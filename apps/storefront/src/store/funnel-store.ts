@@ -28,6 +28,7 @@ interface FunnelState {
   setPrescription: (prescription: Prescription) => void;
   setLensIndex: (index: LensIndex) => void;
   toggleCoating: (coating: CoatingType) => void;
+  setCoatings: (coatings: CoatingType[]) => void;
   setTotal: (cents: number) => void;
   reset: () => void;
 
@@ -55,6 +56,7 @@ export const useFunnelStore = create<FunnelState>((set, get) => ({
   setUsageType: (usageType) => set({ usageType }),
   setPrescription: (prescription) => set({ prescription }),
   setLensIndex: (lensIndex) => set({ lensIndex }),
+  setCoatings: (coatings) => set({ coatings }),
   toggleCoating: (coating) =>
     set((state) => ({
       coatings: state.coatings.includes(coating)
