@@ -1,0 +1,161 @@
+version: "3.9"
+
+# Production compose for a single Hetzner CX22 VPS (4 GB RAM) managed by Coolify.
+# SSL and domain routing are handled by Coolify (Traefik) — no reverse proxy here.
+# Memory limits sized to stay within 4 GB total:
+#   backend   512 MB
+#   storefront 256 MB
+#   postgres   512 MB
+#   redis      128 MB
+#   meilisearch 512 MB
+#   backup cron 64 MB
+# Total headroom: ~2 GB for OS + Coolify
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --maxmemory 100mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    restart: always
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch_data:/meili_data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      STORE_CORS: ${STORE_CORS}
+      ADMIN_CORS: ${ADMIN_CORS}
+      AUTH_CORS: ${AUTH_CORS}
+      BACKEND_URL: ${BACKEND_URL}
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+    ports:
+      - "9000:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  storefront:
+    image: ${STOREFRONT_IMAGE}
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${BACKEND_URL}
+      NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY}
+      NEXT_PUBLIC_MEILISEARCH_HOST: ${MEILISEARCH_PUBLIC_HOST}
+      NEXT_PUBLIC_MEILISEARCH_SEARCH_KEY: ${MEILISEARCH_SEARCH_KEY}
+      NEXT_PUBLIC_CDN_HOSTNAME: ${CDN_HOSTNAME}
+      NEXT_PUBLIC_CDN_URL: ${CDN_URL}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Nightly pg_dump → R2 backup, retains 14 days
+  backup:
+    image: postgres:16-alpine
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: >
+      sh -c "echo '0 2 * * * /backup.sh' | crontab - && crond -f -d 8"
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:

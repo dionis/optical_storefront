@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --accent: 215 100% 53%; /* #0F6FFF */
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}

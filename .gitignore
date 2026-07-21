@@ -1,0 +1,51 @@
+.opencode
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files — NEVER commit real env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Medusa
+.medusa/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Scraper state
+apps/scraper/state.db
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Docker volumes (local)
+infra/volumes/
+

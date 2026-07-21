@@ -1,0 +1,18 @@
+# Retail pricing rules by collection
+# All amounts in USD cents
+# The scraper applies these when pushing products to Medusa.
+# Prices from the supplier (caprioptics.com) are login-gated and NOT scraped.
+
+default_price_cents: 9900   # $99.00 frames (lenses billed separately)
+
+# Per-collection overrides
+di-caprio:
+  price_cents: 12900
+simply-lite:
+  price_cents: 8900
+slimfold:
+  price_cents: 7900
+case:
+  price_cents: 1500         # frame case accessory
+prorx:
+  price_cents: 6900
