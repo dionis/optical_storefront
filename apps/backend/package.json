@@ -10,6 +10,7 @@
     "lint": "eslint src --ext .ts",
     "test": "jest",
     "reindex": "ts-node --esm src/scripts/reindex.ts",
+    "setup-search": "ts-node --esm src/scripts/setup-meilisearch.ts",
     "seed": "medusa exec src/scripts/seed.ts"
   },
   "dependencies": {

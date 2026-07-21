@@ -1,11 +1,20 @@
-export default function GlassesPage() {
-  return (
-    <main className="max-w-7xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-6">Monturas</h1>
-      {/* Listing with Meilisearch instant-search implemented in Phase 2 */}
-      <p className="text-gray-400">
-        La búsqueda y los filtros se implementarán en la Fase 2.
-      </p>
-    </main>
-  );
+import type { Metadata } from "next";
+import { parseFilterParams } from "@/lib/filter-params";
+import { GlassesClientPage } from "./glasses-client";
+
+export const metadata: Metadata = {
+  title: "Monturas",
+  description:
+    "Explora nuestra amplia selección de monturas para lentes graduados. Filtra por forma, material y estilo.",
+};
+
+interface GlassesPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function GlassesPage({ searchParams }: GlassesPageProps) {
+  const params = await searchParams;
+  const initialFilters = parseFilterParams(params);
+
+  return <GlassesClientPage initialFilters={initialFilters} />;
 }
