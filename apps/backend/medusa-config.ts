@@ -38,7 +38,7 @@ export default defineConfig({
         ],
       },
     },
-    // Payment: Stripe
+    // Payment: Stripe + PayPal + Square
     {
       resolve: "@medusajs/medusa/payment",
       options: {
@@ -49,6 +49,26 @@ export default defineConfig({
             options: {
               apiKey: process.env.STRIPE_SECRET_KEY,
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+            },
+          },
+          {
+            resolve: "./src/modules/payment-paypal",
+            id: "paypal",
+            options: {
+              client_id: process.env.PAYPAL_CLIENT_ID,
+              client_secret: process.env.PAYPAL_CLIENT_SECRET,
+              environment: process.env.PAYPAL_ENVIRONMENT ?? "sandbox",
+              webhook_id: process.env.PAYPAL_WEBHOOK_ID,
+            },
+          },
+          {
+            resolve: "./src/modules/payment-square",
+            id: "square",
+            options: {
+              access_token: process.env.SQUARE_ACCESS_TOKEN,
+              location_id: process.env.SQUARE_LOCATION_ID,
+              environment: process.env.SQUARE_ENVIRONMENT ?? "sandbox",
+              webhook_signature_key: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
             },
           },
         ],
