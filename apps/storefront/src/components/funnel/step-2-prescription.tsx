@@ -3,36 +3,20 @@
 import { useState, useCallback, useRef } from "react";
 import type { Prescription, PrescriptionEye, PrescriptionValidationResult } from "@eyewear/shared";
 import { useFunnelStore } from "@/store/funnel-store";
-
-// ──────────────────────────────────────────────
-// Constants
-// ──────────────────────────────────────────────
-
-const SPH_VALUES: number[] = [];
-for (let v = -20; v <= 12; v += 0.25) SPH_VALUES.push(Math.round(v * 100) / 100);
-
-const CYL_VALUES: number[] = [];
-for (let v = -6; v <= 6; v += 0.25) CYL_VALUES.push(Math.round(v * 100) / 100);
-
-const AXIS_VALUES = Array.from({ length: 180 }, (_, i) => i + 1);
-
-const ADD_VALUES: number[] = [];
-for (let v = 0.75; v <= 4.0; v += 0.25) ADD_VALUES.push(Math.round(v * 100) / 100);
-
-const PD_SINGLE: number[] = [];
-for (let v = 50; v <= 80; v += 0.5) PD_SINGLE.push(Math.round(v * 10) / 10);
-
-const PD_HALF: number[] = [];
-for (let v = 25; v <= 40; v += 0.5) PD_HALF.push(Math.round(v * 10) / 10);
+import { RxUpload } from "./rx-upload";
+import {
+  SPH_VALUES,
+  CYL_VALUES,
+  AXIS_VALUES,
+  ADD_VALUES,
+  PD_SINGLE,
+  PD_HALF,
+  fmtDiop,
+} from "@/lib/rx-ranges";
 
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
-
-function fmt(v: number): string {
-  const sign = v > 0 ? "+" : "";
-  return `${sign}${v.toFixed(2)}`;
-}
 
 function blankEye(): PrescriptionEye {
   return { sph: 0, cyl: 0, axis: null, add: null, prism: null, base: null };
@@ -65,7 +49,7 @@ function EyeRow({
         >
           {SPH_VALUES.map((v) => (
             <option key={v} value={v}>
-              {fmt(v)}
+              {fmtDiop(v)}
             </option>
           ))}
         </select>
@@ -79,7 +63,7 @@ function EyeRow({
         >
           {CYL_VALUES.map((v) => (
             <option key={v} value={v}>
-              {fmt(v)}
+              {fmtDiop(v)}
             </option>
           ))}
         </select>
@@ -431,16 +415,28 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
       )}
 
       {tab === "upload" && (
-        <div className="flex flex-col items-center gap-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-10 text-center">
-          <span className="text-4xl">📷</span>
-          <p className="text-sm font-medium text-gray-700">
-            Subir foto de tu receta
-          </p>
-          <p className="text-xs text-gray-400">
-            Esta función estará disponible próximamente. Por ahora usa la
-            opción manual o selecciona "Más tarde".
-          </p>
-        </div>
+        <RxUpload
+          isProgressive={isProgressive}
+          onSwitchToManual={() => setTab("manual")}
+          onConfirm={(rx) => {
+            // Pre-populate manual fields from OCR result
+            setOd(rx.od);
+            setOs(rx.os);
+            if (rx.pd !== null && rx.pd !== undefined) {
+              setPdMode("single");
+              setPdSingle(rx.pd);
+            } else if (rx.pd_od !== null && rx.pd_od !== undefined) {
+              setPdMode("dual");
+              setPdOd(rx.pd_od ?? 31.5);
+              setPdOs(rx.pd_os ?? 31.5);
+            }
+            setPrescription(rx);
+            if (rx.source === "ocr") {
+              // validated by review step in RxUpload, proceed
+              onNext();
+            }
+          }}
+        />
       )}
 
       {tab === "later" && (
@@ -455,28 +451,41 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex gap-3 justify-between pt-6">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          Atrás
-        </button>
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={
-            tab === "manual" &&
-            validation !== null &&
-            !validation.fulfillable
-          }
-          className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Continuar
-        </button>
-      </div>
+      {/* Actions — hidden when upload tab manages its own navigation */}
+      {tab !== "upload" && (
+        <div className="flex gap-3 justify-between pt-6">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Atrás
+          </button>
+          <button
+            type="button"
+            onClick={handleContinue}
+            disabled={
+              tab === "manual" &&
+              validation !== null &&
+              !validation.fulfillable
+            }
+            className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Continuar
+          </button>
+        </div>
+      )}
+      {tab === "upload" && (
+        <div className="pt-6">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Atrás
+          </button>
+        </div>
+      )}
     </div>
   );
 }

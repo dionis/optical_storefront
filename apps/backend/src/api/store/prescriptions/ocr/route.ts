@@ -1,5 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Anthropic from "@anthropic-ai/sdk";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from "crypto";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index.js";
 import type PrescriptionModuleService from "../../../modules/prescription/service.js";
 import type { Prescription } from "@eyewear/shared";
@@ -42,6 +44,40 @@ export async function POST(
       fallback: true,
     });
     return;
+  }
+
+  // ── Upload to R2 (PHI compliance) ──────────────────────────────────────
+  let fileUrl: string | null = null;
+  const r2Bucket = process.env.R2_PRESCRIPTION_BUCKET ?? process.env.R2_BUCKET ?? "eyewear-assets";
+  const r2Endpoint = process.env.R2_ENDPOINT;
+  const r2AccessKey = process.env.R2_ACCESS_KEY_ID;
+  const r2SecretKey = process.env.R2_SECRET_ACCESS_KEY;
+
+  if (r2Endpoint && r2AccessKey && r2SecretKey) {
+    const ext = file.mimetype.split("/")[1] ?? "jpg";
+    const objectKey = `rx/${randomUUID()}.${ext}`;
+    try {
+      const s3 = new S3Client({
+        region: process.env.R2_REGION ?? "auto",
+        endpoint: r2Endpoint,
+        credentials: {
+          accessKeyId: r2AccessKey,
+          secretAccessKey: r2SecretKey,
+        },
+      });
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: r2Bucket,
+          Key: objectKey,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          // No ACL — bucket is private, access via presigned URLs only
+        })
+      );
+      fileUrl = objectKey; // store key, not public URL
+    } catch {
+      // Non-fatal: OCR can proceed without storage
+    }
   }
 
   // TODO(blocked): Upload to R2 first, store key in file_url
@@ -129,7 +165,7 @@ export async function POST(
     pd_os: extracted.pd_os ?? null,
     source: "ocr",
     verified_by_user: false, // MUST be confirmed by human before checkout
-    file_url: null, // TODO: set R2 key after upload
+    file_url: fileUrl,
   };
 
   const prescriptionService = req.scope.resolve<PrescriptionModuleService>(
