@@ -84,6 +84,9 @@ importers:
       '@eyewear/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@mediapipe/tasks-vision':
+        specifier: ^0.10.35
+        version: 0.10.35
       '@medusajs/js-sdk':
         specifier: ^2.8.6
         version: 2.17.2
@@ -1195,6 +1198,9 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@mediapipe/tasks-vision@0.10.35':
+    resolution: {integrity: sha512-HOvadwVRE6JC+45nyYhmnywnr5h/J8KZvOeUNVOG9q/0875pZgItznFB9bRTvLc264YSJqiZ1NsIpCStJw/egg==}
 
   '@medusajs/admin-bundler@2.17.2':
     resolution: {integrity: sha512-wVfTUPg2sy5jms309UNZkbXsTVQzvX4P1iWkaU0RECo3DOF7he9sHN/43Gp9x7DvHiP2cevz0c2tU6z7RNkArA==}
@@ -8782,6 +8788,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@mediapipe/tasks-vision@0.10.35': {}
 
   '@medusajs/admin-bundler@2.17.2(@types/node@20.19.43)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(typescript@5.9.3)':
     dependencies:
