@@ -35,7 +35,6 @@ export default function Header() {
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
           <img src="/logo.png" alt="Óptica El Rancho" className="logo-img" />
-          <span className="logo-name">Óptica El Rancho</span>
         </Link>
 
         <nav className="nav desktop-only">{links}</nav>
