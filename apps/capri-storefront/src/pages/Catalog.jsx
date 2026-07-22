@@ -1,24 +1,26 @@
 import { useMemo, useState, useEffect } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../data/products.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches } from "../data/filters.js";
 import ProductCard from "../components/ProductCard.jsx";
+import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function Catalog() {
   const { slug } = useParams();
   const [params] = useSearchParams();
+  const { t, tv, lang } = useLang();
   const brand = slug ? BRAND_BY_SLUG[slug] : null;
   const q = (params.get("q") || "").toLowerCase().trim();
   const ageParam = params.get("age");
 
   const [selected, setSelected] = useState({});
   const [sort, setSort] = useState("relevance");
+  const [showFilters, setShowFilters] = useState(false);
   const [openGroups, setOpenGroups] = useState(() =>
     Object.fromEntries(FILTER_GROUPS.map((g, i) => [g.key, i < 4]))
   );
 
-  // reset when navigating between brands
   useEffect(() => { setSelected(ageParam ? { age: [ageParam] } : {}); }, [slug, ageParam]);
 
   const toggle = (key, opt) => {
@@ -43,20 +45,23 @@ export default function Catalog() {
   }, [brand, q, selected, sort]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
+  const heading = brand ? brand.name : q ? `${t("cat.results")}: “${q}”` : t("cat.all");
 
   return (
     <div className="catalog">
-      <aside className="filters">
+      <button className="filters-toggle mobile-only" onClick={() => setShowFilters((v) => !v)}>
+        {t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""} {showFilters ? "▲" : "▼"}
+      </button>
+
+      <aside className={`filters ${showFilters ? "show" : ""}`}>
         <div className="filters-head">
-          <span>Filtros</span>
-          {activeCount > 0 && (
-            <button className="clear" onClick={() => setSelected({})}>Limpiar ({activeCount})</button>
-          )}
+          <span>{t("filters.title")}</span>
+          {activeCount > 0 && <button className="clear" onClick={() => setSelected({})}>{t("filters.clear")} ({activeCount})</button>}
         </div>
         {FILTER_GROUPS.map((g) => (
           <div className="fgroup" key={g.key}>
             <button className="fgroup-head" onClick={() => setOpenGroups((o) => ({ ...o, [g.key]: !o[g.key] }))}>
-              {g.title}<span>{openGroups[g.key] ? "−" : "+"}</span>
+              {g.title[lang]}<span>{openGroups[g.key] ? "−" : "+"}</span>
             </button>
             {openGroups[g.key] && (
               <div className="fgroup-body">
@@ -65,7 +70,7 @@ export default function Catalog() {
                   return (
                     <label key={opt} className={`fopt ${g.field ? "" : "disabled"}`}>
                       <input type="checkbox" checked={on} disabled={!g.field} onChange={() => toggle(g.key, opt)} />
-                      <span>{opt}</span>
+                      <span>{tv(opt)}</span>
                     </label>
                   );
                 })}
@@ -78,19 +83,19 @@ export default function Catalog() {
       <section className="listing">
         <div className="listing-head">
           <div>
-            <h1>{brand ? brand.name : q ? `Resultados: “${q}”` : "Todos los espejuelos"}</h1>
-            <span className="count">{results.length} monturas</span>
+            <h1>{heading}</h1>
+            <span className="count">{results.length} {t("cat.count")}</span>
           </div>
           <select value={sort} onChange={(e) => setSort(e.target.value)} className="sort">
-            <option value="relevance">Relevancia</option>
-            <option value="price-asc">Precio: menor a mayor</option>
-            <option value="price-desc">Precio: mayor a menor</option>
-            <option value="rating">Mejor valorados</option>
+            <option value="relevance">{t("sort.relevance")}</option>
+            <option value="price-asc">{t("sort.priceAsc")}</option>
+            <option value="price-desc">{t("sort.priceDesc")}</option>
+            <option value="rating">{t("sort.rating")}</option>
           </select>
         </div>
 
         {results.length === 0 ? (
-          <div className="empty">No hay monturas con estos filtros. <button onClick={() => setSelected({})}>Limpiar filtros</button></div>
+          <div className="empty">{t("empty.text")} <button onClick={() => setSelected({})}>{t("empty.clear")}</button></div>
         ) : (
           <div className="product-grid">
             {results.map((p) => <ProductCard key={p.slug} product={p} />)}

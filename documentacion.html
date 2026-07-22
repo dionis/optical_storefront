@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Óptica Tienda — Documentación del proyecto</title>
+<title>Óptica El Rancho — Documentación técnica</title>
 <style>
-  :root{--ink:#12151a;--muted:#5c6470;--line:#e6e8ec;--soft:#f5f6f8;--brand:#2f5fa8;--ok:#2e7d46;--warn:#b26a00;--bad:#b23b3b;}
+  :root{--ink:#16181d;--muted:#5c6470;--line:#e6e8ec;--soft:#f5f6f8;--blue:#0E5AD0;--red:#FD0E3F;--ok:#2e7d46;--warn:#b26a00;}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Inter",Segoe UI,system-ui,sans-serif;color:var(--ink);background:#fbfcfd;line-height:1.55}
-  header{background:linear-gradient(120deg,#101826,#20304a);color:#fff;padding:38px 32px}
-  header h1{margin:0 0 6px;font-size:28px;letter-spacing:-.5px}
-  header p{margin:0;opacity:.8}
+  header{background:linear-gradient(120deg,#0b2f6e,#0E5AD0 60%,#8a1024);color:#fff;padding:40px 32px}
+  header h1{margin:0 0 6px;font-size:28px}
+  header p{margin:0;opacity:.9}
   .wrap{max-width:1080px;margin:0 auto;padding:28px 32px}
   h2{font-size:21px;margin:34px 0 12px;border-bottom:2px solid var(--line);padding-bottom:8px}
   h3{font-size:16px;margin:20px 0 8px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:14px 0}
   .card{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}
   .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
-  .b-ok{background:#e6f4ea;color:var(--ok)} .b-warn{background:#fbf0df;color:var(--warn)} .b-info{background:#e7eefb;color:var(--brand)}
+  .b-ok{background:#e6f4ea;color:var(--ok)} .b-warn{background:#fbf0df;color:var(--warn)} .b-info{background:#e7eefb;color:var(--blue)}
   table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
   th{background:var(--soft);font-weight:600}
@@ -25,81 +25,89 @@
   pre{background:#0f1420;color:#d7e0ef;padding:14px 16px;border-radius:10px;overflow:auto;font-size:13px}
   .muted{color:var(--muted)}
   ul{margin:8px 0 8px 18px} li{margin:3px 0}
-  .pill{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--muted)}
+  .swatch{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle;margin-right:6px;border:1px solid #0002}
   footer{color:var(--muted);font-size:13px;padding:24px 32px;text-align:center;border-top:1px solid var(--line);margin-top:30px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Óptica Tienda · Documentación técnica</h1>
-  <p>Tienda online de espejuelos de marca (Capri Optics) · Backend Medusa v2 + Storefronts</p>
+  <h1>Óptica El Rancho · Documentación técnica</h1>
+  <p>Tienda online de espejuelos de marca · Marca RUBI_LENS · Bilingüe ES/EN · Rama <code>frontend</code></p>
 </header>
 <div class="wrap">
 
-  <h2>1 · Estado de servicios</h2>
+  <h2>1 · Servicios en ejecución</h2>
   <div class="cards">
-    <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Infra Docker</h3><p class="muted">Postgres :5432 · Redis :6379 · Meilisearch :7700 · MinIO :9090/:9001. Los 4 contenedores <b>healthy</b>.</p></div>
-    <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Web React "Capri Óptica"</h3><p class="muted">Vite + React 18 en <b>http://localhost:5198</b>. Rama <code>frontend</code>.</p></div>
-    <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Storefront Next.js</h3><p class="muted">Next 15 en :3000 (storefront original del repo).</p></div>
-    <div class="card"><span class="badge b-warn">PARCIAL</span><h3>Backend Medusa</h3><p class="muted">BD migrada + build OK. API arranca desde el compilado; pagos PayPal/Square requieren portar a la API de Medusa 2.17.</p></div>
+    <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Web "Óptica El Rancho"</h3><p class="muted">Vite + React 18 en <b>http://localhost:5198</b>. Bilingüe ES/EN, responsive, marca RUBI_LENS.</p></div>
+    <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Infra Docker</h3><p class="muted">Postgres :5432 · Redis :6379 · Meilisearch :7700 · MinIO :9090/:9001.</p></div>
+    <div class="card"><span class="badge b-warn">PARCIAL</span><h3>Backend Medusa</h3><p class="muted">BD migrada + build OK. Pagos PayPal/Square pendientes de portar a Medusa 2.17.</p></div>
+    <div class="card"><span class="badge b-info">REFERENCIA</span><h3>Storefront Next.js</h3><p class="muted">Storefront original del repo en :3000, conectado al backend.</p></div>
   </div>
 
-  <h2>2 · Arquitectura</h2>
-  <p>Monorepo <code>pnpm</code> con tres aplicaciones y un paquete compartido:</p>
-  <table>
-    <tr><th>Ruta</th><th>Stack</th><th>Rol</th></tr>
-    <tr><td><code>apps/backend</code></td><td>Medusa.js v2 (Node 22, TS)</td><td>E-commerce: catálogo, carrito, checkout, pagos, OCR de recetas, módulo de lentes</td></tr>
-    <tr><td><code>apps/storefront</code></td><td>Next.js 15 (App Router)</td><td>Tienda original con PDP y embudo de lentes conectada al backend</td></tr>
-    <tr><td><code>apps/capri-storefront</code> <span class="pill">nuevo</span></td><td>Vite + React 18 + React Router</td><td>Web visual nueva (puerto 5198) con datos e imágenes de caprioptics.com</td></tr>
-    <tr><td><code>apps/scraper</code></td><td>Python 3.13</td><td>Ingesta del catálogo desde caprioptics.com (12 tests pasan)</td></tr>
-    <tr><td><code>packages/shared</code></td><td>TypeScript</td><td>Tipos compartidos (Prescription, LensConfig, FrameAttributes) — compilado a <code>dist</code></td></tr>
-  </table>
-
-  <h2>3 · Web React "Capri Óptica" (rama frontend)</h2>
-  <p>Web responsive en el puerto <b>5198</b>, referencias visuales de Zeelool pero cargando <b>imágenes reales desde caprioptics.com</b>.</p>
-  <h3>Datos reales extraídos</h3>
+  <h2>2 · Identidad visual (Óptica El Rancho / RUBI_LENS)</h2>
+  <p>La marca se tomó de <code>opticaelrancho.com</code>. El logo <b>RUBI_LENS</b> (montura con lente izquierdo azul y derecho rojo) se descargó y se empaquetó en <code>public/logo.png</code>. La paleta se extrajo <b>analizando los píxeles del logo</b> con Pillow:</p>
   <ul>
-    <li><b>17 marcas</b> con sus logos oficiales (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy, Cases, Grande, ProRx, etc.).</li>
-    <li><b>48 productos</b> reales con <b>SKU, variantes de color, imágenes por color y atributos</b> (forma, material, género, edad, tamaños), extraídos por 6 agentes en paralelo de las categorías di-caprio, flexure, millennial, peachtree, 4u y trendy.</li>
-    <li>Precios y valoraciones demo derivados del SKU (Capri Optics es B2B y no publica precios).</li>
+    <li><span class="swatch" style="background:#0E5AD0"></span><b>Azul primario</b> <code>#0E5AD0</code> — barra superior, botones primarios, enlaces activos, selección.</li>
+    <li><span class="swatch" style="background:#FD0E3F"></span><b>Rojo "rubí"</b> <code>#FD0E3F</code> — precios, badges del carrito, acentos.</li>
+    <li>Texto <code>#16181d</code>, footer azul marino <code>#0e1830</code>.</li>
   </ul>
-  <h3>Páginas y funcionalidades</h3>
+  <p>El <b>favicon</b> es un SVG vectorial de dos lentes (azul + rojo) que replica el icono del logo; <code>theme-color</code> = azul de marca.</p>
+
+  <h2>3 · Cómo se renderiza (arquitectura)</h2>
+  <p>Es una <b>SPA (Single Page Application) React 18</b> servida por Vite. No hace llamadas a un backend: los datos viven en <code>src/data</code> como módulos JS, así que el render es instantáneo y funciona sin servidor de API. Enrutado en cliente con <code>react-router-dom</code>.</p>
   <table>
-    <tr><th>Ruta</th><th>Descripción</th></tr>
-    <tr><td><code>/</code></td><td>Home: hero, <b>grid de las 17 marcas</b> (imagen 1), y destacados</td></tr>
-    <tr><td><code>/catalogo</code>, <code>/marca/:slug</code></td><td>Catálogo con <b>sidebar de filtros</b> (imagen 2: Forma, Material, Género, Edad, Tamaño del ojo/puente/sien, Estilo, Características), orden y búsqueda</td></tr>
-    <tr><td><code>/producto/:slug</code></td><td>Detalle estilo Zeelool: galería con <b>cambio de imagen por color</b> (referencia dc406), specs, y CTA a lentes</td></tr>
-    <tr><td><code>/recetas/:slug</code></td><td>Flujo de recetas de <b>4 pasos</b> (Uso → Lente/índice+tratamientos → Receta OD/OS + subida OCR → Resumen) con precio dinámico</td></tr>
+    <tr><th>Ruta</th><th>Componente</th><th>Qué renderiza</th></tr>
+    <tr><td><code>/</code></td><td>Home</td><td>Hero, grid de 17 marcas (grande, con nombre), 8 destacados, franja de propuestas de valor</td></tr>
+    <tr><td><code>/catalogo</code>, <code>/marca/:slug</code></td><td>Catalog</td><td>Sidebar de filtros (colapsable en móvil), orden, búsqueda; grid de <code>ProductCard</code></td></tr>
+    <tr><td><code>/producto/:slug</code></td><td>ProductDetail</td><td>Galería con cambio de imagen por color, specs, CTAs</td></tr>
+    <tr><td><code>/recetas/:slug</code></td><td>LensProcess</td><td>Asistente de 4 pasos con precio dinámico</td></tr>
   </table>
-  <p>Las <b>cards</b> replican la imagen 3: fondo suave, botón de favorito, pastilla "Probador AR", nombre, precio, valoración y muestras de color que cambian la imagen al pasar el cursor.</p>
-  <h3>Cómo levantarla</h3>
+  <h3>Render de imágenes y colores</h3>
+  <p>Las imágenes de producto se <b>enlazan directamente (hotlink) desde el CDN de caprioptics.com</b> con la URL exacta por color. Al pasar el cursor o hacer clic en una muestra de color, el estado React <code>active</code> cambia y se re-renderiza <code>&lt;img src={color.image}&gt;</code> con una transición <code>fade-in</code> — replicando el comportamiento de <code>dc406</code>. Las muestras de color se pintan con un mapa nombre→hex.</p>
+  <h3>Datos</h3>
+  <ul>
+    <li><b>17 marcas</b> reales con logos oficiales (<code>src/data/brands.js</code>).</li>
+    <li><b>48 productos</b> reales (<code>src/data/products.js</code>): SKU, variantes de color con imagen, atributos (forma, material, género, edad, tamaños). Extraídos por 6 agentes en paralelo.</li>
+    <li>Precio y valoración <b>deterministas por SKU</b> (Capri Optics es B2B y no publica precios).</li>
+  </ul>
+
+  <h2>4 · Bilingüe (ES / EN)</h2>
+  <p>Sistema de i18n propio y ligero, sin dependencias:</p>
+  <ul>
+    <li><code>src/i18n/translations.js</code> — diccionario <code>T</code> con todas las cadenas de UI en <b>es</b> y <b>en</b> (nav, botones, hero, filtros, flujo de recetas, footer…), y un mapa <code>VAL</code> que traduce los <b>valores de atributos</b> (p. ej. «Cuadrado»→«Square», «Acetato»→«Acetate»).</li>
+    <li><code>src/i18n/LanguageContext.jsx</code> — contexto React que expone <code>t(clave)</code> y <code>tv(valor)</code>. El idioma se detecta del navegador, se conmuta con el botón <b>ES/EN</b> del header y se <b>persiste en <code>localStorage</code></b>; también actualiza <code>&lt;html lang&gt;</code>.</li>
+    <li>Todo texto visible pasa por <code>t()</code>/<code>tv()</code>: cambiar de idioma re-renderiza la web entera al instante.</li>
+  </ul>
+
+  <h2>5 · Responsive (móvil / tablet / desktop)</h2>
+  <p>Diseño <b>mobile-first con breakpoints</b> y componentes que se adaptan:</p>
+  <table>
+    <tr><th>Rango</th><th>Comportamiento</th></tr>
+    <tr><td><b>Desktop</b> &gt; 1000px</td><td>Nav + buscador en línea, marcas 5 columnas, productos 4 columnas, filtros fijos laterales, PDP a 2 columnas</td></tr>
+    <tr><td><b>Tablet</b> ≤ 1000px</td><td>Aparece <b>menú hamburguesa</b> con cajón lateral deslizante + backdrop; buscador dentro del cajón; filtros colapsan tras un botón «Filtros»; marcas 4 col, productos 3 col; hero y PDP apilados</td></tr>
+    <tr><td><b>Móvil</b> ≤ 640px</td><td>Marcas 2 col, productos 2 col, propuestas 2 col; nombre del logo oculto (solo icono); pastilla «Probador AR» siempre visible; orden a ancho completo</td></tr>
+    <tr><td><b>Móvil pequeño</b> ≤ 380px</td><td>1 columna en marcas/productos</td></tr>
+  </table>
+  <p>Objetivo UX: navegación clara para usuarios noveles — jerarquía visual simple, CTAs grandes y táctiles, un flujo de compra guiado paso a paso, y feedback inmediato al filtrar o cambiar color.</p>
+
+  <h2>6 · QA realizado</h2>
+  <p>Capturas automáticas con Playwright (Chromium headless) en <b>6 combinaciones</b> de viewport e idioma antes de desplegar: home desktop ES, home desktop EN, home móvil (390px), catálogo tablet (820px) EN, detalle móvil ES, recetas desktop EN. Se verificó marca, tamaño de marcas, traducción de UI y de atributos, menú hamburguesa, filtros colapsables y grids responsive.</p>
+
+  <h2>7 · Cómo levantarla</h2>
   <pre>cd apps/capri-storefront
-npm install
-npm run dev      # http://localhost:5198</pre>
+npm install        # solo la primera vez
+npm run dev        # http://localhost:5198 (puerto no estándar, por diseño)</pre>
 
-  <h2>4 · Backend Medusa — resumen del arranque</h2>
-  <p>Se resolvió una cadena de bloqueos de entorno (Windows + pnpm + Medusa 2.17):</p>
-  <ul>
-    <li>Docker Desktop no arrancaba: faltaba la variable <code>ProgramData</code> al lanzarlo desde automatización → relanzado con la variable.</li>
-    <li>Medusa no corre con Node 24 → se instaló <b>Node 22 LTS portátil</b> solo para el backend.</li>
-    <li>Faltaban <code>ts-node</code> y <code>tsconfig-paths</code> (los usa el CLI de Medusa) → instalados.</li>
-    <li>pnpm aislado no exponía módulos internos de Medusa → <code>node-linker=hoisted</code> en <code>.npmrc</code>.</li>
-    <li><code>tsconfig</code> del backend forzaba <code>moduleResolution: Node</code> clásico → se heredó <b>NodeNext</b> del base (resuelve <code>@medusajs/framework/*</code>).</li>
-    <li>Se compiló <code>packages/shared</code> a <code>dist</code> y se quitó el alias a fuente (errores de <code>rootDir</code>).</li>
-    <li>Providers de pago PayPal/Square: exportaban mal la clase → envueltos en <code>ModuleProvider(...)</code>; su API (métodos/firmas) cambió en 2.17 y quedan marcados para portar.</li>
-  </ul>
-  <p><b>Resultado:</b> <code>medusa db:migrate</code> ✅, <code>medusa build</code> ✅ "completed successfully".</p>
-
-  <h2>5 · Pendientes</h2>
+  <h2>8 · Pendientes</h2>
   <table>
-    <tr><th>Área</th><th>Pendiente</th><th>Prioridad</th></tr>
-    <tr><td>Backend</td><td>Portar providers PayPal/Square a la API <code>AbstractPaymentProvider</code> de Medusa 2.17</td><td>Media</td></tr>
-    <tr><td>Integración</td><td>Conectar la web React (5198) al backend Medusa para catálogo/carrito/precios reales de lentes</td><td>Media</td></tr>
-    <tr><td>Catálogo</td><td>Ampliar el scraping a las 17 marcas completas vía <code>apps/scraper</code></td><td>Baja</td></tr>
-    <tr><td>AR / Try-On</td><td>Conectar el probador virtual (MediaPipe) del storefront original a las cards de la web React</td><td>Baja</td></tr>
+    <tr><th>Área</th><th>Pendiente</th></tr>
+    <tr><td>Integración</td><td>Conectar la web al backend Medusa (catálogo, carrito, precios de lentes en servidor)</td></tr>
+    <tr><td>Catálogo</td><td>Ampliar el scraping a las 17 marcas completas vía <code>apps/scraper</code></td></tr>
+    <tr><td>AR</td><td>Enlazar el probador virtual (MediaPipe) del storefront original</td></tr>
+    <tr><td>Backend</td><td>Portar providers de pago PayPal/Square a la API de Medusa 2.17</td></tr>
   </table>
 
 </div>
-<footer>Documento generado automáticamente durante la sesión de desarrollo · Capri Óptica / Óptica Tienda</footer>
+<footer>Documento generado automáticamente durante la sesión de desarrollo · Óptica El Rancho</footer>
 </body>
 </html>
