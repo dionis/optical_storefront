@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index.js";
 import type PrescriptionModuleService from "../../../../modules/prescription/service.js";

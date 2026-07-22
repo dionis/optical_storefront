@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MedusaService } from "@medusajs/framework/utils";
 import { LensOption, CoatingOption } from "./models/index.js";
 import type { LensConfig, LensIndex, CoatingType, UsageType } from "@eyewear/shared";

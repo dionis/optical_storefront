@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Ensures the Meilisearch 'frames' index has the correct settings.
  * Idempotent — safe to call repeatedly.

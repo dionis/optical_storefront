@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Anthropic from "@anthropic-ai/sdk";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";

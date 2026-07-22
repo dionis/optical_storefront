@@ -16,6 +16,7 @@ export default defineConfig({
   },
   admin: {
     backendUrl: process.env.BACKEND_URL ?? "http://localhost:9000",
+    disable: process.env.MEDUSA_DISABLE_ADMIN === "true",
   },
   modules: [
     // File storage: Cloudflare R2 via S3-compatible API

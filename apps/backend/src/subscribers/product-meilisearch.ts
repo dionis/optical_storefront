@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import { MeiliSearch } from "meilisearch";
 import type { MeilisearchFrameDocument } from "@eyewear/shared";

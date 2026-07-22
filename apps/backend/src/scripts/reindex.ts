@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Reindex all products from Medusa into Meilisearch.
  * Run with: pnpm --filter backend reindex

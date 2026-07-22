@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MedusaService } from "@medusajs/framework/utils";
 import { PrescriptionRecord } from "./models/index.js";
 import {

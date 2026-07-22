@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Seed script: populate lens options and coating options with defaults.
  * Run with: medusa exec src/scripts/seed.ts

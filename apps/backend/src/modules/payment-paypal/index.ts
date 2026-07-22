@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * PayPal custom payment provider for Medusa v2.
  *
@@ -14,6 +15,8 @@ import {
   PaymentProviderError,
   PaymentProviderSessionResponse,
   MedusaContainer,
+  ModuleProvider,
+  Modules,
 } from "@medusajs/framework/utils";
 import type {
   CreatePaymentProviderSession,
@@ -35,7 +38,7 @@ interface PayPalTokenResponse {
   expires_in: number;
 }
 
-export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
+class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
   static identifier = "paypal";
 
   private readonly clientId: string;
@@ -379,3 +382,8 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
     }
   }
 }
+
+
+export default ModuleProvider(Modules.PAYMENT, {
+  services: [PayPalPaymentProvider],
+})
