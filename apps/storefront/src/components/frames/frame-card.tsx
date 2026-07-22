@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import type { MeilisearchFrameDocument } from "@eyewear/shared";
+import { resolveLocalizedFrameText } from "@eyewear/shared";
+import type { Locale } from "@/i18n/routing";
 import { ColorSwatch } from "./color-swatch";
+import { RatingStars } from "@/components/shared/rating-stars";
+import { WishlistButton } from "@/components/shared/wishlist-button";
 import { formatPrice } from "@/lib/utils";
 
 interface FrameCardProps {
@@ -14,6 +19,10 @@ interface FrameCardProps {
 export function FrameCard({ frame }: FrameCardProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const selectedColor = frame.colors[selectedColorIndex] ?? frame.colors[0];
+  const locale = useLocale() as Locale;
+  const t = useTranslations("card");
+
+  const { title } = resolveLocalizedFrameText(frame, locale);
 
   const thumbnailUrl = frame.thumbnail
     ? frame.thumbnail.startsWith("http")
@@ -31,7 +40,7 @@ export function FrameCard({ frame }: FrameCardProps) {
         {thumbnailUrl ? (
           <Image
             src={thumbnailUrl}
-            alt={`${frame.title}${selectedColor ? ` — ${selectedColor}` : ""}`}
+            alt={`${title}${selectedColor ? ` — ${selectedColor}` : ""}`}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
@@ -52,25 +61,49 @@ export function FrameCard({ frame }: FrameCardProps) {
             </svg>
           </div>
         )}
-        {/* Collection badge */}
-        {frame.collection && (
-          <span className="absolute top-2 left-2 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-gray-500 uppercase tracking-wide backdrop-blur-sm">
-            {frame.collection.replace(/-/g, " ")}
+
+        {/* Best-seller badge */}
+        {frame.best_seller && (
+          <span className="absolute top-2 left-2 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+            {t("bestSeller")}
           </span>
         )}
+
+        {/* Wishlist */}
+        <WishlistButton handle={frame.handle} variant="card" />
+
+        {/* Try-on pill */}
+        <Link
+          href={`/try-on?frame=${frame.handle}`}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-gray-900/85 px-3 py-1 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          {t("tryOn")}
+        </Link>
       </div>
 
       {/* Info area */}
       <div className="p-3 flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2 group-hover:text-accent transition-colors">
-            {frame.title}
-          </h3>
-          <span className="shrink-0 text-sm font-semibold text-gray-900 whitespace-nowrap">
+        <h3 className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2 group-hover:text-accent transition-colors">
+          {title}
+        </h3>
+
+        {frame.rating > 0 && (
+          <RatingStars rating={frame.rating} reviewCount={frame.review_count} />
+        )}
+
+        {/* Price */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
             {frame.price_from > 0
-              ? `Desde ${formatPrice(frame.price_from)}`
-              : "Precio a consultar"}
+              ? t("priceFrom", { price: formatPrice(frame.price_from, locale) })
+              : t("priceOnRequest")}
           </span>
+          {frame.original_price_from && frame.original_price_from > frame.price_from && (
+            <span className="text-xs text-gray-400 line-through">
+              {formatPrice(frame.original_price_from, locale)}
+            </span>
+          )}
         </div>
 
         {/* Size info */}

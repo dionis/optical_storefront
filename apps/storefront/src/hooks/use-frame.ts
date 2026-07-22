@@ -56,13 +56,11 @@ export function useFrame(handle: string): UseFrameReturn {
         if (product) {
           setFrame(product);
         } else {
-          setError("Montura no encontrada.");
+          setError("not_found");
         }
       })
       .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Error al cargar la montura."
-        );
+        setError(err instanceof Error ? err.message : "fetch_error");
       })
       .finally(() => setIsLoading(false));
   }, [handle]);

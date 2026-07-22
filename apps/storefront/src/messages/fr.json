@@ -1,0 +1,358 @@
+{
+  "common": {
+    "siteName": "Óptica",
+    "tagline": "Des lunettes sur mesure"
+  },
+  "promoBar": {
+    "shipping": "Livraison standard gratuite dès 59,00 $ d'achat",
+    "deal": "Achetez-en 1, obtenez 50 % de réduction sur les montures supplémentaires"
+  },
+  "header": {
+    "navFrames": "Lunettes de vue",
+    "navDeals": "Promotions",
+    "navTryOn": "Essayage virtuel",
+    "searchPlaceholder": "Rechercher des montures…",
+    "searchAria": "Rechercher des montures",
+    "cartAria": "Panier",
+    "wishlistAria": "Liste de souhaits",
+    "accountAria": "Compte"
+  },
+  "languageSwitcher": {
+    "label": "Langue",
+    "es": "Español",
+    "en": "English",
+    "fr": "Français"
+  },
+  "home": {
+    "heroTitlePlain": "Des lunettes",
+    "heroTitleAccent": "sur mesure",
+    "heroSubtitle": "Choisissez votre monture préférée, envoyez votre ordonnance et recevez vos lunettes correctrices chez vous. Processus simple, prix transparents.",
+    "ctaBrowse": "Voir les montures",
+    "ctaTryOn": "Essayage virtuel",
+    "byShape": "Par forme",
+    "collections": "Collections",
+    "viewAll": "Tout voir",
+    "byGender": "Par genre",
+    "genders": { "women": "Femme", "men": "Homme", "unisex": "Unisexe" },
+    "shapes": {
+      "round": "Ronde",
+      "rectangle": "Rectangulaire",
+      "aviator": "Aviateur",
+      "cat_eye": "Œil de chat",
+      "square": "Carrée",
+      "oval": "Ovale"
+    },
+    "collectionList": {
+      "di-caprio": { "label": "Di Caprio", "desc": "Élégance classique en acétate" },
+      "simply-lite": { "label": "Simply Lite", "desc": "Montures ultra-légères" },
+      "trendy": { "label": "Trendy", "desc": "Styles tendance" },
+      "millennial": { "label": "Millennial", "desc": "Designs modernes et polyvalents" },
+      "flexure": { "label": "Flexure", "desc": "Flexibilité maximale en TR90" },
+      "slimfold": { "label": "Slimfold", "desc": "Compactes et pliables" }
+    }
+  },
+  "filters": {
+    "sectionGender": "Genre",
+    "sectionShape": "Forme",
+    "sectionMaterial": "Matériau",
+    "sectionSize": "Taille (œil)",
+    "sectionColor": "Couleur",
+    "sectionCollection": "Collection",
+    "sectionFeatures": "Caractéristiques",
+    "sectionPrice": "Prix",
+    "sectionPrescription": "Prescription",
+    "emptyState": "Les filtres apparaîtront une fois les produits indexés.",
+    "genders": { "men": "Homme", "women": "Femme", "unisex": "Unisexe" },
+    "shapes": {
+      "round": "Ronde",
+      "oval": "Ovale",
+      "rectangle": "Rectangulaire",
+      "square": "Carrée",
+      "cat_eye": "Œil de chat",
+      "aviator": "Aviateur",
+      "browline": "Browline",
+      "geometric": "Géométrique",
+      "rimless": "Sans monture",
+      "semi_rimless": "Semi-cerclée",
+      "other": "Autre"
+    },
+    "materials": {
+      "acetate": "Acétate",
+      "metal": "Métal",
+      "titanium": "Titane",
+      "stainless_steel": "Acier inoxydable",
+      "tr90": "TR90",
+      "mixed": "Mixte",
+      "wood": "Bois",
+      "other": "Autre"
+    },
+    "sizes": {
+      "narrow": "Étroite (< 50 mm)",
+      "medium": "Moyenne (50–54 mm)",
+      "wide": "Large (≥ 55 mm)"
+    },
+    "priceBuckets": {
+      "under_10": "Moins de 10,00 $",
+      "under_20": "Moins de 20,00 $",
+      "under_30": "Moins de 30,00 $",
+      "above_30": "Plus de 30,00 $",
+      "on_sale": "En promotion"
+    },
+    "activeLabel": "Filtres actifs :",
+    "clearAll": "Tout effacer",
+    "removeFilter": "Supprimer le filtre {label}",
+    "mobileButton": "Filtres",
+    "mobileTitle": "Filtres",
+    "mobileClose": "Fermer les filtres",
+    "mobileViewResults": "Voir les résultats"
+  },
+  "listing": {
+    "title": "Lunettes de vue",
+    "metaDescription": "Découvrez notre large sélection de montures de lunettes correctrices. Filtrez par forme, matériau et style.",
+    "heroSubtitle": "Des lunettes tendance pour chaque moment, avec essayage virtuel et livraison rapide.",
+    "resultsFor": "Résultats pour :",
+    "sortLabel": "Trier :",
+    "sortAria": "Trier les résultats",
+    "sort": {
+      "relevance": "Pertinence",
+      "price_asc": "Prix : croissant",
+      "price_desc": "Prix : décroissant",
+      "title_asc": "Nom A–Z",
+      "best_seller": "Meilleures ventes",
+      "rating_desc": "Mieux notés"
+    },
+    "loading": "Recherche…",
+    "resultCount": "{count, plural, one {# monture} other {# montures}}",
+    "noResults": "Aucune monture trouvée.",
+    "noResultsHint": "Essayez d'ajuster les filtres ou le terme de recherche.",
+    "seenAll": "Vous avez vu toutes les montures disponibles.",
+    "errorTitle": "Erreur lors du chargement des résultats"
+  },
+  "card": {
+    "priceFrom": "À partir de {price}",
+    "priceOnRequest": "Prix sur demande",
+    "bestSeller": "Meilleure vente",
+    "tryOn": "Essayer",
+    "reviews": "{count, plural, one {# avis} other {# avis}}"
+  },
+  "pdp": {
+    "breadcrumbFrames": "Lunettes de vue",
+    "backTo": "Retour à {title}",
+    "notFoundMetaTitle": "Monture introuvable",
+    "notFoundTitle": "Monture indisponible",
+    "notFoundBody": "Cette monture n'est pas encore disponible ou est introuvable. Le catalogue se met à jour automatiquement chaque jour.",
+    "viewAll": "Voir toutes les montures",
+    "metaDescription": "Achetez {title} en ligne. Choisissez des verres correcteurs sur mesure.",
+    "colorLabel": "Couleur :",
+    "lensesFrom": "+ verres à partir de",
+    "selectLenses": "Choisir les verres",
+    "selectLensesMetaTitle": "Choisir les verres — {title}",
+    "tryOnVirtual": "Essayer virtuellement",
+    "bestSeller": "Meilleure vente",
+    "reviews": "{count, plural, one {# avis} other {# avis}}",
+    "measurementsTitle": "Mesures",
+    "measurementsAria": "Monture : {eyeSize}-{bridgeSize}-{templeLength}",
+    "measureEye": "Œil",
+    "measureBridge": "Pont",
+    "measureTemple": "Branche"
+  },
+  "gallery": {
+    "prevImage": "Image précédente",
+    "nextImage": "Image suivante",
+    "imageN": "Image {n}"
+  },
+  "wishlist": {
+    "add": "Ajouter à la liste de souhaits",
+    "remove": "Retirer de la liste de souhaits"
+  },
+  "funnel": {
+    "steps": { "usage": "Usage", "prescription": "Ordonnance", "lens": "Verres", "summary": "Résumé" },
+    "stepAria": "Étape {current} sur {total}",
+    "back": "Retour",
+    "continue": "Continuer",
+    "usageTypes": {
+      "single_vision_distance": {
+        "label": "Vision de loin",
+        "description": "Pour voir de loin : conduite, écrans, sport."
+      },
+      "single_vision_reading": {
+        "label": "Vision de près",
+        "description": "Pour lire, broder ou les travaux de précision."
+      },
+      "progressive": {
+        "label": "Progressifs",
+        "description": "Sans ligne visible. Vision de loin et de près sur un seul verre."
+      },
+      "non_prescription": {
+        "label": "Sans correction",
+        "description": "Antireflet ou photochromique seulement. Sans ordonnance."
+      }
+    },
+    "step1": {
+      "title": "À quoi serviront vos lunettes ?",
+      "subtitle": "Sélectionnez le type d'usage pour configurer la meilleure option."
+    },
+    "step2": {
+      "titleNonRx": "Ordonnance",
+      "subtitleNonRx": "Comme vous avez choisi sans correction, aucune ordonnance n'est nécessaire. Vous pouvez continuer.",
+      "title": "Votre ordonnance",
+      "subtitle": "Saisissez les valeurs de votre ordonnance optique la plus récente.",
+      "tabManual": "Saisir manuellement",
+      "tabUpload": "Envoyer une photo",
+      "tabLater": "Plus tard",
+      "axisHeader": "AXE",
+      "pdLabel": "Écart pupillaire (EP)",
+      "pdSingle": "Simple",
+      "pdDual": "Double",
+      "validating": "Validation de l'ordonnance…",
+      "valid": "✓ Ordonnance valide",
+      "invalid": "✗ Ordonnance hors normes",
+      "recommendedIndex": "Indice recommandé : {index}",
+      "laterTitle": "Fournir l'ordonnance plus tard",
+      "laterBody": "Vous pourrez envoyer votre ordonnance par WhatsApp ou e-mail après avoir finalisé votre commande. Votre commande sera fabriquée dès sa réception."
+    },
+    "step3": {
+      "loading": "Chargement des options de verres…",
+      "title": "Type de verre",
+      "subtitle": "Choisissez l'indice de réfraction et les traitements pour vos verres.",
+      "indexHeading": "Indice de réfraction",
+      "recommended": "Recommandé",
+      "included": "Inclus",
+      "treatmentsHeading": "Traitements supplémentaires",
+      "subtotal": "Sous-total estimé"
+    },
+    "step4": {
+      "title": "Résumé",
+      "subtitle": "Vérifiez votre sélection avant de l'ajouter au panier.",
+      "lineFrame": "Monture",
+      "lineLenses": "Verres",
+      "lineTreatments": "Traitements",
+      "none": "Aucun",
+      "included": "Inclus",
+      "indexLabel": "Indice {index}",
+      "total": "Total",
+      "pendingRxNotice": "Ordonnance en attente :",
+      "pendingRxBody": "Votre commande sera fabriquée dès réception de votre ordonnance.",
+      "priceError": "Impossible de calculer le prix. Veuillez réessayer.",
+      "addError": "Erreur lors de l'ajout au panier. Veuillez réessayer.",
+      "adding": "Ajout en cours…",
+      "addToCart": "Ajouter au panier"
+    }
+  },
+  "rxUpload": {
+    "dropTitle": "Glissez votre ordonnance ici ou cliquez pour sélectionner",
+    "dropHint": "JPEG · PNG · WEBP — max. 10 Mo",
+    "dropAria": "Envoyer une image d'ordonnance",
+    "switchManual": "Saisir manuellement",
+    "analyzing": "Analyse de votre ordonnance par IA…",
+    "analyzingHint": "Cela peut prendre quelques secondes",
+    "detected": "✓ Ordonnance détectée",
+    "reviewHint": "Vérifiez et corrigez les valeurs si nécessaire",
+    "outOfRangeTitle": "Valeurs hors normes :",
+    "consentNotice": "Important :",
+    "consentBody": "En confirmant, vous déclarez que les valeurs sont correctes. Le laboratoire fabriquera vos verres à partir de ces données.",
+    "changeImage": "Changer l'image",
+    "editManually": "Modifier manuellement",
+    "confirmRx": "Confirmer l'ordonnance",
+    "errorProcess": "Erreur lors du traitement de l'image.",
+    "errorNoRead": "Impossible de lire l'ordonnance.",
+    "errorNoData": "Aucune donnée d'ordonnance trouvée dans l'image.",
+    "errorConnection": "Erreur de connexion. Veuillez saisir votre ordonnance manuellement."
+  },
+  "cart": {
+    "title": "Votre panier",
+    "emptyTitle": "Votre panier est vide",
+    "emptyBody": "Ajoutez des montures avec vos verres personnalisés pour continuer.",
+    "emptyCta": "Voir les montures",
+    "noItems": "Aucun article dans votre panier.",
+    "removeAria": "Retirer {title}",
+    "summaryTitle": "Résumé",
+    "itemsCount": "Articles ({count})",
+    "shipping": "Livraison",
+    "shippingCalculated": "Calculée lors du paiement",
+    "total": "Total",
+    "checkout": "Procéder au paiement",
+    "continueShopping": "Continuer mes achats"
+  },
+  "checkout": {
+    "title": "Paiement",
+    "contactData": "Coordonnées",
+    "email": "Adresse e-mail",
+    "shippingAddress": "Adresse de livraison",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "addressLine1": "Rue et numéro",
+    "addressLine2": "Appartement (optionnel)",
+    "city": "Ville",
+    "province": "Région/État",
+    "postalCode": "Code postal",
+    "phone": "Téléphone (optionnel)",
+    "continueToPayment": "Continuer vers le paiement",
+    "saving": "Enregistrement…",
+    "paymentMethod": "Méthode de paiement",
+    "providerStripe": "Carte de crédit/débit",
+    "providerPaypal": "PayPal",
+    "providerSquare": "Square",
+    "pay": "Payer {amount}",
+    "processing": "Traitement…",
+    "paypalRedirecting": "Redirection…",
+    "paypalContinue": "Continuer avec PayPal",
+    "paypalNotice": "Vous serez redirigé vers PayPal pour finaliser votre paiement en toute sécurité.",
+    "squareNotice": "Les paiements Square nécessitent la configuration du SDK Square Web Payments sur cette page. Bientôt disponible.",
+    "comingSoon": "Bientôt disponible",
+    "yourOrder": "Votre commande",
+    "total": "Total",
+    "secureNotice": "Paiement 100 % sécurisé · chiffrement SSL",
+    "processingOrder": "Traitement de votre commande…",
+    "errorStripeInit": "Impossible d'initialiser le paiement Stripe.",
+    "errorPaymentGeneric": "Erreur lors du traitement du paiement.",
+    "errorPaypalInit": "Impossible de démarrer PayPal. Veuillez réessayer.",
+    "errors": {
+      "cart_not_found": "Panier introuvable. Veuillez recharger la page.",
+      "address_save_failed": "Erreur lors de l'enregistrement de l'adresse. Veuillez réessayer.",
+      "connection_error": "Erreur de connexion. Vérifiez votre connexion internet et réessayez.",
+      "payment_init_failed": "Erreur lors du démarrage du paiement.",
+      "payment_collection_failed": "Erreur lors de la création de la session de paiement.",
+      "payment_session_failed": "Erreur lors du démarrage de la session de paiement.",
+      "payment_config_failed": "Erreur lors de la configuration du mode de paiement.",
+      "order_failed": "Erreur lors du traitement de la commande. Veuillez réessayer.",
+      "order_incomplete": "Le paiement a été traité mais la commande n'a pas pu être créée.",
+      "order_connection_error": "Erreur de connexion lors de la finalisation de la commande."
+    }
+  },
+  "orderConfirmed": {
+    "metaTitle": "Commande confirmée !",
+    "title": "Commande confirmée !",
+    "orderNumber": "Numéro de commande :",
+    "emailNotice": "Vous recevrez un e-mail de confirmation sous peu. Votre commande sera fabriquée avec les verres que vous avez sélectionnés.",
+    "whatsNext": "Et ensuite ?",
+    "step1": "Nous vérifions votre ordonnance (si vous en avez envoyé une) dans les prochaines heures.",
+    "step2": "Vos verres sont fabriqués en 5 à 7 jours ouvrables.",
+    "step3": "La livraison prend 2 à 4 jours supplémentaires.",
+    "step4": "Nous vous informons par e-mail à chaque étape avec le numéro de suivi.",
+    "continueShopping": "Continuer mes achats"
+  },
+  "tryOn": {
+    "title": "Essayage virtuel",
+    "subtitle": "Essayez des montures en temps réel avec votre caméra. La détection faciale se fait entièrement sur votre appareil — aucune image n'est envoyée à un serveur.",
+    "privacyBadge": "Tout le traitement est local — votre caméra n'est jamais envoyée à un serveur",
+    "cameraStarting": "Démarrage de la caméra…",
+    "likedFrame": "Cette monture vous plaît ? Configurez vos verres.",
+    "selectLenses": "Choisir les verres",
+    "tipLight": "Bon éclairage frontal",
+    "tipEyes": "Regardez droit vers la caméra",
+    "tipCenter": "Gardez le visage centré",
+    "chooseFrame": "Choisissez une monture",
+    "cameraAccessError": "Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.",
+    "cameraAccessHint": "Allez dans Paramètres du navigateur → Confidentialité → Caméra et autorisez l'accès.",
+    "faceDetectorLoading": "Chargement du détecteur facial (la première fois peut prendre ~10 s)…",
+    "faceDetectorError": "Impossible de charger le détecteur facial. {detail}",
+    "capturedPhotoAlt": "Photo capturée",
+    "backToCamera": "Retour à la caméra",
+    "downloadPhoto": "Télécharger la photo",
+    "downloadFilename": "essai-virtuel.jpg",
+    "selectFramePrompt": "Sélectionnez une monture pour l'essayer",
+    "captureAria": "Prendre une photo",
+    "captureHint": "Regardez droit devant · Bon éclairage · Appuyez sur le bouton pour capturer"
+  }
+}

@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from scraper.config import Config
+from scraper.filler import generate_filler
 from scraper.models import ScrapedProduct
 
 
@@ -19,6 +20,10 @@ def _build_medusa_payload(product: ScrapedProduct, pricing: dict[str, Any]) -> d
     price_cents: int = int(
         collection_rules.get("price_cents", pricing.get("default_price_cents", 9900))
     )
+
+    # Deterministic display-only filler (rating/reviews/best-seller/compare-at price).
+    # Never used as an input to actual pricing — display metadata only.
+    filler = generate_filler(product.handle, price_cents)
 
     variants: list[dict[str, Any]] = []
     for idx, color in enumerate(product.colors):
@@ -42,6 +47,7 @@ def _build_medusa_payload(product: ScrapedProduct, pricing: dict[str, Any]) -> d
 
     return {
         "title": product.model_name,
+        "description": product.description_en or None,
         "handle": product.handle,
         "status": "published",
         "variants": variants,
@@ -66,6 +72,11 @@ def _build_medusa_payload(product: ScrapedProduct, pricing: dict[str, Any]) -> d
             "upc_by_color": product.upc_by_color,
             "collection_slug": product.collection_slug,
             "tryon_keys": product.r2_tryon_keys,
+            "rating": filler.rating,
+            "review_count": filler.review_count,
+            "best_seller": filler.best_seller,
+            "original_price_cents": filler.original_price_cents,
+            "i18n": product.translations,
         },
     }
 

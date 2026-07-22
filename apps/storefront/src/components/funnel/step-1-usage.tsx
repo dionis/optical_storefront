@@ -1,40 +1,21 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { UsageType } from "@eyewear/shared";
 import { useFunnelStore } from "@/store/funnel-store";
 
-interface UsageOption {
-  type: UsageType;
-  label: string;
-  description: string;
-  icon: string;
-}
+const OPTION_ICONS: Record<UsageType, string> = {
+  single_vision_distance: "🚗",
+  single_vision_reading: "📖",
+  progressive: "✨",
+  non_prescription: "😎",
+};
 
-const OPTIONS: UsageOption[] = [
-  {
-    type: "single_vision_distance",
-    label: "Visión lejana",
-    description: "Para ver de lejos: conducir, pantallas, deporte.",
-    icon: "🚗",
-  },
-  {
-    type: "single_vision_reading",
-    label: "Visión cercana",
-    description: "Para leer, bordar o trabajo de detalle.",
-    icon: "📖",
-  },
-  {
-    type: "progressive",
-    label: "Progresivos",
-    description: "Sin línea visible. Visión lejos y cerca en una sola lente.",
-    icon: "✨",
-  },
-  {
-    type: "non_prescription",
-    label: "Sin graduación",
-    description: "Solo antireflejante o fotocromático. Sin receta.",
-    icon: "😎",
-  },
+const OPTION_TYPES: UsageType[] = [
+  "single_vision_distance",
+  "single_vision_reading",
+  "progressive",
+  "non_prescription",
 ];
 
 interface Step1UsageProps {
@@ -42,6 +23,7 @@ interface Step1UsageProps {
 }
 
 export function Step1Usage({ onNext }: Step1UsageProps) {
+  const t = useTranslations("funnel");
   const usageType = useFunnelStore((s) => s.usageType);
   const setUsageType = useFunnelStore((s) => s.setUsageType);
 
@@ -53,32 +35,32 @@ export function Step1Usage({ onNext }: Step1UsageProps) {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">
-        ¿Para qué usarás tus lentes?
-      </h2>
-      <p className="text-sm text-gray-500 mb-6">
-        Selecciona el tipo de uso para configurar la mejor opción.
-      </p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t("step1.title")}</h2>
+      <p className="text-sm text-gray-500 mb-6">{t("step1.subtitle")}</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {OPTIONS.map((opt) => (
+        {OPTION_TYPES.map((type) => (
           <button
-            key={opt.type}
+            key={type}
             type="button"
-            onClick={() => handleSelect(opt.type)}
-            aria-pressed={usageType === opt.type}
+            onClick={() => handleSelect(type)}
+            aria-pressed={usageType === type}
             className={`flex items-start gap-4 rounded-xl border-2 p-4 text-left transition-all hover:border-accent hover:bg-accent/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-              usageType === opt.type
+              usageType === type
                 ? "border-accent bg-accent/5"
                 : "border-gray-200"
             }`}
           >
-            <span className="text-3xl leading-none">{opt.icon}</span>
+            <span className="text-3xl leading-none">{OPTION_ICONS[type]}</span>
             <div>
-              <p className="font-semibold text-gray-900">{opt.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
+              <p className="font-semibold text-gray-900">
+                {t(`usageTypes.${type}.label`)}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {t(`usageTypes.${type}.description`)}
+              </p>
             </div>
-            {usageType === opt.type && (
+            {usageType === type && (
               <span className="ml-auto text-accent">
                 <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                   <path

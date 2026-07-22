@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ProductGalleryProps {
@@ -11,6 +12,7 @@ interface ProductGalleryProps {
 export function ProductGallery({ images }: ProductGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const activeImage = images[activeIndex];
+  const t = useTranslations("gallery");
 
   const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL ?? "";
   const resolveUrl = (url: string) =>
@@ -40,7 +42,7 @@ export function ProductGallery({ images }: ProductGalleryProps) {
           <>
             <button
               type="button"
-              aria-label="Imagen anterior"
+              aria-label={t("prevImage")}
               onClick={() =>
                 setActiveIndex((i) => (i - 1 + images.length) % images.length)
               }
@@ -50,7 +52,7 @@ export function ProductGallery({ images }: ProductGalleryProps) {
             </button>
             <button
               type="button"
-              aria-label="Imagen siguiente"
+              aria-label={t("nextImage")}
               onClick={() =>
                 setActiveIndex((i) => (i + 1) % images.length)
               }
@@ -70,7 +72,7 @@ export function ProductGallery({ images }: ProductGalleryProps) {
               key={i}
               type="button"
               onClick={() => setActiveIndex(i)}
-              aria-label={`Imagen ${i + 1}`}
+              aria-label={t("imageN", { n: i + 1 })}
               aria-pressed={i === activeIndex}
               className={`relative h-16 w-20 shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                 i === activeIndex

@@ -1,25 +1,31 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 interface WizardProgressProps {
   currentStep: 1 | 2 | 3 | 4;
   totalSteps?: number;
 }
 
-const STEP_LABELS = ["Uso", "Receta", "Lentes", "Resumen"];
+const STEP_KEYS = ["usage", "prescription", "lens", "summary"] as const;
 
 export function WizardProgress({
   currentStep,
   totalSteps = 4,
 }: WizardProgressProps) {
+  const t = useTranslations("funnel");
+
   return (
-    <div className="w-full" aria-label={`Paso ${currentStep} de ${totalSteps}`}>
+    <div className="w-full" aria-label={t("stepAria", { current: currentStep, total: totalSteps })}>
       {/* Step labels */}
       <ol className="flex items-center justify-between mb-3">
-        {STEP_LABELS.map((label, i) => {
+        {STEP_KEYS.map((key, i) => {
           const step = (i + 1) as 1 | 2 | 3 | 4;
           const isActive = step === currentStep;
           const isDone = step < currentStep;
           return (
             <li
-              key={label}
+              key={key}
               className={`flex flex-col items-center gap-1 ${
                 isActive
                   ? "text-accent"
@@ -52,7 +58,7 @@ export function WizardProgress({
                 )}
               </span>
               <span className="text-[11px] font-medium hidden sm:block">
-                {label}
+                {t(`steps.${key}`)}
               </span>
             </li>
           );

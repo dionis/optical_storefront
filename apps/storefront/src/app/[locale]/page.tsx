@@ -1,25 +1,26 @@
-import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight } from "lucide-react";
 
-const COLLECTIONS = [
-  { slug: "di-caprio", label: "Di Caprio", desc: "Elegancia clásica en acetato" },
-  { slug: "simply-lite", label: "Simply Lite", desc: "Monturas ultra ligeras" },
-  { slug: "trendy", label: "Trendy", desc: "Estilos a la moda" },
-  { slug: "millennial", label: "Millennial", desc: "Diseños modernos y versátiles" },
-  { slug: "flexure", label: "Flexure", desc: "Máxima flexibilidad TR90" },
-  { slug: "slimfold", label: "Slimfold", desc: "Compactas y plegables" },
-];
+const COLLECTION_SLUGS = [
+  "di-caprio",
+  "simply-lite",
+  "trendy",
+  "millennial",
+  "flexure",
+  "slimfold",
+] as const;
 
-const SHAPES = [
-  { label: "Redonda", param: "round" },
-  { label: "Rectangular", param: "rectangle" },
-  { label: "Aviador", param: "aviator" },
-  { label: "Ojo de gato", param: "cat_eye" },
-  { label: "Cuadrada", param: "square" },
-  { label: "Oval", param: "oval" },
-];
+const SHAPE_PARAMS = ["round", "rectangle", "aviator", "cat_eye", "square", "oval"] as const;
 
-export default function HomePage() {
+export default async function HomePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "home" });
+
   return (
     <>
       {/* Hero */}
@@ -27,25 +28,25 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
           <div className="max-w-2xl">
             <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-gray-900 leading-[1.1] mb-6">
-              Lentes a{" "}
-              <span className="text-accent">tu medida</span>
+              {t("heroTitlePlain")}{" "}
+              <span className="text-accent">{t("heroTitleAccent")}</span>
             </h1>
             <p className="text-xl text-gray-500 mb-8 leading-relaxed">
-              Elige tu montura favorita, sube tu receta y recibe tus lentes graduados en casa. Proceso simple, precios transparentes.
+              {t("heroSubtitle")}
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/glasses"
                 className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-accent-700 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                Ver monturas
+                {t("ctaBrowse")}
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 href="/try-on"
                 className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                Prueba virtual
+                {t("ctaTryOn")}
               </Link>
             </div>
           </div>
@@ -54,17 +55,17 @@ export default function HomePage() {
 
       {/* By shape */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Por forma</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">{t("byShape")}</h2>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {SHAPES.map((shape) => (
+          {SHAPE_PARAMS.map((shape) => (
             <Link
-              key={shape.param}
-              href={`/glasses?shape=${shape.param}`}
+              key={shape}
+              href={`/glasses?shape=${shape}`}
               className="flex flex-col items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 p-4 text-center hover:border-accent/30 hover:bg-accent/5 transition-colors group"
             >
               <span className="text-2xl">👓</span>
               <span className="text-xs font-medium text-gray-700 group-hover:text-accent transition-colors">
-                {shape.label}
+                {t(`shapes.${shape}`)}
               </span>
             </Link>
           ))}
@@ -74,28 +75,28 @@ export default function HomePage() {
       {/* Collections */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Colecciones</h2>
+          <h2 className="text-2xl font-bold text-gray-900">{t("collections")}</h2>
           <Link
             href="/glasses"
             className="text-sm font-medium text-accent hover:underline underline-offset-2"
           >
-            Ver todas
+            {t("viewAll")}
           </Link>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {COLLECTIONS.map((col) => (
+          {COLLECTION_SLUGS.map((slug) => (
             <Link
-              key={col.slug}
-              href={`/glasses?collection=${col.slug}`}
+              key={slug}
+              href={`/glasses?collection=${slug}`}
               className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-6 hover:border-gray-200 hover:shadow-sm transition-all"
             >
               <div className="mb-3 h-24 rounded-xl bg-white flex items-center justify-center text-4xl">
                 👓
               </div>
               <h3 className="font-semibold text-gray-900 group-hover:text-accent transition-colors">
-                {col.label}
+                {t(`collectionList.${slug}.label`)}
               </h3>
-              <p className="mt-1 text-sm text-gray-500">{col.desc}</p>
+              <p className="mt-1 text-sm text-gray-500">{t(`collectionList.${slug}.desc`)}</p>
             </Link>
           ))}
         </div>
@@ -104,10 +105,9 @@ export default function HomePage() {
       {/* Gender entry points */}
       <section className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Por género</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">{t("byGender")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {(["women", "men", "unisex"] as const).map((gender) => {
-              const labels = { women: "Para mujer", men: "Para hombre", unisex: "Unisex" };
               const emojis = { women: "👩", men: "👨", unisex: "🧑" };
               return (
                 <Link
@@ -117,7 +117,7 @@ export default function HomePage() {
                 >
                   <span className="text-3xl">{emojis[gender]}</span>
                   <span className="font-semibold text-gray-900 group-hover:text-accent transition-colors">
-                    {labels[gender]}
+                    {t(`genders.${gender}`)}
                   </span>
                   <ArrowRight className="ml-auto h-4 w-4 text-gray-400 group-hover:text-accent transition-colors" />
                 </Link>

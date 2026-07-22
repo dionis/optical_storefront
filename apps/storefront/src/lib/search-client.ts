@@ -1,4 +1,5 @@
 import { MeiliSearch } from "meilisearch";
+import { FRAMES_INDEX_NAME } from "@eyewear/shared";
 
 export const searchClient = new MeiliSearch({
   host:
@@ -6,4 +7,4 @@ export const searchClient = new MeiliSearch({
   apiKey: process.env.NEXT_PUBLIC_MEILISEARCH_SEARCH_KEY,
 });
 
-export const FRAMES_INDEX = "frames";
+export const FRAMES_INDEX = FRAMES_INDEX_NAME;

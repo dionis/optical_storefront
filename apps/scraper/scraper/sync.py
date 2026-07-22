@@ -12,6 +12,7 @@ from scraper.medusa_push import upsert_product
 from scraper.models import ScrapedProduct
 from scraper.parser import parse_product_html, parse_store_api_product
 from scraper.state import StateStore
+from scraper.translate import translate_product
 
 PRICING_YAML_PATH = "pricing.yaml"
 STORE_API_PRODUCTS = "/wp-json/wc/store/v1/products"
@@ -256,6 +257,14 @@ async def sync(
 
                 # Enrich with individual product HTML (for UPC, measurements)
                 product = await _enrich_from_html(client, config, product)
+
+                # AI-assisted es/fr translation of title+description (skips gracefully
+                # if ANTHROPIC_API_KEY is unset or the call fails — never blocks sync)
+                if config.anthropic_api_key:
+                    product.translations = (
+                        translate_product(product.model_name, product.description_en, config)
+                        or {}
+                    )
 
                 # Image pipeline (download → optimize → R2 upload)
                 product = process_product_images(product, config, dry_run=dry_run)

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import {
   loadStripe,
   type Stripe,
@@ -12,6 +13,7 @@ import { useCart } from "@/hooks/use-cart";
 import { useCheckout } from "@/hooks/use-checkout";
 import { formatPrice } from "@/lib/utils";
 import type { CartLensMetadata } from "@eyewear/shared";
+import type { Locale } from "@/i18n/routing";
 
 // ── Stripe initialisation ─────────────────────────────────────────────────
 
@@ -50,6 +52,7 @@ function AddressStep({
 }: {
   checkout: ReturnType<typeof useCheckout>;
 }) {
+  const t = useTranslations("checkout");
   const { contact, address, setContact, setAddress, submitAddress, isLoading, error } = checkout;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,9 +62,9 @@ function AddressStep({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900">Datos de contacto</h2>
+      <h2 className="text-lg font-bold text-gray-900">{t("contactData")}</h2>
 
-      <Field label="Correo electrónico" id="email">
+      <Field label={t("email")} id="email">
         <input
           id="email"
           type="email"
@@ -70,14 +73,14 @@ function AddressStep({
           value={contact.email}
           onChange={(e) => setContact({ email: e.target.value })}
           className={INPUT_CLS}
-          placeholder="correo@ejemplo.com"
+          placeholder="name@example.com"
         />
       </Field>
 
-      <h2 className="text-lg font-bold text-gray-900 pt-2">Dirección de envío</h2>
+      <h2 className="text-lg font-bold text-gray-900 pt-2">{t("shippingAddress")}</h2>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Nombre" id="first_name">
+        <Field label={t("firstName")} id="first_name">
           <input
             id="first_name"
             required
@@ -85,10 +88,9 @@ function AddressStep({
             value={address.first_name}
             onChange={(e) => setAddress({ ...address, first_name: e.target.value })}
             className={INPUT_CLS}
-            placeholder="Ana"
           />
         </Field>
-        <Field label="Apellido" id="last_name">
+        <Field label={t("lastName")} id="last_name">
           <input
             id="last_name"
             required
@@ -96,12 +98,11 @@ function AddressStep({
             value={address.last_name}
             onChange={(e) => setAddress({ ...address, last_name: e.target.value })}
             className={INPUT_CLS}
-            placeholder="García"
           />
         </Field>
       </div>
 
-      <Field label="Calle y número" id="address_1">
+      <Field label={t("addressLine1")} id="address_1">
         <input
           id="address_1"
           required
@@ -109,23 +110,21 @@ function AddressStep({
           value={address.address_1}
           onChange={(e) => setAddress({ ...address, address_1: e.target.value })}
           className={INPUT_CLS}
-          placeholder="Av. Insurgentes 1234"
         />
       </Field>
 
-      <Field label="Colonia / Apartamento (opcional)" id="address_2">
+      <Field label={t("addressLine2")} id="address_2">
         <input
           id="address_2"
           autoComplete="address-line2"
           value={address.address_2 ?? ""}
           onChange={(e) => setAddress({ ...address, address_2: e.target.value })}
           className={INPUT_CLS}
-          placeholder="Col. Roma Norte, Depto 5"
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Ciudad" id="city">
+        <Field label={t("city")} id="city">
           <input
             id="city"
             required
@@ -133,10 +132,9 @@ function AddressStep({
             value={address.city}
             onChange={(e) => setAddress({ ...address, city: e.target.value })}
             className={INPUT_CLS}
-            placeholder="Ciudad de México"
           />
         </Field>
-        <Field label="Estado" id="province">
+        <Field label={t("province")} id="province">
           <input
             id="province"
             required
@@ -144,13 +142,12 @@ function AddressStep({
             value={address.province}
             onChange={(e) => setAddress({ ...address, province: e.target.value })}
             className={INPUT_CLS}
-            placeholder="CDMX"
           />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Código postal" id="postal_code">
+        <Field label={t("postalCode")} id="postal_code">
           <input
             id="postal_code"
             required
@@ -158,10 +155,9 @@ function AddressStep({
             value={address.postal_code}
             onChange={(e) => setAddress({ ...address, postal_code: e.target.value })}
             className={INPUT_CLS}
-            placeholder="06600"
           />
         </Field>
-        <Field label="Teléfono (opcional)" id="phone">
+        <Field label={t("phone")} id="phone">
           <input
             id="phone"
             type="tel"
@@ -169,14 +165,13 @@ function AddressStep({
             value={address.phone ?? ""}
             onChange={(e) => setAddress({ ...address, phone: e.target.value })}
             className={INPUT_CLS}
-            placeholder="+52 55 1234 5678"
           />
         </Field>
       </div>
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
+          {t.has(`errors.${error}`) ? t(`errors.${error}`) : error}
         </p>
       )}
 
@@ -185,7 +180,7 @@ function AddressStep({
         disabled={isLoading}
         className="w-full rounded-xl bg-accent px-6 py-3.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 transition-colors"
       >
-        {isLoading ? "Guardando…" : "Continuar al pago"}
+        {isLoading ? t("saving") : t("continueToPayment")}
       </button>
     </form>
   );
@@ -205,12 +200,6 @@ const CARD_ELEMENT_OPTIONS = {
   },
 };
 
-const PROVIDERS = [
-  { id: "pp_stripe_stripe", label: "Tarjeta de crédito/débito", icon: "💳" },
-  { id: "pp_paypal_paypal", label: "PayPal", icon: "🅿️" },
-  { id: "pp_square_square", label: "Square", icon: "⬛" },
-];
-
 function PaymentStep({
   checkout,
   cartTotal,
@@ -220,12 +209,22 @@ function PaymentStep({
   cartTotal: number;
   onOrderComplete: (orderId: string) => void;
 }) {
+  const t = useTranslations("checkout");
+  const locale = useLocale() as Locale;
   const stripe = useStripe();
   const elements = useElements();
   const { selectedProvider, setSelectedProvider, initPaymentSession, completeOrder, isLoading, error } = checkout;
 
+  const PROVIDERS = [
+    { id: "pp_stripe_stripe", label: t("providerStripe"), icon: "💳" },
+    { id: "pp_paypal_paypal", label: t("providerPaypal"), icon: "🅿️" },
+    { id: "pp_square_square", label: t("providerSquare"), icon: "⬛" },
+  ];
+
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const displayError =
+    initError ?? (error ? (t.has(`errors.${error}`) ? t(`errors.${error}`) : error) : null);
 
   // Initialize Stripe payment session on mount
   useEffect(() => {
@@ -234,7 +233,7 @@ function PaymentStep({
       if (data?.client_secret) {
         setClientSecret(data.client_secret as string);
       } else if (data) {
-        setInitError("No se pudo inicializar el pago con Stripe.");
+        setInitError(t("errorStripeInit"));
       }
     });
   }, [selectedProvider]);
@@ -253,7 +252,7 @@ function PaymentStep({
       );
 
       if (stripeError) {
-        setInitError(stripeError.message ?? "Error al procesar el pago.");
+        setInitError(stripeError.message ?? t("errorPaymentGeneric"));
         return;
       }
 
@@ -271,7 +270,7 @@ function PaymentStep({
       if (approveUrl) {
         window.location.href = approveUrl;
       } else {
-        setInitError("No se pudo iniciar PayPal. Inténtalo de nuevo.");
+        setInitError(t("errorPaypalInit"));
       }
     },
     [initPaymentSession]
@@ -279,7 +278,7 @@ function PaymentStep({
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-gray-900">Método de pago</h2>
+      <h2 className="text-lg font-bold text-gray-900">{t("paymentMethod")}</h2>
 
       {/* Provider selector */}
       <div className="flex flex-col gap-2">
@@ -317,9 +316,9 @@ function PaymentStep({
             <CardElement options={CARD_ELEMENT_OPTIONS} />
           </div>
 
-          {(initError ?? error) && (
+          {displayError && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {initError ?? error}
+              {displayError}
             </p>
           )}
 
@@ -328,7 +327,7 @@ function PaymentStep({
             disabled={isLoading || !stripe || !clientSecret}
             className="w-full rounded-xl bg-accent px-6 py-3.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 transition-colors"
           >
-            {isLoading ? "Procesando…" : `Pagar ${formatPrice(cartTotal)}`}
+            {isLoading ? t("processing") : t("pay", { amount: formatPrice(cartTotal, locale) })}
           </button>
         </form>
       )}
@@ -337,11 +336,11 @@ function PaymentStep({
       {selectedProvider === "pp_paypal_paypal" && (
         <form onSubmit={handlePayPalSubmit} className="space-y-4">
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-            Serás redirigido a PayPal para completar el pago de forma segura.
+            {t("paypalNotice")}
           </div>
-          {(initError ?? error) && (
+          {displayError && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {initError ?? error}
+              {displayError}
             </p>
           )}
           <button
@@ -349,7 +348,7 @@ function PaymentStep({
             disabled={isLoading}
             className="w-full rounded-xl bg-[#0070ba] px-6 py-3.5 text-sm font-semibold text-white hover:bg-[#005ea2] disabled:opacity-50 transition-colors"
           >
-            {isLoading ? "Redirigiendo…" : "Continuar con PayPal"}
+            {isLoading ? t("paypalRedirecting") : t("paypalContinue")}
           </button>
         </form>
       )}
@@ -358,15 +357,14 @@ function PaymentStep({
       {selectedProvider === "pp_square_square" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-            El pago con Square requiere que se configure el SDK de Square Web
-            Payments en esta página. Disponible próximamente.
+            {t("squareNotice")}
           </div>
           <button
             type="button"
             disabled
             className="w-full rounded-xl bg-gray-800 px-6 py-3.5 text-sm font-semibold text-white opacity-40 cursor-not-allowed"
           >
-            Próximamente
+            {t("comingSoon")}
           </button>
         </div>
       )}
@@ -385,9 +383,11 @@ function OrderSummary({
     : NonNullable<ReturnType<typeof useCart>["cart"]>["items"];
   total: number;
 }) {
+  const t = useTranslations("checkout");
+  const locale = useLocale() as Locale;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5">
-      <h2 className="text-base font-bold text-gray-900 mb-4">Tu pedido</h2>
+      <h2 className="text-base font-bold text-gray-900 mb-4">{t("yourOrder")}</h2>
       <div className="space-y-3 mb-4">
         {items.map((item) => {
           const lensTotal =
@@ -399,19 +399,17 @@ function OrderSummary({
                 {item.title}
               </span>
               <span className="font-semibold text-gray-900 shrink-0">
-                {formatPrice(lensTotal)}
+                {formatPrice(lensTotal, locale)}
               </span>
             </div>
           );
         })}
       </div>
       <div className="flex justify-between border-t border-gray-100 pt-3 text-sm font-bold">
-        <span className="text-gray-900">Total</span>
-        <span className="text-accent">{formatPrice(total)}</span>
+        <span className="text-gray-900">{t("total")}</span>
+        <span className="text-accent">{formatPrice(total, locale)}</span>
       </div>
-      <p className="mt-3 text-xs text-gray-400 text-center">
-        Pago 100% seguro · SSL cifrado
-      </p>
+      <p className="mt-3 text-xs text-gray-400 text-center">{t("secureNotice")}</p>
     </div>
   );
 }
@@ -419,6 +417,7 @@ function OrderSummary({
 // ── Processing overlay ────────────────────────────────────────────────────
 
 function ProcessingOverlay() {
+  const t = useTranslations("checkout");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
       <div className="text-center">
@@ -426,7 +425,7 @@ function ProcessingOverlay() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
         </svg>
-        <p className="mt-4 text-sm font-medium text-gray-600">Procesando tu pedido…</p>
+        <p className="mt-4 text-sm font-medium text-gray-600">{t("processingOrder")}</p>
       </div>
     </div>
   );
@@ -435,6 +434,7 @@ function ProcessingOverlay() {
 // ── Root checkout component ───────────────────────────────────────────────
 
 function CheckoutInner() {
+  const t = useTranslations("checkout");
   const router = useRouter();
   const { cart } = useCart();
   const checkout = useCheckout();
@@ -452,7 +452,7 @@ function CheckoutInner() {
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Finalizar compra</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{t("title")}</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Form */}

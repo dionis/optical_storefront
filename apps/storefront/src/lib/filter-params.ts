@@ -1,6 +1,9 @@
 /**
  * Serialises/deserialises the listing page filter state to/from URL search params.
  * This keeps all filter state in the URL for shareability and browser history.
+ *
+ * Display labels for these keys live in messages/{locale}.json under the "filters"
+ * namespace — this file only owns the enum shapes and Meilisearch translation.
  */
 
 export interface ListingFilters {
@@ -13,11 +16,20 @@ export interface ListingFilters {
   /** Derived size buckets: "narrow" (<50 mm), "medium" (50-54), "wide" (≥55) */
   sizes: SizeBucket[];
   colors: string[];
+  /** Derived price buckets, mirrors SizeBucket's pattern */
+  priceRanges: PriceBucket[];
   sort: SortOption;
 }
 
 export type SizeBucket = "narrow" | "medium" | "wide";
-export type SortOption = "relevance" | "price_asc" | "price_desc" | "title_asc";
+export type PriceBucket = "under_10" | "under_20" | "under_30" | "above_30" | "on_sale";
+export type SortOption =
+  | "relevance"
+  | "price_asc"
+  | "price_desc"
+  | "title_asc"
+  | "best_seller"
+  | "rating_desc";
 
 export const SIZE_BUCKET_FILTERS: Record<SizeBucket, string> = {
   narrow: "eye_size < 50",
@@ -25,17 +37,22 @@ export const SIZE_BUCKET_FILTERS: Record<SizeBucket, string> = {
   wide: "eye_size >= 55",
 };
 
-export const SIZE_BUCKET_LABELS: Record<SizeBucket, string> = {
-  narrow: "Estrecho (< 50 mm)",
-  medium: "Mediano (50–54 mm)",
-  wide: "Ancho (≥ 55 mm)",
+/** Cent thresholds for price buckets, matching the Zeelool-style "Under $X" sidebar groups. */
+export const PRICE_BUCKET_FILTERS: Record<PriceBucket, string> = {
+  under_10: "price_from < 1000",
+  under_20: "price_from < 2000",
+  under_30: "price_from < 3000",
+  above_30: "price_from >= 3000",
+  on_sale: "original_price_from > 0",
 };
 
-export const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "relevance", label: "Relevancia" },
-  { value: "price_asc", label: "Precio: menor a mayor" },
-  { value: "price_desc", label: "Precio: mayor a menor" },
-  { value: "title_asc", label: "Nombre A–Z" },
+export const SORT_OPTIONS: SortOption[] = [
+  "relevance",
+  "price_asc",
+  "price_desc",
+  "title_asc",
+  "best_seller",
+  "rating_desc",
 ];
 
 export const MEILI_SORT_PARAMS: Record<SortOption, string[]> = {
@@ -43,6 +60,8 @@ export const MEILI_SORT_PARAMS: Record<SortOption, string[]> = {
   price_asc: ["price_from:asc"],
   price_desc: ["price_from:desc"],
   title_asc: ["title:asc"],
+  best_seller: ["best_seller:desc", "rating:desc"],
+  rating_desc: ["rating:desc"],
 };
 
 const EMPTY: ListingFilters = {
@@ -54,6 +73,7 @@ const EMPTY: ListingFilters = {
   features: [],
   sizes: [],
   colors: [],
+  priceRanges: [],
   sort: "relevance",
 };
 
@@ -80,6 +100,7 @@ export function parseFilterParams(
     features: splitParam(get("feature")),
     sizes: splitParam(get("size")) as SizeBucket[],
     colors: splitParam(get("color")),
+    priceRanges: splitParam(get("price")) as PriceBucket[],
     sort: (get("sort") as SortOption) ?? "relevance",
   };
 }
@@ -96,6 +117,7 @@ export function filtersToSearchParams(
   if (filters.features.length) p.set("feature", filters.features.join(","));
   if (filters.sizes.length) p.set("size", filters.sizes.join(","));
   if (filters.colors.length) p.set("color", filters.colors.join(","));
+  if (filters.priceRanges.length) p.set("price", filters.priceRanges.join(","));
   if (filters.sort !== "relevance") p.set("sort", filters.sort);
   return p;
 }
@@ -132,6 +154,11 @@ export function buildMeiliFilter(filters: ListingFilters): string {
     parts.push(`(${sizeParts.join(" OR ")})`);
   }
 
+  if (filters.priceRanges.length) {
+    const priceParts = filters.priceRanges.map((p) => `(${PRICE_BUCKET_FILTERS[p]})`);
+    parts.push(`(${priceParts.join(" OR ")})`);
+  }
+
   return parts.join(" AND ");
 }
 
@@ -143,7 +170,8 @@ export function countActiveFilters(filters: ListingFilters): number {
     filters.collections.length +
     filters.features.length +
     filters.sizes.length +
-    filters.colors.length
+    filters.colors.length +
+    filters.priceRanges.length
   );
 }
 

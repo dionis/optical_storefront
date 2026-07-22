@@ -1,0 +1,358 @@
+{
+  "common": {
+    "siteName": "Óptica",
+    "tagline": "Lentes a tu medida"
+  },
+  "promoBar": {
+    "shipping": "Envío estándar gratis en pedidos mayores a $59.00",
+    "deal": "Compra 1, obtén 50% de descuento en monturas adicionales"
+  },
+  "header": {
+    "navFrames": "Monturas",
+    "navDeals": "Ofertas",
+    "navTryOn": "Prueba virtual",
+    "searchPlaceholder": "Buscar monturas…",
+    "searchAria": "Buscar monturas",
+    "cartAria": "Carrito de compras",
+    "wishlistAria": "Lista de deseos",
+    "accountAria": "Cuenta"
+  },
+  "languageSwitcher": {
+    "label": "Idioma",
+    "es": "Español",
+    "en": "English",
+    "fr": "Français"
+  },
+  "home": {
+    "heroTitlePlain": "Lentes a",
+    "heroTitleAccent": "tu medida",
+    "heroSubtitle": "Elige tu montura favorita, sube tu receta y recibe tus lentes graduados en casa. Proceso simple, precios transparentes.",
+    "ctaBrowse": "Ver monturas",
+    "ctaTryOn": "Prueba virtual",
+    "byShape": "Por forma",
+    "collections": "Colecciones",
+    "viewAll": "Ver todas",
+    "byGender": "Por género",
+    "genders": { "women": "Para mujer", "men": "Para hombre", "unisex": "Unisex" },
+    "shapes": {
+      "round": "Redonda",
+      "rectangle": "Rectangular",
+      "aviator": "Aviador",
+      "cat_eye": "Ojo de gato",
+      "square": "Cuadrada",
+      "oval": "Oval"
+    },
+    "collectionList": {
+      "di-caprio": { "label": "Di Caprio", "desc": "Elegancia clásica en acetato" },
+      "simply-lite": { "label": "Simply Lite", "desc": "Monturas ultra ligeras" },
+      "trendy": { "label": "Trendy", "desc": "Estilos a la moda" },
+      "millennial": { "label": "Millennial", "desc": "Diseños modernos y versátiles" },
+      "flexure": { "label": "Flexure", "desc": "Máxima flexibilidad TR90" },
+      "slimfold": { "label": "Slimfold", "desc": "Compactas y plegables" }
+    }
+  },
+  "filters": {
+    "sectionGender": "Género",
+    "sectionShape": "Forma",
+    "sectionMaterial": "Material",
+    "sectionSize": "Tamaño (ojo)",
+    "sectionColor": "Color",
+    "sectionCollection": "Colección",
+    "sectionFeatures": "Características",
+    "sectionPrice": "Precio",
+    "sectionPrescription": "Prescripción",
+    "emptyState": "Los filtros aparecerán una vez que haya productos indexados.",
+    "genders": { "men": "Hombre", "women": "Mujer", "unisex": "Unisex" },
+    "shapes": {
+      "round": "Redonda",
+      "oval": "Oval",
+      "rectangle": "Rectangular",
+      "square": "Cuadrada",
+      "cat_eye": "Ojo de gato",
+      "aviator": "Aviador",
+      "browline": "Browline",
+      "geometric": "Geométrica",
+      "rimless": "Sin aro",
+      "semi_rimless": "Semi sin aro",
+      "other": "Otro"
+    },
+    "materials": {
+      "acetate": "Acetato",
+      "metal": "Metal",
+      "titanium": "Titanio",
+      "stainless_steel": "Acero inoxidable",
+      "tr90": "TR90",
+      "mixed": "Mixto",
+      "wood": "Madera",
+      "other": "Otro"
+    },
+    "sizes": {
+      "narrow": "Estrecho (< 50 mm)",
+      "medium": "Mediano (50–54 mm)",
+      "wide": "Ancho (≥ 55 mm)"
+    },
+    "priceBuckets": {
+      "under_10": "Menos de $10.00",
+      "under_20": "Menos de $20.00",
+      "under_30": "Menos de $30.00",
+      "above_30": "Más de $30.00",
+      "on_sale": "En oferta"
+    },
+    "activeLabel": "Filtros activos:",
+    "clearAll": "Limpiar todo",
+    "removeFilter": "Eliminar filtro {label}",
+    "mobileButton": "Filtros",
+    "mobileTitle": "Filtros",
+    "mobileClose": "Cerrar filtros",
+    "mobileViewResults": "Ver resultados"
+  },
+  "listing": {
+    "title": "Monturas",
+    "metaDescription": "Explora nuestra amplia selección de monturas para lentes graduados. Filtra por forma, material y estilo.",
+    "heroSubtitle": "Monturas de moda para cada momento, con prueba virtual y envío rápido.",
+    "resultsFor": "Resultados para:",
+    "sortLabel": "Ordenar:",
+    "sortAria": "Ordenar resultados",
+    "sort": {
+      "relevance": "Relevancia",
+      "price_asc": "Precio: menor a mayor",
+      "price_desc": "Precio: mayor a menor",
+      "title_asc": "Nombre A–Z",
+      "best_seller": "Más vendidos",
+      "rating_desc": "Mejor calificados"
+    },
+    "loading": "Buscando…",
+    "resultCount": "{count, plural, one {# montura} other {# monturas}}",
+    "noResults": "No se encontraron monturas.",
+    "noResultsHint": "Intenta ajustar los filtros o el término de búsqueda.",
+    "seenAll": "Has visto todas las monturas disponibles.",
+    "errorTitle": "Error al cargar resultados"
+  },
+  "card": {
+    "priceFrom": "Desde {price}",
+    "priceOnRequest": "Precio a consultar",
+    "bestSeller": "Best Seller",
+    "tryOn": "Probar",
+    "reviews": "{count, plural, one {# reseña} other {# reseñas}}"
+  },
+  "pdp": {
+    "breadcrumbFrames": "Monturas",
+    "backTo": "Volver a {title}",
+    "notFoundMetaTitle": "Montura no encontrada",
+    "notFoundTitle": "Montura no disponible",
+    "notFoundBody": "Esta montura aún no está disponible o no se encontró. El catálogo se carga automáticamente cada día.",
+    "viewAll": "Ver todas las monturas",
+    "metaDescription": "Compra {title} online. Elige lentes graduados a tu medida.",
+    "colorLabel": "Color:",
+    "lensesFrom": "+ lentes a partir de",
+    "selectLenses": "Seleccionar lentes",
+    "selectLensesMetaTitle": "Seleccionar lentes — {title}",
+    "tryOnVirtual": "Probarme virtualmente",
+    "bestSeller": "Best Seller",
+    "reviews": "{count, plural, one {# reseña} other {# reseñas}}",
+    "measurementsTitle": "Medidas",
+    "measurementsAria": "Montura: {eyeSize}-{bridgeSize}-{templeLength}",
+    "measureEye": "Ojo",
+    "measureBridge": "Puente",
+    "measureTemple": "Varilla"
+  },
+  "gallery": {
+    "prevImage": "Imagen anterior",
+    "nextImage": "Imagen siguiente",
+    "imageN": "Imagen {n}"
+  },
+  "wishlist": {
+    "add": "Agregar a la lista de deseos",
+    "remove": "Quitar de la lista de deseos"
+  },
+  "funnel": {
+    "steps": { "usage": "Uso", "prescription": "Receta", "lens": "Lentes", "summary": "Resumen" },
+    "stepAria": "Paso {current} de {total}",
+    "back": "Atrás",
+    "continue": "Continuar",
+    "usageTypes": {
+      "single_vision_distance": {
+        "label": "Visión lejana",
+        "description": "Para ver de lejos: conducir, pantallas, deporte."
+      },
+      "single_vision_reading": {
+        "label": "Visión cercana",
+        "description": "Para leer, bordar o trabajo de detalle."
+      },
+      "progressive": {
+        "label": "Progresivos",
+        "description": "Sin línea visible. Visión lejos y cerca en una sola lente."
+      },
+      "non_prescription": {
+        "label": "Sin graduación",
+        "description": "Solo antireflejante o fotocromático. Sin receta."
+      }
+    },
+    "step1": {
+      "title": "¿Para qué usarás tus lentes?",
+      "subtitle": "Selecciona el tipo de uso para configurar la mejor opción."
+    },
+    "step2": {
+      "titleNonRx": "Receta médica",
+      "subtitleNonRx": "Como elegiste sin graduación, no necesitas receta. Puedes continuar.",
+      "title": "Tu receta",
+      "subtitle": "Ingresa los valores de tu receta óptica más reciente.",
+      "tabManual": "Ingresar manualmente",
+      "tabUpload": "Subir foto",
+      "tabLater": "Más tarde",
+      "axisHeader": "EJE",
+      "pdLabel": "Distancia pupilar (DP)",
+      "pdSingle": "Simple",
+      "pdDual": "Dual",
+      "validating": "Validando receta…",
+      "valid": "✓ Receta válida",
+      "invalid": "✗ Receta fuera de rango",
+      "recommendedIndex": "Índice recomendado: {index}",
+      "laterTitle": "Proporcionar receta más tarde",
+      "laterBody": "Podrás enviar tu receta por WhatsApp o correo después de completar tu pedido. Tu pedido se fabricará al recibirla."
+    },
+    "step3": {
+      "loading": "Cargando opciones de lentes…",
+      "title": "Tipo de lente",
+      "subtitle": "Elige el índice de refracción y los tratamientos para tus lentes.",
+      "indexHeading": "Índice de refracción",
+      "recommended": "Recomendado",
+      "included": "Incluido",
+      "treatmentsHeading": "Tratamientos adicionales",
+      "subtotal": "Subtotal estimado"
+    },
+    "step4": {
+      "title": "Resumen",
+      "subtitle": "Revisa tu selección antes de agregar al carrito.",
+      "lineFrame": "Montura",
+      "lineLenses": "Lentes",
+      "lineTreatments": "Tratamientos",
+      "none": "Ninguno",
+      "included": "Incluido",
+      "indexLabel": "Índice {index}",
+      "total": "Total",
+      "pendingRxNotice": "Receta pendiente:",
+      "pendingRxBody": "Tu pedido se fabricará cuando recibamos tu receta.",
+      "priceError": "No se pudo calcular el precio. Inténtalo de nuevo.",
+      "addError": "Error al agregar al carrito. Inténtalo de nuevo.",
+      "adding": "Agregando…",
+      "addToCart": "Añadir al carrito"
+    }
+  },
+  "rxUpload": {
+    "dropTitle": "Arrastra tu receta aquí o haz clic para seleccionar",
+    "dropHint": "JPEG · PNG · WEBP — máx. 10 MB",
+    "dropAria": "Subir imagen de receta",
+    "switchManual": "Ingresar manualmente",
+    "analyzing": "Analizando tu receta con IA…",
+    "analyzingHint": "Esto puede tardar unos segundos",
+    "detected": "✓ Receta detectada",
+    "reviewHint": "Revisa y corrige los valores si es necesario",
+    "outOfRangeTitle": "Valores fuera de rango normal:",
+    "consentNotice": "Importante:",
+    "consentBody": "Al confirmar, declaras que los valores son correctos. El fabricante elaborará tus lentes con estos datos.",
+    "changeImage": "Cambiar imagen",
+    "editManually": "Editar manualmente",
+    "confirmRx": "Confirmar receta",
+    "errorProcess": "Error al procesar la imagen.",
+    "errorNoRead": "No se pudo leer la receta.",
+    "errorNoData": "No se encontraron datos de receta en la imagen.",
+    "errorConnection": "Error de conexión. Por favor ingresa tu receta manualmente."
+  },
+  "cart": {
+    "title": "Tu carrito",
+    "emptyTitle": "Tu carrito está vacío",
+    "emptyBody": "Agrega monturas con tus lentes personalizados para continuar.",
+    "emptyCta": "Explorar monturas",
+    "noItems": "No hay artículos en tu carrito.",
+    "removeAria": "Eliminar {title}",
+    "summaryTitle": "Resumen",
+    "itemsCount": "Artículos ({count})",
+    "shipping": "Envío",
+    "shippingCalculated": "Se calcula al pagar",
+    "total": "Total",
+    "checkout": "Proceder al pago",
+    "continueShopping": "Continuar comprando"
+  },
+  "checkout": {
+    "title": "Finalizar compra",
+    "contactData": "Datos de contacto",
+    "email": "Correo electrónico",
+    "shippingAddress": "Dirección de envío",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "addressLine1": "Calle y número",
+    "addressLine2": "Colonia / Apartamento (opcional)",
+    "city": "Ciudad",
+    "province": "Estado",
+    "postalCode": "Código postal",
+    "phone": "Teléfono (opcional)",
+    "continueToPayment": "Continuar al pago",
+    "saving": "Guardando…",
+    "paymentMethod": "Método de pago",
+    "providerStripe": "Tarjeta de crédito/débito",
+    "providerPaypal": "PayPal",
+    "providerSquare": "Square",
+    "pay": "Pagar {amount}",
+    "processing": "Procesando…",
+    "paypalRedirecting": "Redirigiendo…",
+    "paypalContinue": "Continuar con PayPal",
+    "paypalNotice": "Serás redirigido a PayPal para completar el pago de forma segura.",
+    "squareNotice": "El pago con Square requiere que se configure el SDK de Square Web Payments en esta página. Disponible próximamente.",
+    "comingSoon": "Próximamente",
+    "yourOrder": "Tu pedido",
+    "total": "Total",
+    "secureNotice": "Pago 100% seguro · SSL cifrado",
+    "processingOrder": "Procesando tu pedido…",
+    "errorStripeInit": "No se pudo inicializar el pago con Stripe.",
+    "errorPaymentGeneric": "Error al procesar el pago.",
+    "errorPaypalInit": "No se pudo iniciar PayPal. Inténtalo de nuevo.",
+    "errors": {
+      "cart_not_found": "Carrito no encontrado. Por favor recarga la página.",
+      "address_save_failed": "Error al guardar la dirección. Inténtalo de nuevo.",
+      "connection_error": "Error de conexión. Verifica tu internet e inténtalo de nuevo.",
+      "payment_init_failed": "Error al iniciar el pago.",
+      "payment_collection_failed": "Error al crear la sesión de pago.",
+      "payment_session_failed": "Error al iniciar la sesión de pago.",
+      "payment_config_failed": "Error al configurar el método de pago.",
+      "order_failed": "Error al procesar el pedido. Inténtalo de nuevo.",
+      "order_incomplete": "El pago fue procesado pero no se pudo crear el pedido.",
+      "order_connection_error": "Error de conexión al completar el pedido."
+    }
+  },
+  "orderConfirmed": {
+    "metaTitle": "¡Pedido confirmado!",
+    "title": "¡Pedido confirmado!",
+    "orderNumber": "Número de pedido:",
+    "emailNotice": "Recibirás un correo de confirmación en breve. Tu pedido será fabricado con los lentes que seleccionaste.",
+    "whatsNext": "¿Qué sigue?",
+    "step1": "Revisamos tu receta (si la enviaste) en las próximas horas.",
+    "step2": "Tus lentes se fabrican en 5–7 días hábiles.",
+    "step3": "El envío tarda 2–4 días adicionales.",
+    "step4": "Te notificamos por correo en cada paso con número de guía.",
+    "continueShopping": "Seguir comprando"
+  },
+  "tryOn": {
+    "title": "Prueba virtual",
+    "subtitle": "Pruébate monturas en tiempo real con tu cámara. La detección facial ocurre completamente en tu dispositivo — ninguna imagen se envía a servidores.",
+    "privacyBadge": "Todo el procesamiento es local — tu cámara no se sube a ningún servidor",
+    "cameraStarting": "Iniciando cámara…",
+    "likedFrame": "¿Te gustó esta montura? Configura tus lentes.",
+    "selectLenses": "Seleccionar lentes",
+    "tipLight": "Buena iluminación frontal",
+    "tipEyes": "Mira directo a la cámara",
+    "tipCenter": "Mantén el rostro centrado",
+    "chooseFrame": "Elige una montura",
+    "cameraAccessError": "No se pudo acceder a la cámara. Verifica los permisos del navegador.",
+    "cameraAccessHint": "Ve a Configuración del navegador → Privacidad → Cámara y permite el acceso.",
+    "faceDetectorLoading": "Cargando detector facial (primera vez puede tardar ~10 s)…",
+    "faceDetectorError": "No se pudo cargar el detector facial. {detail}",
+    "capturedPhotoAlt": "Foto capturada",
+    "backToCamera": "Volver a la cámara",
+    "downloadPhoto": "Descargar foto",
+    "downloadFilename": "prueba-virtual.jpg",
+    "selectFramePrompt": "Selecciona una montura para probártela",
+    "captureAria": "Tomar foto",
+    "captureHint": "Mira de frente · Buena iluminación · Pulsa el botón para capturar"
+  }
+}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useRouter, usePathname } from "@/i18n/navigation";
 import { SlidersHorizontal, X } from "lucide-react";
 import type { ListingFilters } from "@/lib/filter-params";
 import {
@@ -12,12 +13,16 @@ import {
 import { FilterSidebar } from "@/components/search/filter-sidebar";
 import { FramesGrid } from "@/components/search/frames-grid";
 import { useFramesSearch } from "@/hooks/use-frames-search";
+import { HeroBanner } from "@/components/marketing/hero-banner";
 
 interface GlassesClientPageProps {
   initialFilters: ListingFilters;
 }
 
 export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
+  const t = useTranslations("listing");
+  const tFilters = useTranslations("filters");
+  const tHeader = useTranslations("header");
   const router = useRouter();
   const pathname = usePathname();
   const [, startTransition] = useTransition();
@@ -46,13 +51,22 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Hero */}
+      <div className="mb-8">
+        <HeroBanner
+          titlePlain={t("title")}
+          titleAccent=""
+          subtitle={t("heroSubtitle")}
+          size="sm"
+        />
+      </div>
+
       {/* Page header */}
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Monturas</h1>
           {filters.query && (
             <p className="mt-1 text-sm text-gray-500">
-              Resultados para:{" "}
+              {t("resultsFor")}{" "}
               <span className="font-medium text-gray-800">
                 &ldquo;{filters.query}&rdquo;
               </span>
@@ -67,7 +81,7 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
           className="lg:hidden flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
           <SlidersHorizontal className="h-4 w-4" />
-          Filtros
+          {tFilters("mobileButton")}
           {activeFilterCount > 0 && (
             <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-white">
               {activeFilterCount}
@@ -82,8 +96,8 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
           type="search"
           value={filters.query}
           onChange={(e) => updateFilters({ ...filters, query: e.target.value })}
-          placeholder="Buscar monturas…"
-          aria-label="Buscar monturas"
+          placeholder={tHeader("searchPlaceholder")}
+          aria-label={tHeader("searchAria")}
           className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors"
         />
       </div>
@@ -91,7 +105,7 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
       {/* Active filter chips */}
       {activeFilterCount > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-gray-500">Filtros activos:</span>
+          <span className="text-xs text-gray-500">{tFilters("activeLabel")}</span>
           {filters.genders.map((g) => (
             <Chip
               key={`gender-${g}`}
@@ -140,6 +154,18 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
               }
             />
           ))}
+          {filters.priceRanges.map((p) => (
+            <Chip
+              key={`price-${p}`}
+              label={tFilters(`priceBuckets.${p}`)}
+              onRemove={() =>
+                updateFilters({
+                  ...filters,
+                  priceRanges: filters.priceRanges.filter((v) => v !== p),
+                })
+              }
+            />
+          ))}
           {filters.collections.map((c) => (
             <Chip
               key={`col-${c}`}
@@ -169,7 +195,7 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
             onClick={clearFilters}
             className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2"
           >
-            Limpiar todo
+            {tFilters("clearAll")}
           </button>
         </div>
       )}
@@ -203,12 +229,12 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
           />
           <div className="absolute inset-y-0 left-0 w-80 max-w-full bg-white shadow-xl flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-100 p-4">
-              <h2 className="font-semibold text-gray-900">Filtros</h2>
+              <h2 className="font-semibold text-gray-900">{tFilters("mobileTitle")}</h2>
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(false)}
                 className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100 transition-colors"
-                aria-label="Cerrar filtros"
+                aria-label={tFilters("mobileClose")}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -228,7 +254,7 @@ export function GlassesClientPage({ initialFilters }: GlassesClientPageProps) {
                 onClick={() => setMobileSidebarOpen(false)}
                 className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
               >
-                Ver resultados
+                {tFilters("mobileViewResults")}
               </button>
             </div>
           </div>
@@ -245,13 +271,14 @@ function Chip({
   label: string;
   onRemove: () => void;
 }) {
+  const tFilters = useTranslations("filters");
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
       {label}
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Eliminar filtro ${label}`}
+        aria-label={tFilters("removeFilter", { label })}
         className="ml-0.5 rounded-full hover:bg-gray-200 transition-colors p-0.5"
       >
         <X className="h-3 w-3" />

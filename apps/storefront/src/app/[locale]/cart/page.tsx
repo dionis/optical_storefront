@@ -1,27 +1,24 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { Trash2, ShoppingBag, ChevronRight } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils";
 import type { CartLensMetadata } from "@eyewear/shared";
-
-const USAGE_LABELS: Record<string, string> = {
-  single_vision_distance: "Visión lejana",
-  single_vision_reading: "Visión cercana",
-  progressive: "Progresivos",
-  non_prescription: "Sin graduación",
-};
+import type { Locale } from "@/i18n/routing";
 
 function LensMetaSummary({ metadata }: { metadata: Record<string, unknown> }) {
+  const t = useTranslations("funnel.usageTypes");
   const lens = metadata as Partial<CartLensMetadata>;
   const config = lens.lens_config;
   if (!config) return null;
 
   const parts: string[] = [];
-  if (config.usage_type) parts.push(USAGE_LABELS[config.usage_type] ?? config.usage_type);
-  if (config.index) parts.push(`Índice ${config.index}`);
+  if (config.usage_type)
+    parts.push(t.has(`${config.usage_type}.label`) ? t(`${config.usage_type}.label`) : config.usage_type);
+  if (config.index) parts.push(`${config.index}`);
   if (config.coatings?.length) parts.push(config.coatings.join(", "));
 
   return (
@@ -30,6 +27,8 @@ function LensMetaSummary({ metadata }: { metadata: Record<string, unknown> }) {
 }
 
 export default function CartPage() {
+  const t = useTranslations("cart");
+  const locale = useLocale() as Locale;
   const { cart, isLoading, removeItem, itemCount } = useCart();
 
   const items = cart?.items ?? [];
@@ -38,17 +37,13 @@ export default function CartPage() {
     return (
       <main className="max-w-2xl mx-auto px-4 py-20 text-center">
         <ShoppingBag className="mx-auto h-14 w-14 text-gray-200 mb-5" />
-        <h1 className="text-2xl font-bold text-gray-900 mb-3">
-          Tu carrito está vacío
-        </h1>
-        <p className="text-gray-500 mb-6">
-          Agrega monturas con tus lentes personalizados para continuar.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">{t("emptyTitle")}</h1>
+        <p className="text-gray-500 mb-6">{t("emptyBody")}</p>
         <Link
           href="/glasses"
           className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
         >
-          Explorar monturas
+          {t("emptyCta")}
         </Link>
       </main>
     );
@@ -56,7 +51,7 @@ export default function CartPage() {
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Tu carrito</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{t("title")}</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Items list */}
@@ -72,7 +67,7 @@ export default function CartPage() {
           ) : items.length === 0 ? (
             <div className="rounded-2xl border border-gray-100 p-8 text-center">
               <ShoppingBag className="mx-auto h-10 w-10 text-gray-200 mb-3" />
-              <p className="text-gray-500 text-sm">No hay artículos en tu carrito.</p>
+              <p className="text-gray-500 text-sm">{t("noItems")}</p>
             </div>
           ) : (
             items.map((item) => {
@@ -108,14 +103,14 @@ export default function CartPage() {
                     </p>
                     <LensMetaSummary metadata={item.metadata} />
                     <p className="mt-2 text-sm font-semibold text-accent">
-                      {formatPrice(lensTotal)}
+                      {formatPrice(lensTotal, locale)}
                     </p>
                   </div>
 
                   {/* Remove */}
                   <button
                     type="button"
-                    aria-label={`Eliminar ${item.title}`}
+                    aria-label={t("removeAria", { title: item.title })}
                     onClick={() => removeItem(item.id)}
                     disabled={isLoading}
                     className="self-start rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"
@@ -131,29 +126,25 @@ export default function CartPage() {
         {/* Order summary */}
         <div className="lg:col-span-1">
           <div className="rounded-2xl border border-gray-100 bg-white p-5 sticky top-4">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Resumen</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">{t("summaryTitle")}</h2>
 
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Artículos ({itemCount})
-                </span>
+                <span className="text-gray-500">{t("itemsCount", { count: itemCount })}</span>
                 <span className="font-medium text-gray-900">
-                  {cart ? formatPrice(cart.subtotal) : "—"}
+                  {cart ? formatPrice(cart.subtotal, locale) : "—"}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Envío</span>
-                <span className="text-gray-400 text-xs">
-                  Se calcula al pagar
-                </span>
+                <span className="text-gray-500">{t("shipping")}</span>
+                <span className="text-gray-400 text-xs">{t("shippingCalculated")}</span>
               </div>
             </div>
 
             <div className="flex justify-between border-t border-gray-100 pt-3 mb-5">
-              <span className="font-bold text-gray-900">Total</span>
+              <span className="font-bold text-gray-900">{t("total")}</span>
               <span className="text-lg font-bold text-accent">
-                {cart ? formatPrice(cart.total) : "—"}
+                {cart ? formatPrice(cart.total, locale) : "—"}
               </span>
             </div>
 
@@ -164,7 +155,7 @@ export default function CartPage() {
               }`}
               aria-disabled={itemCount === 0}
             >
-              Proceder al pago
+              {t("checkout")}
               <ChevronRight className="h-4 w-4" />
             </Link>
 
@@ -172,7 +163,7 @@ export default function CartPage() {
               href="/glasses"
               className="mt-3 block text-center text-xs text-gray-400 hover:text-gray-700 transition-colors"
             >
-              Continuar comprando
+              {t("continueShopping")}
             </Link>
           </div>
         </div>
@@ -180,4 +171,3 @@ export default function CartPage() {
     </main>
   );
 }
-

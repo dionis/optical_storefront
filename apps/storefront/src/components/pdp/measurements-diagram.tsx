@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 interface MeasurementsDiagramProps {
   eyeSize: number;
   bridgeSize: number;
@@ -14,16 +18,18 @@ export function MeasurementsDiagram({
   a,
   b,
 }: MeasurementsDiagramProps) {
+  const t = useTranslations("pdp");
+
   return (
     <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-        Medidas
+        {t("measurementsTitle")}
       </h3>
       {/* SVG frame diagram */}
       <svg
         viewBox="0 0 280 80"
         className="w-full max-w-xs mx-auto"
-        aria-label={`Montura: ${eyeSize}-${bridgeSize}-${templeLength}`}
+        aria-label={t("measurementsAria", { eyeSize, bridgeSize, templeLength })}
       >
         {/* Left lens */}
         <rect x="10" y="20" width="90" height="50" rx="8" fill="none" stroke="#94a3b8" strokeWidth="2" />
@@ -53,9 +59,9 @@ export function MeasurementsDiagram({
 
       {/* Measurement pills */}
       <div className="flex flex-wrap justify-center gap-2 mt-3">
-        <Pill label="Ojo" value={`${eyeSize} mm`} />
-        <Pill label="Puente" value={`${bridgeSize} mm`} />
-        <Pill label="Varilla" value={`${templeLength} mm`} />
+        <Pill label={t("measureEye")} value={`${eyeSize} mm`} />
+        <Pill label={t("measureBridge")} value={`${bridgeSize} mm`} />
+        <Pill label={t("measureTemple")} value={`${templeLength} mm`} />
         {a && <Pill label="A" value={`${a} mm`} />}
         {b && <Pill label="B" value={`${b} mm`} />}
       </div>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import type { LensIndex, CoatingType } from "@eyewear/shared";
 import { useFunnelStore } from "@/store/funnel-store";
 import { formatPrice } from "@/lib/utils";
+import type { Locale } from "@/i18n/routing";
 
 interface LensOptionItem {
   id: string;
@@ -29,6 +31,8 @@ interface Step3LensProps {
 }
 
 export function Step3Lens({ onNext, onBack }: Step3LensProps) {
+  const t = useTranslations("funnel");
+  const locale = useLocale() as Locale;
   const usageType = useFunnelStore((s) => s.usageType);
   const lensIndex = useFunnelStore((s) => s.lensIndex);
   const coatings = useFunnelStore((s) => s.coatings);
@@ -84,29 +88,27 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
-        Cargando opciones de lentes…
+        {t("step3.loading")}
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Tipo de lente</h2>
-      <p className="text-sm text-gray-500 mb-5">
-        Elige el índice de refracción y los tratamientos para tus lentes.
-      </p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t("step3.title")}</h2>
+      <p className="text-sm text-gray-500 mb-5">{t("step3.subtitle")}</p>
 
       {/* Lens index cards */}
       {lensOptions.length > 0 && (
         <section className="mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
-            Índice de refracción
+            {t("step3.indexHeading")}
           </h3>
           <div className="grid grid-cols-2 gap-2">
             {lensOptions.map((opt) => {
               const isSelected = lensIndex === opt.index;
               const isRecommended =
-                validationRecommendedIndex === opt.index && opt.index !== "1.57";
+                validationRecommendedIndex === opt.index && opt.index !== 1.57;
               return (
                 <button
                   key={opt.id}
@@ -121,7 +123,7 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
                 >
                   {isRecommended && (
                     <span className="absolute -top-2 left-3 rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                      Recomendado
+                      {t("step3.recommended")}
                     </span>
                   )}
                   <p className="font-bold text-gray-900">{opt.label}</p>
@@ -130,8 +132,8 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
                   </p>
                   <p className="mt-1.5 text-sm font-semibold text-accent">
                     {opt.price_modifier_cents === 0
-                      ? "Incluido"
-                      : `+${formatPrice(opt.price_modifier_cents)}`}
+                      ? t("step3.included")
+                      : `+${formatPrice(opt.price_modifier_cents, locale)}`}
                   </p>
                 </button>
               );
@@ -144,7 +146,7 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
       {coatingOptions.length > 0 && (
         <section className="mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
-            Tratamientos adicionales
+            {t("step3.treatmentsHeading")}
           </h3>
           <div className="space-y-2">
             {coatingOptions.map((opt) => {
@@ -175,8 +177,8 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
                   </div>
                   <span className="shrink-0 text-sm font-semibold text-accent">
                     {opt.price_modifier_cents === 0
-                      ? "Incluido"
-                      : `+${formatPrice(opt.price_modifier_cents)}`}
+                      ? t("step3.included")
+                      : `+${formatPrice(opt.price_modifier_cents, locale)}`}
                   </span>
                 </label>
               );
@@ -187,8 +189,8 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
 
       {/* Subtotal */}
       <div className="flex items-center justify-between rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm mb-4">
-        <span className="text-gray-600">Subtotal estimado</span>
-        <span className="font-bold text-gray-900">{formatPrice(subtotalCents)}</span>
+        <span className="text-gray-600">{t("step3.subtotal")}</span>
+        <span className="font-bold text-gray-900">{formatPrice(subtotalCents, locale)}</span>
       </div>
 
       {/* Actions */}
@@ -198,7 +200,7 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
           onClick={onBack}
           className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          Atrás
+          {t("back")}
         </button>
         <button
           type="button"
@@ -206,7 +208,7 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
           disabled={!lensIndex}
           className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Continuar
+          {t("continue")}
         </button>
       </div>
     </div>

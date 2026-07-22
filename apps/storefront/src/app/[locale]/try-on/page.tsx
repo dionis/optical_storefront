@@ -3,8 +3,18 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { FrameSelector } from "@/components/try-on/frame-selector";
+
+function CameraLoadingFallback() {
+  const t = useTranslations("tryOn");
+  return (
+    <div className="flex items-center justify-center rounded-2xl bg-gray-100 p-16 text-sm text-gray-400">
+      {t("cameraStarting")}
+    </div>
+  );
+}
 
 // Render try-on canvas only on client (uses webcam + WASM)
 const TryonCanvas = dynamic(
@@ -14,15 +24,12 @@ const TryonCanvas = dynamic(
     })),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center rounded-2xl bg-gray-100 p-16 text-sm text-gray-400">
-        Iniciando cámara…
-      </div>
-    ),
+    loading: () => <CameraLoadingFallback />,
   }
 );
 
 function TryOnInner() {
+  const t = useTranslations("tryOn");
   const searchParams = useSearchParams();
   const handleParam = searchParams.get("frame");
 
@@ -59,14 +66,8 @@ function TryOnInner() {
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">
-        Prueba virtual
-      </h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Pruébate monturas en tiempo real con tu cámara. La detección facial
-        ocurre completamente en tu dispositivo — ninguna imagen se envía a
-        servidores.
-      </p>
+      <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("title")}</h1>
+      <p className="text-sm text-gray-500 mb-6">{t("subtitle")}</p>
 
       {/* Privacy badge */}
       <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
@@ -77,7 +78,7 @@ function TryOnInner() {
             clipRule="evenodd"
           />
         </svg>
-        Todo el procesamiento es local — tu cámara no se sube a ningún servidor
+        {t("privacyBadge")}
       </div>
 
       {/* Live camera + overlay */}
@@ -99,14 +100,12 @@ function TryOnInner() {
       {/* CTA: go to lens selection for the selected frame */}
       {selectedHandle && (
         <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-gray-700">
-            ¿Te gustó esta montura? Configura tus lentes.
-          </p>
+          <p className="text-sm text-gray-700">{t("likedFrame")}</p>
           <Link
             href={`/glasses/${selectedHandle}/select-lenses`}
             className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
           >
-            Seleccionar lentes
+            {t("selectLenses")}
           </Link>
         </div>
       )}
@@ -114,9 +113,9 @@ function TryOnInner() {
       {/* Instructions */}
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center text-xs text-gray-500">
         {[
-          { icon: "💡", text: "Buena iluminación frontal" },
-          { icon: "👁️", text: "Mira directo a la cámara" },
-          { icon: "📏", text: "Mantén el rostro centrado" },
+          { icon: "💡", text: t("tipLight") },
+          { icon: "👁️", text: t("tipEyes") },
+          { icon: "📏", text: t("tipCenter") },
         ].map(({ icon, text }) => (
           <div
             key={text}
@@ -147,4 +146,3 @@ export default function TryOnPage() {
     </Suspense>
   );
 }
-

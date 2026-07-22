@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import type { Prescription, PrescriptionEye, PrescriptionValidationResult } from "@eyewear/shared";
 import { useFunnelStore } from "@/store/funnel-store";
 import { RxUpload } from "./rx-upload";
@@ -43,7 +44,7 @@ function EyeRow({
       <td className="py-2 pr-2">
         <select
           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent"
-          value={eye.sph}
+          value={eye.sph ?? 0}
           onChange={(e) => onChange({ ...eye, sph: Number(e.target.value) })}
           aria-label={`SPH ${label}`}
         >
@@ -57,7 +58,7 @@ function EyeRow({
       <td className="py-2 pr-2">
         <select
           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent"
-          value={eye.cyl}
+          value={eye.cyl ?? 0}
           onChange={(e) => onChange({ ...eye, cyl: Number(e.target.value), axis: eye.axis ?? 90 })}
           aria-label={`CYL ${label}`}
         >
@@ -118,6 +119,7 @@ interface Step2PrescriptionProps {
 }
 
 export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
+  const t = useTranslations("funnel");
   const usageType = useFunnelStore((s) => s.usageType);
   const prescription = useFunnelStore((s) => s.prescription);
   const setPrescription = useFunnelStore((s) => s.setPrescription);
@@ -145,9 +147,9 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
     return {
       od,
       os,
-      pd: pdMode === "single" ? pdSingle : undefined,
-      pd_od: pdMode === "dual" ? pdOd : undefined,
-      pd_os: pdMode === "dual" ? pdOs : undefined,
+      pd: pdMode === "single" ? pdSingle : null,
+      pd_od: pdMode === "dual" ? pdOd : null,
+      pd_os: pdMode === "dual" ? pdOs : null,
       source: "manual",
       file_url: null,
     };
@@ -208,24 +210,22 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
   if (isNonPrescription) {
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Receta médica</h2>
-        <p className="text-sm text-gray-500 mb-6">
-          Como elegiste sin graduación, no necesitas receta. Puedes continuar.
-        </p>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">{t("step2.titleNonRx")}</h2>
+        <p className="text-sm text-gray-500 mb-6">{t("step2.subtitleNonRx")}</p>
         <div className="flex gap-3 justify-between pt-2">
           <button
             type="button"
             onClick={onBack}
             className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Atrás
+            {t("back")}
           </button>
           <button
             type="button"
             onClick={onNext}
             className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
           >
-            Continuar
+            {t("continue")}
           </button>
         </div>
       </div>
@@ -234,18 +234,16 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Tu receta</h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Ingresa los valores de tu receta óptica más reciente.
-      </p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t("step2.title")}</h2>
+      <p className="text-sm text-gray-500 mb-4">{t("step2.subtitle")}</p>
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-6">
         {(
           [
-            { key: "manual", label: "Ingresar manualmente" },
-            { key: "upload", label: "Subir foto" },
-            { key: "later", label: "Más tarde" },
+            { key: "manual", label: t("step2.tabManual") },
+            { key: "upload", label: t("step2.tabUpload") },
+            { key: "later", label: t("step2.tabLater") },
           ] as const
         ).map(({ key, label }) => (
           <button
@@ -273,7 +271,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
                   <th className="pb-2 text-left w-10"></th>
                   <th className="pb-2 text-center">SPH</th>
                   <th className="pb-2 text-center">CYL</th>
-                  <th className="pb-2 text-center">EJE</th>
+                  <th className="pb-2 text-center">{t("step2.axisHeader")}</th>
                   {isProgressive && <th className="pb-2 text-center">ADD</th>}
                 </tr>
               </thead>
@@ -298,7 +296,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
           <div>
             <div className="flex items-center gap-4 mb-2">
               <span className="text-sm font-medium text-gray-700">
-                Distancia pupilar (DP)
+                {t("step2.pdLabel")}
               </span>
               <div className="flex gap-1 rounded-md bg-gray-100 p-0.5 text-xs">
                 <button
@@ -310,7 +308,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
                       : "text-gray-500"
                   }`}
                 >
-                  Simple
+                  {t("step2.pdSingle")}
                 </button>
                 <button
                   type="button"
@@ -321,7 +319,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
                       : "text-gray-500"
                   }`}
                 >
-                  Dual
+                  {t("step2.pdDual")}
                 </button>
               </div>
             </div>
@@ -331,7 +329,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
                   className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                   value={pdSingle}
                   onChange={(e) => setPdSingle(Number(e.target.value))}
-                  aria-label="PD simple"
+                  aria-label="PD"
                 >
                   {PD_SINGLE.map((v) => (
                     <option key={v} value={v}>
@@ -379,7 +377,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
           {/* Validation feedback */}
           {validating && (
             <p className="text-xs text-gray-400 animate-pulse">
-              Validando receta…
+              {t("step2.validating")}
             </p>
           )}
           {validation && !validating && (
@@ -391,13 +389,9 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
               }`}
             >
               {validation.fulfillable ? (
-                <p className="text-green-700 font-medium mb-1">
-                  ✓ Receta válida
-                </p>
+                <p className="text-green-700 font-medium mb-1">{t("step2.valid")}</p>
               ) : (
-                <p className="text-red-700 font-medium mb-1">
-                  ✗ Receta fuera de rango
-                </p>
+                <p className="text-red-700 font-medium mb-1">{t("step2.invalid")}</p>
               )}
               {validation.warnings.map((w, i) => (
                 <p key={i} className="text-gray-600 text-xs">
@@ -406,7 +400,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
               ))}
               {validation.recommended_index && (
                 <p className="mt-1 text-xs font-semibold text-accent">
-                  Índice recomendado: {validation.recommended_index}
+                  {t("step2.recommendedIndex", { index: validation.recommended_index })}
                 </p>
               )}
             </div>
@@ -441,13 +435,8 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
 
       {tab === "later" && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm">
-          <p className="font-medium text-amber-800 mb-1">
-            Proporcionar receta más tarde
-          </p>
-          <p className="text-amber-700">
-            Podrás enviar tu receta por WhatsApp o correo después de completar
-            tu pedido. Tu pedido se fabricará al recibirla.
-          </p>
+          <p className="font-medium text-amber-800 mb-1">{t("step2.laterTitle")}</p>
+          <p className="text-amber-700">{t("step2.laterBody")}</p>
         </div>
       )}
 
@@ -459,7 +448,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
             onClick={onBack}
             className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Atrás
+            {t("back")}
           </button>
           <button
             type="button"
@@ -471,7 +460,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
             }
             className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Continuar
+            {t("continue")}
           </button>
         </div>
       )}
@@ -482,7 +471,7 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
             onClick={onBack}
             className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Atrás
+            {t("back")}
           </button>
         </div>
       )}

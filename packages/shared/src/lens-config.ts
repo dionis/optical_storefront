@@ -24,7 +24,7 @@ export interface LensConfig {
 /** Stored in cart line item metadata */
 export interface CartLensMetadata {
   lens_config: LensConfig;
-  prescription_id: string | null;
-  /** Inline snapshot of prescription for orders where prescription is "provide later" */
-  prescription_snapshot: import("./prescription.js").Prescription | null;
+  prescription: import("./prescription.js").Prescription | null;
+  frame_price_cents: number;
+  total_price_cents: number;
 }

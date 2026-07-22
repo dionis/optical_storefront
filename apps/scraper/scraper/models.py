@@ -18,6 +18,10 @@ class ScrapedProduct:
     model_name: str
     handle: str  # URL-safe slug: model slug + collection
     collection_slug: str
+    description_en: str = ""
+
+    # AI-generated translations: {"es": {"title":..., "description":...}, "fr": {...}}
+    translations: dict[str, dict[str, str]] = field(default_factory=dict)
 
     # Variants
     colors: list[str] = field(default_factory=list)

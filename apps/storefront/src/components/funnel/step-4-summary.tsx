@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { useFunnelStore } from "@/store/funnel-store";
 import { useCart } from "@/hooks/use-cart";
 import { formatPrice } from "@/lib/utils";
 import type { CartLensMetadata } from "@eyewear/shared";
+import type { Locale } from "@/i18n/routing";
 
 interface LineItem {
   label: string;
@@ -19,6 +21,8 @@ interface Step4SummaryProps {
 }
 
 export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
+  const t = useTranslations("funnel");
+  const locale = useLocale() as Locale;
   const store = useFunnelStore();
   const { addItem, isLoading: cartLoading } = useCart();
   const router = useRouter();
@@ -54,21 +58,12 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
       .then((data: { price: typeof computedPrice }) => {
         setComputedPrice(data.price);
       })
-      .catch(() => setError("No se pudo calcular el precio. Inténtalo de nuevo."))
+      .catch(() => setError(t("step4.priceError")))
       .finally(() => setPriceLoading(false));
   }, []); // run once on mount; store is stable ref
 
   const handleAddToCart = async () => {
     if (!store.variantId || !computedPrice) return;
-
-    // Verify prescription before adding
-    if (
-      store.usageType !== "non_prescription" &&
-      store.prescription &&
-      !store.prescription.verified_by_user
-    ) {
-      // "Provide later" flow — still allowed
-    }
 
     const lensConfig = store.getLensConfig();
     if (!lensConfig) return;
@@ -85,45 +80,38 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
       store.reset();
       router.push("/cart");
     } catch {
-      setError("Error al agregar al carrito. Inténtalo de nuevo.");
+      setError(t("step4.addError"));
     }
   };
 
   const lines: LineItem[] = [
-    { label: "Montura", amount: store.framePriceCents ?? null, hint: frameTitle },
+    { label: t("step4.lineFrame"), amount: store.framePriceCents ?? null, hint: frameTitle },
     {
-      label: "Lentes",
+      label: t("step4.lineLenses"),
       amount: computedPrice?.lens_modifier_cents ?? null,
-      hint: store.lensIndex ? `Índice ${store.lensIndex}` : undefined,
+      hint: store.lensIndex ? t("step4.indexLabel", { index: store.lensIndex }) : undefined,
     },
     {
-      label: "Tratamientos",
+      label: t("step4.lineTreatments"),
       amount: computedPrice?.coating_modifier_cents ?? null,
       hint:
         store.coatings.length > 0
           ? store.coatings.join(", ")
-          : "Ninguno",
+          : t("step4.none"),
     },
   ];
 
-  const usageLabels: Record<string, string> = {
-    single_vision_distance: "Visión lejana",
-    single_vision_reading: "Visión cercana",
-    progressive: "Progresivos",
-    non_prescription: "Sin graduación",
-  };
-
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Resumen</h2>
-      <p className="text-sm text-gray-500 mb-5">
-        Revisa tu selección antes de agregar al carrito.
-      </p>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">{t("step4.title")}</h2>
+      <p className="text-sm text-gray-500 mb-5">{t("step4.subtitle")}</p>
 
       {/* Usage badge */}
       {store.usageType && (
         <div className="mb-4 inline-flex rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
-          {usageLabels[store.usageType] ?? store.usageType}
+          {t.has(`usageTypes.${store.usageType}.label`)
+            ? t(`usageTypes.${store.usageType}.label`)
+            : store.usageType}
         </div>
       )}
 
@@ -145,9 +133,9 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
                 <span className="block h-4 w-14 animate-pulse rounded bg-gray-100" />
               ) : line.amount !== null ? (
                 line.amount === 0 ? (
-                  "Incluido"
+                  t("step4.included")
                 ) : (
-                  formatPrice(line.amount)
+                  formatPrice(line.amount, locale)
                 )
               ) : (
                 "—"
@@ -158,12 +146,12 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
 
         {/* Total */}
         <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-b-xl">
-          <span className="text-sm font-bold text-gray-900">Total</span>
+          <span className="text-sm font-bold text-gray-900">{t("step4.total")}</span>
           <span className="text-lg font-bold text-accent">
             {priceLoading ? (
               <span className="block h-5 w-20 animate-pulse rounded bg-gray-100" />
             ) : computedPrice ? (
-              formatPrice(computedPrice.total_cents)
+              formatPrice(computedPrice.total_cents, locale)
             ) : (
               "—"
             )}
@@ -174,7 +162,7 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
       {/* Prescription notice */}
       {store.prescription && !store.prescription.verified_by_user && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <strong>Receta pendiente:</strong> Tu pedido se fabricará cuando recibamos tu receta.
+          <strong>{t("step4.pendingRxNotice")}</strong> {t("step4.pendingRxBody")}
         </div>
       )}
 
@@ -192,7 +180,7 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
           onClick={onBack}
           className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          Atrás
+          {t("back")}
         </button>
         <button
           type="button"
@@ -200,7 +188,7 @@ export function Step4Summary({ onBack, frameTitle }: Step4SummaryProps) {
           disabled={priceLoading || cartLoading || !computedPrice}
           className="rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {cartLoading ? "Agregando…" : "Añadir al carrito"}
+          {cartLoading ? t("step4.adding") : t("step4.addToCart")}
         </button>
       </div>
     </div>

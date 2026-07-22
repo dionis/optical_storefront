@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { parseFilterParams } from "@/lib/filter-params";
 import { GlassesClientPage } from "./glasses-client";
 
-export const metadata: Metadata = {
-  title: "Monturas",
-  description:
-    "Explora nuestra amplia selección de monturas para lentes graduados. Filtra por forma, material y estilo.",
-};
-
 interface GlassesPageProps {
+  params: Promise<{ locale: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export async function generateMetadata({ params }: GlassesPageProps): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "listing" });
+  return {
+    title: t("title"),
+    description: t("metaDescription"),
+  };
 }
 
 export default async function GlassesPage({ searchParams }: GlassesPageProps) {
