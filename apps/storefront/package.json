@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
-    "vercel-build": "pnpm --filter @eyewear/shared build && next build",
+    "build": "pnpm --filter @eyewear/shared build && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
