@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { PRODUCTS } from "../data/products.js";
+import { CASES } from "../data/cases.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches } from "../data/filters.js";
 import ProductCard from "../components/ProductCard.jsx";
+import CaseCard from "../components/CaseCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function Catalog() {
@@ -46,6 +48,23 @@ export default function Catalog() {
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
   const heading = brand ? brand.name : q ? `${t("cat.results")}: “${q}”` : t("cat.all");
+
+  // Cases brand → dedicated cases listing (no frame filters)
+  if (brand?.slug === "case") {
+    return (
+      <div className="section">
+        <div className="listing-head">
+          <div>
+            <h1>{t("case.title")}</h1>
+            <span className="count">{CASES.length} · {t("case.sub")}</span>
+          </div>
+        </div>
+        <div className="case-grid">
+          {CASES.map((c) => <CaseCard key={c.slug} item={c} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="catalog">

@@ -68,7 +68,13 @@
   <ul>
     <li><b>17 marcas</b> reales con logos oficiales (<code>src/data/brands.js</code>).</li>
     <li><b>48 productos</b> reales (<code>src/data/products.js</code>): SKU, variantes de color con imagen, atributos (forma, material, género, edad, tamaños). Extraídos por 6 agentes en paralelo.</li>
+    <li><b>10 estuches / cases</b> reales (<code>src/data/cases.js</code>) con imagen y precio, vendibles.</li>
     <li>Precio y valoración <b>deterministas por SKU</b> (Capri Optics es B2B y no publica precios).</li>
+  </ul>
+  <h3>Estuches (cases) y venta cruzada</h3>
+  <ul>
+    <li>La marca <b>Cases</b> (<code>/marca/case</code>) y el enlace «Estuches» del menú muestran una cuadrícula de estuches con botón <b>«+ Añadir»</b> que los agrega al carrito.</li>
+    <li>En cada ficha de espejuelos se muestran <b>3 estuches recomendados</b> («Completa tu compra con un estuche»), elegidos de forma determinista a partir del SKU, cada uno con su botón de compra — <em>cross-sell</em> para aumentar el ticket.</li>
   </ul>
 
   <h2>4 · Bilingüe (ES / EN)</h2>

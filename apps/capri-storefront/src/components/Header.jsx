@@ -20,6 +20,7 @@ export default function Header() {
     <>
       <NavLink to="/catalogo" onClick={() => setMenu(false)}>{t("nav.glasses")}</NavLink>
       <NavLink to="/catalogo?age=Niños" onClick={() => setMenu(false)}>{t("nav.kids")}</NavLink>
+      <NavLink to="/marca/case" onClick={() => setMenu(false)}>{t("nav.cases")}</NavLink>
       <NavLink to="/#marcas" onClick={() => setMenu(false)}>{t("nav.brands")}</NavLink>
     </>
   );

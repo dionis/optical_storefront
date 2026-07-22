@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { PRODUCT_BY_SLUG, PRODUCTS } from "../data/products.js";
+import { recommendedCases } from "../data/cases.js";
 import ProductCard from "../components/ProductCard.jsx";
+import CaseCard from "../components/CaseCard.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -20,6 +22,7 @@ export default function ProductDetail() {
 
   const color = product.colors[active];
   const related = PRODUCTS.filter((p) => p.brand_slug === product.brand_slug && p.slug !== product.slug).slice(0, 4);
+  const cases = recommendedCases(product.sku, 3);
 
   return (
     <div className="pdp">
@@ -85,6 +88,17 @@ export default function ProductDetail() {
           </table>
         </div>
       </div>
+
+      {/* Cross-sell: recommended cases */}
+      <section className="section case-cross">
+        <div className="case-cross-head">
+          <h2 className="section-title">{t("case.recommend")}</h2>
+          <span className="muted">{t("case.recommendSub")}</span>
+        </div>
+        <div className="case-grid three">
+          {cases.map((c) => <CaseCard key={c.slug} item={c} compact />)}
+        </div>
+      </section>
 
       {related.length > 0 && (
         <section className="section">
