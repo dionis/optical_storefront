@@ -194,3 +194,10 @@
 .adm-brand-group { margin-bottom: 14px; }
 .adm-brand-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; padding: 8px 0; border-bottom: 2px solid #f0f2f6; margin-bottom: 6px; position: sticky; top: 0; background: #fff; }
 .adm-brand-h img { height: 18px; max-width: 70px; object-fit: contain; }
+
+/* Cuba allegory in the board */
+.adm-login { position: relative; overflow: hidden; }
+.adm-login-flag { position: absolute; right: -50px; bottom: -30px; width: min(64%, 560px); opacity: .16; pointer-events: none;
+  transform-origin: left center; animation: cubaWave 9s ease-in-out infinite; filter: drop-shadow(0 16px 40px rgba(0,0,0,.28)); }
+.adm-login-card { position: relative; z-index: 1; }
+@keyframes cubaWave { 0%,100%{ transform: skewY(0) translateY(0);} 25%{ transform: skewY(-1.3deg) translateY(-3px);} 50%{ transform: skewY(.7deg) translateY(2px);} 75%{ transform: skewY(-.5deg);} }

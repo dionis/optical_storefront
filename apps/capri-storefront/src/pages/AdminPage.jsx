@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout } from "../admin/adminAuth.js";
 import AdminDashboard from "../admin/AdminDashboard.jsx";
+import CubaFlag from "../components/CubaFlag.jsx";
 import "../admin/admin.css";
 
 function Login({ onOk }) {
@@ -31,6 +32,7 @@ function Login({ onOk }) {
 
   return (
     <div className="adm-login">
+      <CubaFlag className="adm-login-flag" />
       {stage === "creds" ? (
         <form className="adm-login-card" onSubmit={submitCreds}>
           <img src="/logo.svg" alt="RUBI_LENS" className="adm-login-logo" />
@@ -70,6 +72,7 @@ export default function AdminPage() {
           <button className="btn-sm" onClick={() => { logout(); setSession(null); }}>Salir</button>
         </div>
       </header>
+      <div className="cuba-ribbon" aria-hidden="true" />
       <AdminDashboard />
     </div>
   );
