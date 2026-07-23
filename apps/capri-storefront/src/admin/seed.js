@@ -14,6 +14,8 @@ function mulberry32(a) {
   };
 }
 const ymd = (d) => d.toISOString().slice(0, 10);
+const NAMES = [["María", "González"], ["Juan", "Pérez"], ["Ana", "Rodríguez"], ["Luis", "Martínez"], ["Carla", "Sánchez"], ["Pedro", "Ramírez"], ["Sofía", "Torres"], ["Diego", "Flores"], ["Elena", "Díaz"], ["Jorge", "Cruz"], ["Rosa", "Morales"], ["Iván", "Reyes"]];
+const CITIES = [["Katy, TX", "Fry Rd", "us", "USPS/UPS"], ["Houston, TX", "Main St", "us", "USPS/UPS"], ["Miami, FL", "Ocean Dr", "us-exp", "FedEx"], ["La Habana", "Calle 23", "cuba", "Consignataria"], ["CDMX", "Reforma", "mx", "DHL"], ["Bogotá", "Cra 7", "latam", "DHL/FedEx"]];
 
 export function generateDemo(days = 90) {
   const rnd = mulberry32(20260722);
@@ -56,13 +58,24 @@ export function generateDemo(days = 90) {
         }
       }
       const subtotal = items.reduce((s, it) => s + it.total, 0);
-      const shipping = subtotal >= 59 ? 0 : 4.95;
+      const isShip = rnd() < 0.6;
+      const shipCost = !isShip ? 0 : (subtotal >= 59 ? 0 : 6.95);
+      const nm = NAMES[Math.floor(rnd() * NAMES.length)];
+      const cust = { name: nm[0], surname: nm[1], email: (nm[0] + "." + nm[1]).toLowerCase() + "@correo.com", phone: "+1 281 555 0" + (100 + Math.floor(rnd() * 899)) };
+      // status by age: old orders delivered; recent ones spread across the process
+      const status = i > 9 ? "delivered" : (["processing", "shipped", "in_transit", "delivered"])[Math.floor(rnd() * 4)];
+      const city = CITIES[Math.floor(rnd() * CITIES.length)];
       orders.push({
-        id: "DMO-" + key.replace(/-/g, "") + "-" + o,
+        id: "OER-" + key.replace(/-/g, "") + "-" + (o + 1),
         t: t.toISOString(),
         items,
         itemsCount: items.length,
-        total: Math.round((subtotal + shipping) * 100) / 100,
+        total: Math.round((subtotal + shipCost) * 100) / 100,
+        user: cust.email,
+        customer: cust,
+        shipping: { method: isShip ? "ship" : "pickup", cost: shipCost },
+        delivery: isShip ? { recipient: nm[0] + " " + nm[1], phone: cust.phone, email: cust.email, address: (100 + Math.floor(rnd() * 8900)) + " " + city[1], city: city[0], zone: city[2], carrier: city[3] } : null,
+        status,
         demo: true,
       });
     }

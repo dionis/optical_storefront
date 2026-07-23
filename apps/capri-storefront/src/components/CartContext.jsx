@@ -22,13 +22,17 @@ export function CartProvider({ children }) {
   const clearCart = useCallback(() => setItems([]), []);
 
   // Records a real order from the current cart (called at checkout) and empties it.
-  const checkout = useCallback(() => {
+  const checkout = useCallback((shippingCost = 0, shipMethod, extra = {}) => {
     setItems((prev) => {
       if (prev.length) {
         try {
+          const goods = prev.reduce((s, i) => s + (i.total || 0), 0);
           recordOrder({
             items: prev.map((i) => ({ sku: i.sku, name: i.name, brand: i.brand || "—", kind: i.isCase ? "case" : "frame", total: i.total || 0 })),
-            total: prev.reduce((s, i) => s + (i.total || 0), 0),
+            total: goods + (Number(shippingCost) || 0),
+            shipping: { cost: Number(shippingCost) || 0, method: shipMethod || "pickup" },
+            customer: extra.customer || null,
+            delivery: extra.delivery || null,
           });
         } catch {}
       }

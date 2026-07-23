@@ -12,16 +12,25 @@ export function getUser() {
   try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; }
 }
 
-// login and register behave the same here (any email + any password works)
-export function login(email, pass) {
+// Customer identity = email + cell phone (needed to track orders, comment, etc.).
+// Demo-open: any valid email + phone works. login/register behave the same.
+export function login(email, phone) {
   const e = String(email || "").trim();
-  if (!/\S+@\S+\.\S+/.test(e)) return { ok: false, error: "Introduce un correo válido" };
-  if (String(pass || "").length < 1) return { ok: false, error: "Introduce una contraseña" };
-  try { localStorage.setItem(KEY, JSON.stringify({ email: e, since: new Date().toISOString() })); } catch {}
+  const p = String(phone || "").trim();
+  if (!/\S+@\S+\.\S+/.test(e)) return { ok: false, error: "Correo inválido" };
+  if (p.replace(/\D/g, "").length < 7) return { ok: false, error: "Celular inválido" };
+  try { localStorage.setItem(KEY, JSON.stringify({ email: e, phone: p, since: new Date().toISOString() })); } catch {}
   bump();
   return { ok: true };
 }
 export const register = login;
+
+// merge extra profile fields (e.g. name) into the stored user
+export function setProfile(patch) {
+  const u = getUser(); if (!u) return;
+  try { localStorage.setItem(KEY, JSON.stringify({ ...u, ...patch })); } catch {}
+  bump();
+}
 
 export function logout() { try { localStorage.removeItem(KEY); } catch {} bump(); }
 

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
-import { useUser, login, register, logout } from "./userAuth.js";
+import { useUser, login, register, logout, setProfile } from "./userAuth.js";
+import ShippingEstimator from "./ShippingEstimator.jsx";
 
 export function SidePanel({ open, onClose, title, children }) {
   return (
@@ -22,6 +23,30 @@ export function SidePanel({ open, onClose, title, children }) {
 export function CartPanel({ open, onClose }) {
   const { items, removeItem, total, clearCart, checkout } = useCart();
   const { t } = useLang();
+  const user = useUser();
+  const [ship, setShip] = useState({ method: "pickup", cost: 0 });
+  const [err, setErr] = useState("");
+  const [f, setF] = useState({});
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  const isShip = ship.method === "ship";
+  const grand = total + (ship.cost || 0);
+  const email = user ? user.email : (f.email || "");
+  const phone = user ? user.phone : (f.phone || "");
+
+  const doCheckout = () => {
+    setErr("");
+    if (!f.name || !f.surname) return setErr(t("co.errName"));
+    if (!user) { const r = login(email, phone); if (!r.ok) return setErr(r.error); }
+    if (isShip && (!f.dAddress || !f.dCity || !f.dPhone)) return setErr(t("co.errDelivery"));
+    try { setProfile({ name: `${f.name} ${f.surname}`.trim() }); } catch {}
+    checkout(ship.cost || 0, ship.method, {
+      customer: { name: f.name, surname: f.surname, email, phone },
+      delivery: isShip ? { recipient: f.dName || `${f.name} ${f.surname}`.trim(), phone: f.dPhone, email: f.dEmail || email, address: f.dAddress, city: f.dCity, zone: ship.zoneName || ship.zoneId, carrier: ship.carrier } : null,
+    });
+    alert(t("cart.done")); onClose();
+  };
+
   return (
     <SidePanel open={open} onClose={onClose} title={t("cart.title")}>
       {items.length === 0 ? (
@@ -40,8 +65,46 @@ export function CartPanel({ open, onClose }) {
               </li>
             ))}
           </ul>
-          <div className="panel-total"><span>{t("cart.total")}</span><b>${total.toFixed(2)}</b></div>
-          <button className="btn btn-primary big" onClick={() => { checkout(); alert(t("cart.done")); onClose(); }}>{t("cart.checkout")}</button>
+
+          <ShippingEstimator subtotal={total} onChange={(s) => setShip(s)} />
+
+          <div className="co-form">
+            <div className="co-h">👤 {t("co.buyer")}</div>
+            <div className="co-fields">
+              <div className="co-two">
+                <input placeholder={t("co.name")} value={f.name || ""} onChange={set("name")} autoComplete="given-name" />
+                <input placeholder={t("co.surname")} value={f.surname || ""} onChange={set("surname")} autoComplete="family-name" />
+              </div>
+              {!user && <>
+                <input type="email" placeholder={t("auth.email")} value={f.email || ""} onChange={set("email")} autoComplete="email" />
+                <input type="tel" placeholder={t("auth.phone")} value={f.phone || ""} onChange={set("phone")} autoComplete="tel" />
+              </>}
+              {user && <div className="co-note">✓ {user.email} · {user.phone}</div>}
+            </div>
+
+            {isShip && (
+              <>
+                <div className="co-h">🚚 {t("co.delivery")}</div>
+                <div className="co-fields">
+                  <input placeholder={t("co.dAddress")} value={f.dAddress || ""} onChange={set("dAddress")} autoComplete="street-address" />
+                  <input placeholder={t("co.dCity")} value={f.dCity || ""} onChange={set("dCity")} />
+                  <div className="co-two">
+                    <input placeholder={t("co.dName")} value={f.dName || ""} onChange={set("dName")} />
+                    <input type="tel" placeholder={t("co.dPhone")} value={f.dPhone || ""} onChange={set("dPhone")} />
+                  </div>
+                  <input type="email" placeholder={t("co.dEmail")} value={f.dEmail || ""} onChange={set("dEmail")} />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="panel-total"><span>{t("cart.total")}</span><b>${grand.toFixed(2)}</b></div>
+          {ship.cost > 0 && <div className="co-note">🚚 {t("cart.incShip")}: ${ship.cost.toFixed(2)}</div>}
+          {err && <div className="auth-err" style={{ margin: "8px 0" }}>{err}</div>}
+
+          <button className="btn btn-primary big" onClick={doCheckout}>
+            {isShip ? "🚚 " : "🏬 "}{t("cart.checkout")} · ${grand.toFixed(2)}
+          </button>
           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
         </>
       )}
@@ -54,14 +117,14 @@ export function AuthPanel({ open, onClose }) {
   const user = useUser();
   const [mode, setMode] = useState("login"); // 'login' | 'register'
   const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
+  const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");
 
   const submit = (e) => {
     e.preventDefault();
     setErr("");
-    const r = (mode === "login" ? login : register)(email, pass);
-    if (r.ok) { setEmail(""); setPass(""); } else setErr(r.error || "Error");
+    const r = (mode === "login" ? login : register)(email, phone);
+    if (r.ok) { setEmail(""); setPhone(""); } else setErr(r.error || "Error");
   };
 
   return (
@@ -80,7 +143,7 @@ export function AuthPanel({ open, onClose }) {
             <button type="button" className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>{t("auth.register")}</button>
           </div>
           <label>{t("auth.email")}<input type="email" value={email} placeholder="tucorreo@ejemplo.com" autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
-          <label>{t("auth.password")}<input type="password" value={pass} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPass(e.target.value)} /></label>
+          <label>{t("auth.phone")}<input type="tel" value={phone} placeholder="+1 281 555 0100" autoComplete="tel" onChange={(e) => setPhone(e.target.value)} /></label>
           {err && <div className="auth-err">{err}</div>}
           <button className="btn btn-primary big" type="submit">{mode === "login" ? t("auth.login") : t("auth.register")}</button>
           <p className="auth-note">{t("auth.note")}</p>

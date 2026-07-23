@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales } from "./analytics.js";
+import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales, allOrders, updateOrderStatus } from "./analytics.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
@@ -227,11 +227,80 @@ function PriceInput({ value, placeholder, onCommit }) {
   );
 }
 
-function Prices() {
+function TxtInput({ value, placeholder, onCommit, wide }) {
+  const [v, setV] = useState(value ?? "");
+  useEffect(() => { setV(value ?? ""); }, [value]);
+  return (
+    <input className={`adm-txt ${wide ? "wide" : ""}`} value={v} placeholder={placeholder}
+      onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+  );
+}
+
+function ShippingConfig({ ov }) {
+  const sh = ov.shipping; const pk = sh.pickup || {}; const og = sh.origin || {};
+  const zones = sh.zones || []; const carriers = sh.carriers || ["FedEx", "UPS", "USPS", "DHL", "Consignataria"];
+  return (
+    <div className="adm-card">
+      <h3>🚚 Envío y recogida</h3>
+      <div className="adm-grid-2">
+        <div className="ship-block">
+          <div className="ship-h"><span>🏬</span> Recogida en tienda
+            <label className="ship-toggle"><input type="checkbox" checked={!!pk.enabled} onChange={(e) => PS.setPickup({ enabled: e.target.checked })} /> Activa</label>
+          </div>
+          <div className="ship-fields">
+            <label>🏷️ Nombre<TxtInput value={pk.name} onCommit={(v) => PS.setPickup({ name: v })} wide /></label>
+            <label>📍 Dirección<TxtInput value={pk.address} onCommit={(v) => PS.setPickup({ address: v })} wide /></label>
+            <label>🏙️ Ciudad<TxtInput value={pk.city} onCommit={(v) => PS.setPickup({ city: v })} wide /></label>
+            <label>🕒 Horario<TxtInput value={pk.hours} onCommit={(v) => PS.setPickup({ hours: v })} wide /></label>
+            <label>🗺️ Enlace de mapa<TxtInput value={pk.mapsUrl} onCommit={(v) => PS.setPickup({ mapsUrl: v })} wide /></label>
+          </div>
+        </div>
+        <div className="ship-block">
+          <div className="ship-h"><span>📦</span> Origen de envío</div>
+          <div className="ship-fields">
+            <label>🏷️ Nombre<TxtInput value={og.name} onCommit={(v) => PS.setOrigin({ name: v })} wide /></label>
+            <label>📍 Dirección<TxtInput value={og.address} onCommit={(v) => PS.setOrigin({ address: v })} wide /></label>
+            <label>🏙️ Ciudad<TxtInput value={og.city} onCommit={(v) => PS.setOrigin({ city: v })} wide /></label>
+          </div>
+          <div className="ship-h" style={{ marginTop: 12 }}><span>💵</span> Envío base ($)</div>
+          <div className="ship-fields r3">
+            <label>Estándar<PriceInput value={sh.standard} placeholder="4.95" onCommit={(v) => PS.setShipping({ standard: Number(v) || 0 })} /></label>
+            <label>Exprés<PriceInput value={sh.express} placeholder="12.95" onCommit={(v) => PS.setShipping({ express: Number(v) || 0 })} /></label>
+            <label>Gratis desde<PriceInput value={sh.freeThreshold} placeholder="59" onCommit={(v) => PS.setShipping({ freeThreshold: Number(v) || 0 })} /></label>
+          </div>
+        </div>
+      </div>
+      <div className="ship-h" style={{ marginTop: 14 }}><span>🌎</span> Zonas de envío
+        <button className="btn-sm" onClick={PS.addZone}>＋ Zona</button></div>
+      <div className="adm-table-wrap">
+        <table className="adm-table zones">
+          <thead><tr><th>🌍 Destino</th><th>🏷️ Transportista</th><th>💵 Costo</th><th>⏱️ Días</th><th></th></tr></thead>
+          <tbody>
+            {zones.map((z) => (
+              <tr key={z.id}>
+                <td><TxtInput value={z.name} onCommit={(v) => PS.updateZone(z.id, { name: v })} wide /></td>
+                <td><select className="adm-sel" value={z.carrier} onChange={(e) => PS.updateZone(z.id, { carrier: e.target.value })}>
+                  {[...new Set([z.carrier, ...carriers])].filter(Boolean).map((c) => <option key={c} value={c}>{c}</option>)}</select></td>
+                <td><PriceInput value={z.cost} onCommit={(v) => PS.updateZone(z.id, { cost: Number(v) || 0 })} /></td>
+                <td className="eta"><PriceInput value={z.etaMin} onCommit={(v) => PS.updateZone(z.id, { etaMin: Number(v) || 0 })} /><span>–</span><PriceInput value={z.etaMax} onCommit={(v) => PS.updateZone(z.id, { etaMax: Number(v) || 0 })} /></td>
+                <td><button className="btn-sm danger" title="Eliminar zona" onClick={() => PS.removeZone(z.id)}>✕</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted">💡 El cliente ve estas zonas al elegir «Envío a domicilio» en el carrito, con costo y tiempo estimado. El cálculo real por transportista (FedEx / UPS / DHL / consignataria) se conecta luego al backend.</p>
+    </div>
+  );
+}
+
+function Prices({ preQ }) {
   const { products, cases } = useCatalog();
   const [ov, setOv] = useState(PS.getOverrides());
   useEffect(() => PS.subscribe(() => setOv(PS.getOverrides())), []);
   const [q, setQ] = useState("");
+  useEffect(() => { if (preQ != null) setQ(preQ); }, [preQ]);
   const fileRef = useRef(null);
 
   const frames = useMemo(() => products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [products, q]);
@@ -297,12 +366,10 @@ function Prices() {
             <div className="adm-price-row" key={k}><span>{label} <small className="muted">base ${base}</small></span>
               <PriceInput value={ov.usage[k]} placeholder={String(base)} onCommit={(v) => PS.setUsagePrice(k, v)} /></div>
           ))}
-          <h3 style={{ marginTop: 14 }}>Envío ($)</h3>
-          <div className="adm-price-row"><span>Estándar</span><PriceInput value={ov.shipping.standard} placeholder="4.95" onCommit={(v) => PS.setShipping({ standard: Number(v) || 0 })} /></div>
-          <div className="adm-price-row"><span>Exprés</span><PriceInput value={ov.shipping.express} placeholder="12.95" onCommit={(v) => PS.setShipping({ express: Number(v) || 0 })} /></div>
-          <div className="adm-price-row"><span>Envío gratis desde</span><PriceInput value={ov.shipping.freeThreshold} placeholder="59" onCommit={(v) => PS.setShipping({ freeThreshold: Number(v) || 0 })} /></div>
         </div>
       </div>
+
+      <ShippingConfig ov={ov} />
 
       <div className="adm-card">
         <h3>Accesorios · estuches ($)</h3>
@@ -316,32 +383,130 @@ function Prices() {
       <div className="adm-card">
         <div className="adm-head-row"><h3>Monturas ({int(products.length)}) · precio por modelo</h3>
           <input className="adm-search" placeholder="Buscar modelo o marca…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <div className="adm-price-grid">
-          {frames.map((p) => (
-            <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />
+        {Object.entries(frames.reduce((m, p) => { (m[p.brand] = m[p.brand] || []).push(p); return m; }, {}))
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([brand, list]) => (
+            <div className="adm-brand-group" key={brand}>
+              <div className="adm-brand-h">
+                {BRAND_LOGO_BY_NAME[brand] && <img src={BRAND_LOGO_BY_NAME[brand]} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                <span>{brand}</span><small className="muted">({list.length})</small>
+              </div>
+              <div className="adm-price-grid">
+                {list.map((p) => <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />)}
+              </div>
+            </div>
           ))}
-        </div>
         {products.length > 200 && <p className="muted">Mostrando 200 — usa el buscador para acotar.</p>}
       </div>
     </div>
   );
 }
 
-const TABS = [["overview", "Resumen"], ["sales", "Ventas"], ["products", "Productos"], ["prices", "Precios"]];
+const OSTATUS = {
+  processing: ["📦", "En preparación", "#b26a00", "#fbf0df"],
+  shipped: ["🏷️", "Enviado", "#0E5AD0", "#eaf2ff"],
+  in_transit: ["🚚", "En camino", "#7b4aa0", "#f1e9f7"],
+  delivered: ["✅", "Entregado", "#2e7d46", "#e9f5ee"],
+};
+const OSTEPS = ["processing", "shipped", "in_transit", "delivered"];
+
+function Orders() {
+  const snap = useAnalyticsTick();
+  const [filter, setFilter] = useState("all");
+  const [openId, setOpenId] = useState(null);
+  const orders = useMemo(() => allOrders(), [snap]);
+  const shown = filter === "all" ? orders : filter === "done" ? orders.filter((o) => o.status === "delivered") : orders.filter((o) => o.status !== "delivered");
+  const proc = orders.filter((o) => o.status !== "delivered").length;
+  const done = orders.length - proc;
+  const revenue = orders.reduce((s, o) => s + o.total, 0);
+  return (
+    <div className="adm-section">
+      <div className="adm-head-row"><h2>Pedidos</h2>
+        <div className="adm-range">
+          {[["all", "Todos"], ["proc", "En proceso"], ["done", "Entregados"]].map(([k, l]) =>
+            <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>)}
+        </div>
+      </div>
+      <div className="adm-kpis">
+        <KpiCard label="Pedidos" value={int(orders.length)} icon="🧾" />
+        <KpiCard label="En proceso" value={int(proc)} icon="⏳" />
+        <KpiCard label="Entregados" value={int(done)} icon="✅" deltaGood />
+        <KpiCard label="Ingresos" value={money(revenue)} icon="💵" />
+      </div>
+      <div className="adm-card">
+        <div className="adm-table-wrap">
+          <table className="adm-table orders">
+            <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Método</th><th className="r">Total</th><th>Estado / proceso</th></tr></thead>
+            <tbody>
+              {shown.length === 0 ? <tr><td colSpan="6" className="muted">Sin pedidos.</td></tr> : shown.map((o) => {
+                const st = OSTATUS[o.status || "processing"];
+                const ship = o.shipping?.method === "ship";
+                const open = openId === o.id;
+                return [
+                  <tr key={o.id} className="ord-row" onClick={() => setOpenId(open ? null : o.id)}>
+                    <td><b>{o.id}</b>{o.demo && <span className="tag-demo">demo</span>}</td>
+                    <td>{new Date(o.t).toLocaleDateString("es")}</td>
+                    <td>{o.customer ? <span title={o.customer.email}>{o.customer.name} {o.customer.surname}</span> : (o.user || "—")}</td>
+                    <td>{ship ? `🚚 ${o.delivery?.city || "Envío"}` : "🏬 Recogida"}</td>
+                    <td className="r">{money(o.total)}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <span className="ord-badge" style={{ background: st[3], color: st[2] }}>{st[0]} {st[1]}</span>
+                      <select className="adm-sel ord-sel" value={o.status || "processing"} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
+                        {OSTEPS.map((s) => <option key={s} value={s}>{OSTATUS[s][0]} {OSTATUS[s][1]}</option>)}
+                      </select>
+                    </td>
+                  </tr>,
+                  open && (
+                    <tr key={o.id + "-d"} className="ord-detail"><td colSpan="6">
+                      <div className="ord-detail-grid">
+                        <div>
+                          <b>🛍️ Artículos</b>
+                          <ul>{o.items.map((it, i) => <li key={i}><span>{it.name}</span><b>{money(it.total)}</b></li>)}</ul>
+                        </div>
+                        <div>
+                          <b>{ship ? "🚚 Entrega" : "🏬 Recogida en tienda"}</b>
+                          {ship && o.delivery ? (
+                            <p className="ord-addr">📍 {o.delivery.address}, {o.delivery.city}<br />👤 {o.delivery.recipient} · 📞 {o.delivery.phone}<br />✉️ {o.delivery.email} · 🏷️ {o.delivery.carrier || "—"}</p>
+                          ) : <p className="ord-addr muted">El cliente recoge en la sucursal.</p>}
+                          {o.customer && <p className="ord-addr">🧾 {o.customer.name} {o.customer.surname} · {o.customer.email} · {o.customer.phone}</p>}
+                        </div>
+                      </div>
+                    </td></tr>
+                  ),
+                ];
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TABS = [["overview", "Resumen"], ["sales", "Ventas"], ["orders", "Pedidos"], ["products", "Productos"], ["prices", "Precios"]];
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState("overview");
   const [preset, setPreset] = useState("30d");
+  const [find, setFind] = useState("");
   useEffect(() => { ensureSeed(); }, []);
+  const onFind = (v) => { setFind(v); if (v) setTab("prices"); };
   return (
     <div className="adm-body">
-      <nav className="adm-tabs">
-        {TABS.map(([k, label]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>)}
-      </nav>
+      <div className="adm-navbar">
+        <nav className="adm-tabs">
+          {TABS.map(([k, label]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{label}</button>)}
+        </nav>
+        <div className="adm-find" title="Buscar un producto para editar su precio">
+          <span aria-hidden="true">🔎</span>
+          <input placeholder="Buscar producto para editar precio…" value={find} onChange={(e) => onFind(e.target.value)} />
+        </div>
+      </div>
       {tab === "overview" && <Overview preset={preset} setPreset={setPreset} />}
       {tab === "sales" && <Sales preset={preset} setPreset={setPreset} />}
+      {tab === "orders" && <Orders />}
       {tab === "products" && <Products preset={preset} setPreset={setPreset} />}
-      {tab === "prices" && <Prices />}
+      {tab === "prices" && <Prices preQ={find} />}
     </div>
   );
 }

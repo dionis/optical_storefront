@@ -79,3 +79,50 @@ apuntar a tu endpoint. Todo intercambia **JSON**.
 
 Cuando definas la tecnología del backend (p. ej. Medusa v2, que ya está en el repo), podemos
 detallar el **contrato exacto de cada endpoint** (campos de entrada y salida).
+
+
+---
+
+# Ampliación (nuevos cimientos ya montados en el frontend, demo → backend)
+
+Todo lo de abajo ya funciona en modo demo (navegador) y queda listo para conectar.
+
+## 9. Identidad del cliente para comprar
+**Qué:** para finalizar la compra el cliente se identifica con **correo + celular** y da
+**nombre y apellidos**. Con eso podrá luego **rastrear** su pedido y **comentar**.
+**Backend:** cuenta/usuario con email + teléfono verificables (idealmente **OTP al celular** =
+la base del 2FA que ya está previsto), y guardar nombre/apellidos en el perfil.
+
+## 10. Datos de entrega en el pedido
+**Qué:** si el cliente elige **envío a domicilio**, en el pago captura **dirección, ciudad, y el
+contacto de quien recibe** (nombre, celular, correo). Si elige **recogida en tienda**, no.
+**Backend:** guardar estos datos con cada pedido; validarlos.
+
+## 11. Envío: recogida, zonas y transportistas
+**Qué:** el dueño configura en el panel: **recogida en tienda** (dirección y horario — por defecto
+la sucursal de **Fry Rd, Katy**), **origen de envío**, y **zonas** (destino → transportista, costo y
+**tiempo estimado**), incluida **Cuba** por consignataria. El cliente ve costo y tiempo estimado.
+**Backend / integración real:** conectar **cotización en vivo** con FedEx / UPS / DHL / consignataria
+(peso, dimensiones, origen Fry Rd → destino) para reemplazar la tabla de zonas por tarifas reales.
+
+## 12. Estados del pedido y seguimiento (tracking)
+**Qué:** cada pedido tiene un **proceso**: En preparación → Enviado → En camino → Entregado. En el
+panel hay un **registro detallado de todos los pedidos** (cliente, método, destino, total, artículos,
+y su estado, editable). El cliente ve una **línea de seguimiento** en «Mi cuenta».
+**Backend:** guardar el estado y el **número de guía**; recibir **webhooks del transportista** para
+actualizar el estado automáticamente y calcular el **tiempo aproximado** de entrega.
+
+## 13. Reseñas con foto del cliente
+**Qué:** el cliente puede **subir fotos suyas con el producto** en su reseña; se ven en el producto
+y en «Mis reseñas» (editables).
+**Backend:** almacenar las imágenes en un **bucket/CDN** (no en base de datos), moderación básica, y
+asociarlas a la reseña y al cliente.
+
+## 14. Panel: registro de pedidos y buscador
+**Qué:** el panel tiene la pestaña **Pedidos** (todos, en proceso, entregados) con detalle y cambio de
+estado, y un **buscador de producto** para ir directo a editar su precio; las monturas se **agrupan por
+marca**.
+**Backend:** exponer los pedidos con paginación/*filtros* y permisos de administrador.
+
+> Prioridad: 9 y 10 (identidad + datos de entrega) → 12 (estados/tracking) → 11 (cotización real de
+> envío) → 13 (fotos en reseñas). El resto (14) es UI del panel ya resuelta.

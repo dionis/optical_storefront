@@ -6,7 +6,30 @@
 // module is the single seam — swap load()/save() for API calls).
 const KEY = "oer_price_overrides";
 
-const DEFAULT_SHIPPING = { standard: 4.95, express: 12.95, freeThreshold: 59 };
+const DEFAULT_SHIPPING = {
+  standard: 4.95, express: 12.95, freeThreshold: 59,
+  // pickup in store (configurable). Default: main branch on Fry Rd, Katy.
+  pickup: {
+    enabled: true,
+    name: "Óptica El Rancho",
+    address: "Fry Rd, Katy, TX 77449",
+    city: "Katy, Texas",
+    hours: "Lun–Sáb 9:00–19:00",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Optica+El+Rancho+Fry+Rd+Katy+TX",
+  },
+  // ship-from origin used to estimate delivery
+  origin: { name: "Óptica El Rancho (Fry Rd)", address: "Fry Rd, Katy, TX 77449", city: "Katy, TX" },
+  carriers: ["FedEx", "UPS", "USPS", "DHL", "Consignataria"],
+  // configurable shipping zones (destino → transportista, costo y tiempo estimado en días)
+  zones: [
+    { id: "us", name: "Estados Unidos", carrier: "USPS/UPS", cost: 6.95, etaMin: 3, etaMax: 6 },
+    { id: "us-exp", name: "EE.UU. exprés", carrier: "FedEx", cost: 19.95, etaMin: 1, etaMax: 2 },
+    { id: "mx", name: "México", carrier: "DHL", cost: 24.95, etaMin: 5, etaMax: 10 },
+    { id: "latam", name: "Latinoamérica", carrier: "DHL/FedEx", cost: 34.95, etaMin: 7, etaMax: 14 },
+    { id: "cuba", name: "Cuba", carrier: "Consignataria (Va Cuba/Cubamax)", cost: 49.95, etaMin: 10, etaMax: 21 },
+    { id: "intl", name: "Resto del mundo", carrier: "DHL/FedEx", cost: 39.95, etaMin: 7, etaMax: 15 },
+  ],
+};
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
@@ -47,6 +70,27 @@ export function setShipping(patch) {
   o.shipping = { ...DEFAULT_SHIPPING, ...(o.shipping || {}), ...patch };
   save(o);
 }
+export function setPickup(patch) {
+  const o = load(); const sh = { ...DEFAULT_SHIPPING, ...(o.shipping || {}) };
+  o.shipping = { ...sh, pickup: { ...DEFAULT_SHIPPING.pickup, ...(sh.pickup || {}), ...patch } };
+  save(o);
+}
+export function setOrigin(patch) {
+  const o = load(); const sh = { ...DEFAULT_SHIPPING, ...(o.shipping || {}) };
+  o.shipping = { ...sh, origin: { ...DEFAULT_SHIPPING.origin, ...(sh.origin || {}), ...patch } };
+  save(o);
+}
+function getZones() { const sh = { ...DEFAULT_SHIPPING, ...(load().shipping || {}) }; return Array.isArray(sh.zones) ? sh.zones : DEFAULT_SHIPPING.zones; }
+function saveZones(zones) { const o = load(); o.shipping = { ...DEFAULT_SHIPPING, ...(o.shipping || {}), zones }; save(o); }
+export function addZone() {
+  const zones = getZones().slice();
+  zones.push({ id: "z" + Date.now(), name: "Nueva zona", carrier: "FedEx", cost: 0, etaMin: 5, etaMax: 10 });
+  saveZones(zones);
+}
+export function updateZone(id, patch) {
+  saveZones(getZones().map((z) => (z.id === id ? { ...z, ...patch } : z)));
+}
+export function removeZone(id) { saveZones(getZones().filter((z) => z.id !== id)); }
 
 export function resetAll() { try { localStorage.removeItem(KEY); } catch {} bump(); }
 

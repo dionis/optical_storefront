@@ -4,6 +4,7 @@ import { useUser, logout } from "../components/userAuth.js";
 import { useCart } from "../components/CartContext.jsx";
 import { ordersByUser } from "../admin/analytics.js";
 import { listByUser, updateReview, removeReview } from "../components/reviewsStore.js";
+import TrackingTimeline from "../components/TrackingTimeline.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
@@ -95,6 +96,7 @@ function Reviews({ email }) {
               <>
                 <Stars value={r.rating} />
                 <p>{r.text}</p>
+                {r.photos && r.photos.length > 0 && <div className="rev-thumbs">{r.photos.map((p, j) => <img key={j} src={p} alt="" />)}</div>}
                 <div className="acc-review-actions">
                   <button className="btn-sm" onClick={() => { setEditing({ slug: r.slug, id: r.id }); setDraft({ rating: r.rating, text: r.text }); }}>{t("acc.edit")}</button>
                   <button className="btn-sm danger" onClick={() => { removeReview(r.slug, r.id); refresh(); }}>{t("acc.delete")}</button>
@@ -108,14 +110,30 @@ function Reviews({ email }) {
   );
 }
 
-function Tracking() {
+function Tracking({ email }) {
   const { t } = useLang();
+  const orders = useMemo(() => ordersByUser(email), [email]);
+  if (!orders.length) {
+    return (
+      <div className="acc-soon-box">
+        <div className="acc-soon-emoji">🚚</div>
+        <h3>{t("acc.track")}</h3>
+        <p className="muted">{t("acc.track.desc")}</p>
+      </div>
+    );
+  }
+  const etaText = (o) => {
+    const z = o.shipping; if (!z || o.shipping.method === "pickup") return t("acc.track.pickup");
+    return null;
+  };
   return (
-    <div className="acc-soon-box">
-      <div className="acc-soon-emoji">🚚</div>
-      <h3>{t("acc.track")}</h3>
-      <p className="muted">{t("acc.track.desc")}</p>
-      <span className="acc-soon-tag">{t("acc.soon")}</span>
+    <div className="acc-orders">
+      {orders.map((o) => (
+        <div className="acc-order" key={o.id}>
+          <div className="acc-order-head"><b>{o.id}</b><span className="muted">{new Date(o.t).toLocaleDateString("es")}</span></div>
+          <TrackingTimeline status={o.status || "processing"} eta={etaText(o)} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -154,7 +172,7 @@ export default function AccountPage() {
         {tab === "fav" && <Favorites />}
         {tab === "orders" && <Orders email={user.email} />}
         {tab === "reviews" && <Reviews email={user.email} />}
-        {tab === "track" && <Tracking />}
+        {tab === "track" && <Tracking email={user.email} />}
       </div>
     </div>
   );

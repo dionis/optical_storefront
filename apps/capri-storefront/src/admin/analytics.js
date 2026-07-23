@@ -70,6 +70,9 @@ export function recordOrder(order) {
     total: Math.round((order.total || 0) * 100) / 100,
     user: (getUser() && getUser().email) || null,   // ties the order to the logged-in customer
     status: "processing",                             // for future order tracking
+    shipping: order.shipping || null,
+    customer: order.customer || null,
+    delivery: order.delivery || null,
   };
   wr(ORDERS, [rec, ...list]);
   bump();
@@ -79,6 +82,16 @@ export function recordOrder(order) {
 // ---- reads ----
 export function getDaily() { return rd(DAILY, {}); }
 export function getOrders() { return rd(ORDERS, []); }
+// all orders, newest first (for the board's Orders registry)
+export function allOrders() {
+  return getOrders().slice().sort((a, b) => new Date(b.t) - new Date(a.t));
+}
+// advance/set an order's status (owner moves it through the process)
+export function updateOrderStatus(id, status) {
+  wr(ORDERS, getOrders().map((o) => (o.id === id ? { ...o, status } : o)));
+  bump();
+}
+
 // units sold per product — this month and all-time (for the Prices tab)
 export function productSales() {
   const orders = getOrders();
