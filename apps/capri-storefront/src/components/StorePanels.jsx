@@ -18,7 +18,7 @@ export function SidePanel({ open, onClose, title, children }) {
 }
 
 export function CartPanel({ open, onClose }) {
-  const { items, removeItem, total, clearCart } = useCart();
+  const { items, removeItem, total, clearCart, checkout } = useCart();
   const { t } = useLang();
   return (
     <SidePanel open={open} onClose={onClose} title={t("cart.title")}>
@@ -39,7 +39,7 @@ export function CartPanel({ open, onClose }) {
             ))}
           </ul>
           <div className="panel-total"><span>{t("cart.total")}</span><b>${total.toFixed(2)}</b></div>
-          <button className="btn btn-primary big" onClick={() => { alert(t("cart.done")); clearCart(); onClose(); }}>{t("cart.checkout")}</button>
+          <button className="btn btn-primary big" onClick={() => { checkout(); alert(t("cart.done")); onClose(); }}>{t("cart.checkout")}</button>
           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
         </>
       )}

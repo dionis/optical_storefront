@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
+import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
@@ -10,6 +11,7 @@ export default function CaseDetail() {
   const { slug } = useParams();
   const { caseBySlug } = useCatalog();
   const item = caseBySlug[slug];
+  useEffect(() => { if (item) try { trackView(); } catch {} }, [slug]);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [added, setAdded] = useState(false);

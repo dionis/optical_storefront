@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { trackAddToCart, trackFav, recordOrder } from "../admin/analytics.js";
 
 const CartContext = createContext(null);
 
@@ -15,14 +16,31 @@ export function CartProvider({ children }) {
 
   const addItem = useCallback((item) => {
     setItems((prev) => [...prev, { ...item, id: `${item.sku}-${Date.now()}-${Math.round(performance.now())}` }]);
+    try { trackAddToCart(); } catch {}
   }, []);
   const removeItem = useCallback((id) => setItems((prev) => prev.filter((i) => i.id !== id)), []);
   const clearCart = useCallback(() => setItems([]), []);
+
+  // Records a real order from the current cart (called at checkout) and empties it.
+  const checkout = useCallback(() => {
+    setItems((prev) => {
+      if (prev.length) {
+        try {
+          recordOrder({
+            items: prev.map((i) => ({ sku: i.sku, name: i.name, brand: i.brand || "—", kind: i.isCase ? "case" : "frame", total: i.total || 0 })),
+            total: prev.reduce((s, i) => s + (i.total || 0), 0),
+          });
+        } catch {}
+      }
+      return [];
+    });
+  }, []);
 
   const toggleFav = useCallback((p) => {
     setFavorites((prev) => (prev.find((x) => x.slug === p.slug)
       ? prev.filter((x) => x.slug !== p.slug)
       : [...prev, { slug: p.slug, name: p.name, price: p.price, image: p.image, brand: p.brand }]));
+    try { trackFav(); } catch {}
   }, []);
   const isFav = useCallback((slug) => favorites.some((x) => x.slug === slug), [favorites]);
 
@@ -30,7 +48,7 @@ export function CartProvider({ children }) {
   const total = items.reduce((s, i) => s + (i.total || 0), 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, clearCart, count, total, favorites, toggleFav, isFav, favCount: favorites.length }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, clearCart, checkout, count, total, favorites, toggleFav, isFav, favCount: favorites.length }}>
       {children}
     </CartContext.Provider>
   );

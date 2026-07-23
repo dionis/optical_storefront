@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
+import { subscribe as onPrices, usagePrice, materialPrice, treatmentPrice } from "../admin/priceStore.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -16,20 +17,20 @@ const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°"
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
-const USAGE = [
+const _USAGE = [
   { key: "sv-dist", label: "usage.svDist", desc: "usage.svDist.d", price: 6.95, rx: true },
   { key: "sv-read", label: "usage.svRead", desc: "usage.svRead.d", price: 6.95, rx: true },
   { key: "progressive", label: "usage.prog", desc: "usage.prog.d", price: 49.0, rx: true, add: true },
   { key: "frame-only", label: "usage.frame", desc: "usage.frame.d", price: 0, rx: false },
 ];
-const INDEX = [
+const _INDEX = [
   { key: "1.50", label: "idx.std", desc: "idx.std.d", tip: "idx.std.tip", price: 0, max: 2 },
   { key: "1.59", label: "idx.poly", desc: "idx.poly.d", tip: "idx.poly.tip", price: 20, max: 3, poly: true },
   { key: "1.61", label: "idx.thin", desc: "idx.thin.d", tip: "idx.thin.tip", price: 35, max: 4 },
   { key: "1.67", label: "idx.ultra", desc: "idx.ultra.d", tip: "idx.ultra.tip", price: 60, max: 6 },
   { key: "1.74", label: "idx.hi", desc: "idx.hi.d", tip: "idx.hi.tip", price: 95, max: 99 },
 ];
-const COATINGS = [
+const _COATINGS = [
   { key: "ar", label: "coat.ar", tip: "coat.ar.tip", price: 8 },
   { key: "blue", label: "coat.blue", tip: "coat.blue.tip", price: 20 },
   { key: "photo", label: "coat.photo", tip: "coat.photo.tip", price: 45 },
@@ -88,10 +89,16 @@ export default function LensProcess() {
   const [coatings, setCoatings] = useState([]);
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", add: "" });
   const [uploaded, setUploaded] = useState(null);
+  const [pv, setPv] = useState(0);
+  useEffect(() => onPrices(() => setPv((v) => v + 1)), []);
 
   if (!product) return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   const color = product.colors[colorIdx] || product.colors[0];
   const frameOnly = usage?.key === "frame-only";
+  // effective prices with admin overrides applied (pv bump re-renders on price edits)
+  const USAGE = _USAGE.map((u) => ({ ...u, price: usagePrice(u.key, u.price) }));
+  const INDEX = _INDEX.map((i) => ({ ...i, price: materialPrice(i.key, i.price) }));
+  const COATINGS = _COATINGS.map((c) => ({ ...c, price: treatmentPrice(c.key, c.price) }));
 
   const maxAbs = Math.max(
     Math.abs(parseFloat(rx.od_sph) || 0), Math.abs(parseFloat(rx.os_sph) || 0),

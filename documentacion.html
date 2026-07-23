@@ -164,6 +164,24 @@ CATALOG_SOURCE=https://caprioptics.com node scripts/sync-catalog.mjs
     <tr><td>Backend</td><td>Portar providers de pago PayPal/Square a la API de Medusa 2.17</td></tr>
   </table>
 
+  <h2>9 · Panel corporativo (<code>/admin</code>)</h2>
+  <p>Panel de administración <b>dentro de la misma web</b>, pensado para el <b>dueño</b>, con <b>login usuario+contraseña</b>. Guía de uso y credenciales en <code>GUIA-PANEL.md</code>. Es responsive (desktop/tablet/móvil).</p>
+  <div class="cards">
+    <div class="card"><span class="badge b-info">RESUMEN</span><h3>KPIs + gráficas</h3><p class="muted">Ingresos, pedidos, ticket medio, accesos, conversión. Ventas por día, embudo de conversión, ventas por marca, top productos. Filtro de tiempo (Hoy/7/30/90 días/Año/Todo).</p></div>
+    <div class="card"><span class="badge b-info">VENTAS</span><h3>Ventas + pedidos</h3><p class="muted">Ingresos y pedidos por día y tabla de pedidos recientes, con filtros de tiempo.</p></div>
+    <div class="card"><span class="badge b-info">PRODUCTOS</span><h3>Nuevos / retirados</h3><p class="muted">Altas y bajas de catálogo filtrables por tiempo (historial diario del servicio), y catálogo por marca.</p></div>
+    <div class="card"><span class="badge b-ok">PRECIOS</span><h3>Editar TODO</h3><p class="muted">Marcos por modelo, materiales, tratamientos, tipo de lente, envío y accesorios/estuches. Export/Import JSON. Se aplica en la tienda al instante.</p></div>
+  </div>
+  <h3>Arquitectura (sin tocar el backend de Dionis)</h3>
+  <ul>
+    <li><b>Auth</b> (<code>src/admin/adminAuth.js</code>): gate en cliente, contraseña como <b>hash SHA-256</b> (nunca en texto plano), sesión de 8 h en <code>sessionStorage</code>. <b>No es una barrera de seguridad real</b> (todo corre en el navegador): para producción/SaaS se conecta a un backend de auth real vía <code>VITE_ADMIN_AUTH_URL</code> (único <em>seam</em>).</li>
+    <li><b>Analítica</b> (<code>src/admin/analytics.js</code>): registra eventos reales de uso (accesos, vistas, añadir-al-carrito, favoritos) y <b>órdenes</b> al hacer checkout, en <code>localStorage</code>; el checkout de la tienda ahora crea una orden real. Incluye <b>datos demo</b> sembrados (etiquetados, con botón «Borrar demo») para que las gráficas no salgan vacías. Para métricas reales multi-dispositivo, enviar al backend (seam en el mismo archivo).</li>
+    <li><b>Precios</b> (<code>src/admin/priceStore.js</code>): overrides por SKU/clave persistidos en <code>localStorage</code> + export/import JSON; el catálogo se <b>re-renderiza al instante</b> al cambiar un precio (el <code>catalogStore</code> se re-enriquece). Base para SaaS: persistir vía backend (seam).</li>
+    <li><b>Gráficas</b> (<code>src/admin/charts.jsx</code>): SVG propias, responsivas y accesibles, <b>sin dependencias</b>.</li>
+    <li><b>Ruta</b> <code>/admin</code> con layout propio (sin header/footer de tienda); enlace discreto en el pie.</li>
+  </ul>
+  <p class="muted"><b>Credenciales por defecto:</b> usuario <code>admin</code> · contraseña <code>RubiLens*Admin2026</code> — <b>cámbiala</b> (ver <code>GUIA-PANEL.md</code>).</p>
+
 </div>
 <footer>Documento generado automáticamente durante la sesión de desarrollo · Óptica El Rancho</footer>
 </body>

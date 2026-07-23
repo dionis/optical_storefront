@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
@@ -16,6 +17,7 @@ export default function ProductDetail() {
   const { addItem, toggleFav, isFav } = useCart();
   const { t, tv } = useLang();
   const navigate = useNavigate();
+  useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
 
   if (!product) {
     return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;

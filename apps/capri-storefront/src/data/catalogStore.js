@@ -4,11 +4,16 @@
 // files the daily sync service regenerates from caprioptics' Store API (only in-stock
 // frames) — and swap them in. Any component using useCatalog() re-renders on update.
 import { useSyncExternalStore } from "react";
-import { enrichProducts, PRODUCTS as SEED_PRODUCTS } from "./products.js";
-import { enrichCases, CASES as SEED_CASES } from "./cases.js";
+import { enrichProducts, PRODUCTS as SEED_PRODUCTS, SEED_FRAMES } from "./products.js";
+import { enrichCases, CASES as SEED_CASES, SEED_CASES as SEED_CASES_RAW } from "./cases.js";
+import { subscribe as onPrices } from "../admin/priceStore.js";
 
 function hash(str){let h=0;const s=String(str);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffffff;return Math.abs(h);}
 const bySlug = (arr) => Object.fromEntries(arr.map((p) => [p.slug, p]));
+
+// keep the RAW (pre-enrichment) arrays so we can re-price live when the owner edits prices
+let rawFrames = SEED_FRAMES;
+let rawCases = SEED_CASES_RAW;
 
 let state = {
   products: SEED_PRODUCTS,
@@ -18,6 +23,13 @@ let state = {
   meta: null,
   live: false,
 };
+
+// re-enrich (re-apply prices) when the admin changes any override
+onPrices(() => {
+  const products = enrichProducts(rawFrames);
+  const ecases = enrichCases(rawCases);
+  set({ products, cases: ecases, productBySlug: bySlug(products), caseBySlug: bySlug(ecases) });
+});
 
 const subs = new Set();
 function emit() { for (const f of subs) f(); }
@@ -47,8 +59,10 @@ export async function loadLive() {
     if (!Array.isArray(frames) || !frames.length) return;
     let meta = null;
     try { const m = await fetch(`${BASE}/catalog-meta.json`, opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
-    const products = enrichProducts(frames);
-    const ecases = enrichCases(Array.isArray(cases) ? cases : []);
+    rawFrames = frames;
+    if (Array.isArray(cases) && cases.length) rawCases = cases;
+    const products = enrichProducts(rawFrames);
+    const ecases = enrichCases(rawCases);
     set({
       products,
       cases: ecases.length ? ecases : state.cases,

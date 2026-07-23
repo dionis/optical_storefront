@@ -244,6 +244,17 @@ async function main() {
     added, removed, addedCount: added.length, removedCount: removed.length,
   }, null, 2));
 
+  // append daily history (for the admin "new / discontinued over time" view)
+  const histPath = path.join(PUBLIC, "catalog-history.json");
+  let hist = [];
+  try { hist = JSON.parse(fs.readFileSync(histPath, "utf8")); } catch { hist = []; }
+  if (!Array.isArray(hist)) hist = [];
+  const dateKey = startedISO.slice(0, 10);
+  hist = hist.filter((h) => h.date !== dateKey); // one entry per day (replace today)
+  hist.push({ date: dateKey, totalFrames: outFrames.length, totalCases: outCases.length, added, removed });
+  hist = hist.slice(-400);
+  fs.writeFileSync(histPath, JSON.stringify(hist));
+
   console.log(`[sync] DONE ${startedISO}`);
   console.log(`[sync] frames=${outFrames.length} cases=${outCases.length} added=${added.length} removed=${removed.length}`);
   if (added.length) console.log("[sync] + " + added.slice(0, 30).join(", ") + (added.length > 30 ? " …" : ""));

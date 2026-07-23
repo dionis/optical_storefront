@@ -407,3 +407,7 @@ button { font-family: inherit; cursor: pointer; }
   .help-pop { width: 220px; left: -40px; }
   .rev-avg b { font-size: 28px; }
 }
+
+/* discreet admin link in footer */
+.footer-admin { color: inherit; opacity: .55; text-decoration: none; margin-left: 8px; }
+.footer-admin:hover { opacity: 1; text-decoration: underline; }

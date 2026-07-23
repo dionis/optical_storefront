@@ -8,6 +8,8 @@ const reviewsFor=(sku)=>12+(hash(sku+"rv")%180);
 const CHEX={multi:"#9aa3b0",black:"#1a1a1a",transparent:"#dfe6ee",transparente:"#dfe6ee",clear:"#dfe6ee",brown:"#6b4423",blue:"#2f5fa8",gold:"#c9a44a",silver:"#c0c0c0",grey:"#8a8a8a",gunmetal:"#4b4f56"};
 const chex=(n)=>{const k=String(n).toLowerCase();if(CHEX[k])return CHEX[k];for(const t of k.split(/[^a-z]+/))if(CHEX[t])return CHEX[t];return "#9aa3b0";};
 
+import { applyCase } from "../admin/priceStore.js";
+
 // Enrich raw case records (sku,name,colors[,material]) — used for the static seed AND
 // the daily live catalog (cases.json).
 export function enrichCases(list){
@@ -18,7 +20,8 @@ export function enrichCases(list){
     brand_slug: "case",
     isCase: true,
     material: c.material || "",
-    price: priceFor(c.sku),
+    price: applyCase(c.sku, priceFor(c.sku)),
+    basePrice: priceFor(c.sku),
     rating: ratingFor(c.sku),
     reviews: reviewsFor(c.sku),
     colors: c.colors.map((x)=>({...x, hex: x.hex || chex(x.name)})),

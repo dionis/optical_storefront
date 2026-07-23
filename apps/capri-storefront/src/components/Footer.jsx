@@ -29,7 +29,10 @@ export default function Footer() {
           <a href="#">{t("footer.contact")}</a>
         </div>
       </div>
-      <div className="footer-bottom">© {new Date().getFullYear()} {t("footer.rights")}</div>
+      <div className="footer-bottom">
+        © {new Date().getFullYear()} {t("footer.rights")}
+        <Link to="/admin" className="footer-admin" title="Panel corporativo">· {t("footer.admin")}</Link>
+      </div>
     </footer>
   );
 }

@@ -152,6 +152,7 @@ export const T = {
     "footer.chooseFrame": "Cómo elegir tu montura", "footer.rxGuide": "Guía de recetas", "footer.shipping": "Envíos y devoluciones",
     "footer.arSvc": "Probador virtual (AR)", "footer.uploadRx": "Sube tu receta", "footer.contact": "Contacto",
     "footer.rights": "Óptica El Rancho · Imágenes cortesía de caprioptics.com",
+    "footer.admin": "Panel corporativo",
   },
   en: {
     "top.bar": "Free shipping on orders over $59 · 30-day guarantee",
@@ -305,6 +306,7 @@ export const T = {
     "footer.chooseFrame": "How to choose your frame", "footer.rxGuide": "Prescription guide", "footer.shipping": "Shipping & returns",
     "footer.arSvc": "Virtual try-on (AR)", "footer.uploadRx": "Upload your prescription", "footer.contact": "Contact",
     "footer.rights": "Óptica El Rancho · Images courtesy of caprioptics.com",
+    "footer.admin": "Admin panel",
   },
 };
 
