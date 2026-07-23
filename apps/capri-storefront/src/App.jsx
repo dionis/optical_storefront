@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
+import { loadLive } from "./data/catalogStore.js";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
@@ -10,6 +12,7 @@ import { CartProvider } from "./components/CartContext.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
 
 export default function App() {
+  useEffect(() => { loadLive(); }, []);
   return (
     <LanguageProvider>
       <CartProvider>

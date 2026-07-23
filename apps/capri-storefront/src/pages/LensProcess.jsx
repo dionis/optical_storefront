@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
-import { PRODUCT_BY_SLUG } from "../data/products.js";
+import { useCatalog } from "../data/catalogStore.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -75,7 +75,8 @@ export default function LensProcess() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t } = useLang();
-  const product = PRODUCT_BY_SLUG[slug];
+  const { productBySlug } = useCatalog();
+  const product = productBySlug[slug];
   const colorIdx = Number(params.get("color") || 0);
   const navigate = useNavigate();
   const { addItem } = useCart();

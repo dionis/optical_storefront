@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 import { BRANDS } from "../data/brands.js";
-import { PRODUCTS } from "../data/products.js";
+import { useCatalog } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function Home() {
   const { t } = useLang();
+  const { products: PRODUCTS } = useCatalog();
   const featured = PRODUCTS.slice(0, 8);
+  const heroImg = PRODUCTS[0] && PRODUCTS[0].colors[0] ? PRODUCTS[0].colors[0].image : "";
 
   return (
     <div>
@@ -21,7 +23,7 @@ export default function Home() {
             </div>
           </div>
           <div className="hero-art">
-            <img src={PRODUCTS[0].colors[0].image} alt="" onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
+            <img src={heroImg} alt="" onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
           </div>
         </div>
       </section>

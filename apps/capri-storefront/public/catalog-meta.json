@@ -1,0 +1,29 @@
+{
+  "lastSync": "2026-07-23T01:41:12.088Z",
+  "seed": false,
+  "source": "woocommerce-store-api",
+  "totalFrames": 550,
+  "totalCases": 28,
+  "perBrand": {
+    "di-caprio": 129,
+    "grande": 15,
+    "peachtree": 54,
+    "trendy": 21,
+    "4u": 134,
+    "millennial": 45,
+    "candy-shoppe": 15,
+    "simply-lite": 29,
+    "eyeleos": 13,
+    "flexure": 25,
+    "prorx": 9,
+    "ago": 19,
+    "artistik-galerie": 10,
+    "artistik-eyewear": 13,
+    "versailles-palace": 15,
+    "slimfold": 4
+  },
+  "added": [],
+  "removed": [],
+  "addedCount": 0,
+  "removedCount": 0
+}

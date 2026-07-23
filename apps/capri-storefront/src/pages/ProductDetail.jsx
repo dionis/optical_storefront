@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { PRODUCT_BY_SLUG, PRODUCTS } from "../data/products.js";
-import { recommendedCases } from "../data/cases.js";
+import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
@@ -10,7 +9,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function ProductDetail() {
   const { slug } = useParams();
-  const product = PRODUCT_BY_SLUG[slug];
+  const { products: PRODUCTS, productBySlug } = useCatalog();
+  const product = productBySlug[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const { addItem, toggleFav, isFav } = useCart();

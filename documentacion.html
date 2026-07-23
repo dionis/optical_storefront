@@ -41,6 +41,7 @@
     <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Web "Óptica El Rancho"</h3><p class="muted">Vite + React 18 en <b>http://localhost:5198</b>. Bilingüe ES/EN, responsive, marca RUBI_LENS.</p></div>
     <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Infra Docker</h3><p class="muted">Postgres :5432 · Redis :6379 · Meilisearch :7700 · MinIO :9090/:9001.</p></div>
     <div class="card"><span class="badge b-warn">PARCIAL</span><h3>Backend Medusa</h3><p class="muted">BD migrada + build OK. Pagos PayPal/Square pendientes de portar a Medusa 2.17.</p></div>
+    <div class="card"><span class="badge b-ok">PROGRAMADO</span><h3>Servicio de catálogo</h3><p class="muted">Tarea diaria <code>OpticaElRancho-CatalogSync</code> (03:00) — sincroniza los marcos disponibles desde la Store API de caprioptics.</p></div>
     <div class="card"><span class="badge b-info">REFERENCIA</span><h3>Storefront Next.js</h3><p class="muted">Storefront original del repo en :3000, conectado al backend.</p></div>
   </div>
 
@@ -54,7 +55,7 @@
   <p>El <b>favicon</b> es un SVG vectorial de dos lentes (azul + rojo) que replica el icono del logo; <code>theme-color</code> = azul de marca.</p>
 
   <h2>3 · Cómo se renderiza (arquitectura)</h2>
-  <p>Es una <b>SPA (Single Page Application) React 18</b> servida por Vite. No hace llamadas a un backend: los datos viven en <code>src/data</code> como módulos JS, así que el render es instantáneo y funciona sin servidor de API. Enrutado en cliente con <code>react-router-dom</code>.</p>
+  <p>Es una <b>SPA (Single Page Application) React 18</b> servida por Vite. Al arrancar muestra los datos «semilla» incluidos en el build y luego <b>hidrata el catálogo desde <code>catalog.json</code>/<code>cases.json</code></b> (generados por el servicio diario, ver más abajo). Enrutado en cliente con <code>react-router-dom</code>.</p>
   <table>
     <tr><th>Ruta</th><th>Componente</th><th>Qué renderiza</th></tr>
     <tr><td><code>/</code></td><td>Home</td><td>Hero, grid de 17 marcas (grande, con nombre), 8 destacados, franja de propuestas de valor</td></tr>
@@ -64,12 +65,22 @@
     <tr><td><code>/estuches</code>, <code>/marca/case</code></td><td>Catalog (rama case)</td><td>Cuadrícula de estuches, con variantes de color una a una como los espejuelos</td></tr>
   </table>
   <p>El <b>header</b> incluye dos cajones deslizantes globales: <b>Favoritos</b> (icono ♥) y <b>Carrito</b> (icono 🛒), cada uno con su contador. Favoritos y carrito se guardan en <code>localStorage</code> (<code>oer_fav</code>, <code>oer_cart</code>) y persisten entre recargas; desde Favoritos se puede «Añadir al carrito» o «Quitar».</p>
+  <h3>Catálogo dinámico (servicio diario, ya no es estático)</h3>
+  <p>El catálogo <b>ya no está fijo en el código</b>: se actualiza solo cada día. Un servicio <code>scripts/sync-catalog.mjs</code> (Node, sin dependencias) se ejecuta mediante la <b>Tarea programada de Windows <code>OpticaElRancho-CatalogSync</code></b> (<code>_runners/sync-catalog.bat</code>, diaria a las 03:00) y hace lo siguiente:</p>
+  <ul>
+    <li>Consulta la <b>WooCommerce Store API</b> pública de caprioptics (<code>/wp-json/wc/store/v1/products</code>, ~6 peticiones para todo el catálogo).</li>
+    <li>Se queda <b>solo con los marcos disponibles</b> (<code>is_in_stock === true</code>): si un modelo deja de estar disponible <b>desaparece</b> automáticamente de la tienda.</li>
+    <li>Detecta modelos <b>nuevos de cualquier marca</b> (la marca sale de la categoría del producto) y los <b>agrega</b> automáticamente — incluso marcas que no existían antes.</li>
+    <li>Normaliza los atributos al español canónico (Square→Cuadrado…) y agrupa los tamaños a los rangos de los filtros; reutiliza las imágenes por color ya conocidas y solo descarga la galería de los modelos <b>nuevos</b>.</li>
+    <li>Escribe <code>public/catalog.json</code>, <code>public/cases.json</code> y <code>public/catalog-meta.json</code> (fecha de sincronización, conteos por marca y el diff <em>added/removed</em> de ese día). Si la API falla, <b>no sobrescribe</b> el último catálogo bueno.</li>
+  </ul>
+  <p>La tienda (SPA) <b>lee esos JSON en tiempo de ejecución</b> vía <code>src/data/catalogStore.js</code> (<code>useCatalog()</code>): al abrir, muestra al instante los datos «semilla» incluidos en el build y, en cuanto llega el <code>catalog.json</code> del día, <b>re-renderiza</b> con lo disponible. Si no hay red, se queda con la semilla. Así el catálogo se refresca <b>sin recompilar ni reiniciar</b>.</p>
   <h3>Render de imágenes y colores</h3>
   <p>Las imágenes de producto se <b>enlazan directamente (hotlink) desde el CDN de caprioptics.com</b> con la URL exacta por color. Al pasar el cursor o hacer clic en una muestra de color, el estado React <code>active</code> cambia y se re-renderiza <code>&lt;img src={color.image}&gt;</code> con una transición <code>fade-in</code> — replicando el comportamiento de <code>dc406</code>. Las muestras de color se pintan con un mapa nombre→hex.</p>
   <h3>Datos</h3>
   <ul>
     <li><b>17 marcas</b> reales con logos oficiales (<code>src/data/brands.js</code>).</li>
-    <li><b>549 monturas</b> reales de <b>14 marcas</b> (<code>src/data/products.js</code> + <code>frames-extra.js</code>): catálogo COMPLETO de caprioptics.com — Di Caprio (129), 4U (134), Peachtree (54), Millennial (45), Simplylite (29), Flexure (25), Trendy (21), Ago (19), Grande (15), Versailles Palace (15), Eyeleos (13), Artistik Eyewear (13), ProRx (9), más Candy Shoppe/Artistik Galerie/Slimfold. Extraídos por agentes en paralelo (una tanda por categoría, DiCaprio y 4U divididos por páginas), deduplicados por SKU. Los atributos scrapeados en inglés se <b>normalizan al español canónico</b> (Square→Cuadrado, Acetate→Acetato…) y los tamaños se agrupan en los rangos exactos de los filtros, para que filtros y traducción funcionen.</li>
+    <li><b>~550 monturas disponibles</b> de todas las marcas de caprioptics — <b>el número exacto cambia cada día</b> según lo que la API reporte disponible. La semilla incluida es el catálogo COMPLETO capturado: Di Caprio (129), 4U (134), Peachtree (54), Millennial (45), Simplylite (29), Flexure (25), Trendy (21), Ago (19), Grande (15), Versailles Palace (15), Eyeleos (13), Artistik Eyewear (13), ProRx (9), Candy Shoppe, Artistik Galerie, Slimfold. Los atributos se <b>normalizan al español canónico</b> (Square→Cuadrado, Acetate→Acetato…) y los tamaños se agrupan en los rangos exactos de los filtros, para que filtros y traducción funcionen.</li>
     <li><b>28 estuches / cases</b> reales (<code>src/data/cases.js</code>) — categoría Case completa — con imagen y precio, vendibles; los que tienen varios colores muestran cada variante una a una.</li>
     <li>Precio y valoración <b>deterministas por SKU</b> (Capri Optics es B2B y no publica precios).</li>
   </ul>
@@ -120,18 +131,24 @@
   <p>Objetivo UX: navegación clara para usuarios noveles — jerarquía visual simple, CTAs grandes y táctiles, un flujo de compra guiado paso a paso, y feedback inmediato al filtrar o cambiar color.</p>
 
   <h2>6 · QA realizado</h2>
-  <p>Capturas automáticas con Playwright (Chromium headless) en múltiples combinaciones de viewport e idioma antes de desplegar. En la última iteración (v5) se verificó: logo vectorial nítido y solo-logo en el header, tarjetas con fondo blanco sin recorte, catálogo con <b>136 monturas</b>, cajón de <b>favoritos</b> (añadir/quitar/al carrito), bloque de <b>reseñas</b> con formulario, receta con desplegables por defecto 0.00, materiales/tratamientos seleccionables con globo de ayuda ⓘ, y estuches recomendados como cross-sell. Nota: en el sandbox en la nube las imágenes del CDN de caprioptics pueden salir en blanco por bloqueo de red; en la máquina local cargan con normalidad.</p>
+  <p>Capturas automáticas con Playwright (Chromium headless) en múltiples combinaciones de viewport e idioma antes de desplegar. Se verificó: logo vectorial nítido y solo-logo en el header, tarjetas con fondo blanco sin recorte, cajón de <b>favoritos</b> (añadir/quitar/al carrito), bloque de <b>reseñas</b> con formulario, receta con desplegables por defecto 0.00, materiales/tratamientos seleccionables con globo de ayuda ⓘ, estuches con la misma dinámica que los espejuelos y como cross-sell, y las <b>banderitas 🇪🇸/🇺🇸</b> del idioma.</p>
+  <p>En la última iteración (v8) se validó el <b>catálogo dinámico</b> de punta a punta: el servicio corrió contra la Store API (578 productos → <b>550 monturas disponibles + 28 estuches</b>, con diff added/removed), los JSON generados pasaron chequeos de integridad (0 sin color, 0 imágenes vacías, 0 material inválido), la tarea diaria quedó registrada (<code>OpticaElRancho-CatalogSync</code>, próxima 03:00) y la SPA hidrató y re-renderizó desde <code>catalog.json</code> sin errores de consola. Nota: en el sandbox en la nube las imágenes del CDN de caprioptics pueden salir en blanco por bloqueo de red; en la máquina local cargan con normalidad.</p>
 
   <h2>7 · Cómo levantarla</h2>
   <pre>cd apps/capri-storefront
 npm install        # solo la primera vez
-npm run dev        # http://localhost:5198 (puerto no estándar, por diseño)</pre>
+npm run dev        # http://localhost:5198 (puerto no estándar, por diseño)
+
+# Servicio de catálogo (se ejecuta solo cada día a las 03:00):
+node scripts/sync-catalog.mjs        # o _runners\sync-catalog.bat
+# Tarea programada de Windows: OpticaElRancho-CatalogSync (diaria)</pre>
+  <p class="muted">El servicio de catálogo ya quedó registrado como tarea diaria de Windows; para forzar una sincronización manual basta con ejecutar el <code>.bat</code> o el comando <code>node</code> de arriba.</p>
 
   <h2>8 · Pendientes</h2>
   <table>
     <tr><th>Área</th><th>Pendiente</th></tr>
     <tr><td>Integración</td><td>Conectar la web al backend Medusa (catálogo, carrito, precios de lentes en servidor)</td></tr>
-    <tr><td>Catálogo</td><td>Ampliar el scraping a las 17 marcas completas vía <code>apps/scraper</code></td></tr>
+    <tr><td>Catálogo</td><td><b>Resuelto:</b> catálogo dinámico diario vía Store API (servicio <code>sync-catalog.mjs</code> + tarea <code>OpticaElRancho-CatalogSync</code>).</td></tr>
     <tr><td>AR</td><td>Enlazar el probador virtual (MediaPipe) del storefront original</td></tr>
     <tr><td>Backend</td><td>Portar providers de pago PayPal/Square a la API de Medusa 2.17</td></tr>
   </table>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { CASE_BY_SLUG, recommendedCases } from "../data/cases.js";
+import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
 import { useCart } from "../components/CartContext.jsx";
@@ -8,7 +8,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function CaseDetail() {
   const { slug } = useParams();
-  const item = CASE_BY_SLUG[slug];
+  const { caseBySlug } = useCatalog();
+  const item = caseBySlug[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [added, setAdded] = useState(false);

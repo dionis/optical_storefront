@@ -90,20 +90,31 @@ function reviewsFor(sku) {
   return 40 + (hash(sku + "rev") % 480);
 }
 
-const ALL = [...RAW, ...EXTRA].filter((p) => p.colors && p.colors.length);
-const seen = new Set();
-export const PRODUCTS = ALL.filter((p) => {
-  const s = p.sku.toLowerCase().replace(/\s+/g, "");
-  if (seen.has(s)) return false;
-  seen.add(s);
-  return true;
-}).map((p) => ({
-  ...p,
-  slug: p.sku.toLowerCase().replace(/[^a-z0-9]+/g, ""),
-  price: priceFor(p.sku),
-  rating: ratingFor(p.sku),
-  reviews: reviewsFor(p.sku),
-  colors: p.colors.map((c) => ({ ...c, hex: hexFor(c.name) })),
-}));
+// Enrich a list of raw frame records (sku,name,brand,brand_slug,colors,attributes)
+// with deterministic price/rating/reviews, url slug and per-color hex. Deduped by SKU.
+// Used for BOTH the bundled static seed and the daily live catalog (catalog.json).
+export function enrichProducts(list) {
+  const seen = new Set();
+  return (list || [])
+    .filter((p) => p && p.colors && p.colors.length)
+    .filter((p) => {
+      const s = String(p.sku).toLowerCase().replace(/\s+/g, "");
+      if (seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    })
+    .map((p) => ({
+      ...p,
+      attributes: p.attributes || {},
+      slug: String(p.sku).toLowerCase().replace(/[^a-z0-9]+/g, ""),
+      price: priceFor(p.sku),
+      rating: ratingFor(p.sku),
+      reviews: reviewsFor(p.sku),
+      colors: p.colors.map((c) => ({ ...c, hex: c.hex || hexFor(c.name) })),
+    }));
+}
 
+// Bundled static seed = original curated RAW + full scraped EXTRA (fallback / first paint).
+export const SEED_FRAMES = [...RAW, ...EXTRA];
+export const PRODUCTS = enrichProducts(SEED_FRAMES);
 export const PRODUCT_BY_SLUG = Object.fromEntries(PRODUCTS.map((p) => [p.slug, p]));

@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { PRODUCTS } from "../data/products.js";
-import { CASES } from "../data/cases.js";
+import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches } from "../data/filters.js";
 import ProductCard from "../components/ProductCard.jsx";
@@ -12,6 +11,7 @@ export default function Catalog() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t, tv, lang } = useLang();
+  const { products: PRODUCTS, cases: CASES } = useCatalog();
   const brand = slug ? BRAND_BY_SLUG[slug] : null;
   const q = (params.get("q") || "").toLowerCase().trim();
   const ageParam = params.get("age");
@@ -44,7 +44,7 @@ export default function Catalog() {
     if (sort === "price-desc") list = [...list].sort((a, b) => b.price - a.price);
     if (sort === "rating") list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [brand, q, selected, sort]);
+  }, [PRODUCTS, brand, q, selected, sort]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
   const heading = brand ? brand.name : q ? `${t("cat.results")}: “${q}”` : t("cat.all");

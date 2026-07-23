@@ -8,24 +8,32 @@ const reviewsFor=(sku)=>12+(hash(sku+"rv")%180);
 const CHEX={multi:"#9aa3b0",black:"#1a1a1a",transparent:"#dfe6ee",transparente:"#dfe6ee",clear:"#dfe6ee",brown:"#6b4423",blue:"#2f5fa8",gold:"#c9a44a",silver:"#c0c0c0",grey:"#8a8a8a",gunmetal:"#4b4f56"};
 const chex=(n)=>{const k=String(n).toLowerCase();if(CHEX[k])return CHEX[k];for(const t of k.split(/[^a-z]+/))if(CHEX[t])return CHEX[t];return "#9aa3b0";};
 
-export const CASES = RAW.map((c)=>({
-  ...c,
-  slug: "case-"+c.sku.toLowerCase().replace(/[^a-z0-9]+/g,"-"),
-  brand: "Cases",
-  brand_slug: "case",
-  isCase: true,
-  material: c.material || "",
-  price: priceFor(c.sku),
-  rating: ratingFor(c.sku),
-  reviews: reviewsFor(c.sku),
-  colors: c.colors.map((x)=>({...x, hex: chex(x.name)})),
-}));
+// Enrich raw case records (sku,name,colors[,material]) — used for the static seed AND
+// the daily live catalog (cases.json).
+export function enrichCases(list){
+  return (list || []).filter((c)=>c && c.colors && c.colors.length).map((c)=>({
+    ...c,
+    slug: "case-"+String(c.sku).toLowerCase().replace(/[^a-z0-9]+/g,"-"),
+    brand: "Cases",
+    brand_slug: "case",
+    isCase: true,
+    material: c.material || "",
+    price: priceFor(c.sku),
+    rating: ratingFor(c.sku),
+    reviews: reviewsFor(c.sku),
+    colors: c.colors.map((x)=>({...x, hex: x.hex || chex(x.name)})),
+  }));
+}
 
+export const SEED_CASES = RAW;
+export const CASES = enrichCases(RAW);
 export const CASE_BY_SLUG = Object.fromEntries(CASES.map((c)=>[c.slug, c]));
 
-export function recommendedCases(seed, n=3){
-  const start=hash(seed||"x")%CASES.length;
+// Seed-only recommender; the live app uses catalogStore.recommendedCases.
+export function recommendedCases(seed, n=3, pool=CASES){
+  if(!pool.length) return [];
+  const start=hash(seed||"x")%pool.length;
   const out=[];
-  for(let i=0;i<n;i++)out.push(CASES[(start+i)%CASES.length]);
+  for(let i=0;i<n;i++)out.push(pool[(start+i)%pool.length]);
   return out;
 }
