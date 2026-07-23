@@ -77,7 +77,7 @@ export function FrameDetail({ product }: FrameDetailProps) {
         <div className="flex flex-col gap-6">
           {/* Title + collection */}
           <div>
-            {meta["collection_slug"] && (
+            {Boolean(meta["collection_slug"]) && (
               <p className="text-xs font-medium uppercase tracking-widest text-accent mb-1">
                 {String(meta["collection_slug"]).replace(/-/g, " ")}
               </p>

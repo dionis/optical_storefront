@@ -193,9 +193,9 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
     const prescription: Prescription = {
       od,
       os,
-      pd: pdMode === "single" ? pdSingle : undefined,
-      pd_od: pdMode === "dual" ? pdOd : undefined,
-      pd_os: pdMode === "dual" ? pdOs : undefined,
+      pd: pdMode === "single" ? (pdSingle ?? null) : null,
+      pd_od: pdMode === "dual" ? (pdOd ?? null) : null,
+      pd_os: pdMode === "dual" ? (pdOs ?? null) : null,
       source: "ocr",
       verified_by_user: true,
       file_url: ocrFileUrl,

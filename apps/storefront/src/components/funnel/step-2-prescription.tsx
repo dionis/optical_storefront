@@ -43,7 +43,7 @@ function EyeRow({
       <td className="py-2 pr-2">
         <select
           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent"
-          value={eye.sph}
+          value={eye.sph ?? ""}
           onChange={(e) => onChange({ ...eye, sph: Number(e.target.value) })}
           aria-label={`SPH ${label}`}
         >
@@ -57,7 +57,7 @@ function EyeRow({
       <td className="py-2 pr-2">
         <select
           className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent"
-          value={eye.cyl}
+          value={eye.cyl ?? ""}
           onChange={(e) => onChange({ ...eye, cyl: Number(e.target.value), axis: eye.axis ?? 90 })}
           aria-label={`CYL ${label}`}
         >
@@ -145,9 +145,9 @@ export function Step2Prescription({ onNext, onBack }: Step2PrescriptionProps) {
     return {
       od,
       os,
-      pd: pdMode === "single" ? pdSingle : undefined,
-      pd_od: pdMode === "dual" ? pdOd : undefined,
-      pd_os: pdMode === "dual" ? pdOs : undefined,
+      pd: pdMode === "single" ? (pdSingle ?? null) : null,
+      pd_od: pdMode === "dual" ? (pdOd ?? null) : null,
+      pd_os: pdMode === "dual" ? (pdOs ?? null) : null,
       source: "manual",
       file_url: null,
     };

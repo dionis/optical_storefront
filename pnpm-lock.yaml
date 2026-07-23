@@ -44,6 +44,9 @@ importers:
       '@medusajs/medusa':
         specifier: ^2.8.6
         version: 2.17.2(@medusajs/admin-sdk@2.18.0)(@medusajs/cli@2.17.2(@types/node@20.19.43))(@medusajs/dashboard@2.17.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(typescript@5.9.3))(@medusajs/framework@2.17.2(@medusajs/cli@2.17.2(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@5.4.21(@types/node@20.19.43))(zod@3.25.76))(@medusajs/icons@2.17.2(react@18.3.1))(@medusajs/ui@4.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.15.46(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(awilix@8.0.1)(posthog-node@5.46.0(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@6.30.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      '@mikro-orm/migrations':
+        specifier: ^6.4.3
+        version: 6.6.14(@mikro-orm/core@6.6.14)(@types/node@20.19.43)(pg@8.22.0)
       meilisearch:
         specifier: ^0.46.0
         version: 0.46.0

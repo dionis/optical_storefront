@@ -68,7 +68,7 @@ export function useFramesSearch(
         } else {
           setHits(result.hits);
           setFacets(result.facetDistribution ?? {});
-          setTotalHits(result.estimatedTotalHits ?? result.totalHits ?? 0);
+          setTotalHits(result.estimatedTotalHits ?? 0);
         }
         setError(null);
       } catch (err: unknown) {

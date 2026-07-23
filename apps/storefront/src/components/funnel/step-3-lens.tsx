@@ -106,7 +106,7 @@ export function Step3Lens({ onNext, onBack }: Step3LensProps) {
             {lensOptions.map((opt) => {
               const isSelected = lensIndex === opt.index;
               const isRecommended =
-                validationRecommendedIndex === opt.index && opt.index !== "1.57";
+                validationRecommendedIndex === opt.index && opt.index !== 1.57;
               return (
                 <button
                   key={opt.id}
