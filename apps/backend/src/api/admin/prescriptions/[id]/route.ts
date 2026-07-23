@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index.js";
-import type PrescriptionModuleService from "../../../../modules/prescription/service.js";
+import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index";
+import type PrescriptionModuleService from "../../../../modules/prescription/service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 /**

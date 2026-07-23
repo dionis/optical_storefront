@@ -14,6 +14,8 @@
 
 import {
   AbstractPaymentProvider,
+  ModuleProvider,
+  Modules,
   PaymentProviderError,
   PaymentProviderSessionResponse,
   MedusaContainer,
@@ -34,7 +36,7 @@ interface SquareOptions {
 }
 
 // TODO(blocked): Complete Square integration after Stripe + PayPal ship (Phase 5)
-export default class SquarePaymentProvider extends AbstractPaymentProvider<SquareOptions> {
+class SquarePaymentProvider extends AbstractPaymentProvider<SquareOptions> {
   static identifier = "square";
 
   private readonly accessToken: string;
@@ -263,3 +265,7 @@ export default class SquarePaymentProvider extends AbstractPaymentProvider<Squar
     }
   }
 }
+
+export default ModuleProvider(Modules.PAYMENT, {
+  services: [SquarePaymentProvider],
+});

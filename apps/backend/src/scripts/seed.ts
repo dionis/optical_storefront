@@ -4,8 +4,8 @@
  * Safe to re-run (idempotent).
  */
 
-import { LENS_CONFIG_MODULE } from "../modules/lens-config/index.js";
-import type LensConfigModuleService from "../modules/lens-config/service.js";
+import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
+import type LensConfigModuleService from "../modules/lens-config/service";
 
 export default async function seed({
   container,

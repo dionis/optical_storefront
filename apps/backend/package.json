@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "medusa develop",
-    "build": "medusa build",
+    "build": "pnpm --filter @eyewear/shared build && medusa build",
     "start": "medusa start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
@@ -17,13 +17,18 @@
     "@anthropic-ai/sdk": "^0.32.1",
     "@aws-sdk/client-s3": "^3.709.0",
     "@aws-sdk/s3-request-presigner": "^3.709.0",
+    "@medusajs/admin-sdk": "^2.8.6",
+    "@medusajs/admin-shared": "^2.8.6",
     "@medusajs/dashboard": "^2.8.6",
+    "@medusajs/draft-order": "^2.8.6",
     "@medusajs/framework": "^2.8.6",
     "@medusajs/js-sdk": "^2.8.6",
     "@medusajs/medusa": "^2.8.6",
     "meilisearch": "^0.46.0",
     "multer": "^2.2.0",
     "pg": "^8.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "square": "^39.0.0",
     "stripe": "^16.12.0",
     "zod": "^3.23.8"
@@ -36,6 +41,7 @@
     "@types/pg": "^8.11.10",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   }
 }

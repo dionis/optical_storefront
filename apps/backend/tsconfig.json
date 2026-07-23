@@ -1,15 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
+  "ts-node": {
+    "transpileOnly": true
+  },
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "Node",
     "outDir": "./dist",
     "rootDir": "./src",
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "paths": {
-      "@eyewear/shared": ["../../packages/shared/src/index.ts"]
-    }
+    "emitDecoratorMetadata": true
   },
   "include": ["src"]
 }

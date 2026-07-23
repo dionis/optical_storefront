@@ -1,4 +1,4 @@
-import type { MeilisearchFrameDocument, FrameTranslations } from "./search.js";
+import type { MeilisearchFrameDocument, FrameTranslations } from "./search";
 
 /** Permissive shape covering both the subscriber's `retrieveProduct()` result and the Admin SDK's `product.list()` result. */
 export interface MedusaProductLike {

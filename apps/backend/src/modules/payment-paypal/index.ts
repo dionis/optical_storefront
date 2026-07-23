@@ -11,6 +11,8 @@
 
 import {
   AbstractPaymentProvider,
+  ModuleProvider,
+  Modules,
   PaymentProviderError,
   PaymentProviderSessionResponse,
   MedusaContainer,
@@ -35,7 +37,7 @@ interface PayPalTokenResponse {
   expires_in: number;
 }
 
-export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
+class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
   static identifier = "paypal";
 
   private readonly clientId: string;
@@ -379,3 +381,7 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
     }
   }
 }
+
+export default ModuleProvider(Modules.PAYMENT, {
+  services: [PayPalPaymentProvider],
+});

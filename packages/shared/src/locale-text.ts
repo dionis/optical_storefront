@@ -1,4 +1,4 @@
-import type { FrameTranslations, MeilisearchFrameDocument } from "./search.js";
+import type { FrameTranslations, MeilisearchFrameDocument } from "./search";
 
 export type Locale = "es" | "en" | "fr";
 
