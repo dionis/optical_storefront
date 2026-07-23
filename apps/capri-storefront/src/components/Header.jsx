@@ -6,7 +6,7 @@ import { CartPanel, FavPanel } from "./StorePanels.jsx";
 
 export default function Header() {
   const { count, favCount } = useCart();
-  const { t, lang, toggle } = useLang();
+  const { t, lang, setLang } = useLang();
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null); // 'cart' | 'fav' | null
@@ -47,11 +47,20 @@ export default function Header() {
         </form>
 
         <div className="header-actions">
-          <button className="lang-btn" onClick={toggle} title="Language / Idioma">
-            <span className={lang === "es" ? "on" : ""}>ES</span>
-            <span className="sep">/</span>
-            <span className={lang === "en" ? "on" : ""}>EN</span>
-          </button>
+          <div className="lang-flags" role="group" aria-label="Language / Idioma">
+            <button className={`flag-btn ${lang === "es" ? "on" : ""}`} onClick={() => setLang("es")}
+                    title="Español" aria-label="Español" aria-pressed={lang === "es"}>
+              <svg viewBox="0 0 3 2" className="flag"><rect width="3" height="2" fill="#c60b1e"/><rect y="0.5" width="3" height="1" fill="#ffc400"/></svg>
+            </button>
+            <button className={`flag-btn ${lang === "en" ? "on" : ""}`} onClick={() => setLang("en")}
+                    title="English" aria-label="English" aria-pressed={lang === "en"}>
+              <svg viewBox="0 0 19 10" className="flag">
+                <rect width="19" height="10" fill="#b22234"/>
+                <g fill="#fff"><rect y="0.77" width="19" height="0.77"/><rect y="2.31" width="19" height="0.77"/><rect y="3.85" width="19" height="0.77"/><rect y="5.38" width="19" height="0.77"/><rect y="6.92" width="19" height="0.77"/><rect y="8.46" width="19" height="0.77"/></g>
+                <rect width="7.6" height="5.38" fill="#3c3b6e"/>
+              </svg>
+            </button>
+          </div>
           <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
             ♡{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>

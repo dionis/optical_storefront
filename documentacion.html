@@ -69,8 +69,8 @@
   <h3>Datos</h3>
   <ul>
     <li><b>17 marcas</b> reales con logos oficiales (<code>src/data/brands.js</code>).</li>
-    <li><b>136 productos</b> reales (<code>src/data/products.js</code> + <code>frames-extra.js</code>): SKU, variantes de color con imagen, atributos (forma, material, género, edad, tamaños). Extraídos de caprioptics.com por agentes en paralelo y deduplicados por SKU.</li>
-    <li><b>27 estuches / cases</b> reales (<code>src/data/cases.js</code>) con imagen y precio, vendibles; los que tienen varios colores muestran cada variante una a una.</li>
+    <li><b>549 monturas</b> reales de <b>14 marcas</b> (<code>src/data/products.js</code> + <code>frames-extra.js</code>): catálogo COMPLETO de caprioptics.com — Di Caprio (129), 4U (134), Peachtree (54), Millennial (45), Simplylite (29), Flexure (25), Trendy (21), Ago (19), Grande (15), Versailles Palace (15), Eyeleos (13), Artistik Eyewear (13), ProRx (9), más Candy Shoppe/Artistik Galerie/Slimfold. Extraídos por agentes en paralelo (una tanda por categoría, DiCaprio y 4U divididos por páginas), deduplicados por SKU. Los atributos scrapeados en inglés se <b>normalizan al español canónico</b> (Square→Cuadrado, Acetate→Acetato…) y los tamaños se agrupan en los rangos exactos de los filtros, para que filtros y traducción funcionen.</li>
+    <li><b>28 estuches / cases</b> reales (<code>src/data/cases.js</code>) — categoría Case completa — con imagen y precio, vendibles; los que tienen varios colores muestran cada variante una a una.</li>
     <li>Precio y valoración <b>deterministas por SKU</b> (Capri Optics es B2B y no publica precios).</li>
   </ul>
   <h3>Estuches (cases) y venta cruzada</h3>
@@ -104,7 +104,7 @@
   <p>Sistema de i18n propio y ligero, sin dependencias:</p>
   <ul>
     <li><code>src/i18n/translations.js</code> — diccionario <code>T</code> con todas las cadenas de UI en <b>es</b> y <b>en</b> (nav, botones, hero, filtros, flujo de recetas, footer…), y un mapa <code>VAL</code> que traduce los <b>valores de atributos</b> (p. ej. «Cuadrado»→«Square», «Acetato»→«Acetate»).</li>
-    <li><code>src/i18n/LanguageContext.jsx</code> — contexto React que expone <code>t(clave)</code> y <code>tv(valor)</code>. El idioma se detecta del navegador, se conmuta con el botón <b>ES/EN</b> del header y se <b>persiste en <code>localStorage</code></b>; también actualiza <code>&lt;html lang&gt;</code>.</li>
+    <li><code>src/i18n/LanguageContext.jsx</code> — contexto React que expone <code>t(clave)</code> y <code>tv(valor)</code>. El idioma se detecta del navegador, se conmuta con <b>dos banderitas en el header</b> (🇪🇸 Español y 🇺🇸 English, SVG en línea; la activa se resalta con un anillo azul) y se <b>persiste en <code>localStorage</code></b>; también actualiza <code>&lt;html lang&gt;</code>.</li>
     <li>Todo texto visible pasa por <code>t()</code>/<code>tv()</code>: cambiar de idioma re-renderiza la web entera al instante.</li>
   </ul>
 

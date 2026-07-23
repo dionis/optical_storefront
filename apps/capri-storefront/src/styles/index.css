@@ -51,6 +51,11 @@ button { font-family: inherit; cursor: pointer; }
 .lang-btn { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); display: flex; gap: 4px; }
 .lang-btn .on { color: var(--blue); }
 .lang-btn .sep { color: var(--line); }
+.lang-flags { display: flex; align-items: center; gap: 4px; }
+.flag-btn { border: none; background: transparent; padding: 3px; border-radius: 6px; cursor: pointer; line-height: 0; opacity: .45; filter: grayscale(.5); transition: .16s; }
+.flag-btn:hover { opacity: .85; }
+.flag-btn.on { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--blue); background: #fff; }
+.flag-btn .flag { width: 26px; height: 18px; border-radius: 3px; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 .icon-btn { position: relative; border: none; background: none; font-size: 20px; padding: 6px; }
 .badge { position: absolute; top: -2px; right: -4px; background: var(--red); color: #fff; font-size: 11px; border-radius: 999px; padding: 1px 6px; }
 

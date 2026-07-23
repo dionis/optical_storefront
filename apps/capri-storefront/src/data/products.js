@@ -67,8 +67,10 @@ const COLOR_HEX = {
 function hexFor(colorName) {
   const key = colorName.toLowerCase();
   if (COLOR_HEX[key]) return COLOR_HEX[key];
-  const first = key.split(" ")[0];
-  return COLOR_HEX[first] || "#b8bec8";
+  // strip leading index like "01-" and scan tokens for a known color word
+  const tokens = key.replace(/\b\d+\s*-?\s*/g, " ").split(/[^a-z]+/).filter(Boolean);
+  for (const t of tokens) if (COLOR_HEX[t]) return COLOR_HEX[t];
+  return "#b8bec8";
 }
 
 // Deterministic pseudo-random from string
