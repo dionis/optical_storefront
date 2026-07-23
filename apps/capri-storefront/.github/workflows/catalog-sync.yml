@@ -1,0 +1,49 @@
+name: Catalog sync (daily)
+
+# Cloud service — runs on GitHub's infrastructure, NOT on any local machine.
+# Every day it queries the caprioptics WooCommerce Store API, keeps only the
+# available frames/cases, and commits the regenerated catalog JSON so every
+# deployment of the storefront (SaaS) serves an up-to-date, self-healing catalog.
+
+on:
+  schedule:
+    - cron: "0 8 * * *"      # 08:00 UTC daily (~03:00 America/Chicago)
+  workflow_dispatch: {}       # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/capri-storefront
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run catalog sync
+        env:
+          CATALOG_SOURCE: https://caprioptics.com
+        run: node scripts/sync-catalog.mjs
+
+      - name: Commit updated catalog
+        run: |
+          git config user.name  "catalog-sync[bot]"
+          git config user.email "catalog-sync@users.noreply.github.com"
+          git add public/catalog.json public/cases.json public/catalog-meta.json
+          if git diff --staged --quiet; then
+            echo "No catalog changes today."
+          else
+            SUMMARY=$(node -e "const m=require('./public/catalog-meta.json');console.log(`frames=${m.totalFrames} cases=${m.totalCases} +${m.addedCount||0}/-${m.removedCount||0}`)")
+            git commit -m "chore(catalog): daily sync — $SUMMARY [skip ci]"
+            git push
+          fi

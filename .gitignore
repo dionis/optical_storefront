@@ -49,3 +49,10 @@ Thumbs.db
 # Docker volumes (local)
 infra/volumes/
 
+node_modules
+dist
+.medusa
+_transfer
+*.log
+.env
+.DS_Store

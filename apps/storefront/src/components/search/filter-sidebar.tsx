@@ -1,34 +1,52 @@
 "use client";
 
-import { useState } from "react";
 import type { FacetDistribution } from "meilisearch";
-import { useTranslations } from "next-intl";
-import type { ListingFilters, PriceBucket, SizeBucket } from "@/lib/filter-params";
+import type { ListingFilters, SizeBucket } from "@/lib/filter-params";
+import { SIZE_BUCKET_LABELS } from "@/lib/filter-params";
 import { getColorHex } from "@/lib/color-map";
-import { Minus, Plus } from "lucide-react";
+import { X } from "lucide-react";
 
-const PRICE_BUCKETS: PriceBucket[] = ["under_10", "under_20", "under_30", "above_30", "on_sale"];
-const SIZE_BUCKETS: SizeBucket[] = ["narrow", "medium", "wide"];
+const SHAPE_LABELS: Record<string, string> = {
+  round: "Redonda",
+  oval: "Oval",
+  rectangle: "Rectangular",
+  square: "Cuadrada",
+  cat_eye: "Ojo de gato",
+  aviator: "Aviador",
+  browline: "Browline",
+  geometric: "Geométrica",
+  rimless: "Sin aro",
+  semi_rimless: "Semi sin aro",
+  other: "Otro",
+};
+
+const MATERIAL_LABELS: Record<string, string> = {
+  acetate: "Acetato",
+  metal: "Metal",
+  titanium: "Titanio",
+  stainless_steel: "Acero inoxidable",
+  tr90: "TR90",
+  mixed: "Mixto",
+  wood: "Madera",
+  other: "Otro",
+};
+
+const GENDER_LABELS: Record<string, string> = {
+  men: "Hombre",
+  women: "Mujer",
+  unisex: "Unisex",
+};
 
 interface FilterSectionProps {
   title: string;
   children: React.ReactNode;
-  defaultOpen?: boolean;
 }
 
-function FilterSection({ title, children, defaultOpen = true }: FilterSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+function FilterSection({ title, children }: FilterSectionProps) {
   return (
     <div className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="mb-3 flex w-full items-center justify-between text-sm font-semibold text-gray-800"
-      >
-        {title}
-        {open ? <Minus className="h-3.5 w-3.5 text-gray-400" /> : <Plus className="h-3.5 w-3.5 text-gray-400" />}
-      </button>
-      {open && children}
+      <h3 className="mb-3 text-sm font-semibold text-gray-800">{title}</h3>
+      {children}
     </div>
   );
 }
@@ -84,8 +102,6 @@ function toggle<T>(arr: T[], value: T): T[] {
 }
 
 export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps) {
-  const t = useTranslations("filters");
-
   const shapeFacets = (facets["shape"] ?? {}) as Record<string, number>;
   const materialFacets = (facets["material"] ?? {}) as Record<string, number>;
   const genderFacets = (facets["gender"] ?? {}) as Record<string, number>;
@@ -104,14 +120,14 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
     <aside className="flex flex-col gap-4">
       {/* Gender */}
       {hasGenders && (
-        <FilterSection title={t("sectionGender")}>
+        <FilterSection title="Género">
           <div className="flex flex-col gap-1.5">
             {Object.entries(genderFacets)
               .sort((a, b) => b[1] - a[1])
               .map(([g, count]) => (
                 <CheckboxItem
                   key={g}
-                  label={t.has(`genders.${g}`) ? t(`genders.${g}`) : g}
+                  label={GENDER_LABELS[g] ?? g}
                   checked={filters.genders.includes(g)}
                   count={count}
                   onChange={() =>
@@ -123,32 +139,16 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
         </FilterSection>
       )}
 
-      {/* Price */}
-      <FilterSection title={t("sectionPrice")}>
-        <div className="flex flex-col gap-1.5">
-          {PRICE_BUCKETS.map((bucket) => (
-            <CheckboxItem
-              key={bucket}
-              label={t(`priceBuckets.${bucket}`)}
-              checked={filters.priceRanges.includes(bucket)}
-              onChange={() =>
-                onChange({ ...filters, priceRanges: toggle(filters.priceRanges, bucket) })
-              }
-            />
-          ))}
-        </div>
-      </FilterSection>
-
       {/* Shape */}
       {hasShapes && (
-        <FilterSection title={t("sectionShape")}>
+        <FilterSection title="Forma">
           <div className="flex flex-col gap-1.5">
             {Object.entries(shapeFacets)
               .sort((a, b) => b[1] - a[1])
               .map(([shape, count]) => (
                 <CheckboxItem
                   key={shape}
-                  label={t.has(`shapes.${shape}`) ? t(`shapes.${shape}`) : shape}
+                  label={SHAPE_LABELS[shape] ?? shape}
                   checked={filters.shapes.includes(shape)}
                   count={count}
                   onChange={() =>
@@ -160,9 +160,46 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
         </FilterSection>
       )}
 
+      {/* Material */}
+      {hasMaterials && (
+        <FilterSection title="Material">
+          <div className="flex flex-col gap-1.5">
+            {Object.entries(materialFacets)
+              .sort((a, b) => b[1] - a[1])
+              .map(([mat, count]) => (
+                <CheckboxItem
+                  key={mat}
+                  label={MATERIAL_LABELS[mat] ?? mat}
+                  checked={filters.materials.includes(mat)}
+                  count={count}
+                  onChange={() =>
+                    onChange({ ...filters, materials: toggle(filters.materials, mat) })
+                  }
+                />
+              ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {/* Size */}
+      <FilterSection title="Tamaño (ojo)">
+        <div className="flex flex-col gap-1.5">
+          {(["narrow", "medium", "wide"] as SizeBucket[]).map((bucket) => (
+            <CheckboxItem
+              key={bucket}
+              label={SIZE_BUCKET_LABELS[bucket]}
+              checked={filters.sizes.includes(bucket)}
+              onChange={() =>
+                onChange({ ...filters, sizes: toggle(filters.sizes, bucket) })
+              }
+            />
+          ))}
+        </div>
+      </FilterSection>
+
       {/* Color */}
       {hasColors && (
-        <FilterSection title={t("sectionColor")}>
+        <FilterSection title="Color">
           <div className="flex flex-wrap gap-2">
             {Object.entries(colorFacets)
               .sort((a, b) => b[1] - a[1])
@@ -174,7 +211,7 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
                     key={color}
                     type="button"
                     title={color}
-                    aria-label={color}
+                    aria-label={`${color}${active ? " (activo)" : ""}`}
                     aria-pressed={active}
                     onClick={() =>
                       onChange({ ...filters, colors: toggle(filters.colors, color) })
@@ -190,9 +227,33 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
         </FilterSection>
       )}
 
-      {/* Prescription / features */}
+      {/* Collection */}
+      {hasCollections && (
+        <FilterSection title="Colección">
+          <div className="flex flex-col gap-1.5">
+            {Object.entries(collectionFacets)
+              .sort((a, b) => b[1] - a[1])
+              .map(([col, count]) => (
+                <CheckboxItem
+                  key={col}
+                  label={col.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  checked={filters.collections.includes(col)}
+                  count={count}
+                  onChange={() =>
+                    onChange({
+                      ...filters,
+                      collections: toggle(filters.collections, col),
+                    })
+                  }
+                />
+              ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {/* Features */}
       {hasFeatures && (
-        <FilterSection title={t("sectionPrescription")}>
+        <FilterSection title="Características">
           <div className="flex flex-col gap-1.5">
             {Object.entries(featureFacets)
               .sort((a, b) => b[1] - a[1])
@@ -215,70 +276,11 @@ export function FilterSidebar({ filters, facets, onChange }: FilterSidebarProps)
         </FilterSection>
       )}
 
-      {/* Material */}
-      {hasMaterials && (
-        <FilterSection title={t("sectionMaterial")} defaultOpen={false}>
-          <div className="flex flex-col gap-1.5">
-            {Object.entries(materialFacets)
-              .sort((a, b) => b[1] - a[1])
-              .map(([mat, count]) => (
-                <CheckboxItem
-                  key={mat}
-                  label={t.has(`materials.${mat}`) ? t(`materials.${mat}`) : mat}
-                  checked={filters.materials.includes(mat)}
-                  count={count}
-                  onChange={() =>
-                    onChange({ ...filters, materials: toggle(filters.materials, mat) })
-                  }
-                />
-              ))}
-          </div>
-        </FilterSection>
-      )}
-
-      {/* Size */}
-      <FilterSection title={t("sectionSize")} defaultOpen={false}>
-        <div className="flex flex-col gap-1.5">
-          {SIZE_BUCKETS.map((bucket) => (
-            <CheckboxItem
-              key={bucket}
-              label={t(`sizes.${bucket}`)}
-              checked={filters.sizes.includes(bucket)}
-              onChange={() =>
-                onChange({ ...filters, sizes: toggle(filters.sizes, bucket) })
-              }
-            />
-          ))}
-        </div>
-      </FilterSection>
-
-      {/* Collection */}
-      {hasCollections && (
-        <FilterSection title={t("sectionCollection")} defaultOpen={false}>
-          <div className="flex flex-col gap-1.5">
-            {Object.entries(collectionFacets)
-              .sort((a, b) => b[1] - a[1])
-              .map(([col, count]) => (
-                <CheckboxItem
-                  key={col}
-                  label={col.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                  checked={filters.collections.includes(col)}
-                  count={count}
-                  onChange={() =>
-                    onChange({
-                      ...filters,
-                      collections: toggle(filters.collections, col),
-                    })
-                  }
-                />
-              ))}
-          </div>
-        </FilterSection>
-      )}
-
       {/* Show empty state when no facets yet */}
       {!hasShapes && !hasMaterials && !hasGenders && !hasCollections && !hasColors && (
-        <p className="text-sm text-gray-400 py-2">{t("emptyState")}</p>
+        <p className="text-sm text-gray-400 py-2">
+          Los filtros aparecerán una vez que haya productos indexados.
+        </p>
       )}
     </aside>
   );

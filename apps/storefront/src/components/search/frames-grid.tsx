@@ -1,6 +1,5 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import { FrameCard } from "@/components/frames/frame-card";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { useFramesSearch } from "@/hooks/use-frames-search";
@@ -14,7 +13,6 @@ interface FramesGridProps {
 }
 
 export function FramesGrid({ filters, onSortChange }: FramesGridProps) {
-  const t = useTranslations("listing");
   const { hits, totalHits, isLoading, isLoadingMore, hasMore, error, loadMore } =
     useFramesSearch(filters);
 
@@ -23,7 +21,8 @@ export function FramesGrid({ filters, onSortChange }: FramesGridProps) {
   if (error) {
     return (
       <div className="py-16 text-center text-gray-500">
-        <p className="mb-2 font-medium">{t("errorTitle")}</p>
+        <p className="mb-2 font-medium">Error al cargar resultados</p>
+        <p className="text-sm text-gray-400">{error}</p>
       </div>
     );
   }
@@ -36,10 +35,13 @@ export function FramesGrid({ filters, onSortChange }: FramesGridProps) {
           {isLoading ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("loading")}
+              Buscando…
             </span>
           ) : (
-            t("resultCount", { count: totalHits })
+            <>
+              <span className="font-semibold text-gray-900">{totalHits}</span>{" "}
+              {totalHits === 1 ? "montura" : "monturas"}
+            </>
           )}
         </p>
         <SortSelect value={filters.sort} onChange={onSortChange} />
@@ -57,8 +59,10 @@ export function FramesGrid({ filters, onSortChange }: FramesGridProps) {
         </div>
       ) : hits.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="text-gray-500 mb-2">{t("noResults")}</p>
-          <p className="text-sm text-gray-400">{t("noResultsHint")}</p>
+          <p className="text-gray-500 mb-2">No se encontraron monturas.</p>
+          <p className="text-sm text-gray-400">
+            Intenta ajustar los filtros o el término de búsqueda.
+          </p>
         </div>
       ) : (
         <>
@@ -78,7 +82,9 @@ export function FramesGrid({ filters, onSortChange }: FramesGridProps) {
           )}
 
           {!hasMore && hits.length > 0 && (
-            <p className="py-4 text-center text-sm text-gray-400">{t("seenAll")}</p>
+            <p className="py-4 text-center text-sm text-gray-400">
+              Has visto todas las monturas disponibles.
+            </p>
           )}
         </>
       )}

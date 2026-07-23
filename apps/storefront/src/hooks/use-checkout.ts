@@ -75,7 +75,7 @@ export function useCheckout(): UseCheckoutReturn {
   const submitAddress = useCallback(async (): Promise<boolean> => {
     const id = cartId();
     if (!id) {
-      setError("cart_not_found");
+      setError("Carrito no encontrado. Por favor recarga la página.");
       return false;
     }
     setIsLoading(true);
@@ -91,13 +91,13 @@ export function useCheckout(): UseCheckoutReturn {
         }),
       });
       if (!res.ok) {
-        setError("address_save_failed");
+        setError("Error al guardar la dirección. Inténtalo de nuevo.");
         return false;
       }
       setStep("payment");
       return true;
     } catch {
-      setError("connection_error");
+      setError("Error de conexión. Verifica tu internet e inténtalo de nuevo.");
       return false;
     } finally {
       setIsLoading(false);
@@ -122,7 +122,7 @@ export function useCheckout(): UseCheckoutReturn {
           body: JSON.stringify({ cart_id: id }),
         });
         if (!collRes.ok) {
-          setError("payment_init_failed");
+          setError("Error al iniciar el pago.");
           return null;
         }
         const collData = (await collRes.json()) as {
@@ -130,7 +130,7 @@ export function useCheckout(): UseCheckoutReturn {
         };
         const collectionId = collData.payment_collection?.id;
         if (!collectionId) {
-          setError("payment_collection_failed");
+          setError("Error al crear la sesión de pago.");
           return null;
         }
 
@@ -144,7 +144,7 @@ export function useCheckout(): UseCheckoutReturn {
           }
         );
         if (!sessRes.ok) {
-          setError("payment_session_failed");
+          setError("Error al iniciar la sesión de pago.");
           return null;
         }
         const sessData = (await sessRes.json()) as {
@@ -162,7 +162,7 @@ export function useCheckout(): UseCheckoutReturn {
         }
         return data;
       } catch {
-        setError("payment_config_failed");
+        setError("Error al configurar el método de pago.");
         return null;
       } finally {
         setIsLoading(false);
@@ -184,7 +184,7 @@ export function useCheckout(): UseCheckoutReturn {
         headers,
       });
       if (!res.ok) {
-        setError("order_failed");
+        setError("Error al procesar el pedido. Inténtalo de nuevo.");
         setStep("payment");
         return null;
       }
@@ -197,11 +197,11 @@ export function useCheckout(): UseCheckoutReturn {
         setStep("complete");
         return data.order.id;
       }
-      setError("order_incomplete");
+      setError("El pago fue procesado pero no se pudo crear el pedido.");
       setStep("payment");
       return null;
     } catch {
-      setError("order_connection_error");
+      setError("Error de conexión al completar el pedido.");
       setStep("payment");
       return null;
     } finally {

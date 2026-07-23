@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useTranslations } from "next-intl";
 import type { Prescription, PrescriptionEye, PrescriptionValidationResult } from "@eyewear/shared";
 import {
   SPH_VALUES,
@@ -109,8 +108,6 @@ function EyeRow({
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploadProps) {
-  const t = useTranslations("rxUpload");
-  const tFunnel = useTranslations("funnel");
   const [status, setStatus] = useState<OcrStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -146,8 +143,13 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
       const data = (await res.json()) as OcrResponse;
 
       if (!res.ok || data.error) {
-        setErrorMsg(data.error ?? t("errorNoRead"));
-        setStatus("error");
+        if (data.fallback) {
+          setErrorMsg(data.error ?? "Error al procesar la imagen.");
+          setStatus("error");
+        } else {
+          setErrorMsg(data.error ?? "No se pudo leer la receta.");
+          setStatus("error");
+        }
         return;
       }
 
@@ -167,11 +169,11 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
         setValidation(data.validation ?? null);
         setStatus("reviewing");
       } else {
-        setErrorMsg(t("errorNoData"));
+        setErrorMsg("No se encontraron datos de receta en la imagen.");
         setStatus("error");
       }
     } catch {
-      setErrorMsg(t("errorConnection"));
+      setErrorMsg("Error de conexión. Por favor ingresa tu receta manualmente.");
       setStatus("error");
     }
   };
@@ -191,9 +193,9 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
     const prescription: Prescription = {
       od,
       os,
-      pd: pdMode === "single" ? pdSingle : null,
-      pd_od: pdMode === "dual" ? pdOd : null,
-      pd_os: pdMode === "dual" ? pdOs : null,
+      pd: pdMode === "single" ? pdSingle : undefined,
+      pd_od: pdMode === "dual" ? pdOd : undefined,
+      pd_os: pdMode === "dual" ? pdOs : undefined,
       source: "ocr",
       verified_by_user: true,
       file_url: ocrFileUrl,
@@ -209,7 +211,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
         <div
           role="button"
           tabIndex={0}
-          aria-label={t("dropAria")}
+          aria-label="Subir imagen de receta"
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => inputRef.current?.click()}
@@ -218,8 +220,12 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
         >
           <span className="text-4xl select-none">📷</span>
           <div>
-            <p className="text-sm font-semibold text-gray-800">{t("dropTitle")}</p>
-            <p className="text-xs text-gray-400 mt-1">{t("dropHint")}</p>
+            <p className="text-sm font-semibold text-gray-800">
+              Arrastra tu receta aquí o haz clic para seleccionar
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              JPEG · PNG · WEBP — máx. 10 MB
+            </p>
           </div>
           <input
             ref={inputRef}
@@ -239,7 +245,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
               onClick={onSwitchToManual}
               className="ml-2 underline font-medium hover:text-red-900"
             >
-              {t("switchManual")}
+              Ingresar manualmente
             </button>
           </div>
         )}
@@ -256,7 +262,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={previewUrl}
-            alt={fileName ?? ""}
+            alt={fileName ?? "Receta"}
             className="h-28 w-auto rounded-lg border border-gray-200 object-contain shadow-sm"
           />
         )}
@@ -280,9 +286,11 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
               d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
             />
           </svg>
-          {t("analyzing")}
+          Analizando tu receta con IA…
         </div>
-        <p className="text-xs text-gray-400">{t("analyzingHint")}</p>
+        <p className="text-xs text-gray-400">
+          Esto puede tardar unos segundos
+        </p>
       </div>
     );
   }
@@ -297,20 +305,24 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={previewUrl}
-            alt={fileName ?? ""}
+            alt={fileName ?? "Receta"}
             className="h-12 w-auto rounded object-contain border border-green-200"
           />
         )}
         <div>
-          <p className="text-sm font-semibold text-green-800">{t("detected")}</p>
-          <p className="text-xs text-green-600">{t("reviewHint")}</p>
+          <p className="text-sm font-semibold text-green-800">
+            ✓ Receta detectada
+          </p>
+          <p className="text-xs text-green-600">
+            Revisa y corrige los valores si es necesario
+          </p>
         </div>
       </div>
 
       {/* Validation warnings */}
       {validation && !validation.fulfillable && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <p className="font-semibold mb-1">{t("outOfRangeTitle")}</p>
+          <p className="font-semibold mb-1">Valores fuera de rango normal:</p>
           {validation.warnings.map((w, i) => (
             <p key={i}>• {w}</p>
           ))}
@@ -325,7 +337,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
               <th className="pb-2 text-left w-10"></th>
               <th className="pb-2 text-center">SPH</th>
               <th className="pb-2 text-center">CYL</th>
-              <th className="pb-2 text-center">{tFunnel("step2.axisHeader")}</th>
+              <th className="pb-2 text-center">EJE</th>
               {isProgressive && <th className="pb-2 text-center">ADD</th>}
             </tr>
           </thead>
@@ -339,7 +351,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
       {/* PD */}
       <div>
         <div className="flex items-center gap-4 mb-2">
-          <span className="text-sm font-medium text-gray-700">{tFunnel("step2.pdLabel")}</span>
+          <span className="text-sm font-medium text-gray-700">Distancia pupilar (DP)</span>
           <div className="flex gap-1 rounded-md bg-gray-100 p-0.5 text-xs">
             {(["single", "dual"] as const).map((mode) => (
               <button
@@ -352,7 +364,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
                     : "text-gray-500"
                 }`}
               >
-                {mode === "single" ? tFunnel("step2.pdSingle") : tFunnel("step2.pdDual")}
+                {mode === "single" ? "Simple" : "Dual"}
               </button>
             ))}
           </div>
@@ -362,7 +374,7 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
             className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             value={pdSingle}
             onChange={(e) => setPdSingle(Number(e.target.value))}
-            aria-label="PD"
+            aria-label="PD simple"
           >
             {PD_SINGLE.map((v) => (
               <option key={v} value={v}>{v} mm</option>
@@ -395,7 +407,8 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
 
       {/* Consent notice */}
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-        <strong>{t("consentNotice")}</strong> {t("consentBody")}
+        <strong>Importante:</strong> Al confirmar, declaras que los valores son
+        correctos. El fabricante elaborará tus lentes con estos datos.
       </div>
 
       {/* Actions */}
@@ -409,21 +422,21 @@ export function RxUpload({ onConfirm, onSwitchToManual, isProgressive }: RxUploa
           }}
           className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          {t("changeImage")}
+          Cambiar imagen
         </button>
         <button
           type="button"
           onClick={onSwitchToManual}
           className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          {t("editManually")}
+          Editar manualmente
         </button>
         <button
           type="button"
           onClick={handleConfirm}
           className="ml-auto rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
         >
-          {t("confirmRx")}
+          Confirmar receta
         </button>
       </div>
     </div>

@@ -9,15 +9,10 @@ const WASM_CDN =
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
-export interface FaceLandmarkerError {
-  code: "load_failed";
-  detail: string;
-}
-
 export function useFaceLandmarker() {
   const landmarkerRef = useRef<FaceLandmarkerType | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState<FaceLandmarkerError | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +37,10 @@ export function useFaceLandmarker() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setError({
-            code: "load_failed",
-            detail: err instanceof Error ? err.message : String(err),
-          });
+          setError(
+            "No se pudo cargar el detector facial. " +
+              (err instanceof Error ? err.message : String(err))
+          );
         }
       }
     })();

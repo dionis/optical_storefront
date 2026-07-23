@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useTranslations } from "next-intl";
 import { useFaceLandmarker } from "@/hooks/use-face-landmarker";
 
 // ── MediaPipe landmark indices ────────────────────────────────────────────
@@ -27,7 +26,6 @@ interface TryonCanvasProps {
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
-  const t = useTranslations("tryOn");
   const { landmarker, isReady, error: landmarkerError } = useFaceLandmarker();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,7 +69,9 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
           setCameraReady(true);
         }
       } catch {
-        setCameraError(t("cameraAccessError"));
+        setCameraError(
+          "No se pudo acceder a la cámara. Verifica los permisos del navegador."
+        );
       }
     })();
     return () => {
@@ -184,7 +184,9 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
         <span className="text-4xl">📵</span>
         <p className="text-sm font-semibold text-red-700">{cameraError}</p>
-        <p className="text-xs text-red-500">{t("cameraAccessHint")}</p>
+        <p className="text-xs text-red-500">
+          Ve a Configuración del navegador → Privacidad → Cámara y permite el acceso.
+        </p>
       </div>
     );
   }
@@ -193,9 +195,7 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
         <span className="text-3xl">⚠️</span>
-        <p className="text-sm text-amber-700">
-          {t("faceDetectorError", { detail: landmarkerError.detail })}
-        </p>
+        <p className="text-sm text-amber-700">{landmarkerError}</p>
       </div>
     );
   }
@@ -214,7 +214,9 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
         </svg>
         <p className="text-sm text-gray-500">
-          {!cameraReady ? t("cameraStarting") : t("faceDetectorLoading")}
+          {!cameraReady
+            ? "Iniciando cámara…"
+            : "Cargando detector facial (primera vez puede tardar ~10 s)…"}
         </p>
       </div>
     );
@@ -228,7 +230,7 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={captured}
-          alt={t("capturedPhotoAlt")}
+          alt="Foto capturada"
           className="w-full max-w-xl rounded-2xl shadow-lg"
         />
         <div className="flex gap-3">
@@ -237,14 +239,14 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
             onClick={handleRetake}
             className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            {t("backToCamera")}
+            Volver a la cámara
           </button>
           <a
             href={captured}
-            download={t("downloadFilename")}
+            download="prueba-virtual.jpg"
             className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-700 transition-colors"
           >
-            {t("downloadPhoto")}
+            Descargar foto
           </a>
         </div>
       </div>
@@ -264,7 +266,7 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
         {!frameImageUrl && (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="rounded-lg bg-black/60 px-4 py-2 text-sm text-white">
-              {t("selectFramePrompt")}
+              Selecciona una montura para probártela
             </p>
           </div>
         )}
@@ -275,14 +277,16 @@ export function TryonCanvas({ frameImageUrl, onCapture }: TryonCanvasProps) {
         type="button"
         onClick={handleCapture}
         disabled={!frameImageUrl}
-        aria-label={t("captureAria")}
+        aria-label="Tomar foto"
         className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-md hover:bg-accent-700 disabled:opacity-40 transition-all active:scale-95"
       >
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
           <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-1.61c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.16-1.63c.19-.15.24-.42.12-.64l-2.05-3.55c-.12-.22-.39-.3-.61-.22l-2.55 1.03c-.52-.4-1.08-.73-1.69-.98L14.17 3c-.04-.24-.24-.42-.5-.42h-4.1c-.26 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.55-1.03c-.22-.08-.49 0-.61.22L2.4 9.4c-.13.22-.07.49.12.64L4.68 11.67c-.04.34-.07.67-.07 1s.03.65.07.97l-2.16 1.66c-.19.15-.24.42-.12.64l2.05 3.55c.12.22.39.3.61.22l2.55-1.03c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.23.42.49.42h4.1c.26 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.55 1.03c.22.08.49 0 .61-.22l2.05-3.55c.12-.22.07-.49-.12-.64l-2.16-1.66z" />
         </svg>
       </button>
-      <p className="text-xs text-gray-400">{t("captureHint")}</p>
+      <p className="text-xs text-gray-400">
+        Mira de frente · Buena iluminación · Pulsa el botón para capturar
+      </p>
     </div>
   );
 }

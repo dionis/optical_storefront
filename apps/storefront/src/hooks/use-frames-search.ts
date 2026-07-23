@@ -28,7 +28,6 @@ export interface UseFramesSearchResult {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  /** Translate with useTranslations("listing") — "errorTitle" is a fixed label, this is just a raw message. */
   error: string | null;
   loadMore: () => void;
 }
@@ -69,11 +68,15 @@ export function useFramesSearch(
         } else {
           setHits(result.hits);
           setFacets(result.facetDistribution ?? {});
-          setTotalHits(result.estimatedTotalHits ?? 0);
+          setTotalHits(result.estimatedTotalHits ?? result.totalHits ?? 0);
         }
         setError(null);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "search_failed");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Error al cargar los resultados."
+        );
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
