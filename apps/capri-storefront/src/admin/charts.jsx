@@ -2,6 +2,9 @@ import { useState, useRef, useId } from "react";
 
 // ---------------------------------------------------------------------------
 // Capri admin dashboard — dependency-free, responsive, accessible SVG charts.
+// Enhanced with mount entrance animations, hover motion and rich Spanish
+// tooltips. All keyframes live in admin.css (prefixed `cx-` / `cx…`) and are
+// disabled under `prefers-reduced-motion: reduce`.
 // Brand palette
 const BRAND = {
   primary: "#0E5AD0",
@@ -86,12 +89,50 @@ function Empty({ height, msg = "sin datos" }) {
   );
 }
 
+// Floating rich tooltip. Positioned by viewBox coords (x,y) inside a
+// position:relative wrapper whose rendered box matches the <svg>.
+function Tip({ x, y, W, H, caption, value, valueColor, lines = [] }) {
+  const leftPct = Math.max(5, Math.min(95, (x / W) * 100));
+  const topPct = Math.max(0, (y / H) * 100);
+  return (
+    <div className="cx-tip" style={{ left: `${leftPct}%`, top: `${topPct}%` }}>
+      {caption != null ? <div className="cx-tip-cap">{caption}</div> : null}
+      {value != null ? (
+        <div className="cx-tip-val" style={valueColor ? { color: valueColor } : undefined}>
+          {value}
+        </div>
+      ) : null}
+      {lines.map((l, i) => (
+        <div
+          key={i}
+          className="cx-tip-line"
+          style={l.color ? { color: l.color } : undefined}
+        >
+          {l.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// signed percentage vs a reference (e.g. average) as a colored tooltip line
+function deltaLine(value, ref, labelText = "vs promedio") {
+  if (!ref || ref <= 0) return null;
+  const pct = ((value - ref) / ref) * 100;
+  const sign = pct > 0 ? "+" : "";
+  return {
+    text: `${sign}${pct.toFixed(0)}% ${labelText}`,
+    color: pct >= 0 ? "#7ee2a0" : "#ff9db0",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 1. KpiCard
 export function KpiCard({ label, value, delta, deltaGood, icon, sub }) {
   const good = !!deltaGood;
   return (
     <div
+      className="cx-kpi"
       style={{
         fontFamily: FONT,
         background: "#fff",
@@ -125,7 +166,7 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub }) {
           {label}
         </span>
         {icon ? (
-          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+          <span aria-hidden="true" className="cx-kpi-icon" style={{ fontSize: 18, lineHeight: 1 }}>
             {icon}
           </span>
         ) : null}
@@ -196,6 +237,8 @@ export function LineChart({
   const rawMax = Math.max(...values, 0);
   const max = niceMax(rawMax);
   const n = data.length;
+  const total = values.reduce((s, v) => s + v, 0);
+  const avg = n > 0 ? total / n : 0;
 
   const xAt = (i) => (n === 1 ? padL + plotW / 2 : padL + (plotW * i) / (n - 1));
   const yAt = (v) => padT + plotH - (plotH * v) / max;
@@ -244,8 +287,9 @@ export function LineChart({
   )}`;
 
   const hp = hover ? pts[hover.i] : null;
-  const tipLeftPct = hp ? (hp.x / W) * 100 : 0;
-  const tipTopPct = hp ? (hp.y / H) * 100 : 0;
+  const hv = hp ? Number(hp.d.value) || 0 : 0;
+  const hpct = hp && total > 0 ? (hv / total) * 100 : 0;
+  const DRAW = "3000";
 
   return (
     <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
@@ -307,7 +351,13 @@ export function LineChart({
           ) : null
         )}
 
-        {area ? <path d={areaPath} fill={`url(#lg-${gid})`} /> : null}
+        {area ? (
+          <path
+            d={areaPath}
+            fill={`url(#lg-${gid})`}
+            style={{ animation: "cxFadeIn 1.1s ease .25s both" }}
+          />
+        ) : null}
         <path
           d={linePath}
           fill="none"
@@ -315,20 +365,12 @@ export function LineChart({
           strokeWidth="2.5"
           strokeLinejoin="round"
           strokeLinecap="round"
+          style={{
+            strokeDasharray: DRAW,
+            "--cx-len": `${DRAW}px`,
+            animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both",
+          }}
         />
-
-        {/* dots */}
-        {pts.map((p) => (
-          <circle
-            key={p.i}
-            cx={p.x}
-            cy={p.y}
-            r={hover && hover.i === p.i ? 4.5 : 2.5}
-            fill="#fff"
-            stroke={color}
-            strokeWidth="2"
-          />
-        ))}
 
         {/* hover guide */}
         {hp ? (
@@ -343,33 +385,38 @@ export function LineChart({
             opacity="0.6"
           />
         ) : null}
+
+        {/* dots */}
+        {pts.map((p) => (
+          <circle
+            key={p.i}
+            cx={p.x}
+            cy={p.y}
+            r={hover && hover.i === p.i ? 5 : 2.5}
+            fill="#fff"
+            stroke={color}
+            strokeWidth={hover && hover.i === p.i ? 2.5 : 2}
+            style={{
+              transition: "r .15s ease, stroke-width .15s ease",
+              animation: `cxFadeIn .5s ease ${0.6 + p.i * 0.02}s both`,
+            }}
+          />
+        ))}
       </svg>
 
       {hp ? (
-        <div
-          style={{
-            position: "absolute",
-            left: `${tipLeftPct}%`,
-            top: `${tipTopPct}%`,
-            transform: "translate(-50%, calc(-100% - 10px))",
-            background: BRAND.ink,
-            color: "#fff",
-            padding: "6px 9px",
-            borderRadius: 8,
-            fontSize: 11,
-            lineHeight: 1.35,
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            boxShadow: "0 4px 12px rgba(16,24,40,0.18)",
-            zIndex: 2,
-          }}
-        >
-          <div style={{ color: "rgba(255,255,255,0.7)" }}>{hp.d.label}</div>
-          <div style={{ fontWeight: 700 }}>
-            {valuePrefix}
-            {fmt(Number(hp.d.value) || 0)}
-          </div>
-        </div>
+        <Tip
+          x={hp.x}
+          y={hp.y}
+          W={W}
+          H={H}
+          caption={hp.d.label}
+          value={`${valuePrefix}${fmt(hv)}`}
+          lines={[
+            { text: `${hpct.toFixed(1)}% del total`, color: "rgba(255,255,255,0.72)" },
+            deltaLine(hv, avg),
+          ].filter(Boolean)}
+        />
       ) : null}
     </div>
   );
@@ -393,12 +440,20 @@ export function BarChart({
   const rawMax = Math.max(...values, 0);
   const max = niceMax(rawMax) || 1;
   const n = data.length;
+  const total = values.reduce((s, v) => s + v, 0);
+  const avg = n > 0 ? total / n : 0;
   const W = 720;
   const H = height;
 
   const ariaLabel = `Gráfico de barras, ${n} categorías, máximo ${valuePrefix}${fmt(
     rawMax
   )}`;
+
+  const tipLines = (v) =>
+    [
+      { text: `${total > 0 ? ((v / total) * 100).toFixed(1) : "0"}% del total`, color: "rgba(255,255,255,0.72)" },
+      deltaLine(v, avg),
+    ].filter(Boolean);
 
   if (horizontal) {
     const padL = 120;
@@ -408,6 +463,13 @@ export function BarChart({
     const plotW = W - padL - padR;
     const rowH = (H - padT - padB) / n;
     const barH = Math.min(26, rowH * 0.62);
+    const hv = hover != null ? values[hover] : 0;
+    const hy =
+      hover != null
+        ? padT + rowH * hover + (rowH - barH) / 2 + barH / 2
+        : 0;
+    const hx =
+      hover != null ? padL + Math.max(0, (plotW * hv) / max) : 0;
 
     return (
       <div style={{ position: "relative", width: "100%", fontFamily: FONT }}>
@@ -436,7 +498,9 @@ export function BarChart({
                   y={y + barH / 2 + 4}
                   textAnchor="end"
                   fontSize="11"
-                  fill={BRAND.ink}
+                  fill={hovered ? BRAND.ink : BRAND.muted}
+                  fontWeight={hovered ? "700" : "400"}
+                  style={{ transition: "fill .15s ease" }}
                 >
                   {String(d.label).length > 16
                     ? String(d.label).slice(0, 15) + "…"
@@ -449,22 +513,40 @@ export function BarChart({
                   height={barH}
                   rx={barH / 2}
                   fill={BRAND.soft}
+                  style={{ animation: "none" }}
                 />
-                <rect
-                  x={padL}
-                  y={y}
-                  width={w}
-                  height={barH}
-                  rx={barH / 2}
-                  fill={color}
-                  opacity={hovered ? 1 : 0.9}
-                />
+                <g
+                  style={{
+                    transform: hovered ? "translateX(3px)" : "none",
+                    transition: "transform .18s cubic-bezier(.2,.8,.2,1)",
+                  }}
+                >
+                  <rect
+                    x={padL}
+                    y={y}
+                    width={w}
+                    height={barH}
+                    rx={barH / 2}
+                    fill={color}
+                    opacity={hovered ? 1 : 0.9}
+                    style={{
+                      transformBox: "fill-box",
+                      transformOrigin: "left",
+                      transition: "opacity .15s ease, filter .18s ease",
+                      filter: hovered
+                        ? `brightness(1.06) drop-shadow(0 2px 6px ${color}55)`
+                        : "none",
+                      animation: `cxGrowRight .7s cubic-bezier(.2,.85,.25,1) ${i * 40}ms both`,
+                    }}
+                  />
+                </g>
                 <text
                   x={padL + w + 8}
                   y={y + barH / 2 + 4}
                   fontSize="11"
                   fontWeight="600"
-                  fill={BRAND.muted}
+                  fill={hovered ? BRAND.ink : BRAND.muted}
+                  style={{ transition: "fill .15s ease" }}
                 >
                   {valuePrefix}
                   {fmt(v)}
@@ -473,6 +555,17 @@ export function BarChart({
             );
           })}
         </svg>
+        {hover != null ? (
+          <Tip
+            x={hx}
+            y={hy}
+            W={W}
+            H={H}
+            caption={data[hover].label}
+            value={`${valuePrefix}${fmt(hv)}`}
+            lines={tipLines(hv)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -496,6 +589,10 @@ export function BarChart({
 
   const step = labelStep(n, 8);
   const rotate = n > 8;
+
+  const hv = hover != null ? values[hover] : 0;
+  const hcx = hover != null ? padL + slot * hover + slot / 2 : 0;
+  const hy = hover != null ? yAt(hv) : 0;
 
   return (
     <div style={{ position: "relative", width: "100%", fontFamily: FONT }}>
@@ -544,36 +641,49 @@ export function BarChart({
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
             >
+              {/* transparent hit slot so the whole column is hoverable */}
               <rect
-                x={bx}
-                y={by}
-                width={barW}
-                height={Math.max(0, bh)}
-                rx={6}
-                fill={color}
-                opacity={hovered ? 1 : 0.9}
+                x={padL + slot * i}
+                y={padT}
+                width={slot}
+                height={plotH}
+                fill="transparent"
               />
-              {hovered ? (
-                <text
-                  x={cx}
-                  y={by - 6}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fontWeight="700"
-                  fill={BRAND.ink}
-                >
-                  {valuePrefix}
-                  {fmt(v)}
-                </text>
-              ) : null}
+              <g
+                style={{
+                  transform: hovered ? "translateY(-4px)" : "none",
+                  transition: "transform .18s cubic-bezier(.2,.8,.2,1)",
+                }}
+              >
+                <rect
+                  x={bx}
+                  y={by}
+                  width={barW}
+                  height={Math.max(0, bh)}
+                  rx={6}
+                  fill={color}
+                  opacity={hovered ? 1 : 0.9}
+                  style={{
+                    transformBox: "fill-box",
+                    transformOrigin: "bottom",
+                    transition: "opacity .15s ease, filter .18s ease",
+                    filter: hovered
+                      ? `brightness(1.06) drop-shadow(0 4px 8px ${color}55)`
+                      : "none",
+                    animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 40}ms both`,
+                  }}
+                />
+              </g>
               {i % step === 0 || i === n - 1 ? (
                 <text
                   x={cx}
                   y={H - (rotate ? 6 : 12)}
                   textAnchor={rotate ? "end" : "middle"}
                   fontSize="10"
-                  fill={BRAND.muted}
+                  fill={hovered ? BRAND.ink : BRAND.muted}
+                  fontWeight={hovered ? "700" : "400"}
                   transform={rotate ? `rotate(-35 ${cx} ${H - 6})` : undefined}
+                  style={{ transition: "fill .15s ease" }}
                 >
                   {d.label}
                 </text>
@@ -582,6 +692,17 @@ export function BarChart({
           );
         })}
       </svg>
+      {hover != null ? (
+        <Tip
+          x={hcx}
+          y={hy}
+          W={W}
+          H={H}
+          caption={data[hover].label}
+          value={`${valuePrefix}${fmt(hv)}`}
+          lines={tipLines(hv)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -589,6 +710,8 @@ export function BarChart({
 // ---------------------------------------------------------------------------
 // 4. DonutChart
 export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
+  const [hi, setHi] = useState(-1);
+
   if (!Array.isArray(data) || data.length === 0)
     return <Empty height={height} />;
 
@@ -620,6 +743,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
   });
 
   const ariaLabel = `Gráfico de dona, total ${fmt(total)}, ${items.length} categorías`;
+  const active = hi >= 0 ? segs[hi] : null;
 
   return (
     <div
@@ -651,40 +775,94 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
             strokeWidth={stroke}
           />
           {total > 0 &&
-            segs.map((s, i) => (
-              <circle
-                key={i}
-                cx={cx}
-                cy={cy}
-                r={r}
-                fill="none"
-                stroke={s.color}
-                strokeWidth={stroke}
-                strokeDasharray={`${s.dash} ${circ - s.dash}`}
-                strokeDashoffset={-s.offset}
-                strokeLinecap="butt"
-              />
-            ))}
+            segs.map((s, i) => {
+              const hovered = hi === i;
+              const dim = hi >= 0 && !hovered;
+              return (
+                <circle
+                  key={i}
+                  cx={cx}
+                  cy={cy}
+                  r={r}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={hovered ? stroke * 1.14 : stroke}
+                  strokeDasharray={`${s.dash} ${circ - s.dash}`}
+                  strokeDashoffset={-s.offset}
+                  strokeLinecap="butt"
+                  onMouseEnter={() => setHi(i)}
+                  onMouseLeave={() => setHi(-1)}
+                  style={{
+                    opacity: dim ? 0.4 : 1,
+                    cursor: "pointer",
+                    transition: "stroke-width .18s ease, opacity .18s ease",
+                    "--cx-from": `${-s.offset + s.dash}px`,
+                    "--cx-to": `${-s.offset}px`,
+                    animation: `cxSweep .8s cubic-bezier(.3,.8,.25,1) ${i * 110}ms both`,
+                  }}
+                />
+              );
+            })}
         </g>
-        <text
-          x={cx}
-          y={cy - 2}
-          textAnchor="middle"
-          fontSize={S * 0.16}
-          fontWeight="700"
-          fill={BRAND.ink}
-        >
-          {fmt(total)}
-        </text>
-        <text
-          x={cx}
-          y={cy + S * 0.12}
-          textAnchor="middle"
-          fontSize="10"
-          fill={BRAND.muted}
-        >
-          Total
-        </text>
+        {active ? (
+          <>
+            <text
+              x={cx}
+              y={cy - S * 0.11}
+              textAnchor="middle"
+              fontSize="9.5"
+              fontWeight="600"
+              fill={active.color}
+              style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}
+            >
+              {String(active.label).length > 12
+                ? String(active.label).slice(0, 11) + "…"
+                : active.label}
+            </text>
+            <text
+              x={cx}
+              y={cy + S * 0.02}
+              textAnchor="middle"
+              fontSize={S * 0.15}
+              fontWeight="700"
+              fill={BRAND.ink}
+            >
+              {fmt(active.value)}
+            </text>
+            <text
+              x={cx}
+              y={cy + S * 0.15}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="600"
+              fill={BRAND.muted}
+            >
+              {(active.frac * 100).toFixed(1)}%
+            </text>
+          </>
+        ) : (
+          <>
+            <text
+              x={cx}
+              y={cy - 2}
+              textAnchor="middle"
+              fontSize={S * 0.16}
+              fontWeight="700"
+              fill={BRAND.ink}
+            >
+              {fmt(total)}
+            </text>
+            <text
+              x={cx}
+              y={cy + S * 0.12}
+              textAnchor="middle"
+              fontSize="10"
+              fill={BRAND.muted}
+            >
+              Total
+            </text>
+          </>
+        )}
       </svg>
 
       <ul
@@ -696,17 +874,26 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
           minWidth: 140,
           display: "flex",
           flexDirection: "column",
-          gap: 8,
+          gap: 4,
         }}
       >
         {segs.map((s, i) => (
           <li
             key={i}
+            onMouseEnter={() => setHi(i)}
+            onMouseLeave={() => setHi(-1)}
+            className="cx-legend-row"
             style={{
               display: "flex",
               alignItems: "center",
               gap: 8,
               fontSize: 12,
+              padding: "4px 6px",
+              borderRadius: 8,
+              cursor: "pointer",
+              background: hi === i ? "rgba(14,90,208,0.06)" : "transparent",
+              opacity: hi >= 0 && hi !== i ? 0.55 : 1,
+              transition: "background .15s ease, opacity .15s ease",
             }}
           >
             <span
@@ -717,6 +904,8 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
                 borderRadius: 3,
                 background: s.color,
                 flex: "0 0 auto",
+                transform: hi === i ? "scale(1.25)" : "none",
+                transition: "transform .15s ease",
               }}
             />
             {iconByLabel && iconByLabel[s.label] && (
@@ -774,6 +963,7 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
     .join(" ");
   const lastX = xAt(n - 1);
   const lastY = yAt(values[n - 1]);
+  const DRAW = "600";
 
   return (
     <svg
@@ -791,8 +981,19 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
         strokeWidth="1.75"
         strokeLinejoin="round"
         strokeLinecap="round"
+        style={{
+          strokeDasharray: DRAW,
+          "--cx-len": `${DRAW}px`,
+          animation: "cxDraw 1s ease both",
+        }}
       />
-      <circle cx={lastX} cy={lastY} r="2" fill={color} />
+      <circle
+        cx={lastX}
+        cy={lastY}
+        r="2"
+        fill={color}
+        style={{ animation: "cxFadeIn .4s ease .9s both" }}
+      />
     </svg>
   );
 }
@@ -800,6 +1001,8 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
 // ---------------------------------------------------------------------------
 // 6. Funnel
 export function Funnel({ steps }) {
+  const [hi, setHi] = useState(-1);
+
   if (!Array.isArray(steps) || steps.length === 0)
     return <Empty height={160} />;
 
@@ -826,9 +1029,23 @@ export function Funnel({ steps }) {
       {rows.map((r, i) => {
         const wpct = (r.value / maxV) * 100;
         const conv = first > 0 ? (r.value / first) * 100 : 0;
+        const prev = i > 0 ? rows[i - 1].value : r.value;
+        const stepDrop = prev > 0 ? (1 - r.value / prev) * 100 : 0;
         const c = PALETTE[i % PALETTE.length];
+        const hovered = hi === i;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            key={i}
+            className="cx-funnel-row"
+            onMouseEnter={() => setHi(i)}
+            onMouseLeave={() => setHi(-1)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              animation: `cxRise .5s cubic-bezier(.2,.8,.2,1) ${i * 70}ms both`,
+            }}
+          >
             <div
               style={{
                 width: 120,
@@ -862,13 +1079,35 @@ export function Funnel({ steps }) {
                   alignItems: "center",
                   paddingLeft: 10,
                   boxSizing: "border-box",
-                  transition: "width 0.3s ease",
+                  transformOrigin: "left",
+                  filter: hovered ? "brightness(1.07)" : "none",
+                  transition: "filter .15s ease",
+                  animation: `cxGrowRight .8s cubic-bezier(.2,.85,.25,1) ${i * 70}ms both`,
                 }}
               >
                 <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>
                   {fmt(r.value)}
                 </span>
               </div>
+              {hovered && i > 0 ? (
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 8,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: BRAND.accent,
+                    background: "rgba(255,255,255,0.9)",
+                    padding: "1px 6px",
+                    borderRadius: 999,
+                    pointerEvents: "none",
+                  }}
+                >
+                  −{stepDrop.toFixed(0)}% vs paso previo
+                </span>
+              ) : null}
             </div>
             <div
               style={{
@@ -906,40 +1145,65 @@ export function AccessVsBuyChart({ data, height = 250 }) {
   const linePts = data.map((d, i) => `${x(i)},${y(d.access)}`).join(" ");
   const areaPts = `${PL},${PT + ih} ${linePts} ${PL + iw},${PT + ih}`;
   const step = Math.ceil(data.length / 7);
+  const hd = hi >= 0 ? data[hi] : null;
+  const conv = hd && hd.access ? (hd.orders / hd.access) * 100 : 0;
   return (
     <div className="chart-wrap" role="img" aria-label="Accesos vs compras por día">
       <div className="chart-legend">
         <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
         <span><i style={{ background: "#FD0E3F" }} />Compras</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
-           onMouseLeave={() => setHi(-1)}>
-        <defs>
-          <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.22" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id={gid + "b"} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" />
-          </linearGradient>
-        </defs>
-        {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
-          return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
-        <polygon points={areaPts} fill={`url(#${gid})`} />
-        <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round" />
-        {data.map((d, i) => (
-          <g key={i} onMouseEnter={() => setHi(i)}>
-            <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="3" fill={`url(#${gid + "b"})`} opacity={hi === i ? 1 : 0.9} />
-            {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.label}</text>}
-            <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
-          </g>
-        ))}
-        {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="4" fill="#0E5AD0" stroke="#fff" strokeWidth="1.5" />}
-      </svg>
-      {hi >= 0 && (
-        <div className="chart-tip" style={{ left: `${(x(hi) / W) * 100}%` }}>
-          <b>{data[hi].label}</b><span>Accesos: {data[hi].access}</span><span>Compras: {data[hi].orders}</span>
-        </div>
-      )}
+      <div style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
+             style={{ display: "block" }}
+             onMouseLeave={() => setHi(-1)}>
+          <defs>
+            <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.22" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id={gid + "b"} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" />
+            </linearGradient>
+          </defs>
+          {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
+            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
+          <polygon points={areaPts} fill={`url(#${gid})`} style={{ animation: "cxFadeIn 1.1s ease .3s both" }} />
+          <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round"
+                    style={{ strokeDasharray: "3000", "--cx-len": "3000px", animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both" }} />
+          {data.map((d, i) => {
+            const hovered = hi === i;
+            return (
+              <g key={i} onMouseEnter={() => setHi(i)}>
+                <g style={{ transform: hovered ? "translateY(-3px)" : "none", transition: "transform .18s cubic-bezier(.2,.8,.2,1)" }}>
+                  <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="3"
+                        fill={`url(#${gid + "b"})`} opacity={hi < 0 || hovered ? 1 : 0.55}
+                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
+                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 30}ms both` }} />
+                </g>
+                {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill={hovered ? "#16181d" : "#98a1b0"} fontWeight={hovered ? "700" : "400"}>{d.label}</text>}
+                <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
+              </g>
+            );
+          })}
+          {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke="#0E5AD0" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
+          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill="#0E5AD0" stroke="#fff" strokeWidth="2" />}
+        </svg>
+        {hd && (
+          <Tip
+            x={x(hi)}
+            y={Math.min(y(hd.access), y(hd.orders))}
+            W={W}
+            H={H}
+            caption={hd.label}
+            value={null}
+            lines={[
+              { text: `Accesos: ${fmt(hd.access)}`, color: "#8fc0ff" },
+              { text: `Compras: ${fmt(hd.orders)}`, color: "#ff9db0" },
+              { text: `Conversión: ${conv.toFixed(1)}%`, color: "#7ee2a0" },
+            ]}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -955,32 +1219,67 @@ export function WeekdayChart({ data, height = 230 }) {
   const nice = Math.ceil(max / 4) * 4;
   const gw = iw / data.length, bw = Math.min(22, gw / 3);
   const y = (v) => PT + ih - (v / nice) * ih;
+  // best day = most purchases (ties → highest conversion)
+  let bestIdx = 0;
+  data.forEach((d, i) => {
+    const b = data[bestIdx];
+    if (d.orders > b.orders || (d.orders === b.orders && (d.conv || 0) > (b.conv || 0))) bestIdx = i;
+  });
+  const hd = hi >= 0 ? data[hi] : null;
   return (
     <div className="chart-wrap" role="img" aria-label="Accesos y compras por día de la semana">
       <div className="chart-legend">
         <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
         <span><i style={{ background: "#FD0E3F" }} />Compras</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHi(-1)}>
-        <defs>
-          <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#3d84ea" /><stop offset="1" stopColor="#0E5AD0" /></linearGradient>
-          <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" /></linearGradient>
-        </defs>
-        {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
-          return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
-        {data.map((d, i) => {
-          const cx = PL + gw * i + gw / 2;
-          return (
-            <g key={i} onMouseEnter={() => setHi(i)}>
-              <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="4" fill={`url(#${gid + "a"})`} opacity={hi === i ? 1 : 0.92} />
-              <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="4" fill={`url(#${gid + "o"})`} opacity={hi === i ? 1 : 0.92} />
-              <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill="#5c6470" fontWeight="600">{d.label}</text>
-              <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
-            </g>
-          );
-        })}
-      </svg>
-      {hi >= 0 && <p className="chart-note">{data[hi].label}: <b>{data[hi].access}</b> accesos · <b>{data[hi].orders}</b> compras · conversión <b>{data[hi].conv}%</b></p>}
+      <div style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }} onMouseLeave={() => setHi(-1)}>
+          <defs>
+            <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#3d84ea" /><stop offset="1" stopColor="#0E5AD0" /></linearGradient>
+            <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" /></linearGradient>
+          </defs>
+          {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
+            return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
+          {data.map((d, i) => {
+            const cx = PL + gw * i + gw / 2;
+            const hovered = hi === i;
+            const isBest = i === bestIdx;
+            return (
+              <g key={i} onMouseEnter={() => setHi(i)}>
+                <rect x={PL + gw * i} y={PT} width={gw} height={ih} fill={hovered ? "rgba(14,90,208,0.05)" : "transparent"} />
+                <g style={{ transform: hovered ? "translateY(-5px)" : "none", transition: "transform .18s cubic-bezier(.2,.8,.2,1)" }}>
+                  <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="4"
+                        fill={`url(#${gid + "a"})`} opacity={hi < 0 || hovered ? 1 : 0.6}
+                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
+                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45}ms both` }} />
+                  <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="4"
+                        fill={`url(#${gid + "o"})`} opacity={hi < 0 || hovered ? 1 : 0.6}
+                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
+                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45 + 60}ms both` }} />
+                </g>
+                {isBest && <text x={cx} y={Math.min(y(d.access), y(d.orders)) - 6} textAnchor="middle" fontSize="12" fill="#c9a44a">★</text>}
+                <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill={hovered || isBest ? "#16181d" : "#5c6470"} fontWeight={hovered || isBest ? "700" : "600"}>{d.label}</text>
+                <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
+              </g>
+            );
+          })}
+        </svg>
+        {hd && (
+          <Tip
+            x={PL + gw * hi + gw / 2}
+            y={Math.min(y(hd.access), y(hd.orders))}
+            W={W}
+            H={H}
+            caption={`${hd.label}${hi === bestIdx ? "  ★ mejor día" : ""}`}
+            value={null}
+            lines={[
+              { text: `Accesos: ${fmt(hd.access)}`, color: "#8fc0ff" },
+              { text: `Compras: ${fmt(hd.orders)}`, color: "#ff9db0" },
+              { text: `Conversión: ${hd.conv}%`, color: "#7ee2a0" },
+            ]}
+          />
+        )}
+      </div>
     </div>
   );
 }

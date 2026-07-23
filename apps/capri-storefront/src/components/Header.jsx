@@ -85,8 +85,6 @@ export default function Header() {
       </div>
       {menu && <div className="drawer-backdrop" onClick={() => setMenu(false)} />}
 
-      <div className="cuba-ribbon" aria-hidden="true" />
-
       <CartPanel open={panel === "cart"} onClose={() => setPanel(null)} />
       <FavPanel open={panel === "fav"} onClose={() => setPanel(null)} />
       <AuthPanel open={panel === "account"} onClose={() => setPanel(null)} />

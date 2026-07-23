@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { BRANDS } from "../data/brands.js";
 import { useCatalog } from "../data/catalogStore.js";
-import CubaFlag from "../components/CubaFlag.jsx";
 import ProductCard from "../components/ProductCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -14,9 +13,6 @@ export default function Home() {
   return (
     <div>
       <section className="hero">
-        <div className="hero-flag-wrap" aria-hidden="true">
-          <CubaFlag className="hero-flag" />
-        </div>
         <div className="hero-inner">
           <div className="hero-text">
             <h1>{t("hero.title").split("\n").map((l, i) => <span key={i}>{l}<br /></span>)}</h1>

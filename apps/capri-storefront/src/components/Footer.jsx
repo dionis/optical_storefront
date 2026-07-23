@@ -5,7 +5,6 @@ export default function Footer() {
   const { t } = useLang();
   return (
     <footer className="footer">
-      <div className="cuba-ribbon" aria-hidden="true" />
       <div className="footer-cols">
         <div className="footer-brand">
           <img src="/logo.svg" alt="Óptica El Rancho" className="footer-logo" />

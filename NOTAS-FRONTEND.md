@@ -61,3 +61,51 @@
 - Hospedar la SPA en CDN y publicar `catalog.json` en un bucket público
   (apuntar `VITE_CATALOG_URL`); parametrizar `CATALOG_SOURCE` por tenant para el SaaS.
 - Rehospedar imágenes de producto en CDN propio (ver punto 5).
+
+
+---
+
+## Actualización de diseño e interacción (2026-07-23)
+
+### Identidad visual — estilo cubano por color (no bandera)
+Se descartó la bandera literal y las cintas tricolor (se veían poco profesionales).
+En su lugar se aplica un **sistema de marca tricolor** azul · blanco · rojo (aprox. los
+colores de la bandera cubana) usado con criterio Material Design:
+
+- **Logo RUBI_LENS** bicolor: "RUBI" en azul (#0E5AD0) y "LENS" en rojo (#FD0E3F),
+  haciendo eco de los dos lentes del isotipo (uno azul, uno rojo). `public/logo.svg`.
+- **Botones** (Material): primario en azul con elevación y estados hover/active;
+  contorno azul; variante `.btn-accent` en rojo para énfasis.
+- **Títulos de sección**: sutil subrayado degradado azul→rojo (firma de marca).
+- **Cards de producto y de marca**: se elevan al pasar el cursor y revelan un fino
+  acento superior azul→rojo.
+- **Props de valor**: iconos alternan azul/rojo y se elevan en hover.
+- Tokens nuevos en `:root`: `--red-dark`, `--red-soft` (además de los azules ya existentes).
+
+### Board (panel corporativo)
+- Login con degradado azul→rojo (colores cubanos), profesional.
+- **Cifras KPI en azul** (énfasis tricolor); icono de conversión en rojo.
+- **Cards, filas de tabla, filas de precio, pestañas y filtros** con movimiento y
+  realce al pasar el cursor (elevación Material, línea azul superior en hover, resaltado
+  de fila). Todo se siente clicable e interactivo.
+- **Gráficas premium e interactivas** (`src/admin/charts.jsx`): animaciones de entrada
+  (barras crecen, líneas se dibujan, dona se despliega), movimiento en hover (barras se
+  elevan y brillan, segmento de dona resalta), y **tooltips flotantes con información
+  extra**: % del total, delta vs. promedio y conversión (compras/accesos). Respeta
+  `prefers-reduced-motion`. Estilos con prefijo `cx-` en `admin.css`.
+- **Buscador de pedidos** en la pestaña Pedidos: busca por número, cliente, correo,
+  teléfono, ciudad o artículo, combinable con los filtros (Todos / En proceso / Entregados),
+  con contador de resultados y botón de limpiar. (El buscador de productos ya existía en la
+  barra superior y salta a Precios.)
+
+### Multilingüe (es/en)
+- `ShippingEstimator.jsx` y `TrackingTimeline.jsx` ahora pasan 100% por el sistema i18n
+  (`t()`/`tv()`). Claves nuevas `ship.*` y `track.*` en `src/i18n/translations.js`, y los
+  nombres de zonas de envío por defecto se traducen vía el mapa `VAL` (Estados Unidos →
+  United States, etc.). El board sigue en español (herramienta interna del dueño).
+
+### Responsive
+- Tienda y board revisados con breakpoints existentes; cards, KPIs y tablas se reflujan
+  en móvil. Sin cambios de layout que rompan en pantallas pequeñas.
+
+Nada de esto toca el backend de Dionis (solo `apps/capri-storefront`). Rama `frontend`.

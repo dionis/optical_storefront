@@ -3,6 +3,8 @@
   --blue-dark: #0a47a8;
   --blue-soft: #eef4ff;
   --red: #FD0E3F;
+  --red-dark: #d40b34;
+  --red-soft: #fff0f3;
   --ink: #17191f;
   --ink-soft: #3a3f4a;
   --muted: #6b7280;
@@ -521,51 +523,49 @@ button { font-family: inherit; cursor: pointer; }
 .co-form .co-fields input:focus { outline: 2px solid #0E5AD0aa; border-color: var(--blue); }
 .co-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-/* ===== Cuba allegory (visible + tasteful) ===== */
-@media (prefers-reduced-motion: no-preference) {
-  /* gentle cloth wave for the flag */
-  @keyframes cubaWave {
-    0%,100% { transform: perspective(500px) rotateY(0deg) skewX(0deg) translateY(0); }
-    25%     { transform: perspective(500px) rotateY(6deg) skewX(-1.4deg) translateY(-2px); }
-    50%     { transform: perspective(500px) rotateY(0deg) skewX(1.2deg) translateY(1px); }
-    75%     { transform: perspective(500px) rotateY(-5deg) skewX(-.8deg) translateY(-1px); }
-  }
-  /* moving sheen across the cloth */
-  @keyframes cubaSheen { 0%{ transform: translateX(-120%); } 60%,100%{ transform: translateX(220%); } }
-  @keyframes cubaSlide { to { background-position: 60px 0; } }
-}
+/* ============================================================
+   Cuban tricolor brand system — blue · white · red, used with
+   restraint (color, not flags). Material-influenced elevation
+   and motion. Blue = structure/primary, Red = emphasis/accent,
+   White = surfaces.
+   ============================================================ */
 .hero { position: relative; overflow: hidden; }
 .hero-inner { position: relative; z-index: 1; }
-
-/* Waving Cuban flag — a real, visible accent pinned in the hero. */
-.hero-flag-wrap {
-  position: absolute; top: 20px; right: 22px; z-index: 3;
-  width: clamp(132px, 17vw, 190px); aspect-ratio: 2 / 1;
-  border-radius: 5px; overflow: hidden; pointer-events: none;
-  box-shadow: 0 14px 30px rgba(14,40,90,.28), 0 2px 0 rgba(0,0,0,.04);
-  transform-origin: left center; animation: cubaWave 6s ease-in-out infinite;
-  outline: 1px solid rgba(255,255,255,.6); outline-offset: -1px;
-}
-.hero-flag-wrap::before { /* subtle fold shading for cloth depth */
-  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: repeating-linear-gradient(90deg, rgba(0,0,0,.06) 0 8%, rgba(255,255,255,.05) 8% 16%);
-  mix-blend-mode: overlay; opacity: .5;
-}
-.hero-flag-wrap::after { /* animated sheen */
-  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; z-index: 3;
-  background: linear-gradient(105deg, transparent, rgba(255,255,255,.55), transparent);
-  transform: translateX(-120%); animation: cubaSheen 6s ease-in-out infinite; pointer-events: none;
-}
-.cuba-flag { display: block; width: 100%; height: 100%; }
-.cuba-flag.hero-flag { position: absolute; inset: 0; z-index: 1; }
-@media (max-width: 720px) {
-  .hero-flag-wrap { width: 104px; top: 12px; right: 12px; }
-}
-
-/* recurring tricolor ribbon accent (blue · white · red) */
-.cuba-ribbon { height: 4px; width: 100%; background: repeating-linear-gradient(90deg, var(--blue) 0 20px, #ffffff 20px 40px, var(--red) 40px 60px); background-size: 60px 100%; animation: cubaSlide 5s linear infinite; }
-.cuba-ribbon.thin { height: 3px; }
-
-/* footer ribbon full-bleed */
 .footer { position: relative; }
-.footer > .cuba-ribbon { position: absolute; top: 0; left: 0; }
+
+/* Brand signature: a soft blue→red underline under centered section titles */
+.section-center .section-title { position: relative; display: inline-block; }
+.section-center .section-title::after {
+  content: ""; position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%);
+  width: 54px; height: 4px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), var(--red));
+}
+
+/* Buttons — Material elevation + state layers */
+.btn { transition: transform .15s cubic-bezier(.2,.7,.2,1), box-shadow .2s ease, background .2s, color .2s, border-color .2s; }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 8px 18px -8px rgba(14,90,208,.55); }
+.btn-primary:hover { background: var(--blue-dark); transform: translateY(-1px); box-shadow: 0 14px 26px -10px rgba(14,90,208,.6); }
+.btn-primary:active { transform: translateY(0); box-shadow: 0 6px 14px -8px rgba(14,90,208,.55); }
+.btn-outline { background: #fff; border-color: var(--blue); color: var(--blue); }
+.btn-outline:hover { background: var(--blue-soft); transform: translateY(-1px); }
+.btn-accent { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 8px 18px -8px rgba(253,14,63,.5); }
+.btn-accent:hover { background: var(--red-dark); transform: translateY(-1px); }
+
+/* Cards — hover lift + a subtle blue→red top accent revealed on hover */
+.product-card, .brand-chip { position: relative; transition: transform .18s cubic-bezier(.2,.7,.2,1), box-shadow .22s ease; }
+.product-card::after, .brand-chip::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: linear-gradient(90deg, var(--blue), var(--red));
+  opacity: 0; transition: opacity .2s ease; pointer-events: none; z-index: 2;
+}
+.product-card:hover, .brand-chip:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.product-card:hover::after, .brand-chip:hover::after { opacity: 1; }
+
+/* Value props — icons alternate blue / red for a tricolor rhythm, lift on hover */
+.props .prop { transition: transform .18s cubic-bezier(.2,.7,.2,1); }
+.props .prop:hover { transform: translateY(-3px); }
+.props .prop:nth-child(odd) span { color: var(--blue); }
+.props .prop:nth-child(even) span { color: var(--red); }
+
+/* Active nav link gets the brand blue underline (already partly styled above) */
+.nav a.active { color: var(--blue); }
