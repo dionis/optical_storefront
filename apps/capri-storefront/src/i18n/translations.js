@@ -187,6 +187,15 @@ export const T = {
     "acc.track.soon": "El seguimiento estará disponible pronto",
     "acc.track.desc": "Aquí podrás seguir el estado de envío de tus pedidos en tiempo real (preparación, enviado, en camino, entregado). Se conectará cuando el backend lo provea.",
     "acc.status.processing": "En preparación", "acc.status.shipped": "Enviado", "acc.status.delivered": "Entregado",
+    "ship.aria": "Opciones de envío", "ship.how": "¿Cómo lo quieres recibir?",
+    "ship.methodAria": "Método de entrega", "ship.pickup": "Recoger en tienda",
+    "ship.free": "Gratis", "ship.directions": "Cómo llegar",
+    "ship.toHome": "Envío a domicilio", "ship.chooseDest": "Elige tu destino",
+    "ship.days": "días", "ship.shippedFrom": "Enviado desde",
+    "track.aria": "Estado del pedido", "track.confirmed": "Confirmado",
+    "track.processing": "En preparación", "track.shipped": "Enviado",
+    "track.in_transit": "En camino", "track.delivered": "Entregado",
+    "track.eta": "Entrega estimada:",
   },
   en: {
     "top.bar": "Free shipping on orders over $59 · 30-day guarantee",
@@ -375,6 +384,15 @@ export const T = {
     "acc.track.soon": "Tracking will be available soon",
     "acc.track.desc": "Here you'll follow your orders' shipping status in real time (preparing, shipped, in transit, delivered). Wires up when the backend provides it.",
     "acc.status.processing": "Preparing", "acc.status.shipped": "Shipped", "acc.status.delivered": "Delivered",
+    "ship.aria": "Shipping options", "ship.how": "How would you like to get it?",
+    "ship.methodAria": "Delivery method", "ship.pickup": "Pick up in store",
+    "ship.free": "Free", "ship.directions": "Get directions",
+    "ship.toHome": "Home delivery", "ship.chooseDest": "Choose your destination",
+    "ship.days": "days", "ship.shippedFrom": "Shipped from",
+    "track.aria": "Order status", "track.confirmed": "Confirmed",
+    "track.processing": "Preparing", "track.shipped": "Shipped",
+    "track.in_transit": "In transit", "track.delivered": "Delivered",
+    "track.eta": "Estimated delivery:",
   },
 };
 
@@ -394,6 +412,9 @@ export const VAL = {
   // filter-only extras
   "Juego de 3 piezas sin aro": "3-piece rimless", "Sin montura semi al aire": "Semi-rimless", "Gafas de sol": "Sunglasses",
   "Bisagra de resorte": "Spring hinge", "Puente Unifit": "Unifit bridge", "Más de 60 mm": "Over 60 mm", "155+ mm": "155+ mm",
+  // shipping zone names (default set; owner-edited names pass through unchanged)
+  "Estados Unidos": "United States", "EE.UU. exprés": "US express", "México": "Mexico",
+  "Latinoamérica": "Latin America", "Resto del mundo": "Rest of world",
 };
 export function tv(value, lang) {
   if (lang === "es") return value;

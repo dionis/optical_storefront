@@ -410,23 +410,43 @@ const OSTATUS = {
 };
 const OSTEPS = ["processing", "shipped", "in_transit", "delivered"];
 
+function orderHaystack(o) {
+  return [
+    o.id, o.customer?.name, o.customer?.surname, o.customer?.email, o.customer?.phone,
+    o.user, o.delivery?.city, o.delivery?.recipient, o.delivery?.phone, o.delivery?.email,
+    o.delivery?.carrier, o.shipping?.method, o.status, OSTATUS[o.status || "processing"]?.[1],
+    ...(o.items || []).map((it) => it.name),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 function Orders() {
   const snap = useAnalyticsTick();
   const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState(null);
   const orders = useMemo(() => allOrders(), [snap]);
-  const shown = filter === "all" ? orders : filter === "done" ? orders.filter((o) => o.status === "delivered") : orders.filter((o) => o.status !== "delivered");
+  const q = query.trim().toLowerCase();
+  const base = filter === "all" ? orders : filter === "done" ? orders.filter((o) => o.status === "delivered") : orders.filter((o) => o.status !== "delivered");
+  const shown = useMemo(() => (q ? base.filter((o) => orderHaystack(o).includes(q)) : base), [base, q]);
   const proc = orders.filter((o) => o.status !== "delivered").length;
   const done = orders.length - proc;
   const revenue = orders.reduce((s, o) => s + o.total, 0);
   return (
     <div className="adm-section">
       <div className="adm-head-row"><h2>Pedidos</h2>
-        <div className="adm-range">
-          {[["all", "Todos"], ["proc", "En proceso"], ["done", "Entregados"]].map(([k, l]) =>
-            <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>)}
+        <div className="adm-orders-tools">
+          <div className="adm-find compact" title="Buscar un pedido para verlo y actualizar su estado">
+            <span aria-hidden="true">🔎</span>
+            <input placeholder="Buscar pedido: #, cliente, ciudad, correo…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            {query && <button className="adm-find-x" title="Limpiar" onClick={() => setQuery("")}>×</button>}
+          </div>
+          <div className="adm-range">
+            {[["all", "Todos"], ["proc", "En proceso"], ["done", "Entregados"]].map(([k, l]) =>
+              <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>)}
+          </div>
         </div>
       </div>
+      {q && <div className="adm-find-note muted">🔎 {shown.length} resultado{shown.length === 1 ? "" : "s"} para “{query}”</div>}
       <div className="adm-kpis">
         <KpiCard label="Pedidos" value={int(orders.length)} icon="🧾" />
         <KpiCard label="En proceso" value={int(proc)} icon="⏳" />
@@ -438,7 +458,7 @@ function Orders() {
           <table className="adm-table orders">
             <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Método</th><th className="r">Total</th><th>Estado / proceso</th></tr></thead>
             <tbody>
-              {shown.length === 0 ? <tr><td colSpan="6" className="muted">Sin pedidos.</td></tr> : shown.map((o) => {
+              {shown.length === 0 ? <tr><td colSpan="6" className="muted">{q ? "Sin resultados para tu búsqueda." : "Sin pedidos."}</td></tr> : shown.map((o) => {
                 const st = OSTATUS[o.status || "processing"];
                 const ship = o.shipping?.method === "ship";
                 const open = openId === o.id;

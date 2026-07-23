@@ -14,8 +14,9 @@ export default function Home() {
   return (
     <div>
       <section className="hero">
-        <CubaFlag className="hero-flag" />
-        <div className="hero-stars" aria-hidden="true"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div>
+        <div className="hero-flag-wrap" aria-hidden="true">
+          <CubaFlag className="hero-flag" />
+        </div>
         <div className="hero-inner">
           <div className="hero-text">
             <h1>{t("hero.title").split("\n").map((l, i) => <span key={i}>{l}<br /></span>)}</h1>

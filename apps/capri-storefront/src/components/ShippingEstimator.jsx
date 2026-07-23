@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { shipping, subscribe } from "../admin/priceStore.js";
+import { useLang } from "../i18n/LanguageContext.jsx";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
 export default function ShippingEstimator({ subtotal = 0, onChange }) {
+  const { t, tv } = useLang();
   const [cfg, setCfg] = useState(() => shipping());
   const pickupOn = !!(cfg.pickup && cfg.pickup.enabled);
   const [method, setMethod] = useState(pickupOn ? "pickup" : "ship");
@@ -40,13 +42,13 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
   }, [method, zoneId, isFree, cfg]);
 
   return (
-    <section className="ship-est" aria-label="Opciones de envío">
+    <section className="ship-est" aria-label={t("ship.aria")}>
       <div className="ship-est-head">
         <span className="ship-est-ico" aria-hidden="true">🚚</span>
-        <h3 className="ship-est-title">¿Cómo lo quieres recibir?</h3>
+        <h3 className="ship-est-title">{t("ship.how")}</h3>
       </div>
 
-      <div className="ship-methods" role="radiogroup" aria-label="Método de entrega">
+      <div className="ship-methods" role="radiogroup" aria-label={t("ship.methodAria")}>
         {pickupOn && (
           <button
             type="button"
@@ -57,8 +59,8 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
           >
             <div className="ship-method-top">
               <span className="ship-method-ico" aria-hidden="true">🏬</span>
-              <span className="ship-method-name">Recoger en tienda</span>
-              <span className="ship-badge">Gratis</span>
+              <span className="ship-method-name">{t("ship.pickup")}</span>
+              <span className="ship-badge">{t("ship.free")}</span>
             </div>
             {method === "pickup" && (
               <div className="ship-method-body">
@@ -75,7 +77,7 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <span aria-hidden="true">📍</span> Cómo llegar
+                  <span aria-hidden="true">📍</span> {t("ship.directions")}
                 </a>
               </div>
             )}
@@ -91,18 +93,18 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
         >
           <div className="ship-method-top">
             <span className="ship-method-ico" aria-hidden="true">🚚</span>
-            <span className="ship-method-name">Envío a domicilio</span>
+            <span className="ship-method-name">{t("ship.toHome")}</span>
           </div>
           {method === "ship" && (
             <div className="ship-method-body" onClick={(e) => e.stopPropagation()}>
               <select
                 className="ship-zone"
-                aria-label="Elige tu destino"
+                aria-label={t("ship.chooseDest")}
                 value={zoneId}
                 onChange={(e) => setZoneId(e.target.value)}
               >
                 {zones.map((z) => (
-                  <option key={z.id} value={z.id}>{z.name}</option>
+                  <option key={z.id} value={z.id}>{tv(z.name)}</option>
                 ))}
               </select>
               {zone && (
@@ -110,14 +112,14 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
                   <div className="ship-summary">
                     <span className="ship-chip"><span aria-hidden="true">🏷️</span> {zone.carrier}</span>
                     <span className="ship-chip">
-                      <span aria-hidden="true">💵</span> {isFree ? "Gratis" : money(zone.cost)}
+                      <span aria-hidden="true">💵</span> {isFree ? t("ship.free") : money(zone.cost)}
                     </span>
                     <span className="ship-chip">
-                      <span aria-hidden="true">⏱️</span> {zone.etaMin}–{zone.etaMax} días
+                      <span aria-hidden="true">⏱️</span> {zone.etaMin}–{zone.etaMax} {t("ship.days")}
                     </span>
                   </div>
                   <div className="ship-origin muted">
-                    <span aria-hidden="true">📦</span> Enviado desde {cfg.origin ? cfg.origin.city : ""}
+                    <span aria-hidden="true">📦</span> {t("ship.shippedFrom")} {cfg.origin ? cfg.origin.city : ""}
                   </div>
                 </>
               )}

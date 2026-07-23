@@ -162,6 +162,12 @@
 .adm-navbar .adm-tabs { padding: 0; flex: 1; }
 .adm-find { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #ececea; border-radius: 999px; padding: 8px 14px; min-width: 240px; box-shadow: 0 1px 2px rgba(23,32,58,.04); }
 .adm-find input { border: none; outline: none; font-size: 14px; width: 100%; background: transparent; }
+.adm-find:focus-within { border-color: #0E5AD0; box-shadow: 0 0 0 3px rgba(14,90,208,.12); }
+.adm-find-x { border: none; background: #eef1f5; color: #5c6470; width: 20px; height: 20px; border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.adm-find-x:hover { background: #e0e4ea; }
+.adm-orders-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adm-find.compact { min-width: 260px; padding: 7px 12px; }
+.adm-find-note { margin: -6px 0 12px; font-size: 13px; }
 .ship-block { }
 .ship-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: #16181d; margin-bottom: 8px; }
 .ship-h span { font-size: 17px; }
