@@ -19,11 +19,15 @@ export default function Catalog() {
   const [selected, setSelected] = useState({});
   const [sort, setSort] = useState("relevance");
   const [showFilters, setShowFilters] = useState(false);
+  // All filter groups start CLOSED on load.
   const [openGroups, setOpenGroups] = useState(() =>
-    Object.fromEntries(FILTER_GROUPS.map((g, i) => [g.key, i < 4]))
+    Object.fromEntries(FILTER_GROUPS.map((g) => [g.key, false]))
   );
 
   useEffect(() => { setSelected(ageParam ? { age: [ageParam] } : {}); }, [slug, ageParam]);
+
+  // Applying a filter, sort or search jumps back to the top of the listing.
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }, [selected, sort, q, slug]);
 
   const toggle = (key, opt) => {
     setSelected((prev) => {

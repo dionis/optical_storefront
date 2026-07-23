@@ -26,19 +26,27 @@ function set(next) { state = { ...state, ...next }; emit(); }
 export function subscribe(f) { subs.add(f); return () => subs.delete(f); }
 export function getState() { return state; }
 
+// Where the daily cloud service publishes the catalog. Defaults to same-origin
+// (public/*.json), but for the SaaS/cloud deployment set VITE_CATALOG_URL to the
+// hosted base (e.g. https://cdn.myshop.com/catalog) so the storefront reads the
+// cloud-generated catalog directly, decoupled from any local machine.
+const BASE = (import.meta.env && import.meta.env.VITE_CATALOG_URL
+  ? String(import.meta.env.VITE_CATALOG_URL).replace(/\/$/, "")
+  : "");
+
 let loaded = false;
 export async function loadLive() {
   if (loaded) return;
   loaded = true;
   try {
     const opt = { cache: "no-store" };
-    const [cRes, kRes] = await Promise.all([fetch("/catalog.json", opt), fetch("/cases.json", opt)]);
+    const [cRes, kRes] = await Promise.all([fetch(`${BASE}/catalog.json`, opt), fetch(`${BASE}/cases.json`, opt)]);
     if (!cRes.ok || !kRes.ok) return; // keep seed
     const frames = await cRes.json();
     const cases = await kRes.json();
     if (!Array.isArray(frames) || !frames.length) return;
     let meta = null;
-    try { const m = await fetch("/catalog-meta.json", opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
+    try { const m = await fetch(`${BASE}/catalog-meta.json`, opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
     const products = enrichProducts(frames);
     const ecases = enrichCases(Array.isArray(cases) ? cases : []);
     set({

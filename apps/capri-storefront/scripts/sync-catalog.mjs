@@ -24,8 +24,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC = path.resolve(__dirname, "..", "public");
-const API = "https://caprioptics.com/wp-json/wc/store/v1/products";
+// Output dir is configurable for cloud/SaaS deploys (e.g. write to a mounted volume,
+// a build dir, or a synced folder). Defaults to the storefront's public/.
+const PUBLIC = process.env.CATALOG_OUT_DIR
+  ? path.resolve(process.env.CATALOG_OUT_DIR)
+  : path.resolve(__dirname, "..", "public");
+fs.mkdirSync(PUBLIC, { recursive: true });
+// Source site is configurable so the same service can power multiple SaaS tenants.
+const SITE = (process.env.CATALOG_SOURCE || "https://caprioptics.com").replace(/\/$/, "");
+const API = `${SITE}/wp-json/wc/store/v1/products`;
 const UA = { "User-Agent": "OpticaElRancho-CatalogSync/1.0 (+storefront)" };
 
 // ---- brand + attribute normalization (must match src/data filters/VAL) ----
@@ -131,7 +138,7 @@ async function galleryFromHTML(url) {
     const re = /data-large_image="([^"]+)"/g; let m;
     while ((m = re.exec(html))) urls.add(m[1].replace(/&#0?38;|&amp;/g, "&"));
     if (!urls.size) {
-      const re2 = /<a[^>]+href="(https:\/\/caprioptics\.com\/wp-content\/uploads\/[^"]+\.(?:jpg|jpeg|png|JPG))"/g;
+      const re2 = /<a[^>]+href="(https?:\/\/[^"]+\/wp-content\/uploads\/[^"]+\.(?:jpg|jpeg|png|JPG))"/g;
       while ((m = re2.exec(html))) urls.add(m[1].replace(/&#0?38;|&amp;/g, "&"));
     }
     return [...urls];

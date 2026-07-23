@@ -41,7 +41,7 @@
     <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Web "Óptica El Rancho"</h3><p class="muted">Vite + React 18 en <b>http://localhost:5198</b>. Bilingüe ES/EN, responsive, marca RUBI_LENS.</p></div>
     <div class="card"><span class="badge b-ok">CORRIENDO</span><h3>Infra Docker</h3><p class="muted">Postgres :5432 · Redis :6379 · Meilisearch :7700 · MinIO :9090/:9001.</p></div>
     <div class="card"><span class="badge b-warn">PARCIAL</span><h3>Backend Medusa</h3><p class="muted">BD migrada + build OK. Pagos PayPal/Square pendientes de portar a Medusa 2.17.</p></div>
-    <div class="card"><span class="badge b-ok">PROGRAMADO</span><h3>Servicio de catálogo</h3><p class="muted">Tarea diaria <code>OpticaElRancho-CatalogSync</code> (03:00) — sincroniza los marcos disponibles desde la Store API de caprioptics.</p></div>
+    <div class="card"><span class="badge b-ok">NUBE</span><h3>Servicio de catálogo</h3><p class="muted">Servicio cloud (GitHub Actions diario + contenedor Docker) — sincroniza los marcos disponibles desde la Store API de caprioptics. No depende de ninguna PC. Listo para SaaS.</p></div>
     <div class="card"><span class="badge b-info">REFERENCIA</span><h3>Storefront Next.js</h3><p class="muted">Storefront original del repo en :3000, conectado al backend.</p></div>
   </div>
 
@@ -65,16 +65,22 @@
     <tr><td><code>/estuches</code>, <code>/marca/case</code></td><td>Catalog (rama case)</td><td>Cuadrícula de estuches, con variantes de color una a una como los espejuelos</td></tr>
   </table>
   <p>El <b>header</b> incluye dos cajones deslizantes globales: <b>Favoritos</b> (icono ♥) y <b>Carrito</b> (icono 🛒), cada uno con su contador. Favoritos y carrito se guardan en <code>localStorage</code> (<code>oer_fav</code>, <code>oer_cart</code>) y persisten entre recargas; desde Favoritos se puede «Añadir al carrito» o «Quitar».</p>
-  <h3>Catálogo dinámico (servicio diario, ya no es estático)</h3>
-  <p>El catálogo <b>ya no está fijo en el código</b>: se actualiza solo cada día. Un servicio <code>scripts/sync-catalog.mjs</code> (Node, sin dependencias) se ejecuta mediante la <b>Tarea programada de Windows <code>OpticaElRancho-CatalogSync</code></b> (<code>_runners/sync-catalog.bat</code>, diaria a las 03:00) y hace lo siguiente:</p>
+  <h3>Catálogo dinámico — servicio en la nube (ya no es estático)</h3>
+  <p>El catálogo <b>ya no está fijo en el código</b>: se regenera solo cada día mediante un <b>servicio preparado para la nube</b> (pensado para el modelo SaaS, sin depender de ninguna PC). El servicio es <code>scripts/sync-catalog.mjs</code> — Node puro, <b>sin dependencias</b>, configurable por variables de entorno — y hace lo siguiente:</p>
   <ul>
-    <li>Consulta la <b>WooCommerce Store API</b> pública de caprioptics (<code>/wp-json/wc/store/v1/products</code>, ~6 peticiones para todo el catálogo).</li>
+    <li>Consulta la <b>WooCommerce Store API</b> pública de la tienda origen (<code>/wp-json/wc/store/v1/products</code>, ~6 peticiones para todo el catálogo). La tienda origen es configurable (<code>CATALOG_SOURCE</code>) para servir a <b>varios tenants SaaS</b>.</li>
     <li>Se queda <b>solo con los marcos disponibles</b> (<code>is_in_stock === true</code>): si un modelo deja de estar disponible <b>desaparece</b> automáticamente de la tienda.</li>
     <li>Detecta modelos <b>nuevos de cualquier marca</b> (la marca sale de la categoría del producto) y los <b>agrega</b> automáticamente — incluso marcas que no existían antes.</li>
     <li>Normaliza los atributos al español canónico (Square→Cuadrado…) y agrupa los tamaños a los rangos de los filtros; reutiliza las imágenes por color ya conocidas y solo descarga la galería de los modelos <b>nuevos</b>.</li>
-    <li>Escribe <code>public/catalog.json</code>, <code>public/cases.json</code> y <code>public/catalog-meta.json</code> (fecha de sincronización, conteos por marca y el diff <em>added/removed</em> de ese día). Si la API falla, <b>no sobrescribe</b> el último catálogo bueno.</li>
+    <li>Escribe <code>catalog.json</code>, <code>cases.json</code> y <code>catalog-meta.json</code> (fecha de sincronización, conteos por marca y el diff <em>added/removed</em> de ese día) en el directorio configurable <code>CATALOG_OUT_DIR</code>. Si la API falla, <b>no sobrescribe</b> el último catálogo bueno.</li>
   </ul>
-  <p>La tienda (SPA) <b>lee esos JSON en tiempo de ejecución</b> vía <code>src/data/catalogStore.js</code> (<code>useCatalog()</code>): al abrir, muestra al instante los datos «semilla» incluidos en el build y, en cuanto llega el <code>catalog.json</code> del día, <b>re-renderiza</b> con lo disponible. Si no hay red, se queda con la semilla. Así el catálogo se refresca <b>sin recompilar ni reiniciar</b>.</p>
+  <p><b>Despliegue en la nube</b> (3 caminos, documentados en <code>scripts/README.md</code>):</p>
+  <ul>
+    <li><b>GitHub Actions</b> (incluido): <code>.github/workflows/catalog-sync.yml</code> corre a diario (08:00 UTC) en la infraestructura de GitHub y commitea el catálogo regenerado. Cero infraestructura propia.</li>
+    <li><b>Contenedor Docker</b> (incluido): <code>scripts/Dockerfile</code> es un job de una sola ejecución para <b>Cloud Run Jobs, ECS Scheduled Tasks, Kubernetes CronJob, Azure Container Apps</b>, etc.</li>
+    <li><b>Cualquier cron serverless</b> (Vercel/Cloudflare/Lambda): invocar el script y publicar los JSON en un CDN/bucket.</li>
+  </ul>
+  <p>La tienda (SPA) <b>lee esos JSON en tiempo de ejecución</b> vía <code>src/data/catalogStore.js</code> (<code>useCatalog()</code>): al abrir, muestra al instante los datos «semilla» incluidos en el build y, en cuanto llega el <code>catalog.json</code>, <b>re-renderiza</b> con lo disponible. La URL del catálogo es configurable con <code>VITE_CATALOG_URL</code> — para SaaS se apunta al catálogo hospedado en la nube (CDN), desacoplado de cualquier máquina. Si no hay red, se queda con la semilla. Así el catálogo se refresca <b>sin recompilar ni reiniciar</b>.</p>
   <h3>Render de imágenes y colores</h3>
   <p>Las imágenes de producto se <b>enlazan directamente (hotlink) desde el CDN de caprioptics.com</b> con la URL exacta por color. Al pasar el cursor o hacer clic en una muestra de color, el estado React <code>active</code> cambia y se re-renderiza <code>&lt;img src={color.image}&gt;</code> con una transición <code>fade-in</code> — replicando el comportamiento de <code>dc406</code>. Las muestras de color se pintan con un mapa nombre→hex.</p>
   <h3>Datos</h3>
@@ -109,6 +115,8 @@
     <li>Énfasis por <b>movimiento</b>: al pasar el cursor la tarjeta se eleva y la montura se agranda/rota levemente, con sombra suave y un borde tenue — todo sobre blanco.</li>
     <li>En el header se muestra <b>solo el logo</b> RUBI_LENS (sin el texto «Óptica El Rancho»).</li>
     <li>El panel lateral de <b>filtros ahora tiene scroll propio</b> (<code>max-height</code> + <code>overflow-y:auto</code>): cuando todos los filtros están desplegados se puede bajar por ellos sin quedar bloqueado.</li>
+    <li><b>Todos los grupos de filtros inician cerrados</b> al cargar el catálogo (menos ruido visual; el usuario abre solo lo que necesita).</li>
+    <li><b>Scroll al inicio automático</b>: al navegar a cualquier página (montura, marca, estuche, receta…) la vista salta arriba (componente <code>ScrollToTop</code> sobre el cambio de ruta), y al <b>aplicar un filtro, orden o búsqueda</b> el listado también vuelve al inicio — ya no te deja «tirado» al final de la página.</li>
   </ul>
 
   <h2>4 · Bilingüe (ES / EN)</h2>
@@ -132,23 +140,26 @@
 
   <h2>6 · QA realizado</h2>
   <p>Capturas automáticas con Playwright (Chromium headless) en múltiples combinaciones de viewport e idioma antes de desplegar. Se verificó: logo vectorial nítido y solo-logo en el header, tarjetas con fondo blanco sin recorte, cajón de <b>favoritos</b> (añadir/quitar/al carrito), bloque de <b>reseñas</b> con formulario, receta con desplegables por defecto 0.00, materiales/tratamientos seleccionables con globo de ayuda ⓘ, estuches con la misma dinámica que los espejuelos y como cross-sell, y las <b>banderitas 🇪🇸/🇺🇸</b> del idioma.</p>
-  <p>En la última iteración (v8) se validó el <b>catálogo dinámico</b> de punta a punta: el servicio corrió contra la Store API (578 productos → <b>550 monturas disponibles + 28 estuches</b>, con diff added/removed), los JSON generados pasaron chequeos de integridad (0 sin color, 0 imágenes vacías, 0 material inválido), la tarea diaria quedó registrada (<code>OpticaElRancho-CatalogSync</code>, próxima 03:00) y la SPA hidrató y re-renderizó desde <code>catalog.json</code> sin errores de consola. Nota: en el sandbox en la nube las imágenes del CDN de caprioptics pueden salir en blanco por bloqueo de red; en la máquina local cargan con normalidad.</p>
+  <p>Se validó el <b>catálogo dinámico</b> de punta a punta: el servicio corrió contra la Store API (578 productos → <b>550 monturas disponibles + 28 estuches</b>, con diff added/removed), los JSON generados pasaron chequeos de integridad (0 sin color, 0 imágenes vacías, 0 material inválido) y la SPA hidrató y re-renderizó desde <code>catalog.json</code> sin errores de consola. En v9 se comprobó además la <b>UX de navegación</b>: los 9 grupos de filtros inician <b>cerrados</b> (0 abiertos) y, tras hacer scroll al final y clicar una montura, la página vuelve al <b>inicio</b> (scrollY 0). Nota: en el sandbox en la nube las imágenes del CDN de caprioptics pueden salir en blanco por bloqueo de red; en la máquina local cargan con normalidad.</p>
 
   <h2>7 · Cómo levantarla</h2>
   <pre>cd apps/capri-storefront
 npm install        # solo la primera vez
 npm run dev        # http://localhost:5198 (puerto no estándar, por diseño)
 
-# Servicio de catálogo (se ejecuta solo cada día a las 03:00):
-node scripts/sync-catalog.mjs        # o _runners\sync-catalog.bat
-# Tarea programada de Windows: OpticaElRancho-CatalogSync (diaria)</pre>
-  <p class="muted">El servicio de catálogo ya quedó registrado como tarea diaria de Windows; para forzar una sincronización manual basta con ejecutar el <code>.bat</code> o el comando <code>node</code> de arriba.</p>
+# Servicio de catálogo (NUBE) — correr a mano o dejarlo a GitHub Actions/Docker:
+node scripts/sync-catalog.mjs                      # una sincronización
+CATALOG_SOURCE=https://caprioptics.com node scripts/sync-catalog.mjs
+# GitHub Actions: .github/workflows/catalog-sync.yml (cron diario 08:00 UTC)
+# Docker:        docker build -f scripts/Dockerfile -t oer-catalog-sync .</pre>
+  <p class="muted">El servicio de catálogo es <b>cloud-ready</b> (no depende de ninguna PC). Detalles y opciones de despliegue en <code>apps/capri-storefront/scripts/README.md</code>. La tarea local de Windows fue eliminada a favor del servicio en la nube.</p>
 
   <h2>8 · Pendientes</h2>
   <table>
     <tr><th>Área</th><th>Pendiente</th></tr>
     <tr><td>Integración</td><td>Conectar la web al backend Medusa (catálogo, carrito, precios de lentes en servidor)</td></tr>
-    <tr><td>Catálogo</td><td><b>Resuelto:</b> catálogo dinámico diario vía Store API (servicio <code>sync-catalog.mjs</code> + tarea <code>OpticaElRancho-CatalogSync</code>).</td></tr>
+    <tr><td>Catálogo</td><td><b>Resuelto:</b> catálogo dinámico diario en la <b>nube</b> vía Store API (<code>sync-catalog.mjs</code> + GitHub Actions/Docker), cloud-ready para SaaS.</td></tr>
+    <tr><td>SaaS</td><td>Hospedar la SPA en un CDN y publicar el catálogo en un bucket/CDN público (apuntar <code>VITE_CATALOG_URL</code>); parametrizar <code>CATALOG_SOURCE</code> por tenant.</td></tr>
     <tr><td>AR</td><td>Enlazar el probador virtual (MediaPipe) del storefront original</td></tr>
     <tr><td>Backend</td><td>Portar providers de pago PayPal/Square a la API de Medusa 2.17</td></tr>
   </table>
