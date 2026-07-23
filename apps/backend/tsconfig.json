@@ -4,8 +4,6 @@
     "transpileOnly": true
   },
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "Node",
     "outDir": "./dist",
     "rootDir": "./src",
     "experimentalDecorators": true,

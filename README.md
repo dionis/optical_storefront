@@ -28,9 +28,10 @@ storefronts don't handle out of the box:
 ```
 eyewear-store/
 ├── apps/
-│   ├── backend/       # Medusa.js v2, Node 20, TypeScript strict
-│   ├── storefront/    # Next.js 15 App Router, Tailwind, shadcn/ui
-│   └── scraper/       # Python 3.12 catalog ingestion
+│   ├── backend/           # Medusa.js v2, Node 20, TypeScript strict
+│   ├── storefront/        # Next.js 15 App Router, Tailwind, shadcn/ui
+│   ├── capri-storefront/  # React + Vite storefront (own catalog sync, admin dashboard)
+│   └── scraper/           # Python 3.12 catalog ingestion
 ├── packages/
 │   └── shared/        # Shared TS types: Prescription, LensConfig, FrameAttributes
 ├── infra/
@@ -172,17 +173,24 @@ on the backend.
 | **Meilisearch host + master key** | Trigger reindex after ingest | Post-sync search reindex |
 | Target site reachability (caprioptics.com) | Actual scraping | Live `sync` runs (not needed for tests, which use fixtures) |
 
-### Infra / deployment (`infra/docker-compose.prod.yml`)
+### Infra / deployment
 
-Deployed to a single Hetzner CX22 VPS via Coolify. In addition to everything
-above, production needs:
+The backend is deployed to an **Oracle Cloud Free Tier** VM (Ampere/ARM,
+reserved public IP) via **Coolify**, a self-hosted PaaS running on that same
+VM. Only the backend runs there — Postgres is a managed **Supabase** free-tier
+project (Session Pooler connection, not Direct or Transaction Pooler — see the
+doc below for why), and Redis/Meilisearch run as lightweight Coolify services
+on the VM. The storefront is deployed separately on **Vercel**.
 
-- **Coolify** installed on the VPS (handles SSL/domain routing via Traefik,
-  and stores secrets in its encrypted environment store).
-- Container images for `backend` and `storefront` (`BACKEND_IMAGE` /
-  `STOREFRONT_IMAGE`), built by CI.
-- Cloudflare R2 credentials reused by the nightly backup job (`pg_dump` →
-  R2, 14-day retention).
+Full setup notes — Oracle networking gotchas, Coolify configuration, the
+backend `Dockerfile`, environment variables, and the pending production
+checklist (custom domain, live payment keys, etc.) — are documented in
+[docs/deploy-backend-coolify-oracle.md](docs/deploy-backend-coolify-oracle.md).
+
+`infra/docker-compose.prod.yml` (a fully self-hosted stack — Postgres, Redis,
+Meilisearch, backend, and storefront all on one VPS, as originally planned
+for a Hetzner CX22) still exists and works, but is **not** what's currently
+deployed; treat it as a legacy/alternative path.
 
 ## Prescription data handling
 
