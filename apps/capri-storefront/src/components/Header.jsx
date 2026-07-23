@@ -2,12 +2,14 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { CartPanel, FavPanel } from "./StorePanels.jsx";
 
 export default function Header() {
-  const { count } = useCart();
+  const { count, favCount } = useCart();
   const { t, lang, toggle } = useLang();
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
+  const [panel, setPanel] = useState(null); // 'cart' | 'fav' | null
   const navigate = useNavigate();
 
   const submit = (e) => {
@@ -34,7 +36,7 @@ export default function Header() {
         </button>
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
-          <img src="/logo.png" alt="Óptica El Rancho" className="logo-img" />
+          <img src="/logo.svg" alt="Óptica El Rancho — RUBI_LENS" className="logo-img" />
         </Link>
 
         <nav className="nav desktop-only">{links}</nav>
@@ -50,14 +52,15 @@ export default function Header() {
             <span className="sep">/</span>
             <span className={lang === "en" ? "on" : ""}>EN</span>
           </button>
-          <button className="icon-btn desktop-only" title={t("a11y.fav")}>♡</button>
-          <button className="icon-btn cart" title={t("a11y.cart")}>
+          <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
+            ♡{favCount > 0 && <span className="badge">{favCount}</span>}
+          </button>
+          <button className="icon-btn cart" title={t("a11y.cart")} onClick={() => setPanel("cart")}>
             🛒{count > 0 && <span className="badge">{count}</span>}
           </button>
         </div>
       </div>
 
-      {/* Mobile drawer */}
       <div className={`drawer ${menu ? "open" : ""}`}>
         <form className="search mobile-search" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -66,6 +69,9 @@ export default function Header() {
         <nav className="drawer-nav">{links}</nav>
       </div>
       {menu && <div className="drawer-backdrop" onClick={() => setMenu(false)} />}
+
+      <CartPanel open={panel === "cart"} onClose={() => setPanel(null)} />
+      <FavPanel open={panel === "fav"} onClose={() => setPanel(null)} />
     </header>
   );
 }

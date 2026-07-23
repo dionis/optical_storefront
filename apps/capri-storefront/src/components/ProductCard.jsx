@@ -1,17 +1,23 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useCart } from "./CartContext.jsx";
 
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
-  const [fav, setFav] = useState(false);
   const { t, tv } = useLang();
+  const { toggleFav, isFav } = useCart();
   const color = product.colors[active];
+  const fav = isFav(product.slug);
 
   return (
     <div className="card">
       <div className="card-media">
-        <button className={`heart ${fav ? "on" : ""}`} onClick={() => setFav((v) => !v)} aria-label={t("a11y.fav")}>
+        <button
+          className={`heart ${fav ? "on" : ""}`}
+          onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand })}
+          aria-label={t("a11y.fav")}
+        >
           {fav ? "♥" : "♡"}
         </button>
         <Link to={`/producto/${product.slug}`} className="card-img-link">

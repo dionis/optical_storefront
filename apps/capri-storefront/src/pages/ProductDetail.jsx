@@ -4,6 +4,7 @@ import { PRODUCT_BY_SLUG, PRODUCTS } from "../data/products.js";
 import { recommendedCases } from "../data/cases.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
+import Reviews from "../components/Reviews.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -12,7 +13,7 @@ export default function ProductDetail() {
   const product = PRODUCT_BY_SLUG[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
-  const { addItem } = useCart();
+  const { addItem, toggleFav, isFav } = useCart();
   const { t, tv } = useLang();
   const navigate = useNavigate();
 
@@ -33,6 +34,9 @@ export default function ProductDetail() {
       <div className="pdp-grid">
         <div className="pdp-gallery">
           <div className={`pdp-main ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+            <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
+                    onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand }); }}
+                    aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
             <span className="pdp-ar">◈ {t("card.ar")}</span>
@@ -88,6 +92,8 @@ export default function ProductDetail() {
           </table>
         </div>
       </div>
+
+      <Reviews product={product} />
 
       {/* Cross-sell: recommended cases */}
       <section className="section case-cross">

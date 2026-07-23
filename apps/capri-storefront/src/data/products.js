@@ -1,6 +1,7 @@
 // Real products pulled from caprioptics.com (images hotlinked from their CDN).
 // Prices/ratings are demo values derived deterministically from the SKU
 // (Capri Optics is B2B and does not publish retail prices).
+import { EXTRA } from "./frames-extra.js";
 const RAW = [
   {"sku":"DC406","name":"DC406","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC406%20Black.jpg"},{"name":"Grey","image":"https://caprioptics.com/wp-content/uploads/DC406%20Grey.jpg"},{"name":"Tortoise","image":"https://caprioptics.com/wp-content/uploads/DC406%20TORTOISE.jpg"}],"attributes":{"eye_size":"54-56 mm","bridge_size":"18-19 mm","temple_length":"145-150 mm","material":["Acetato","Plástica"],"gender":"Hombres","age":"Adulto","shape":"Cuadrado"}},
   {"sku":"DC407","name":"DC407","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC407%20Black.jpg"},{"name":"Light Blue","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Blue.jpg"},{"name":"Light Pink","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Pink.jpg"}],"attributes":{"eye_size":"51-53 mm","bridge_size":"16-17 mm","temple_length":"135-140 mm","material":["Acetato","Plástica"],"gender":"Señoras","age":"Adulto","shape":"Ojo de gato"}},
@@ -59,6 +60,9 @@ const COLOR_HEX = {
   pink: "#e79cc2", "light pink": "#f3c6da", purple: "#7b4aa0", green: "#3f8f5f", red: "#c0392b",
   burgundy: "#6d1f2e", wine: "#722f37", crystal: "#e8ecf1", clear: "#e8ecf1", lilac: "#b39ddb",
   rose: "#d98695", mauve: "#a97c88", tan: "#d2b48c", plum: "#8e4585", "plum pink": "#b5568a",
+  coffee: "#6f4e37", navy: "#1f2a44", demi: "#8b5a2b", ink: "#2b2f3a", pewter: "#8a8d91",
+  violet: "#7b4aa0", aqua: "#4bb8c4", denim: "#3b5a80", antique: "#b08d57", matt: "#2b2b2b",
+  stone: "#9a9488", grey: "#8a8a8a", light: "#cfd6df", "matt gold": "#c9a44a", "black grey": "#4b4f56",
 };
 function hexFor(colorName) {
   const key = colorName.toLowerCase();
@@ -84,9 +88,16 @@ function reviewsFor(sku) {
   return 40 + (hash(sku + "rev") % 480);
 }
 
-export const PRODUCTS = RAW.map((p) => ({
+const ALL = [...RAW, ...EXTRA].filter((p) => p.colors && p.colors.length);
+const seen = new Set();
+export const PRODUCTS = ALL.filter((p) => {
+  const s = p.sku.toLowerCase().replace(/\s+/g, "");
+  if (seen.has(s)) return false;
+  seen.add(s);
+  return true;
+}).map((p) => ({
   ...p,
-  slug: p.sku.toLowerCase().replace(/\s+/g, ""),
+  slug: p.sku.toLowerCase().replace(/[^a-z0-9]+/g, ""),
   price: priceFor(p.sku),
   rating: ratingFor(p.sku),
   reviews: reviewsFor(p.sku),

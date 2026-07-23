@@ -45,7 +45,7 @@
   </div>
 
   <h2>2 · Identidad visual (Óptica El Rancho / RUBI_LENS)</h2>
-  <p>La marca se tomó de <code>opticaelrancho.com</code>. El logo <b>RUBI_LENS</b> (montura con lente izquierdo azul y derecho rojo) se descargó y se empaquetó en <code>public/logo.png</code>. La paleta se extrajo <b>analizando los píxeles del logo</b> con Pillow:</p>
+  <p>La marca se tomó de <code>opticaelrancho.com</code>. El logo <b>RUBI_LENS</b> (montura con lente izquierdo azul y derecho rojo) se <b>re-dibujó como vector SVG</b> en <code>public/logo.svg</code> — trazos de montura + texto en vez de un recorte PNG, por lo que se ve nítido a cualquier tamaño y sin bordes sucios. La paleta se extrajo <b>analizando los píxeles del logo</b> con Pillow:</p>
   <ul>
     <li><span class="swatch" style="background:#0E5AD0"></span><b>Azul primario</b> <code>#0E5AD0</code> — barra superior, botones primarios, enlaces activos, selección.</li>
     <li><span class="swatch" style="background:#FD0E3F"></span><b>Rojo "rubí"</b> <code>#FD0E3F</code> — precios, badges del carrito, acentos.</li>
@@ -61,33 +61,43 @@
     <tr><td><code>/catalogo</code>, <code>/marca/:slug</code></td><td>Catalog</td><td>Sidebar de filtros (colapsable en móvil), orden, búsqueda; grid de <code>ProductCard</code></td></tr>
     <tr><td><code>/producto/:slug</code></td><td>ProductDetail</td><td>Galería con cambio de imagen por color, specs, CTAs</td></tr>
     <tr><td><code>/recetas/:slug</code></td><td>LensProcess</td><td>Asistente de 4 pasos con precio dinámico</td></tr>
+    <tr><td><code>/estuches</code>, <code>/marca/case</code></td><td>Catalog (rama case)</td><td>Cuadrícula de estuches, con variantes de color una a una como los espejuelos</td></tr>
   </table>
+  <p>El <b>header</b> incluye dos cajones deslizantes globales: <b>Favoritos</b> (icono ♥) y <b>Carrito</b> (icono 🛒), cada uno con su contador. Favoritos y carrito se guardan en <code>localStorage</code> (<code>oer_fav</code>, <code>oer_cart</code>) y persisten entre recargas; desde Favoritos se puede «Añadir al carrito» o «Quitar».</p>
   <h3>Render de imágenes y colores</h3>
   <p>Las imágenes de producto se <b>enlazan directamente (hotlink) desde el CDN de caprioptics.com</b> con la URL exacta por color. Al pasar el cursor o hacer clic en una muestra de color, el estado React <code>active</code> cambia y se re-renderiza <code>&lt;img src={color.image}&gt;</code> con una transición <code>fade-in</code> — replicando el comportamiento de <code>dc406</code>. Las muestras de color se pintan con un mapa nombre→hex.</p>
   <h3>Datos</h3>
   <ul>
     <li><b>17 marcas</b> reales con logos oficiales (<code>src/data/brands.js</code>).</li>
-    <li><b>48 productos</b> reales (<code>src/data/products.js</code>): SKU, variantes de color con imagen, atributos (forma, material, género, edad, tamaños). Extraídos por 6 agentes en paralelo.</li>
-    <li><b>10 estuches / cases</b> reales (<code>src/data/cases.js</code>) con imagen y precio, vendibles.</li>
+    <li><b>136 productos</b> reales (<code>src/data/products.js</code> + <code>frames-extra.js</code>): SKU, variantes de color con imagen, atributos (forma, material, género, edad, tamaños). Extraídos de caprioptics.com por agentes en paralelo y deduplicados por SKU.</li>
+    <li><b>27 estuches / cases</b> reales (<code>src/data/cases.js</code>) con imagen y precio, vendibles; los que tienen varios colores muestran cada variante una a una.</li>
     <li>Precio y valoración <b>deterministas por SKU</b> (Capri Optics es B2B y no publica precios).</li>
   </ul>
   <h3>Estuches (cases) y venta cruzada</h3>
   <ul>
     <li>La marca <b>Cases</b> (<code>/marca/case</code>) y el enlace «Estuches» del menú muestran una cuadrícula de estuches con botón <b>«+ Añadir»</b> que los agrega al carrito.</li>
+    <li>Los estuches siguen <b>la misma dinámica que los espejuelos</b>: cada tarjeta es clicable y abre su propia ficha <code>/estuche/:slug</code> (<code>CaseDetail.jsx</code>) con imagen grande, <b>cambio de color una a una</b>, botón de <b>favoritos ♥</b>, <b>añadir al carrito</b>, ficha de especificaciones, bloque de <b>reseñas</b> y recomendación de «otros estuches». La tarjeta también tiene su propio corazón de favoritos.</li>
     <li>En cada ficha de espejuelos se muestran <b>3 estuches recomendados</b> («Completa tu compra con un estuche»), elegidos de forma determinista a partir del SKU, cada uno con su botón de compra — <em>cross-sell</em> para aumentar el ticket.</li>
   </ul>
   <h3>Configurador de lentes / receta (estilo Zeelool)</h3>
   <ul>
     <li>Flujo de 4 pasos reordenado: <b>Uso → Receta → Lente → Resumen</b>.</li>
-    <li>La receta usa <b>listas desplegables</b> en todos los campos: ESF/SPH (−20.00 a +12.00), CIL/CYL (−6.00 a +6.00), EJE/AXIS (1–180°), DP/PD (50–76) y ADD (+0.75 a +3.50, solo en progresivos), en pasos de 0.25.</li>
+    <li>La receta usa <b>listas desplegables</b> en todos los campos con <b>valor por defecto 0.00</b>: ESF/SPH (−20.00 a +12.00), CIL/CYL (−6.00 a +6.00), EJE/AXIS (1–180°), DP/PD (50–76) y ADD (+0.75 a +3.50, solo en progresivos), en pasos de 0.25.</li>
     <li><b>Cálculo acorde a la graduación:</b> se toma el valor absoluto más alto de esfera/cilindro (y si es infantil, policarbonato) y se <b>recomienda automáticamente el índice de lente</b> más adecuado (1.50 → ±2, 1.61 → ±4, 1.67 → ±6, 1.74 → &gt;±6), destacándolo con una insignia.</li>
-    <li><b>5 materiales</b> (1.50 CR-39, 1.59 policarbonato, 1.61, 1.67, 1.74) cada uno con una <b>nota de «buena práctica»</b> que explica cuándo conviene o no ese material.</li>
+    <li><b>5 materiales seleccionables</b> (1.50 CR-39, 1.59 policarbonato, 1.61, 1.67, 1.74): cada uno es una casilla elegible con un <b>globo de ayuda ⓘ</b> que, al hacer clic, explica cuándo conviene o no ese material (se quitó el prefijo «buena práctica»).</li>
+    <li><b>Tratamientos</b> (antirreflejo, filtro de luz azul, fotocromático, tinte de sol) como casillas marcables, cada una con su <b>globo de ayuda ⓘ</b> explicando cuándo es prudente.</li>
+  </ul>
+  <h3>Reseñas por producto</h3>
+  <ul>
+    <li>Cada ficha de espejuelos incluye un bloque <b>«Escribe una reseña»</b>: valoración por estrellas (1–5), nombre y comentario.</li>
+    <li>Las reseñas se guardan en <code>localStorage</code> (<code>oer_rev_&lt;slug&gt;</code>) por producto y se listan al instante; la <b>media mostrada</b> combina la valoración base del SKU con las reseñas nuevas.</li>
   </ul>
   <h3>Refinamiento visual</h3>
   <ul>
-    <li><b>Fondo blanco</b> en todas las tarjetas y visores de producto (se eliminó el recuadro gris que recortaba mal la imagen).</li>
-    <li>Énfasis por <b>movimiento</b>: al pasar el cursor la tarjeta se eleva y la montura se agranda/rota levemente, con sombra suave — todo sobre blanco.</li>
+    <li><b>Sin diferencia de fondo</b>: las tarjetas usan exactamente el mismo fondo blanco que la página (borde transparente en reposo), de modo que la imagen del producto no queda «recortada» sobre un rectángulo gris.</li>
+    <li>Énfasis por <b>movimiento</b>: al pasar el cursor la tarjeta se eleva y la montura se agranda/rota levemente, con sombra suave y un borde tenue — todo sobre blanco.</li>
     <li>En el header se muestra <b>solo el logo</b> RUBI_LENS (sin el texto «Óptica El Rancho»).</li>
+    <li>El panel lateral de <b>filtros ahora tiene scroll propio</b> (<code>max-height</code> + <code>overflow-y:auto</code>): cuando todos los filtros están desplegados se puede bajar por ellos sin quedar bloqueado.</li>
   </ul>
 
   <h2>4 · Bilingüe (ES / EN)</h2>
@@ -110,7 +120,7 @@
   <p>Objetivo UX: navegación clara para usuarios noveles — jerarquía visual simple, CTAs grandes y táctiles, un flujo de compra guiado paso a paso, y feedback inmediato al filtrar o cambiar color.</p>
 
   <h2>6 · QA realizado</h2>
-  <p>Capturas automáticas con Playwright (Chromium headless) en <b>6 combinaciones</b> de viewport e idioma antes de desplegar: home desktop ES, home desktop EN, home móvil (390px), catálogo tablet (820px) EN, detalle móvil ES, recetas desktop EN. Se verificó marca, tamaño de marcas, traducción de UI y de atributos, menú hamburguesa, filtros colapsables y grids responsive.</p>
+  <p>Capturas automáticas con Playwright (Chromium headless) en múltiples combinaciones de viewport e idioma antes de desplegar. En la última iteración (v5) se verificó: logo vectorial nítido y solo-logo en el header, tarjetas con fondo blanco sin recorte, catálogo con <b>136 monturas</b>, cajón de <b>favoritos</b> (añadir/quitar/al carrito), bloque de <b>reseñas</b> con formulario, receta con desplegables por defecto 0.00, materiales/tratamientos seleccionables con globo de ayuda ⓘ, y estuches recomendados como cross-sell. Nota: en el sandbox en la nube las imágenes del CDN de caprioptics pueden salir en blanco por bloqueo de red; en la máquina local cargan con normalidad.</p>
 
   <h2>7 · Cómo levantarla</h2>
   <pre>cd apps/capri-storefront

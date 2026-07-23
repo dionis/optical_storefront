@@ -4,7 +4,6 @@ import { PRODUCT_BY_SLUG } from "../data/products.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
-/* ---- Prescription value ranges (Zeelool-style dropdowns) ---- */
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2);
 function range(min, max, step) {
   const out = [];
@@ -13,7 +12,7 @@ function range(min, max, step) {
 }
 const SPH = range(-20, 12, 0.25).map((v) => ({ v, label: fmt(v) }));
 const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
-const AXIS = Array.from({ length: 180 }, (_, i) => i + 1).map((v) => ({ v, label: String(v) + "°" }));
+const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
@@ -31,18 +30,41 @@ const INDEX = [
   { key: "1.74", label: "idx.hi", desc: "idx.hi.d", tip: "idx.hi.tip", price: 95, max: 99 },
 ];
 const COATINGS = [
-  { key: "ar", label: "coat.ar", price: 8 },
-  { key: "blue", label: "coat.blue", price: 20 },
-  { key: "photo", label: "coat.photo", price: 45 },
-  { key: "tint", label: "coat.tint", price: 15 },
+  { key: "ar", label: "coat.ar", tip: "coat.ar.tip", price: 8 },
+  { key: "blue", label: "coat.blue", tip: "coat.blue.tip", price: 20 },
+  { key: "photo", label: "coat.photo", tip: "coat.photo.tip", price: 45 },
+  { key: "tint", label: "coat.tint", tip: "coat.tint.tip", price: 15 },
 ];
 
-function Field({ label, value, onChange, options, t }) {
+function HelpTip({ text, title }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="help-wrap">
+      <button type="button" className="help-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o); }} aria-label="?">ⓘ</button>
+      {open && (
+        <span className="help-pop" onClick={(e) => e.stopPropagation()}>
+          <b>{title}</b>
+          <span>{text}</span>
+          <button type="button" className="help-close" onClick={() => setOpen(false)}>×</button>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SelectCell({ value, onChange, options, t }) {
+  return (
+    <select className="rx-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+    </select>
+  );
+}
+function Field({ label, value, onChange, options, t, withEmpty }) {
   return (
     <label className="rx-field">
       <span>{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">{t("lens.select")}</option>
+        {withEmpty && <option value="">{t("lens.select")}</option>}
         {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
       </select>
     </label>
@@ -63,14 +85,13 @@ export default function LensProcess() {
   const [usage, setUsage] = useState(null);
   const [index, setIndex] = useState(null);
   const [coatings, setCoatings] = useState([]);
-  const [rx, setRx] = useState({ od_sph: "", od_cyl: "", od_axis: "", os_sph: "", os_cyl: "", os_axis: "", pd: "", add: "" });
+  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", add: "" });
   const [uploaded, setUploaded] = useState(null);
 
   if (!product) return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   const color = product.colors[colorIdx] || product.colors[0];
   const frameOnly = usage?.key === "frame-only";
 
-  // Recommend a lens material from the strongest sphere/cylinder (and kids -> poly)
   const maxAbs = Math.max(
     Math.abs(parseFloat(rx.od_sph) || 0), Math.abs(parseFloat(rx.os_sph) || 0),
     Math.abs(parseFloat(rx.od_cyl) || 0), Math.abs(parseFloat(rx.os_cyl) || 0)
@@ -92,7 +113,6 @@ export default function LensProcess() {
     setCoatings((prev) => (prev.find((x) => x.key === c.key) ? prev.filter((x) => x.key !== c.key) : [...prev, c]));
 
   const canNext = (step === 0 && usage) || step === 1 || (step === 2 && (frameOnly || index)) || step === 3;
-
   const finish = () => {
     addItem({ sku: product.sku, name: product.name, color: color.name, usage: usage?.key, index: index?.key, total });
     alert(t("lens.added"));
@@ -115,7 +135,6 @@ export default function LensProcess() {
 
       <div className="lens-grid">
         <div className="lens-body">
-          {/* STEP 0 — usage */}
           {step === 0 && (
             <div>
               <h2>{t("lens.q.use")}</h2>
@@ -130,7 +149,6 @@ export default function LensProcess() {
             </div>
           )}
 
-          {/* STEP 1 — prescription (all dropdowns) */}
           {step === 1 && (
             <div>
               <h2>{t("lens.q.rx")}</h2>
@@ -166,15 +184,14 @@ export default function LensProcess() {
                     </tbody>
                   </table>
                   <div className="rx-extra">
-                    <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} />
-                    {usage?.add && <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} />}
+                    <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty />
+                    {usage?.add && <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty />}
                   </div>
                 </>
               )}
             </div>
           )}
 
-          {/* STEP 2 — lens material + coatings */}
           {step === 2 && (
             <div>
               <h2>{frameOnly ? t("lens.frameOnlyTitle") : t("lens.q.lens")}</h2>
@@ -190,34 +207,40 @@ export default function LensProcess() {
                   )}
                   <div className="opt-list">
                     {INDEX.map((ix) => (
-                      <button key={ix.key} className={`opt-row ${index?.key === ix.key ? "sel" : ""}`} onClick={() => setIndex(ix)}>
-                        <div className="opt-row-main">
-                          <div className="opt-row-head">
-                            <b>{t(ix.label)}</b>
-                            {recommended?.key === ix.key && <span className="reco-badge">★ {t("lens.step.lens")}</span>}
-                            <span className="opt-price2">{ix.price ? `+ $${ix.price}` : t("lens.included")}</span>
-                          </div>
-                          <small className="opt-desc">{t(ix.desc)}</small>
-                          <small className="opt-tip">{t(ix.tip)}</small>
-                        </div>
-                      </button>
+                      <label key={ix.key} className={`choice ${index?.key === ix.key ? "sel" : ""}`}>
+                        <input type="radio" name="lensidx" checked={index?.key === ix.key} onChange={() => setIndex(ix)} />
+                        <span className="choice-main">
+                          <span className="choice-title">
+                            {t(ix.label)}
+                            {recommended?.key === ix.key && <span className="reco-badge">★</span>}
+                            <HelpTip title={t("help.title")} text={t(ix.tip)} />
+                          </span>
+                          <small className="choice-desc">{t(ix.desc)}</small>
+                        </span>
+                        <span className="choice-price">{ix.price ? `+ $${ix.price}` : t("lens.included")}</span>
+                      </label>
                     ))}
                   </div>
                   <h3 className="mt">{t("lens.treatments")}</h3>
-                  <div className="coat-row">
-                    {COATINGS.map((c) => (
-                      <label key={c.key} className={`coat ${coatings.find((x) => x.key === c.key) ? "sel" : ""}`}>
-                        <input type="checkbox" checked={!!coatings.find((x) => x.key === c.key)} onChange={() => toggleCoat(c)} />
-                        {t(c.label)} <span>+${c.price}</span>
-                      </label>
-                    ))}
+                  <div className="opt-list">
+                    {COATINGS.map((c) => {
+                      const on = !!coatings.find((x) => x.key === c.key);
+                      return (
+                        <label key={c.key} className={`choice ${on ? "sel" : ""}`}>
+                          <input type="checkbox" checked={on} onChange={() => toggleCoat(c)} />
+                          <span className="choice-main">
+                            <span className="choice-title">{t(c.label)}<HelpTip title={t("help.title")} text={t(c.tip)} /></span>
+                          </span>
+                          <span className="choice-price">+${c.price}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </>
               )}
             </div>
           )}
 
-          {/* STEP 3 — summary */}
           {step === 3 && (
             <div>
               <h2>{t("lens.summary")}</h2>
@@ -226,9 +249,7 @@ export default function LensProcess() {
                 {usage && <li><span>{t("lens.use")}: {t(usage.label)}</span><b>{usage.price ? `$${usage.price.toFixed(2)}` : t("lens.included")}</b></li>}
                 {index && !frameOnly && <li><span>{t("lens.lens")} {t(index.label)}</span><b>{index.price ? `$${index.price}` : t("lens.included")}</b></li>}
                 {!frameOnly && coatings.map((c) => <li key={c.key}><span>{t(c.label)}</span><b>${c.price}</b></li>)}
-                {!frameOnly && (rx.od_sph || rx.os_sph) && (
-                  <li><span>{t("lens.q.rx")}: OD {rx.od_sph && fmt(parseFloat(rx.od_sph))} / OS {rx.os_sph && fmt(parseFloat(rx.os_sph))}</span><b>✓</b></li>
-                )}
+                {!frameOnly && <li><span>{t("lens.q.rx")}: OD {fmt(parseFloat(rx.od_sph) || 0)} / OS {fmt(parseFloat(rx.os_sph) || 0)}</span><b>✓</b></li>}
               </ul>
               <p className="muted small">{t("lens.note")}</p>
             </div>
@@ -250,14 +271,5 @@ export default function LensProcess() {
         </aside>
       </div>
     </div>
-  );
-}
-
-function SelectCell({ value, onChange, options, t }) {
-  return (
-    <select className="rx-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{t("lens.select")}</option>
-      {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
-    </select>
   );
 }
