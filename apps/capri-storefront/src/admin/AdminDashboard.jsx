@@ -4,6 +4,8 @@ import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, p
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
+import { useLang } from "../i18n/LanguageContext.jsx";
+import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../data/lensPricing.js";
 
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 
@@ -295,6 +297,109 @@ function ShippingConfig({ ov }) {
   );
 }
 
+// Categories (columns) for the fotocromáticos / transitions table.
+const LENS_PHOTO_CATS = [
+  ["sv", { es: "Visión Sencilla", en: "Single Vision" }],
+  ["bifocal", { es: "Bifocal", en: "Bifocal" }],
+  ["prog", { es: "Progresivo", en: "Progressive" }],
+];
+
+// "Lista de precios 2026 · Lentes": base matrix + fotocromáticos + antirreflejos.
+function LensPriceList() {
+  const { lang } = useLang();
+  const [, force] = useState(0);
+  useEffect(() => PS.subscribe(() => force((n) => n + 1)), []);
+  return (
+    <div className="adm-card lens-pl">
+      <h3>{lang === "en" ? "Price list 2026 · Lenses" : "Lista de precios 2026 · Lentes"}</h3>
+
+      <div className="lens-sub">
+        <h4>{lang === "en" ? "Base price (design × material)" : "Precio base (diseño × material)"}</h4>
+        <div className="adm-table-wrap">
+          <table className="adm-table lens-tbl">
+            <thead>
+              <tr>
+                <th>{lang === "en" ? "Design" : "Diseño"}</th>
+                {LENS_MATERIALS.map((m) => <th key={m.id} className="r">{L(m.label, lang)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {DESIGNS.map((d) => (
+                <tr key={d.id}>
+                  <td><b>{L(d.label, lang)}</b></td>
+                  {LENS_MATERIALS.map((m) => {
+                    const base = BASE[d.id][m.id];
+                    return (
+                      <td key={m.id} className="r">
+                        <PriceInput value={PS.lensBasePrice(d.id, m.id, base)} placeholder={String(base)} onCommit={(v) => PS.setLensBase(d.id, m.id, v)} />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="lens-sub">
+        <h4>{lang === "en" ? "Photochromic / Transitions ($)" : "Fotocromáticos / Transitions ($)"}</h4>
+        <div className="adm-table-wrap">
+          <table className="adm-table lens-tbl">
+            <thead>
+              <tr>
+                <th>{lang === "en" ? "Type" : "Tipo"}</th>
+                {LENS_PHOTO_CATS.map(([k, lbl]) => <th key={k} className="r">{L(lbl, lang)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {PHOTO.map((p) => (
+                <tr key={p.id}>
+                  <td><b>{L(p.label, lang)}</b></td>
+                  {LENS_PHOTO_CATS.map(([cat]) => {
+                    const base = p.price[cat];
+                    return (
+                      <td key={cat} className="r">
+                        {base === null
+                          ? <span className="muted">—</span>
+                          : <PriceInput value={PS.lensPhotoPrice(p.id, cat, base)} placeholder={String(base)} onCommit={(v) => PS.setLensPhoto(p.id, cat, v)} />}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="lens-sub">
+        <h4>{lang === "en" ? "Anti-reflective ($)" : "Antirreflejos ($)"}</h4>
+        <div className="adm-grid-2">
+          <div className="lens-ar-group">
+            <div className="lens-ar-h">{lang === "en" ? "For Single Vision" : "Para Visión Sencilla"}</div>
+            {AR.sv.map((a) => (
+              <div className="adm-price-row" key={a.id}>
+                <span>{L(a.label, lang)}</span>
+                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
+              </div>
+            ))}
+          </div>
+          <div className="lens-ar-group">
+            <div className="lens-ar-h">{lang === "en" ? "For Bifocals & Progressives" : "Para Bifocales y Progresivos"}</div>
+            {AR.bifprog.map((a) => (
+              <div className="adm-price-row" key={a.id}>
+                <span>{L(a.label, lang)}</span>
+                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Prices({ preQ }) {
   const { products, cases } = useCatalog();
   const [ov, setOv] = useState(PS.getOverrides());
@@ -398,6 +503,8 @@ function Prices({ preQ }) {
           ))}
         {products.length > 200 && <p className="muted">Mostrando 200 — usa el buscador para acotar.</p>}
       </div>
+
+      <LensPriceList />
     </div>
   );
 }

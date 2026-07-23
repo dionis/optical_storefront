@@ -569,3 +569,11 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Active nav link gets the brand blue underline (already partly styled above) */
 .nav a.active { color: var(--blue); }
+
+/* ===== Lens configurator — price list 2026 additions ===== */
+.lp-h { font-size: 15px; font-weight: 700; margin: 22px 0 10px; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.lp-h:first-of-type { margin-top: 8px; }
+.lp-opt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--soft); border-radius: 999px; padding: 2px 8px; }
+.lp-dot { display: inline-block; width: 12px; height: 12px; border-radius: 999px; margin-left: 6px; border: 1px solid rgba(0,0,0,.15); vertical-align: middle; }
+.choice.na { opacity: .5; }
+.choice.na input { cursor: not-allowed; }
