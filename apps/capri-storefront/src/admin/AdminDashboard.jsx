@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
-import { KpiCard, LineChart, BarChart, DonutChart, Funnel } from "./charts.jsx";
+import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
 import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo } from "./analytics.js";
 import { useCatalog } from "../data/catalogStore.js";
+import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
+
+const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 
 const money = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int = (n) => (Number(n) || 0).toLocaleString("es");
@@ -80,10 +83,11 @@ function Overview({ preset, setPreset }) {
         <div className="adm-card"><h3>Embudo de conversión</h3><Funnel steps={s.funnel} /></div>
       </div>
       <div className="adm-grid-2">
-        <div className="adm-card"><h3>Ventas por marca</h3><DonutChart data={s.topBrands} /></div>
+        <div className="adm-card"><h3>Ventas por marca</h3><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} /></div>
         <div className="adm-card"><h3>Top productos (ingresos)</h3><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg="Sin ventas aún" /></div>
       </div>
-      <div className="adm-card"><h3>Accesos por día</h3><LineChart data={s.accessSeries} color="#2e7d46" area={false} /></div>
+      <div className="adm-card"><h3>Accesos vs Compras por día</h3><p className="adm-sub">Cuánta gente entra y cuánta compra cada día</p><AccessVsBuyChart data={s.accessVsBuy} /></div>
+      <div className="adm-card"><h3>Por día de la semana</h3><p className="adm-sub">¿Qué días entran y compran más? (% = conversión)</p><WeekdayChart data={s.weekday} /></div>
     </div>
   );
 }
@@ -191,7 +195,10 @@ function Products({ preset, setPreset }) {
       </div>
       <div className="adm-card">
         <h3>Catálogo por marca</h3>
-        <BarChart data={brandRows.map(([label, value]) => ({ label, value }))} horizontal />
+        <ThumbBars
+          data={brandRows.map(([slug, value]) => ({ label: (BRAND_BY_SLUG[slug]?.name) || slug, value }))}
+          imgByName={Object.fromEntries(brandRows.map(([slug]) => { const b = BRAND_BY_SLUG[slug]; return [b?.name || slug, b?.logo]; }))}
+        />
       </div>
     </div>
   );

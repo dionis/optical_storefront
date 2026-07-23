@@ -134,6 +134,20 @@ export function summarize({ from, to }) {
   const salesSeries = days.map((k) => ({ label: k.slice(5), value: Math.round(revByDay[k] * 100) / 100 }));
   const ordersSeries = days.map((k) => ({ label: k.slice(5), value: ordByDay[k] }));
   const accessSeries = days.map((k) => ({ label: k.slice(5), value: (daily[k]?.access) || 0 }));
+  // accesses vs purchases on the SAME daily chart
+  const accessVsBuy = days.map((k) => ({ label: k.slice(5), access: (daily[k]?.access) || 0, orders: ordByDay[k] }));
+  // day-of-week analysis: which weekdays get more visits / more purchases
+  const DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const wAcc = [0, 0, 0, 0, 0, 0, 0], wOrd = [0, 0, 0, 0, 0, 0, 0], wCnt = [0, 0, 0, 0, 0, 0, 0];
+  for (const k of days) {
+    const dow = new Date(k + "T12:00:00").getDay();
+    wAcc[dow] += (daily[k]?.access) || 0; wOrd[dow] += ordByDay[k]; wCnt[dow] += 1;
+  }
+  const order = [1, 2, 3, 4, 5, 6, 0]; // Mon-first
+  const weekday = order.map((d) => ({
+    label: DOW[d], access: wAcc[d], orders: wOrd[d],
+    conv: wAcc[d] ? Math.round((wOrd[d] / wAcc[d]) * 1000) / 10 : 0,
+  }));
 
   // top products / brands by revenue
   const prodMap = {}, brandMap = {};
@@ -145,7 +159,7 @@ export function summarize({ from, to }) {
 
   return {
     kpis: { revenue, ordersCount, units, aov, access, view, atc, fav, conv },
-    salesSeries, ordersSeries, accessSeries,
+    salesSeries, ordersSeries, accessSeries, accessVsBuy, weekday,
     funnel: [
       { label: "Accesos", value: access },
       { label: "Vistas de producto", value: view },

@@ -588,7 +588,7 @@ export function BarChart({
 
 // ---------------------------------------------------------------------------
 // 4. DonutChart
-export function DonutChart({ data, height = 220, size = 180 }) {
+export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
   if (!Array.isArray(data) || data.length === 0)
     return <Empty height={height} />;
 
@@ -719,7 +719,12 @@ export function DonutChart({ data, height = 220, size = 180 }) {
                 flex: "0 0 auto",
               }}
             />
-            <span style={{ color: BRAND.ink, flex: 1, minWidth: 0 }}>
+            {iconByLabel && iconByLabel[s.label] && (
+              <img src={iconByLabel[s.label]} alt="" loading="lazy"
+                   onError={(e) => { e.currentTarget.style.display = "none"; }}
+                   style={{ width: 34, height: 16, objectFit: "contain", flex: "0 0 auto" }} />
+            )}
+            <span style={{ color: BRAND.ink, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {s.label}
             </span>
             <span style={{ color: BRAND.ink, fontWeight: 600 }}>
@@ -880,6 +885,92 @@ export function Funnel({ steps }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Combo: daily ACCESSES (line/area) vs PURCHASES (bars) on the same chart.
+// data = [{ label, access, orders }]
+export function AccessVsBuyChart({ data, height = 250 }) {
+  const gid = useId();
+  const [hi, setHi] = useState(-1);
+  const W = 720, H = height, PL = 44, PR = 14, PT = 18, PB = 30;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>Sin datos</div>;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
+  const nice = Math.ceil(max / 4) * 4;
+  const x = (i) => PL + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
+  const y = (v) => PT + ih - (v / nice) * ih;
+  const bw = Math.max(2, Math.min(16, iw / data.length * 0.5));
+  const linePts = data.map((d, i) => `${x(i)},${y(d.access)}`).join(" ");
+  const areaPts = `${PL},${PT + ih} ${linePts} ${PL + iw},${PT + ih}`;
+  const step = Math.ceil(data.length / 7);
+  return (
+    <div className="chart-wrap" role="img" aria-label="Accesos vs compras por día">
+      <div className="chart-legend">
+        <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
+        <span><i style={{ background: "#FD0E3F" }} />Compras</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
+           onMouseLeave={() => setHi(-1)}>
+        <defs><linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.18" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
+        </linearGradient></defs>
+        {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
+          return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
+        <polygon points={areaPts} fill={`url(#${gid})`} />
+        <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round" />
+        {data.map((d, i) => (
+          <g key={i} onMouseEnter={() => setHi(i)}>
+            <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="2" fill="#FD0E3F" opacity={hi === i ? 1 : 0.85} />
+            {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.label}</text>}
+            <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
+          </g>
+        ))}
+        {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="4" fill="#0E5AD0" stroke="#fff" strokeWidth="1.5" />}
+      </svg>
+      {hi >= 0 && (
+        <div className="chart-tip" style={{ left: `${(x(hi) / W) * 100}%` }}>
+          <b>{data[hi].label}</b><span>Accesos: {data[hi].access}</span><span>Compras: {data[hi].orders}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Grouped bars per weekday: accesses vs purchases. data = [{label, access, orders, conv}]
+export function WeekdayChart({ data, height = 230 }) {
+  const [hi, setHi] = useState(-1);
+  const W = 720, H = height, PL = 40, PR = 12, PT = 16, PB = 42;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>Sin datos</div>;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
+  const nice = Math.ceil(max / 4) * 4;
+  const gw = iw / data.length, bw = Math.min(22, gw / 3);
+  const y = (v) => PT + ih - (v / nice) * ih;
+  return (
+    <div className="chart-wrap" role="img" aria-label="Accesos y compras por día de la semana">
+      <div className="chart-legend">
+        <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
+        <span><i style={{ background: "#FD0E3F" }} />Compras</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHi(-1)}>
+        {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
+          return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
+        {data.map((d, i) => {
+          const cx = PL + gw * i + gw / 2;
+          return (
+            <g key={i} onMouseEnter={() => setHi(i)}>
+              <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="3" fill="#0E5AD0" opacity={hi === i ? 1 : 0.9} />
+              <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="3" fill="#FD0E3F" opacity={hi === i ? 1 : 0.9} />
+              <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill="#5c6470" fontWeight="600">{d.label}</text>
+              <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
+            </g>
+          );
+        })}
+      </svg>
+      {hi >= 0 && <p className="chart-note">{data[hi].label}: <b>{data[hi].access}</b> accesos · <b>{data[hi].orders}</b> compras · conversión <b>{data[hi].conv}%</b></p>}
     </div>
   );
 }
