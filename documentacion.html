@@ -183,6 +183,17 @@ CATALOG_SOURCE=https://caprioptics.com node scripts/sync-catalog.mjs
   <p class="muted"><b>Acceso (modo demo):</b> el login del panel acepta <b>cualquier correo + contraseña</b> (el correo se muestra en la barra del panel). La tienda tiene además un <b>botón 👤 «Acceso»</b> en el encabezado para que los clientes inicien sesión / creen cuenta (<code>src/components/userAuth.js</code>).</p>
   <p class="muted"><b>Preparado para 2FA:</b> el auth del panel ya tiene el <em>segundo factor</em> listo (paso de código en el login). Se activa con <code>VITE_ADMIN_2FA="true"</code> — en demo acepta cualquier código de 4–8 dígitos; para TOTP/SMS real se apunta <code>VITE_ADMIN_2FA_URL</code> al backend de Dionis. Ver <code>src/admin/adminAuth.js</code> (<code>verifyOtp</code>) y <code>GUIA-PANEL.md</code>.</p>
 
+  <h2>10 · Cuenta del cliente (<code>/cuenta</code>) y panel más visual</h2>
+  <p>Al autenticarse en la tienda (botón <b>👤 Acceso</b>), el cliente entra a <b>«Mi cuenta»</b> (<code>/cuenta</code>, <code>src/pages/AccountPage.jsx</code>) con cuatro secciones, responsive:</p>
+  <ul>
+    <li><b>Favoritos</b>: todos sus favoritos, con enlace, añadir al carrito y quitar.</li>
+    <li><b>Mis compras</b>: historial de pedidos del cliente (cada pedido se liga a su correo al hacer checkout) con artículos, total, fecha y estado.</li>
+    <li><b>Mis reseñas</b>: todas sus reseñas, con opción de <b>editar y borrar</b> (<code>src/components/reviewsStore.js</code>).</li>
+    <li><b>Seguimiento</b>: pantalla <b>«Próximamente»</b> lista para mostrar el estado de envío cuando el backend lo provea (el pedido ya lleva campo <code>status</code>).</li>
+  </ul>
+  <p>El <b>panel del dueño</b> se hizo <b>más visual</b>: «Top productos» y las listas de productos nuevos/retirados muestran <b>miniatura de foto del producto</b>, barras con relleno animado, y quedó <b>100% responsive</b> (KPIs 2→1 columnas, tabs y rangos que se adaptan). Las gráficas son SVG con <em>tooltips</em> interactivos.</p>
+  <p class="muted">Todo lo anterior funciona en <b>modo demo</b> (datos en el navegador). Las <b>tareas para llevarlo a backend</b> están desglosadas en lenguaje claro en <code>TAREAS-BACKEND-DIONIS.md</code>, y el reparto por <b>agentes</b> (rol, entorno, entregables) en <code>PLAN-AGENTES.md</code> — ambos para Dionis.</p>
+
 </div>
 <footer>Documento generado automáticamente durante la sesión de desarrollo · Óptica El Rancho</footer>
 </body>

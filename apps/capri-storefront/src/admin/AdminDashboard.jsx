@@ -6,6 +6,29 @@ import * as PS from "./priceStore.js";
 
 const money = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int = (n) => (Number(n) || 0).toLocaleString("es");
+const normKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+// Visual bar list with a small product photo per row (icons with product thumbnails).
+function ThumbBars({ data, imgByName, valuePrefix = "", emptyMsg = "Sin datos" }) {
+  if (!data || !data.length) return <div className="adm-nodata">{emptyMsg}</div>;
+  const max = Math.max(...data.map((d) => d.value), 1);
+  return (
+    <div className="adm-thumbbars">
+      {data.map((d, i) => {
+        const img = imgByName && imgByName[d.label];
+        return (
+          <div className="adm-tb-row" key={i}>
+            <div className="adm-tb-thumb">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
+            <div className="adm-tb-main">
+              <div className="adm-tb-top"><span className="adm-tb-name" title={d.label}>{d.label}</span><b>{valuePrefix}{int(d.value)}</b></div>
+              <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: (d.value / max * 100).toFixed(1) + "%" }} /></div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const RANGES = [
   ["today", "Hoy"], ["7d", "7 días"], ["30d", "30 días"], ["90d", "90 días"], ["ytd", "Año"], ["all", "Todo"],
@@ -36,6 +59,8 @@ function useSummary(preset) {
 function Overview({ preset, setPreset }) {
   const s = useSummary(preset);
   const k = s.kpis;
+  const { products } = useCatalog();
+  const imgByName = useMemo(() => Object.fromEntries(products.map((p) => [p.name, p.colors?.[0]?.image])), [products]);
   return (
     <div className="adm-section">
       <div className="adm-head-row">
@@ -56,7 +81,7 @@ function Overview({ preset, setPreset }) {
       </div>
       <div className="adm-grid-2">
         <div className="adm-card"><h3>Ventas por marca</h3><DonutChart data={s.topBrands} /></div>
-        <div className="adm-card"><h3>Top productos (ingresos)</h3><BarChart data={s.topProducts} horizontal valuePrefix="$" /></div>
+        <div className="adm-card"><h3>Top productos (ingresos)</h3><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg="Sin ventas aún" /></div>
       </div>
       <div className="adm-card"><h3>Accesos por día</h3><LineChart data={s.accessSeries} color="#2e7d46" area={false} /></div>
     </div>
@@ -127,6 +152,22 @@ function Products({ preset, setPreset }) {
 
   const perBrand = meta?.perBrand || products.reduce((m, p) => (m[p.brand_slug] = (m[p.brand_slug] || 0) + 1, m), {});
   const brandRows = Object.entries(perBrand).sort((a, b) => b[1] - a[1]);
+  const prodByKey = useMemo(() => { const m = {}; for (const p of products) m[normKey(p.sku)] = p; return m; }, [products]);
+  const findP = (sku) => prodByKey[normKey(sku)];
+  const ProdList = ({ list, empty }) => (
+    <div className="adm-prodlist">
+      {list.length === 0 ? <div className="adm-nodata">{empty}</div> : list.slice(0, 100).map((x, i) => {
+        const p = findP(x.sku);
+        return (
+          <div className="adm-prodlist-row" key={i}>
+            <div className="adm-tb-thumb sm">{p?.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
+            <div className="adm-pl-main"><b>{p?.name || x.sku}</b>{p && <small className="muted">{p.brand}</small>}</div>
+            <small className="muted">{x.date ? new Date(x.date).toLocaleDateString("es") : "—"}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="adm-section">
@@ -141,15 +182,11 @@ function Products({ preset, setPreset }) {
       <div className="adm-grid-2">
         <div className="adm-card">
           <h3>🆕 Productos nuevos</h3>
-          <div className="adm-table-wrap"><table className="adm-table"><thead><tr><th>SKU/Modelo</th><th>Fecha</th></tr></thead>
-            <tbody>{added.length === 0 ? <tr><td colSpan="2" className="muted">Sin altas en este rango.</td></tr> :
-              added.slice(0, 100).map((x, i) => <tr key={i}><td>{x.sku}</td><td>{x.date ? new Date(x.date).toLocaleDateString("es") : "—"}</td></tr>)}</tbody></table></div>
+          <ProdList list={added} empty="Sin altas en este rango." />
         </div>
         <div className="adm-card">
           <h3>🚫 Ya no disponibles</h3>
-          <div className="adm-table-wrap"><table className="adm-table"><thead><tr><th>SKU/Modelo</th><th>Fecha</th></tr></thead>
-            <tbody>{removed.length === 0 ? <tr><td colSpan="2" className="muted">Sin bajas en este rango.</td></tr> :
-              removed.slice(0, 100).map((x, i) => <tr key={i}><td>{x.sku}</td><td>{x.date ? new Date(x.date).toLocaleDateString("es") : "—"}</td></tr>)}</tbody></table></div>
+          <ProdList list={removed} empty="Sin bajas en este rango." />
         </div>
       </div>
       <div className="adm-card">

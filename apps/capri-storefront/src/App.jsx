@@ -11,6 +11,7 @@ import ProductDetail from "./pages/ProductDetail.jsx";
 import CaseDetail from "./pages/CaseDetail.jsx";
 import LensProcess from "./pages/LensProcess.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import AccountPage from "./pages/AccountPage.jsx";
 import { CartProvider } from "./components/CartContext.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
 
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/estuche/:slug" element={<CaseDetail />} />
             <Route path="/estuches" element={<Catalog />} />
             <Route path="/recetas/:slug" element={<LensProcess />} />
+            <Route path="/cuenta" element={<AccountPage />} />
           </Routes>
         </main>
         <Footer />

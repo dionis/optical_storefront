@@ -63,7 +63,8 @@ export default function Header() {
               </svg>
             </button>
           </div>
-          <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")} onClick={() => setPanel("account")}>
+          <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")}
+                  onClick={() => (user ? navigate("/cuenta") : setPanel("account"))}>
             {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : "👤"}
           </button>
           <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>

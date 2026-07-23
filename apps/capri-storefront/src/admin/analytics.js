@@ -8,6 +8,7 @@
 // NOTE: localStorage is per-browser. For real cross-device SaaS analytics this layer should
 // post events to Dionis's backend — the track*/recordOrder functions are the seam for that.
 import { generateDemo } from "./seed.js";
+import { getUser } from "../components/userAuth.js";
 
 const DAILY = "oer_daily";
 const ORDERS = "oer_orders";
@@ -67,6 +68,8 @@ export function recordOrder(order) {
     items: order.items || [],
     itemsCount: (order.items || []).length,
     total: Math.round((order.total || 0) * 100) / 100,
+    user: (getUser() && getUser().email) || null,   // ties the order to the logged-in customer
+    status: "processing",                             // for future order tracking
   };
   wr(ORDERS, [rec, ...list]);
   bump();
@@ -76,6 +79,11 @@ export function recordOrder(order) {
 // ---- reads ----
 export function getDaily() { return rd(DAILY, {}); }
 export function getOrders() { return rd(ORDERS, []); }
+// a customer's own orders (used by the "Mi cuenta" area)
+export function ordersByUser(email) {
+  if (!email) return [];
+  return getOrders().filter((o) => o.user === email).sort((a, b) => new Date(b.t) - new Date(a.t));
+}
 
 // ---- change notifications (so the dashboard re-renders live) ----
 const subs = new Set();

@@ -70,6 +70,7 @@ export function AuthPanel({ open, onClose }) {
         <div className="auth-signed">
           <div className="auth-avatar">{(user.email[0] || "?").toUpperCase()}</div>
           <p className="auth-hi">{t("auth.hi")},<br /><b>{user.email}</b></p>
+          <Link to="/cuenta" className="btn btn-primary big" onClick={onClose}>{t("acc.title")}</Link>
           <button className="btn btn-outline big" onClick={() => { logout(); }}>{t("auth.logout")}</button>
         </div>
       ) : (

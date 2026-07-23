@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { getUser } from "./userAuth.js";
 
 function loadReviews(slug) {
   try { return JSON.parse(localStorage.getItem("oer_rev_" + slug)) || []; } catch { return []; }
@@ -29,7 +30,14 @@ export default function Reviews({ product }) {
   const submit = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    const r = { name: name.trim() || "Anónimo", rating, text: text.trim(), date: new Date().toISOString().slice(0, 10) };
+    const u = getUser();
+    const r = {
+      id: "rev-" + Date.now() + "-" + Math.round(Math.random() * 1e6),
+      name: name.trim() || (u && u.email) || "Anónimo",
+      user: (u && u.email) || null,          // ties the review to the logged-in customer
+      product: product.name, slug: product.slug,
+      rating, text: text.trim(), date: new Date().toISOString().slice(0, 10),
+    };
     const next = [r, ...reviews];
     setReviews(next);
     try { localStorage.setItem("oer_rev_" + product.slug, JSON.stringify(next)); } catch {}
