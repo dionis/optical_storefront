@@ -2,3 +2,30 @@ node_modules
 dist
 .vite
 *.log
+
+# scraper scratch — NUNCA commitear (se generan al capturar datos del catálogo)
+/page*.html
+/prod/
+/products/
+/case_products/
+/cat_*.html
+/page_*.html
+/4u_page_*.html
+/case_p*.html
+/p_*.html
+/prod-*.html
+/prod_*.html
+/t_*.html
+/result.json
+/out.json
+/all_urls.txt
+/product_urls.txt
+/*_slugs.txt
+/grid_urls.txt
+/urls_*.txt
+/want.txt
+/got.txt
+/slug_url.txt
+/build.py
+/parse.py
+# NOTA: index.html (entry de Vite) y public/*.json (catálogo) SÍ se versionan.
