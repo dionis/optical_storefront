@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo } from "./analytics.js";
+import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales } from "./analytics.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
@@ -235,6 +235,28 @@ function Prices() {
   const fileRef = useRef(null);
 
   const frames = useMemo(() => products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [products, q]);
+  const sales = useMemo(() => productSales(), []);
+
+  // shared product price row: photo + name + (hover) units bought this month + never-sold tag
+  const ProdRow = ({ p, value, onCommit }) => {
+    const key = normKey(p.sku);
+    const m = sales.month[key] || 0, ev = sales.ever[key] || 0;
+    const img = p.colors?.[0]?.image;
+    return (
+      <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
+        <div className="adm-pp-left">
+          <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
+          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}base {money(p.basePrice ?? p.price)}</small></span>
+        </div>
+        <div className="adm-pp-right">
+          {ev === 0
+            ? <span className="pp-tag never" title="Este producto nunca se ha vendido">Nunca vendido</span>
+            : <span className="pp-tag sold">🛒 {m} <em>este mes</em></span>}
+          <PriceInput value={value} placeholder={String(p.basePrice ?? p.price)} onCommit={onCommit} />
+        </div>
+      </div>
+    );
+  };
 
   const doImport = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -286,8 +308,7 @@ function Prices() {
         <h3>Accesorios · estuches ($)</h3>
         <div className="adm-price-grid">
           {cases.map((c) => (
-            <div className="adm-price-row" key={c.slug}><span>{c.name} <small className="muted">base {money(c.basePrice ?? c.price)}</small></span>
-              <PriceInput value={ov.cases[c.sku]} placeholder={String(c.basePrice ?? c.price)} onCommit={(v) => PS.setCasePrice(c.sku, v)} /></div>
+            <ProdRow key={c.slug} p={c} value={ov.cases[c.sku]} onCommit={(v) => PS.setCasePrice(c.sku, v)} />
           ))}
         </div>
       </div>
@@ -297,8 +318,7 @@ function Prices() {
           <input className="adm-search" placeholder="Buscar modelo o marca…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <div className="adm-price-grid">
           {frames.map((p) => (
-            <div className="adm-price-row" key={p.slug}><span>{p.name} <small className="muted">{p.brand} · base {money(p.basePrice ?? p.price)}</small></span>
-              <PriceInput value={ov.frames[p.sku]} placeholder={String(p.basePrice ?? p.price)} onCommit={(v) => PS.setFramePrice(p.sku, v)} /></div>
+            <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />
           ))}
         </div>
         {products.length > 200 && <p className="muted">Mostrando 200 — usa el buscador para acotar.</p>}

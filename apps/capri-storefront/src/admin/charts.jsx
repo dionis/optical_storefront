@@ -914,16 +914,21 @@ export function AccessVsBuyChart({ data, height = 250 }) {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
            onMouseLeave={() => setHi(-1)}>
-        <defs><linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.18" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
-        </linearGradient></defs>
+        <defs>
+          <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.22" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id={gid + "b"} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" />
+          </linearGradient>
+        </defs>
         {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
           return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
         <polygon points={areaPts} fill={`url(#${gid})`} />
         <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round" />
         {data.map((d, i) => (
           <g key={i} onMouseEnter={() => setHi(i)}>
-            <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="2" fill="#FD0E3F" opacity={hi === i ? 1 : 0.85} />
+            <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="3" fill={`url(#${gid + "b"})`} opacity={hi === i ? 1 : 0.9} />
             {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.label}</text>}
             <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
           </g>
@@ -942,6 +947,7 @@ export function AccessVsBuyChart({ data, height = 250 }) {
 // Grouped bars per weekday: accesses vs purchases. data = [{label, access, orders, conv}]
 export function WeekdayChart({ data, height = 230 }) {
   const [hi, setHi] = useState(-1);
+  const gid = useId();
   const W = 720, H = height, PL = 40, PR = 12, PT = 16, PB = 42;
   const iw = W - PL - PR, ih = H - PT - PB;
   if (!data || !data.length) return <div className="chart-empty" style={{ height }}>Sin datos</div>;
@@ -956,14 +962,18 @@ export function WeekdayChart({ data, height = 230 }) {
         <span><i style={{ background: "#FD0E3F" }} />Compras</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" onMouseLeave={() => setHi(-1)}>
+        <defs>
+          <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#3d84ea" /><stop offset="1" stopColor="#0E5AD0" /></linearGradient>
+          <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" /></linearGradient>
+        </defs>
         {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
           return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
         {data.map((d, i) => {
           const cx = PL + gw * i + gw / 2;
           return (
             <g key={i} onMouseEnter={() => setHi(i)}>
-              <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="3" fill="#0E5AD0" opacity={hi === i ? 1 : 0.9} />
-              <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="3" fill="#FD0E3F" opacity={hi === i ? 1 : 0.9} />
+              <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="4" fill={`url(#${gid + "a"})`} opacity={hi === i ? 1 : 0.92} />
+              <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="4" fill={`url(#${gid + "o"})`} opacity={hi === i ? 1 : 0.92} />
               <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill="#5c6470" fontWeight="600">{d.label}</text>
               <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
             </g>

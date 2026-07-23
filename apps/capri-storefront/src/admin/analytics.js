@@ -79,6 +79,22 @@ export function recordOrder(order) {
 // ---- reads ----
 export function getDaily() { return rd(DAILY, {}); }
 export function getOrders() { return rd(ORDERS, []); }
+// units sold per product — this month and all-time (for the Prices tab)
+export function productSales() {
+  const orders = getOrders();
+  const monthAgo = Date.now() - 30 * 864e5;
+  const month = {}, ever = {};
+  for (const o of orders) {
+    const t = new Date(o.t).getTime();
+    for (const it of (o.items || [])) {
+      const k = String(it.sku).toLowerCase().replace(/[^a-z0-9]+/g, "");
+      ever[k] = (ever[k] || 0) + 1;
+      if (t >= monthAgo) month[k] = (month[k] || 0) + 1;
+    }
+  }
+  return { month, ever };
+}
+
 // a customer's own orders (used by the "Mi cuenta" area)
 export function ordersByUser(email) {
   if (!email) return [];
