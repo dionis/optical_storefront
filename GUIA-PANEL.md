@@ -4,12 +4,18 @@ Panel de administración dentro de la misma web, pensado para el **dueño de la 
 
 ## Acceso
 - URL: **`/admin`** (también hay un enlace discreto «Panel corporativo» en el pie de la tienda).
-- Entra con **usuario + contraseña**. Credenciales por defecto:
-  - Usuario: **`admin`**
-  - Contraseña: **`RubiLens*Admin2026`**
+- Entra con **correo electrónico + contraseña**. **Actualmente el gate es abierto: acepta
+  cualquier correo con formato válido y cualquier contraseña** (modo demo, para pruebas). El
+  correo con el que entras se muestra en la barra superior del panel.
 - La sesión dura 8 horas y se cierra con el botón **Salir**.
 
-> ⚠️ **Cambia la contraseña.** Es lo primero que deberías hacer. Ver «Cambiar credenciales».
+## Acceso de clientes (en la tienda)
+- En el encabezado de la tienda hay un botón **👤 (Acceso)** que abre un panel para
+  **iniciar sesión o crear cuenta** con correo + contraseña (también acepta cualquiera por ahora).
+- Al entrar, el botón muestra la inicial del correo y aparece **Cerrar sesión**.
+
+> ⚠️ **Antes de producción**: bloquea el panel a una credencial real y conecta ambos accesos
+> (panel y clientes) al backend de autenticación de Dionis. Ver «Cambiar credenciales» y las notas.
 
 ## Qué puedes hacer
 
@@ -63,3 +69,11 @@ VITE_ADMIN_USER=eldueno
 VITE_ADMIN_PASS_SHA256=<hash generado>
 ```
 Para conectar a un backend real de auth, define `VITE_ADMIN_AUTH_URL=https://.../auth`.
+
+## Verificación en 2 pasos (2FA) — listo para el futuro
+El login del panel ya trae el **segundo factor** integrado (paso de código tras la contraseña).
+Hoy está **desactivado** (modo demo, solo correo+clave). Para activarlo:
+- Define `VITE_ADMIN_2FA=true` — el login pedirá un **código de un solo uso**. En modo demo acepta
+  cualquier código de **4 a 8 dígitos**.
+- Para 2FA real (TOTP/SMS), apunta `VITE_ADMIN_2FA_URL` al endpoint de verificación del backend de
+  Dionis. La función `verifyOtp(code)` en `src/admin/adminAuth.js` es el único punto a conectar.

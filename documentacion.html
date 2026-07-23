@@ -180,7 +180,8 @@ CATALOG_SOURCE=https://caprioptics.com node scripts/sync-catalog.mjs
     <li><b>Gráficas</b> (<code>src/admin/charts.jsx</code>): SVG propias, responsivas y accesibles, <b>sin dependencias</b>.</li>
     <li><b>Ruta</b> <code>/admin</code> con layout propio (sin header/footer de tienda); enlace discreto en el pie.</li>
   </ul>
-  <p class="muted"><b>Credenciales por defecto:</b> usuario <code>admin</code> · contraseña <code>RubiLens*Admin2026</code> — <b>cámbiala</b> (ver <code>GUIA-PANEL.md</code>).</p>
+  <p class="muted"><b>Acceso (modo demo):</b> el login del panel acepta <b>cualquier correo + contraseña</b> (el correo se muestra en la barra del panel). La tienda tiene además un <b>botón 👤 «Acceso»</b> en el encabezado para que los clientes inicien sesión / creen cuenta (<code>src/components/userAuth.js</code>).</p>
+  <p class="muted"><b>Preparado para 2FA:</b> el auth del panel ya tiene el <em>segundo factor</em> listo (paso de código en el login). Se activa con <code>VITE_ADMIN_2FA="true"</code> — en demo acepta cualquier código de 4–8 dígitos; para TOTP/SMS real se apunta <code>VITE_ADMIN_2FA_URL</code> al backend de Dionis. Ver <code>src/admin/adminAuth.js</code> (<code>verifyOtp</code>) y <code>GUIA-PANEL.md</code>.</p>
 
 </div>
 <footer>Documento generado automáticamente durante la sesión de desarrollo · Óptica El Rancho</footer>

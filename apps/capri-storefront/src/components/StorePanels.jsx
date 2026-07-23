@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useUser, login, register, logout } from "./userAuth.js";
 
 export function SidePanel({ open, onClose, title, children }) {
   return (
@@ -42,6 +44,46 @@ export function CartPanel({ open, onClose }) {
           <button className="btn btn-primary big" onClick={() => { checkout(); alert(t("cart.done")); onClose(); }}>{t("cart.checkout")}</button>
           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
         </>
+      )}
+    </SidePanel>
+  );
+}
+
+export function AuthPanel({ open, onClose }) {
+  const { t } = useLang();
+  const user = useUser();
+  const [mode, setMode] = useState("login"); // 'login' | 'register'
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    setErr("");
+    const r = (mode === "login" ? login : register)(email, pass);
+    if (r.ok) { setEmail(""); setPass(""); } else setErr(r.error || "Error");
+  };
+
+  return (
+    <SidePanel open={open} onClose={onClose} title={user ? t("auth.account") : t("auth.title")}>
+      {user ? (
+        <div className="auth-signed">
+          <div className="auth-avatar">{(user.email[0] || "?").toUpperCase()}</div>
+          <p className="auth-hi">{t("auth.hi")},<br /><b>{user.email}</b></p>
+          <button className="btn btn-outline big" onClick={() => { logout(); }}>{t("auth.logout")}</button>
+        </div>
+      ) : (
+        <form className="auth-form" onSubmit={submit}>
+          <div className="auth-tabs">
+            <button type="button" className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>{t("auth.login")}</button>
+            <button type="button" className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>{t("auth.register")}</button>
+          </div>
+          <label>{t("auth.email")}<input type="email" value={email} placeholder="tucorreo@ejemplo.com" autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
+          <label>{t("auth.password")}<input type="password" value={pass} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPass(e.target.value)} /></label>
+          {err && <div className="auth-err">{err}</div>}
+          <button className="btn btn-primary big" type="submit">{mode === "login" ? t("auth.login") : t("auth.register")}</button>
+          <p className="auth-note">{t("auth.note")}</p>
+        </form>
       )}
     </SidePanel>
   );

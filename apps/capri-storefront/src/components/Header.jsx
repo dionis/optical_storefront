@@ -2,14 +2,16 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
-import { CartPanel, FavPanel } from "./StorePanels.jsx";
+import { CartPanel, FavPanel, AuthPanel } from "./StorePanels.jsx";
+import { useUser } from "./userAuth.js";
 
 export default function Header() {
   const { count, favCount } = useCart();
   const { t, lang, setLang } = useLang();
+  const user = useUser();
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
-  const [panel, setPanel] = useState(null); // 'cart' | 'fav' | null
+  const [panel, setPanel] = useState(null); // 'cart' | 'fav' | 'account' | null
   const navigate = useNavigate();
 
   const submit = (e) => {
@@ -61,6 +63,9 @@ export default function Header() {
               </svg>
             </button>
           </div>
+          <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")} onClick={() => setPanel("account")}>
+            {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : "👤"}
+          </button>
           <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
             ♡{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>
@@ -81,6 +86,7 @@ export default function Header() {
 
       <CartPanel open={panel === "cart"} onClose={() => setPanel(null)} />
       <FavPanel open={panel === "fav"} onClose={() => setPanel(null)} />
+      <AuthPanel open={panel === "account"} onClose={() => setPanel(null)} />
     </header>
   );
 }

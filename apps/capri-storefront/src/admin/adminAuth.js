@@ -17,9 +17,17 @@ const ADMIN_USER = ENV.VITE_ADMIN_USER || "admin";
 const ADMIN_PASS_SHA256 = ENV.VITE_ADMIN_PASS_SHA256 ||
   "050dd99468979cc8001652c357c141b3dd513156a71fb8aed112cbb23ec3638f";
 const AUTH_URL = ENV.VITE_ADMIN_AUTH_URL || "";
+// 2FA (second factor). DEMO: disabled by default → email+password logs in directly.
+// FUTURE: set VITE_ADMIN_2FA="true" to require a one-time code after the password. In demo
+// mode the code step accepts any 4–8 digit code; for real TOTP/SMS point VITE_ADMIN_2FA_URL
+// at the backend verify endpoint (Dionis). This keeps a clean seam so 2FA plugs in with no
+// UI rework — the login already renders the second step when 2FA is on.
+const TWOFA_ENABLED = String(ENV.VITE_ADMIN_2FA || "") === "true";
+const TWOFA_URL = ENV.VITE_ADMIN_2FA_URL || "";
 
 const SESSION_KEY = "oer_admin_session";
 const SESSION_HOURS = 8;
+let _pending = null; // holds a half-authenticated login awaiting the 2FA code
 
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -47,17 +55,54 @@ export async function authenticate(user, pass) {
       saveSession(user, token);
       return { ok: true };
     }
-    // client-side check
-    const okUser = String(user || "").trim() === ADMIN_USER;
-    const okPass = (await sha256Hex(String(pass || ""))) === ADMIN_PASS_SHA256;
-    if (okUser && okPass) {
-      saveSession(user, randomToken());
+    // client-side check — accepts ANY email + password (demo-open gate).
+    // (The exact-credential check is kept below, commented, for when you want to lock it.)
+    const email = String(user || "").trim();
+    const okEmail = /\S+@\S+\.\S+/.test(email);
+    const okPass = String(pass || "").length >= 1;
+    if (okEmail && okPass) {
+      if (TWOFA_ENABLED) {
+        // first factor OK — require the one-time code next (see verifyOtp)
+        _pending = { email, token: randomToken() };
+        return { ok: true, twofa: true };
+      }
+      saveSession(email, randomToken());
       return { ok: true };
     }
-    return { ok: false, error: "Usuario o contraseña incorrectos" };
+    return { ok: false, error: "Introduce un correo y una contraseña" };
+    // To lock to a single credential, replace the block above with:
+    //   const okUser = email === ADMIN_USER;
+    //   const okHash = (await sha256Hex(String(pass||""))) === ADMIN_PASS_SHA256;
+    //   if (okUser && okHash) { saveSession(email, randomToken()); return { ok: true }; }
+    //   return { ok: false, error: "Credenciales incorrectas" };
   } catch (e) {
     return { ok: false, error: "Error de autenticación" };
   }
+}
+
+// Second factor (2FA). Seam for the future: today it's demo (any 4–8 digit code); wire
+// TWOFA_URL to a real TOTP/SMS verify endpoint for production.
+export const twofaEnabled = () => TWOFA_ENABLED;
+export async function verifyOtp(code) {
+  if (!_pending) return { ok: false, error: "Vuelve a iniciar sesión" };
+  const c = String(code || "").trim();
+  try {
+    if (TWOFA_URL) {
+      const r = await fetch(TWOFA_URL, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user: _pending.email, code: c }),
+      });
+      if (!r.ok) return { ok: false, error: "Código inválido" };
+      const data = await r.json();
+      saveSession(_pending.email, data.token || _pending.token); _pending = null;
+      return { ok: true };
+    }
+    if (/^\d{4,8}$/.test(c)) { // demo: any 4–8 digit code
+      saveSession(_pending.email, _pending.token); _pending = null;
+      return { ok: true };
+    }
+    return { ok: false, error: "Código inválido (4–8 dígitos)" };
+  } catch { return { ok: false, error: "Error al verificar el código" }; }
 }
 
 function saveSession(user, token) {
