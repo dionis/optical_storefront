@@ -67,6 +67,35 @@ class TestStoreApiParser:
         assert "(" not in product.handle
         assert product.handle.endswith("-trendy")
 
+    def test_captures_and_strips_html_description(self) -> None:
+        data = {
+            "id": 1,
+            "name": "Di Caprio DC101",
+            "description": "<p>A <strong>classic</strong> acetate frame.</p>",
+            "images": [],
+            "attributes": [],
+            "tags": [],
+        }
+        product = parse_store_api_product(data, "di-caprio")
+        assert product.description_en == "A classic acetate frame."
+
+    def test_falls_back_to_short_description(self) -> None:
+        data = {
+            "id": 1,
+            "name": "Di Caprio DC101",
+            "short_description": "Short blurb.",
+            "images": [],
+            "attributes": [],
+            "tags": [],
+        }
+        product = parse_store_api_product(data, "di-caprio")
+        assert product.description_en == "Short blurb."
+
+    def test_missing_description_is_empty_string(self) -> None:
+        data = {"id": 1, "name": "Di Caprio DC101", "images": [], "attributes": [], "tags": []}
+        product = parse_store_api_product(data, "di-caprio")
+        assert product.description_en == ""
+
 
 class TestHtmlParser:
     def test_parses_fixture_if_present(self) -> None:

@@ -11,17 +11,40 @@
 
 import {
   AbstractPaymentProvider,
-  PaymentProviderError,
-  PaymentProviderSessionResponse,
-  MedusaContainer,
+  MathBN,
+  ModuleProvider,
+  Modules,
 } from "@medusajs/framework/utils";
 import type {
-  CreatePaymentProviderSession,
-  UpdatePaymentProviderSession,
+  AuthorizePaymentInput,
+  AuthorizePaymentOutput,
+  BigNumberInput,
+  CancelPaymentInput,
+  CancelPaymentOutput,
+  CapturePaymentInput,
+  CapturePaymentOutput,
+  DeletePaymentInput,
+  DeletePaymentOutput,
+  GetPaymentStatusInput,
+  GetPaymentStatusOutput,
+  InitiatePaymentInput,
+  InitiatePaymentOutput,
+  PaymentSessionStatus,
   ProviderWebhookPayload,
+  RefundPaymentInput,
+  RefundPaymentOutput,
+  RetrievePaymentInput,
+  RetrievePaymentOutput,
+  UpdatePaymentInput,
+  UpdatePaymentOutput,
   WebhookActionResult,
 } from "@medusajs/framework/types";
 import crypto from "node:crypto";
+
+/** Normalizes any BigNumberInput variant into a plain JS number. */
+function toNumber(amount: BigNumberInput): number {
+  return MathBN.convert(amount).toNumber();
+}
 
 interface PayPalOptions {
   client_id: string;
@@ -35,7 +58,7 @@ interface PayPalTokenResponse {
   expires_in: number;
 }
 
-export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
+class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
   static identifier = "paypal";
 
   private readonly clientId: string;
@@ -44,7 +67,7 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
   private readonly webhookId: string;
   private readonly baseUrl: string;
 
-  constructor(container: MedusaContainer, options: PayPalOptions) {
+  constructor(container: Record<string, unknown>, options: PayPalOptions) {
     super(container, options);
     this.clientId = options.client_id ?? process.env.PAYPAL_CLIENT_ID ?? "";
     this.clientSecret = options.client_secret ?? process.env.PAYPAL_CLIENT_SECRET ?? "";
@@ -106,177 +129,181 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
   }
 
   async initiatePayment(
-    context: CreatePaymentProviderSession
-  ): Promise<PaymentProviderError | PaymentProviderSessionResponse> {
+    input: InitiatePaymentInput
+  ): Promise<InitiatePaymentOutput> {
     const idempotencyKey = crypto.randomUUID();
-    const amountStr = (context.amount / 100).toFixed(2);
-    const currency = (context.currency_code ?? "USD").toUpperCase();
+    const amountCents = toNumber(input.amount);
+    const amountStr = (amountCents / 100).toFixed(2);
+    const currency = (input.currency_code ?? "USD").toUpperCase();
 
-    try {
-      const order = (await this.paypalRequest(
-        "POST",
-        "/v2/checkout/orders",
-        {
-          intent: "AUTHORIZE",
-          purchase_units: [
-            {
-              amount: { currency_code: currency, value: amountStr },
-            },
-          ],
-          payment_source: {
-            paypal: {
-              experience_context: {
-                payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
-                user_action: "PAY_NOW",
-                return_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=confirm`,
-                cancel_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=cancel`,
-              },
+    const order = (await this.paypalRequest(
+      "POST",
+      "/v2/checkout/orders",
+      {
+        intent: "AUTHORIZE",
+        purchase_units: [
+          {
+            amount: { currency_code: currency, value: amountStr },
+          },
+        ],
+        payment_source: {
+          paypal: {
+            experience_context: {
+              payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
+              user_action: "PAY_NOW",
+              return_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=confirm`,
+              cancel_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=cancel`,
             },
           },
         },
-        idempotencyKey
-      )) as { id: string; status: string; links?: Array<{ rel: string; href: string }> };
+      },
+      idempotencyKey
+    )) as { id: string; status: string; links?: Array<{ rel: string; href: string }> };
 
-      const approveLink = order.links?.find((l) => l.rel === "payer-action")?.href;
-      return {
-        id: order.id,
-        data: {
-          paypal_order_id: order.id,
-          amount: context.amount,
-          currency_code: currency,
-          status: order.status,
-          approve_url: approveLink ?? null,
-        },
-      };
-    } catch (err: unknown) {
-      return {
-        error: (err as Error).message,
-        code: "paypal_initiate_failed",
-        detail: err,
-      };
-    }
+    const approveLink = order.links?.find((l) => l.rel === "payer-action")?.href;
+    return {
+      id: order.id,
+      data: {
+        paypal_order_id: order.id,
+        amount: amountCents,
+        currency_code: currency,
+        status: order.status,
+        approve_url: approveLink ?? null,
+      },
+    };
   }
 
   async updatePayment(
-    context: UpdatePaymentProviderSession
-  ): Promise<PaymentProviderError | PaymentProviderSessionResponse> {
-    return this.initiatePayment(context);
+    input: UpdatePaymentInput
+  ): Promise<UpdatePaymentOutput> {
+    const { data } = await this.initiatePayment(input);
+    return { data };
+  }
+
+  async deletePayment(
+    input: DeletePaymentInput
+  ): Promise<DeletePaymentOutput> {
+    // PayPal orders expire on their own; voiding any pending authorization is
+    // the closest equivalent to discarding the session.
+    return this.cancelPayment(input);
+  }
+
+  async retrievePayment(
+    input: RetrievePaymentInput
+  ): Promise<RetrievePaymentOutput> {
+    const orderId = input.data?.["paypal_order_id"] as string | undefined;
+    if (!orderId) return { data: input.data ?? {} };
+
+    const order = (await this.paypalRequest(
+      "GET",
+      `/v2/checkout/orders/${orderId}`
+    )) as Record<string, unknown>;
+    return { data: order };
   }
 
   async authorizePayment(
-    paymentSessionData: Record<string, unknown>,
-    _context: Record<string, unknown>
-  ): Promise<PaymentProviderError | { status: string; data: Record<string, unknown> }> {
-    const orderId = paymentSessionData["paypal_order_id"] as string;
+    input: AuthorizePaymentInput
+  ): Promise<AuthorizePaymentOutput> {
+    const sessionData = input.data ?? {};
+    const orderId = sessionData["paypal_order_id"] as string | undefined;
     if (!orderId) {
-      return { error: "PayPal: paypal_order_id missing.", code: "missing_order_id", detail: "" };
+      throw new Error("PayPal: paypal_order_id missing.");
     }
 
     const idempotencyKey = crypto.randomUUID();
-    try {
-      const result = (await this.paypalRequest(
-        "POST",
-        `/v2/checkout/orders/${orderId}/authorize`,
-        {},
-        idempotencyKey
-      )) as { status: string; purchase_units?: Array<{ payments?: { authorizations?: Array<{ id: string }> } }> };
+    const result = (await this.paypalRequest(
+      "POST",
+      `/v2/checkout/orders/${orderId}/authorize`,
+      {},
+      idempotencyKey
+    )) as { status: string; purchase_units?: Array<{ payments?: { authorizations?: Array<{ id: string }> } }> };
 
-      const authorizationId =
-        result.purchase_units?.[0]?.payments?.authorizations?.[0]?.id ?? null;
+    const authorizationId =
+      result.purchase_units?.[0]?.payments?.authorizations?.[0]?.id ?? null;
 
-      return {
-        status: result.status === "COMPLETED" ? "authorized" : "pending",
-        data: {
-          ...paymentSessionData,
-          paypal_authorization_id: authorizationId,
-          paypal_status: result.status,
-        },
-      };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "paypal_authorize_failed", detail: err };
-    }
+    return {
+      status: result.status === "COMPLETED" ? "authorized" : "pending",
+      data: {
+        ...sessionData,
+        paypal_authorization_id: authorizationId,
+        paypal_status: result.status,
+      },
+    };
   }
 
   async capturePayment(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const authorizationId = paymentSessionData["paypal_authorization_id"] as string;
+    input: CapturePaymentInput
+  ): Promise<CapturePaymentOutput> {
+    const sessionData = input.data ?? {};
+    const authorizationId = sessionData["paypal_authorization_id"] as string | undefined;
     if (!authorizationId) {
-      return { error: "PayPal: paypal_authorization_id missing.", code: "missing_auth_id", detail: "" };
+      throw new Error("PayPal: paypal_authorization_id missing.");
     }
 
     const idempotencyKey = crypto.randomUUID();
-    try {
-      const result = (await this.paypalRequest(
-        "POST",
-        `/v2/payments/authorizations/${authorizationId}/capture`,
-        {},
-        idempotencyKey
-      )) as { id: string; status: string };
+    const result = (await this.paypalRequest(
+      "POST",
+      `/v2/payments/authorizations/${authorizationId}/capture`,
+      {},
+      idempotencyKey
+    )) as { id: string; status: string };
 
-      return {
-        ...paymentSessionData,
+    return {
+      data: {
+        ...sessionData,
         paypal_capture_id: result.id,
         status: "captured",
-      };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "paypal_capture_failed", detail: err };
-    }
+      },
+    };
   }
 
   async refundPayment(
-    paymentSessionData: Record<string, unknown>,
-    refundAmount: number
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const captureId = paymentSessionData["paypal_capture_id"] as string;
+    input: RefundPaymentInput
+  ): Promise<RefundPaymentOutput> {
+    const sessionData = input.data ?? {};
+    const captureId = sessionData["paypal_capture_id"] as string | undefined;
     if (!captureId) {
-      return { error: "PayPal: paypal_capture_id missing.", code: "missing_capture_id", detail: "" };
+      throw new Error("PayPal: paypal_capture_id missing.");
     }
 
-    const currency = (paymentSessionData["currency_code"] as string ?? "USD").toUpperCase();
+    const refundAmount = toNumber(input.amount);
+    const currency = ((sessionData["currency_code"] as string) ?? "USD").toUpperCase();
     const idempotencyKey = crypto.randomUUID();
-    try {
-      await this.paypalRequest(
-        "POST",
-        `/v2/payments/captures/${captureId}/refund`,
-        {
-          amount: {
-            value: (refundAmount / 100).toFixed(2),
-            currency_code: currency,
-          },
+    await this.paypalRequest(
+      "POST",
+      `/v2/payments/captures/${captureId}/refund`,
+      {
+        amount: {
+          value: (refundAmount / 100).toFixed(2),
+          currency_code: currency,
         },
-        idempotencyKey
-      );
-      return { ...paymentSessionData, refunded_amount: refundAmount };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "paypal_refund_failed", detail: err };
-    }
+      },
+      idempotencyKey
+    );
+    return { data: { ...sessionData, refunded_amount: refundAmount } };
   }
 
   async cancelPayment(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const authorizationId = paymentSessionData["paypal_authorization_id"] as string;
+    input: CancelPaymentInput
+  ): Promise<CancelPaymentOutput> {
+    const sessionData = input.data ?? {};
+    const authorizationId = sessionData["paypal_authorization_id"] as string | undefined;
     if (!authorizationId) {
-      return { ...paymentSessionData, status: "canceled" };
+      return { data: { ...sessionData, status: "canceled" } };
     }
 
-    try {
-      await this.paypalRequest(
-        "POST",
-        `/v2/payments/authorizations/${authorizationId}/void`,
-        {}
-      );
-      return { ...paymentSessionData, status: "canceled" };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "paypal_cancel_failed", detail: err };
-    }
+    await this.paypalRequest(
+      "POST",
+      `/v2/payments/authorizations/${authorizationId}/void`,
+      {}
+    );
+    return { data: { ...sessionData, status: "canceled" } };
   }
 
   async getPaymentStatus(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<{ status: string }> {
-    const orderId = paymentSessionData["paypal_order_id"] as string;
+    input: GetPaymentStatusInput
+  ): Promise<GetPaymentStatusOutput> {
+    const orderId = input.data?.["paypal_order_id"] as string | undefined;
     if (!orderId) return { status: "pending" };
 
     try {
@@ -285,7 +312,7 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
         `/v2/checkout/orders/${orderId}`
       )) as { status: string };
 
-      const statusMap: Record<string, string> = {
+      const statusMap: Record<string, PaymentSessionStatus> = {
         CREATED: "pending",
         SAVED: "pending",
         APPROVED: "pending",
@@ -364,11 +391,10 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
           action: "captured",
           data: { session_id: event.resource?.id ?? "", amount: amountCents },
         };
+      // Medusa's PaymentActions has no "refunded" member — refunds are driven
+      // from the admin via refundPayment, not reconciled from webhooks.
       case "PAYMENT.CAPTURE.REFUNDED":
-        return {
-          action: "refunded",
-          data: { session_id: event.resource?.id ?? "", amount: amountCents },
-        };
+        return { action: "not_supported" };
       case "PAYMENT.AUTHORIZATION.VOIDED":
         return {
           action: "canceled",
@@ -379,3 +405,7 @@ export default class PayPalPaymentProvider extends AbstractPaymentProvider<PayPa
     }
   }
 }
+
+export default ModuleProvider(Modules.PAYMENT, {
+  services: [PayPalPaymentProvider],
+});

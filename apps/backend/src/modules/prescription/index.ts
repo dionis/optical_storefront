@@ -1,4 +1,4 @@
-import PrescriptionModuleService from "./service.js";
+import PrescriptionModuleService from "./service";
 import { Module } from "@medusajs/framework/utils";
 
 export const PRESCRIPTION_MODULE = "prescription";

@@ -10,6 +10,12 @@ build/
 .next/
 out/
 
+# Stray tsc output next to sources (happens when tsc runs without the project tsconfig)
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+
 # Environment files — NEVER commit real env files
 .env
 .env.local
@@ -49,3 +55,10 @@ Thumbs.db
 # Docker volumes (local)
 infra/volumes/
 
+node_modules
+dist
+.medusa
+_transfer
+*.log
+.env
+.DS_Store

@@ -1,7 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import { MeiliSearch } from "meilisearch";
-
-const INDEX_NAME = "frames";
+import { FRAMES_INDEX_NAME } from "@eyewear/shared";
 
 export default async function productDeleteSubscriber({
   event: { data },
@@ -11,7 +10,7 @@ export default async function productDeleteSubscriber({
     apiKey: process.env.MEILISEARCH_MASTER_KEY,
   });
 
-  const index = client.index(INDEX_NAME);
+  const index = client.index(FRAMES_INDEX_NAME);
   await index.deleteDocument(data.id);
 }
 

@@ -1,10 +1,10 @@
 import { MedusaService } from "@medusajs/framework/utils";
-import { PrescriptionRecord } from "./models/index.js";
+import { PrescriptionRecord } from "./models/index";
 import {
   validatePrescription,
   DEFAULT_RX_RANGES,
   type RxRanges,
-} from "./validation.js";
+} from "./validation";
 import type {
   Prescription,
   PrescriptionValidationResult,

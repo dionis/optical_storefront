@@ -9,11 +9,11 @@ Online store for prescription eyeglasses. Catalog ingested via scraping from cap
 ```
 eyewear-store/
 ├── apps/
-│   ├── backend/       # Medusa.js v2, Node 20, TypeScript strict
-│   ├── storefront/    # Next.js 15 App Router, Tailwind, shadcn/ui
-│   └── scraper/       # Python 3.12 catalog ingestion
+│   ├── backend/           # Medusa.js v2, Node 20, TypeScript strict
+│   ├── capri-storefront/  # React 18 + Vite storefront (static catalog, admin panel)
+│   └── scraper/           # Python 3.12 catalog ingestion
 ├── packages/
-│   └── shared/        # Shared TS types: Prescription, LensConfig, FrameAttributes
+│   └── shared/        # Shared TS types (Prescription, LensConfig, FrameAttributes) + Meilisearch doc/settings + i18n locale-text helpers
 ├── infra/
 │   ├── docker-compose.yml
 │   ├── docker-compose.prod.yml
@@ -35,8 +35,9 @@ eyewear-store/
 
 - Conventional commits; one phase = one or more focused commits
 - TypeScript strict mode everywhere
-- All code, comments, identifiers in English; UI copy in Spanish (es)
-- Never trust client-side totals — price always computed server-side
+- All code, comments, identifiers in English; UI copy goes through the `t(key)` dictionary in `apps/capri-storefront/src/i18n/translations.js` (`es` default, `en` second — language is toggled client-side and persisted in `localStorage`, there are no locale-prefixed URLs). Never hardcode UI strings in components — add the key to both `es` and `en`.
+- Product catalog content (title/description) is translated at scrape time by the AI translation pipeline (`apps/scraper/scraper/translate.py`) into `product.metadata.i18n.{es,fr}`; the storefront resolves display text via `resolveLocalizedFrameText`/`resolveLocalizedProductMetadataText` in `@eyewear/shared`, never by re-translating client-side
+- Never trust client-side totals — price always computed server-side. This includes display-only filler fields (rating, review count, best-seller flag, "compare at" price) generated deterministically by `apps/scraper/scraper/filler.py` — they are presentation metadata only and must never feed into actual pricing/checkout math
 - Prescriptions are health data: R2 prescription bucket is private, presigned URLs only
 - Never commit credentials; all secrets via env vars
 - Check `node_modules` package types before inventing Medusa v2 API signatures

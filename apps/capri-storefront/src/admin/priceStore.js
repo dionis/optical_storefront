@@ -102,6 +102,21 @@ export function treatmentPrice(key, base) { const o = load().treatments || {}; r
 export function usagePrice(key, base) { const o = load().usage || {}; return key in o ? o[key] : base; }
 export function shipping() { return { ...DEFAULT_SHIPPING, ...(load().shipping || {}) }; }
 
+// ---- lens price list 2026 (matriz base + fotocromáticos + antirreflejos) ----
+// overrides bajo load().lens con claves: b:<design>:<mat> · p:<id>:<cat> · a:<id>
+export function lensBasePrice(designId, matId, base) {
+  const o = load().lens || {}; const k = `b:${designId}:${matId}`; return k in o ? o[k] : base;
+}
+export function lensPhotoPrice(id, cat, base) {
+  const o = load().lens || {}; const k = `p:${id}:${cat}`; return k in o ? o[k] : base;
+}
+export function lensARPrice(id, base) {
+  const o = load().lens || {}; const k = `a:${id}`; return k in o ? o[k] : base;
+}
+export const setLensBase = (designId, matId, v) => setIn("lens", `b:${designId}:${matId}`, v);
+export const setLensPhoto = (id, cat, v) => setIn("lens", `p:${id}:${cat}`, v);
+export const setLensAR = (id, v) => setIn("lens", `a:${id}`, v);
+
 // ---- export / import ----
 export function exportJSON() {
   const blob = new Blob([JSON.stringify(load(), null, 2)], { type: "application/json" });

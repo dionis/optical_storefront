@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.medusa
+**/.next
+.git
+.env
+**/.env
+infra
+apps/scraper
+apps/capri-storefront

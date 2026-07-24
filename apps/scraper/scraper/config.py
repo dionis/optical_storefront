@@ -33,6 +33,9 @@ class Config:
     meilisearch_master_key: str = field(
         default_factory=lambda: os.getenv("MEILISEARCH_MASTER_KEY", "")
     )
+    anthropic_api_key: str = field(
+        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
+    )
     rate_limit_seconds: float = field(
         default_factory=lambda: float(os.getenv("SCRAPER_RATE_LIMIT", "1.0"))
     )

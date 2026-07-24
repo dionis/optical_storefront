@@ -62,10 +62,15 @@ def parse_store_api_product(
     # Features from tags
     features: list[str] = [t["name"] for t in data.get("tags", [])]
 
+    # English description (WooCommerce returns HTML; strip to plain text)
+    raw_description = data.get("description") or data.get("short_description") or ""
+    description_en = BeautifulSoup(raw_description, "lxml").get_text(" ", strip=True)
+
     product = ScrapedProduct(
         model_name=name,
         handle=handle,
         collection_slug=collection_slug,
+        description_en=description_en,
         colors=colors,
         sizes=raw_sizes,
         image_urls=image_urls,
@@ -77,6 +82,7 @@ def parse_store_api_product(
         json.dumps(
             {
                 "name": name,
+                "description": description_en,
                 "colors": sorted(colors),
                 "sizes": [
                     (s.eye_size, s.bridge_size, s.temple_length) for s in raw_sizes
