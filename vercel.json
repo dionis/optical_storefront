@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd apps/capri-storefront && npm install",
+  "buildCommand": "cd apps/capri-storefront && npm run build",
+  "outputDirectory": "apps/capri-storefront/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
