@@ -1,6 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { LENS_CONFIG_MODULE } from "../../../modules/lens-config/index";
-import type LensConfigModuleService from "../../../modules/lens-config/service";
+import { LENS_CONFIG_MODULE } from "../../../../modules/lens-config/index";
+import type LensConfigModuleService from "../../../../modules/lens-config/service";
 import type { LensConfig } from "@eyewear/shared";
 
 export async function POST(
