@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "medusa develop",
+    "dev": "pnpm --filter @eyewear/shared build && medusa develop",
     "build": "pnpm --filter @eyewear/shared build && medusa build",
     "start": "medusa start",
     "typecheck": "tsc --noEmit",

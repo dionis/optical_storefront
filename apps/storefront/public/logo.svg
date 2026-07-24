@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 100" fill="none">
+  <g stroke-width="8" stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M6,30 L18,34" stroke="#141414"/>
+    <path d="M18,33 Q18,28 23,28 L74,28 Q80,28 79,34 L74,68 Q73,77 63,77 L30,77 Q19,77 18,66 Z" stroke="#0E5AD0"/>
+    <path d="M79,38 Q90,31 103,38" stroke="#141414"/>
+    <path d="M103,33 Q103,28 108,28 L159,28 Q165,28 164,34 L159,68 Q158,77 148,77 L115,77 Q104,77 103,66 Z" stroke="#FD0E3F"/>
+    <path d="M164,34 L176,30" stroke="#141414"/>
+  </g>
+  <text x="196" y="71" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="800" letter-spacing="1"><tspan fill="#0E5AD0">RUBI</tspan><tspan fill="#151515">_</tspan><tspan fill="#FD0E3F">LENS</tspan></text>
+</svg>

@@ -29,7 +29,7 @@ storefronts don't handle out of the box:
 eyewear-store/
 ├── apps/
 │   ├── backend/           # Medusa.js v2, Node 20, TypeScript strict
-│   ├── storefront/        # Next.js 15 App Router, Tailwind, shadcn/ui
+│   ├── storefront/        # React + Vite storefront (mirror of capri-storefront, port 3000)
 │   ├── capri-storefront/  # React + Vite storefront (own catalog sync, admin dashboard)
 │   └── scraper/           # Python 3.12 catalog ingestion
 ├── packages/
@@ -66,7 +66,6 @@ eyewear-store/
 
    ```bash
    cp apps/backend/.env.example apps/backend/.env
-   cp apps/storefront/.env.example apps/storefront/.env
    cp apps/scraper/.env.example apps/scraper/.env
    ```
 
