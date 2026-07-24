@@ -5,6 +5,7 @@ import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
+import TryOn from "../components/TryOn.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -14,6 +15,7 @@ export default function ProductDetail() {
   const product = productBySlug[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
+  const [tryOn, setTryOn] = useState(false);
   const { addItem, toggleFav, isFav } = useCart();
   const { t, tv } = useLang();
   const navigate = useNavigate();
@@ -41,7 +43,7 @@ export default function ProductDetail() {
                     aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
-            <span className="pdp-ar">◈ {t("card.ar")}</span>
+            <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
           </div>
           <div className="pdp-thumbs">
             {product.colors.map((c, i) => (
@@ -79,6 +81,7 @@ export default function ProductDetail() {
               {t("pdp.addFrame")} · ${product.price.toFixed(2)}
             </button>
           </div>
+          <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
 
           <table className="specs">
             <tbody>
@@ -116,6 +119,8 @@ export default function ProductDetail() {
           </div>
         </section>
       )}
+
+      {tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
     </div>
   );
 }

@@ -284,3 +284,14 @@
 /* Buttons (board) — subtle Material press */
 .btn-sm { transition: transform .14s ease, box-shadow .18s ease, background .15s ease, border-color .15s; }
 .btn-sm:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -12px rgba(23,32,58,.5); border-color: #cfd6e2; }
+
+/* ── Lista de precios 2026 · Lentes (base matrix + fotocromáticos + antirreflejos) ── */
+.lens-pl .lens-sub { margin-top: 14px; }
+.lens-pl .lens-sub:first-of-type { margin-top: 4px; }
+.lens-pl h4 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #0E5AD0; letter-spacing: .01em; }
+.lens-tbl { font-size: 13px; }
+.lens-tbl th, .lens-tbl td { padding: 6px 8px; }
+.lens-tbl th:first-child, .lens-tbl td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }
+.lens-tbl .adm-price-input { width: 82px; }
+.lens-ar-group { border: 1px solid #eef1f5; border-radius: 12px; padding: 10px 12px; }
+.lens-ar-h { font-size: 12px; font-weight: 700; color: #5c6470; margin-bottom: 4px; }
