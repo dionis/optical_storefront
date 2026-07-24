@@ -123,7 +123,7 @@ Note the username format: `postgres.<project-ref>`, not just `postgres`
   the `CMD` may need to change to explicitly run from `.medusa/server`.
 - `.dockerignore` added at repo root (excludes `node_modules`, `dist`,
   `.medusa`, `.next`, `.git`, `.env*`, `infra`, `apps/scraper`,
-  `apps/storefront` from the build context).
+  `apps/capri-storefront` from the build context).
 
 ## Environment variables (Coolify → backend app → Environment Variables)
 

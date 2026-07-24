@@ -14,19 +14,40 @@
 
 import {
   AbstractPaymentProvider,
+  MathBN,
   ModuleProvider,
   Modules,
-  PaymentProviderError,
-  PaymentProviderSessionResponse,
-  MedusaContainer,
 } from "@medusajs/framework/utils";
 import type {
-  CreatePaymentProviderSession,
-  UpdatePaymentProviderSession,
+  AuthorizePaymentInput,
+  AuthorizePaymentOutput,
+  BigNumberInput,
+  CancelPaymentInput,
+  CancelPaymentOutput,
+  CapturePaymentInput,
+  CapturePaymentOutput,
+  DeletePaymentInput,
+  DeletePaymentOutput,
+  GetPaymentStatusInput,
+  GetPaymentStatusOutput,
+  InitiatePaymentInput,
+  InitiatePaymentOutput,
+  PaymentSessionStatus,
   ProviderWebhookPayload,
+  RefundPaymentInput,
+  RefundPaymentOutput,
+  RetrievePaymentInput,
+  RetrievePaymentOutput,
+  UpdatePaymentInput,
+  UpdatePaymentOutput,
   WebhookActionResult,
 } from "@medusajs/framework/types";
 import crypto from "node:crypto";
+
+/** Normalizes any BigNumberInput variant into a plain JS number. */
+function toNumber(amount: BigNumberInput): number {
+  return MathBN.convert(amount).toNumber();
+}
 
 interface SquareOptions {
   access_token: string;
@@ -45,7 +66,7 @@ class SquarePaymentProvider extends AbstractPaymentProvider<SquareOptions> {
   private readonly webhookSignatureKey: string;
   private readonly baseUrl: string;
 
-  constructor(container: MedusaContainer, options: SquareOptions) {
+  constructor(container: Record<string, unknown>, options: SquareOptions) {
     super(container, options);
     this.accessToken = options.access_token ?? process.env.SQUARE_ACCESS_TOKEN ?? "";
     this.locationId = options.location_id ?? process.env.SQUARE_LOCATION_ID ?? "";
@@ -82,131 +103,140 @@ class SquarePaymentProvider extends AbstractPaymentProvider<SquareOptions> {
   }
 
   async initiatePayment(
-    context: CreatePaymentProviderSession
-  ): Promise<PaymentProviderError | PaymentProviderSessionResponse> {
+    input: InitiatePaymentInput
+  ): Promise<InitiatePaymentOutput> {
     // Square doesn't have a server-side "create payment intent" like Stripe.
     // We store the amount and currency, then charge when the nonce arrives.
     return {
       id: `sq_pending_${Date.now()}`,
       data: {
-        amount: context.amount,
-        currency_code: context.currency_code,
+        amount: toNumber(input.amount),
+        currency_code: input.currency_code,
         location_id: this.locationId,
         status: "pending",
       },
     };
   }
 
+  async updatePayment(
+    input: UpdatePaymentInput
+  ): Promise<UpdatePaymentOutput> {
+    const { data } = await this.initiatePayment(input);
+    return { data };
+  }
+
+  async deletePayment(
+    input: DeletePaymentInput
+  ): Promise<DeletePaymentOutput> {
+    // Cancelling the authorization is the closest equivalent to discarding
+    // a Square session; an un-authorized session has no server-side state.
+    return this.cancelPayment(input);
+  }
+
+  async retrievePayment(
+    input: RetrievePaymentInput
+  ): Promise<RetrievePaymentOutput> {
+    const squarePaymentId = input.data?.["square_payment_id"] as string | undefined;
+    if (!squarePaymentId) return { data: input.data ?? {} };
+
+    const result = (await this.squareRequest(
+      "GET",
+      `/v2/payments/${squarePaymentId}`
+    )) as { payment: Record<string, unknown> };
+    return { data: result.payment };
+  }
+
   async authorizePayment(
-    paymentSessionData: Record<string, unknown>,
-    context: Record<string, unknown>
-  ): Promise<PaymentProviderError | { status: string; data: Record<string, unknown> }> {
-    const sourceId = paymentSessionData["source_id"] as string | undefined;
+    input: AuthorizePaymentInput
+  ): Promise<AuthorizePaymentOutput> {
+    const sessionData = input.data ?? {};
+    const sourceId = sessionData["source_id"] as string | undefined;
     if (!sourceId) {
-      return {
-        error: "Square: source_id (payment nonce) is required to authorize.",
-        code: "missing_source_id",
-        detail: "Frontend must provide the Square payment token.",
-      };
+      throw new Error(
+        "Square: source_id (payment nonce) is required to authorize. Frontend must provide the Square payment token."
+      );
     }
 
     const idempotencyKey = crypto.randomUUID();
-    try {
-      const result = await this.squareRequest("POST", "/v2/payments", {
-        source_id: sourceId,
-        idempotency_key: idempotencyKey,
-        amount_money: {
-          amount: paymentSessionData["amount"],
-          currency: (paymentSessionData["currency_code"] as string ?? "USD").toUpperCase(),
-        },
-        location_id: this.locationId,
-        autocomplete: false, // authorize only; capture separately
-      }) as { payment: { id: string; status: string } };
+    const result = (await this.squareRequest("POST", "/v2/payments", {
+      source_id: sourceId,
+      idempotency_key: idempotencyKey,
+      amount_money: {
+        amount: sessionData["amount"],
+        currency: ((sessionData["currency_code"] as string) ?? "USD").toUpperCase(),
+      },
+      location_id: this.locationId,
+      autocomplete: false, // authorize only; capture separately
+    })) as { payment: { id: string; status: string } };
 
-      return {
-        status: result.payment.status === "APPROVED" ? "authorized" : "pending",
-        data: { square_payment_id: result.payment.id, ...paymentSessionData },
-      };
-    } catch (err: unknown) {
-      return {
-        error: (err as Error).message,
-        code: "square_authorize_failed",
-        detail: err,
-      };
-    }
+    return {
+      status: result.payment.status === "APPROVED" ? "authorized" : "pending",
+      data: { square_payment_id: result.payment.id, ...sessionData },
+    };
   }
 
   async capturePayment(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const squarePaymentId = paymentSessionData["square_payment_id"] as string;
+    input: CapturePaymentInput
+  ): Promise<CapturePaymentOutput> {
+    const sessionData = input.data ?? {};
+    const squarePaymentId = sessionData["square_payment_id"] as string | undefined;
     if (!squarePaymentId) {
-      return { error: "Square: square_payment_id missing.", code: "missing_payment_id", detail: "" };
+      throw new Error("Square: square_payment_id missing.");
     }
 
-    try {
-      await this.squareRequest("POST", `/v2/payments/${squarePaymentId}/complete`, {});
-      return { ...paymentSessionData, status: "captured" };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "square_capture_failed", detail: err };
-    }
+    await this.squareRequest("POST", `/v2/payments/${squarePaymentId}/complete`, {});
+    return { data: { ...sessionData, status: "captured" } };
   }
 
   async refundPayment(
-    paymentSessionData: Record<string, unknown>,
-    refundAmount: number
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const squarePaymentId = paymentSessionData["square_payment_id"] as string;
+    input: RefundPaymentInput
+  ): Promise<RefundPaymentOutput> {
+    const sessionData = input.data ?? {};
+    const squarePaymentId = sessionData["square_payment_id"] as string | undefined;
     if (!squarePaymentId) {
-      return { error: "Square: square_payment_id missing.", code: "missing_payment_id", detail: "" };
+      throw new Error("Square: square_payment_id missing.");
     }
 
+    const refundAmount = toNumber(input.amount);
     const idempotencyKey = crypto.randomUUID();
-    try {
-      await this.squareRequest("POST", "/v2/refunds", {
-        idempotency_key: idempotencyKey,
-        payment_id: squarePaymentId,
-        amount_money: {
-          amount: refundAmount,
-          currency: (paymentSessionData["currency_code"] as string ?? "USD").toUpperCase(),
-        },
-      });
-      return { ...paymentSessionData, refunded_amount: refundAmount };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "square_refund_failed", detail: err };
-    }
+    await this.squareRequest("POST", "/v2/refunds", {
+      idempotency_key: idempotencyKey,
+      payment_id: squarePaymentId,
+      amount_money: {
+        amount: refundAmount,
+        currency: ((sessionData["currency_code"] as string) ?? "USD").toUpperCase(),
+      },
+    });
+    return { data: { ...sessionData, refunded_amount: refundAmount } };
   }
 
   async cancelPayment(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<PaymentProviderError | Record<string, unknown>> {
-    const squarePaymentId = paymentSessionData["square_payment_id"] as string;
+    input: CancelPaymentInput
+  ): Promise<CancelPaymentOutput> {
+    const sessionData = input.data ?? {};
+    const squarePaymentId = sessionData["square_payment_id"] as string | undefined;
     if (!squarePaymentId) {
       // Nothing to cancel server-side if we never authorized
-      return { ...paymentSessionData, status: "canceled" };
+      return { data: { ...sessionData, status: "canceled" } };
     }
 
-    try {
-      await this.squareRequest("POST", `/v2/payments/${squarePaymentId}/cancel`, {});
-      return { ...paymentSessionData, status: "canceled" };
-    } catch (err: unknown) {
-      return { error: (err as Error).message, code: "square_cancel_failed", detail: err };
-    }
+    await this.squareRequest("POST", `/v2/payments/${squarePaymentId}/cancel`, {});
+    return { data: { ...sessionData, status: "canceled" } };
   }
 
   async getPaymentStatus(
-    paymentSessionData: Record<string, unknown>
-  ): Promise<{ status: string }> {
-    const squarePaymentId = paymentSessionData["square_payment_id"] as string;
+    input: GetPaymentStatusInput
+  ): Promise<GetPaymentStatusOutput> {
+    const squarePaymentId = input.data?.["square_payment_id"] as string | undefined;
     if (!squarePaymentId) return { status: "pending" };
 
     try {
-      const result = await this.squareRequest(
+      const result = (await this.squareRequest(
         "GET",
         `/v2/payments/${squarePaymentId}`
-      ) as { payment: { status: string } };
+      )) as { payment: { status: string } };
 
-      const statusMap: Record<string, string> = {
+      const statusMap: Record<string, PaymentSessionStatus> = {
         APPROVED: "authorized",
         COMPLETED: "captured",
         CANCELED: "canceled",
@@ -255,11 +285,10 @@ class SquarePaymentProvider extends AbstractPaymentProvider<SquareOptions> {
           action: "canceled",
           data: { session_id: payment?.id ?? "", amount: 0 },
         };
+      // Medusa's PaymentActions has no "refunded" member — refunds are driven
+      // from the admin via refundPayment, not reconciled from webhooks.
       case "refund.completed":
-        return {
-          action: "refunded",
-          data: { session_id: payment?.id ?? "", amount: 0 },
-        };
+        return { action: "not_supported" };
       default:
         return { action: "not_supported" };
     }

@@ -1,4 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
+import type { IProductModuleService } from "@medusajs/framework/types";
+import { Modules } from "@medusajs/framework/utils";
 import { MeiliSearch } from "meilisearch";
 import { FRAMES_INDEX_NAME, productToDocument, type MedusaProductLike } from "@eyewear/shared";
 
@@ -13,13 +15,13 @@ export default async function productUpsertSubscriber({
   event: { data },
   container,
 }: SubscriberArgs<{ id: string }>): Promise<void> {
-  const productService = container.resolve("productModuleService");
+  const productService = container.resolve<IProductModuleService>(Modules.PRODUCT);
   let product: MedusaProductLike;
 
   try {
-    product = await productService.retrieveProduct(data.id, {
+    product = (await productService.retrieveProduct(data.id, {
       relations: ["variants", "variants.prices", "images", "collection"],
-    });
+    })) as MedusaProductLike;
   } catch {
     // Product may not exist (deleted event handled separately)
     return;

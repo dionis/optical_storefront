@@ -45,8 +45,10 @@ export async function setupMeilisearchIndex(): Promise<void> {
   console.log(`[meilisearch] Index '${FRAMES_INDEX_NAME}' settings applied.`);
 }
 
-// Run standalone if invoked directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run standalone if invoked directly.
+// This file compiles to CommonJS (module: NodeNext with no "type": "module"),
+// so `require.main` is the entrypoint check — not `import.meta.url`.
+if (require.main === module) {
   setupMeilisearchIndex()
     .then(() => process.exit(0))
     .catch((err: unknown) => {

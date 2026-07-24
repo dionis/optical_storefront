@@ -4,8 +4,24 @@
  * Safe to re-run (idempotent).
  */
 
+import type { CoatingType, UsageType } from "@eyewear/shared";
 import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
 import type LensConfigModuleService from "../modules/lens-config/service";
+
+interface LensOptionSeed {
+  usage_type: UsageType;
+  index: number;
+  label: string;
+  price_modifier_cents: number;
+}
+
+interface CoatingOptionSeed {
+  type: CoatingType;
+  label: string;
+  description: string;
+  price_modifier_cents: number;
+  compatible_usage_types: UsageType[];
+}
 
 export default async function seed({
   container,
@@ -15,7 +31,7 @@ export default async function seed({
   const lensService = container.resolve<LensConfigModuleService>(LENS_CONFIG_MODULE);
 
   // ── Lens index options ──────────────────────────────────────────
-  const lensOptions = [
+  const lensOptions: LensOptionSeed[] = [
     // Single vision distance
     { usage_type: "single_vision_distance", index: 1.57, label: "Estándar (1.57)", price_modifier_cents: 0 },
     { usage_type: "single_vision_distance", index: 1.61, label: "Delgado (1.61)", price_modifier_cents: 2000 },
@@ -45,7 +61,7 @@ export default async function seed({
   }
 
   // ── Coating options ─────────────────────────────────────────────
-  const coatings = [
+  const coatings: CoatingOptionSeed[] = [
     {
       type: "anti_reflective",
       label: "Antirreflejante",

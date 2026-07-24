@@ -50,7 +50,8 @@ async function reindex(): Promise<void> {
     const { products, count } = await sdk.admin.product.list({
       limit,
       offset,
-      expand: "variants,variants.prices,images,collection",
+      // Medusa v2 replaced `expand` with `fields`; `*rel` expands a relation.
+      fields: "*variants,*variants.prices,*images,*collection",
     });
 
     total = count;
