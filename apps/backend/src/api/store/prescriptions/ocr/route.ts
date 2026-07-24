@@ -2,8 +2,8 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Anthropic from "@anthropic-ai/sdk";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
-import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index.js";
-import type PrescriptionModuleService from "../../../modules/prescription/service.js";
+import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index.js";
+import type PrescriptionModuleService from "../../../../modules/prescription/service.js";
 import type { Prescription } from "@eyewear/shared";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
