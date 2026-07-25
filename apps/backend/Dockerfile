@@ -13,6 +13,10 @@ COPY apps/backend/package.json apps/backend/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
+# tsconfig.base.json lives at the repo root and is extended by both
+# packages/shared and apps/backend tsconfigs — without it, tsc can't read
+# the shared compilerOptions (target/lib ES2022) and the build fails.
+COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/backend apps/backend
 RUN pnpm --filter @eyewear/shared build
