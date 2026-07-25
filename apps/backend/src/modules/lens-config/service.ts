@@ -1,6 +1,6 @@
 import { MedusaService } from "@medusajs/framework/utils";
 import { LensOption, CoatingOption } from "./models/index";
-import type { LensConfig, LensIndex, CoatingType, UsageType } from "@eyewear/shared";
+import type { LensConfig, UsageType } from "@eyewear/shared";
 
 export interface ComputedLensPrice {
   frame_price_cents: number;
