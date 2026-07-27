@@ -86,7 +86,15 @@ servidor**. La SPA solo muestra; nunca envía totales al checkout.
 Ordenadas para que cada fase deje la app funcionando. Se puede desplegar
 incrementalmente detrás de un flag `VITE_USE_MEDUSA`.
 
-### Fase 0 — Fundaciones (backend + SDK cliente)
+### Fase 0 — Fundaciones (backend + SDK cliente) — ✅ COMPLETA Y VALIDADA (2026-07-26)
+
+**Estado:** validada end-to-end contra el backend vivo (Supabase). El seed por
+defecto ya traía **"Default Sales Channel"** y **"Default Publishable API Key"**
+(asociados) — se reutilizaron, no se creó nada nuevo. `GET /store/products` con la
+publishable key → 200; CORS confirmado para `http://localhost:5198`
+(`Access-Control-Allow-Origin` en GET y preflight). Valores en `apps/backend/.env`
+(`STORE_CORS`) y `apps/capri-storefront/.env` (`VITE_MEDUSA_PUBLISHABLE_KEY`,
+`VITE_USE_MEDUSA=false`). Runbook: [`phase-0-setup.md`](./phase-0-setup.md).
 
 **Objetivo:** que la SPA pueda hablar con Medusa aunque todavía no use nada.
 
@@ -109,7 +117,24 @@ incrementalmente detrás de un flag `VITE_USE_MEDUSA`.
 
 **Entrega:** SDK conectado, CORS verde, sin cambio visible aún.
 
-### Fase 1 — Catálogo desde Medusa
+### Fase 1 — Catálogo desde Medusa — 🟡 EN CURSO (validada con datos de prueba, 2026-07-26)
+
+**Estado:** el camino de datos SPA → Store API funciona end-to-end. `catalogStore.js`
+carga desde Medusa cuando `VITE_USE_MEDUSA=true` (adaptador en
+[`medusaCatalog.js`](../apps/capri-storefront/src/data/medusaCatalog.js) → forma que
+esperan los componentes; atributos híbrido: tokens EN del scraper → ES canónico →
+`tv()`). Validado en navegador: listado (11 productos sembrados, precios reales de
+`pricing.yaml`, marcas, colores, imágenes) y PDP (specs + buckets) sin errores.
+
+Scraper **terminado y testeado** (55 tests): `sales_channels` + gate `is_in_stock`
++ color↔imagen (`tokenMatch`) + mapa de marca + medidas bucketizadas +
+reconciliación de descatalogados. Además se corrigieron 2 bugs reales que impedían
+el push: auth Admin API (Bearer→**Basic**) y falta de `options` en el payload v2.
+
+**Pendiente de Fase 1:** poblar el catálogo completo (correr el scraper real con
+secret key + R2, o ampliar el seed); `original_price_cents`/compare-at en el
+adaptador; considerar Meilisearch para el listado con filtros a escala. Seed de
+desarrollo: `apps/scraper/scripts/seed_medusa_dev.py`.
 
 **Objetivo:** que armaduras y estuches vengan de la Store API, no de los JSON.
 
@@ -235,18 +260,34 @@ borrable vía `DELETE /admin/prescriptions/:id`.
 
 ---
 
-## Decisiones abiertas (requieren al dueño / negocio)
+## Decisiones (RESUELTAS — 2026-07-26)
 
-1. **Matriz de precios de lentes:** ¿se adopta el modelo simple del backend
-   (modificador por índice) o se extiende el backend para soportar la matriz 2026
-   completa (diseño×material + fotocromáticos por categoría + dos familias de AR)?
-   *Bloquea la Fase 2.*
-2. **Ingestión de catálogo:** ¿scraper Python (Opción A) o portar `sync-catalog.mjs`
-   a Admin API (Opción B)? *Bloquea la Fase 1.*
-3. **Reseñas y favoritos:** ¿backend o se quedan en cliente?
-4. **Try-on:** se mantiene tal cual (cliente + MediaPipe CDN). No requiere backend.
+1. **Matriz de precios de lentes:** ✅ **Extender el backend a la matriz 2026
+   completa** (diseño×material + fotocromáticos por categoría + dos familias de AR).
+   Ampliar `LensOption`/`CoatingOption` y el seed. Es el trabajo de mayor riesgo de
+   la Fase 2. *(Antes de codificar, confirmar la lista de precios definitiva de la
+   óptica.)*
+2. **Ingestión de catálogo:** ✅ **Usar `apps/scraper` (Python)** como pipeline de
+   ingestión periódica. Ya empuja a Medusa vía Admin API. Portar de
+   `sync-catalog.mjs` lo que falta (sales channel, gate `is_in_stock`,
+   reconciliación de descatalogados, color↔imagen por `tokenMatch`, nombre de marca,
+   medidas bucketizadas). Detalle en
+   [`scraper-medusa-ingestion-analysis.md`](./scraper-medusa-ingestion-analysis.md).
+3. **Reseñas y favoritos:** ✅ **Ambos en backend** (módulos custom Medusa ligados a
+   `customer_id`). Reemplaza el `localStorage` actual.
+4. **Normalización de atributos de filtro:** ✅ **Híbrido** — medidas
+   (eye/bridge/temple) bucketizadas en el scraper (idioma-neutral, para las facetas
+   de Meilisearch); valores nominales (forma/material/género/edad) traducidos en la
+   SPA vía `tv()`.
+5. **Pagos:** ✅ **Stripe como pasarela principal**, manteniendo la arquitectura
+   multi-pasarela **Stripe / PayPal / Square** ya configurada en `medusa-config.ts`.
+6. **Try-on:** se mantiene tal cual (cliente + MediaPipe CDN). No requiere backend.
    Único apunte: hoy carga MediaPipe y el modelo desde CDNs externos — evaluar si se
-   self-hostean para el deploy productivo.
+   self-hostean para el deploy productivo. (A futuro podría usar los
+   `r2_tryon_keys` sin fondo que ya genera el scraper.)
+
+**Alcance de la ronda actual:** Fase 0 completa y **validada** antes de avanzar a
+la Fase 1.
 
 ## Riesgos y notas
 

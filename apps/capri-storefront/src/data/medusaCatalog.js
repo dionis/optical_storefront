@@ -1,0 +1,138 @@
+// Medusa Store API → storefront catalog adapter (Phase 1).
+//
+// When VITE_USE_MEDUSA=true, catalogStore.loadLive() pulls the catalog from the
+// Medusa Store API instead of the static public/*.json. This module fetches every
+// published product for the sales channel (paginated) and maps each one to the
+// exact shape the existing components already consume (see products.js/cases.js),
+// so ProductCard / Catalog / ProductDetail need no changes.
+//
+// Attribute canonicalization (the "híbrido" decision): the scraper stores nominal
+// values as English tokens and measurements as language-neutral buckets. Here we
+// map the English tokens back to the storefront's canonical Spanish values so the
+// existing filters.js + tv() (Spanish→English display) keep working unchanged.
+import { medusa } from "./medusa.js";
+import { hexFor } from "./products.js";
+
+// English (scraper) → canonical Spanish (storefront) for nominal attributes.
+const SHAPE_ES = {
+  square: "Cuadrado", round: "Redondo", "cat-eye": "Ojo de gato", navigator: "Navegador",
+  rectangle: "Rectángulo", aviator: "Aviador", geometric: "Geométrico", oval: "Oval",
+  "modified-oval": "Óvalo modificado", "modified-round": "Ronda modificada",
+  combo: "Combo", "full-frame": "Marco completo",
+};
+const MATERIAL_ES = {
+  acetate: "Acetato", plastic: "Plástica", metal: "Metal", "stainless-steel": "Acero inoxidable",
+  memory: "Memoria", titanium: "Titanio", injection: "Inyección", tr90: "TR-90", ultem: "Ultem",
+};
+const GENDER_ES = { men: "Hombres", women: "Señoras", unisex: "Unisexo", kids: "Niños" };
+const AGE_ES = { adult: "Adulto", kids: "Niños" };
+
+const mapEnum = (table, v) => (v ? table[String(v).toLowerCase()] || v : v);
+
+// R2 keys are stored bare; hotlinked/dev images are already absolute URLs.
+const R2_PUBLIC = (import.meta.env && import.meta.env.VITE_R2_PUBLIC_URL
+  ? String(import.meta.env.VITE_R2_PUBLIC_URL).replace(/\/$/, "")
+  : "");
+function resolveImage(key) {
+  if (!key) return "";
+  if (/^https?:\/\//i.test(key)) return key;
+  return R2_PUBLIC ? `${R2_PUBLIC}/${key.replace(/^\//, "")}` : key;
+}
+
+// Lowest variant price (dollars) from Medusa's server-computed calculated_price.
+function priceOf(product) {
+  const amounts = (product.variants || [])
+    .map((v) => v.calculated_price && v.calculated_price.calculated_amount)
+    .filter((a) => typeof a === "number");
+  if (!amounts.length) return 0;
+  return Math.round(Math.min(...amounts)) / 100;
+}
+
+function colorsOf(product) {
+  const variants = product.variants || [];
+  const images = (product.images || []).map((i) => i.url);
+  return variants.map((v, i) => {
+    const name = v.title || (v.metadata && v.metadata.color) || "Default";
+    const raw = (v.metadata && v.metadata.image) || images[i] || product.thumbnail || images[0] || "";
+    return { name, image: resolveImage(raw), hex: hexFor(name) };
+  });
+}
+
+function toFrame(product) {
+  const m = product.metadata || {};
+  const materials = m.material ? [mapEnum(MATERIAL_ES, m.material)] : [];
+  const price = priceOf(product);
+  return {
+    sku: product.title,
+    name: product.title,
+    slug: product.handle,
+    brand: m.brand || "",
+    brand_slug: m.brand_slug || m.collection_slug || "",
+    colors: colorsOf(product),
+    attributes: {
+      shape: mapEnum(SHAPE_ES, m.shape) || "",
+      material: materials,
+      gender: mapEnum(GENDER_ES, m.gender) || "",
+      age: mapEnum(AGE_ES, m.age_group) || "",
+      eye_size: m.eye_size_bucket || "",
+      bridge_size: m.bridge_size_bucket || "",
+      temple_length: m.temple_length_bucket || "",
+    },
+    price,
+    basePrice: price,
+    rating: typeof m.rating === "number" ? m.rating : 4.6,
+    reviews: typeof m.review_count === "number" ? m.review_count : 0,
+    medusaId: product.id,
+  };
+}
+
+function toCase(product) {
+  const price = priceOf(product);
+  return {
+    sku: product.title,
+    name: product.title,
+    slug: "case-" + product.handle,
+    brand: "Cases",
+    brand_slug: "case",
+    isCase: true,
+    material: "",
+    colors: colorsOf(product),
+    price,
+    basePrice: price,
+    rating: typeof (product.metadata || {}).rating === "number" ? product.metadata.rating : 4.7,
+    reviews: typeof (product.metadata || {}).review_count === "number" ? product.metadata.review_count : 0,
+    medusaId: product.id,
+  };
+}
+
+const FIELDS =
+  "id,title,handle,description,thumbnail,*images,*variants,*variants.calculated_price,metadata";
+
+// Fetch every published product for the store's first region, paginated.
+export async function loadFromMedusa() {
+  const { regions } = await medusa.store.region.list();
+  const region_id = regions && regions[0] && regions[0].id;
+
+  const all = [];
+  const limit = 100;
+  let offset = 0;
+  // Cap the loop defensively; a normal catalog is a few hundred products.
+  for (let page = 0; page < 100; page++) {
+    const { products, count } = await medusa.store.product.list({
+      limit, offset, region_id, fields: FIELDS,
+    });
+    if (!products || !products.length) break;
+    all.push(...products);
+    offset += limit;
+    if (offset >= (count || 0)) break;
+  }
+
+  const frames = [];
+  const cases = [];
+  for (const p of all) {
+    const slug = ((p.metadata || {}).brand_slug || (p.metadata || {}).collection_slug || "");
+    if (slug === "case") cases.push(toCase(p));
+    else frames.push(toFrame(p));
+  }
+  return { products: frames, cases };
+}

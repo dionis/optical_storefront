@@ -12,6 +12,12 @@ class Config:
     medusa_admin_api_key: str = field(
         default_factory=lambda: os.getenv("MEDUSA_ADMIN_API_KEY", "")
     )
+    # Sales channel the storefront sells from. Products MUST be associated with it,
+    # or the Store API (queried via the publishable key) returns nothing. Obtain the
+    # id (`sc_...`) from docs/phase-0-setup.md. Empty = don't set it on the payload.
+    medusa_sales_channel_id: str = field(
+        default_factory=lambda: os.getenv("MEDUSA_SALES_CHANNEL_ID", "")
+    )
     r2_access_key_id: str = field(
         default_factory=lambda: os.getenv("R2_ACCESS_KEY_ID", "")
     )

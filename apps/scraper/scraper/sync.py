@@ -8,9 +8,13 @@ import yaml
 from scraper.config import Config, get_config
 from scraper.http_client import RateLimitedClient
 from scraper.images import process_product_images
-from scraper.medusa_push import upsert_product
+from scraper.medusa_push import reconcile_discontinued, upsert_product
 from scraper.models import ScrapedProduct
-from scraper.parser import parse_product_html, parse_store_api_product
+from scraper.parser import (
+    align_images_to_colors,
+    parse_product_html,
+    parse_store_api_product,
+)
 from scraper.state import StateStore
 from scraper.translate import translate_product
 
@@ -241,22 +245,38 @@ async def sync(
     state = StateStore(config.state_db_path)
     pricing = _load_pricing()
     target_collections = collections or config.collections
+    # Every handle present at the supplier this run, whether pushed or skipped as
+    # unchanged. Used to reconcile (draft) discontinued products on full syncs.
+    seen_handles: set[str] = set()
+    fetch_failed = False
 
     async with RateLimitedClient(config) as client:
         for collection_slug in target_collections:
             print(f"\n[scraper] ── Syncing collection: {collection_slug} ──")
             products = await _fetch_collection_products(client, config, collection_slug)
             print(f"[scraper]   Found {len(products)} products.")
+            if not products:
+                # A collection that yields nothing may be a fetch failure, not a real
+                # empty — don't let reconciliation unpublish it on a fluke.
+                fetch_failed = True
 
             pushed = 0
             skipped = 0
             for product in products:
+                seen_handles.add(product.handle)
                 if not full and not state.has_changed(product.handle, product.content_hash):
                     skipped += 1
                     continue
 
                 # Enrich with individual product HTML (for UPC, measurements)
                 product = await _enrich_from_html(client, config, product)
+
+                # Align images to colors (token match) so each variant/try-on asset
+                # gets its own photo, not a positional guess. Done after enrichment
+                # so gallery images pulled from the HTML page are included.
+                product.image_urls = align_images_to_colors(
+                    product.colors, product.image_urls
+                )
 
                 # AI-assisted es/fr translation of title+description (skips gracefully
                 # if ANTHROPIC_API_KEY is unset or the call fails — never blocks sync)
@@ -277,6 +297,16 @@ async def sync(
                         state.mark_seen(product.handle, product.content_hash)
 
             print(f"[scraper]   Pushed: {pushed}, Skipped (unchanged): {skipped}")
+
+    # Reconcile discontinued models (draft them) — only on a full sync where every
+    # collection returned data, so a partial/failed fetch never unpublishes stock.
+    if full and not fetch_failed:
+        drafted = reconcile_discontinued(
+            seen_handles, set(target_collections), config, dry_run=dry_run
+        )
+        print(f"[scraper]   Reconciled discontinued: {len(drafted)} drafted.")
+    elif full and fetch_failed:
+        print("[scraper]   Skipping reconciliation — a collection returned no data.")
 
     print("\n[scraper] ✓ Sync complete.")
 

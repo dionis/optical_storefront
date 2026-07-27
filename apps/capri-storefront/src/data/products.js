@@ -65,7 +65,7 @@ const COLOR_HEX = {
   violet: "#7b4aa0", aqua: "#4bb8c4", denim: "#3b5a80", antique: "#b08d57", matt: "#2b2b2b",
   stone: "#9a9488", grey: "#8a8a8a", light: "#cfd6df", "matt gold": "#c9a44a", "black grey": "#4b4f56",
 };
-function hexFor(colorName) {
+export function hexFor(colorName) {
   const key = colorName.toLowerCase();
   if (COLOR_HEX[key]) return COLOR_HEX[key];
   // strip leading index like "01-" and scan tokens for a known color word

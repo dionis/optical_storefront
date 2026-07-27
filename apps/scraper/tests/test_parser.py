@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from scraper.models import ScrapedProduct
-from scraper.parser import parse_product_html, parse_store_api_product, _parse_sizes
+from scraper.parser import (
+    align_images_to_colors,
+    parse_product_html,
+    parse_store_api_product,
+    _parse_sizes,
+)
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -95,6 +100,60 @@ class TestStoreApiParser:
         data = {"id": 1, "name": "Di Caprio DC101", "images": [], "attributes": [], "tags": []}
         product = parse_store_api_product(data, "di-caprio")
         assert product.description_en == ""
+
+    def test_in_stock_defaults_true_when_absent(self) -> None:
+        data = {"id": 1, "name": "DC101", "images": [], "attributes": [], "tags": []}
+        product = parse_store_api_product(data, "di-caprio")
+        assert product.is_in_stock is True
+
+    def test_out_of_stock_is_captured(self) -> None:
+        data = {"id": 1, "name": "DC101", "is_in_stock": False, "images": [], "attributes": [], "tags": []}
+        product = parse_store_api_product(data, "di-caprio")
+        assert product.is_in_stock is False
+
+    def test_stock_change_alters_content_hash(self) -> None:
+        base = {"id": 1, "name": "DC101", "images": [], "attributes": [], "tags": []}
+        in_stock = parse_store_api_product({**base, "is_in_stock": True}, "di-caprio")
+        out_stock = parse_store_api_product({**base, "is_in_stock": False}, "di-caprio")
+        assert in_stock.content_hash != out_stock.content_hash
+
+
+class TestAlignImagesToColors:
+    def test_matches_each_color_to_its_image(self) -> None:
+        colors = ["Black", "Light Blue", "Light Pink"]
+        urls = [
+            "https://cdn/DC407%20Light%20Pink.jpg",
+            "https://cdn/DC407%20Black.jpg",
+            "https://cdn/DC407%20Light%20Blue.jpg",
+        ]
+        aligned = align_images_to_colors(colors, urls)
+        assert aligned[0] == "https://cdn/DC407%20Black.jpg"
+        assert aligned[1] == "https://cdn/DC407%20Light%20Blue.jpg"
+        assert aligned[2] == "https://cdn/DC407%20Light%20Pink.jpg"
+
+    def test_appends_unmatched_gallery_images(self) -> None:
+        colors = ["Black"]
+        urls = ["https://cdn/Black.jpg", "https://cdn/detail-shot.jpg"]
+        aligned = align_images_to_colors(colors, urls)
+        assert aligned[0] == "https://cdn/Black.jpg"
+        assert "https://cdn/detail-shot.jpg" in aligned
+        assert len(aligned) == 2
+
+    def test_falls_back_positionally_when_no_token_match(self) -> None:
+        colors = ["Onyx", "Sand"]
+        urls = ["https://cdn/img-a.jpg", "https://cdn/img-b.jpg"]
+        aligned = align_images_to_colors(colors, urls)
+        assert aligned == ["https://cdn/img-a.jpg", "https://cdn/img-b.jpg"]
+
+    def test_reuses_featured_when_fewer_images_than_colors(self) -> None:
+        colors = ["Black", "Blue", "Green"]
+        urls = ["https://cdn/only-one.jpg"]
+        aligned = align_images_to_colors(colors, urls)
+        assert aligned[:3] == ["https://cdn/only-one.jpg"] * 3
+
+    def test_no_colors_returns_images_unchanged(self) -> None:
+        urls = ["https://cdn/a.jpg", "https://cdn/b.jpg"]
+        assert align_images_to_colors([], urls) == urls
 
 
 class TestHtmlParser:

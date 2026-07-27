@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from typing import Any
+from urllib.parse import unquote
 
 from bs4 import BeautifulSoup, Tag
 
@@ -11,6 +12,63 @@ from scraper.models import FrameSize, ScrapedProduct
 
 
 SIZE_RE = re.compile(r"(\d+)-(\d+)-(\d+)")
+
+
+def _color_tokens(name: str) -> list[str]:
+    """Tokenize a color name for URL matching: lowercase, drop leading indices/digits."""
+    lowered = re.sub(r"\b\d+\s*-?\s*", " ", name.lower())
+    return [t for t in re.split(r"[^a-z]+", lowered) if t]
+
+
+def _token_match(name: str, urls: list[str]) -> str | None:
+    """Return the first URL whose decoded path contains every token of `name`.
+
+    Port of sync-catalog.mjs `tokenMatch`: matches a color name against image URLs
+    (e.g. color "Light Blue" → ".../DC407 Light Blue.jpg").
+    """
+    tokens = _color_tokens(name)
+    if not tokens:
+        return None
+    for url in urls:
+        haystack = unquote(url).lower()
+        if all(tok in haystack for tok in tokens):
+            return url
+    return None
+
+
+def align_images_to_colors(
+    colors: list[str], image_urls: list[str]
+) -> list[str]:
+    """Reorder image_urls so image[i] corresponds to colors[i].
+
+    Matches each color name against the image URLs (token match), falling back to
+    positional order, then to the first available image (mirrors sync-catalog.mjs
+    color→image resolution). Images not matched to a color are appended after so the
+    full product gallery is preserved. The first len(colors) entries are the
+    per-color images in color order, which downstream (image upload + try-on asset)
+    relies on to associate each variant with its own photo.
+    """
+    if not colors:
+        return list(image_urls)
+
+    used: set[str] = set()
+    ordered: list[str] = []
+    for idx, color in enumerate(colors):
+        remaining = [u for u in image_urls if u not in used]
+        chosen = _token_match(color, remaining)
+        if chosen is None:
+            if idx < len(image_urls) and image_urls[idx] not in used:
+                chosen = image_urls[idx]          # positional fallback
+            elif remaining:
+                chosen = remaining[0]             # first still-unused image
+            elif image_urls:
+                chosen = image_urls[0]            # reuse featured image
+        if chosen is not None:
+            ordered.append(chosen)
+            used.add(chosen)
+
+    ordered.extend([u for u in image_urls if u not in used])  # leftover gallery
+    return ordered
 
 
 def _parse_sizes(raw: str) -> list[FrameSize]:
@@ -66,6 +124,10 @@ def parse_store_api_product(
     raw_description = data.get("description") or data.get("short_description") or ""
     description_en = BeautifulSoup(raw_description, "lxml").get_text(" ", strip=True)
 
+    # Availability gate: the Store API exposes stock via `is_in_stock` (default to
+    # available when the field is absent).
+    is_in_stock = bool(data.get("is_in_stock", True))
+
     product = ScrapedProduct(
         model_name=name,
         handle=handle,
@@ -75,9 +137,11 @@ def parse_store_api_product(
         sizes=raw_sizes,
         image_urls=image_urls,
         features=features,
+        is_in_stock=is_in_stock,
     )
 
-    # Compute content hash for change detection
+    # Compute content hash for change detection. Include stock so a transition
+    # (available ↔ out of stock) re-triggers the push even if nothing else changed.
     product.content_hash = hashlib.sha256(
         json.dumps(
             {
@@ -88,6 +152,7 @@ def parse_store_api_product(
                     (s.eye_size, s.bridge_size, s.temple_length) for s in raw_sizes
                 ],
                 "images": sorted(image_urls),
+                "in_stock": is_in_stock,
             },
             sort_keys=True,
         ).encode()

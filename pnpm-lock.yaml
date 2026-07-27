@@ -117,6 +117,9 @@ importers:
 
   apps/capri-storefront:
     dependencies:
+      '@medusajs/js-sdk':
+        specifier: ^2.8.6
+        version: 2.17.2
       react:
         specifier: ^18.3.1
         version: 18.3.1

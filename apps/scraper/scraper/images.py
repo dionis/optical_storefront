@@ -66,7 +66,12 @@ def process_product_images(
         return product
 
     if not config.r2_endpoint:
-        print(f"[images] Skipping R2 upload — R2_ENDPOINT not configured.")
+        # Dev/no-R2 fallback: hotlink the supplier images (already color-aligned)
+        # so products still get pictures. Mirrors the static catalog's approach.
+        # Downstream treats an absolute http(s) key as a ready-to-use URL. No
+        # try-on assets are generated (rembg needs the downloaded bytes).
+        print("[images] R2_ENDPOINT not configured — hotlinking supplier image URLs.")
+        product.r2_image_keys = list(product.image_urls)
         return product
 
     s3 = _get_s3_client(config)

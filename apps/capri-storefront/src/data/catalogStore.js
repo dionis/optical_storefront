@@ -7,6 +7,8 @@ import { useSyncExternalStore } from "react";
 import { enrichProducts, PRODUCTS as SEED_PRODUCTS, SEED_FRAMES } from "./products.js";
 import { enrichCases, CASES as SEED_CASES, SEED_CASES as SEED_CASES_RAW } from "./cases.js";
 import { subscribe as onPrices } from "../admin/priceStore.js";
+import { USE_MEDUSA } from "./medusa.js";
+import { loadFromMedusa } from "./medusaCatalog.js";
 
 function hash(str){let h=0;const s=String(str);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffffff;return Math.abs(h);}
 const bySlug = (arr) => Object.fromEntries(arr.map((p) => [p.slug, p]));
@@ -50,6 +52,28 @@ let loaded = false;
 export async function loadLive() {
   if (loaded) return;
   loaded = true;
+
+  // Medusa path (Phase 1): the Store API is the source of truth. Prices/attributes
+  // come already computed from the backend — no priceStore/enrichment re-pricing.
+  if (USE_MEDUSA) {
+    try {
+      const { products, cases } = await loadFromMedusa();
+      if (Array.isArray(products) && products.length) {
+        set({
+          products,
+          cases: cases.length ? cases : state.cases,
+          productBySlug: bySlug(products),
+          caseBySlug: bySlug(cases.length ? cases : state.cases),
+          meta: { source: "medusa" },
+          live: true,
+        });
+      }
+    } catch (e) {
+      // network/SDK error → keep the bundled seed silently
+    }
+    return;
+  }
+
   try {
     const opt = { cache: "no-store" };
     const [cRes, kRes] = await Promise.all([fetch(`${BASE}/catalog.json`, opt), fetch(`${BASE}/cases.json`, opt)]);

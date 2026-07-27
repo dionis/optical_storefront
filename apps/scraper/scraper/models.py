@@ -30,6 +30,11 @@ class ScrapedProduct:
     # Per-color UPC codes  {color_name: upc}
     upc_by_color: dict[str, str] = field(default_factory=dict)
 
+    # Availability at the supplier. Out-of-stock models are pushed to Medusa as
+    # drafts (unpublished) so they disappear from the storefront and reappear when
+    # restocked. Part of the content hash so a stock transition triggers a re-push.
+    is_in_stock: bool = True
+
     # Physical attributes
     material: str = ""
     shape: str = ""
