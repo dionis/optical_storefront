@@ -317,7 +317,16 @@ async def _enrich_from_html(
     product: ScrapedProduct,
 ) -> ScrapedProduct:
     """Fetch the product HTML page and enrich the product with additional attributes."""
-    url = f"{config.base_url}/product/{product.handle.rsplit('-', 1)[0]}/"
+    # Prefer the supplier's own permalink. The fallback strips the collection slug
+    # from the handle — `rsplit('-', 1)` is wrong for multi-word slugs like
+    # "di-caprio" (us134-di-caprio → us134-di → 404).
+    url = product.source_url
+    if not url:
+        model_slug = product.handle
+        suffix = f"-{product.collection_slug}"
+        if model_slug.endswith(suffix):
+            model_slug = model_slug[: -len(suffix)]
+        url = f"{config.base_url}/product/{model_slug}/"
     try:
         resp = await client.get(url)
         if resp.status_code == 304:

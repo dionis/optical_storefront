@@ -135,6 +135,7 @@ def parse_store_api_product(
         description_en=description_en,
         colors=colors,
         sizes=raw_sizes,
+        source_url=str(data.get("permalink") or ""),
         image_urls=image_urls,
         features=features,
         is_in_stock=is_in_stock,

@@ -49,6 +49,11 @@ class ScrapedProduct:
     ed: float | None = None
     circ: float | None = None
 
+    # Canonical product page at the supplier, when known (Store API `permalink`).
+    # Used for HTML enrichment; the handle is not reversible into a URL because the
+    # collection slug appended to it may itself contain hyphens.
+    source_url: str = ""
+
     # Image URLs from supplier (will be downloaded and re-hosted on R2)
     image_urls: list[str] = field(default_factory=list)
 

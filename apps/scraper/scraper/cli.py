@@ -4,7 +4,7 @@ import asyncio
 
 import click
 
-from scraper.config import get_config
+from scraper.config import ConfigError, get_config
 from scraper.sync import sync
 
 
@@ -19,7 +19,12 @@ def cli() -> None:
 @click.option("--dry-run", is_flag=True, default=False, help="Parse and print without writing to Medusa or R2.")
 def sync_cmd(full: bool, collection_slug: str | None, dry_run: bool) -> None:
     """Sync catalog from caprioptics.com into Medusa + R2."""
-    config = get_config()
+    try:
+        config = get_config()
+        config.validate(dry_run=dry_run)
+    except ConfigError as err:
+        # Surface the actual cause instead of a network traceback 130 products in.
+        raise click.ClickException(str(err)) from err
     collections = [collection_slug] if collection_slug else None
     asyncio.run(sync(config, collections=collections, full=full, dry_run=dry_run))
 
