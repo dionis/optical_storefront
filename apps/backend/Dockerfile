@@ -48,9 +48,15 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/apps/backend/.medusa/server ./apps/backend/.medusa/server
 
-# `medusa start` resolves medusa-config.js, src/** and public/admin relative
-# to the working directory, so it must run from the build output folder.
+# `medusa start` derives everything from the working directory —
+# @medusajs/cli does `path.resolve(".")` and looks for medusa-config, src/**
+# and public/admin under it. Started anywhere else it dies with
+# "Cannot find module '<cwd>/medusa-config'", because this image ships the
+# compiled output only, never the sources.
 WORKDIR /app/apps/backend/.medusa/server
 
 EXPOSE 9000
-CMD ["/app/apps/backend/node_modules/.bin/medusa", "start", "-H", "0.0.0.0"]
+# The `cd` is deliberate rather than relying on WORKDIR alone: an orchestrator
+# that sets its own working_dir (Coolify writes the compose file for us) would
+# otherwise silently move the process out of the build output folder.
+CMD ["sh", "-c", "cd /app/apps/backend/.medusa/server && exec /app/apps/backend/node_modules/.bin/medusa start -H 0.0.0.0"]

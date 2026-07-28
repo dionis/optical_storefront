@@ -180,6 +180,44 @@ ls node_modules | wc -l     # a pnpm workspace root should be a handful, not hun
 rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install
 ```
 
+### Third failure: restart loop, wrong working directory
+
+The image finally built and the container started, then restarted forever.
+Coolify still reported the deploy as successful — its job ends at
+`Rolling update completed`, which only means Docker accepted the container.
+Whether the process stays alive is the restart policy's business, not the
+deploy's. Worse, every redeploy runs `docker rm -f` on the previous container,
+taking its logs with it — so the logs have to be captured *before* pressing
+Deploy again, or by running the image by hand:
+
+```bash
+IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep <app-uuid> | head -1)
+docker run --rm -it --network coolify \
+  --env-file /data/coolify/applications/<app-uuid>/.env "$IMG" sh
+```
+
+The error was:
+
+```
+Error in loading config: Cannot find module '/app/apps/backend/medusa-config'
+```
+
+`@medusajs/cli` does `path.resolve(".")` ([create-cli.js:52]) and derives
+medusa-config, `src/**` and `public/admin` from it. Started outside
+`.medusa/server`, none of it resolves — the runner image ships the compiled
+output only, never the sources. The `CMD` now `cd`s explicitly instead of
+trusting `WORKDIR`, so an orchestrator setting its own `working_dir` cannot
+move the process out of the build output folder. `exec` is kept so SIGTERM
+still reaches Medusa for graceful shutdown.
+
+Also found while chasing this: the Coolify resource named
+`redis-insight-…` was a **RedisInsight** stack — the browser GUI, listening on
+5540 and speaking HTTP, not a Redis server. `REDIS_URL` pointed at it using
+the *resource display name* (`redis-insight-…`) rather than the container
+hostname (`redisinsight-…`), so it did not even resolve. Coolify's Redis
+**database** resource exposes the correct string in its "Redis URL (internal)"
+field, where the host is the bare UUID — always copy that verbatim.
+
 ### If the export step still fails
 
 Check the VM, not the build:
