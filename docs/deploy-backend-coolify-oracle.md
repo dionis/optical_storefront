@@ -160,6 +160,26 @@ added to `include`; `@eyewear/shared` moved from `devDependencies` to
 the Meilisearch subscribers, and `--prod` would otherwise prune it); Dockerfile
 rewritten as described above.
 
+### Second failure: phantom dependency
+
+With the export fixed, the next deploy got as far as `medusa build` and failed
+with six `TS2307: Cannot find module '@mikro-orm/knex'`. The package was never
+declared — it was only reachable transitively through `@mikro-orm/migrations`.
+
+It compiled locally because the repo root had a **flat, npm-style
+`node_modules` with 855 entries** (`express`, `react`, `next`… none of them
+root dependencies) left over next to pnpm's `.pnpm` store. A hoisted tree
+resolves undeclared packages; pnpm's isolated tree inside the container does
+not. Fixed by declaring `@mikro-orm/knex` in `apps/backend` devDependencies
+(the imports are all `import type`).
+
+If a build fails in Docker but passes locally, suspect this first:
+
+```bash
+ls node_modules | wc -l     # a pnpm workspace root should be a handful, not hundreds
+rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install
+```
+
 ### If the export step still fails
 
 Check the VM, not the build:

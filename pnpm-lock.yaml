@@ -81,6 +81,9 @@ importers:
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.5
+      '@mikro-orm/knex':
+        specifier: ^6.4.3
+        version: 6.6.14(@mikro-orm/core@6.6.14)(pg@8.22.0)
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
