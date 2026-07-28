@@ -30,11 +30,14 @@ def _build_medusa_payload(
     and reappear when restocked. When `sales_channel_id` is provided the product is
     associated with it — required for the Store API (publishable key) to return it.
     """
-    # Determine price from pricing rules: collection > default
+    # Determine price from pricing rules: collection > default. pricing.yaml is
+    # authored in cents; Medusa v2 stores prices as DECIMAL major units (dollars,
+    # e.g. 99.00 — NOT cents), so convert here for the variant price amount.
     collection_rules: dict[str, Any] = pricing.get(product.collection_slug, {})
     price_cents: int = int(
         collection_rules.get("price_cents", pricing.get("default_price_cents", 9900))
     )
+    price_amount = round(price_cents / 100, 2)
 
     # Deterministic display-only filler (rating/reviews/best-seller/compare-at price).
     # Never used as an input to actual pricing — display metadata only.
@@ -51,7 +54,10 @@ def _build_medusa_payload(
             "title": color,
             "sku": product.upc_by_color.get(color, f"{product.handle}-{color.lower().replace(' ', '-')}"),
             "options": {"Color": color},
-            "prices": [{"currency_code": "usd", "amount": price_cents}],
+            # Frames are made/ordered per sale (availability comes from the scraper's
+            # is_in_stock gate, not Medusa inventory), so don't stock-track variants.
+            "manage_inventory": False,
+            "prices": [{"currency_code": "usd", "amount": price_amount}],
             "metadata": {
                 "upc": product.upc_by_color.get(color),
                 "color": color,

@@ -39,13 +39,14 @@ function resolveImage(key) {
   return R2_PUBLIC ? `${R2_PUBLIC}/${key.replace(/^\//, "")}` : key;
 }
 
-// Lowest variant price (dollars) from Medusa's server-computed calculated_price.
+// Lowest variant price from Medusa's server-computed calculated_price. Medusa v2
+// stores amounts as decimal dollars (e.g. 99), so use them as-is — never /100.
 function priceOf(product) {
   const amounts = (product.variants || [])
     .map((v) => v.calculated_price && v.calculated_price.calculated_amount)
     .filter((a) => typeof a === "number");
   if (!amounts.length) return 0;
-  return Math.round(Math.min(...amounts)) / 100;
+  return Math.round(Math.min(...amounts) * 100) / 100;
 }
 
 function colorsOf(product) {
@@ -54,7 +55,7 @@ function colorsOf(product) {
   return variants.map((v, i) => {
     const name = v.title || (v.metadata && v.metadata.color) || "Default";
     const raw = (v.metadata && v.metadata.image) || images[i] || product.thumbnail || images[0] || "";
-    return { name, image: resolveImage(raw), hex: hexFor(name) };
+    return { name, image: resolveImage(raw), hex: hexFor(name), variantId: v.id };
   });
 }
 

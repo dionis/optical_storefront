@@ -23,6 +23,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.709.0
         version: 3.1091.0
+      '@eyewear/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@medusajs/admin-sdk':
         specifier: ^2.8.6
         version: 2.18.0
@@ -78,9 +81,6 @@ importers:
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.5
-      '@eyewear/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14

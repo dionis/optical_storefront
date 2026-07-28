@@ -4,10 +4,17 @@
     "transpileOnly": true
   },
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
+    // Medusa derives its build output folder from `outDir` and expects the
+    // standard `.medusa/server` layout: compiled sources under `src/` plus a
+    // `medusa-config.js` at the root. Do NOT set `rootDir` — stripping the
+    // `src/` prefix breaks module resolution at runtime, because the loaders
+    // always look for the project's routes/modules under `<cwd>/src`.
+    "outDir": "./.medusa/server",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src"]
+  // `medusa-config.ts` must be part of the program so it gets emitted next to
+  // the compiled sources — `medusa start` loads it from the output folder.
+  "include": ["src", "medusa-config.ts"],
+  "exclude": ["node_modules", "dist", ".medusa", "tests"]
 }

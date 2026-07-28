@@ -1,13 +1,15 @@
 /**
  * Seed the 2026 lens price list ("matriz") — Óptica El Rancho.
  * Run with: medusa exec src/scripts/seed-lens-2026.ts
- * Idempotent: creates rows only when their unique code (or design/material cell)
- * is missing, so it is safe to re-run.
  *
- * All amounts are USD cents (integers) to match Medusa product prices.
+ * Writes via the shared Postgres connection (Knex), mirroring the store routes
+ * (/store/lens-config/matrix and /quote), so it is independent of the lens-config
+ * module's ORM manager lifecycle. Re-running replaces the 5 matrix tables.
+ *
+ * All amounts are USD cents (integers) to keep the price-list columns explicit.
  */
-import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
-import type LensConfigModuleService from "../modules/lens-config/service";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 
 const DESIGNS = [
   { code: "sv", category: "sv", requires_rx: true, requires_add: false, label_es: "Visión Sencilla", label_en: "Single Vision", sort: 0 },
@@ -60,32 +62,30 @@ export default async function seedLens2026({
 }: {
   container: { resolve: <T>(id: string) => T };
 }): Promise<void> {
-  const svc = container.resolve<LensConfigModuleService>(LENS_CONFIG_MODULE);
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
 
-  for (const d of DESIGNS) {
-    const existing = await svc.listLensDesigns({ code: d.code });
-    if (!existing.length) { await svc.createLensDesigns(d); console.log(`[seed] design ${d.code}`); }
-  }
-  for (const m of MATERIALS) {
-    const existing = await svc.listLensMaterials({ code: m.code });
-    if (!existing.length) { await svc.createLensMaterials(m); console.log(`[seed] material ${m.code}`); }
-  }
+  // Clean re-seed (nothing references these tables yet).
+  await pg("lens_base_price").del();
+  await pg("lens_design").del();
+  await pg("lens_material").del();
+  await pg("lens_photo_option").del();
+  await pg("lens_ar_option").del();
+
+  await pg("lens_design").insert(DESIGNS);
+  await pg("lens_material").insert(MATERIALS);
+
+  const basePrices: { design_code: string; material_code: string; price_cents: number }[] = [];
   for (const design of Object.keys(BASE_USD)) {
     for (const material of Object.keys(BASE_USD[design])) {
-      const existing = await svc.listLensBasePrices({ design_code: design, material_code: material });
-      if (!existing.length) {
-        await svc.createLensBasePrices({ design_code: design, material_code: material, price_cents: BASE_USD[design][material] * 100 });
-      }
+      basePrices.push({ design_code: design, material_code: material, price_cents: BASE_USD[design][material] * 100 });
     }
   }
-  for (const p of PHOTOS) {
-    const existing = await svc.listLensPhotoOptions({ code: p.code });
-    if (!existing.length) { await svc.createLensPhotoOptions(p); console.log(`[seed] photo ${p.code}`); }
-  }
-  for (const a of ARS) {
-    const existing = await svc.listLensArOptions({ code: a.code });
-    if (!existing.length) { await svc.createLensArOptions(a); console.log(`[seed] ar ${a.code}`); }
-  }
+  await pg("lens_base_price").insert(basePrices);
+  await pg("lens_photo_option").insert(PHOTOS);
+  await pg("lens_ar_option").insert(ARS);
 
-  console.log("[seed] 2026 lens matrix ready.");
+  console.log(
+    `[seed] 2026 matrix: ${DESIGNS.length} designs, ${MATERIALS.length} materials, ` +
+    `${basePrices.length} base prices, ${PHOTOS.length} photos, ${ARS.length} AR options.`
+  );
 }

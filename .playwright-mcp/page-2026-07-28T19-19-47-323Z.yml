@@ -1,0 +1,230 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: Free shipping on orders over $59 · 30-day guarantee
+    - generic [ref=e5]:
+      - link [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "Óptica El Rancho — RUBI_LENS" [ref=e7]
+      - navigation [ref=e8]:
+        - link "Eyeglasses" [ref=e9] [cursor=pointer]:
+          - /url: /catalogo
+        - link "Kids" [ref=e10] [cursor=pointer]:
+          - /url: /catalogo?age=Niños
+        - link "Cases" [ref=e11] [cursor=pointer]:
+          - /url: /marca/case
+        - link "Brands" [ref=e12] [cursor=pointer]:
+          - /url: /#marcas
+      - generic [ref=e13]:
+        - textbox "Search by model or brand…" [ref=e14]
+        - button "Search" [ref=e15] [cursor=pointer]: ⌕
+      - generic [ref=e16]:
+        - group "Language / Idioma" [ref=e17]:
+          - button "Español" [ref=e18] [cursor=pointer]
+          - button "English" [pressed] [ref=e22] [cursor=pointer]
+        - button "👤" [ref=e33] [cursor=pointer]
+        - button "♡" [ref=e34] [cursor=pointer]
+        - button "🛒" [ref=e35] [cursor=pointer]
+    - dialog "Your cart" [ref=e36]:
+      - generic [ref=e37]:
+        - heading "Your cart" [level=3] [ref=e38]
+        - button "×" [ref=e39] [cursor=pointer]
+      - paragraph [ref=e41]: Your cart is empty
+    - dialog "Your favorites" [ref=e42]:
+      - generic [ref=e43]:
+        - heading "Your favorites" [level=3] [ref=e44]
+        - button "×" [ref=e45] [cursor=pointer]
+      - paragraph [ref=e47]: No favorites yet. Tap the ♡ on any frame.
+    - dialog "Sign in to your account" [ref=e48]:
+      - generic [ref=e49]:
+        - heading "Sign in to your account" [level=3] [ref=e50]
+        - button "×" [ref=e51] [cursor=pointer]
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - button "Sign in" [ref=e55] [cursor=pointer]
+          - button "Create account" [ref=e56] [cursor=pointer]
+        - generic [ref=e57]:
+          - text: Email
+          - textbox "Email" [ref=e58]:
+            - /placeholder: tucorreo@ejemplo.com
+        - generic [ref=e59]:
+          - text: Cell phone
+          - textbox "Cell phone" [ref=e60]:
+            - /placeholder: +1 281 555 0100
+        - button "Sign in" [ref=e61] [cursor=pointer]
+        - paragraph [ref=e62]: Sign in to save favorites and see your orders.
+  - main [ref=e63]:
+    - generic [ref=e64]:
+      - generic [ref=e89]:
+        - link "← Back to US134" [ref=e90] [cursor=pointer]:
+          - /url: /producto/us134-4u
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: ✓
+            - text: Use
+          - generic [ref=e94]:
+            - generic [ref=e95]: ✓
+            - text: Prescription
+          - generic [ref=e96]:
+            - generic [ref=e97]: "3"
+            - text: Lens
+          - generic [ref=e98]:
+            - generic [ref=e99]: "4"
+            - text: Summary
+      - generic [ref=e100]:
+        - generic [ref=e170]:
+          - heading "Choose your lens material" [level=2] [ref=e171]
+          - generic [ref=e172]:
+            - generic [ref=e173]: "💡 Based on your prescription we recommend: CR-39 (Resin)"
+            - generic [ref=e174]: You can pick another material, but this one best fits your prescription.
+          - heading "Lens material" [level=3] [ref=e175]
+          - generic [ref=e176]:
+            - generic [ref=e177] [cursor=pointer]:
+              - radio "CR-39 (Resin) ★ Standard, budget. $60" [checked] [active] [ref=e178]
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - text: CR-39 (Resin)
+                  - generic [ref=e181]: ★
+                - generic [ref=e182]: Standard, budget.
+              - generic [ref=e183]: $60
+            - generic [ref=e184] [cursor=pointer]:
+              - radio "Polycarbonate Impact-resistant. Kids/sport. $90" [ref=e185]
+              - generic [ref=e186]:
+                - generic [ref=e187]: Polycarbonate
+                - generic [ref=e188]: Impact-resistant. Kids/sport.
+              - generic [ref=e189]: $90
+            - generic [ref=e190] [cursor=pointer]:
+              - radio "Index 1.56 Thinner than CR-39. $100" [ref=e191]
+              - generic [ref=e192]:
+                - generic [ref=e193]: Index 1.56
+                - generic [ref=e194]: Thinner than CR-39.
+              - generic [ref=e195]: $100
+            - generic [ref=e196] [cursor=pointer]:
+              - radio "Index 1.61 Thin. $100" [ref=e197]
+              - generic [ref=e198]:
+                - generic [ref=e199]: Index 1.61
+                - generic [ref=e200]: Thin.
+              - generic [ref=e201]: $100
+            - generic [ref=e202] [cursor=pointer]:
+              - radio "Index 1.67 Very thin. $120" [ref=e203]
+              - generic [ref=e204]:
+                - generic [ref=e205]: Index 1.67
+                - generic [ref=e206]: Very thin.
+              - generic [ref=e207]: $120
+            - generic [ref=e208] [cursor=pointer]:
+              - radio "Index 1.74 Ultra-thin. High Rx. $150" [ref=e209]
+              - generic [ref=e210]:
+                - generic [ref=e211]: Index 1.74
+                - generic [ref=e212]: Ultra-thin. High Rx.
+              - generic [ref=e213]: $150
+          - heading "Photochromic / Transitions optional" [level=3] [ref=e214]:
+            - text: Photochromic / Transitions
+            - generic [ref=e215]: optional
+          - generic [ref=e216]:
+            - generic [ref=e217] [cursor=pointer]:
+              - radio "None Included" [checked] [ref=e218]
+              - generic [ref=e219]: None
+              - generic [ref=e221]: Included
+            - generic [ref=e222] [cursor=pointer]:
+              - radio "Photochromic Grey Grey + $85" [ref=e223]
+              - generic [ref=e225]:
+                - text: Photochromic Grey
+                - generic "Grey" [ref=e226]
+              - generic [ref=e227]: + $85
+            - generic [ref=e228] [cursor=pointer]:
+              - radio "Photochromic Brown Brown —" [disabled] [ref=e229]
+              - generic [ref=e231]:
+                - text: Photochromic Brown
+                - generic "Brown" [ref=e232]
+              - generic [ref=e233]: —
+            - generic [ref=e234] [cursor=pointer]:
+              - radio "Transitions Gen S Grey Grey + $105" [ref=e235]
+              - generic [ref=e237]:
+                - text: Transitions Gen S Grey
+                - generic "Grey" [ref=e238]
+              - generic [ref=e239]: + $105
+            - generic [ref=e240] [cursor=pointer]:
+              - radio "Transitions Gen S Brown Brown + $105" [ref=e241]
+              - generic [ref=e243]:
+                - text: Transitions Gen S Brown
+                - generic "Brown" [ref=e244]
+              - generic [ref=e245]: + $105
+            - generic [ref=e246] [cursor=pointer]:
+              - radio "Transitions Gen S Graphite Green Graphite green + $105" [ref=e247]
+              - generic [ref=e249]:
+                - text: Transitions Gen S Graphite Green
+                - generic "Graphite green" [ref=e250]
+              - generic [ref=e251]: + $105
+            - generic [ref=e252] [cursor=pointer]:
+              - radio "Transitions Xtractive Grey Grey + $130" [ref=e253]
+              - generic [ref=e255]:
+                - text: Transitions Xtractive Grey
+                - generic "Grey" [ref=e256]
+              - generic [ref=e257]: + $130
+            - generic [ref=e258] [cursor=pointer]:
+              - radio "Transitions Xtractive Brown (RAM) Brown + $130" [ref=e259]
+              - generic [ref=e261]:
+                - text: Transitions Xtractive Brown (RAM)
+                - generic "Brown" [ref=e262]
+              - generic [ref=e263]: + $130
+          - heading "Anti-reflective treatment optional" [level=3] [ref=e264]:
+            - text: Anti-reflective treatment
+            - generic [ref=e265]: optional
+          - generic [ref=e266]:
+            - generic [ref=e267] [cursor=pointer]:
+              - radio "None Included" [checked] [ref=e268]
+              - generic [ref=e269]: None
+              - generic [ref=e271]: Included
+            - generic [ref=e272] [cursor=pointer]:
+              - radio "AR Green Basic + $60" [ref=e273]
+              - generic [ref=e274]: AR Green Basic
+              - generic [ref=e276]: + $60
+            - generic [ref=e277] [cursor=pointer]:
+              - radio "AR Green Plus + $90" [ref=e278]
+              - generic [ref=e279]: AR Green Plus
+              - generic [ref=e281]: + $90
+            - generic [ref=e282] [cursor=pointer]:
+              - radio "AR Blue Protect + $90" [ref=e283]
+              - generic [ref=e284]: AR Blue Protect
+              - generic [ref=e286]: + $90
+        - complementary [ref=e125]:
+          - img "US134" [ref=e126]
+          - generic [ref=e127]: US134 · Black
+          - generic [ref=e128]:
+            - generic [ref=e129]: Total
+            - generic [ref=e130]: $159.00
+          - generic [ref=e131]:
+            - button "Back" [ref=e169] [cursor=pointer]
+            - button "Continue" [ref=e132] [cursor=pointer]
+  - contentinfo [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - img "Óptica El Rancho" [ref=e70]
+        - paragraph [ref=e71]: Óptica El Rancho — designer eyewear online. Wellness and style for your vision.
+      - generic [ref=e72]:
+        - heading "Shop" [level=4] [ref=e73]
+        - link "All eyeglasses" [ref=e74] [cursor=pointer]:
+          - /url: /catalogo
+        - link "Kids" [ref=e75] [cursor=pointer]:
+          - /url: /catalogo?age=Niños
+        - link "Brands" [ref=e76] [cursor=pointer]:
+          - /url: /#marcas
+      - generic [ref=e77]:
+        - heading "Help" [level=4] [ref=e78]
+        - link "How to choose your frame" [ref=e79] [cursor=pointer]:
+          - /url: "#"
+        - link "Prescription guide" [ref=e80] [cursor=pointer]:
+          - /url: "#"
+        - link "Shipping & returns" [ref=e81] [cursor=pointer]:
+          - /url: "#"
+      - generic [ref=e82]:
+        - heading "Service" [level=4] [ref=e83]
+        - link "Virtual try-on (AR)" [ref=e84] [cursor=pointer]:
+          - /url: "#"
+        - link "Upload your prescription" [ref=e85] [cursor=pointer]:
+          - /url: "#"
+        - link "Contact" [ref=e86] [cursor=pointer]:
+          - /url: "#"
+    - generic [ref=e87]:
+      - text: © 2026 Óptica El Rancho · Images courtesy of caprioptics.com
+      - link "· Admin panel" [ref=e88] [cursor=pointer]:
+        - /url: /admin

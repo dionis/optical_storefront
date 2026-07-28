@@ -112,18 +112,89 @@ Note the username format: `postgres.<project-ref>`, not just `postgres`
   needs `pnpm-workspace.yaml` and `packages/shared`.
   - Coolify: Build Pack = `Dockerfile`, Base Directory = `/`,
     Dockerfile Location = `apps/backend/Dockerfile`.
-- Multi-stage: installs the full pnpm workspace, builds `@eyewear/shared`
-  then `@eyewear/backend`, and runs `pnpm start` from `apps/backend` keeping
-  the full monorepo `node_modules` (rather than Medusa's usual standalone
-  `.medusa/server` + reinstall) — this avoids `@eyewear/shared` being
-  referenced via an unresolvable `workspace:*` protocol outside the monorepo.
-- **Not yet validated with a real `docker build`** (Docker Desktop wasn't
-  running locally when this was written) — first Coolify deploy is the real
-  test. If `pnpm start` doesn't pick up the Medusa build output correctly,
-  the `CMD` may need to change to explicitly run from `.medusa/server`.
-- `.dockerignore` added at repo root (excludes `node_modules`, `dist`,
-  `.medusa`, `.next`, `.git`, `.env*`, `infra`, `apps/scraper`,
-  `apps/capri-storefront` from the build context).
+- Stages: `manifests` (workspace `package.json`s + lockfile) → `deps` (full
+  install) → `build` (compiles `@eyewear/shared` then `@eyewear/backend`);
+  and, branching off `manifests` in parallel, `runner` (`pnpm install --prod`).
+- **The runner never copies `node_modules`.** It is layered directly on its own
+  production-only install and only copies in `packages/shared/dist` and
+  `apps/backend/.medusa/server` — no sources, no tests, no `.medusa/types`.
+  A cross-stage `node_modules` copy writes a second full-size layer that the
+  daemon then has to export, which is what the free-tier VM cannot afford.
+- It keeps the pnpm symlink farm rather than reinstalling inside
+  `.medusa/server`, because the `package.json` Medusa copies there references
+  `@eyewear/shared` as `workspace:*`, which npm cannot resolve outside the
+  monorepo.
+- `CMD` runs `medusa start` **from `apps/backend/.medusa/server`**. Medusa
+  resolves `medusa-config.js`, `src/**` and `public/admin` relative to the
+  working directory, so it has to be the build output folder, not the source
+  folder.
+- `.dockerignore` at repo root excludes `node_modules`, `dist`, `.medusa`,
+  `.next`, `.git`, `.env*`, `infra`, `docs`, `.playwright-mcp`,
+  `apps/scraper`, `apps/capri-storefront` from the build context.
+
+### Failed deploy of 2026-07-28 and what changed
+
+The first real Coolify deploy compiled fine and then died with no error text
+at `#22 exporting to image / exporting layers`, exit code 255. An empty
+BuildKit error plus an immediate exit is the signature of the daemon or the
+build helper container being killed by the host — the VM ran out of
+memory/disk while writing the image layers, it is not a compile error.
+
+Three things fed that:
+
+1. The old runner stage did `COPY --from=build /app/node_modules` — a fresh
+   multi-hundred-MB layer duplicating a tree the build host had already
+   materialised once, dev dependencies included.
+2. It also copied all of `apps/backend` (sources, tests, `dist/`,
+   `.medusa/types`, `.medusa/client`) on top of that.
+3. `apps/backend/tsconfig.json` set `rootDir: "./src"` and `outDir: "./dist"`,
+   and `include` left `medusa-config.ts` out of the program. That produced
+   `dist/{api,modules,subscribers}` with **no `medusa-config.js`** — a layout
+   `medusa start` cannot run, since the loaders always look for the project's
+   routes and modules under `<cwd>/src`. So even a successful image would have
+   crash-looped.
+
+Fixes: `rootDir` removed, `outDir` set to `.medusa/server`, `medusa-config.ts`
+added to `include`; `@eyewear/shared` moved from `devDependencies` to
+`dependencies` in `apps/backend/package.json` (it is imported at runtime by
+the Meilisearch subscribers, and `--prod` would otherwise prune it); Dockerfile
+rewritten as described above.
+
+### If the export step still fails
+
+Check the VM, not the build:
+
+```bash
+df -h /              # boot volume; Oracle's default is ~47 GB
+free -m              # A1.Flex free tier is often provisioned with little RAM
+docker system df -v  # per-item breakdown: images, containers, volumes, build cache
+```
+
+The VM is **shared** — Coolify itself, the Redis and Meilisearch services, and
+whatever else is deployed all live on the same daemon. Reclaim space in
+increasing order of blast radius, and stop as soon as `df -h` looks healthy:
+
+```bash
+docker builder prune -af                          # build cache only — always safe
+docker image prune -f                             # dangling (untagged) images only
+docker image prune -a --filter "until=168h"       # tagged images unused for a week
+```
+
+**Never run `docker system prune --volumes` on this host.** It deletes every
+volume not attached to a *running* container, so a service that happens to be
+stopped or restarting loses its data (Meilisearch indexes, Redis persistence).
+For the same reason avoid bare `docker system prune -a`: it removes the images
+of stopped containers, including the previous backend image Coolify would roll
+back to.
+
+If `free -m` shows no swap, add some — the image export is the memory peak of
+the whole deploy:
+
+```bash
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
 
 ## Environment variables (Coolify → backend app → Environment Variables)
 
@@ -191,8 +262,10 @@ HTTP.
       re-register webhook endpoints against the final HTTPS backend URL
       (most providers reject non-HTTPS webhook URLs, and sandbox webhook
       secrets differ from live ones).
-- [ ] Validate the Docker build actually succeeds end-to-end in Coolify
-      (first real deploy) — see the Dockerfile caveat above.
+- [ ] Validate the Docker build actually succeeds end-to-end in Coolify after
+      the 2026-07-28 fixes above, and that the container stays up.
+- [ ] Run `medusa db:migrate` against Supabase once the container boots — the
+      image only builds the app, it never touches the database schema.
 - [ ] Wire up the CI auto-deploy: in Coolify → backend app → Webhooks, copy
       the URL, then add `COOLIFY_WEBHOOK_URL` and `COOLIFY_WEBHOOK_TOKEN` as
       GitHub Actions secrets (`infra/github-actions/ci.yml` already has the

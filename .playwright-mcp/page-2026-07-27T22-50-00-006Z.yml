@@ -1,0 +1,92 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]: Free shipping on orders over $59 · 30-day guarantee
+    - generic [ref=f1e5]:
+      - link [ref=f1e6] [cursor=pointer]:
+        - /url: /
+        - img "Óptica El Rancho — RUBI_LENS" [ref=f1e7]
+      - navigation [ref=f1e8]:
+        - link "Eyeglasses" [ref=f1e9] [cursor=pointer]:
+          - /url: /catalogo
+        - link "Kids" [ref=f1e10] [cursor=pointer]:
+          - /url: /catalogo?age=Niños
+        - link "Cases" [ref=f1e11] [cursor=pointer]:
+          - /url: /marca/case
+        - link "Brands" [ref=f1e12] [cursor=pointer]:
+          - /url: /#marcas
+      - generic [ref=f1e13]:
+        - textbox "Search by model or brand…" [ref=f1e14]
+        - button "Search" [ref=f1e15] [cursor=pointer]: ⌕
+      - generic [ref=f1e16]:
+        - group "Language / Idioma" [ref=f1e17]:
+          - button "Español" [ref=f1e18] [cursor=pointer]
+          - button "English" [pressed] [ref=f1e22] [cursor=pointer]
+        - button "👤" [ref=f1e33] [cursor=pointer]
+        - button "♡" [ref=f1e34] [cursor=pointer]
+        - button "🛒" [ref=f1e35] [cursor=pointer]
+    - dialog "Your cart" [ref=f1e36]:
+      - generic [ref=f1e37]:
+        - heading "Your cart" [level=3] [ref=f1e38]
+        - button "×" [ref=f1e39] [cursor=pointer]
+      - paragraph [ref=f1e41]: Your cart is empty
+    - dialog "Your favorites" [ref=f1e42]:
+      - generic [ref=f1e43]:
+        - heading "Your favorites" [level=3] [ref=f1e44]
+        - button "×" [ref=f1e45] [cursor=pointer]
+      - paragraph [ref=f1e47]: No favorites yet. Tap the ♡ on any frame.
+    - dialog "Sign in to your account" [ref=f1e48]:
+      - generic [ref=f1e49]:
+        - heading "Sign in to your account" [level=3] [ref=f1e50]
+        - button "×" [ref=f1e51] [cursor=pointer]
+      - generic [ref=f1e53]:
+        - generic [ref=f1e54]:
+          - button "Sign in" [ref=f1e55] [cursor=pointer]
+          - button "Create account" [ref=f1e56] [cursor=pointer]
+        - generic [ref=f1e57]:
+          - text: Email
+          - textbox "Email" [ref=f1e58]:
+            - /placeholder: tucorreo@ejemplo.com
+        - generic [ref=f1e59]:
+          - text: Cell phone
+          - textbox "Cell phone" [ref=f1e60]:
+            - /placeholder: +1 281 555 0100
+        - button "Sign in" [ref=f1e61] [cursor=pointer]
+        - paragraph [ref=f1e62]: Sign in to save favorites and see your orders.
+  - main [ref=f1e63]:
+    - paragraph [ref=f1e65]:
+      - text: Product not found.
+      - link "View catalog" [ref=f1e66] [cursor=pointer]:
+        - /url: /catalogo
+  - contentinfo [ref=f1e67]:
+    - generic [ref=f1e68]:
+      - generic [ref=f1e69]:
+        - img "Óptica El Rancho" [ref=f1e70]
+        - paragraph [ref=f1e71]: Óptica El Rancho — designer eyewear online. Wellness and style for your vision.
+      - generic [ref=f1e72]:
+        - heading "Shop" [level=4] [ref=f1e73]
+        - link "All eyeglasses" [ref=f1e74] [cursor=pointer]:
+          - /url: /catalogo
+        - link "Kids" [ref=f1e75] [cursor=pointer]:
+          - /url: /catalogo?age=Niños
+        - link "Brands" [ref=f1e76] [cursor=pointer]:
+          - /url: /#marcas
+      - generic [ref=f1e77]:
+        - heading "Help" [level=4] [ref=f1e78]
+        - link "How to choose your frame" [ref=f1e79] [cursor=pointer]:
+          - /url: "#"
+        - link "Prescription guide" [ref=f1e80] [cursor=pointer]:
+          - /url: "#"
+        - link "Shipping & returns" [ref=f1e81] [cursor=pointer]:
+          - /url: "#"
+      - generic [ref=f1e82]:
+        - heading "Service" [level=4] [ref=f1e83]
+        - link "Virtual try-on (AR)" [ref=f1e84] [cursor=pointer]:
+          - /url: "#"
+        - link "Upload your prescription" [ref=f1e85] [cursor=pointer]:
+          - /url: "#"
+        - link "Contact" [ref=f1e86] [cursor=pointer]:
+          - /url: "#"
+    - generic [ref=f1e87]:
+      - text: © 2026 Óptica El Rancho · Images courtesy of caprioptics.com
+      - link "· Admin panel" [ref=f1e88] [cursor=pointer]:
+        - /url: /admin

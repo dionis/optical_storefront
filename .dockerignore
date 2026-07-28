@@ -6,5 +6,7 @@
 .env
 **/.env
 infra
+docs
+.playwright-mcp
 apps/scraper
 apps/capri-storefront

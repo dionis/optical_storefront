@@ -60,7 +60,9 @@ class TestBuildMedusaPayload:
         )
         payload = _build_medusa_payload(product, PRICING)
         real_price = payload["variants"][0]["prices"][0]["amount"]
-        assert real_price == 12900  # from pricing.yaml rules, untouched by filler
+        # pricing.yaml is cents (12900); Medusa stores dollars → 129.00.
+        assert real_price == 129.0
+        assert payload["variants"][0]["manage_inventory"] is False
 
     def test_in_stock_product_is_published(self) -> None:
         product = ScrapedProduct(

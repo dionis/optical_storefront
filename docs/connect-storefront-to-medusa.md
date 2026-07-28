@@ -162,7 +162,34 @@ desarrollo: `apps/scraper/scripts/seed_medusa_dev.py`.
 **Entrega:** listado, PDP y detalle de estuche sirviendo datos de Medusa con
 precios reales. Try-on y reseñas siguen igual (el try-on no depende del backend).
 
-### Fase 2 — Configurador de lentes con precio server-side
+### Fase 2 — Configurador de lentes con precio server-side — ✅ COMPLETA Y VALIDADA (2026-07-27)
+
+**Estado:** matriz 2026 completa en el backend + precio 100% server-side.
+- Modelos nuevos en `lens-config`: `LensDesign`, `LensMaterial`, `LensBasePrice`,
+  `LensPhotoOption`, `LensArOption` (migraciones `CreateLens2026Matrix2` +
+  `SeedLens2026Data3`, datos sembrados vía SQL).
+- Rutas: `GET /store/lens-config/matrix` y `POST /store/lens-config/quote`
+  (desglose frame + lente + fotocromático + AR, en centavos).
+- Wizard `LensProcess.jsx` calcula el total vía `/quote` bajo `USE_MEDUSA`.
+  Validado en navegador: SV + Índice 1.67 sobre montura $129 → **$249.00**
+  (server-side). Caso N/A (fotocromático no disponible por categoría) → no se cobra.
+- Se corrigió un bug latente de Rules-of-Hooks en el wizard (hooks tras early return)
+  que el catálogo async de Medusa exponía.
+
+**⚠️ Workaround importante:** el módulo `lens-config` tiene un bug pre-existente —
+su conexión MikroORM no inicializa (`baseRepository_/manager` undefined; el
+`.catch(() => [null])` original lo enmascaraba), así que **todos** los métodos del
+servicio del módulo fallan con `.fork of undefined`. Las rutas nuevas lo evitan
+leyendo con la **conexión Postgres cruda (Knex)** vía
+`ContainerRegistrationKeys.PG_CONNECTION`. Pendiente: diagnosticar por qué el
+módulo no obtiene su conexión (posible fallo de conexión a Supabase al bootstrap
+del módulo, o config del módulo).
+
+**Precios en Medusa = dólares (no centavos):** se corrigió que el scraper/seed
+guardaban `9900` (interpretado por Medusa v2 como $9900). Ahora guardan dólares
+(`99.00`), el adaptador no divide /100, y las variantes usan `manage_inventory:false`
+(óptica hace por pedido; disponibilidad la da el scraper, no el inventario de Medusa).
+Validado: carrito con montura → total `129 usd`.
 
 **Objetivo:** eliminar el cálculo de total en cliente de `LensProcess.jsx`.
 
@@ -223,7 +250,17 @@ borrable vía `DELETE /admin/prescriptions/:id`.
 
 **Entrega:** identidad de cliente real, base para historial de pedidos.
 
-### Fase 5 — Carrito y checkout nativos de Medusa
+### Fase 5 — Carrito y checkout nativos de Medusa — ✅ COMPLETA / validada (2026-07-28)
+
+**Estado:** flujo de compra validado end-to-end en navegador → **Order #1**
+($340.95, pago Stripe *authorized*). Frame configurado añadido con precio
+server-side vía `POST /store/carts/:id/configured-line` (`lib/lens-quote.ts`);
+carrito/envío/pago vía `src/data/medusaCart.js`; checkout con **Stripe Payment
+Element** en `src/pages/MedusaCheckout.jsx`. Provider por defecto configurable con
+`VITE_DEFAULT_PAYMENT_PROVIDER`. Runbook + IDs en
+[`phase-5-checkout-setup.md`](./phase-5-checkout-setup.md).
+Pendientes menores: textos de checkout → `translations.js`; receta como PHI (Fase 3);
+webhooks Stripe; reconciliar `CartContext` (localStorage) con el carrito Medusa.
 
 **Objetivo:** el carrito y el pago dejan de ser `localStorage` + `alert()`.
 
