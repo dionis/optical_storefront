@@ -63,6 +63,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
   // 3) bucle de render (no re-renderiza React: escribe estilos por ref)
   useEffect(() => {
+    runningRef.current = true; // re-armar en cada (re)montaje — StrictMode desmonta y vuelve a montar en dev
     const loop = () => {
       if (!runningRef.current) return;
       const v = videoRef.current, ov = overlayRef.current, stage = stageRef.current;
@@ -85,11 +86,12 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
               const toY = (ny) => oy + ny * sy;
               const rE = lms[33], lE = lms[263];      // esquinas externas de los ojos
               const x1 = toX(rE.x), y1 = toY(rE.y), x2 = toX(lE.x), y2 = toY(lE.y);
-              const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 + yOff * H;
               const dx = x2 - x1, dy = y2 - y1;
               const eyeDist = Math.hypot(dx, dy);
-              const gw = eyeDist * 2.05 * size;
+              const gw = eyeDist * 1.85 * size;   // ancho realista de la montura vs. distancia entre ojos
               const ih = gw / aspect;
+              const cx = (x1 + x2) / 2;
+              const cy = (y1 + y2) / 2 + yOff * H - ih * 0.06; // subir un poco para apoyar sobre los ojos
               const ang = Math.atan2(dy, dx) * 180 / Math.PI;
               ov.style.width = gw + "px";
               ov.style.left = (cx - gw / 2) + "px";
@@ -103,11 +105,11 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         }
 
         if (!placed) {
-          const gw = W * 0.6 * size;
+          const gw = W * 0.42 * size;
           const ih = gw / aspect;
           ov.style.width = gw + "px";
           ov.style.left = (W / 2 - gw / 2) + "px";
-          ov.style.top = (H * (0.42 + yOff) - ih / 2) + "px";
+          ov.style.top = (H * (0.40 + yOff) - ih / 2) + "px";
           ov.style.transform = "rotate(0deg)";
           ov.style.opacity = "1";
         }

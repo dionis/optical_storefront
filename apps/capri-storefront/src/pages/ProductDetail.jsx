@@ -6,6 +6,7 @@ import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
 import TryOn from "../components/TryOn.jsx";
+import { TRYON_ENABLED } from "../config.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -43,7 +44,9 @@ export default function ProductDetail() {
                     aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
-            <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+            {TRYON_ENABLED && (
+              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+            )}
           </div>
           <div className="pdp-thumbs">
             {product.colors.map((c, i) => (
@@ -81,7 +84,9 @@ export default function ProductDetail() {
               {t("pdp.addFrame")} · ${product.price.toFixed(2)}
             </button>
           </div>
-          <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+          {TRYON_ENABLED && (
+            <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+          )}
 
           <table className="specs">
             <tbody>
@@ -120,7 +125,7 @@ export default function ProductDetail() {
         </section>
       )}
 
-      {tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
+      {TRYON_ENABLED && tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
     </div>
   );
 }

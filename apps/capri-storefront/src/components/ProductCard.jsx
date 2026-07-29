@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
 import TryOn from "./TryOn.jsx";
+import { TRYON_ENABLED } from "../config.js";
 
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
@@ -26,11 +27,13 @@ export default function ProductCard({ product }) {
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
-        <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
-          <span aria-hidden>◈</span> {t("card.ar")}
-        </button>
+        {TRYON_ENABLED && (
+          <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
+            <span aria-hidden>◈</span> {t("card.ar")}
+          </button>
+        )}
       </div>
-      {tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
+      {TRYON_ENABLED && tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
 
       <div className="card-body">
         <div className="card-row">

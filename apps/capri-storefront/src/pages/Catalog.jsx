@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches } from "../data/filters.js";
+import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -15,6 +16,8 @@ export default function Catalog() {
   const brand = slug ? BRAND_BY_SLUG[slug] : null;
   const q = (params.get("q") || "").toLowerCase().trim();
   const ageParam = params.get("age");
+  const shapeParam = params.get("shape");
+  const genderParam = params.get("gender");
 
   const [selected, setSelected] = useState({});
   const [sort, setSort] = useState("relevance");
@@ -24,7 +27,15 @@ export default function Catalog() {
     Object.fromEntries(FILTER_GROUPS.map((g) => [g.key, false]))
   );
 
-  useEffect(() => { setSelected(ageParam ? { age: [ageParam] } : {}); }, [slug, ageParam]);
+  useEffect(() => {
+    const sel = {};
+    const opens = {};
+    if (ageParam) { sel.age = [ageParam]; opens.age = true; }
+    if (shapeParam) { sel.shape = [shapeParam]; opens.shape = true; }
+    if (genderParam) { sel.gender = [genderParam]; opens.gender = true; }
+    setSelected(sel);
+    if (Object.keys(opens).length) setOpenGroups((prev) => ({ ...prev, ...opens }));
+  }, [slug, ageParam, shapeParam, genderParam]);
 
   // Applying a filter, sort or search jumps back to the top of the listing.
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }, [selected, sort, q, slug]);
@@ -51,7 +62,11 @@ export default function Catalog() {
   }, [PRODUCTS, brand, q, selected, sort]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
-  const heading = brand ? brand.name : q ? `${t("cat.results")}: “${q}”` : t("cat.all");
+  const urlFilterLabel = shapeParam ? tv(shapeParam) : genderParam ? tv(genderParam) : ageParam ? tv(ageParam) : null;
+  const heading = brand ? brand.name
+    : q ? `${t("cat.results")}: “${q}”`
+    : urlFilterLabel ? urlFilterLabel
+    : t("cat.all");
 
   // Cases brand → dedicated cases listing (no frame filters)
   if (brand?.slug === "case") {
@@ -71,6 +86,25 @@ export default function Catalog() {
   }
 
   return (
+    <>
+      {brand && (
+        <section className="brand-hero">
+          <div className="brand-hero-media" aria-hidden="true">
+            <img src={brandHeroImage(brand.slug)} alt=""
+                 onError={(e) => { e.currentTarget.style.display = "none"; }} />
+            <div className="brand-hero-scrim" />
+          </div>
+          <div className="brand-hero-inner">
+            <div className="brand-hero-logo">
+              <img src={brand.logo} alt={brand.name}
+                   onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
+            </div>
+            <h1>{brand.name}</h1>
+            <p className="brand-hero-desc">{brandInfo(brand.slug, lang, brand.name).desc}</p>
+            <span className="brand-hero-count">{results.length} {t("brand.frames")}</span>
+          </div>
+        </section>
+      )}
     <div className="catalog">
       <button className="filters-toggle mobile-only" onClick={() => setShowFilters((v) => !v)}>
         {t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""} {showFilters ? "▲" : "▼"}
@@ -126,5 +160,6 @@ export default function Catalog() {
         )}
       </section>
     </div>
+    </>
   );
 }
