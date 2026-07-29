@@ -1,122 +1,69 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { buildFrame, frameDimensions } from "./tryon/frameGeometry.js";
+import { createFaceOccluder } from "./tryon/faceOccluder.js";
 
-// Probador virtual (AR) real: usa la cámara y, si es posible, rastrea la cara
-// con MediaPipe FaceLandmarker (CDN) para colocar la montura sobre los ojos.
-// Si no hay detección, cae a colocación MANUAL con ajuste de tamaño y altura.
-// La montura se superpone con mix-blend-mode:multiply para que el fondo blanco
-// de la foto del producto "desaparezca" sin necesidad de CORS.
+// Probador virtual 3D. La montura es geometría real generada a partir de las
+// medidas del catálogo (calibre, puente, varilla, forma, material), NO la foto
+// del producto: esas fotos son tomas en perspectiva 3/4 — el frente ocupa sólo
+// ~55% del ancho de la imagen — y por eso nunca podían encajar sobre un rostro
+// frontal por mucho que se ajustase la escala.
+//
+// La cámara de la escena es ORTOGRÁFICA en espacio de píxeles de pantalla, de
+// modo que el encuadre coincide exactamente con el `object-fit: cover` del
+// vídeo. La pose 3D de la cabeza viene de la matriz de MediaPipe, y un oclusor
+// invisible con la forma de la cabeza esconde las varillas que pasan por detrás.
 
-// Un fotograma suelto sin detección es normal: mantenemos la última posición
-// válida durante este margen antes de volver al modo manual. Sin esto la
-// montura salta entre la cara y el centro de la pantalla y parpadea.
 const LOST_FACE_GRACE_MS = 900;
-// Suavizado exponencial de la posición: más bajo = más estable, más latencia.
-const SMOOTHING = 0.35;
-
-// ── Escalado físico ────────────────────────────────────────────────────────
-// Distancia media entre las esquinas externas de los ojos (landmarks 33/263)
-// en un adulto. Es nuestra "regla" para convertir milímetros a píxeles.
+const SMOOTHING = 0.4;
+// Distancia media entre las esquinas externas de los ojos (landmarks 33/263).
+// Es la regla que convierte los milímetros del catálogo a píxeles.
 const OUTER_CANTHAL_MM = 91;
-// Grosor combinado de los dos aros exteriores, que el calibre no incluye.
-const RIM_MM = 8;
-const DEFAULT_FRAME_MM = 135;
-// Las fotos del catálogo vienen recortadas al ras de la montura (medido: la
-// montura ocupa ~99% del ancho y ~97% del alto). La línea de los ojos no cae
-// en el centro de esa caja: la pupila va en la mitad superior de la lente.
-const EYE_LINE_IN_IMAGE = 0.45;
-// Aspecto medio de las fotos del catálogo, sólo hasta que la imagen carga.
-const FALLBACK_ASPECT = 2.5;
+// Las gafas apoyan en el puente de la nariz, por delante de la superficie de la
+// cara. Sin este margen la montura se hunde en el oclusor y desaparece.
+const FRAME_FORWARD_MM = 13;
 
-// Instrumentación de calibrado: abrir la página con ?tryonDebug=1 para que el
-// probador emita sus medidas por consola (1 línea/segundo).
 const DEBUG = (typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search))
   || (typeof import.meta !== "undefined" && import.meta.env?.DEV);
-
-// ── Orientación 3D ─────────────────────────────────────────────────────────
-// Sin esto la montura es una calcomanía plana mirando a cámara: la posición
-// puede ser correcta y aun así "flotar por delante" en cuanto giras la cabeza.
-const PERSPECTIVE_PX = 600;
-// La foto es un frente plano; seguir la cabeza al 100% exagera la deformación.
-const YAW_DAMP = 0.85;
-const PITCH_DAMP = 0.7;
-const MAX_YAW_DEG = 38;
-const MAX_PITCH_DEG = 28;
-
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-// Matriz 4x4 column-major de MediaPipe → ángulos de Euler en grados.
-// R[fila][col] = m[col*4 + fila]; el eje Y es el giro izquierda/derecha y el
-// eje X el cabeceo, en el marco canónico de la cara (X derecha, Y arriba).
-function headAngles(m) {
-  if (!m || m.length < 11) return null;
-  const yaw = Math.atan2(-m[2], Math.hypot(m[0], m[1]));
-  const pitch = Math.atan2(m[6], m[10]);
-  return { yaw: yaw * 180 / Math.PI, pitch: pitch * 180 / Math.PI };
-}
-
-// "54-56 mm" → 55 · "18 mm" → 18
-function parseMm(value) {
-  const nums = String(value ?? "").match(/\d+(?:\.\d+)?/g);
-  if (!nums || !nums.length) return null;
-  return nums.reduce((acc, n) => acc + parseFloat(n), 0) / nums.length;
-}
-
-// Ancho real de la montura = 2×calibre + puente + aros. Usar las medidas del
-// catálogo en vez de una constante fija hace que las monturas de niño salgan
-// estrechas y las de hombre anchas, en lugar de todas del mismo tamaño.
-function frameWidthMm(product) {
-  const eye = parseMm(product?.attributes?.eye_size);
-  if (!eye) return DEFAULT_FRAME_MM;
-  return 2 * eye + (parseMm(product?.attributes?.bridge_size) ?? 18) + RIM_MM;
-}
 
 export default function TryOn({ product, colorIdx = 0, onClose }) {
   const { t } = useLang();
   const videoRef = useRef(null);
-  const overlayRef = useRef(null);
+  const canvasRef = useRef(null);
   const stageRef = useRef(null);
   const rafRef = useRef(0);
   const lmRef = useRef(null);
   const runningRef = useRef(true);
 
-  // Estado del bucle de render, fuera de React para no re-renderizar por frame.
-  const poseRef = useRef(null);          // última pose suavizada { cx, cy, eyeDist, ang }
-  const lastSeenRef = useRef(0);         // timestamp de la última detección válida
-  const lastFrameTimeRef = useRef(-1);   // video.currentTime del último frame analizado
+  const glRef = useRef(null);          // { renderer, scene, camera, occluder, root }
+  const frameRef = useRef(null);       // THREE.Group de la montura
+  const poseRef = useRef(null);
+  const lastSeenRef = useRef(0);
+  const lastFrameTimeRef = useRef(-1);
   const stageSizeRef = useRef({ w: 0, h: 0 });
-  const appliedWidthRef = useRef(0);
   const trackingRef = useRef(false);
-  const lastLogRef = useRef(0);          // throttle del log de calibrado
+  const lastLogRef = useRef(0);
   const sizeRef = useRef(1);
   const yOffRef = useRef(0);
 
   const [ci, setCi] = useState(colorIdx);
   const [status, setStatus] = useState("starting"); // starting | ready | denied | nocam
   const [tracking, setTracking] = useState(false);
-  const [size, setSize] = useState(1);   // 0.5 – 1.5
-  const [yOff, setYOff] = useState(0);   // -0.15 – 0.15
+  const [size, setSize] = useState(1);
+  const [yOff, setYOff] = useState(0);
 
   const color = product.colors[ci] || product.colors[0];
-
-  // Cuántas veces la distancia entre ojos mide la montura. Antes era un 2.05
-  // fijo: ~37% de más, por eso las gafas no ajustaban a la cara.
-  const frameRatio = useMemo(() => frameWidthMm(product) / OUTER_CANTHAL_MM, [product]);
-  const frameRatioRef = useRef(frameRatio);
-
-  // Los sliders se leen desde refs dentro del bucle: cambiarlos no debe
-  // reiniciar el requestAnimationFrame.
   sizeRef.current = size;
   yOffRef.current = yOff;
-  frameRatioRef.current = frameRatio;
 
   // 1) cámara
   useEffect(() => {
     runningRef.current = true;
     let cancelled = false;
     let stream = null;
-
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) { setStatus("nocam"); return; }
       try {
@@ -124,8 +71,6 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
           video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         });
-        // El cleanup puede haber corrido mientras esperábamos (StrictMode monta
-        // dos veces en dev): hay que cerrar este stream o la cámara queda abierta.
         if (cancelled) { s.getTracks().forEach((tk) => tk.stop()); return; }
         stream = s;
         if (videoRef.current) {
@@ -138,7 +83,6 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         setStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
       }
     })();
-
     return () => {
       cancelled = true;
       runningRef.current = false;
@@ -147,7 +91,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
     };
   }, []);
 
-  // 2) MediaPipe (best-effort; si falla, queda modo manual)
+  // 2) MediaPipe
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -158,194 +102,232 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         const lm = await vision.FaceLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
           runningMode: "VIDEO", numFaces: 1,
-          // Pose 3D de la cabeza: sin esto sólo tenemos el ladeo (roll) y la
-          // montura no puede girar con la cara.
+          // La pose 3D de la cabeza: imprescindible para orientar la montura.
           outputFacialTransformationMatrixes: true,
         });
-        // Igual que con la cámara: si ya se desmontó, liberamos el grafo WASM.
         if (cancelled) { lm.close?.(); return; }
         lmRef.current = lm;
-      } catch (e) { /* modo manual */ }
+      } catch (e) { if (DEBUG) console.warn("[tryon] MediaPipe no disponible", e); }
     })();
-    return () => {
-      cancelled = true;
-      lmRef.current?.close?.();
-      lmRef.current = null;
-    };
+    return () => { cancelled = true; lmRef.current?.close?.(); lmRef.current = null; };
   }, []);
 
-  // 3) bucle de render (no re-renderiza React: escribe estilos por ref)
+  // 3) escena three.js (una sola vez)
   useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
+    const canvas = canvasRef.current, stage = stageRef.current;
+    if (!canvas || !stage) return;
 
-    // Medimos el escenario con ResizeObserver en vez de leer clientWidth en
-    // cada frame (eso fuerza un reflow sincrónico 60 veces por segundo).
-    const measure = () => { stageSizeRef.current = { w: stage.clientWidth, h: stage.clientHeight }; };
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    const scene = new THREE.Scene();
+    // Sin entorno, un material metálico se ve negro: el metal sólo refleja.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.5);
+    key.position.set(0.4, 0.8, 1);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0xdce6ff, 0.7);
+    rim.position.set(-0.6, 0.2, 0.5);
+    scene.add(rim);
+
+    // Ortográfica en píxeles: x∈[0,W] a la derecha, y∈[0,H] hacia ARRIBA.
+    const camera = new THREE.OrthographicCamera(0, 1, 1, 0, 1, 20000);
+    camera.position.set(0, 0, 5000);
+
+    const occluder = createFaceOccluder();
+    scene.add(occluder);
+
+    // Contenedor de la montura: aquí se aplican pose y escala.
+    const root = new THREE.Group();
+    scene.add(root);
+
+    glRef.current = { renderer, scene, camera, occluder, root, pmrem };
+
+    const measure = () => {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      stageSizeRef.current = { w, h };
+      renderer.setSize(w, h, false);
+      camera.left = 0; camera.right = w;
+      camera.top = h; camera.bottom = 0;
+      camera.updateProjectionMatrix();
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(stage);
 
+    return () => {
+      ro.disconnect();
+      occluder.dispose();
+      pmrem.dispose();
+      scene.environment?.dispose?.();
+      renderer.dispose();
+      glRef.current = null;
+    };
+  }, []);
+
+  // 4) (re)construir la montura al cambiar de producto o color
+  useEffect(() => {
+    const gl = glRef.current;
+    if (!gl) return;
+    const frame = buildFrame(product, color?.hex);
+    gl.root.add(frame);
+    frameRef.current = frame;
+    return () => {
+      gl.root.remove(frame);
+      frame.userData.dispose?.();
+      if (frameRef.current === frame) frameRef.current = null;
+    };
+  }, [product, color?.hex]);
+
+  // 5) bucle de render
+  useEffect(() => {
     const setTrackingOnce = (on) => {
       if (trackingRef.current === on) return;
       trackingRef.current = on;
       setTracking(on);
     };
 
+    // reutilizables, para no crear objetos por fotograma
+    const m4 = new THREE.Matrix4();
+    const quat = new THREE.Quaternion();
+    const tmpPos = new THREE.Vector3();
+    const tmpScale = new THREE.Vector3();
+    const euler = new THREE.Euler();
+    const forward = new THREE.Vector3();
+    const smoothQuat = new THREE.Quaternion();
+    let haveQuat = false;
+
     const loop = () => {
       if (!runningRef.current) return;
       rafRef.current = requestAnimationFrame(loop);
 
-      const v = videoRef.current, ov = overlayRef.current;
+      const gl = glRef.current, v = videoRef.current, frame = frameRef.current;
       const { w: W, h: H } = stageSizeRef.current;
-      if (!v || !ov || !W || !H || !v.videoWidth || v.readyState < 2) return;
+      if (!gl || !v || !W || !H) return;
+      if (!v.videoWidth || v.readyState < 2) return;
 
       const now = performance.now();
-      const aspect = (ov.naturalWidth && ov.naturalHeight) ? ov.naturalWidth / ov.naturalHeight : FALLBACK_ASPECT;
 
-      // Sólo analizamos fotogramas nuevos. Reprocesar el mismo frame gasta GPU
-      // y puede devolver resultados vacíos que provocarían el parpadeo.
       const isNewFrame = v.currentTime !== lastFrameTimeRef.current;
       if (lmRef.current && isNewFrame) {
         lastFrameTimeRef.current = v.currentTime;
         try {
           const res = lmRef.current.detectForVideo(v, now);
-          const lms = res && res.faceLandmarks && res.faceLandmarks[0];
+          const lms = res?.faceLandmarks?.[0];
           if (lms) {
-            // object-fit: cover → factor de escala/offset del video mostrado
+            // object-fit: cover → escala/offset del vídeo tal como se muestra.
             const vAsp = v.videoWidth / v.videoHeight, dAsp = W / H;
             let sx, sy, ox = 0, oy = 0;
             if (vAsp > dAsp) { sy = H; sx = H * vAsp; ox = (W - sx) / 2; }
             else { sx = W; sy = W / vAsp; oy = (H - sy) / 2; }
-            const toX = (nx) => ox + (1 - nx) * sx; // espejado (selfie)
-            const toY = (ny) => oy + ny * sy;
-            // 33 = ojo derecho del usuario, 263 = izquierdo. toX() espeja la
-            // imagen (selfie), así que el ojo derecho acaba a la DERECHA de la
-            // pantalla: el vector izquierda→derecha va de 263 hacia 33. Tomarlo
-            // al revés daba atan2 ≈ 180° y la montura salía cabeza abajo.
-            const rE = lms[33], lE = lms[263];      // esquinas externas de los ojos
-            const xR = toX(rE.x), yR = toY(rE.y);   // derecha en pantalla
-            const xL = toX(lE.x), yL = toY(lE.y);   // izquierda en pantalla
-            const dx = xR - xL, dy = yR - yL;
-            // El vídeo va espejado, así que el giro horizontal se invierte.
-            const head = headAngles(res.facialTransformationMatrixes?.[0]?.data);
+            // Espejado (selfie) en x; y hacia arriba para three.js; la z de
+            // MediaPipe viene en la misma escala que x, y negativa hacia cámara.
+            const project = (lm) => ({
+              x: ox + (1 - lm.x) * sx,
+              y: H - (oy + lm.y * sy),
+              z: -lm.z * sx,
+            });
+
+            const rE = project(lms[33]), lE = project(lms[263]);
+            const canthalPx = Math.hypot(rE.x - lE.x, rE.y - lE.y);
+            const pxPerMm = canthalPx / OUTER_CANTHAL_MM;
+
+            // Orientación: la matriz rígida de MediaPipe. Como espejamos la
+            // imagen, hay que espejar también la rotación → se niegan el giro
+            // (Y) y el ladeo (Z), el cabeceo (X) se mantiene.
+            const mtx = res.facialTransformationMatrixes?.[0]?.data;
+            if (mtx) {
+              m4.fromArray(mtx);                       // column-major, igual que three
+              m4.decompose(tmpPos, quat, tmpScale);
+              euler.setFromQuaternion(quat, "YXZ");
+              euler.y = -euler.y;
+              euler.z = -euler.z;
+              quat.setFromEuler(euler);
+              if (!haveQuat) { smoothQuat.copy(quat); haveQuat = true; }
+              else smoothQuat.slerp(quat, SMOOTHING);
+            }
+
             const next = {
-              cx: (xL + xR) / 2,
-              cy: (yL + yR) / 2,
-              eyeDist: Math.hypot(dx, dy),
-              ang: Math.atan2(dy, dx) * 180 / Math.PI,
-              yaw: head ? clamp(-head.yaw * YAW_DAMP, -MAX_YAW_DEG, MAX_YAW_DEG) : 0,
-              pitch: head ? clamp(head.pitch * PITCH_DAMP, -MAX_PITCH_DEG, MAX_PITCH_DEG) : 0,
+              cx: (rE.x + lE.x) / 2,
+              cy: (rE.y + lE.y) / 2,
+              cz: (rE.z + lE.z) / 2,
+              pxPerMm,
             };
-            // Suavizado exponencial contra el jitter de los landmarks.
             const prev = poseRef.current;
             const ema = (a, b) => a + (b - a) * SMOOTHING;
             poseRef.current = prev ? {
-              cx: ema(prev.cx, next.cx),
-              cy: ema(prev.cy, next.cy),
-              eyeDist: ema(prev.eyeDist, next.eyeDist),
-              ang: ema(prev.ang, next.ang),
-              yaw: ema(prev.yaw, next.yaw),
-              pitch: ema(prev.pitch, next.pitch),
+              cx: ema(prev.cx, next.cx), cy: ema(prev.cy, next.cy),
+              cz: ema(prev.cz, next.cz), pxPerMm: ema(prev.pxPerMm, next.pxPerMm),
             } : next;
+
+            gl.occluder.updateFromLandmarks(lms, project);
+            gl.occluder.visible = true;
             lastSeenRef.current = now;
             setTrackingOnce(true);
 
-            // Instrumentación de calibrado (?tryonDebug=1). Mide la cara con
-            // varias referencias para poder elegir la mejor escala. El modelo
-            // devuelve 478 puntos, así que los del iris (468/473) existen.
             if (DEBUG && now - lastLogRef.current > 1000) {
               lastLogRef.current = now;
-              const P = (i) => (lms[i] ? { x: toX(lms[i].x), y: toY(lms[i].y) } : null);
-              const dist = (a, b) => (a && b ? Math.hypot(a.x - b.x, a.y - b.y) : NaN);
-              const irisR = P(468), irisL = P(473);       // centros de iris
-              const sideR = P(234), sideL = P(454);       // laterales de la cara (sienes)
-              const brow = P(9);                          // entrecejo
-              const noseTip = P(1), chin = P(152), headTop = P(10);
-              const pdPx = dist(irisR, irisL);
-              const facePx = dist(sideR, sideL);
-              const canthalPx = next.eyeDist;
-              const eyeLineY = irisR && irisL ? (irisR.y + irisL.y) / 2 : NaN;
-              const gwNow = canthalPx * frameRatioRef.current * sizeRef.current;
-              console.log("[tryon]", JSON.stringify({
-                sku: product.sku, eye: product?.attributes?.eye_size, bridge: product?.attributes?.bridge_size,
-                frameRatio: +frameRatioRef.current.toFixed(3), size: sizeRef.current, yOff: yOffRef.current,
-                stage: `${Math.round(W)}x${Math.round(H)}`,
-                img: `${ov.naturalWidth}x${ov.naturalHeight}`, aspect: +aspect.toFixed(3),
-                // referencias de escala, en px de pantalla
-                canthalPx: +canthalPx.toFixed(1), pdPx: +pdPx.toFixed(1), facePx: +facePx.toFixed(1),
-                canthal_over_pd: +(canthalPx / pdPx).toFixed(3),
-                face_over_canthal: +(facePx / canthalPx).toFixed(3),
-                // lo que dibujamos vs lo que mide la cara
-                gw: +gwNow.toFixed(1), ih: +(gwNow / aspect).toFixed(1),
-                gw_over_face: +(gwNow / facePx).toFixed(3),
-                // anclaje vertical: dónde está cada cosa en pantalla
-                eyeLineY: +eyeLineY.toFixed(1), canthalY: +next.cy.toFixed(1),
-                browY: brow ? +brow.y.toFixed(1) : null,
-                noseTipY: noseTip ? +noseTip.y.toFixed(1) : null,
-                headTopY: headTop ? +headTop.y.toFixed(1) : null, chinY: chin ? +chin.y.toFixed(1) : null,
-                // orientación 3D de la cabeza (grados, ya amortiguados)
-                ang: +next.ang.toFixed(1), yaw: +next.yaw.toFixed(1), pitch: +next.pitch.toFixed(1),
-                hasMatrix: !!res.facialTransformationMatrixes?.[0], lmCount: lms.length,
+              const d = frameDimensions(product);
+              console.log("[tryon3d]", JSON.stringify({
+                sku: product.sku, shape: product?.attributes?.shape,
+                eye: d.eye, bridge: d.bridge, temple: d.temple,
+                frameWidthMm: +d.totalWidth.toFixed(1),
+                canthalPx: +canthalPx.toFixed(1), pxPerMm: +pxPerMm.toFixed(3),
+                frameWidthPx: +(d.totalWidth * pxPerMm * sizeRef.current).toFixed(1),
+                yawDeg: +(euler.y * 180 / Math.PI).toFixed(1),
+                pitchDeg: +(euler.x * 180 / Math.PI).toFixed(1),
+                rollDeg: +(euler.z * 180 / Math.PI).toFixed(1),
+                hasMatrix: !!mtx, lmCount: lms.length,
               }));
             }
           }
         } catch (err) { if (DEBUG) console.warn("[tryon] frame error", err); }
       }
 
-      // Conservamos la última pose durante el margen de gracia. Sin esto, un
-      // solo frame sin cara mandaba la montura al centro y de vuelta.
       const pose = poseRef.current;
       const fresh = pose && (now - lastSeenRef.current) < LOST_FACE_GRACE_MS;
       if (!fresh) {
-        if (pose) { poseRef.current = null; lastFrameTimeRef.current = -1; }
+        if (pose) { poseRef.current = null; lastFrameTimeRef.current = -1; haveQuat = false; }
         setTrackingOnce(false);
+        gl.occluder.visible = false;
       }
 
-      let gw, left, top, ang, yaw = 0, pitch = 0;
-      if (fresh) {
-        gw = pose.eyeDist * frameRatioRef.current * sizeRef.current;
-        left = pose.cx - gw / 2;
-        // La línea de los ojos no es el centro de la foto: la pupila cae en la
-        // mitad superior de la lente, así que anclamos por EYE_LINE_IN_IMAGE.
-        top = pose.cy + yOffRef.current * H - (gw / aspect) * EYE_LINE_IN_IMAGE;
-        ang = pose.ang;
-        yaw = pose.yaw;
-        pitch = pose.pitch;
-      } else {
-        gw = W * 0.6 * sizeRef.current;
-        left = W / 2 - gw / 2;
-        top = H * (0.42 + yOffRef.current) - (gw / aspect) / 2;
-        ang = 0;
+      if (frame) {
+        if (fresh) {
+          // mm → px, con el ajuste manual del usuario encima.
+          const s = pose.pxPerMm * sizeRef.current;
+          frame.scale.setScalar(s);
+          frame.quaternion.copy(smoothQuat);
+          // Adelantar la montura respecto de la superficie de la cara, en la
+          // dirección a la que mira la cabeza.
+          forward.set(0, 0, 1).applyQuaternion(smoothQuat).multiplyScalar(FRAME_FORWARD_MM * s);
+          frame.position.set(
+            pose.cx + forward.x,
+            pose.cy + forward.y + yOffRef.current * H,
+            pose.cz + forward.z
+          );
+        } else {
+          // Sin cara: la montura de frente, centrada, a tamaño razonable.
+          const d = frameDimensions(product);
+          const s = (W * 0.55 * sizeRef.current) / d.totalWidth;
+          frame.scale.setScalar(s);
+          frame.quaternion.identity();
+          frame.position.set(W / 2, H * (0.55 - yOffRef.current), 0);
+        }
       }
 
-      // width dispara layout, así que sólo lo tocamos cuando cambia de verdad;
-      // la posición va por transform (composita, no reflowea).
-      if (Math.abs(gw - appliedWidthRef.current) > 0.5) {
-        appliedWidthRef.current = gw;
-        ov.style.width = gw + "px";
-      }
-      // perspective() debe ir ANTES de las rotaciones para que tengan efecto 3D.
-      // rotateY = giro de la cabeza, rotateX = cabeceo, rotate = ladeo.
-      ov.style.transform =
-        `translate(${left}px, ${top}px) perspective(${PERSPECTIVE_PX}px) ` +
-        `rotateY(${yaw}deg) rotateX(${pitch}deg) rotate(${ang}deg)`;
-      ov.style.opacity = "1";
+      gl.renderer.render(gl.scene, gl.camera);
     };
 
     rafRef.current = requestAnimationFrame(loop);
-    return () => { ro.disconnect(); cancelAnimationFrame(rafRef.current); };
-  }, []);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [product]);
 
-  // Al cambiar de color la imagen se recarga: forzamos recalcular el ancho
-  // aplicado para que el nuevo aspect ratio se tenga en cuenta.
-  useEffect(() => { appliedWidthRef.current = 0; }, [ci]);
-
-  // Portal a <body>: el modal se monta dentro de .card, y `.card:hover` aplica
-  // un transform que convierte a la tarjeta en bloque contenedor de cualquier
-  // position:fixed descendiente. Al abrir el probador la tarjeta está en hover,
-  // así que el modal se dibujaba encajado (y recortado por su overflow:hidden)
-  // dentro de la tarjeta, y saltaba a pantalla completa al salir el ratón.
   return createPortal(
     <div className="tryon" role="dialog" aria-modal="true">
       <div className="tryon-bar">
@@ -355,9 +337,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
       <div className="tryon-stage" ref={stageRef}>
         <video ref={videoRef} className="tryon-video" playsInline muted />
-        <img ref={overlayRef} className="tryon-frame" src={color.image} alt=""
-             onLoad={() => { appliedWidthRef.current = 0; }}
-             onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+        <canvas ref={canvasRef} className="tryon-gl" />
 
         {status !== "ready" && (
           <div className="tryon-overlay-msg">

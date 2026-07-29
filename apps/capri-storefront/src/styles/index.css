@@ -591,11 +591,9 @@ button { font-family: inherit; cursor: pointer; }
 .tryon-x:hover { background: rgba(255,255,255,.26); }
 .tryon-stage { position: relative; flex: 1; overflow: hidden; background: #000; }
 .tryon-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-/* Sin drop-shadow: la foto del catálogo es un JPG opaco (sin canal alfa), así
-   que drop-shadow dibujaba la sombra del RECTÁNGULO completo, y multiply la
-   pintaba como una caja gris por delante de la cara. Sólo se puede reactivar
-   sobre los recortes PNG con transparencia que genera el pipeline de rembg. */
-.tryon-frame { position: absolute; left: 0; top: 0; opacity: 0; pointer-events: none; mix-blend-mode: multiply; will-change: transform, width; transition: opacity .2s ease; }
+/* Lienzo WebGL de la montura 3D: transparente y encima del vídeo, para que el
+   oclusor de la cabeza deje ver la cámara a través de las varillas ocultas. */
+.tryon-gl { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .tryon-overlay-msg { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; text-align: center; padding: 24px; font-size: 16px; background: rgba(0,0,0,.4); }
 .tryon-badge { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.55); color: #fff; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 14px; }
 .tryon-badge.on { background: rgba(20,120,50,.7); }
