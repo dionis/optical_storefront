@@ -29,6 +29,10 @@ const EYE_LINE_IN_IMAGE = 0.45;
 // Aspecto medio de las fotos del catálogo, sólo hasta que la imagen carga.
 const FALLBACK_ASPECT = 2.5;
 
+// Instrumentación de calibrado: abrir la página con ?tryonDebug=1 para que el
+// probador emita sus medidas por consola (1 línea/segundo).
+const DEBUG = typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search);
+
 // "54-56 mm" → 55 · "18 mm" → 18
 function parseMm(value) {
   const nums = String(value ?? "").match(/\d+(?:\.\d+)?/g);
@@ -61,6 +65,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   const stageSizeRef = useRef({ w: 0, h: 0 });
   const appliedWidthRef = useRef(0);
   const trackingRef = useRef(false);
+  const lastLogRef = useRef(0);          // throttle del log de calibrado
   const sizeRef = useRef(1);
   const yOffRef = useRef(0);
 
@@ -212,8 +217,45 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             } : next;
             lastSeenRef.current = now;
             setTrackingOnce(true);
+
+            // Instrumentación de calibrado (?tryonDebug=1). Mide la cara con
+            // varias referencias para poder elegir la mejor escala. El modelo
+            // devuelve 478 puntos, así que los del iris (468/473) existen.
+            if (DEBUG && now - lastLogRef.current > 1000) {
+              lastLogRef.current = now;
+              const P = (i) => (lms[i] ? { x: toX(lms[i].x), y: toY(lms[i].y) } : null);
+              const dist = (a, b) => (a && b ? Math.hypot(a.x - b.x, a.y - b.y) : NaN);
+              const irisR = P(468), irisL = P(473);       // centros de iris
+              const sideR = P(234), sideL = P(454);       // laterales de la cara (sienes)
+              const brow = P(9);                          // entrecejo
+              const noseTip = P(1), chin = P(152), headTop = P(10);
+              const pdPx = dist(irisR, irisL);
+              const facePx = dist(sideR, sideL);
+              const canthalPx = next.eyeDist;
+              const eyeLineY = irisR && irisL ? (irisR.y + irisL.y) / 2 : NaN;
+              const gwNow = canthalPx * frameRatioRef.current * sizeRef.current;
+              console.log("[tryon]", JSON.stringify({
+                sku: product.sku, eye: product?.attributes?.eye_size, bridge: product?.attributes?.bridge_size,
+                frameRatio: +frameRatioRef.current.toFixed(3), size: sizeRef.current, yOff: yOffRef.current,
+                stage: `${Math.round(W)}x${Math.round(H)}`,
+                img: `${ov.naturalWidth}x${ov.naturalHeight}`, aspect: +aspect.toFixed(3),
+                // referencias de escala, en px de pantalla
+                canthalPx: +canthalPx.toFixed(1), pdPx: +pdPx.toFixed(1), facePx: +facePx.toFixed(1),
+                canthal_over_pd: +(canthalPx / pdPx).toFixed(3),
+                face_over_canthal: +(facePx / canthalPx).toFixed(3),
+                // lo que dibujamos vs lo que mide la cara
+                gw: +gwNow.toFixed(1), ih: +(gwNow / aspect).toFixed(1),
+                gw_over_face: +(gwNow / facePx).toFixed(3),
+                // anclaje vertical: dónde está cada cosa en pantalla
+                eyeLineY: +eyeLineY.toFixed(1), canthalY: +next.cy.toFixed(1),
+                browY: brow ? +brow.y.toFixed(1) : null,
+                noseTipY: noseTip ? +noseTip.y.toFixed(1) : null,
+                headTopY: headTop ? +headTop.y.toFixed(1) : null, chinY: chin ? +chin.y.toFixed(1) : null,
+                ang: +next.ang.toFixed(1), lmCount: lms.length,
+              }));
+            }
           }
-        } catch { /* ignore frame */ }
+        } catch (err) { if (DEBUG) console.warn("[tryon] frame error", err); }
       }
 
       // Conservamos la última pose durante el margen de gracia. Sin esto, un
