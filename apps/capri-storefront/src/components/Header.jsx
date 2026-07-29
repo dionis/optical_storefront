@@ -20,16 +20,32 @@ export default function Header() {
     setMenu(false);
   };
 
+  const goBrands = (e) => {
+    e.preventDefault();
+    setMenu(false);
+    const scrollToBrands = () => {
+      const el = document.getElementById("marcas");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    if (window.location.pathname === "/") {
+      scrollToBrands();
+    } else {
+      navigate("/");
+      setTimeout(scrollToBrands, 400);
+    }
+  };
+
   const links = (
     <>
       <NavLink to="/catalogo" onClick={() => setMenu(false)}>{t("nav.glasses")}</NavLink>
       <NavLink to="/catalogo?age=Niños" onClick={() => setMenu(false)}>{t("nav.kids")}</NavLink>
       <NavLink to="/marca/case" onClick={() => setMenu(false)}>{t("nav.cases")}</NavLink>
-      <NavLink to="/#marcas" onClick={() => setMenu(false)}>{t("nav.brands")}</NavLink>
+      <NavLink to="/#marcas" onClick={goBrands}>{t("nav.brands")}</NavLink>
     </>
   );
 
   return (
+    <>
     <header className="header">
       <div className="header-top">{t("top.bar")}</div>
       <div className="header-main">
@@ -89,5 +105,14 @@ export default function Header() {
       <FavPanel open={panel === "fav"} onClose={() => setPanel(null)} />
       <AuthPanel open={panel === "account"} onClose={() => setPanel(null)} />
     </header>
+
+    <button className="chat-fab" type="button" disabled aria-disabled="true"
+            title={t("chat.soon")} aria-label={t("chat.soon")}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+           strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      </svg>
+    </button>
+    </>
   );
 }
