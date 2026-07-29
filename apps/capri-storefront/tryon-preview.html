@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Página de verificación de la geometría procedural del probador.
+     No forma parte de la app: sirve para inspeccionar las monturas 3D sin
+     necesidad de cámara. Abrir en dev con /tryon-preview.html -->
+<html lang="es">
+  <head><meta charset="utf-8" /><title>Try-on · previsualización de monturas</title>
+    <style>
+      body { margin: 0; background: #eef1f6; font: 13px system-ui, sans-serif; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; }
+      figure { margin: 0; background: #fff; border-radius: 8px; overflow: hidden; }
+      figcaption { padding: 6px 10px; color: #333; font-weight: 600; }
+      canvas { display: block; width: 100%; height: 260px; }
+    </style>
+  </head>
+  <body>
+    <div class="grid" id="grid"></div>
+    <script type="module">
+      import * as THREE from "three";
+      import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+      import { buildFrame, frameDimensions } from "/src/components/tryon/frameGeometry.js";
+
+      const SAMPLES = [
+        { label: "Cuadrado acetato (DC406)", hex: "#1b1b1f",
+          attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Acetato","Plástica"], shape: "Cuadrado" } },
+        { label: "Ojo de gato (DC407)", hex: "#d98aa8",
+          attributes: { eye_size: "51-53 mm", bridge_size: "16-17 mm", temple_length: "135-140 mm", material: ["Acetato","Plástica"], shape: "Ojo de gato" } },
+        { label: "Redondo metal (DC251)", hex: "#c9a227",
+          attributes: { eye_size: "51-53 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Metal","Acero inoxidable"], shape: "Redondo" } },
+        { label: "Navegador metal (FX120)", hex: "#5a6472",
+          attributes: { eye_size: "54-56 mm", bridge_size: "13-15 mm", temple_length: "145-150 mm", material: ["Memoria","Metal"], shape: "Navegador" } },
+        { label: "Rectángulo (FX121)", hex: "#22252b",
+          attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Memoria","Metal"], shape: "Rectángulo" } },
+        { label: "Niños redondo (PT212)", hex: "#2e7d5b",
+          attributes: { eye_size: "44-47 mm", bridge_size: "16-17 mm", temple_length: "125-130 mm", material: ["Metal"], shape: "Combo" } },
+      ];
+      // Vistas: de frente y en 3/4, para juzgar aros, puente y varillas.
+      const VIEWS = [
+        { name: "frente", yaw: 0, pitch: 0 },
+        { name: "3/4", yaw: -32, pitch: 8 },
+      ];
+
+      const grid = document.getElementById("grid");
+      for (const s of SAMPLES) {
+        for (const view of VIEWS) {
+          const fig = document.createElement("figure");
+          const cap = document.createElement("figcaption");
+          cap.textContent = `${s.label} · ${view.name}`;
+          const canvas = document.createElement("canvas");
+          fig.append(canvas, cap); grid.append(fig);
+
+          const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+          const w = 420, h = 260;
+          renderer.setSize(w, h, false);
+          renderer.setPixelRatio(2);
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(0xffffff);
+          const pmrem = new THREE.PMREMGenerator(renderer);
+          scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+          scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+          const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(0.4, 0.8, 1); scene.add(key);
+
+          const frame = buildFrame(s, s.hex);
+          const dim = frameDimensions(s);
+          frame.rotation.y = view.yaw * Math.PI / 180;
+          frame.rotation.x = view.pitch * Math.PI / 180;
+          scene.add(frame);
+
+          // Ortográfica encuadrada al ancho total de la montura.
+          const pad = 1.25, halfW = (dim.totalWidth / 2) * pad, halfH = halfW * (h / w);
+          const cam = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, -1000, 1000);
+          cam.position.z = 300;
+          renderer.render(scene, cam);
+        }
+      }
+      window.__previewReady = true;
+    </script>
+  </body>
+</html>
