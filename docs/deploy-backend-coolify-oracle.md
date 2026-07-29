@@ -218,6 +218,32 @@ hostname (`redisinsight-…`), so it did not even resolve. Coolify's Redis
 **database** resource exposes the correct string in its "Redis URL (internal)"
 field, where the host is the bare UUID — always copy that verbatim.
 
+### Fourth failure: S3 file provider with no credentials
+
+With the working directory fixed, Medusa loaded its config and modules and then
+died on:
+
+```
+Error starting server: Access key ID and secret access key are required
+  at new S3FileService (@medusajs/file-s3/dist/services/s3-file.js:21)
+```
+
+No `R2_*` variable was set in Coolify, because there was nothing to copy — the
+R2 block in the local `apps/backend/.env` is still the verbatim `.env.example`
+placeholders (`your-r2-access-key-id`, `https://<account-id>.r2.cloudflare…`).
+Cloudflare R2 has never been provisioned for this project.
+
+`medusa-config.ts` now registers the S3 provider only when
+`R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are both present, and falls back
+to `@medusajs/medusa/file-local` with a warning otherwise — the provider throws
+from its constructor, so a missing credential took the whole server down
+instead of degrading.
+
+**The fallback is for getting the deployment up, not for real use.** Local disk
+lives inside the container: uploads vanish on redeploy, and prescription images
+would not land in the private bucket that health data requires. Do not exercise
+the prescription upload/OCR flow until R2 is configured.
+
 ### If the export step still fails
 
 Check the VM, not the build:

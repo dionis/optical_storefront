@@ -2,6 +2,44 @@ import { loadEnv, defineConfig } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
+// The S3 provider throws from its constructor when credentials are absent,
+// which takes the whole server down at boot rather than degrading. Register it
+// only when it can actually work, so a deployment without R2 still starts.
+const hasR2Credentials = Boolean(
+  process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+);
+
+if (!hasR2Credentials) {
+  console.warn(
+    "[file] R2 credentials missing — falling back to local disk storage. " +
+      "Uploads do not survive a redeploy, and prescription images would not " +
+      "land in the private bucket they require. Set R2_ACCESS_KEY_ID and " +
+      "R2_SECRET_ACCESS_KEY before enabling the prescription flow."
+  );
+}
+
+const fileProviders = hasR2Credentials
+  ? [
+      {
+        resolve: "@medusajs/medusa/file-s3",
+        id: "s3",
+        options: {
+          file_url: process.env.R2_PUBLIC_URL,
+          access_key_id: process.env.R2_ACCESS_KEY_ID,
+          secret_access_key: process.env.R2_SECRET_ACCESS_KEY,
+          region: process.env.R2_REGION ?? "auto",
+          bucket: process.env.R2_BUCKET ?? "eyewear-assets",
+          endpoint: process.env.R2_ENDPOINT,
+        },
+      },
+    ]
+  : [
+      {
+        resolve: "@medusajs/medusa/file-local",
+        id: "local",
+      },
+    ];
+
 export default defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -18,24 +56,11 @@ export default defineConfig({
     backendUrl: process.env.BACKEND_URL ?? "http://localhost:9000",
   },
   modules: [
-    // File storage: Cloudflare R2 via S3-compatible API
+    // File storage: Cloudflare R2 via S3-compatible API, local disk otherwise
     {
       resolve: "@medusajs/medusa/file",
       options: {
-        providers: [
-          {
-            resolve: "@medusajs/medusa/file-s3",
-            id: "s3",
-            options: {
-              file_url: process.env.R2_PUBLIC_URL,
-              access_key_id: process.env.R2_ACCESS_KEY_ID,
-              secret_access_key: process.env.R2_SECRET_ACCESS_KEY,
-              region: process.env.R2_REGION ?? "auto",
-              bucket: process.env.R2_BUCKET ?? "eyewear-assets",
-              endpoint: process.env.R2_ENDPOINT,
-            },
-          },
-        ],
+        providers: fileProviders,
       },
     },
     // Payment: Stripe + PayPal + Square
