@@ -31,7 +31,30 @@ const FALLBACK_ASPECT = 2.5;
 
 // Instrumentación de calibrado: abrir la página con ?tryonDebug=1 para que el
 // probador emita sus medidas por consola (1 línea/segundo).
-const DEBUG = typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search);
+const DEBUG = (typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search))
+  || (typeof import.meta !== "undefined" && import.meta.env?.DEV);
+
+// ── Orientación 3D ─────────────────────────────────────────────────────────
+// Sin esto la montura es una calcomanía plana mirando a cámara: la posición
+// puede ser correcta y aun así "flotar por delante" en cuanto giras la cabeza.
+const PERSPECTIVE_PX = 600;
+// La foto es un frente plano; seguir la cabeza al 100% exagera la deformación.
+const YAW_DAMP = 0.85;
+const PITCH_DAMP = 0.7;
+const MAX_YAW_DEG = 38;
+const MAX_PITCH_DEG = 28;
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// Matriz 4x4 column-major de MediaPipe → ángulos de Euler en grados.
+// R[fila][col] = m[col*4 + fila]; el eje Y es el giro izquierda/derecha y el
+// eje X el cabeceo, en el marco canónico de la cara (X derecha, Y arriba).
+function headAngles(m) {
+  if (!m || m.length < 11) return null;
+  const yaw = Math.atan2(-m[2], Math.hypot(m[0], m[1]));
+  const pitch = Math.atan2(m[6], m[10]);
+  return { yaw: yaw * 180 / Math.PI, pitch: pitch * 180 / Math.PI };
+}
 
 // "54-56 mm" → 55 · "18 mm" → 18
 function parseMm(value) {
@@ -135,6 +158,9 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         const lm = await vision.FaceLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
           runningMode: "VIDEO", numFaces: 1,
+          // Pose 3D de la cabeza: sin esto sólo tenemos el ladeo (roll) y la
+          // montura no puede girar con la cara.
+          outputFacialTransformationMatrixes: true,
         });
         // Igual que con la cámara: si ya se desmontó, liberamos el grafo WASM.
         if (cancelled) { lm.close?.(); return; }
@@ -201,19 +227,26 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             const xR = toX(rE.x), yR = toY(rE.y);   // derecha en pantalla
             const xL = toX(lE.x), yL = toY(lE.y);   // izquierda en pantalla
             const dx = xR - xL, dy = yR - yL;
+            // El vídeo va espejado, así que el giro horizontal se invierte.
+            const head = headAngles(res.facialTransformationMatrixes?.[0]?.data);
             const next = {
               cx: (xL + xR) / 2,
               cy: (yL + yR) / 2,
               eyeDist: Math.hypot(dx, dy),
               ang: Math.atan2(dy, dx) * 180 / Math.PI,
+              yaw: head ? clamp(-head.yaw * YAW_DAMP, -MAX_YAW_DEG, MAX_YAW_DEG) : 0,
+              pitch: head ? clamp(head.pitch * PITCH_DAMP, -MAX_PITCH_DEG, MAX_PITCH_DEG) : 0,
             };
             // Suavizado exponencial contra el jitter de los landmarks.
             const prev = poseRef.current;
+            const ema = (a, b) => a + (b - a) * SMOOTHING;
             poseRef.current = prev ? {
-              cx: prev.cx + (next.cx - prev.cx) * SMOOTHING,
-              cy: prev.cy + (next.cy - prev.cy) * SMOOTHING,
-              eyeDist: prev.eyeDist + (next.eyeDist - prev.eyeDist) * SMOOTHING,
-              ang: prev.ang + (next.ang - prev.ang) * SMOOTHING,
+              cx: ema(prev.cx, next.cx),
+              cy: ema(prev.cy, next.cy),
+              eyeDist: ema(prev.eyeDist, next.eyeDist),
+              ang: ema(prev.ang, next.ang),
+              yaw: ema(prev.yaw, next.yaw),
+              pitch: ema(prev.pitch, next.pitch),
             } : next;
             lastSeenRef.current = now;
             setTrackingOnce(true);
@@ -251,7 +284,9 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
                 browY: brow ? +brow.y.toFixed(1) : null,
                 noseTipY: noseTip ? +noseTip.y.toFixed(1) : null,
                 headTopY: headTop ? +headTop.y.toFixed(1) : null, chinY: chin ? +chin.y.toFixed(1) : null,
-                ang: +next.ang.toFixed(1), lmCount: lms.length,
+                // orientación 3D de la cabeza (grados, ya amortiguados)
+                ang: +next.ang.toFixed(1), yaw: +next.yaw.toFixed(1), pitch: +next.pitch.toFixed(1),
+                hasMatrix: !!res.facialTransformationMatrixes?.[0], lmCount: lms.length,
               }));
             }
           }
@@ -267,7 +302,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         setTrackingOnce(false);
       }
 
-      let gw, left, top, ang;
+      let gw, left, top, ang, yaw = 0, pitch = 0;
       if (fresh) {
         gw = pose.eyeDist * frameRatioRef.current * sizeRef.current;
         left = pose.cx - gw / 2;
@@ -275,6 +310,8 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         // mitad superior de la lente, así que anclamos por EYE_LINE_IN_IMAGE.
         top = pose.cy + yOffRef.current * H - (gw / aspect) * EYE_LINE_IN_IMAGE;
         ang = pose.ang;
+        yaw = pose.yaw;
+        pitch = pose.pitch;
       } else {
         gw = W * 0.6 * sizeRef.current;
         left = W / 2 - gw / 2;
@@ -288,7 +325,11 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         appliedWidthRef.current = gw;
         ov.style.width = gw + "px";
       }
-      ov.style.transform = `translate(${left}px, ${top}px) rotate(${ang}deg)`;
+      // perspective() debe ir ANTES de las rotaciones para que tengan efecto 3D.
+      // rotateY = giro de la cabeza, rotateX = cabeceo, rotate = ladeo.
+      ov.style.transform =
+        `translate(${left}px, ${top}px) perspective(${PERSPECTIVE_PX}px) ` +
+        `rotateY(${yaw}deg) rotateX(${pitch}deg) rotate(${ang}deg)`;
       ov.style.opacity = "1";
     };
 
