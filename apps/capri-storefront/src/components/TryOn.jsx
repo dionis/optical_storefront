@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 // Probador virtual (AR) real: usa la cámara y, si es posible, rastrea la cara
@@ -13,6 +14,36 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 const LOST_FACE_GRACE_MS = 900;
 // Suavizado exponencial de la posición: más bajo = más estable, más latencia.
 const SMOOTHING = 0.35;
+
+// ── Escalado físico ────────────────────────────────────────────────────────
+// Distancia media entre las esquinas externas de los ojos (landmarks 33/263)
+// en un adulto. Es nuestra "regla" para convertir milímetros a píxeles.
+const OUTER_CANTHAL_MM = 91;
+// Grosor combinado de los dos aros exteriores, que el calibre no incluye.
+const RIM_MM = 8;
+const DEFAULT_FRAME_MM = 135;
+// Las fotos del catálogo vienen recortadas al ras de la montura (medido: la
+// montura ocupa ~99% del ancho y ~97% del alto). La línea de los ojos no cae
+// en el centro de esa caja: la pupila va en la mitad superior de la lente.
+const EYE_LINE_IN_IMAGE = 0.45;
+// Aspecto medio de las fotos del catálogo, sólo hasta que la imagen carga.
+const FALLBACK_ASPECT = 2.5;
+
+// "54-56 mm" → 55 · "18 mm" → 18
+function parseMm(value) {
+  const nums = String(value ?? "").match(/\d+(?:\.\d+)?/g);
+  if (!nums || !nums.length) return null;
+  return nums.reduce((acc, n) => acc + parseFloat(n), 0) / nums.length;
+}
+
+// Ancho real de la montura = 2×calibre + puente + aros. Usar las medidas del
+// catálogo en vez de una constante fija hace que las monturas de niño salgan
+// estrechas y las de hombre anchas, en lugar de todas del mismo tamaño.
+function frameWidthMm(product) {
+  const eye = parseMm(product?.attributes?.eye_size);
+  if (!eye) return DEFAULT_FRAME_MM;
+  return 2 * eye + (parseMm(product?.attributes?.bridge_size) ?? 18) + RIM_MM;
+}
 
 export default function TryOn({ product, colorIdx = 0, onClose }) {
   const { t } = useLang();
@@ -41,10 +72,16 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
   const color = product.colors[ci] || product.colors[0];
 
+  // Cuántas veces la distancia entre ojos mide la montura. Antes era un 2.05
+  // fijo: ~37% de más, por eso las gafas no ajustaban a la cara.
+  const frameRatio = useMemo(() => frameWidthMm(product) / OUTER_CANTHAL_MM, [product]);
+  const frameRatioRef = useRef(frameRatio);
+
   // Los sliders se leen desde refs dentro del bucle: cambiarlos no debe
   // reiniciar el requestAnimationFrame.
   sizeRef.current = size;
   yOffRef.current = yOff;
+  frameRatioRef.current = frameRatio;
 
   // 1) cámara
   useEffect(() => {
@@ -133,7 +170,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
       if (!v || !ov || !W || !H || !v.videoWidth || v.readyState < 2) return;
 
       const now = performance.now();
-      const aspect = (ov.naturalWidth && ov.naturalHeight) ? ov.naturalWidth / ov.naturalHeight : 2.2;
+      const aspect = (ov.naturalWidth && ov.naturalHeight) ? ov.naturalWidth / ov.naturalHeight : FALLBACK_ASPECT;
 
       // Sólo analizamos fotogramas nuevos. Reprocesar el mismo frame gasta GPU
       // y puede devolver resultados vacíos que provocarían el parpadeo.
@@ -190,9 +227,11 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
       let gw, left, top, ang;
       if (fresh) {
-        gw = pose.eyeDist * 2.05 * sizeRef.current;
+        gw = pose.eyeDist * frameRatioRef.current * sizeRef.current;
         left = pose.cx - gw / 2;
-        top = pose.cy + yOffRef.current * H - (gw / aspect) / 2;
+        // La línea de los ojos no es el centro de la foto: la pupila cae en la
+        // mitad superior de la lente, así que anclamos por EYE_LINE_IN_IMAGE.
+        top = pose.cy + yOffRef.current * H - (gw / aspect) * EYE_LINE_IN_IMAGE;
         ang = pose.ang;
       } else {
         gw = W * 0.6 * sizeRef.current;
@@ -219,7 +258,12 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   // aplicado para que el nuevo aspect ratio se tenga en cuenta.
   useEffect(() => { appliedWidthRef.current = 0; }, [ci]);
 
-  return (
+  // Portal a <body>: el modal se monta dentro de .card, y `.card:hover` aplica
+  // un transform que convierte a la tarjeta en bloque contenedor de cualquier
+  // position:fixed descendiente. Al abrir el probador la tarjeta está en hover,
+  // así que el modal se dibujaba encajado (y recortado por su overflow:hidden)
+  // dentro de la tarjeta, y saltaba a pantalla completa al salir el ratón.
+  return createPortal(
     <div className="tryon" role="dialog" aria-modal="true">
       <div className="tryon-bar">
         <span className="tryon-title">👓 {t("tryon.title")} · {product.name}</span>
@@ -259,6 +303,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         </label>
       </div>
       <p className="tryon-hint">{t("tryon.hint")}</p>
-    </div>
+    </div>,
+    document.body
   );
 }
