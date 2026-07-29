@@ -2,11 +2,13 @@ import { useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
-import {
-  DESIGNS, FRAME_ONLY, MATERIALS, BASE, PHOTO, PHOTO_COLORS,
-  arListFor, designById, materialById, L,
-} from "../data/lensPricing.js";
+// Catalog rows (designs/materials/prices/photo/AR) come from the backend via
+// useLensCatalog; only the presentation-only bits with no backend counterpart —
+// the synthetic "frame only" choice, the swatch hexes and the label picker — stay local.
+import { FRAME_ONLY, PHOTO_COLORS, arGroupFor, L } from "../data/lensPricing.js";
+import { useLensCatalog } from "../data/lensCatalog.js";
 import { useCart } from "../components/CartContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { medusa, USE_MEDUSA } from "../data/medusa.js";
 import { addConfiguredFrame, createPrescription } from "../data/medusaCart.js";
@@ -46,6 +48,8 @@ export default function LensProcess() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t, lang } = useLang();
+  const { toast } = useFeedback();
+  const { DESIGNS, MATERIALS, BASE, PHOTO, AR } = useLensCatalog();
   const { productBySlug } = useCatalog();
   const product = productBySlug[slug];
   const colorIdx = Number(params.get("color") || 0);
@@ -89,17 +93,17 @@ export default function LensProcess() {
   // return before these useMemos would change the hook count and crash React.
   const color = product ? (product.colors[colorIdx] || product.colors[0]) : null;
 
-  const design = designId === "frame-only" ? FRAME_ONLY : designById(designId);
+  const design = designId === "frame-only" ? FRAME_ONLY : (DESIGNS.find((d) => d.id === designId) || null);
   const frameOnly = designId === "frame-only";
   const cat = design && design.cat; // sv | bifocal | prog
 
   // precios efectivos (override-aware). pv bump re-render on admin edits.
   const basePrice = (dId, mId) => lensBasePrice(dId, mId, (BASE[dId] || {})[mId] ?? 0);
   const photoPriceOf = (p) => (p.price[cat] == null ? null : lensPhotoPrice(p.id, cat, p.price[cat]));
-  const arList = design && !frameOnly ? arListFor(design) : [];
+  const arList = design && !frameOnly ? (AR[arGroupFor(design)] || []) : [];
   const arPriceOf = (a) => lensARPrice(a.id, a.price);
 
-  const material = matId ? materialById(matId) : null;
+  const material = matId ? (MATERIALS.find((m) => m.id === matId) || null) : null;
   const photo = photoId ? PHOTO.find((p) => p.id === photoId) : null;
   const ar = arId ? arList.find((a) => a.id === arId) : null;
 
@@ -110,7 +114,7 @@ export default function LensProcess() {
   const recommendedMat = useMemo(() => {
     if (product?.attributes?.age === "Niños") return MATERIALS.find((m) => m.id === "poly");
     return MATERIALS.find((m) => maxAbs <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
-  }, [maxAbs, product?.attributes?.age]);
+  }, [maxAbs, product?.attributes?.age, MATERIALS]);
 
   const clientTotal = useMemo(() => {
     let x = product?.price || 0;
@@ -119,7 +123,7 @@ export default function LensProcess() {
     if (!frameOnly && ar) x += arPriceOf(ar);
     return Math.round(x * 100) / 100;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.price, designId, matId, photoId, arId, frameOnly, pv]);
+  }, [product?.price, designId, matId, photoId, arId, frameOnly, pv, BASE, PHOTO, AR]);
 
   // Effective total: server-computed under Medusa (authoritative), else client-side.
   const total = USE_MEDUSA && serverTotal != null ? serverTotal : clientTotal;
@@ -163,7 +167,7 @@ export default function LensProcess() {
         return;
       } catch (e) { /* fall back to the local flow below */ }
     }
-    alert(t("lens.added"));
+    toast({ tone: "success", title: t("lens.added"), message: t("lens.addedBody") });
     navigate(`/producto/${product.slug}`);
   };
   const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));

@@ -14,6 +14,7 @@ import AdminPage from "./pages/AdminPage.jsx";
 import AccountPage from "./pages/AccountPage.jsx";
 import MedusaCheckout from "./pages/MedusaCheckout.jsx";
 import { CartProvider } from "./components/CartContext.jsx";
+import { FeedbackProvider } from "./components/Feedback.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
 
 export default function App() {
@@ -24,34 +25,38 @@ export default function App() {
   if (isAdmin) {
     return (
       <LanguageProvider>
-        <CartProvider>
-          <ScrollToTop />
-          <Routes><Route path="/admin" element={<AdminPage />} /></Routes>
-        </CartProvider>
+        <FeedbackProvider>
+          <CartProvider>
+            <ScrollToTop />
+            <Routes><Route path="/admin" element={<AdminPage />} /></Routes>
+          </CartProvider>
+        </FeedbackProvider>
       </LanguageProvider>
     );
   }
 
   return (
     <LanguageProvider>
-      <CartProvider>
-        <ScrollToTop />
-        <Header />
-        <main className="site-main">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/catalogo" element={<Catalog />} />
-            <Route path="/marca/:slug" element={<Catalog />} />
-            <Route path="/producto/:slug" element={<ProductDetail />} />
-            <Route path="/estuche/:slug" element={<CaseDetail />} />
-            <Route path="/estuches" element={<Catalog />} />
-            <Route path="/recetas/:slug" element={<LensProcess />} />
-            <Route path="/checkout" element={<MedusaCheckout />} />
-            <Route path="/cuenta" element={<AccountPage />} />
-          </Routes>
-        </main>
-        <Footer />
-      </CartProvider>
+      <FeedbackProvider>
+        <CartProvider>
+          <ScrollToTop />
+          <Header />
+          <main className="site-main">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/catalogo" element={<Catalog />} />
+              <Route path="/marca/:slug" element={<Catalog />} />
+              <Route path="/producto/:slug" element={<ProductDetail />} />
+              <Route path="/estuche/:slug" element={<CaseDetail />} />
+              <Route path="/estuches" element={<Catalog />} />
+              <Route path="/recetas/:slug" element={<LensProcess />} />
+              <Route path="/checkout" element={<MedusaCheckout />} />
+              <Route path="/cuenta" element={<AccountPage />} />
+            </Routes>
+          </main>
+          <Footer />
+        </CartProvider>
+      </FeedbackProvider>
     </LanguageProvider>
   );
 }

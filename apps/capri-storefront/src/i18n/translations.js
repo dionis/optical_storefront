@@ -44,13 +44,29 @@ export const T = {
     "cart.total": "Total",
     "cart.checkout": "Finalizar compra",
     "cart.clear": "Vaciar carrito",
-    "cart.done": "¡Gracias por tu compra! (demo)",
+    "cart.doneTitle": "¡Gracias por tu compra!",
+    "cart.done": "Tu pedido de demostración quedó registrado. Te enviaremos la confirmación por correo.",
+    "cart.doneTotal": "Total del pedido",
+    "cart.doneCta": "Seguir comprando",
     "fav.title": "Tus favoritos",
     "fav.empty": "Aún no tienes favoritos. Toca el ♡ en cualquier montura.",
     "fav.view": "Ver",
     "common.close": "Cerrar",
     "common.remove": "Quitar",
     "common.addCart": "Añadir al carrito",
+    "dlg.confirm": "Confirmar",
+    "dlg.cancel": "Cancelar",
+    "dlg.ok": "Entendido",
+    "dlg.close": "Cerrar",
+    "adm.importInvalid": "Archivo no válido",
+    "adm.importInvalidBody": "El archivo seleccionado no contiene un JSON de precios válido.",
+    "adm.importOk": "Precios importados",
+    "adm.importOkBody": "Los precios del archivo ya están activos en la tienda.",
+    "adm.resetTitle": "¿Restablecer todos los precios?",
+    "adm.resetBody": "Se eliminarán todos los precios personalizados y la tienda volverá a los valores base. Esta acción no se puede deshacer.",
+    "adm.resetConfirm": "Sí, restablecer",
+    "adm.resetDone": "Precios restablecidos",
+    "adm.resetDoneBody": "Todos los productos usan de nuevo su precio base.",
     "rev.title": "Reseñas",
     "rev.write": "Escribe una reseña",
     "rev.your": "Tu valoración",
@@ -134,7 +150,8 @@ export const T = {
     "lens.back2": "Atrás",
     "lens.continue": "Continuar",
     "lens.addCart": "Añadir al carrito",
-    "lens.added": "¡Añadido al carrito! (demo)",
+    "lens.added": "¡Añadido al carrito!",
+    "lens.addedBody": "Tus lentes con receta están listos. Abre el carrito cuando quieras finalizar la compra.",
     "usage.svDist": "Visión sencilla (lejos)",
     "usage.svDist.d": "Miopía o hipermetropía",
     "usage.svRead": "Visión sencilla (lectura)",
@@ -224,6 +241,7 @@ export const T = {
     "checkout.orderNo": "Tu pedido", "checkout.thanks": "Gracias por tu compra. Te enviaremos la confirmación por correo.",
     "checkout.testCard": "Tarjeta de prueba: 4242 4242 4242 4242 · cualquier fecha futura · cualquier CVC.",
     "checkout.noStripe": "Falta VITE_STRIPE_PUBLISHABLE_KEY.",
+    "checkout.email": "correo@ejemplo.com", "checkout.failed": "No se pudo completar el pedido.",
   },
   en: {
     "top.bar": "Free shipping on orders over $59 · 30-day guarantee",
@@ -269,13 +287,29 @@ export const T = {
     "cart.total": "Total",
     "cart.checkout": "Checkout",
     "cart.clear": "Empty cart",
-    "cart.done": "Thank you for your purchase! (demo)",
+    "cart.doneTitle": "Thank you for your purchase!",
+    "cart.done": "Your demo order has been recorded. We'll email you the confirmation.",
+    "cart.doneTotal": "Order total",
+    "cart.doneCta": "Keep shopping",
     "fav.title": "Your favorites",
     "fav.empty": "No favorites yet. Tap the ♡ on any frame.",
     "fav.view": "View",
     "common.close": "Close",
     "common.remove": "Remove",
     "common.addCart": "Add to cart",
+    "dlg.confirm": "Confirm",
+    "dlg.cancel": "Cancel",
+    "dlg.ok": "Got it",
+    "dlg.close": "Close",
+    "adm.importInvalid": "Invalid file",
+    "adm.importInvalidBody": "The selected file does not contain valid price JSON.",
+    "adm.importOk": "Prices imported",
+    "adm.importOkBody": "The prices from the file are now live in the store.",
+    "adm.resetTitle": "Reset all prices?",
+    "adm.resetBody": "Every custom price will be removed and the store will fall back to its base values. This action cannot be undone.",
+    "adm.resetConfirm": "Yes, reset",
+    "adm.resetDone": "Prices reset",
+    "adm.resetDoneBody": "All products use their base price again.",
     "rev.title": "Reviews",
     "rev.write": "Write a review",
     "rev.your": "Your rating",
@@ -359,7 +393,8 @@ export const T = {
     "lens.back2": "Back",
     "lens.continue": "Continue",
     "lens.addCart": "Add to cart",
-    "lens.added": "Added to cart! (demo)",
+    "lens.added": "Added to cart!",
+    "lens.addedBody": "Your prescription lenses are ready. Open the cart whenever you want to check out.",
     "usage.svDist": "Single vision (distance)",
     "usage.svDist.d": "Nearsighted or farsighted",
     "usage.svRead": "Single vision (reading)",
@@ -449,6 +484,7 @@ export const T = {
     "checkout.orderNo": "Your order", "checkout.thanks": "Thanks for your order. We'll email your confirmation.",
     "checkout.testCard": "Test card: 4242 4242 4242 4242 · any future date · any CVC.",
     "checkout.noStripe": "VITE_STRIPE_PUBLISHABLE_KEY is missing.",
+    "checkout.email": "email@example.com", "checkout.failed": "We couldn't complete your order.",
   },
 };
 
@@ -471,8 +507,30 @@ export const VAL = {
   // shipping zone names (default set; owner-edited names pass through unchanged)
   "Estados Unidos": "United States", "EE.UU. exprés": "US express", "México": "Mexico",
   "Latinoamérica": "Latin America", "Resto del mundo": "Rest of world",
+  // Medusa shipping option names (created in the admin, stored in Spanish)
+  "Recoger en tienda": "Pick up in store", "Envío estándar": "Standard shipping",
+  "Envío exprés": "Express shipping",
 };
+
+// Lookup keys for VAL. Server values reach us with inconsistent casing and, when an
+// upstream write mangled the encoding, with their accents replaced by U+FFFD
+// ("Envío" → "Env�o"). Indexing every entry under both a strip form (accent →
+// base letter) and a drop form (accent removed entirely) makes either spelling
+// resolve, and lets ES recover the canonical text instead of echoing the mojibake.
+const stripKey = (s) =>
+  String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "");
+const dropKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+const VAL_INDEX = {};
+for (const [es, en] of Object.entries(VAL)) {
+  for (const key of [stripKey(es), dropKey(es)]) {
+    if (key && !(key in VAL_INDEX)) VAL_INDEX[key] = { es, en };
+  }
+}
+
 export function tv(value, lang) {
-  if (lang === "es") return value;
-  return VAL[value] || value;
+  if (value == null) return value;
+  const hit = VAL_INDEX[dropKey(value)] || VAL_INDEX[stripKey(value)];
+  if (!hit) return value;
+  return lang === "es" ? hit.es : hit.en;
 }

@@ -5,6 +5,7 @@ import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../data/lensPricing.js";
 
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
@@ -401,6 +402,8 @@ function LensPriceList() {
 }
 
 function Prices({ preQ }) {
+  const { t } = useLang();
+  const { toast, confirm } = useFeedback();
   const { products, cases } = useCatalog();
   const [ov, setOv] = useState(PS.getOverrides());
   useEffect(() => PS.subscribe(() => setOv(PS.getOverrides())), []);
@@ -435,8 +438,29 @@ function Prices({ preQ }) {
   const doImport = (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     const rd = new FileReader();
-    rd.onload = () => { try { PS.importJSON(rd.result); } catch { alert("JSON inválido"); } };
+    rd.onload = () => {
+      try {
+        PS.importJSON(rd.result);
+        toast({ tone: "success", title: t("adm.importOk"), message: t("adm.importOkBody") });
+      } catch {
+        toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
+      }
+    };
+    rd.onerror = () => toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
     rd.readAsText(f);
+    e.target.value = ""; // allow re-picking the same file after a failed import
+  };
+
+  const doReset = async () => {
+    const ok = await confirm({
+      tone: "danger",
+      title: t("adm.resetTitle"),
+      message: t("adm.resetBody"),
+      confirmLabel: t("adm.resetConfirm"),
+    });
+    if (!ok) return;
+    PS.resetAll();
+    toast({ tone: "success", title: t("adm.resetDone"), message: t("adm.resetDoneBody") });
   };
 
   return (
@@ -447,7 +471,7 @@ function Prices({ preQ }) {
           <button className="btn-sm" onClick={PS.exportJSON}>Exportar JSON</button>
           <button className="btn-sm" onClick={() => fileRef.current?.click()}>Importar</button>
           <input ref={fileRef} type="file" accept="application/json" hidden onChange={doImport} />
-          <button className="btn-sm danger" onClick={() => { if (confirm("¿Restablecer TODOS los precios a los valores base?")) PS.resetAll(); }}>Restablecer</button>
+          <button className="btn-sm danger" onClick={doReset}>Restablecer</button>
         </div>
       </div>
       <p className="muted">Edita cualquier precio. Vacío = usa el precio base. Los cambios se aplican en la tienda al instante.</p>

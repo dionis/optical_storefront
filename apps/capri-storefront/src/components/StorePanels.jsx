@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useUser, login, register, logout, setProfile } from "./userAuth.js";
+import { useFeedback } from "./Feedback.jsx";
 import ShippingEstimator from "./ShippingEstimator.jsx";
 
 export function SidePanel({ open, onClose, title, children }) {
@@ -23,6 +24,7 @@ export function SidePanel({ open, onClose, title, children }) {
 export function CartPanel({ open, onClose }) {
   const { items, removeItem, total, clearCart, checkout } = useCart();
   const { t } = useLang();
+  const { dialog } = useFeedback();
   const user = useUser();
   const [ship, setShip] = useState({ method: "pickup", cost: 0 });
   const [err, setErr] = useState("");
@@ -44,7 +46,14 @@ export function CartPanel({ open, onClose }) {
       customer: { name: f.name, surname: f.surname, email, phone },
       delivery: isShip ? { recipient: f.dName || `${f.name} ${f.surname}`.trim(), phone: f.dPhone, email: f.dEmail || email, address: f.dAddress, city: f.dCity, zone: ship.zoneName || ship.zoneId, carrier: ship.carrier } : null,
     });
-    alert(t("cart.done")); onClose();
+    onClose();
+    dialog({
+      tone: "success",
+      title: t("cart.doneTitle"),
+      message: t("cart.done"),
+      detail: `${t("cart.doneTotal")}: $${grand.toFixed(2)}`,
+      confirmLabel: t("cart.doneCta"),
+    });
   };
 
   return (

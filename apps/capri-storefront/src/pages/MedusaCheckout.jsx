@@ -21,7 +21,7 @@ function loadStripe(pk) {
 }
 
 export default function MedusaCheckout() {
-  const { t } = useLang();
+  const { t, tv } = useLang();
   const { clearCart } = useCart();
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
@@ -97,7 +97,7 @@ export default function MedusaCheckout() {
       if (error) { setErr(error.message); setBusy(false); return; }
       const r = await completeCart();
       if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
-      else setErr(typeof r.error === "string" ? r.error : "No se pudo completar el pedido.");
+      else setErr(typeof r.error === "string" ? r.error : L("failed"));
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
   };
@@ -149,7 +149,7 @@ export default function MedusaCheckout() {
             <div className="co-form">
               <div className="co-h">👤 {L("contact")}</div>
               <div className="co-fields">
-                <input type="email" placeholder="email@ejemplo.com" value={f.email} onChange={set("email")} autoComplete="email" />
+                <input type="email" placeholder={L("email")} value={f.email} onChange={set("email")} autoComplete="email" />
                 <div className="co-two">
                   <input placeholder={L("first")} value={f.first_name} onChange={set("first_name")} />
                   <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
@@ -172,7 +172,7 @@ export default function MedusaCheckout() {
                     {ship.map((o) => (
                       <label key={o.id} className={`choice ${shipId === o.id ? "sel" : ""}`}>
                         <input type="radio" name="ship" checked={shipId === o.id} onChange={() => setShipId(o.id)} />
-                        <span className="choice-main"><span className="choice-title">{o.name}</span></span>
+                        <span className="choice-main"><span className="choice-title">{tv(o.name)}</span></span>
                         <span className="choice-price">{o.amount > 0 ? money(o.amount) : L("free")}</span>
                       </label>
                     ))}
