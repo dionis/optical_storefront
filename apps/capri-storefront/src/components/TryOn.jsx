@@ -6,6 +6,14 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // Si no hay detección, cae a colocación MANUAL con ajuste de tamaño y altura.
 // La montura se superpone con mix-blend-mode:multiply para que el fondo blanco
 // de la foto del producto "desaparezca" sin necesidad de CORS.
+
+// Un fotograma suelto sin detección es normal: mantenemos la última posición
+// válida durante este margen antes de volver al modo manual. Sin esto la
+// montura salta entre la cara y el centro de la pantalla y parpadea.
+const LOST_FACE_GRACE_MS = 900;
+// Suavizado exponencial de la posición: más bajo = más estable, más latencia.
+const SMOOTHING = 0.35;
+
 export default function TryOn({ product, colorIdx = 0, onClose }) {
   const { t } = useLang();
   const videoRef = useRef(null);
@@ -14,7 +22,16 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   const rafRef = useRef(0);
   const lmRef = useRef(null);
   const runningRef = useRef(true);
-  const detectedRef = useRef(false);
+
+  // Estado del bucle de render, fuera de React para no re-renderizar por frame.
+  const poseRef = useRef(null);          // última pose suavizada { cx, cy, eyeDist, ang }
+  const lastSeenRef = useRef(0);         // timestamp de la última detección válida
+  const lastFrameTimeRef = useRef(-1);   // video.currentTime del último frame analizado
+  const stageSizeRef = useRef({ w: 0, h: 0 });
+  const appliedWidthRef = useRef(0);
+  const trackingRef = useRef(false);
+  const sizeRef = useRef(1);
+  const yOffRef = useRef(0);
 
   const [ci, setCi] = useState(colorIdx);
   const [status, setStatus] = useState("starting"); // starting | ready | denied | nocam
@@ -24,23 +41,45 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
   const color = product.colors[ci] || product.colors[0];
 
+  // Los sliders se leen desde refs dentro del bucle: cambiarlos no debe
+  // reiniciar el requestAnimationFrame.
+  sizeRef.current = size;
+  yOffRef.current = yOff;
+
   // 1) cámara
   useEffect(() => {
-    let stream;
+    runningRef.current = true;
+    let cancelled = false;
+    let stream = null;
+
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) { setStatus("nocam"); return; }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        // El cleanup puede haber corrido mientras esperábamos (StrictMode monta
+        // dos veces en dev): hay que cerrar este stream o la cámara queda abierta.
+        if (cancelled) { s.getTracks().forEach((tk) => tk.stop()); return; }
+        stream = s;
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          videoRef.current.srcObject = s;
           await videoRef.current.play().catch(() => {});
           setStatus("ready");
         }
       } catch (e) {
+        if (cancelled) return;
         setStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
       }
     })();
-    return () => { runningRef.current = false; cancelAnimationFrame(rafRef.current); if (stream) stream.getTracks().forEach((tk) => tk.stop()); };
+
+    return () => {
+      cancelled = true;
+      runningRef.current = false;
+      cancelAnimationFrame(rafRef.current);
+      if (stream) stream.getTracks().forEach((tk) => tk.stop());
+    };
   }, []);
 
   // 2) MediaPipe (best-effort; si falla, queda modo manual)
@@ -55,68 +94,125 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
           baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
           runningMode: "VIDEO", numFaces: 1,
         });
-        if (!cancelled) lmRef.current = lm;
+        // Igual que con la cámara: si ya se desmontó, liberamos el grafo WASM.
+        if (cancelled) { lm.close?.(); return; }
+        lmRef.current = lm;
       } catch (e) { /* modo manual */ }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      lmRef.current?.close?.();
+      lmRef.current = null;
+    };
   }, []);
 
   // 3) bucle de render (no re-renderiza React: escribe estilos por ref)
   useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Medimos el escenario con ResizeObserver en vez de leer clientWidth en
+    // cada frame (eso fuerza un reflow sincrónico 60 veces por segundo).
+    const measure = () => { stageSizeRef.current = { w: stage.clientWidth, h: stage.clientHeight }; };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(stage);
+
+    const setTrackingOnce = (on) => {
+      if (trackingRef.current === on) return;
+      trackingRef.current = on;
+      setTracking(on);
+    };
+
     const loop = () => {
       if (!runningRef.current) return;
-      const v = videoRef.current, ov = overlayRef.current, stage = stageRef.current;
-      if (v && ov && stage && v.videoWidth) {
-        const W = stage.clientWidth, H = stage.clientHeight;
-        const aspect = (ov.naturalWidth && ov.naturalHeight) ? ov.naturalWidth / ov.naturalHeight : 2.2;
-        let placed = false;
-
-        if (lmRef.current) {
-          try {
-            const res = lmRef.current.detectForVideo(v, performance.now());
-            const lms = res && res.faceLandmarks && res.faceLandmarks[0];
-            if (lms) {
-              // object-fit: cover → factor de escala/offset del video mostrado
-              const vAsp = v.videoWidth / v.videoHeight, dAsp = W / H;
-              let sx, sy, ox = 0, oy = 0;
-              if (vAsp > dAsp) { sy = H; sx = H * vAsp; ox = (W - sx) / 2; }
-              else { sx = W; sy = W / vAsp; oy = (H - sy) / 2; }
-              const toX = (nx) => ox + (1 - nx) * sx; // espejado (selfie)
-              const toY = (ny) => oy + ny * sy;
-              const rE = lms[33], lE = lms[263];      // esquinas externas de los ojos
-              const x1 = toX(rE.x), y1 = toY(rE.y), x2 = toX(lE.x), y2 = toY(lE.y);
-              const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 + yOff * H;
-              const dx = x2 - x1, dy = y2 - y1;
-              const eyeDist = Math.hypot(dx, dy);
-              const gw = eyeDist * 2.05 * size;
-              const ih = gw / aspect;
-              const ang = Math.atan2(dy, dx) * 180 / Math.PI;
-              ov.style.width = gw + "px";
-              ov.style.left = (cx - gw / 2) + "px";
-              ov.style.top = (cy - ih / 2) + "px";
-              ov.style.transform = `rotate(${ang}deg)`;
-              ov.style.opacity = "1";
-              placed = true;
-              if (!detectedRef.current) { detectedRef.current = true; setTracking(true); }
-            } else if (detectedRef.current) { detectedRef.current = false; setTracking(false); }
-          } catch { /* ignore frame */ }
-        }
-
-        if (!placed) {
-          const gw = W * 0.6 * size;
-          const ih = gw / aspect;
-          ov.style.width = gw + "px";
-          ov.style.left = (W / 2 - gw / 2) + "px";
-          ov.style.top = (H * (0.42 + yOff) - ih / 2) + "px";
-          ov.style.transform = "rotate(0deg)";
-          ov.style.opacity = "1";
-        }
-      }
       rafRef.current = requestAnimationFrame(loop);
+
+      const v = videoRef.current, ov = overlayRef.current;
+      const { w: W, h: H } = stageSizeRef.current;
+      if (!v || !ov || !W || !H || !v.videoWidth || v.readyState < 2) return;
+
+      const now = performance.now();
+      const aspect = (ov.naturalWidth && ov.naturalHeight) ? ov.naturalWidth / ov.naturalHeight : 2.2;
+
+      // Sólo analizamos fotogramas nuevos. Reprocesar el mismo frame gasta GPU
+      // y puede devolver resultados vacíos que provocarían el parpadeo.
+      const isNewFrame = v.currentTime !== lastFrameTimeRef.current;
+      if (lmRef.current && isNewFrame) {
+        lastFrameTimeRef.current = v.currentTime;
+        try {
+          const res = lmRef.current.detectForVideo(v, now);
+          const lms = res && res.faceLandmarks && res.faceLandmarks[0];
+          if (lms) {
+            // object-fit: cover → factor de escala/offset del video mostrado
+            const vAsp = v.videoWidth / v.videoHeight, dAsp = W / H;
+            let sx, sy, ox = 0, oy = 0;
+            if (vAsp > dAsp) { sy = H; sx = H * vAsp; ox = (W - sx) / 2; }
+            else { sx = W; sy = W / vAsp; oy = (H - sy) / 2; }
+            const toX = (nx) => ox + (1 - nx) * sx; // espejado (selfie)
+            const toY = (ny) => oy + ny * sy;
+            const rE = lms[33], lE = lms[263];      // esquinas externas de los ojos
+            const x1 = toX(rE.x), y1 = toY(rE.y), x2 = toX(lE.x), y2 = toY(lE.y);
+            const dx = x2 - x1, dy = y2 - y1;
+            const next = {
+              cx: (x1 + x2) / 2,
+              cy: (y1 + y2) / 2,
+              eyeDist: Math.hypot(dx, dy),
+              ang: Math.atan2(dy, dx) * 180 / Math.PI,
+            };
+            // Suavizado exponencial contra el jitter de los landmarks.
+            const prev = poseRef.current;
+            poseRef.current = prev ? {
+              cx: prev.cx + (next.cx - prev.cx) * SMOOTHING,
+              cy: prev.cy + (next.cy - prev.cy) * SMOOTHING,
+              eyeDist: prev.eyeDist + (next.eyeDist - prev.eyeDist) * SMOOTHING,
+              ang: prev.ang + (next.ang - prev.ang) * SMOOTHING,
+            } : next;
+            lastSeenRef.current = now;
+            setTrackingOnce(true);
+          }
+        } catch { /* ignore frame */ }
+      }
+
+      // Conservamos la última pose durante el margen de gracia. Sin esto, un
+      // solo frame sin cara mandaba la montura al centro y de vuelta.
+      const pose = poseRef.current;
+      const fresh = pose && (now - lastSeenRef.current) < LOST_FACE_GRACE_MS;
+      if (!fresh) {
+        if (pose) { poseRef.current = null; lastFrameTimeRef.current = -1; }
+        setTrackingOnce(false);
+      }
+
+      let gw, left, top, ang;
+      if (fresh) {
+        gw = pose.eyeDist * 2.05 * sizeRef.current;
+        left = pose.cx - gw / 2;
+        top = pose.cy + yOffRef.current * H - (gw / aspect) / 2;
+        ang = pose.ang;
+      } else {
+        gw = W * 0.6 * sizeRef.current;
+        left = W / 2 - gw / 2;
+        top = H * (0.42 + yOffRef.current) - (gw / aspect) / 2;
+        ang = 0;
+      }
+
+      // width dispara layout, así que sólo lo tocamos cuando cambia de verdad;
+      // la posición va por transform (composita, no reflowea).
+      if (Math.abs(gw - appliedWidthRef.current) > 0.5) {
+        appliedWidthRef.current = gw;
+        ov.style.width = gw + "px";
+      }
+      ov.style.transform = `translate(${left}px, ${top}px) rotate(${ang}deg)`;
+      ov.style.opacity = "1";
     };
+
     rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [size, yOff, ci]);
+    return () => { ro.disconnect(); cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  // Al cambiar de color la imagen se recarga: forzamos recalcular el ancho
+  // aplicado para que el nuevo aspect ratio se tenga en cuenta.
+  useEffect(() => { appliedWidthRef.current = 0; }, [ci]);
 
   return (
     <div className="tryon" role="dialog" aria-modal="true">
@@ -127,7 +223,8 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
       <div className="tryon-stage" ref={stageRef}>
         <video ref={videoRef} className="tryon-video" playsInline muted />
-        <img ref={overlayRef} className="tryon-frame" src={color.image} alt="" style={{ opacity: 0 }}
+        <img ref={overlayRef} className="tryon-frame" src={color.image} alt=""
+             onLoad={() => { appliedWidthRef.current = 0; }}
              onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
 
         {status !== "ready" && (
