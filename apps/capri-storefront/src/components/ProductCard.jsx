@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
-import TryOn from "./TryOn.jsx";
+import { TRY_ON_ENABLED } from "../config/features.js";
+
+// El probador arrastra three.js (~560 kB). Se carga sólo al abrirlo, no en
+// cada listado de producto.
+const TryOn = lazy(() => import("./TryOn.jsx"));
 
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
@@ -26,11 +30,17 @@ export default function ProductCard({ product }) {
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
-        <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
-          <span aria-hidden>◈</span> {t("card.ar")}
-        </button>
+        {TRY_ON_ENABLED && (
+          <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
+            <span aria-hidden>◈</span> {t("card.ar")}
+          </button>
+        )}
       </div>
-      {tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
+      {TRY_ON_ENABLED && tryOn && (
+        <Suspense fallback={null}>
+          <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
+        </Suspense>
+      )}
 
       <div className="card-body">
         <div className="card-row">

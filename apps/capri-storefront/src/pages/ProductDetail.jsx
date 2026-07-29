@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
-import TryOn from "../components/TryOn.jsx";
+// Carga diferida: el probador arrastra three.js y no debe pesar en la PDP.
+const TryOn = lazy(() => import("../components/TryOn.jsx"));
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { TRY_ON_ENABLED } from "../config/features.js";
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -43,7 +45,9 @@ export default function ProductDetail() {
                     aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
-            <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+            {TRY_ON_ENABLED && (
+              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+            )}
           </div>
           <div className="pdp-thumbs">
             {product.colors.map((c, i) => (
@@ -81,7 +85,9 @@ export default function ProductDetail() {
               {t("pdp.addFrame")} · ${product.price.toFixed(2)}
             </button>
           </div>
-          <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+          {TRY_ON_ENABLED && (
+            <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+          )}
 
           <table className="specs">
             <tbody>
@@ -120,7 +126,11 @@ export default function ProductDetail() {
         </section>
       )}
 
-      {tryOn && <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />}
+      {TRY_ON_ENABLED && tryOn && (
+        <Suspense fallback={null}>
+          <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
