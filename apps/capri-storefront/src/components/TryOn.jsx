@@ -151,12 +151,17 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             else { sx = W; sy = W / vAsp; oy = (H - sy) / 2; }
             const toX = (nx) => ox + (1 - nx) * sx; // espejado (selfie)
             const toY = (ny) => oy + ny * sy;
+            // 33 = ojo derecho del usuario, 263 = izquierdo. toX() espeja la
+            // imagen (selfie), así que el ojo derecho acaba a la DERECHA de la
+            // pantalla: el vector izquierda→derecha va de 263 hacia 33. Tomarlo
+            // al revés daba atan2 ≈ 180° y la montura salía cabeza abajo.
             const rE = lms[33], lE = lms[263];      // esquinas externas de los ojos
-            const x1 = toX(rE.x), y1 = toY(rE.y), x2 = toX(lE.x), y2 = toY(lE.y);
-            const dx = x2 - x1, dy = y2 - y1;
+            const xR = toX(rE.x), yR = toY(rE.y);   // derecha en pantalla
+            const xL = toX(lE.x), yL = toY(lE.y);   // izquierda en pantalla
+            const dx = xR - xL, dy = yR - yL;
             const next = {
-              cx: (x1 + x2) / 2,
-              cy: (y1 + y2) / 2,
+              cx: (xL + xR) / 2,
+              cy: (yL + yR) / 2,
               eyeDist: Math.hypot(dx, dy),
               ang: Math.atan2(dy, dx) * 180 / Math.PI,
             };
