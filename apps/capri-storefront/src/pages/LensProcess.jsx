@@ -69,10 +69,18 @@ function Field({ label, value, onChange, options, t, withEmpty, hint }) {
   );
 }
 
+// Familias fotocromáticas con explicación DIFERENCIADORA (no todas dicen lo mismo):
+// cada una aclara qué la distingue y para quién conviene.
 const PHOTO_FAMILIES = [
-  { key: "photo",   label: { es: "Fotocromático",         en: "Photochromic" },        ids: ["photo-grey", "photo-brown"] },
-  { key: "trans-s", label: { es: "Transitions Gen S",     en: "Transitions Gen S" },   ids: ["trans-s-grey", "trans-s-brown", "trans-s-green"] },
-  { key: "trans-x", label: { es: "Transitions XTRActive", en: "Transitions XTRActive" }, ids: ["trans-x-grey", "trans-x-brown"] },
+  { key: "photo", label: { es: "Fotocromático", en: "Photochromic" }, ids: ["photo-grey", "photo-brown"],
+    desc: { es: "La opción económica. Se oscurecen al sol y se aclaran adentro, pero tardan un poco más y aclaran menos con calor.",
+            en: "The budget option. Darken in the sun and clear indoors, but change a bit slower and stay slightly tinted in heat." } },
+  { key: "trans-s", label: { es: "Transitions Gen S", en: "Transitions Gen S" }, ids: ["trans-s-grey", "trans-s-brown", "trans-s-green"],
+    desc: { es: "Marca Transitions: cambian rápido y quedan totalmente claros en interior. La opción equilibrada para el día a día.",
+            en: "Transitions brand: change fast and go fully clear indoors. The balanced everyday choice." } },
+  { key: "trans-x", label: { es: "Transitions XTRActive", en: "Transitions XTRActive" }, ids: ["trans-x-grey", "trans-x-brown"],
+    desc: { es: "Los más oscuros, incluso con calor, y se activan algo dentro del auto. Para quien pasa mucho tiempo al aire libre o maneja.",
+            en: "The darkest, even in heat, and activate a little inside the car. For lots of outdoor time or driving." } },
 ];
 // Diseños multifocales (se ofrecen solo si la receta trae ADD).
 const MULTI_IDS = ["bifocal", "prog-mid", "prog-high"];
@@ -410,17 +418,23 @@ export default function LensProcess() {
                     <div key={fam.key} className={`zl-fam ${open ? "open" : ""}`}>
                       <button className={`zl-card ${items.some((p) => p.id === photoId) ? "sel" : ""}`} onClick={() => setOpenFam(open ? null : fam.key)}>
                         <span className="zl-card-ic"><IconPhoto /></span>
-                        <span className="zl-card-main"><b>{L(fam.label, lang)}</b><small>{t("lens.photo.sub")}</small></span>
+                        <span className="zl-card-main"><b>{L(fam.label, lang)}</b><small>{L(fam.desc, lang)}</small></span>
                         <span className="zl-card-price">{t("lens.fromPrice")} +{money(famMin)} <i className="zl-chev">{open ? "▲" : "▼"}</i></span>
                       </button>
                       {open && (
                         <div className="zl-fam-body">
-                          {items.map((p) => (
-                            <button key={p.id} className={`zl-variant ${photoId === p.id ? "sel" : ""}`} onClick={() => setPhotoId(p.id)}>
-                              <span className="zl-variant-main">{L(p.label, lang)}<span className="zl-dots">{p.colors.map((c) => <i key={c} title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}</span></span>
-                              <b>+{money(photoPriceOf(p))}</b>
-                            </button>
-                          ))}
+                          {items.map((p) => {
+                            const col = PHOTO_COLORS[p.colors[0]];
+                            return (
+                              <button key={p.id} className={`zl-variant ${photoId === p.id ? "sel" : ""}`} onClick={() => setPhotoId(p.id)}>
+                                <span className="zl-variant-main">
+                                  <span className="zl-variant-lbl">{L(p.label, lang)}<span className="zl-dots">{p.colors.map((c) => <i key={c} title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}</span></span>
+                                  {col?.note && <small className="zl-variant-note">{L(col.note, lang)}</small>}
+                                </span>
+                                <b>+{money(photoPriceOf(p))}</b>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -440,7 +454,7 @@ export default function LensProcess() {
                   return (
                     <button key={a.id} className={`zl-card ${arId === a.id ? "sel" : ""}`} onClick={() => setArId(a.id)}>
                       <span className="zl-card-ic">{blue ? <IconBlue /> : <IconAR />}</span>
-                      <span className="zl-card-main"><b>{L(a.label, lang)}</b><small>{blue ? t("lens.ar.blueSub") : t("lens.ar.sub")}</small></span>
+                      <span className="zl-card-main"><b>{L(a.label, lang)}</b><small>{L(a.desc, lang) || (blue ? t("lens.ar.blueSub") : t("lens.ar.sub"))}</small></span>
                       <span className="zl-card-price">+{money(arPriceOf(a))}</span>
                     </button>
                   );

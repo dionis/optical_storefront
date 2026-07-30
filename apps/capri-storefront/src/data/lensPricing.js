@@ -17,13 +17,27 @@ export const DESIGNS = [
 export const FRAME_ONLY = { id: "frame-only", rx: false, label: { es: "Solo montura", en: "Frame only" } };
 
 // Materiales (columnas). maxAbs = graduación máx. recomendada.
+// `desc` = explicación breve y DIFERENCIADORA, pensada para alguien que no sabe
+// de óptica: qué lo distingue y para quién conviene (no solo "delgado/muy delgado").
 export const MATERIALS = [
-  { id: "cr39",  maxAbs: 2,  label: { es: "CR-39 (Resina)", en: "CR-39 (Resin)" },     desc: { es: "Estándar, económico.",       en: "Standard, budget." } },
-  { id: "poly",  maxAbs: 3,  label: { es: "Policarbonato",  en: "Polycarbonate" },      desc: { es: "Resistente a impactos. Niños/deporte.", en: "Impact-resistant. Kids/sport." } },
-  { id: "1.56",  maxAbs: 3,  label: { es: "Índice 1.56",    en: "Index 1.56" },         desc: { es: "Más delgado que CR-39.",     en: "Thinner than CR-39." } },
-  { id: "1.61",  maxAbs: 4,  label: { es: "Índice 1.61",    en: "Index 1.61" },         desc: { es: "Delgado.",                   en: "Thin." } },
-  { id: "1.67",  maxAbs: 6,  label: { es: "Índice 1.67",    en: "Index 1.67" },         desc: { es: "Muy delgado.",               en: "Very thin." } },
-  { id: "1.74",  maxAbs: 99, label: { es: "Índice 1.74",    en: "Index 1.74" },         desc: { es: "Ultra delgado. Alta graduación.", en: "Ultra-thin. High Rx." } },
+  { id: "cr39",  maxAbs: 2,  label: { es: "CR-39 (Resina)", en: "CR-39 (Resin)" },
+    desc: { es: "El más económico. Bien para graduaciones bajas; en graduaciones altas queda grueso.",
+            en: "The cheapest. Fine for low prescriptions; gets thick on strong ones." } },
+  { id: "poly",  maxAbs: 3,  label: { es: "Policarbonato",  en: "Polycarbonate" },
+    desc: { es: "Casi irrompible y ligero, con protección UV. Ideal para niños, deporte y monturas al aire.",
+            en: "Almost unbreakable, light, with UV protection. Best for kids, sport and rimless frames." } },
+  { id: "1.56",  maxAbs: 3,  label: { es: "Índice 1.56",    en: "Index 1.56" },
+    desc: { es: "Un paso más delgado y ligero que el estándar. Buen equilibrio precio/estética.",
+            en: "A step thinner and lighter than standard. Good price/look balance." } },
+  { id: "1.61",  maxAbs: 4,  label: { es: "Índice 1.61",    en: "Index 1.61" },
+    desc: { es: "Delgado y estético para graduación media. El borde del lente se nota mucho menos.",
+            en: "Thin and good-looking for medium Rx. The lens edge shows far less." } },
+  { id: "1.67",  maxAbs: 6,  label: { es: "Índice 1.67",    en: "Index 1.67" },
+    desc: { es: "Muy delgado, para graduaciones altas: evita el efecto 'fondo de botella'.",
+            en: "Very thin, for strong prescriptions: avoids the thick 'coke-bottle' edge." } },
+  { id: "1.74",  maxAbs: 99, label: { es: "Índice 1.74",    en: "Index 1.74" },
+    desc: { es: "El más delgado que existe. Para graduaciones muy altas cuando quieres el lente más disimulado.",
+            en: "The thinnest available. For very strong Rx when you want the most discreet lens." } },
 ];
 
 // Matriz base: BASE[designId][materialId] = precio del lente (USD).
@@ -47,25 +61,41 @@ export const PHOTO = [
 ];
 
 // Antirreflejos (adicional). Grupo por categoría: sv vs bifprog.
+// `desc` = qué aporta CADA capa y por qué elegirla (lenguaje sencillo).
 export const AR = {
   sv: [
-    { id: "ar-green-basic",  label: { es: "AR Green Básico", en: "AR Green Basic" }, price: 60 },
-    { id: "ar-green-plus",   label: { es: "AR Green Plus",   en: "AR Green Plus" },  price: 90 },
-    { id: "ar-blue-protect", label: { es: "AR Blue Protect", en: "AR Blue Protect" },price: 90 },
+    { id: "ar-green-basic",  label: { es: "AR Green Básico", en: "AR Green Basic" }, price: 60,
+      desc: { es: "Quita los reflejos molestos y verás más nítido, sobre todo de noche. La capa esencial.",
+              en: "Removes annoying glare so you see sharper, especially at night. The essential coating." } },
+    { id: "ar-green-plus",   label: { es: "AR Green Plus",   en: "AR Green Plus" },  price: 90,
+      desc: { es: "Antirreflejo reforzado: además repele agua, grasa y polvo, se limpia fácil y dura más.",
+              en: "Reinforced anti-glare: also repels water, grease and dust; easier to clean and lasts longer." } },
+    { id: "ar-blue-protect", label: { es: "AR Blue Protect", en: "AR Blue Protect" },price: 90,
+      desc: { es: "Filtra la luz azul de pantallas (celular, PC). Ideal si pasas muchas horas frente a dispositivos.",
+              en: "Filters blue light from screens (phone, PC). Ideal if you spend hours on devices." } },
   ],
   bifprog: [
-    { id: "adequate",    label: { es: "Adequate",    en: "Adequate" },    price: 50 },
-    { id: "crystal",     label: { es: "Crystal",     en: "Crystal" },     price: 80 },
-    { id: "flawless",    label: { es: "Flawless",    en: "Flawless" },    price: 120 },
-    { id: "blue-uv-445", label: { es: "Blue UV 445", en: "Blue UV 445" }, price: 120 },
+    { id: "adequate",    label: { es: "Adequate",    en: "Adequate" },    price: 50,
+      desc: { es: "Antirreflejo básico: menos reflejos para ver más claro. Buena opción de entrada.",
+              en: "Basic anti-glare: fewer reflections for clearer vision. A good entry option." } },
+    { id: "crystal",     label: { es: "Crystal",     en: "Crystal" },     price: 80,
+      desc: { es: "Antirreflejo que además repele agua y huellas: se ensucia menos y se limpia fácil.",
+              en: "Anti-glare that also repels water and fingerprints: stays cleaner, wipes off easily." } },
+    { id: "flawless",    label: { es: "Flawless",    en: "Flawless" },    price: 120,
+      desc: { es: "El más completo: antirreflejo + antirrayado + repelente. Máxima transparencia y durabilidad.",
+              en: "The most complete: anti-glare + scratch-resistant + repellent. Top clarity and durability." } },
+    { id: "blue-uv-445", label: { es: "Blue UV 445", en: "Blue UV 445" }, price: 120,
+      desc: { es: "Filtra luz azul de pantallas Y rayos UV del sol a la vez: protege por dentro y por fuera.",
+              en: "Filters screen blue light AND the sun's UV at once: protects indoors and outdoors." } },
   ],
 };
 
-// Colores disponibles (para mostrar swatches).
+// Colores disponibles (para mostrar swatches). `note` = para qué sirve cada tono,
+// porque el cliente online no sabe qué color elegir.
 export const PHOTO_COLORS = {
-  grey:  { es: "Gris",  en: "Grey",  hex: "#5b6068" },
-  brown: { es: "Marrón",en: "Brown", hex: "#6b4a2b" },
-  green: { es: "Verde grafito", en: "Graphite green", hex: "#3f5b4a" },
+  grey:  { es: "Gris",  en: "Grey",  hex: "#5b6068", note: { es: "tono neutral, el más popular", en: "neutral tint, most popular" } },
+  brown: { es: "Marrón",en: "Brown", hex: "#6b4a2b", note: { es: "realza el contraste, ideal para días soleados", en: "boosts contrast, great on sunny days" } },
+  green: { es: "Verde grafito", en: "Graphite green", hex: "#3f5b4a", note: { es: "reduce el deslumbramiento", en: "cuts glare" } },
 };
 
 // Helpers

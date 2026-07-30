@@ -1318,3 +1318,9 @@ img { max-width: 100%; }
   .rx-extra { flex-wrap: wrap; }
   .rx-extra .rx-field { flex: 1 1 45%; }
 }
+
+/* Descripciones diferenciadoras (tratamiento/índice) + guía de color de variantes */
+.zl-card-main small { line-height: 1.4; }
+.zl-variant-main { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.zl-variant-lbl { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.zl-variant-note { color: var(--ink-soft); font-size: 12px; font-weight: 400; }

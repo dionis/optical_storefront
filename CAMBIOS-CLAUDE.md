@@ -223,3 +223,13 @@ Archivos: `src/pages/LensProcess.jsx` (reescrito), `src/styles/index.css` (bloqu
 **Código:** comentarios/documentación añadidos en todos los módulos tocados.
 
 **QA hecho:** build en entorno tipo Vercel ✓; recorrido en navegador ✓ (checkout→comprobante, orden en cuenta con estado "Recibida" + desglose + rastreo, línea de seguimiento 5 pasos, ES/EN, 0 errores de consola). Admin verificado por código+build (login corporativo protegido). Archivos: 19 (2 nuevos data/, 1 ErrorBoundary + 16 tocados). Solo frontend; no toca el backend de Dionis.
+
+## 2026-07-30 (5) — Explicaciones diferenciadoras en la selección de lentes
+
+El cliente online no sabe de óptica, así que cada opción ahora tiene una explicación breve que
+**la distingue y dice para quién conviene** (antes fotocromáticos y Transitions decían casi lo mismo):
+- **Fotocromáticos/Transitions:** Fotocromático (económico, más lento) vs Transitions Gen S (rápido, equilibrado) vs XTRActive (más oscuro, se activa en el auto). Cada variante muestra además una guía de color (gris neutral, marrón contraste, verde antideslumbrante).
+- **Antirreflejos:** cada uno explica qué aporta (esencial / repele agua / filtra luz azul / el más completo / luz azul + UV).
+- **Índices/materiales:** por graduación y grosor, y para quién (niños/deporte, estética, graduaciones altas…).
+- **Tipos de receta:** qué es cada uno en palabras sencillas (un campo, con línea, sin línea, premium).
+Todo bilingüe ES/EN (copy en `data/lensPricing.js` y `PHOTO_FAMILIES`) y responsive (las descripciones envuelven bien). Archivos: `lensPricing.js`, `LensProcess.jsx`, `translations.js`, `index.css`. Solo frontend.
