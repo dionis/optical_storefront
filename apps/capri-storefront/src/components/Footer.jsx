@@ -18,15 +18,15 @@ export default function Footer() {
         </div>
         <div>
           <h4>{t("footer.help")}</h4>
-          <a href="#">{t("footer.chooseFrame")}</a>
-          <a href="#">{t("footer.rxGuide")}</a>
-          <a href="#">{t("footer.shipping")}</a>
+          <Link to="/catalogo">{t("footer.chooseFrame")}</Link>
+          <Link to="/catalogo">{t("footer.rxGuide")}</Link>
+          <Link to="/catalogo">{t("footer.shipping")}</Link>
         </div>
         <div>
           <h4>{t("footer.service")}</h4>
-          <a href="#">{t("footer.arSvc")}</a>
-          <a href="#">{t("footer.uploadRx")}</a>
-          <a href="#">{t("footer.contact")}</a>
+          <Link to="/catalogo">{t("footer.arSvc")}</Link>
+          <Link to="/catalogo">{t("footer.uploadRx")}</Link>
+          <Link to="/cuenta">{t("footer.contact")}</Link>
         </div>
       </div>
       <div className="footer-bottom">
