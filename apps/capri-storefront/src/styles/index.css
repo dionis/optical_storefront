@@ -255,11 +255,12 @@ button { font-family: inherit; cursor: pointer; }
   .filters-toggle { display: block; }
   .filters { display: none; position: static; margin-bottom: 18px; }
   .filters.show { display: block; }
-  .drawer { display: block; position: fixed; top: 0; left: 0; width: 82%; max-width: 340px; height: 100vh; background: #fff; z-index: 70; box-shadow: var(--shadow-lg); transform: translateX(-100%); transition: transform .25s ease; padding: 74px 20px 20px; overflow-y: auto; }
+  .drawer { display: block; position: fixed; top: 0; left: 0; width: 80%; max-width: 320px; height: auto; max-height: 100vh; background: #fff; z-index: 70; box-shadow: var(--shadow-lg); transform: translateX(-100%); transition: transform .25s ease; padding: 64px 16px 14px; overflow-y: auto; border-radius: 0 0 16px 0; }
   .drawer.open { transform: none; }
   .drawer-backdrop { display: block; position: fixed; inset: 0; background: rgba(10,20,40,.4); z-index: 65; }
-  .drawer-nav { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
-  .drawer-nav a { padding: 14px 6px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 17px; }
+  .drawer-nav { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
+  .drawer-nav a { padding: 11px 6px; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 16px; }
+  .drawer-nav a:last-child { border-bottom: none; }
   .mobile-search { max-width: none; margin: 0; }
 }
 /* Phone */

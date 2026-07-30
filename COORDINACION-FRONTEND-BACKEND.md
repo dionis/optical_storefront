@@ -9,6 +9,29 @@ coordinar (no se borra el hardcode, para no romper la tienda en vivo).
 
 ---
 
+## 0. 🚨 BLOQUEADOR QUE MANDA — CORS (el navegador no puede hablar con el backend)
+
+Verificado 2026-07-30 con la key nueva (`pk_4207…`) y `VITE_R2_PUBLIC_URL`:
+- **Server-to-server (PowerShell) SÍ funciona**: `/store/products` → 200, 221 productos;
+  imágenes de Supabase/R2 resuelven (200, webp); precios con `region_id` OK.
+- **Desde el NAVEGADOR (storefront en `http://localhost:5198`) FALLA**: `TypeError: Failed to fetch`.
+- Preflight `OPTIONS /store/products` con `Origin: http://localhost:5198` → **204**, pero
+  `Access-Control-Allow-Origin` viene **VACÍO** (Allow-Methods y Allow-Headers sí vienen).
+
+**Causa:** el backend NO tiene el origen del storefront en `STORE_CORS`
+(el ejemplo trae `STORE_CORS=http://localhost:3000`; el storefront corre en `:5198` y en
+producción en el dominio de Vercel).
+
+**Fix (lo hace Dionis en el backend — yo no toco el backend):** agregar a `STORE_CORS`:
+- `http://localhost:5198` (dev del storefront)
+- el dominio de producción en Vercel del storefront (ej. `https://<tu-app>.vercel.app`)
+
+Hasta que esto se arregle, **ninguna** llamada del navegador al backend funciona (ni OCR ni
+catálogo). Es el primer paso, antes que todo lo demás.
+
+> Nota (novedades del .env nuevo, ya verificadas): la key `pk_4207…` funciona (221 productos)
+> y `VITE_R2_PUBLIC_URL` (Supabase) resuelve las imágenes → eso cierra el gap de imágenes de §2.1.
+
 ## 1. Lo que YA funciona contra el backend
 
 - **`.env` del storefront** ya apunta al backend live:
