@@ -62,6 +62,26 @@ export async function createPrescription(prescription, ctx = {}) {
   return res.prescription_id || null;
 }
 
+/**
+ * Read a prescription photo via the backend OCR endpoint. The file is uploaded
+ * as multipart and never touches R2 from the browser — the backend owns the
+ * private PHI bucket. Returns { prescription, validation, message }; the
+ * prescription always comes back with verified_by_user=false, so the caller
+ * must have the user confirm the values before persisting them.
+ */
+export async function ocrPrescription(file) {
+  const form = new FormData();
+  form.append("file", file);
+  return medusa.client.fetch("/store/prescriptions/ocr", {
+    method: "POST",
+    body: form,
+    // The SDK defaults to application/json and would JSON.stringify the
+    // FormData; dropping the header lets the browser set the multipart
+    // boundary itself.
+    headers: { "content-type": null },
+  });
+}
+
 /** Add a frame configured with lenses — priced entirely server-side. */
 export async function addConfiguredFrame(variantId, selection, prescriptionId = null) {
   const cart = await ensureCart();

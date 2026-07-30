@@ -45,7 +45,17 @@ def _admin_client(config: Config) -> httpx.Client:
             # Transport-level replay of connect failures, beneath the tenacity retry
             # below; the two together survive a host that drops handshakes.
             transport=httpx.HTTPTransport(retries=3),
-            limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+            # Products take ~30-75s each once the image pipeline runs, so a pooled
+            # connection sits idle far longer than any NAT or proxy keeps its state.
+            # Reusing one the far side has silently dropped surfaces as a corrupt
+            # record (`SSLV3_ALERT_BAD_RECORD_MAC`) or a bare ReadError. Expiring
+            # idle connections well inside that window costs one handshake per
+            # product and removes the whole failure mode.
+            limits=httpx.Limits(
+                max_connections=4,
+                max_keepalive_connections=4,
+                keepalive_expiry=20.0,
+            ),
         )
     return _client
 

@@ -5,13 +5,21 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import {
   createStorageClient,
   prescriptionBucket,
+  presignPrescriptionUrl,
   storageConfigured,
+  PRESCRIPTION_URL_TTL_SECONDS,
 } from "../../../../lib/s3";
 
 /**
  * GET /admin/prescriptions/:id
  * Retrieve a single prescription record (admin only).
  * Emits an audit log entry on every access.
+ *
+ * `prescription.file_url` stays the R2 object key. The scanned document is
+ * returned separately as `file_download_url`: a presigned link valid for
+ * PRESCRIPTION_URL_TTL_SECONDS. Because the object is fetched from R2 directly,
+ * the audit entry below records that a link was *issued*, not that the file was
+ * opened — a viewing record would need a proxy route instead.
  */
 export async function GET(
   req: MedusaRequest,
@@ -31,18 +39,28 @@ export async function GET(
     return;
   }
 
+  const fileDownloadUrl = await presignPrescriptionUrl(
+    (record["file_url"] as string | null) ?? null
+  );
+
   // Audit log — log who accessed which prescription record
   console.info(
     JSON.stringify({
       event: "prescription.accessed",
       prescription_id: id,
       admin_user_id: (req as unknown as { auth_context?: { actor_id?: string } }).auth_context?.actor_id ?? "unknown",
+      // Never log the URL itself — it is a bearer credential for the file.
+      file_url_issued: fileDownloadUrl !== null,
       timestamp: new Date().toISOString(),
     })
   );
 
   const rxService = req.scope.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
-  res.json({ prescription: rxService.recordToRx(record) });
+  res.json({
+    prescription: rxService.recordToRx(record),
+    file_download_url: fileDownloadUrl,
+    file_download_expires_in: fileDownloadUrl ? PRESCRIPTION_URL_TTL_SECONDS : null,
+  });
 }
 
 /**

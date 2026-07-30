@@ -208,6 +208,12 @@ button { font-family: inherit; cursor: pointer; }
 .upload-box:hover { border-color: var(--blue); }
 .upload-box span { font-weight: 700; }
 .upload-box small { color: var(--muted); }
+.upload-box:has(input:disabled) { cursor: progress; opacity: .7; }
+.rx-ocr-error { color: #b42318; font-size: 14px; margin: 0; }
+.rx-ocr-review { border: 1.5px solid var(--blue); background: rgba(37,99,235,.06); border-radius: 12px; padding: 16px; margin-bottom: 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.rx-ocr-review.ok { border-color: #12805c; background: rgba(18,128,92,.07); }
+.rx-ocr-review p { margin: 0; font-size: 14px; color: var(--muted); }
+.rx-ocr-warnings { margin: 0; padding-left: 18px; font-size: 14px; color: #92400e; }
 .or { color: var(--muted); font-size: 14px; }
 .rx-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
 .rx-table th, .rx-table td { padding: 8px; text-align: center; font-size: 14px; }

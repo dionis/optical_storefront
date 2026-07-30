@@ -32,10 +32,27 @@ export async function POST(
     return;
   }
 
+  const source = rx.source === "ocr" ? "ocr" : "manual";
+
+  // OCR output is a model's reading of a health document, not an authoritative
+  // record: it is only persistable once a human has reviewed the values on
+  // screen and confirmed them. The OCR route always emits verified_by_user
+  // false, so an unconfirmed payload reaching here means the confirmation step
+  // was bypassed.
+  if (source === "ocr" && rx.verified_by_user !== true) {
+    res.status(400).json({
+      error:
+        "Los valores leídos automáticamente deben confirmarse antes de guardarse.",
+    });
+    return;
+  }
+
+  const verifiedByUser = source === "ocr" ? true : rx.verified_by_user ?? true;
+
   // Validation is a pure function on the service (no ORM manager needed).
   const svc = req.scope.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
   const validation = svc.validate(
-    { ...rx, source: rx.source ?? "manual", verified_by_user: rx.verified_by_user ?? true, file_url: rx.file_url ?? null },
+    { ...rx, source, verified_by_user: verifiedByUser, file_url: rx.file_url ?? null },
     { usage_type: body.usage_type, eye_size: body.eye_size }
   );
 
@@ -50,8 +67,8 @@ export async function POST(
       os_sph: num(rx.os.sph), os_cyl: num(rx.os.cyl), os_axis: num(rx.os.axis),
       os_add: num(rx.os.add), os_prism: num(rx.os.prism), os_base: rx.os.base ?? null,
       pd: num(rx.pd), pd_od: num(rx.pd_od), pd_os: num(rx.pd_os),
-      source: rx.source === "ocr" ? "ocr" : "manual",
-      verified_by_user: rx.verified_by_user ?? true,
+      source,
+      verified_by_user: verifiedByUser,
       file_url: rx.file_url ?? null,
       customer_id: null,
     })

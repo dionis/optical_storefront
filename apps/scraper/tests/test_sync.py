@@ -1,12 +1,17 @@
 """Tests for sync.py pipeline helpers (no live HTTP)."""
 
 import json
+from collections.abc import Iterator
+from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from scraper.config import Config
-from scraper.sync import _parse_product_from_html_page, _resolve_category_id
+from scraper.models import ScrapedProduct
+from scraper.sync import _parse_product_from_html_page, _resolve_category_id, sync
 
 
 MINIMAL_PRODUCT_HTML = """
@@ -125,3 +130,110 @@ class TestResolveCategoryId:
     async def test_malformed_payload_returns_none(self) -> None:
         client = _client_returning({"error": "boom"})
         assert await _resolve_category_id(client, Config(), "grande") is None
+
+
+@asynccontextmanager
+async def _null_client(_config: Config) -> Any:
+    yield MagicMock()
+
+
+@pytest.fixture
+def sync_harness(tmp_path: Any) -> Iterator[dict[str, Any]]:
+    """Patch out every I/O boundary of sync() so only the loop's control flow runs."""
+    products = [
+        ScrapedProduct(model_name=f"M{i}", handle=f"h{i}", collection_slug="4u")
+        for i in range(5)
+    ]
+    state = MagicMock()
+    state.has_changed = MagicMock(return_value=True)
+
+    with (
+        patch("scraper.sync.RateLimitedClient", _null_client),
+        patch("scraper.sync.StateStore", return_value=state),
+        patch("scraper.sync._load_pricing", return_value={"default_price_cents": 9900}),
+        patch(
+            "scraper.sync._fetch_collection_products",
+            AsyncMock(return_value=products),
+        ),
+        patch("scraper.sync._enrich_from_html", AsyncMock(side_effect=lambda _c, _cfg, p: p)),
+        patch("scraper.sync.align_images_to_colors", side_effect=lambda _c, urls: urls),
+        patch("scraper.sync.process_product_images", side_effect=lambda p, _c, dry_run: p),
+        patch("scraper.sync.close_admin_client"),
+        patch("scraper.sync.upsert_product") as upsert,
+    ):
+        yield {"upsert": upsert, "state": state, "products": products}
+
+
+class TestSyncSurvivesTransientFailures:
+    """A blip on one product used to abort the whole catalog.
+
+    The real run died at product 118/134 on `httpx.ReadError: SSLV3_ALERT_BAD_RECORD_MAC`
+    raised by the Medusa POST: `_post` only replays connect-phase errors, so a read
+    error propagated out of sync() and every remaining product was lost.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_failing_product_does_not_stop_the_rest(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        sync_harness["upsert"].side_effect = [
+            "prod_1",
+            httpx.ReadError("[SSL: SSLV3_ALERT_BAD_RECORD_MAC] sslv3 alert bad record mac"),
+            "prod_3",
+            "prod_4",
+            "prod_5",
+        ]
+
+        await sync(Config(), collections=["4u"])
+
+        assert sync_harness["upsert"].call_count == 5, "the run stopped at the failure"
+
+    @pytest.mark.asyncio
+    async def test_the_failed_product_is_not_marked_seen(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        """Otherwise the next run skips it as unchanged and the gap is permanent."""
+        sync_harness["upsert"].side_effect = [
+            "prod_1",
+            httpx.ReadError("boom"),
+            "prod_3",
+            "prod_4",
+            "prod_5",
+        ]
+
+        await sync(Config(), collections=["4u"])
+
+        marked = {call.args[0] for call in sync_harness["state"].mark_seen.call_args_list}
+        assert marked == {"h0", "h2", "h3", "h4"}
+        assert "h1" not in marked
+
+    @pytest.mark.asyncio
+    async def test_a_sustained_outage_aborts_instead_of_grinding(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        """At ~55s a product, retrying a dead backend 130 more times helps nobody."""
+        sync_harness["upsert"].side_effect = httpx.ConnectError("backend down")
+
+        with patch("scraper.sync._MAX_CONSECUTIVE_FAILURES", 3):
+            await sync(Config(), collections=["4u"])
+
+        assert sync_harness["upsert"].call_count == 3
+        sync_harness["state"].mark_seen.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_the_failure_streak_resets_on_success(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        """Alternating failures are flakiness, not an outage — keep going."""
+        sync_harness["upsert"].side_effect = [
+            httpx.ReadError("boom"),
+            "prod_2",
+            httpx.ReadError("boom"),
+            "prod_4",
+            httpx.ReadError("boom"),
+        ]
+
+        with patch("scraper.sync._MAX_CONSECUTIVE_FAILURES", 2):
+            await sync(Config(), collections=["4u"])
+
+        assert sync_harness["upsert"].call_count == 5

@@ -26,7 +26,16 @@ def _get_s3_client(config: Config) -> object:
         # Providers other than AWS rarely hold a wildcard cert for bucket
         # subdomains — Supabase Storage fails the TLS handshake outright — while R2,
         # MinIO and Garage all accept path-style. The compatible choice everywhere.
-        config=BotoConfig(s3={"addressing_style": "path"}),
+        config=BotoConfig(
+            s3={"addressing_style": "path"},
+            # The default "legacy" mode replays only a narrow error set, so a
+            # dropped connection mid-upload (SSLV3_ALERT_BAD_RECORD_MAC, closed
+            # before a valid response) burned the image outright. "standard"
+            # covers transport failures and adds exponential backoff.
+            retries={"max_attempts": 5, "mode": "standard"},
+            connect_timeout=15,
+            read_timeout=60,
+        ),
     )
 
 
@@ -106,22 +115,31 @@ def process_product_images(
             )
             product.r2_image_keys.append(r2_key)
 
-            # Generate try-on asset for the first image of each color
+            # Generate try-on asset for the first image of each color.
+            # Background removal and upload are reported separately: one try/except
+            # around both blamed rembg for every failed S3 PUT, so upload errors
+            # ("Connection was closed before we received a valid response") read as
+            # "rembg failed" and sent debugging down the wrong path.
             if idx < len(product.colors):
                 color = product.colors[idx]
                 try:
                     tryon_png = _remove_background(raw)
-                    tryon_key = f"tryon/{product.handle}_{color.lower().replace(' ', '_')}.png"
-                    s3.put_object(  # type: ignore[union-attr]
-                        Bucket=config.r2_bucket,
-                        Key=tryon_key,
-                        Body=tryon_png,
-                        ContentType="image/png",
-                        CacheControl="public, max-age=31536000, immutable",
-                    )
-                    product.r2_tryon_keys.append(tryon_key)
                 except Exception as rembg_err:
-                    print(f"[images] rembg failed for {url}: {rembg_err}")
+                    print(f"[images] Background removal failed for {url}: {rembg_err}")
+                else:
+                    tryon_key = f"tryon/{product.handle}_{color.lower().replace(' ', '_')}.png"
+                    try:
+                        s3.put_object(  # type: ignore[union-attr]
+                            Bucket=config.r2_bucket,
+                            Key=tryon_key,
+                            Body=tryon_png,
+                            ContentType="image/png",
+                            CacheControl="public, max-age=31536000, immutable",
+                        )
+                    except Exception as upload_err:
+                        print(f"[images] Try-on upload failed for {tryon_key}: {upload_err}")
+                    else:
+                        product.r2_tryon_keys.append(tryon_key)
 
         except Exception as err:
             print(f"[images] Failed to process {url}: {err}")

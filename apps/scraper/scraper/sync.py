@@ -20,6 +20,8 @@ from scraper.state import StateStore
 from scraper.translate import translate_product
 
 PRICING_YAML_PATH = "pricing.yaml"
+# Consecutive per-product failures that mean the backend or network is down, not flaky.
+_MAX_CONSECUTIVE_FAILURES = 10
 STORE_API_PRODUCTS = "/wp-json/wc/store/v1/products"
 STORE_API_CATEGORIES = "/wp-json/wc/store/v1/products/categories"
 
@@ -277,6 +279,8 @@ async def sync(
 
             pushed = 0
             skipped = 0
+            failed = 0
+            consecutive_failures = 0
             total = len(products)
             for position, product in enumerate(products, start=1):
                 seen_handles.add(product.handle)
@@ -293,29 +297,59 @@ async def sync(
                 started = time.monotonic()
                 print(f"[scraper]   [{position}/{total}] {product.handle} …", flush=True)
 
-                # Enrich with individual product HTML (for UPC, measurements)
-                product = await _enrich_from_html(client, config, product)
+                # One product must never take the run down with it. A transient
+                # transport error on the Medusa POST (TLS `bad record mac`, a
+                # dropped keep-alive) used to propagate out of `sync()` and abort
+                # mid-catalog, losing every product after it. Failures are not
+                # marked seen, so the next run retries them — `upsert_product`
+                # looks the handle up first, so a write that did land server-side
+                # is updated rather than duplicated.
+                try:
+                    # Enrich with individual product HTML (for UPC, measurements)
+                    product = await _enrich_from_html(client, config, product)
 
-                # Align images to colors (token match) so each variant/try-on asset
-                # gets its own photo, not a positional guess. Done after enrichment
-                # so gallery images pulled from the HTML page are included.
-                product.image_urls = align_images_to_colors(
-                    product.colors, product.image_urls
-                )
-
-                # AI-assisted es/fr translation of title+description (skips gracefully
-                # if ANTHROPIC_API_KEY is unset or the call fails — never blocks sync)
-                if config.anthropic_api_key:
-                    product.translations = (
-                        translate_product(product.model_name, product.description_en, config)
-                        or {}
+                    # Align images to colors (token match) so each variant/try-on
+                    # asset gets its own photo, not a positional guess. Done after
+                    # enrichment so gallery images from the HTML page are included.
+                    product.image_urls = align_images_to_colors(
+                        product.colors, product.image_urls
                     )
 
-                # Image pipeline (download → optimize → R2 upload)
-                product = process_product_images(product, config, dry_run=dry_run)
+                    # AI-assisted es/fr translation of title+description (skips
+                    # gracefully if ANTHROPIC_API_KEY is unset or the call fails)
+                    if config.anthropic_api_key:
+                        product.translations = (
+                            translate_product(product.model_name, product.description_en, config)
+                            or {}
+                        )
 
-                # Push to Medusa
-                medusa_id = upsert_product(product, config, pricing, dry_run=dry_run)
+                    # Image pipeline (download → optimize → R2 upload)
+                    product = process_product_images(product, config, dry_run=dry_run)
+
+                    # Push to Medusa
+                    medusa_id = upsert_product(product, config, pricing, dry_run=dry_run)
+                except Exception as err:
+                    failed += 1
+                    consecutive_failures += 1
+                    print(
+                        f"[scraper]   [{position}/{total}] {product.handle} ✗ "
+                        f"{time.monotonic() - started:.1f}s — {type(err).__name__}: {err}",
+                        flush=True,
+                    )
+                    # A run of failures this long is an outage, not a blip. Stop
+                    # instead of grinding through the rest of the catalog at ~55s
+                    # a product against a backend that is not answering.
+                    if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                        print(
+                            f"[scraper]   Aborting: {consecutive_failures} products failed "
+                            "in a row — check the Medusa backend and network path.",
+                            flush=True,
+                        )
+                        fetch_failed = True
+                        break
+                    continue
+
+                consecutive_failures = 0
                 if medusa_id or dry_run:
                     pushed += 1
                     if not dry_run:
@@ -330,7 +364,15 @@ async def sync(
                     flush=True,
                 )
 
-            print(f"[scraper]   Pushed: {pushed}, Skipped (unchanged): {skipped}", flush=True)
+            print(
+                f"[scraper]   Pushed: {pushed}, Skipped (unchanged): {skipped}, "
+                f"Failed: {failed}",
+                flush=True,
+            )
+            if failed:
+                # Reconciliation drafts anything not seen this run. A collection
+                # that partly failed is not evidence a product is discontinued.
+                fetch_failed = True
 
     # Reconcile discontinued models (draft them) — only on a full sync where every
     # collection returned data, so a partial/failed fetch never unpublishes stock.

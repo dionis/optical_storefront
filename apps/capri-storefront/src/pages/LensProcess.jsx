@@ -11,7 +11,7 @@ import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { medusa, USE_MEDUSA } from "../data/medusa.js";
-import { addConfiguredFrame, createPrescription } from "../data/medusaCart.js";
+import { addConfiguredFrame, createPrescription, ocrPrescription } from "../data/medusaCart.js";
 
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2);
 function range(min, max, step) {
@@ -24,6 +24,20 @@ const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
 const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+
+// OCR returns free-form numbers; the selects only accept values that exist as
+// options. Snap to the closest one so a reading of -2.30 lands on -2.25 instead
+// of leaving the field blank. Out-of-range values clamp to the nearest end and
+// the server-side validation surfaces the warning at the review step.
+function nearest(value, options) {
+  const v = Number(value);
+  if (value == null || Number.isNaN(v)) return null;
+  let best = options[0];
+  for (const o of options) {
+    if (Math.abs(o.v - v) < Math.abs(best.v - v)) best = o;
+  }
+  return String(best.v);
+}
 
 function SelectCell({ value, onChange, options }) {
   return (
@@ -63,7 +77,17 @@ export default function LensProcess() {
   const [photoId, setPhotoId] = useState(null); // null = ninguno
   const [arId, setArId] = useState(null);        // null = ninguno
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", add: "" });
-  const [uploaded, setUploaded] = useState(null);
+  // OCR reading of an uploaded prescription photo. `confirmed` gates step 1:
+  // extracted values are a model's reading of a health document and must be
+  // reviewed by the user before they can be persisted (the backend rejects an
+  // unconfirmed OCR prescription).
+  const [ocr, setOcr] = useState({
+    status: "idle", // idle | loading | done | error
+    fileName: null,
+    warnings: [],
+    fileUrl: null,
+    confirmed: false,
+  });
   const [pv, setPv] = useState(0);
   useEffect(() => onPrices(() => setPv((v) => v + 1)), []);
 
@@ -130,11 +154,51 @@ export default function LensProcess() {
 
   if (!product) return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
 
+  const awaitingRxConfirm = !frameOnly && ocr.status === "done" && !ocr.confirmed;
+
   const canNext =
     (step === 0 && designId) ||
-    step === 1 ||
+    (step === 1 && !awaitingRxConfirm && ocr.status !== "loading") ||
     (step === 2 && (frameOnly || matId)) ||
     step === 3;
+
+  // Some prescriptions give one PD per eye instead of a single total.
+  const totalPd = (p) =>
+    p.pd != null ? p.pd : p.pd_od != null && p.pd_os != null ? p.pd_od + p.pd_os : null;
+
+  const handleRxUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the user re-pick the same file after an error
+    if (!file) return;
+    setOcr({ status: "loading", fileName: file.name, warnings: [], fileUrl: null, confirmed: false });
+    try {
+      const res = await ocrPrescription(file);
+      const p = res.prescription || {};
+      // Keep whatever the user already picked for fields the OCR couldn't read.
+      setRx((r) => ({
+        ...r,
+        od_sph: nearest(p.od?.sph, SPH) ?? r.od_sph,
+        od_cyl: nearest(p.od?.cyl, CYL) ?? r.od_cyl,
+        od_axis: nearest(p.od?.axis, AXIS) ?? r.od_axis,
+        os_sph: nearest(p.os?.sph, SPH) ?? r.os_sph,
+        os_cyl: nearest(p.os?.cyl, CYL) ?? r.os_cyl,
+        os_axis: nearest(p.os?.axis, AXIS) ?? r.os_axis,
+        pd: nearest(totalPd(p), PD) ?? r.pd,
+        add: nearest(p.od?.add ?? p.os?.add, ADD) ?? r.add,
+      }));
+      setOcr({
+        status: "done",
+        fileName: file.name,
+        warnings: res.validation?.warnings || [],
+        fileUrl: p.file_url ?? null,
+        confirmed: false,
+      });
+    } catch {
+      // Every OCR failure mode is recoverable by typing the values in, so we
+      // never block the funnel on it.
+      setOcr({ status: "error", fileName: file.name, warnings: [], fileUrl: null, confirmed: false });
+    }
+  };
 
   const finish = async () => {
     // Keep the local cart for the header UI badge.
@@ -151,11 +215,16 @@ export default function LensProcess() {
         if (!frameOnly) {
           const num = (v) => (v === "" || v == null ? null : parseFloat(v));
           const addv = rx.add ? parseFloat(rx.add) : null;
+          // Only claim the OCR provenance once the user actually confirmed the
+          // reading — the backend rejects an unconfirmed OCR prescription.
+          const fromOcr = ocr.status === "done" && ocr.confirmed;
           const rxPayload = {
             od: { sph: num(rx.od_sph) ?? 0, cyl: num(rx.od_cyl) ?? 0, axis: rx.od_axis ? parseInt(rx.od_axis, 10) : null, add: addv, prism: null, base: null },
             os: { sph: num(rx.os_sph) ?? 0, cyl: num(rx.os_cyl) ?? 0, axis: rx.os_axis ? parseInt(rx.os_axis, 10) : null, add: addv, prism: null, base: null },
             pd: num(rx.pd), pd_od: null, pd_os: null,
-            source: "manual", verified_by_user: true, file_url: null,
+            source: fromOcr ? "ocr" : "manual",
+            verified_by_user: true,
+            file_url: fromOcr ? ocr.fileUrl : null,
           };
           try { prescriptionId = await createPrescription(rxPayload); } catch { /* non-blocking */ }
         }
@@ -218,15 +287,50 @@ export default function LensProcess() {
                 <p className="muted">{t("lens.rx.none")}</p>
               ) : (
                 <>
+                  {/* OCR runs on the backend, so the upload path only exists
+                      when the storefront is wired to Medusa. */}
+                  {USE_MEDUSA && (
                   <div className="rx-upload">
                     <label className="upload-box">
-                      <input type="file" accept="image/*,application/pdf" hidden
-                             onChange={(e) => setUploaded(e.target.files?.[0]?.name || null)} />
+                      {/* Keep in sync with the multer allowlist in the backend:
+                          images go to the API as an image block, PDFs as a
+                          document block. */}
+                      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden
+                             disabled={ocr.status === "loading"}
+                             onChange={handleRxUpload} />
                       <span>📤 {t("lens.upload")}</span>
-                      <small>{uploaded ? `${t("lens.upload.file")}: ${uploaded}` : t("lens.upload.sub")}</small>
+                      <small>
+                        {ocr.status === "loading"
+                          ? t("lens.upload.reading")
+                          : ocr.fileName
+                            ? `${t("lens.upload.file")}: ${ocr.fileName}`
+                            : t("lens.upload.sub")}
+                      </small>
                     </label>
+                    {ocr.status === "error" && (
+                      <p className="rx-ocr-error">{t("lens.upload.error")}</p>
+                    )}
                     <span className="or">{t("lens.or")}</span>
                   </div>
+                  )}
+
+                  {ocr.status === "done" && (
+                    <div className={`rx-ocr-review ${ocr.confirmed ? "ok" : ""}`}>
+                      <b>{ocr.confirmed ? `✓ ${t("lens.upload.confirmed")}` : t("lens.upload.reviewTitle")}</b>
+                      {!ocr.confirmed && <p>{t("lens.upload.reviewBody")}</p>}
+                      {ocr.warnings.length > 0 && (
+                        <ul className="rx-ocr-warnings">
+                          {ocr.warnings.map((w) => <li key={w}>{w}</li>)}
+                        </ul>
+                      )}
+                      {!ocr.confirmed && (
+                        <button type="button" className="btn btn-outline"
+                                onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>
+                          {t("lens.upload.confirm")}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <p className="muted small">{t("lens.rxHelp")}</p>
                   <table className="rx-table">
                     <thead><tr><th></th><th>ESF / SPH</th><th>CIL / CYL</th><th>EJE / AXIS</th></tr></thead>

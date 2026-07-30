@@ -1,4 +1,5 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
  * Shared S3 client construction for the object-storage backends we support
@@ -49,4 +50,40 @@ export function storageConfigured(): boolean {
       process.env.R2_ACCESS_KEY_ID &&
       process.env.R2_SECRET_ACCESS_KEY
   );
+}
+
+/** Lifetime of a prescription download link, in seconds. */
+export const PRESCRIPTION_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * Mint a short-lived download link for a stored prescription file.
+ *
+ * The prescription bucket is private, so this is the only way to read an object
+ * back — the alternative would be making the bucket public, which would put
+ * health data behind nothing but an unguessable key.
+ *
+ * The returned URL carries our credentials' authority for its whole lifetime:
+ * anyone holding it can fetch the file with no further authentication. Treat it
+ * as a bearer token — hand it straight to the requesting admin, and never log
+ * it, email it, or persist it.
+ *
+ * Returns null when storage is not configured or the record has no file.
+ */
+export async function presignPrescriptionUrl(
+  objectKey: string | null,
+  ttlSeconds: number = PRESCRIPTION_URL_TTL_SECONDS
+): Promise<string | null> {
+  if (!objectKey || !storageConfigured()) return null;
+  try {
+    return await getSignedUrl(
+      createStorageClient(),
+      new GetObjectCommand({ Bucket: prescriptionBucket(), Key: objectKey }),
+      { expiresIn: ttlSeconds }
+    );
+  } catch {
+    // Signing is local (no network round-trip), so a failure here means a
+    // misconfigured client rather than an unreachable object. Non-fatal: the
+    // caller still gets the record, just without a download link.
+    return null;
+  }
 }
