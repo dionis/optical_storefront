@@ -29,6 +29,8 @@ function flag(value, fallback) {
 // (nobody downloads it, but it ships). Dropping it from the build takes the
 // `disable-try-on` plugin in vite.config.js, which swaps TryOn.jsx for a stub
 // when the flag is off. Both read the flag the same way — keep them in sync.
-export const TRY_ON_ENABLED = flag(env.VITE_ENABLE_TRY_ON, true);
+// Default OFF por decisión de producto (probador desactivado en todo el sitio).
+// Para reactivarlo en desarrollo: VITE_ENABLE_TRY_ON=true en tu .env.
+export const TRY_ON_ENABLED = flag(env.VITE_ENABLE_TRY_ON, false);
 
 export default { TRY_ON_ENABLED };
