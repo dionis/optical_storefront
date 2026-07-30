@@ -172,3 +172,17 @@ Se agregó **`PENDIENTES-Y-LOGISTICA.md`** (raíz) con la lista de requisitos qu
 - Preguntas abiertas registradas (key de Google, canal de notificaciones, tarifa Cuba, fuente del tracking).
 
 Es solo documentación; no toca código de la app ni el backend.
+
+## 2026-07-30 — Proceso de lentes rediseñado estilo Zeelool (rama `frontend`)
+
+Se reescribió `src/pages/LensProcess.jsx` para replicar el flujo de compra de lentes de Zeelool
+(https://www.zeelool.com/lens-process), usando nuestros propios datos de `lensPricing.js`.
+Flujo a **pantalla completa**, 5 pasos + confirmación, con iconografía SVG propia:
+1. **Tipo de receta** — Visión Sencilla / Bifocal FT-28 / Progresivo Gama Media / Gama Alta / Solo montura (tarjetas con icono + "desde $").
+2. **¿Cómo añadir la receta?** — Escanear (foto) / Rellenar manual + enlace a receta guardada.
+3. **Ingresar receta** — tabla OD/OS · SPH·CYL·AXIS + PD (+ ADD en bifocal/progresivo), banner SPH(−)/(+), enlace "Aprende a leer tu receta" y modal **"¿Coincide con tu receta?"** (Editar/Confirmar).
+4. **Tratamiento del lente** — fotocromáticos/Transitions (desplegables con swatches de color) + antirreflejos, precios de nuestra lista.
+5. **Índice/grosor** — CR-39 → 1.74 con badge **"Recomendado"** según graduación y banner de capas incluidas.
+Panel izquierdo permanente: montura + resumen acumulado + subtotal; barra de progreso arriba.
+
+Archivos: `src/pages/LensProcess.jsx` (reescrito), `src/styles/index.css` (bloque `.zl`), `src/i18n/translations.js` (~30 claves ES/EN nuevas). Build verificado en entorno idéntico a Vercel (Linux, install limpio). Solo frontend; no toca el backend de Dionis.
