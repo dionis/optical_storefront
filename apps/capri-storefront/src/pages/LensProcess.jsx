@@ -41,8 +41,8 @@ const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
 const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+const PDHALF = range(25, 38, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
-// Cuantiza un valor OCR al paso del selector correspondiente.
 const qStep = (v, lo, hi, step) => {
   if (v == null || isNaN(v)) return null;
   let n = Math.round(Number(v) / step) * step;
@@ -57,10 +57,10 @@ function SelectCell({ value, onChange, options }) {
     </select>
   );
 }
-function Field({ label, value, onChange, options, t, withEmpty }) {
+function Field({ label, value, onChange, options, t, withEmpty, hint }) {
   return (
     <label className="rx-field">
-      <span>{label}</span>
+      <span>{label}{hint && <i className="rx-hint">{hint}</i>}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         {withEmpty && <option value="">{t("lens.select")}</option>}
         {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
@@ -74,6 +74,9 @@ const PHOTO_FAMILIES = [
   { key: "trans-s", label: { es: "Transitions Gen S",     en: "Transitions Gen S" },   ids: ["trans-s-grey", "trans-s-brown", "trans-s-green"] },
   { key: "trans-x", label: { es: "Transitions XTRActive", en: "Transitions XTRActive" }, ids: ["trans-x-grey", "trans-x-brown"] },
 ];
+// Diseños multifocales (se ofrecen solo si la receta trae ADD).
+const MULTI_IDS = ["bifocal", "prog-mid", "prog-high"];
+const RECOMMENDED_MULTI = "prog-mid";
 
 const MEDUSA_URL = (import.meta.env && import.meta.env.VITE_MEDUSA_URL) ? String(import.meta.env.VITE_MEDUSA_URL).replace(/\/$/, "") : "";
 const PK = (import.meta.env && import.meta.env.VITE_MEDUSA_PUBLISHABLE_KEY) || "";
@@ -90,7 +93,7 @@ export default function LensProcess() {
 
   const [step, setStep] = useState(0);
   const [designId, setDesignId] = useState(null);
-  const [rxMethod, setRxMethod] = useState(null);
+  const [rxMethod, setRxMethod] = useState(null); // "scan" | "fill" | null
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null);
   const [arId, setArId] = useState(null);
@@ -117,15 +120,19 @@ export default function LensProcess() {
   const color = product.colors[colorIdx] || product.colors[0];
 
   const frameOnly = designId === "frame-only";
+  const hasRx = rxMethod === "scan" || rxMethod === "fill";
+  const rxReady = rxMethod === "fill" || ocr.status === "done";
+  const addVal = parseFloat(rx.add) || 0;
+  const isMulti = hasRx && addVal > 0;
+
   const design = frameOnly ? FRAME_ONLY : designById(designId);
   const cat = design && design.cat;
 
   const basePrice = (dId, mId) => lensBasePrice(dId, mId, (BASE[dId] || {})[mId] ?? 0);
-  const photoPriceOf = (p) => (p.price[cat] == null ? null : lensPhotoPrice(p.id, cat, p.price[cat]));
+  const photoPriceOf = (p) => (cat && p.price[cat] != null ? lensPhotoPrice(p.id, cat, p.price[cat]) : null);
   const arList = design && !frameOnly ? arListFor(design) : [];
   const arPriceOf = (a) => lensARPrice(a.id, a.price);
   const minDesignPrice = (dId) => Math.min(...MATERIALS.map((m) => basePrice(dId, m.id)));
-  // Materiales ordenados por precio (el más barato = primero = incluido).
   const sortedMats = useMemo(() => designId && !frameOnly
     ? [...MATERIALS].sort((a, b) => basePrice(designId, a.id) - basePrice(designId, b.id)) : MATERIALS,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,22 +161,30 @@ export default function LensProcess() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.price, designId, matId, photoId, arId, frameOnly, pv]);
 
-  const stepKeys = frameOnly ? ["type"] : ["type", "rxmethod", "rx", "treatment", "index"];
+  // ── Flujo NUEVO: receta primero; el diseño se deduce de la receta ──
+  //   1) receta (escanear / manual / sin graduación)
+  //   2) datos de la receta  → auto: sin ADD = Visión Sencilla; con ADD = multifocal
+  //   3) [solo multifocal] elegir Bifocal / Progresivo Media / Alta
+  //   4) tratamiento   5) índice
+  const stepKeys = frameOnly
+    ? ["rxmethod"]
+    : isMulti
+      ? ["rxmethod", "rx", "design", "treatment", "index"]
+      : ["rxmethod", "rx", "treatment", "index"];
   const key = stepKeys[Math.min(step, stepKeys.length - 1)];
   const isLast = step >= stepKeys.length - 1;
-  const rxReady = rxMethod === "fill" || ocr.status === "done";
 
   const canNext =
-    (key === "type" && designId) ||
-    (key === "rxmethod" && rxMethod) ||
+    (key === "rxmethod" && (hasRx || frameOnly)) ||
     (key === "rx" && rxReady) ||
+    (key === "design" && MULTI_IDS.includes(designId)) ||
     (key === "treatment") ||
     (key === "index" && matId);
 
   const money = (n) => "$" + Number(n).toFixed(2);
   const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));
 
-  // ── OCR: subir imagen → detectar receta ─────────────────────────────
+  // ── OCR: subir imagen → detectar receta ──
   async function handleOcr(file) {
     if (!file) return;
     setOcr({ status: "loading", file: file.name, msg: "" });
@@ -181,8 +196,10 @@ export default function LensProcess() {
       if (PK) headers["x-publishable-api-key"] = PK;
       const res = await fetch(`${MEDUSA_URL}/store/prescriptions/ocr`, { method: "POST", body: fd, headers });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.fallback) throw new Error(data.error || "fallback");
+      if (!res.ok || data.fallback) { const e = new Error(data.error || "fallback"); e.fallback = !!data.fallback; throw e; }
       const od = data.od || {}, os = data.os || {};
+      const pdOd = qStep(data.pd_od, 25, 38, 0.5);
+      const pdOs = qStep(data.pd_os, 25, 38, 0.5);
       setRx((r) => ({
         ...r,
         od_sph: qStep(od.sph, -20, 12, 0.25) ?? "0",
@@ -192,14 +209,16 @@ export default function LensProcess() {
         os_cyl: qStep(os.cyl, -6, 6, 0.25) ?? "0",
         os_axis: os.axis != null ? String(Math.max(0, Math.min(180, Math.round(os.axis)))) : "0",
         pd: qStep(data.pd, 50, 76, 0.5) ?? r.pd,
-        pd_od: qStep(data.pd_od, 25, 38, 0.5) ?? "",
-        pd_os: qStep(data.pd_os, 25, 38, 0.5) ?? "",
+        pd_od: pdOd ?? "",
+        pd_os: pdOs ?? "",
         add: qStep(od.add ?? os.add, 0.75, 3.5, 0.25) ?? "",
       }));
-      if (data.pd_od != null && data.pd_os != null) setTwoPd(true);
+      if (pdOd && pdOs) setTwoPd(true);
       setOcr({ status: "done", file: file.name, msg: "" });
     } catch (e) {
-      setOcr({ status: "error", file: file?.name || "", msg: String(e.message || "") });
+      // Sin lector disponible (backend sin API key) → pasamos a manual con aviso claro.
+      setRxMethod("fill");
+      setOcr({ status: "error", file: file?.name || "", msg: e.fallback ? "disabled" : "read" });
     }
   }
 
@@ -208,40 +227,29 @@ export default function LensProcess() {
     if (isLast) return finish();
     setStep((s) => s + 1);
   };
-  const confirmRx = () => { setShowConfirm(false); setStep((s) => s + 1); };
+  const confirmRx = () => {
+    setShowConfirm(false);
+    // AUTO: el sistema fija el diseño según la receta.
+    if (addVal > 0) {
+      if (!MULTI_IDS.includes(designId)) setDesignId(RECOMMENDED_MULTI); // multifocal → refina luego
+    } else {
+      setDesignId("sv"); // sin ADD → Visión Sencilla automática
+    }
+    setStep((s) => s + 1);
+  };
 
   const finish = () => {
-    addItem({ sku: product.sku, name: product.name, color: color.name, design: designId, material: matId, photo: photoId, ar: arId, total });
+    addItem({ sku: product.sku, name: product.name, color: color.name, design: frameOnly ? "frame-only" : designId, material: matId, photo: photoId, ar: arId, total });
     navigate(`/producto/${product.slug}`);
   };
 
   const progress = ((step + 1) / stepKeys.length) * 100;
   const stepTitle = {
-    type: t("lens.q.use"), rxmethod: t("lens.rxmethod.title"), rx: t("lens.q.rx"),
-    treatment: t("lens.treatment.title"), index: t("lens.index.title"),
+    rxmethod: t("lens.rxmethod.title"), rx: t("lens.q.rx"),
+    design: t("lens.design.title"), treatment: t("lens.treatment.title"), index: t("lens.index.title"),
   }[key];
 
-  const RxTable = ({ compact }) => (
-    <table className={`rx-table ${compact ? "compact" : ""}`}>
-      <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th>{design?.add && <th>ADD</th>}</tr></thead>
-      <tbody>
-        <tr>
-          <td>{t("lens.right")}<small>OD</small></td>
-          <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
-          <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
-          <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
-          {design?.add && <td><SelectCell value={rx.add} onChange={setF("add")} options={ADD} /></td>}
-        </tr>
-        <tr>
-          <td>{t("lens.left")}<small>OS</small></td>
-          <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
-          <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
-          <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
-          {design?.add && <td><SelectCell value={rx.add} onChange={setF("add")} options={ADD} /></td>}
-        </tr>
-      </tbody>
-    </table>
-  );
+  const designLabel = frameOnly ? L(FRAME_ONLY.label, lang) : designId ? L(designById(designId)?.label, lang) : "";
 
   return (
     <div className="zl">
@@ -250,8 +258,8 @@ export default function LensProcess() {
         <div className="zl-preview-img"><img src={color.image} alt={product.name} onError={(e) => { e.currentTarget.style.opacity = 0.3; }} /></div>
         <dl className="zl-recap">
           <div><dt>{t("card.frame")}</dt><dd>{product.name} · {color.name}<b>{money(product.price)}</b></dd></div>
-          {design && <div><dt>{t("lens.use")}</dt><dd>{L(design.label, lang)}</dd></div>}
           {!frameOnly && rxReady && <div><dt>{t("lens.q.rx")}</dt><dd>OD {fmt(parseFloat(rx.od_sph) || 0)} · OS {fmt(parseFloat(rx.os_sph) || 0)}</dd></div>}
+          {designLabel && (designId || frameOnly) && <div><dt>{t("lens.use")}</dt><dd>{designLabel}</dd></div>}
           {photo && !frameOnly && photoPriceOf(photo) != null && <div><dt>{t("lens.photo")}</dt><dd>{L(photo.label, lang)}<b>+{money(photoPriceOf(photo))}</b></dd></div>}
           {ar && !frameOnly && <div><dt>{t("lens.ar")}</dt><dd>{L(ar.label, lang)}<b>+{money(arPriceOf(ar))}</b></dd></div>}
           {material && !frameOnly && <div><dt>{t("lens.material")}</dt><dd>{L(material.label, lang)}<b>{money(basePrice(designId, matId))}</b></dd></div>}
@@ -269,89 +277,110 @@ export default function LensProcess() {
           </div>
           <div className="zl-title-row">
             <h2>{stepTitle}</h2>
-            {key === "type" && <span className="zl-help"><IconHelp /> {t("lens.learnUse")}</span>}
             {key === "rx" && <span className="zl-help"><IconHelp /> {t("lens.rxHelp.link")}</span>}
           </div>
         </div>
 
         <div className="zl-scroll">
-          {/* STEP: tipo de receta */}
-          {key === "type" && (
-            <div className="zl-cards">
-              {[...DESIGNS, FRAME_ONLY].map((d) => (
-                <button key={d.id} className={`zl-card ${designId === d.id ? "sel" : ""}`}
-                        onClick={() => { setDesignId(d.id); setMatId(null); setPhotoId(null); setArId(null); }}>
-                  <span className="zl-card-ic">{designIcon(d.id)}</span>
-                  <span className="zl-card-main"><b>{L(d.label, lang)}</b><small>{t(`lens.desc.${d.id}`)}</small></span>
-                  <span className="zl-card-price">{d.id === "frame-only" ? t("lens.included") : `${t("lens.fromPrice")} ${money(minDesignPrice(d.id))}`}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* STEP: cómo añadir receta */}
+          {/* STEP 1: receta (escanear / manual / sin graduación) */}
           {key === "rxmethod" && (
             <>
               <div className="zl-cards">
-                <button className={`zl-card ${rxMethod === "scan" ? "sel" : ""}`} onClick={() => setRxMethod("scan")}>
+                <button className={`zl-card ${rxMethod === "scan" ? "sel" : ""}`} onClick={() => { setRxMethod("scan"); setDesignId(null); setOcr({ status: "idle", file: null, msg: "" }); }}>
                   <span className="zl-card-ic"><IconScan /></span>
                   <span className="zl-card-main"><b>{t("lens.rxmethod.scan")}</b><small>{t("lens.rxmethod.scan.sub")}</small></span>
                 </button>
-                <button className={`zl-card ${rxMethod === "fill" ? "sel" : ""}`} onClick={() => setRxMethod("fill")}>
+                <button className={`zl-card ${rxMethod === "fill" ? "sel" : ""}`} onClick={() => { setRxMethod("fill"); setDesignId(null); }}>
                   <span className="zl-card-ic"><IconFill /></span>
                   <span className="zl-card-main"><b>{t("lens.rxmethod.fill")}</b><small>{t("lens.rxmethod.fill.sub")}</small></span>
+                </button>
+                <button className={`zl-card ${frameOnly ? "sel" : ""}`} onClick={() => { setDesignId("frame-only"); setRxMethod(null); setMatId(null); setPhotoId(null); setArId(null); }}>
+                  <span className="zl-card-ic"><IconFrame /></span>
+                  <span className="zl-card-main"><b>{t("lens.rxmethod.none")}</b><small>{t("lens.rxmethod.none.sub")}</small></span>
+                  <span className="zl-card-price zl-inc">{t("lens.included")}</span>
                 </button>
               </div>
               <p className="zl-signin">{t("lens.rxmethod.saved")} <Link to="/cuenta">{t("auth.account")}</Link></p>
             </>
           )}
 
-          {/* STEP: ingresar receta */}
+          {/* STEP 2: ingresar receta (siempre con ADD para deducir multifocal) */}
           {key === "rx" && (
             <div>
               <div className="zl-banner">{t("lens.rx.sph")}</div>
 
               {rxMethod === "scan" && ocr.status !== "done" && (
-                <>
-                  {ocr.status === "loading" ? (
-                    <div className="zl-ocr-loading"><Spinner /><b>{t("lens.ocr.loading")}</b><small>{ocr.file}</small></div>
-                  ) : (
-                    <label className="zl-upload">
-                      <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => handleOcr(e.target.files?.[0])} />
-                      <span className="zl-upload-ic"><IconScan /></span>
-                      <b>{t("lens.upload")}</b>
-                      <small>{t("lens.upload.sub")}</small>
-                    </label>
-                  )}
-                  {ocr.status === "error" && (
-                    <div className="zl-ocr-error">
-                      {t("lens.ocr.error")}
-                      <button className="link" onClick={() => { setRxMethod("fill"); setOcr({ status: "idle", file: null, msg: "" }); }}>{t("lens.ocr.manual")}</button>
-                    </div>
-                  )}
-                </>
+                ocr.status === "loading" ? (
+                  <div className="zl-ocr-loading"><Spinner /><b>{t("lens.ocr.loading")}</b><small>{ocr.file}</small></div>
+                ) : (
+                  <label className="zl-upload">
+                    <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => handleOcr(e.target.files?.[0])} />
+                    <span className="zl-upload-ic"><IconScan /></span>
+                    <b>{t("lens.upload")}</b>
+                    <small>{t("lens.upload.sub")}</small>
+                  </label>
+                )
               )}
 
               {rxReady && (
                 <>
                   {ocr.status === "done" && <div className="zl-detected">✓ {t("lens.ocr.detected")}</div>}
-                  <RxTable />
+                  {ocr.status === "error" && <div className="zl-ocr-error">{ocr.msg === "disabled" ? t("lens.ocr.disabled") : t("lens.ocr.error")}</div>}
+                  <table className="rx-table">
+                    <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td>{t("lens.right")}<small>OD</small></td>
+                        <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
+                        <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
+                        <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
+                      </tr>
+                      <tr>
+                        <td>{t("lens.left")}<small>OS</small></td>
+                        <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
+                        <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
+                        <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
+                      </tr>
+                    </tbody>
+                  </table>
                   <div className="rx-extra">
                     {!twoPd
                       ? <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty />
                       : (<>
-                          <Field label={`${t("lens.pd")} OD`} value={rx.pd_od} onChange={setF("pd_od")} options={range(25, 38, 0.5).map((v) => ({ v, label: v.toFixed(1) }))} t={t} withEmpty />
-                          <Field label={`${t("lens.pd")} OS`} value={rx.pd_os} onChange={setF("pd_os")} options={range(25, 38, 0.5).map((v) => ({ v, label: v.toFixed(1) }))} t={t} withEmpty />
+                          <Field label={`${t("lens.pd")} OD`} value={rx.pd_od} onChange={setF("pd_od")} options={PDHALF} t={t} withEmpty />
+                          <Field label={`${t("lens.pd")} OS`} value={rx.pd_os} onChange={setF("pd_os")} options={PDHALF} t={t} withEmpty />
                         </>)}
+                    <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty hint={t("lens.add.hint")} />
                   </div>
                   <label className="zl-check"><input type="checkbox" checked={twoPd} onChange={(e) => setTwoPd(e.target.checked)} /> {t("lens.pd.two")}</label>
+                  <div className="zl-auto">{isMulti ? t("lens.auto.multi") : t("lens.auto.sv")}</div>
                   <p className="zl-chat">{t("lens.rx.verify")} <Link to="/catalogo">{t("chat.soon")}</Link></p>
                 </>
               )}
             </div>
           )}
 
-          {/* STEP: tratamiento */}
+          {/* STEP 3: tipo multifocal (solo si hay ADD) */}
+          {key === "design" && (
+            <div>
+              <div className="zl-banner">{t("lens.design.note")}</div>
+              <div className="zl-cards">
+                {MULTI_IDS.map((id) => {
+                  const d = designById(id);
+                  const reco = id === RECOMMENDED_MULTI;
+                  return (
+                    <button key={id} className={`zl-card ${designId === id ? "sel" : ""}`} onClick={() => setDesignId(id)}>
+                      <span className="zl-card-ic">{designIcon(id)}</span>
+                      <span className="zl-card-main"><b>{L(d.label, lang)} {reco && <span className="zl-badge">{t("lens.recommended")}</span>}</b><small>{t(`lens.desc.${id}`)}</small></span>
+                      <span className="zl-card-price">{t("lens.fromPrice")} {money(minDesignPrice(id))}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: tratamiento */}
           {key === "treatment" && (
             <div>
               <h3 className="zl-sub">{t("lens.photo")} <span className="zl-optional">{t("lens.optional")}</span></h3>
@@ -409,7 +438,7 @@ export default function LensProcess() {
             </div>
           )}
 
-          {/* STEP: índice / grosor — primera (más barata) = incluida, resto +delta */}
+          {/* STEP 5: índice / grosor */}
           {key === "index" && (
             <div>
               <div className="zl-banner ok">{t("lens.index.coatings")}</div>
@@ -445,13 +474,13 @@ export default function LensProcess() {
         <div className="zl-modal-bg" onClick={() => setShowConfirm(false)}>
           <div className="zl-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{t("lens.confirm.title")}</h3>
-            <p className="zl-modal-sub">{L(design?.label, lang)}</p>
+            <p className="zl-modal-sub">{isMulti ? t("lens.auto.multi") : t("lens.auto.sv")}</p>
             <table className="rx-table view">
-              <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th>{design?.add && <th>ADD</th>}</tr></thead>
+              <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th>{isMulti && <th>ADD</th>}</tr></thead>
               <tbody>
-                <tr><td>OD<small>{t("lens.right")}</small></td><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
-                <tr><td>OS<small>{t("lens.left")}</small></td><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
-                <tr><td>PD</td><td colSpan={design?.add ? 4 : 3}>{twoPd ? `${rx.pd_od || "—"} / ${rx.pd_os || "—"}` : (rx.pd || "—")}</td></tr>
+                <tr><td>OD<small>{t("lens.right")}</small></td><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td>{isMulti && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
+                <tr><td>OS<small>{t("lens.left")}</small></td><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td>{isMulti && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
+                <tr><td>PD</td><td colSpan={isMulti ? 4 : 3}>{twoPd ? `${rx.pd_od || "—"} / ${rx.pd_os || "—"}` : (rx.pd || "—")}</td></tr>
               </tbody>
             </table>
             <div className="zl-modal-actions">
