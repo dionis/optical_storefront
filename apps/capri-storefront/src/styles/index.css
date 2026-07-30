@@ -1324,3 +1324,57 @@ img { max-width: 100%; }
 .zl-variant-main { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 .zl-variant-lbl { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .zl-variant-note { color: var(--ink-soft); font-size: 12px; font-weight: 400; }
+
+/* ═══ Tipo de gafas EN VIVO + detalle bajo la montura ═══ */
+.zl-gtype { display: flex; gap: 12px; align-items: center; margin: 12px 0 4px; padding: 12px 14px;
+  border: 1.5px solid var(--gt, var(--blue)); border-left-width: 5px; border-radius: 12px;
+  background: color-mix(in srgb, var(--gt, var(--blue)) 7%, #fff); }
+.zl-gtype.gt-frame { --gt: var(--ink-soft); }
+.zl-gtype-ic { color: var(--gt, var(--blue)); flex: 0 0 auto; display: flex; }
+.zl-gtype-tx { display: flex; flex-direction: column; gap: 2px; }
+.zl-gtype-tx b { font-size: 14.5px; color: var(--gt, var(--blue)); }
+.zl-gtype-tx small { font-size: 12px; color: var(--ink-soft); line-height: 1.35; }
+
+.zl-detail { margin: 10px 0 2px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.zl-detail-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin-bottom: 6px; }
+.zl-detail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.zl-detail li { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+.zl-detail li span { display: block; font-weight: 700; color: var(--ink); }
+
+/* Campo de receta deshabilitado (no aplica) + material no apto */
+.rx-select.is-off { opacity: .45; background: #f3f4f6; cursor: not-allowed; }
+.zl-card.is-off { opacity: .5; cursor: not-allowed; }
+.zl-badge.off { background: var(--red-soft); color: var(--red-dark); }
+.zl-fieldnote { font-size: 12px; color: var(--ink-soft); margin: 6px 0; }
+
+/* ═══ Checkout: entrega + pago + consentimiento ═══ */
+.co-deliv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 10px; }
+.co-deliv-opt { display: flex; gap: 10px; align-items: center; text-align: left; padding: 11px 12px;
+  border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; transition: .15s; }
+.co-deliv-opt.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); background: var(--blue-soft); }
+.co-deliv-ic { font-size: 20px; flex: 0 0 auto; }
+.co-deliv-tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.co-deliv-tx b { font-size: 13.5px; }
+.co-deliv-tx small { font-size: 11.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; }
+
+.co-card { margin-top: 8px; }
+.co-card input { width: 100%; }
+.co-secure { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+.co-consent { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0 2px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+.co-consent input { accent-color: var(--blue); width: 16px; height: 16px; margin-top: 1px; flex: 0 0 auto; }
+
+/* ═══ Comprobante: detalle de artículos + dirección ═══ */
+.co-bill { text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 14px 0; }
+.co-bill-row + .co-bill-row { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.co-bill-h b { font-size: 14px; }
+.co-bill-type { font-size: 12.5px; font-weight: 700; color: var(--blue); margin: 3px 0; }
+.co-bill-spec { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft); }
+.co-bill-rx { font-size: 12px; color: var(--ink-soft); margin-top: 4px; background: var(--soft); border-radius: 8px; padding: 6px 8px; }
+.co-addr { text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; font-size: 13px; }
+.co-addr-h { font-weight: 800; margin-bottom: 4px; }
+.co-maps { display: inline-block; margin-top: 6px; color: var(--blue); font-weight: 700; font-size: 12.5px; }
+.co-pay-done { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; }
+
+@media (max-width: 640px) {
+  .co-deliv { grid-template-columns: 1fr; }
+}

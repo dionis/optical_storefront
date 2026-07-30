@@ -4,7 +4,7 @@ import { useCatalog } from "../data/catalogStore.js";
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 import {
   DESIGNS, FRAME_ONLY, MATERIALS, BASE, PHOTO, PHOTO_COLORS,
-  arListFor, designById, materialById, L,
+  arListFor, designById, materialById, L, glassesTypeOf,
 } from "../data/lensPricing.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -29,6 +29,10 @@ const Spinner = () => (<svg className="zl-spin" width="34" height="34" viewBox="
 const designIcon = (id) => id === "sv" ? <IconSV /> : id === "bifocal" ? <IconBifocal />
   : (id === "prog-mid" || id === "prog-high") ? <IconProg /> : id === "frame-only" ? <IconFrame /> : <IconSV />;
 
+const IconSun = () => (<svg {...svg}><circle cx="12" cy="12" r="4.2" stroke={RED} /><path d="M12 2.4v2.4M12 19.2v2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M2.4 12h2.4M19.2 12h2.4M4.4 19.6l1.7-1.7M17.9 6.1l1.7-1.7" /></svg>);
+// Icono para el "tipo de gafas" que se muestra en vivo bajo la montura.
+const glassesTypeIcon = (icon) => icon === "sun" ? <IconSun /> : icon === "photo" ? <IconPhoto /> : <IconClear />;
+
 /* ───────────── Selects de receta ───────────── */
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2);
 function range(min, max, step) {
@@ -50,9 +54,10 @@ const qStep = (v, lo, hi, step) => {
   return String(Math.round(n * 100) / 100);
 };
 
-function SelectCell({ value, onChange, options }) {
+function SelectCell({ value, onChange, options, disabled, title }) {
   return (
-    <select className="rx-select" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className={"rx-select" + (disabled ? " is-off" : "")} value={value} disabled={disabled} title={disabled ? title : undefined}
+      onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
     </select>
   );
@@ -132,6 +137,12 @@ export default function LensProcess() {
   const rxReady = rxMethod === "fill" || ocr.status === "done";
   const addVal = parseFloat(rx.add) || 0;
   const isMulti = hasRx && addVal > 0;
+
+  // AXIS solo aplica si hay cilindro (CYL≠0). Si no, se deshabilita el campo.
+  const odAxisOff = (parseFloat(rx.od_cyl) || 0) === 0;
+  const osAxisOff = (parseFloat(rx.os_cyl) || 0) === 0;
+  // Tipo de gafas VISIBLE (comunes / todos los momentos / sol) según el foto elegido.
+  const glassesType = frameOnly ? null : glassesTypeOf(photoId);
 
   const design = frameOnly ? FRAME_ONLY : designById(designId);
   const cat = design && design.cat;
@@ -253,10 +264,20 @@ export default function LensProcess() {
     if (!frameOnly && material) specs.push({ label: `${L(design.label, lang)} · ${L(material.label, lang)}`, price: basePrice(designId, matId) });
     if (!frameOnly && photo && photoPriceOf(photo) != null) specs.push({ label: L(photo.label, lang), price: photoPriceOf(photo) });
     if (!frameOnly && ar) specs.push({ label: L(ar.label, lang), price: arPriceOf(ar) });
+    // Receta guardada con el artículo (se conserva en la orden y en el perfil).
+    const rxSnapshot = frameOnly ? null : {
+      od: { sph: rx.od_sph, cyl: rx.od_cyl, axis: odAxisOff ? "" : rx.od_axis },
+      os: { sph: rx.os_sph, cyl: rx.os_cyl, axis: osAxisOff ? "" : rx.os_axis },
+      pd: twoPd ? "" : rx.pd, pd_od: twoPd ? rx.pd_od : "", pd_os: twoPd ? rx.pd_os : "",
+      add: isMulti ? rx.add : "", twoPd,
+    };
     addItem({
       sku: product.sku, name: product.name, color: color.name,
       brand: product.brand || product.brand_slug || "—",   // para analítica de marcas del admin
       design: frameOnly ? "frame-only" : designId, material: matId, photo: photoId, ar: arId,
+      glassesType: glassesType ? glassesType.key : "frame",
+      glassesLabel: glassesType ? glassesType.label : FRAME_ONLY.label,
+      rx: rxSnapshot,
       specs, total,
     });
     navigate(`/producto/${product.slug}`);
@@ -275,14 +296,40 @@ export default function LensProcess() {
       {/* ───────── Izquierda: montura + resumen + subtotal ───────── */}
       <aside className="zl-preview">
         <div className="zl-preview-img"><img src={color.image} alt={product.name} onError={(e) => { e.currentTarget.style.opacity = 0.3; }} /></div>
+
+        {/* Tipo de gafas EN VIVO: el cliente ve claramente qué está mandando a hacer. */}
+        {glassesType && (
+          <div className={`zl-gtype gt-${glassesType.key}`} style={{ "--gt": glassesType.hex }}>
+            <span className="zl-gtype-ic">{glassesTypeIcon(glassesType.icon)}</span>
+            <span className="zl-gtype-tx"><b>{L(glassesType.label, lang)}</b><small>{L(glassesType.hint, lang)}</small></span>
+          </div>
+        )}
+        {frameOnly && (
+          <div className="zl-gtype gt-frame"><span className="zl-gtype-ic"><IconFrame /></span><span className="zl-gtype-tx"><b>{L(FRAME_ONLY.label, lang)}</b><small>{t("lens.desc.frame-only")}</small></span></div>
+        )}
+
         <dl className="zl-recap">
           <div><dt>{t("card.frame")}</dt><dd>{product.name} · {color.name}<b>{money(product.price)}</b></dd></div>
-          {!frameOnly && rxReady && <div><dt>{t("lens.q.rx")}</dt><dd>OD {fmt(parseFloat(rx.od_sph) || 0)} · OS {fmt(parseFloat(rx.os_sph) || 0)}</dd></div>}
+          {!frameOnly && rxReady && <div><dt>{t("lens.q.rx")}</dt><dd>OD {fmt(parseFloat(rx.od_sph) || 0)} · OS {fmt(parseFloat(rx.os_sph) || 0)}{isMulti ? ` · ADD +${rx.add}` : ""}</dd></div>}
           {designLabel && (designId || frameOnly) && <div><dt>{t("lens.use")}</dt><dd>{designLabel}</dd></div>}
           {photo && !frameOnly && photoPriceOf(photo) != null && <div><dt>{t("lens.photo")}</dt><dd>{L(photo.label, lang)}<b>+{money(photoPriceOf(photo))}</b></dd></div>}
           {ar && !frameOnly && <div><dt>{t("lens.ar")}</dt><dd>{L(ar.label, lang)}<b>+{money(arPriceOf(ar))}</b></dd></div>}
           {material && !frameOnly && <div><dt>{t("lens.material")}</dt><dd>{L(material.label, lang)}<b>{money(basePrice(designId, matId))}</b></dd></div>}
         </dl>
+
+        {/* Explicación detallada, en vivo, de lo que se va seleccionando. */}
+        {!frameOnly && (design || material || photo || ar) && (
+          <div className="zl-detail">
+            <div className="zl-detail-h">{t("lens.detail.title")}</div>
+            <ul>
+              {design && <li><span>{L(design.label, lang)}</span>{t(`lens.desc.${design.id}`)}</li>}
+              {material && <li><span>{L(material.label, lang)}</span>{L(material.desc, lang)}</li>}
+              {photo && photoPriceOf(photo) != null && <li><span>{L(photo.label, lang)}</span>{L(PHOTO_FAMILIES.find((f) => f.ids.includes(photo.id))?.desc, lang)}</li>}
+              {ar && <li><span>{L(ar.label, lang)}</span>{L(ar.desc, lang)}</li>}
+            </ul>
+          </div>
+        )}
+
         <div className="zl-subtotal"><span>{t("lens.total")}</span><b>{money(total)}</b></div>
       </aside>
 
@@ -352,13 +399,13 @@ export default function LensProcess() {
                         <td>{t("lens.right")}<small>OD</small></td>
                         <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
                         <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
+                        <td><SelectCell value={odAxisOff ? "0" : rx.od_axis} onChange={setF("od_axis")} options={AXIS} disabled={odAxisOff} title={t("lens.axis.off")} /></td>
                       </tr>
                       <tr>
                         <td>{t("lens.left")}<small>OS</small></td>
                         <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
                         <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
+                        <td><SelectCell value={osAxisOff ? "0" : rx.os_axis} onChange={setF("os_axis")} options={AXIS} disabled={osAxisOff} title={t("lens.axis.off")} /></td>
                       </tr>
                     </tbody>
                   </table>
@@ -372,6 +419,7 @@ export default function LensProcess() {
                     <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty hint={t("lens.add.hint")} />
                   </div>
                   <label className="zl-check"><input type="checkbox" checked={twoPd} onChange={(e) => setTwoPd(e.target.checked)} /> {t("lens.pd.two")}</label>
+                  {(odAxisOff || osAxisOff) && <div className="zl-fieldnote">ⓘ {t("lens.axis.note")}</div>}
                   <div className="zl-auto">{isMulti ? t("lens.auto.multi") : t("lens.auto.sv")}</div>
                   <p className="zl-chat">{t("lens.rx.verify")} <Link to="/catalogo">{t("chat.soon")}</Link></p>
                 </>
@@ -472,11 +520,13 @@ export default function LensProcess() {
                   const price = basePrice(designId, m.id);
                   const delta = Math.round((price - matBase) * 100) / 100;
                   const reco = recommendedMat?.id === m.id;
+                  // No apto: la graduación supera el máximo recomendado del material.
+                  const unfit = maxAbs > m.maxAbs;
                   return (
-                    <button key={m.id} className={`zl-card zl-card-lg ${matId === m.id ? "sel" : ""}`} onClick={() => setMatId(m.id)}>
+                    <button key={m.id} disabled={unfit} className={`zl-card zl-card-lg ${matId === m.id ? "sel" : ""} ${unfit ? "is-off" : ""}`} onClick={() => !unfit && setMatId(m.id)}>
                       <span className="zl-card-ic"><IconIndex /></span>
                       <span className="zl-card-main">
-                        <b>{L(m.label, lang)} {reco && <span className="zl-badge">{t("lens.recommended")}</span>}</b>
+                        <b>{L(m.label, lang)} {reco && !unfit && <span className="zl-badge">{t("lens.recommended")}</span>}{unfit && <span className="zl-badge off">{t("lens.notFit")}</span>}</b>
                         <ul className="zl-specs"><li>{L(m.desc, lang)}</li><li>{t("lens.index.rx")} ±{m.maxAbs === 99 ? "20" : m.maxAbs.toFixed(2)}</li></ul>
                       </span>
                       <span className={`zl-card-price ${delta === 0 ? "zl-inc" : ""}`}>{delta === 0 ? t("lens.included") : `+${money(delta)}`}</span>

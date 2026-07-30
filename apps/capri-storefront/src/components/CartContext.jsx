@@ -45,6 +45,8 @@ export function CartProvider({ children }) {
           color: i.color || null,
           design: i.design || null, material: i.material || null,
           photo: i.photo || null, ar: i.ar || null,
+          glassesType: i.glassesType || null, glassesLabel: i.glassesLabel || null,
+          rx: i.rx || null,   // receta guardada con la orden (dato de salud)
           specs: Array.isArray(i.specs) ? i.specs : [],
           total: i.total || 0,
         })),
@@ -52,6 +54,8 @@ export function CartProvider({ children }) {
         shipping: { cost: Number(shippingCost) || 0, method: shipMethod || "pickup" },
         customer: extra.customer || null,
         delivery: extra.delivery || null,
+        pickup: extra.pickup || null,
+        payment: extra.payment || null,
       });
     } catch {}
     setItems([]);

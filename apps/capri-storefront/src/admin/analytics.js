@@ -80,6 +80,8 @@ export function recordOrder(order) {
     shipping: order.shipping || null,
     customer: order.customer || null,
     delivery: order.delivery || null,
+    pickup: order.pickup || null,                     // dirección de la tienda si recoge en tienda
+    payment: order.payment || null,                   // { method, brand?, last4? } — nunca el PAN completo
   };
   wr(ORDERS, [rec, ...list]);
   bump();

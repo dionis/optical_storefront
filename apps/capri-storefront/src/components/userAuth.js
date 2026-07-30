@@ -33,6 +33,16 @@ export function setProfile(patch) {
   bump();
 }
 
+// Guarda recetas en el perfil (dato de salud). Se anexan a las existentes.
+// En producción esto va al backend con almacenamiento privado (no localStorage).
+export function addPrescriptions(list) {
+  const u = getUser(); if (!u || !Array.isArray(list) || !list.length) return;
+  const prev = Array.isArray(u.prescriptions) ? u.prescriptions : [];
+  const stamped = list.map((rx) => ({ ...rx, savedAt: new Date().toISOString() }));
+  try { localStorage.setItem(KEY, JSON.stringify({ ...u, prescriptions: [...prev, ...stamped] })); } catch {}
+  bump();
+}
+
 export function logout() { try { localStorage.removeItem(KEY); } catch {} bump(); }
 
 export function useUser() {

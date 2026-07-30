@@ -98,9 +98,44 @@ export const PHOTO_COLORS = {
   green: { es: "Verde grafito", en: "Graphite green", hex: "#3f5b4a", note: { es: "reduce el deslumbramiento", en: "cuts glare" } },
 };
 
+// ─── Tipo de gafas VISIBLE para el cliente (condicionado por la receta y el
+// tratamiento elegido). El cliente online no sabe de óptica: necesita ver, en
+// palabras claras, SI está mandando a hacer espejuelos comunes, gafas de sol o
+// unos "para todos los momentos" (fotocromáticos). ───
+export const GLASSES_TYPES = {
+  common: {
+    key: "common", icon: "clear", hex: "#2563eb",
+    label: { es: "Espejuelos comunes", en: "Everyday eyeglasses" },
+    hint:  { es: "Lentes transparentes para uso diario, dentro y fuera de casa.",
+             en: "Clear lenses for everyday use, indoors and outdoors." },
+  },
+  allmoment: {
+    key: "allmoment", icon: "photo", hex: "#7c3aed",
+    label: { es: "Para todos los momentos", en: "All-day / all-light" },
+    hint:  { es: "Fotocromáticos: transparentes en interior y se oscurecen al sol. Un solo par para todo el día.",
+             en: "Photochromic: clear indoors, darken in the sun. One pair for the whole day." },
+  },
+  sun: {
+    key: "sun", icon: "sun", hex: "#d97706",
+    label: { es: "Gafas de sol graduadas", en: "Prescription sunglasses" },
+    hint:  { es: "Los más oscuros, incluso con calor, y se activan algo en el auto. Ideales para exterior y manejo.",
+             en: "The darkest, even in heat, and activate a little in the car. Great outdoors and driving." },
+  },
+};
+// Clasifica el tipo de gafas por el fotocromático elegido.
+//   sin foto           → comunes
+//   Transitions XTRActive (los más oscuros) → gafas de sol
+//   resto de fotocromáticos → para todos los momentos
+export function glassesTypeOf(photoId) {
+  if (!photoId) return GLASSES_TYPES.common;
+  if (String(photoId).startsWith("trans-x")) return GLASSES_TYPES.sun;
+  return GLASSES_TYPES.allmoment;
+}
+
 // Helpers
 export const designById = (id) => DESIGNS.find((d) => d.id === id) || null;
 export const materialById = (id) => MATERIALS.find((m) => m.id === id) || null;
+export const photoById = (id) => PHOTO.find((p) => p.id === id) || null;
 // categoría de AR para un diseño: sv -> "sv", bifocal/prog -> "bifprog"
 export const arGroupFor = (design) => (design && design.cat === "sv" ? "sv" : "bifprog");
 export const arListFor = (design) => AR[arGroupFor(design)] || [];
