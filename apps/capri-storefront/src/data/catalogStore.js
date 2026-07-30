@@ -26,6 +26,7 @@ let state = {
   caseBySlug: bySlug(SEED_CASES),
   meta: null,
   live: false,
+  ready: false, // true cuando loadLive() terminó (Medusa, catalog.json o fallback)
 };
 
 // re-enrich (re-apply prices) when the admin changes any override
@@ -54,7 +55,15 @@ let loaded = false;
 export async function loadLive() {
   if (loaded) return;
   loaded = true;
-
+  try {
+    await _loadLive();
+  } finally {
+    // Marca la carga como TERMINADA (haya venido de Medusa, catalog.json o seed),
+    // para que las páginas (PDP/receta) sepan cuándo dejar de mostrar el estado de carga.
+    if (!getState().ready) set({ ready: true });
+  }
+}
+async function _loadLive() {
   // ── Fuente 1: backend Medusa (si VITE_USE_MEDUSA). Fallback: catalog.json → seed. ──
   if (medusaEnabled()) {
     try {

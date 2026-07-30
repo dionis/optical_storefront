@@ -102,20 +102,28 @@ function mapProduct(p) {
   };
 }
 
-// Trae TODOS los productos (paginado) y los mapea. Lanza si el backend no responde
-// (catalogStore hace fallback a catalog.json / seed).
+// Trae TODOS los productos y los mapea. La primera página da el `count`; el resto
+// se pide EN PARALELO para que el catálogo cargue rápido (evita el "flash" de datos
+// seed en enlaces directos). Lanza si el backend no responde (catalogStore hace
+// fallback a catalog.json / seed).
 export async function fetchMedusaFrames() {
   const rid = await getRegion();
   const fields =
     "%2Bmetadata,%2Bimages.url,%2Bthumbnail,%2Boptions.title,%2Boptions.values.value,%2Bvariants.calculated_price";
-  let out = [];
-  for (let offset = 0; offset < 3000; offset += 100) {
-    const d = await api(
-      `/store/products?limit=100&offset=${offset}${rid ? "&region_id=" + rid : ""}&fields=${fields}`
+  const url = (offset) =>
+    `/store/products?limit=100&offset=${offset}${rid ? "&region_id=" + rid : ""}&fields=${fields}`;
+
+  const first = await api(url(0));
+  let out = (first.products || []).map(mapProduct);
+  const count = first.count || out.length;
+
+  const offsets = [];
+  for (let o = 100; o < count; o += 100) offsets.push(o);
+  if (offsets.length) {
+    const rest = await Promise.all(
+      offsets.map((o) => api(url(o)).then((d) => (d.products || []).map(mapProduct)).catch(() => []))
     );
-    const list = d.products || [];
-    out = out.concat(list.map(mapProduct));
-    if (!list.length || offset + 100 >= (d.count || 0)) break;
+    for (const arr of rest) out = out.concat(arr);
   }
   return out;
 }

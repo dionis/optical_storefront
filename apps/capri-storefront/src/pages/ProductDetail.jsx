@@ -12,7 +12,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function ProductDetail() {
   const { slug } = useParams();
-  const { products: PRODUCTS, productBySlug } = useCatalog();
+  const { products: PRODUCTS, productBySlug, ready } = useCatalog();
   const product = productBySlug[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
@@ -22,6 +22,11 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
 
+  // Mientras el catálogo termina de cargar (Medusa), no mostramos datos seed viejos
+  // en un enlace directo/refresh: evita el "flash" de precio/imagen incorrectos.
+  if (!ready) {
+    return <div className="section pdp-loading"><p className="muted">{t("loading")}</p></div>;
+  }
   if (!product) {
     return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   }
