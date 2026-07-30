@@ -92,6 +92,9 @@ const MULTI_IDS = ["bifocal", "prog-mid", "prog-high"];
 const RECOMMENDED_MULTI = "prog-mid";
 
 const MEDUSA_URL = (import.meta.env && import.meta.env.VITE_MEDUSA_URL) ? String(import.meta.env.VITE_MEDUSA_URL).replace(/\/$/, "") : "";
+// Llamamos al backend vía proxy MISMO ORIGEN (/medusa) para evitar CORS del navegador.
+// El proxy lo resuelve Vite en dev y Vercel (rewrite) en prod. Si no hay backend, vacío.
+const MEDUSA_BASE = MEDUSA_URL ? "/medusa" : "";
 const PK = (import.meta.env && import.meta.env.VITE_MEDUSA_PUBLISHABLE_KEY) || "";
 
 export default function LensProcess() {
@@ -208,12 +211,12 @@ export default function LensProcess() {
     if (!file) return;
     setOcr({ status: "loading", file: file.name, msg: "" });
     try {
-      if (!MEDUSA_URL) throw new Error("no-backend");
+      if (!MEDUSA_BASE) throw new Error("no-backend");
       const fd = new FormData();
       fd.append("file", file);
       const headers = {};
       if (PK) headers["x-publishable-api-key"] = PK;
-      const res = await fetch(`${MEDUSA_URL}/store/prescriptions/ocr`, { method: "POST", body: fd, headers });
+      const res = await fetch(`${MEDUSA_BASE}/store/prescriptions/ocr`, { method: "POST", body: fd, headers });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.fallback) { const e = new Error(data.error || "fallback"); e.fallback = !!data.fallback; throw e; }
       const od = data.od || {}, os = data.os || {};
