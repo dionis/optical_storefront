@@ -11,8 +11,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 5198,
-      host: true,
+      host: true,            // escucha en 0.0.0.0 → accesible por la IP real de la máquina
       strictPort: true,
+      allowedHosts: true,    // acepta cualquier Host (IP LAN/pública, dominio o túnel)
       proxy: MEDUSA
         ? {
             "/medusa": {
@@ -28,6 +29,7 @@ export default defineConfig(({ mode }) => {
       port: 5198,
       host: true,
       strictPort: true,
+      allowedHosts: true,
     },
   };
 });

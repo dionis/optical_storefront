@@ -7,7 +7,8 @@ import { useSyncExternalStore } from "react";
 import { enrichProducts, PRODUCTS as SEED_PRODUCTS, SEED_FRAMES } from "./products.js";
 import { enrichCases, CASES as SEED_CASES, SEED_CASES as SEED_CASES_RAW } from "./cases.js";
 import { ALLOWED_BRAND_SLUGS } from "./brands.js";
-import { subscribe as onPrices } from "../admin/priceStore.js";
+import { subscribe as onPrices, applyFrame } from "../admin/priceStore.js";
+import { medusaEnabled, fetchMedusaFrames } from "./medusaCatalog.js";
 
 function hash(str){let h=0;const s=String(str);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffffff;return Math.abs(h);}
 const bySlug = (arr) => Object.fromEntries(arr.map((p) => [p.slug, p]));
@@ -53,6 +54,42 @@ let loaded = false;
 export async function loadLive() {
   if (loaded) return;
   loaded = true;
+
+  // ── Fuente 1: backend Medusa (si VITE_USE_MEDUSA). Fallback: catalog.json → seed. ──
+  if (medusaEnabled()) {
+    try {
+      const frames = await fetchMedusaFrames();
+      if (Array.isArray(frames) && frames.length) {
+        rawFrames = frames;
+        const products = inBrand(enrichProducts(frames)).map((p) =>
+          p._medusaPrice != null
+            ? { ...p, price: applyFrame(p.sku, p._medusaPrice), basePrice: p._medusaPrice,
+                rating: p._medusaRating ?? p.rating, reviews: p._medusaReviews ?? p.reviews }
+            : p
+        );
+        // Estuches: siguen desde cases.json (fallback al seed).
+        let ecases = state.cases;
+        try {
+          const k = await fetch(`${BASE}/cases.json`, { cache: "no-store" });
+          if (k.ok) { const cj = await k.json(); if (Array.isArray(cj) && cj.length) { rawCases = cj; ecases = enrichCases(cj); } }
+        } catch { /* keep seed cases */ }
+        if (products.length) {
+          set({
+            products,
+            cases: ecases.length ? ecases : state.cases,
+            productBySlug: bySlug(products),
+            caseBySlug: bySlug(ecases.length ? ecases : state.cases),
+            meta: { source: "medusa", count: products.length },
+            live: true,
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      // backend no disponible / error → caemos a catalog.json y luego al seed
+    }
+  }
+
   try {
     const opt = { cache: "no-store" };
     const [cRes, kRes] = await Promise.all([fetch(`${BASE}/catalog.json`, opt), fetch(`${BASE}/cases.json`, opt)]);
