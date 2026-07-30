@@ -1,6 +1,7 @@
 """Main sync orchestrator."""
 
 import asyncio
+import time
 from typing import Any
 
 import yaml
@@ -276,11 +277,21 @@ async def sync(
 
             pushed = 0
             skipped = 0
-            for product in products:
+            total = len(products)
+            for position, product in enumerate(products, start=1):
                 seen_handles.add(product.handle)
                 if not full and not state.has_changed(product.handle, product.content_hash):
                     skipped += 1
                     continue
+
+                # Per-product progress. Each product costs a rate-limited HTML fetch
+                # plus, per image, a download, an R2 upload and ~2.5s of u2net
+                # inference when the tryon extra is installed — roughly 15s. Without
+                # this line a 129-product collection looks frozen for half an hour.
+                # flush=True because stdout is block-buffered whenever the run is
+                # piped to a file or a CI log instead of a terminal.
+                started = time.monotonic()
+                print(f"[scraper]   [{position}/{total}] {product.handle} …", flush=True)
 
                 # Enrich with individual product HTML (for UPC, measurements)
                 product = await _enrich_from_html(client, config, product)
@@ -310,7 +321,16 @@ async def sync(
                     if not dry_run:
                         state.mark_seen(product.handle, product.content_hash)
 
-            print(f"[scraper]   Pushed: {pushed}, Skipped (unchanged): {skipped}")
+                print(
+                    f"[scraper]   [{position}/{total}] {product.handle} "
+                    f"{'✓' if medusa_id or dry_run else '✗'} "
+                    f"{time.monotonic() - started:.1f}s "
+                    f"({len(product.r2_image_keys)} img, "
+                    f"{len(product.r2_tryon_keys)} try-on)",
+                    flush=True,
+                )
+
+            print(f"[scraper]   Pushed: {pushed}, Skipped (unchanged): {skipped}", flush=True)
 
     # Reconcile discontinued models (draft them) — only on a full sync where every
     # collection returned data, so a partial/failed fetch never unpublishes stock.

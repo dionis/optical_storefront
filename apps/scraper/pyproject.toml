@@ -15,6 +15,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "tenacity>=9.0.0",
     "anthropic>=0.39.0",
+    "python-dotenv>=1.0.1",
 ]
 
 [project.optional-dependencies]
@@ -25,10 +26,22 @@ dev = [
     "mypy>=1.11.0",
     "ruff>=0.6.0",
 ]
-# rembg requires Python <3.13; install separately for Phase 6 try-on work:
-#   pip install "rembg>=2.0.57"
+# Phase 6 try-on assets (background removal). Install with:
+#   ./scripts/setup_tryon.sh          (or: uv sync --extra tryon)
+# Heavy extra (~300 MB: onnxruntime, scikit-image, scipy) plus a ~175 MB u2net
+# model downloaded on first use — keep it out of the default dependency set.
 tryon = [
-    "rembg>=2.0.57; python_version < '3.13'",
+    # rembg[cpu] pulls onnxruntime; plain `rembg` installs without an inference
+    # runtime and fails at call time.
+    "rembg[cpu]>=2.0.57",
+    # numba (pulled in by pymatting) has no wheels built against numpy 2.5+, and
+    # rembg does not floor pymatting. Left free, the resolver keeps numpy 2.5 and
+    # walks the chain back to pymatting 1.1.14 → numba 0.53.1 → llvmlite 0.36.0 —
+    # sdist-only 2021 releases that need LLVM 11 and fail to build on Python 3.12+
+    # ("Cannot install on Python version 3.13.13; only >=3.6,<3.10 supported").
+    # These two bounds keep it on wheels for every interpreter we support.
+    "numpy<2.5",
+    "pymatting>=1.1.15",
 ]
 
 [build-system]

@@ -30,6 +30,16 @@ const fileProviders = hasR2Credentials
           region: process.env.R2_REGION ?? "auto",
           bucket: process.env.R2_BUCKET ?? "eyewear-assets",
           endpoint: process.env.R2_ENDPOINT,
+          // Omit the ACL header entirely. Left unset, the provider defaults to
+          // sending `public-read`/`private` on every upload, and none of the
+          // backends we target implement S3 ACLs — R2 and Supabase Storage manage
+          // visibility per bucket instead.
+          acl: false,
+          additional_client_config: {
+            // See the comment in src/lib/s3.ts — bucket-as-subdomain has no
+            // certificate on Supabase Storage, and path-style works everywhere.
+            forcePathStyle: true,
+          },
         },
       },
     ]

@@ -1,16 +1,29 @@
 """CLI entry point for the scraper."""
 
 import asyncio
+from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 
 from scraper.config import ConfigError, get_config
 from scraper.sync import sync
+
+# Resolved from this file, not the working directory, so `python -m scraper` picks
+# up the same `.env` no matter where it is invoked from. Nothing used to load it
+# at all: the app relied on an editor injecting the file, so any other caller — a
+# cron job, a plain shell, a container — silently fell back to the defaults and
+# reported "R2 not configured" with correct credentials sitting in `.env`.
+#
+# `override=False` (the default) keeps real environment variables winning over the
+# file, which is what CI and Coolify depend on.
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 @click.group()
 def cli() -> None:
     """Eyewear catalog ingestion CLI."""
+    load_dotenv(_ENV_FILE)
 
 
 @cli.command()

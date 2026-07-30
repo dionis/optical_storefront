@@ -1,7 +1,12 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import Anthropic from "@anthropic-ai/sdk";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
+import {
+  createStorageClient,
+  prescriptionBucket,
+  storageConfigured,
+} from "../../../../lib/s3";
 import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../../modules/prescription/service";
 import type { Prescription } from "@eyewear/shared";
@@ -48,26 +53,14 @@ export async function POST(
 
   // ── Upload to R2 (PHI compliance) ──────────────────────────────────────
   let fileUrl: string | null = null;
-  const r2Bucket = process.env.R2_PRESCRIPTION_BUCKET ?? process.env.R2_BUCKET ?? "eyewear-assets";
-  const r2Endpoint = process.env.R2_ENDPOINT;
-  const r2AccessKey = process.env.R2_ACCESS_KEY_ID;
-  const r2SecretKey = process.env.R2_SECRET_ACCESS_KEY;
-
-  if (r2Endpoint && r2AccessKey && r2SecretKey) {
+  if (storageConfigured()) {
     const ext = file.mimetype.split("/")[1] ?? "jpg";
     const objectKey = `rx/${randomUUID()}.${ext}`;
     try {
-      const s3 = new S3Client({
-        region: process.env.R2_REGION ?? "auto",
-        endpoint: r2Endpoint,
-        credentials: {
-          accessKeyId: r2AccessKey,
-          secretAccessKey: r2SecretKey,
-        },
-      });
+      const s3 = createStorageClient();
       await s3.send(
         new PutObjectCommand({
-          Bucket: r2Bucket,
+          Bucket: prescriptionBucket(),
           Key: objectKey,
           Body: file.buffer,
           ContentType: file.mimetype,

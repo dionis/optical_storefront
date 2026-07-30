@@ -30,7 +30,19 @@ jobs:
 
       - name: Install scraper dependencies
         working-directory: apps/scraper
-        run: pip install -e "."
+        # [tryon] pulls rembg + onnxruntime so the sync can generate the
+        # background-removed PNGs under tryon/. Drop the extra to skip them —
+        # process_product_images() degrades gracefully, logging
+        # "rembg failed … No module named 'rembg'" per image.
+        run: pip install -e ".[tryon]"
+
+      - name: Cache the u2net background-removal model
+        uses: actions/cache@v4
+        with:
+          # rembg downloads ~175 MB into ~/.u2net on its first call. Uncached,
+          # every scheduled run re-downloads it before the first product.
+          path: ~/.u2net
+          key: u2net-model-v1
 
       - name: Check required secrets
         env:

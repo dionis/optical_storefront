@@ -29,7 +29,9 @@ done
 if command -v uv >/dev/null 2>&1; then
   if [ "$CHECK_ONLY" -eq 0 ]; then
     echo "[tryon] Installing extra with uv (resolves and updates uv.lock)..."
-    uv sync --extra tryon
+    # `uv sync` prunes anything outside the requested extras, so asking for
+    # tryon alone silently uninstalls ruff/pytest from the dev venv. Sync both.
+    uv sync --extra dev --extra tryon
   fi
   PYTHON=(uv run --no-sync python)
 else
