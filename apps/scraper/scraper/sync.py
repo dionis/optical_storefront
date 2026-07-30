@@ -8,7 +8,7 @@ import yaml
 from scraper.config import Config, get_config
 from scraper.http_client import RateLimitedClient
 from scraper.images import process_product_images
-from scraper.medusa_push import reconcile_discontinued, upsert_product
+from scraper.medusa_push import close_admin_client, reconcile_discontinued, upsert_product
 from scraper.models import ScrapedProduct
 from scraper.parser import (
     align_images_to_colors,
@@ -31,15 +31,29 @@ async def _resolve_category_id(
     """
     Resolve a WooCommerce category slug to its numeric ID via the Store API.
     Returns None if not found or if the API is not accessible.
+
+    The endpoint SILENTLY IGNORES a `?slug=` filter — every slug comes back with
+    the same first category (`4u`, id 470). Asking for `?slug=grande&per_page=1`
+    therefore returned 4u's 134 products under the Grande label, and a --full run
+    would have ingested the same collection 17 times, each mislabelled. So fetch
+    the whole list and match here. There are 18 categories, comfortably one page.
     """
-    url = f"{config.base_url}{STORE_API_CATEGORIES}?slug={collection_slug}&per_page=1"
+    url = f"{config.base_url}{STORE_API_CATEGORIES}?per_page=100"
     try:
         resp = await client.get(url)
         if resp.status_code == 304:
             return None
         data: list[dict[str, Any]] = resp.json()
-        if data and isinstance(data, list) and data[0].get("id"):
-            return int(data[0]["id"])
+        if not isinstance(data, list):
+            return None
+        wanted = collection_slug.strip().lower()
+        for item in data:
+            if str(item.get("slug", "")).strip().lower() == wanted and item.get("id"):
+                return int(item["id"])
+        print(
+            f"[scraper] Category slug {collection_slug!r} not found among "
+            f"{len(data)} supplier categories."
+        )
     except Exception as err:
         print(f"[scraper] Category ID lookup failed for {collection_slug}: {err}")
     return None
@@ -308,6 +322,7 @@ async def sync(
     elif full and fetch_failed:
         print("[scraper]   Skipping reconciliation — a collection returned no data.")
 
+    close_admin_client()
     print("\n[scraper] ✓ Sync complete.")
 
 

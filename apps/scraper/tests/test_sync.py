@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from scraper.sync import _parse_product_from_html_page
+from scraper.config import Config
+from scraper.sync import _parse_product_from_html_page, _resolve_category_id
 
 
 MINIMAL_PRODUCT_HTML = """
@@ -66,3 +67,61 @@ class TestParseProductFromHtmlPage:
             "di-caprio",
         )
         assert product is None
+
+
+# The supplier returns every category regardless of any `?slug=` filter, so the
+# whole list arrives whatever we ask for. Mirroring that exactly is the point of
+# these tests: the old code trusted the filter and took data[0], which resolved
+# EVERY collection to 4u (id 470) and would have ingested it once per collection.
+SUPPLIER_CATEGORIES = [
+    {"id": 470, "slug": "4u", "name": "4U", "count": 134},
+    {"id": 31, "slug": "peachtree", "name": "Peachtree", "count": 54},
+    {"id": 371, "slug": "grande", "name": "Grande", "count": 15},
+    {"id": 140, "slug": "case", "name": "Case", "count": 28},
+]
+
+
+def _client_returning(payload: object, status_code: int = 200) -> MagicMock:
+    response = MagicMock()
+    response.status_code = status_code
+    response.json = MagicMock(return_value=payload)
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    return client
+
+
+class TestResolveCategoryId:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("slug", "expected"),
+        [("grande", 371), ("4u", 470), ("peachtree", 31), ("case", 140)],
+    )
+    async def test_matches_the_requested_slug(self, slug: str, expected: int) -> None:
+        client = _client_returning(SUPPLIER_CATEGORIES)
+        assert await _resolve_category_id(client, Config(), slug) == expected
+
+    @pytest.mark.asyncio
+    async def test_does_not_fall_back_to_the_first_category(self) -> None:
+        """The regression: 'grande' must never resolve to 4u's id."""
+        client = _client_returning(SUPPLIER_CATEGORIES)
+        assert await _resolve_category_id(client, Config(), "grande") != 470
+
+    @pytest.mark.asyncio
+    async def test_slug_match_is_case_insensitive(self) -> None:
+        client = _client_returning(SUPPLIER_CATEGORIES)
+        assert await _resolve_category_id(client, Config(), "  GRANDE ") == 371
+
+    @pytest.mark.asyncio
+    async def test_unknown_slug_returns_none(self) -> None:
+        client = _client_returning(SUPPLIER_CATEGORIES)
+        assert await _resolve_category_id(client, Config(), "no-such-brand") is None
+
+    @pytest.mark.asyncio
+    async def test_not_modified_returns_none(self) -> None:
+        client = _client_returning(SUPPLIER_CATEGORIES, status_code=304)
+        assert await _resolve_category_id(client, Config(), "grande") is None
+
+    @pytest.mark.asyncio
+    async def test_malformed_payload_returns_none(self) -> None:
+        client = _client_returning({"error": "boom"})
+        assert await _resolve_category_id(client, Config(), "grande") is None

@@ -1,9 +1,17 @@
 """Push scraped products to Medusa via Admin API."""
 
+import atexit
 import json
 from typing import Any
 
 import httpx
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from scraper.config import Config
 from scraper.filler import generate_filler
@@ -15,6 +23,92 @@ from scraper.normalize import (
     bucket_temple,
     handles_to_unpublish,
 )
+
+# One pooled client for the whole run. A fresh `httpx.Client` per product meant a
+# full TLS handshake per product against the Medusa host — over a second each on a
+# remote (Coolify/sslip.io) deployment — and a single dropped handshake surfaced as
+# `SSL: UNEXPECTED_EOF_WHILE_READING`, aborting the sync mid-catalog. Keep-alive
+# collapses that to one connection, so there is far less to go wrong per run.
+_client: httpx.Client | None = None
+
+
+def _admin_client(config: Config) -> httpx.Client:
+    """Return the pooled admin client, creating it on first use."""
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.Client(
+            # Medusa v2 authenticates secret admin API keys via HTTP Basic (token as
+            # the username, empty password) — NOT a Bearer header.
+            auth=(config.medusa_admin_api_key, ""),
+            headers={"Content-Type": "application/json"},
+            timeout=httpx.Timeout(30.0, connect=15.0),
+            # Transport-level replay of connect failures, beneath the tenacity retry
+            # below; the two together survive a host that drops handshakes.
+            transport=httpx.HTTPTransport(retries=3),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+        )
+    return _client
+
+
+def close_admin_client() -> None:
+    """Close the pooled admin client. Idempotent."""
+    global _client
+    if _client is not None and not _client.is_closed:
+        _client.close()
+    _client = None
+
+
+atexit.register(close_admin_client)
+
+
+def _log_retry(state: RetryCallState) -> None:
+    err = state.outcome.exception() if state.outcome else None
+    sleep = getattr(state.next_action, "sleep", 0.0)
+    print(
+        f"[medusa] transient {type(err).__name__} on attempt "
+        f"{state.attempt_number}/4 — retrying in {sleep:.0f}s"
+    )
+
+
+# Safe to replay on any method: a connect-phase failure means the request never
+# reached Medusa, so a retry cannot duplicate a product.
+_CONNECT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
+# Reads are idempotent, so a failure mid-flight is safe to replay as well. Writes
+# deliberately do NOT retry these — Medusa may have already applied the change.
+_READ_ERRORS = _CONNECT_ERRORS + (
+    httpx.ReadError,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+
+
+@retry(
+    retry=retry_if_exception_type(_READ_ERRORS),
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    before_sleep=_log_retry,
+    reraise=True,
+)
+def _get(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
+    """GET an admin endpoint, retried on transport-level flakiness.
+
+    Mirrors the policy the supplier-facing client already has
+    (`http_client.RateLimitedClient.get`). Only transport errors are retried — an
+    HTTP error status is a real rejection and must surface immediately.
+    """
+    return client.get(url, **kwargs)
+
+
+@retry(
+    retry=retry_if_exception_type(_CONNECT_ERRORS),
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    before_sleep=_log_retry,
+    reraise=True,
+)
+def _post(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
+    """POST to an admin endpoint, retried only when the request never left."""
+    return client.post(url, **kwargs)
 
 
 def _build_medusa_payload(
@@ -121,6 +215,43 @@ def _build_medusa_payload(
     return payload
 
 
+def _as_update_payload(
+    payload: dict[str, Any],
+    existing: dict[str, Any],
+) -> dict[str, Any]:
+    """Adapt a create payload for `POST /admin/products/:id`.
+
+    Two things differ from create, both verified against the installed
+    `@medusajs/medusa` (2.17.2) request validators:
+
+    1. Medusa 2.16.0 REMOVED the product-level `options` property from the update
+       schema. It is not merely ignored — the validator rejects the whole request
+       with "The 'options' property was removed in version 2.16.0". `CreateProduct`
+       still accepts it, so only the update payload may drop it. Options are
+       managed through the dedicated `/admin/products/:id/options` routes now; we
+       never change the colour axis on an update, so there is nothing to send.
+
+    2. `id` is OPTIONAL on an update variant, which means a variant sent without
+       one is CREATED rather than matched — silently duplicating every colour on
+       each sync. Match the existing rows by SKU (falling back to title, since the
+       colour name is what the SKU is derived from) and carry their ids over.
+    """
+    update = {key: value for key, value in payload.items() if key != "options"}
+
+    existing_variants = existing.get("variants") or []
+    by_sku = {v["sku"]: v["id"] for v in existing_variants if v.get("sku") and v.get("id")}
+    by_title = {v["title"]: v["id"] for v in existing_variants if v.get("title") and v.get("id")}
+
+    variants = []
+    for variant in update.get("variants") or []:
+        variant_id = by_sku.get(variant.get("sku")) or by_title.get(variant.get("title"))
+        variants.append({**variant, "id": variant_id} if variant_id else variant)
+    if variants:
+        update["variants"] = variants
+
+    return update
+
+
 def upsert_product(
     product: ScrapedProduct,
     config: Config,
@@ -140,44 +271,45 @@ def upsert_product(
         print(json.dumps(payload, indent=2, default=str))
         return None
 
-    # Medusa v2 authenticates secret admin API keys via HTTP Basic (token as the
-    # username, empty password) — NOT a Bearer header.
-    headers = {"Content-Type": "application/json"}
-    auth = (config.medusa_admin_api_key, "")
     base_url = config.medusa_backend_url.rstrip("/")
+    client = _admin_client(config)
 
-    with httpx.Client(timeout=30, auth=auth) as client:
-        # Check if product already exists
-        search_resp = client.get(
-            f"{base_url}/admin/products",
-            params={"handle": product.handle},
-            headers=headers,
+    # Check if product already exists
+    search_resp = _get(
+        client,
+        f"{base_url}/admin/products",
+        # Variants are needed to carry their ids into the update payload, and
+        # they are not part of the default field set.
+        params={"handle": product.handle, "fields": "id,handle,*variants"},
+    )
+    search_resp.raise_for_status()
+    products = search_resp.json().get("products", [])
+
+    if products:
+        existing = products[0]
+        resp = _post(
+            client,
+            f"{base_url}/admin/products/{existing['id']}",
+            json=_as_update_payload(payload, existing),
         )
-        search_resp.raise_for_status()
-        products = search_resp.json().get("products", [])
+    else:
+        resp = _post(client, f"{base_url}/admin/products", json=payload)
 
-        if products:
-            product_id = products[0]["id"]
-            resp = client.post(
-                f"{base_url}/admin/products/{product_id}",
-                json=payload,
-                headers=headers,
-            )
-        else:
-            resp = client.post(
-                f"{base_url}/admin/products",
-                json=payload,
-                headers=headers,
-            )
-
-        resp.raise_for_status()
-        return str(resp.json().get("product", {}).get("id", ""))
+    # `raise_for_status()` reports only the status line, but Medusa puts the
+    # useful part — which field it rejected and why — in the response body.
+    # Without this a validation slip surfaces as a bare "400 Bad Request"
+    # against an opaque product id.
+    if resp.is_error:
+        raise RuntimeError(
+            f"Medusa rejected {'update' if products else 'create'} of "
+            f"{product.handle!r} with HTTP {resp.status_code}: {resp.text[:800]}"
+        )
+    return str(resp.json().get("product", {}).get("id", ""))
 
 
 def _list_published_handles(
     client: httpx.Client,
     base_url: str,
-    headers: dict[str, str],
     target_collections: set[str],
 ) -> dict[str, str]:
     """Return {handle: product_id} for published products we manage.
@@ -188,10 +320,10 @@ def _list_published_handles(
     managed: dict[str, str] = {}
     offset, limit = 0, 100
     while True:
-        resp = client.get(
+        resp = _get(
+            client,
             f"{base_url}/admin/products",
             params={"status[]": "published", "limit": limit, "offset": offset},
-            headers=headers,
         )
         resp.raise_for_status()
         body = resp.json()
@@ -224,24 +356,22 @@ def reconcile_discontinued(
         print("[reconcile] SKIP — 0 handles seen this run (refusing to unpublish).")
         return []
 
-    headers = {"Content-Type": "application/json"}
-    auth = (config.medusa_admin_api_key, "")
     base_url = config.medusa_backend_url.rstrip("/")
+    client = _admin_client(config)
 
-    with httpx.Client(timeout=30, auth=auth) as client:
-        managed = _list_published_handles(client, base_url, headers, target_collections)
-        stale = handles_to_unpublish(set(managed.keys()), seen_handles)
+    managed = _list_published_handles(client, base_url, target_collections)
+    stale = handles_to_unpublish(set(managed.keys()), seen_handles)
 
-        for handle in sorted(stale):
-            if dry_run:
-                print(f"[dry-run] Would draft discontinued product: {handle}")
-                continue
-            resp = client.post(
-                f"{base_url}/admin/products/{managed[handle]}",
-                json={"status": "draft"},
-                headers=headers,
-            )
-            resp.raise_for_status()
-            print(f"[reconcile] Drafted discontinued: {handle}")
+    for handle in sorted(stale):
+        if dry_run:
+            print(f"[dry-run] Would draft discontinued product: {handle}")
+            continue
+        resp = _post(
+            client,
+            f"{base_url}/admin/products/{managed[handle]}",
+            json={"status": "draft"},
+        )
+        resp.raise_for_status()
+        print(f"[reconcile] Drafted discontinued: {handle}")
 
     return sorted(stale)

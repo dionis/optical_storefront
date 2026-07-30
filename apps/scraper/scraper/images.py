@@ -5,6 +5,7 @@ from pathlib import Path
 
 import boto3
 import httpx
+from botocore.config import Config as BotoConfig
 from PIL import Image
 
 from scraper.config import Config
@@ -20,7 +21,12 @@ def _get_s3_client(config: Config) -> object:
         endpoint_url=config.r2_endpoint,
         aws_access_key_id=config.r2_access_key_id,
         aws_secret_access_key=config.r2_secret_access_key,
-        region_name="auto",
+        region_name=config.r2_region,
+        # Path-style (host/bucket/key) instead of virtual-hosted (bucket.host/key).
+        # Providers other than AWS rarely hold a wildcard cert for bucket
+        # subdomains — Supabase Storage fails the TLS handshake outright — while R2,
+        # MinIO and Garage all accept path-style. The compatible choice everywhere.
+        config=BotoConfig(s3={"addressing_style": "path"}),
     )
 
 
@@ -65,12 +71,12 @@ def process_product_images(
         print(f"[dry-run] Would process {len(product.image_urls)} images for {product.handle}")
         return product
 
-    if not config.r2_endpoint:
+    if not config.r2_configured:
         # Dev/no-R2 fallback: hotlink the supplier images (already color-aligned)
         # so products still get pictures. Mirrors the static catalog's approach.
         # Downstream treats an absolute http(s) key as a ready-to-use URL. No
         # try-on assets are generated (rembg needs the downloaded bytes).
-        print("[images] R2_ENDPOINT not configured — hotlinking supplier image URLs.")
+        print("[images] R2 not configured — hotlinking supplier image URLs.")
         product.r2_image_keys = list(product.image_urls)
         return product
 

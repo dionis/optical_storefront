@@ -32,24 +32,66 @@ jobs:
         working-directory: apps/scraper
         run: pip install -e "."
 
+      - name: Check required secrets
+        env:
+          MEDUSA_BACKEND_URL: ${{ secrets.MEDUSA_BACKEND_URL }}
+          MEDUSA_ADMIN_API_KEY: ${{ secrets.MEDUSA_ADMIN_API_KEY }}
+        run: |
+          # Undefined GitHub secrets interpolate to an empty string, so without this
+          # gate the job fails deep inside the sync with an opaque httpx error.
+          missing=""
+          [ -n "$MEDUSA_BACKEND_URL" ] || missing="$missing MEDUSA_BACKEND_URL"
+          [ -n "$MEDUSA_ADMIN_API_KEY" ] || missing="$missing MEDUSA_ADMIN_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing — add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          case "$MEDUSA_BACKEND_URL" in
+            http://*|https://*) ;;
+            *)
+              echo "::error::MEDUSA_BACKEND_URL must start with http:// or https://"
+              exit 1
+              ;;
+          esac
+
+      - name: Restore incremental sync state
+        uses: actions/cache@v4
+        with:
+          # state.db holds the last-seen content hash per product handle. Without it
+          # the runner starts empty, has_changed() is True for every product, and each
+          # scheduled run re-pushes the whole catalog and re-runs paid AI translation.
+          # The run_id key never hits, so restore-keys falls back to the newest prior
+          # entry and the post-step always writes a fresh one (cache keys are immutable).
+          path: apps/scraper/state.db
+          key: scraper-state-${{ github.run_id }}
+          restore-keys: |
+            scraper-state-
+
       - name: Run scraper sync
         working-directory: apps/scraper
         env:
           MEDUSA_BACKEND_URL: ${{ secrets.MEDUSA_BACKEND_URL }}
           MEDUSA_ADMIN_API_KEY: ${{ secrets.MEDUSA_ADMIN_API_KEY }}
+          MEDUSA_SALES_CHANNEL_ID: ${{ secrets.MEDUSA_SALES_CHANNEL_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_REGION: ${{ secrets.R2_REGION }}
           R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
           MEILISEARCH_HOST: ${{ secrets.MEILISEARCH_HOST }}
           MEILISEARCH_MASTER_KEY: ${{ secrets.MEILISEARCH_MASTER_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Read inputs through env, never interpolated into the shell body.
+          INPUT_FULL: ${{ github.event.inputs.full }}
+          INPUT_COLLECTION: ${{ github.event.inputs.collection }}
         run: |
+          set -euo pipefail
           ARGS=""
-          if [ "${{ github.event.inputs.full }}" = "true" ]; then
+          if [ "${INPUT_FULL:-false}" = "true" ]; then
             ARGS="$ARGS --full"
           fi
-          if [ -n "${{ github.event.inputs.collection }}" ]; then
-            ARGS="$ARGS --collection ${{ github.event.inputs.collection }}"
+          if [ -n "${INPUT_COLLECTION:-}" ]; then
+            ARGS="$ARGS --collection $INPUT_COLLECTION"
           fi
           python -m scraper sync $ARGS

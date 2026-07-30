@@ -89,7 +89,11 @@ services:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET: ${R2_BUCKET}
+      # Prescriptions are health data and must never share the public assets
+      # bucket — the backend falls back to R2_BUCKET when this is unset.
+      R2_PRESCRIPTION_BUCKET: ${R2_PRESCRIPTION_BUCKET}
       R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
@@ -146,6 +150,7 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET: ${R2_BUCKET}
       R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION}
     volumes:
       - ./scripts/backup.sh:/backup.sh:ro
     command: >

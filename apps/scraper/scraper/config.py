@@ -24,6 +24,36 @@ def _env_url(name: str, default: str = "") -> str:
     return _env(name, default).rstrip("/")
 
 
+# Fragments that only appear in the values shipped in `.env.example`. Left
+# unreplaced they are worse than a blank: `R2_ENDPOINT=https://<account-id>.r2…`
+# is non-empty, so it satisfies both `validate()`'s scheme check and the "is R2
+# configured?" guard in images.py, and then boto3 rejects it with a bare
+# `ValueError: Invalid endpoint` — after a whole collection has been scraped.
+_PLACEHOLDER_MARKERS = ("<", "your-", "change-me", "example.com")
+
+
+def _env_optional(name: str, default: str = "", *, url: bool = False) -> str:
+    """Read an env var for an OPTIONAL integration, blanking template values.
+
+    Every caller of these has a graceful "not configured" path (hotlink the
+    supplier images instead of uploading to R2, and so on). Collapsing an
+    unreplaced placeholder to `""` is what routes execution into that path
+    rather than into a traceback, and the warning keeps it from being silent —
+    a genuine value that trips the heuristic must not vanish unnoticed.
+
+    Only for optional credentials: `SCRAPER_USER_AGENT` legitimately defaults to
+    a contact address at example.com and must never be blanked.
+    """
+    raw = _env(name, default)
+    if raw and any(marker in raw.lower() for marker in _PLACEHOLDER_MARKERS):
+        print(
+            f"[config] WARNING: {name} still holds the .env.example placeholder "
+            f"{raw!r} — treating it as unset."
+        )
+        return ""
+    return raw.rstrip("/") if url else raw
+
+
 def _env_float(name: str, default: float) -> float:
     raw = _env(name)
     if not raw:
@@ -49,25 +79,31 @@ class Config:
         default_factory=lambda: _env("MEDUSA_SALES_CHANNEL_ID")
     )
     r2_access_key_id: str = field(
-        default_factory=lambda: _env("R2_ACCESS_KEY_ID")
+        default_factory=lambda: _env_optional("R2_ACCESS_KEY_ID")
     )
     r2_secret_access_key: str = field(
-        default_factory=lambda: _env("R2_SECRET_ACCESS_KEY")
+        default_factory=lambda: _env_optional("R2_SECRET_ACCESS_KEY")
     )
     r2_bucket: str = field(
         default_factory=lambda: _env("R2_BUCKET", "eyewear-assets")
     )
+    # SigV4 signing region. Cloudflare R2 wants the literal "auto", but most other
+    # S3-compatible backends (Supabase Storage among them) sign with the real region
+    # and reject "auto" outright, so this cannot stay hardcoded.
+    r2_region: str = field(
+        default_factory=lambda: _env("R2_REGION", "auto")
+    )
     r2_endpoint: str = field(
-        default_factory=lambda: _env_url("R2_ENDPOINT")
+        default_factory=lambda: _env_optional("R2_ENDPOINT", url=True)
     )
     r2_public_url: str = field(
-        default_factory=lambda: _env_url("R2_PUBLIC_URL")
+        default_factory=lambda: _env_optional("R2_PUBLIC_URL", url=True)
     )
     meilisearch_host: str = field(
         default_factory=lambda: _env_url("MEILISEARCH_HOST", "http://localhost:7700")
     )
     meilisearch_master_key: str = field(
-        default_factory=lambda: _env("MEILISEARCH_MASTER_KEY")
+        default_factory=lambda: _env_optional("MEILISEARCH_MASTER_KEY")
     )
     anthropic_api_key: str = field(
         default_factory=lambda: _env("ANTHROPIC_API_KEY")
@@ -105,6 +141,17 @@ class Config:
             "case",
         ]
     )
+
+    @property
+    def r2_configured(self) -> bool:
+        """True only when R2 has everything boto3 needs to actually upload.
+
+        The endpoint alone used to be the test, so an endpoint set without
+        credentials built a client fine and then failed once per image, turning
+        a config mistake into hundreds of logged exceptions and a catalog of
+        products with no pictures. All three or none.
+        """
+        return bool(self.r2_endpoint and self.r2_access_key_id and self.r2_secret_access_key)
 
     def validate(self, dry_run: bool = False) -> None:
         """Fail fast on missing/malformed config before any network call.
@@ -163,8 +210,20 @@ class Config:
                 "won't be attached to a sales channel and the storefront Store API "
                 "will not return them."
             )
-        if not self.r2_endpoint:
-            print("[config] WARNING: R2_ENDPOINT unset — images stay hotlinked to the supplier.")
+        if not self.r2_configured:
+            missing = [
+                name
+                for name, value in (
+                    ("R2_ENDPOINT", self.r2_endpoint),
+                    ("R2_ACCESS_KEY_ID", self.r2_access_key_id),
+                    ("R2_SECRET_ACCESS_KEY", self.r2_secret_access_key),
+                )
+                if not value
+            ]
+            print(
+                f"[config] WARNING: R2 not configured ({', '.join(missing)}) — "
+                "images stay hotlinked to the supplier and no try-on assets are generated."
+            )
         if not self.anthropic_api_key:
             print("[config] WARNING: ANTHROPIC_API_KEY unset — es/fr translations skipped.")
 

@@ -11,7 +11,10 @@ from bs4 import BeautifulSoup, Tag
 from scraper.models import FrameSize, ScrapedProduct
 
 
-SIZE_RE = re.compile(r"(\d+)-(\d+)-(\d+)")
+# Eye-bridge-temple, e.g. "52-16-140". The supplier pads the separators
+# inconsistently ("58- 18- 150" is what the Size attribute actually returns), so
+# tolerate whitespace around the hyphens or every measurement parses as absent.
+SIZE_RE = re.compile(r"(\d+)\s*-\s*(\d+)\s*-\s*(\d+)")
 
 
 def _color_tokens(name: str) -> list[str]:
@@ -92,6 +95,96 @@ def _slug(text: str) -> str:
     return text.strip("-")
 
 
+def _attribute_terms(attr: dict[str, Any]) -> list[tuple[str, str]]:
+    """`(display name, slug)` pairs for a WooCommerce attribute's values.
+
+    The Store API (`/wp-json/wc/store/v1`) calls them `terms`; the older REST API
+    v3 called them `options`. Reading only `options` silently produced an empty
+    list for every product against the supplier's current API — no colours (so
+    every frame collapsed to a single "Default" variant) and no sizes (so the
+    eye/bridge/temple measurements went null). Accept either shape, and tolerate
+    plain strings, which is how some WooCommerce builds serialise custom
+    (non-taxonomy) attributes.
+
+    The slug matters as much as the name: WooCommerce already publishes exactly
+    the canonical tokens the storefront maps from (`cat-eye`, `tr90`, `men`,
+    `adult`), so nominal attributes are taken from it rather than re-derived.
+    """
+    for key in ("terms", "options"):
+        values = attr.get(key)
+        if not values:
+            continue
+        terms: list[tuple[str, str]] = []
+        for value in values:
+            if isinstance(value, dict):
+                term_name = str(value.get("name") or "").strip()
+                term_slug = str(value.get("slug") or "").strip().lower()
+            else:
+                term_name, term_slug = str(value).strip(), ""
+            if term_name:
+                terms.append((term_name, term_slug or _slug(term_name)))
+        return terms
+    return []
+
+
+def _attribute_values(attr: dict[str, Any]) -> list[str]:
+    """Display names only — for attributes shown verbatim, like colour."""
+    return [name for name, _ in _attribute_terms(attr)]
+
+
+def _find_attribute(data: dict[str, Any], *names: str) -> list[tuple[str, str]]:
+    """Terms of the first attribute matching any of `names`.
+
+    Matches on the taxonomy (`pa_material` -> `material`) or the display label,
+    so it works whether the supplier exposes a global taxonomy attribute or a
+    per-product custom one. Exact match, not substring: "Bridge size (mm)" and
+    "Eye size (mm)" would both answer to a loose "size".
+    """
+    wanted = {n.lower() for n in names}
+    for attr in data.get("attributes", []):
+        taxonomy = str(attr.get("taxonomy") or "").lower()
+        if taxonomy.startswith("pa_"):
+            taxonomy = taxonomy[3:]
+        label = str(attr.get("name") or "").strip().lower()
+        if taxonomy in wanted or label in wanted:
+            return _attribute_terms(attr)
+    return []
+
+
+def _normalize_gender(terms: list[tuple[str, str]]) -> str | None:
+    """Supplier gender terms -> the storefront's men/women/unisex/kids token.
+
+    Order matters: "women" contains "men", so it has to be tested first. A frame
+    tagged with both men's and women's terms is unisex.
+    """
+    found: set[str] = set()
+    for name, slug in terms:
+        text = f"{slug} {name}".lower()
+        if "unisex" in text:
+            found.add("unisex")
+        elif "women" in text or "ladies" in text or "lady" in text:
+            found.add("women")
+        elif "men" in text or "man" in text:
+            found.add("men")
+        elif "kid" in text or "child" in text or "youth" in text or "junior" in text:
+            found.add("kids")
+    if not found:
+        return None
+    if "unisex" in found or {"men", "women"} <= found:
+        return "unisex"
+    return next(iter(found))
+
+
+def _normalize_age(terms: list[tuple[str, str]]) -> str | None:
+    for name, slug in terms:
+        text = f"{slug} {name}".lower()
+        if "kid" in text or "child" in text or "youth" in text or "junior" in text:
+            return "kids"
+        if "adult" in text:
+            return "adult"
+    return None
+
+
 def parse_store_api_product(
     data: dict[str, Any], collection_slug: str
 ) -> ScrapedProduct:
@@ -103,22 +196,45 @@ def parse_store_api_product(
     colors: list[str] = []
     for attr in data.get("attributes", []):
         if attr.get("name", "").lower() in ("color", "colour", "color/frame"):
-            colors = [o["name"] for o in attr.get("options", [])]
+            colors = _attribute_values(attr)
 
     # Sizes from attribute named "size"
     raw_sizes: list[FrameSize] = []
     for attr in data.get("attributes", []):
         if "size" in attr.get("name", "").lower():
-            for opt in attr.get("options", []):
-                raw_sizes.extend(_parse_sizes(opt["name"]))
+            for value in _attribute_values(attr):
+                raw_sizes.extend(_parse_sizes(value))
+
+    # Nominal attributes. These used to come only from scraping the product HTML
+    # page, whose selectors no longer match the supplier's markup — so every
+    # freshly ingested product landed with material/shape/gender/style null and
+    # the storefront's filters had nothing to filter on. They are all right here
+    # in the response we already have, published as canonical slugs.
+    material_terms = _find_attribute(data, "material")
+    shape_terms = _find_attribute(data, "shape")
+    style_terms = _find_attribute(data, "style")
+    gender = _normalize_gender(_find_attribute(data, "gender"))
+    age_group = _normalize_age(_find_attribute(data, "age", "age group"))
+
+    # A frame can carry several materials ("Plastic", "Tr90"); the storefront
+    # models a single primary one, so keep the first and let the rest go.
+    material = material_terms[0][1] if material_terms else ""
+    shape = shape_terms[0][1] if shape_terms else ""
+    style = style_terms[0][1] if style_terms else ""
 
     # Images
     image_urls: list[str] = [
         img["src"] for img in data.get("images", []) if img.get("src")
     ]
 
-    # Features from tags
-    features: list[str] = [t["name"] for t in data.get("tags", [])]
+    # Features from tags, plus the dedicated attribute ("Spring Hinge" and the
+    # like live there, not in the tags). Order-preserving dedupe.
+    features: list[str] = list(
+        dict.fromkeys(
+            [t["name"] for t in data.get("tags", []) if t.get("name")]
+            + [name for name, _ in _find_attribute(data, "features", "feature")]
+        )
+    )
 
     # English description (WooCommerce returns HTML; strip to plain text)
     raw_description = data.get("description") or data.get("short_description") or ""
@@ -139,6 +255,11 @@ def parse_store_api_product(
         image_urls=image_urls,
         features=features,
         is_in_stock=is_in_stock,
+        material=material,
+        shape=shape,
+        style=style,
+        **({"gender": gender} if gender else {}),
+        **({"age_group": age_group} if age_group else {}),
     )
 
     # Compute content hash for change detection. Include stock so a transition
@@ -154,6 +275,13 @@ def parse_store_api_product(
                 ],
                 "images": sorted(image_urls),
                 "in_stock": is_in_stock,
+                # Included so a supplier correction to any of these re-triggers
+                # the push on an incremental sync instead of being skipped.
+                "material": material,
+                "shape": shape,
+                "style": style,
+                "gender": gender,
+                "age_group": age_group,
             },
             sort_keys=True,
         ).encode()
@@ -203,14 +331,18 @@ def parse_product_html(
                     product.upc_by_color[color_text] = upc_text
 
     # ----- Product attributes (material, shape, etc.) -----
+    # The Store API is the primary source for these now; this page is only a
+    # backstop for products whose attributes the supplier left unset there. Never
+    # overwrite a value that already arrived — these selectors no longer match the
+    # supplier's markup, and a partial match must not blank out good data.
     for item in soup.select(".product_meta .detail, .product-attributes li, .pa_material, .pa_shape"):
         text = item.get_text(separator=":", strip=True).lower()
         if "material" in text:
-            product.material = text.split(":")[-1].strip()
+            product.material = product.material or text.split(":")[-1].strip()
         elif "shape" in text:
-            product.shape = text.split(":")[-1].strip()
+            product.shape = product.shape or text.split(":")[-1].strip()
         elif "style" in text:
-            product.style = text.split(":")[-1].strip()
+            product.style = product.style or text.split(":")[-1].strip()
         elif "gender" in text or "frame for" in text:
             raw = text.split(":")[-1].strip()
             if "men" in raw and "women" in raw:
