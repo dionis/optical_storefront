@@ -18,6 +18,43 @@ if (!hasR2Credentials) {
   );
 }
 
+// Same reasoning for email: the Resend provider validates its options at boot
+// and throws when they are missing. Fall back to the logging provider so a
+// deployment without mail credentials still starts — order confirmations then
+// show up in the server log instead of an inbox.
+const hasResendCredentials = Boolean(
+  process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL
+);
+
+if (!hasResendCredentials) {
+  console.warn(
+    "[notification] Resend credentials missing — emails will be logged, not sent. " +
+      "Set RESEND_API_KEY and RESEND_FROM_EMAIL to deliver order confirmations."
+  );
+}
+
+const notificationProviders = hasResendCredentials
+  ? [
+      {
+        resolve: "./src/modules/notification-resend",
+        id: "resend",
+        options: {
+          channels: ["email"],
+          api_key: process.env.RESEND_API_KEY,
+          from: process.env.RESEND_FROM_EMAIL,
+        },
+      },
+    ]
+  : [
+      {
+        resolve: "@medusajs/medusa/notification-local",
+        id: "local",
+        options: {
+          channels: ["email"],
+        },
+      },
+    ];
+
 const fileProviders = hasR2Credentials
   ? [
       {
@@ -71,6 +108,13 @@ export default defineConfig({
       resolve: "@medusajs/medusa/file",
       options: {
         providers: fileProviders,
+      },
+    },
+    // Notifications: transactional email via Resend, logger otherwise
+    {
+      resolve: "@medusajs/medusa/notification",
+      options: {
+        providers: notificationProviders,
       },
     },
     // Payment: Stripe + PayPal + Square
