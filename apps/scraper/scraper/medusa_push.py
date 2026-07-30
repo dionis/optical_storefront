@@ -64,8 +64,9 @@ atexit.register(close_admin_client)
 def _log_retry(state: RetryCallState) -> None:
     err = state.outcome.exception() if state.outcome else None
     sleep = getattr(state.next_action, "sleep", 0.0)
+    label = str(err) if isinstance(err, _GatewayError) else type(err).__name__
     print(
-        f"[medusa] transient {type(err).__name__} on attempt "
+        f"[medusa] transient {label} on attempt "
         f"{state.attempt_number}/4 — retrying in {sleep:.0f}s"
     )
 
@@ -81,22 +82,51 @@ _READ_ERRORS = _CONNECT_ERRORS + (
     httpx.RemoteProtocolError,
 )
 
+# Statuses the reverse proxy — not Medusa — produces when it cannot get a timely
+# answer from the backend container. On a small VPS a long sync makes the Node
+# process stall past the proxy's patience, and the run would die mid-catalog on
+# what is really a hiccup. These say nothing about the request's validity, so a
+# read is safe to replay; every other 4xx/5xx is a real answer and still surfaces
+# immediately.
+_GATEWAY_STATUSES = frozenset({502, 503, 504})
+
+
+class _GatewayError(Exception):
+    """Carries a gateway response through tenacity so the retry can see it."""
+
+    def __init__(self, response: httpx.Response) -> None:
+        super().__init__(f"HTTP {response.status_code} from the gateway")
+        self.response = response
+
 
 @retry(
-    retry=retry_if_exception_type(_READ_ERRORS),
+    retry=retry_if_exception_type(_READ_ERRORS + (_GatewayError,)),
     stop=stop_after_attempt(4),
     wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=_log_retry,
     reraise=True,
 )
+def _get_with_retry(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
+    response = client.get(url, **kwargs)
+    if response.status_code in _GATEWAY_STATUSES:
+        raise _GatewayError(response)
+    return response
+
+
 def _get(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
-    """GET an admin endpoint, retried on transport-level flakiness.
+    """GET an admin endpoint, retried on transport flakiness and gateway errors.
 
     Mirrors the policy the supplier-facing client already has
-    (`http_client.RateLimitedClient.get`). Only transport errors are retried — an
-    HTTP error status is a real rejection and must surface immediately.
+    (`http_client.RateLimitedClient.get`). An HTTP error status is a real
+    rejection and must surface immediately — except the gateway statuses above,
+    which mean the request never got a verdict from Medusa at all.
     """
-    return client.get(url, **kwargs)
+    try:
+        return _get_with_retry(client, url, **kwargs)
+    except _GatewayError as exc:
+        # Retries exhausted. Hand the response back untouched so the caller's
+        # `raise_for_status()` reports it as the HTTP error it has always been.
+        return exc.response
 
 
 @retry(

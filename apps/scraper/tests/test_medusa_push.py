@@ -1,7 +1,23 @@
-"""Unit tests for the Medusa Admin API payload builder — no live HTTP."""
+"""Unit tests for the Medusa Admin API payload builder and the admin GET retry
+policy. All HTTP is served by `httpx.MockTransport` — nothing leaves the process."""
 
-from scraper.medusa_push import _build_medusa_payload
+from collections.abc import Iterator
+
+import httpx
+import pytest
+from tenacity import wait_none
+
+from scraper.medusa_push import _build_medusa_payload, _get, _get_with_retry
 from scraper.models import FrameSize, ScrapedProduct
+
+
+@pytest.fixture
+def no_retry_wait() -> Iterator[None]:
+    """Strip the exponential backoff so the retry tests run instantly."""
+    original = _get_with_retry.retry.wait
+    _get_with_retry.retry.wait = wait_none()
+    yield
+    _get_with_retry.retry.wait = original
 
 PRICING = {"default_price_cents": 9900, "di-caprio": {"price_cents": 12900}}
 
@@ -154,3 +170,58 @@ class TestBuildMedusaPayload:
         meta = _build_medusa_payload(product, PRICING)["metadata"]
         assert meta["eye_size_bucket"] is None
         assert meta["bridge_size_bucket"] is None
+
+
+class TestGetRetryPolicy:
+    """`_get` must survive a reverse-proxy hiccup but not mask a real rejection."""
+
+    @staticmethod
+    def _client(handler: "callable") -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    def test_retries_gateway_error_then_succeeds(self, no_retry_wait: None) -> None:
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                return httpx.Response(502, text="Bad Gateway")
+            return httpx.Response(200, json={"products": []})
+
+        with self._client(handler) as client:
+            response = _get(client, "https://medusa.test/admin/products")
+
+        assert response.status_code == 200
+        assert attempts["n"] == 3
+
+    def test_gateway_error_surfaces_after_exhausting_retries(
+        self, no_retry_wait: None
+    ) -> None:
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            return httpx.Response(503, text="Service Unavailable")
+
+        with self._client(handler) as client:
+            response = _get(client, "https://medusa.test/admin/products")
+
+        # The caller's raise_for_status() must still see the real response.
+        assert attempts["n"] == 4
+        assert response.status_code == 503
+        with pytest.raises(httpx.HTTPStatusError):
+            response.raise_for_status()
+
+    def test_client_error_is_not_retried(self, no_retry_wait: None) -> None:
+        attempts = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            attempts["n"] += 1
+            return httpx.Response(422, json={"message": "invalid handle"})
+
+        with self._client(handler) as client:
+            response = _get(client, "https://medusa.test/admin/products")
+
+        # A validation rejection is a real answer — replaying it only wastes time.
+        assert attempts["n"] == 1
+        assert response.status_code == 422
