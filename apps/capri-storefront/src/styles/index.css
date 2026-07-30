@@ -1160,78 +1160,106 @@ img { max-width: 100%; }
 /* El hero de marca (banner) también centra un poco más abajo para no cortar las monturas. */
 .brand-hero-media img { object-position: center 42%; }
 
+
 /* ═══════════════ Proceso de lentes estilo Zeelool (.zl) ═══════════════ */
-.zl { position: fixed; inset: 0; z-index: 200; background: #fff; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,560px); align-items: stretch; height: 100vh; overflow: hidden; }
-.zl-preview { position: static; align-self: start; padding: 40px; display: flex; flex-direction: column; height: 100vh; }
-.zl-preview-img { flex: 1; display: flex; align-items: center; justify-content: center; }
-.zl-preview-img img { max-width: 80%; max-height: 340px; object-fit: contain; background: #fff; }
-.zl-recap { margin: 0; border-top: 1px solid var(--line); padding-top: 14px; font-size: 14px; }
+/* Layout con el header SIEMPRE visible: nada de overlay a pantalla completa.
+   Barra de progreso pegada bajo el menú y botón Continuar pegado abajo. */
+.zl { --zl-hh: 104px; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,560px); align-items: start; }
+.zl-preview { position: sticky; top: calc(var(--zl-hh) + 14px); align-self: start; padding: 26px 36px; display: flex; flex-direction: column; max-height: calc(100vh - var(--zl-hh) - 28px); }
+.zl-preview-img { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.zl-preview-img img { max-width: 82%; max-height: 320px; object-fit: contain; background: #fff; }
+.zl-recap { margin: 0; border-top: 1px solid var(--line); padding-top: 12px; font-size: 14px; }
 .zl-recap > div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
 .zl-recap dt { color: var(--ink-soft); }
 .zl-recap dd { margin: 0; font-weight: 600; text-align: right; }
 .zl-recap dd b { margin-left: 8px; color: var(--red); font-weight: 700; }
-.zl-subtotal { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 15px; }
-.zl-subtotal b { font-size: 26px; color: var(--ink); }
+.zl-subtotal { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 15px; }
+.zl-subtotal b { font-size: 25px; color: var(--blue); }
 
-.zl-panel { position: relative; background: #f7f7f8; display: flex; flex-direction: column; height: 100vh; min-height: 0; }
-.zl-progress { height: 4px; background: #e4e4e7; }
-.zl-progress i { display: block; height: 100%; background: var(--blue); transition: width .35s ease; }
-.zl-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 30px 0; }
-.zl-back { background: none; border: none; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--ink); }
-.zl-close { font-size: 20px; color: #9a9aa0; text-decoration: none; line-height: 1; }
-.zl-scroll { flex: 1; overflow-y: auto; padding: 8px 30px 20px; }
-.zl-title-row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0 18px; gap: 12px; }
-.zl-title-row h2 { font-size: 24px; margin: 0; }
-.zl-help { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); text-decoration: underline; cursor: pointer; white-space: nowrap; }
+.zl-panel { background: #f7f8fb; display: flex; flex-direction: column; min-height: calc(100vh - var(--zl-hh)); border-left: 1px solid var(--line); }
+.zl-phead { position: sticky; top: var(--zl-hh); z-index: 6; background: #f7f8fb; padding: 0 30px; }
+.zl-progress { height: 4px; background: #e2e5ee; border-radius: 3px; margin: 0 -30px; }
+.zl-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--red)); transition: width .35s ease; }
+.zl-top { display: flex; justify-content: space-between; align-items: center; padding: 14px 0 0; }
+.zl-back { background: none; border: none; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--blue); }
+.zl-close { font-size: 20px; color: #9aa0ad; text-decoration: none; line-height: 1; }
+.zl-title-row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 12px; gap: 12px; }
+.zl-title-row h2 { font-size: 23px; margin: 0; color: var(--ink); }
+.zl-help { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--blue); text-decoration: underline; cursor: pointer; white-space: nowrap; }
 
+.zl-scroll { padding: 4px 30px 24px; }
 .zl-cards { display: flex; flex-direction: column; gap: 12px; }
-.zl-card { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 14px; padding: 16px 18px; cursor: pointer; transition: border-color .15s, box-shadow .15s; font: inherit; }
-.zl-card:hover { border-color: #c7c7cc; }
+.zl-card { display: flex; align-items: center; gap: 15px; width: 100%; text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 14px; padding: 15px 17px; cursor: pointer; transition: border-color .15s, box-shadow .15s; font: inherit; }
+.zl-card:hover { border-color: #b9c2d6; }
 .zl-card.sel { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(14,90,208,.14); }
-.zl-card-ic { flex: 0 0 auto; color: var(--ink); display: flex; }
+.zl-card-ic { flex: 0 0 auto; color: var(--blue); display: flex; }
 .zl-card-main { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.zl-card-main b { font-size: 16px; }
+.zl-card-main b { font-size: 16px; color: var(--ink); }
 .zl-card-main small { color: var(--ink-soft); font-size: 13px; }
-.zl-card-price { font-weight: 700; white-space: nowrap; color: var(--ink); }
-.zl-chev { font-size: 10px; color: #9a9aa0; margin-left: 6px; font-style: normal; }
-
+.zl-card-price { font-weight: 700; white-space: nowrap; color: var(--red); }
+.zl-card-price.zl-inc { color: #1f9d57; }
+.zl-chev { font-size: 10px; color: #9aa0ad; margin-left: 6px; font-style: normal; }
 .zl-card-lg { align-items: flex-start; }
 .zl-specs { margin: 6px 0 0; padding-left: 16px; color: var(--ink-soft); font-size: 13px; }
 .zl-specs li { margin: 2px 0; }
-.zl-badge { display: inline-block; background: var(--blue); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; margin-left: 8px; vertical-align: middle; letter-spacing: .02em; }
+.zl-badge { display: inline-block; background: var(--blue); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
 
-.zl-sub { font-size: 15px; margin: 24px 0 12px; }
-.zl-optional { color: #9a9aa0; font-weight: 400; font-size: 13px; margin-left: 6px; }
+.zl-sub { font-size: 15px; margin: 24px 0 12px; color: var(--ink); }
+.zl-optional { color: #9aa0ad; font-weight: 400; font-size: 13px; margin-left: 6px; }
 .zl-fam.open > .zl-card { border-color: var(--blue); }
-.zl-fam-body { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px 8px; padding-left: 16px; border-left: 2px solid var(--line); }
+.zl-fam-body { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px 8px; padding-left: 16px; border-left: 2px solid var(--blue-soft); }
 .zl-variant { display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; font: inherit; font-size: 14px; }
 .zl-variant.sel { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(14,90,208,.14); }
 .zl-variant-main { display: flex; align-items: center; gap: 10px; }
+.zl-variant b { color: var(--red); }
 .zl-dots { display: inline-flex; gap: 4px; }
 .zl-dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); display: inline-block; }
 
-.zl-banner { background: var(--red-soft); border: 1px solid #ffd7de; color: #7a1226; font-size: 13px; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; line-height: 1.5; }
+.zl-banner { background: var(--blue-soft); border: 1px solid #cfe0ff; color: #123a86; font-size: 13px; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; line-height: 1.5; }
+.zl-banner.ok { background: #eafaf1; border-color: #bfe9d1; color: #12683b; }
 .zl-signin, .zl-chat { margin-top: 16px; font-size: 14px; color: var(--ink-soft); }
+.zl-signin a, .zl-chat a { color: var(--blue); }
 
-.zl-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 30px; border-top: 1px solid var(--line); background: #fff; }
+/* OCR / subir imagen */
+.zl-upload { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; border: 2px dashed #b9c2d6; border-radius: 14px; padding: 34px 20px; cursor: pointer; background: #fff; transition: border-color .15s, background .15s; }
+.zl-upload:hover { border-color: var(--blue); background: var(--blue-soft); }
+.zl-upload-ic { color: var(--blue); }
+.zl-upload b { font-size: 15px; color: var(--ink); }
+.zl-upload small { color: var(--ink-soft); font-size: 13px; }
+.zl-ocr-loading { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 34px 20px; color: var(--blue); }
+.zl-ocr-loading b { color: var(--ink); }
+.zl-ocr-loading small { color: var(--ink-soft); }
+.zl-spin { animation: zlspin 0.9s linear infinite; }
+@keyframes zlspin { to { transform: rotate(360deg); } }
+.zl-ocr-error { margin-top: 12px; background: var(--red-soft); border: 1px solid #ffd2db; color: #8a1024; border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+.zl-ocr-error .link { background: none; border: none; color: var(--blue); text-decoration: underline; cursor: pointer; font: inherit; margin-left: 4px; }
+.zl-detected { background: #eafaf1; border: 1px solid #bfe9d1; color: #12683b; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+.zl-check { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--ink-soft); cursor: pointer; }
+.rx-table.view td { text-align: center; font-weight: 600; }
+.rx-table.view td small { display: block; font-weight: 400; color: var(--ink-soft); font-size: 11px; }
+
+.zl-foot { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 30px; border-top: 1px solid var(--line); background: #fff; }
 .zl-foot-total { display: flex; flex-direction: column; }
 .zl-foot-total span { font-size: 12px; color: var(--ink-soft); }
-.zl-foot-total b { font-size: 20px; }
+.zl-foot-total b { font-size: 20px; color: var(--blue); }
 .zl-next { min-width: 200px; }
 
 .zl-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-.zl-modal { background: #fff; border-radius: 16px; padding: 26px; max-width: 520px; width: 100%; }
-.zl-modal h3 { text-align: center; margin: 0 0 18px; font-size: 20px; }
+.zl-modal { background: #fff; border-radius: 16px; padding: 26px; max-width: 540px; width: 100%; }
+.zl-modal h3 { text-align: center; margin: 0 0 4px; font-size: 20px; }
+.zl-modal-sub { text-align: center; color: var(--ink-soft); margin: 0 0 16px; font-size: 14px; }
 .zl-modal-actions { display: flex; gap: 12px; margin-top: 20px; }
 .zl-modal-actions .btn { flex: 1; }
 
-@media (max-width: 860px) {
-  .zl { grid-template-columns: 1fr; display: block; overflow-y: auto; }
-  .zl-preview { position: static; height: auto; min-height: auto; padding: 24px; }
-  .zl-preview-img img { max-height: 210px; }
-  .zl-panel { height: auto; min-height: auto; }
-  .zl-scroll { padding: 8px 18px 20px; }
-  .zl-top { padding: 16px 18px 0; }
-  .zl-foot { padding: 14px 18px; position: sticky; bottom: 0; }
+@media (max-width: 900px) {
+  .zl { grid-template-columns: 1fr; }
+  .zl-preview { position: static; max-height: none; padding: 20px 18px; border-bottom: 1px solid var(--line); }
+  .zl-preview-img img { max-height: 190px; }
+  .zl-panel { min-height: 0; border-left: none; }
+  .zl-phead { padding: 0 18px; }
+  .zl-progress { margin: 0 -18px; }
+  .zl-scroll { padding: 4px 18px 22px; }
+  .zl-foot { padding: 12px 18px; }
   .zl-next { min-width: 150px; }
+  .zl-title-row h2 { font-size: 20px; }
 }

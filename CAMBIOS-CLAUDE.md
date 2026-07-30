@@ -186,3 +186,16 @@ Flujo a **pantalla completa**, 5 pasos + confirmación, con iconografía SVG pro
 Panel izquierdo permanente: montura + resumen acumulado + subtotal; barra de progreso arriba.
 
 Archivos: `src/pages/LensProcess.jsx` (reescrito), `src/styles/index.css` (bloque `.zl`), `src/i18n/translations.js` (~30 claves ES/EN nuevas). Build verificado en entorno idéntico a Vercel (Linux, install limpio). Solo frontend; no toca el backend de Dionis.
+
+## 2026-07-30 (2) — Proceso de lentes v2 + marcas activas (rama `frontend`)
+
+**Proceso de lentes (mejoras sobre el flujo Zeelool):**
+- **El menú/header queda siempre visible** (se quitó el overlay a pantalla completa); barra de progreso pegada bajo el menú y botón "Continuar" pegado abajo.
+- **Detección de receta por imagen (OCR):** "Escanear receta" sube la foto a `POST {VITE_MEDUSA_URL}/store/prescriptions/ocr` (Anthropic vision en el backend), con estado "Analizando…", prellenado de SPH/CYL/AXIS/PD/ADD y fallback a manual si el backend no responde.
+- **Entrada manual mejorada:** ADD por diseño, opción "dos números de DP (OD/OS)".
+- **Iconos rediseñados a dos tonos azul/rojo**; textos con azul/rojo del tema (total azul, precios rojos, "Incluido" verde, badges azul).
+- **Primera opción siempre incluida** y **precios por delta**: en tratamiento (Transparente/Ninguno = Incluido) y en índice (el más barato = Incluido, el resto "+$").
+- **Modal de confirmación** de receta más detallado (OD/OS con SPH·CYL·AXIS·ADD y DP).
+- Bilingüe ES/EN y responsive.
+
+**Marcas activas (decisión de negocio):** se dejan solo **9** — Di Caprio, Peachtree, Flexure, Four You, Trendy, Millennial, Grande, ProRx y Cases. Se retiran del sitio candy-shoppe, artistik-galerie, eyeleos, versailles-palace, slimfold, ago, artistik-eyewear y simply-lite. Filtro por allowlist en `data/brands.js` + `data/catalogStore.js` (quedan 432 monturas de las 118 quitadas). Solo frontend.

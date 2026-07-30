@@ -9,31 +9,27 @@ import {
 import { useCart } from "../components/CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
-/* ───────────────────────── Iconografía (línea, estilo Zeelool) ───────────────────────── */
-const S = { width: 30, height: 30, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" };
-const IconSV = () => (<svg {...S}><path d="M3 17l5-7 4 5 3-4 6 6" /><path d="M3 20h18" /></svg>);
-const IconProg = () => (<svg {...S}><path d="M3 16l4-5 3 4 3-5 4 6" /><path d="M3 19h18" /><path d="M3 12l4-4 3 3" opacity=".5" /></svg>);
-const IconBifocal = () => (<svg {...S}><path d="M3 15l5-6 4 5 3-3 6 5" /><path d="M3 12h18" /><path d="M3 19h18" /></svg>);
-const IconReading = () => (<svg {...S}><path d="M12 6c-2-1.5-5-1.5-8 0v12c3-1.5 6-1.5 8 0 2-1.5 5-1.5 8 0V6c-3-1.5-6-1.5-8 0z" /><path d="M12 6v12" /></svg>);
-const IconFrame = () => (<svg {...S}><circle cx="7" cy="14" r="3.2" /><circle cx="17" cy="14" r="3.2" /><path d="M10.2 13h3.6" /><path d="M3.8 12l1.2-2h2M20.2 12l-1.2-2h-2" /></svg>);
-const IconScan = () => (<svg {...S}><rect x="3" y="7" width="18" height="13" rx="2.5" /><circle cx="12" cy="13.5" r="3.4" /><path d="M8 7l1.5-2h5L16 7" /></svg>);
-const IconFill = () => (<svg {...S}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 8h5M8 12h8M8 16h6" /><path d="M15.5 6.5l2.2 2.2-4 4H11.5v-2.2z" /></svg>);
-const IconStandard = () => (<svg {...S}><circle cx="12" cy="12" r="8.2" /><path d="M8 9c1.5 2 4 3 8 2.6" opacity=".6" /></svg>);
-const IconBlue = () => (<svg {...S}><circle cx="12" cy="12" r="8.2" /><path d="M12 5c3.6.7 6 3.6 6 7s-2.4 6.3-6 7c2-2 3-4.4 3-7s-1-5-3-7z" /><path d="M6 8l1 1M6.5 15l1-.6" opacity=".6" /></svg>);
-const IconPhoto = () => (<svg {...S}><circle cx="12" cy="12" r="8.2" /><path d="M12 3.8v16.4a8.2 8.2 0 000-16.4z" fill="currentColor" opacity=".85" stroke="none" /><path d="M12 3.8a8.2 8.2 0 000 16.4" /></svg>);
-const IconAR = () => (<svg {...S}><path d="M12 3l7 2.5v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10v-5z" /><path d="M9 12l2 2 4-4" /></svg>);
-const IconIndex = () => (<svg {...S}><path d="M6 4c4 3 4 13 0 16M18 4c-4 3-4 13 0 16" /><path d="M6 4h12M6 20h12" /></svg>);
-const IconHelp = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 113.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01" strokeLinecap="round" /></svg>);
+/* ───────────── Iconografía a dos tonos (azul línea + acento rojo) ───────────── */
+const RED = "#FD0E3F";
+const svg = { width: 28, height: 28, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round" };
+const IconSV = () => (<svg {...svg}><path d="M1.8 12S5.4 6 12 6s10.2 6 10.2 6-3.6 6-10.2 6S1.8 12 1.8 12z" /><circle cx="12" cy="12" r="2.6" stroke={RED} /></svg>);
+const IconBifocal = () => (<svg {...svg}><circle cx="12" cy="12" r="8.4" /><path d="M4.2 14.6h15.6" stroke={RED} /></svg>);
+const IconProg = () => (<svg {...svg}><circle cx="12" cy="12" r="8.4" /><path d="M5 9.5h14" opacity=".45" /><path d="M6 12.5h12" opacity=".65" /><path d="M7.5 15.5h9" stroke={RED} /></svg>);
+const IconFrame = () => (<svg {...svg}><rect x="2.2" y="9" width="8" height="6.4" rx="3.2" /><rect x="13.8" y="9" width="8" height="6.4" rx="3.2" /><path d="M10.2 11.5h3.6" stroke={RED} /><path d="M2.2 10.5l-1-1.5M21.8 10.5l1-1.5" /></svg>);
+const IconScan = () => (<svg {...svg}><path d="M3 8V5.5A1.5 1.5 0 014.5 4H7M17 4h2.5A1.5 1.5 0 0121 5.5V8M21 16v2.5a1.5 1.5 0 01-1.5 1.5H17M7 20H4.5A1.5 1.5 0 013 18.5V16" /><circle cx="12" cy="12" r="3.1" stroke={RED} /></svg>);
+const IconFill = () => (<svg {...svg}><path d="M6 3h8l4 4v9a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" /><path d="M8 12h4M8 15.5h6" /><path d="M17.4 8.4l2.2 2.2-4.6 4.6-2.6.4.4-2.6z" stroke={RED} /></svg>);
+const IconClear = () => (<svg {...svg}><circle cx="12" cy="12" r="8.4" /><path d="M7.5 9.5c2 2.2 5.4 2.6 8.5 1.3" opacity=".5" /></svg>);
+const IconPhoto = () => (<svg {...svg}><circle cx="12" cy="12" r="8.4" /><path d="M12 3.6a8.4 8.4 0 000 16.8z" fill="currentColor" stroke="none" opacity=".9" /><path d="M18.5 7l1.2-1.2M20 12h1.6M18.5 17l1.2 1.2" stroke={RED} strokeWidth="1.3" /></svg>);
+const IconBlue = () => (<svg {...svg}><rect x="3" y="4.5" width="18" height="12" rx="1.8" /><path d="M8.5 20h7M12 16.5V20" /><path d="M12 7.4l1.3 2.7 2.9.3-2.2 2 .6 2.9L12 14l-2.6 1.3.6-2.9-2.2-2 2.9-.3z" stroke={RED} strokeWidth="1.2" /></svg>);
+const IconAR = () => (<svg {...svg}><path d="M12 2.6l7.4 2.6v5.2c0 4.6-3.1 8.4-7.4 10.4-4.3-2-7.4-5.8-7.4-10.4V5.2z" /><path d="M8.6 12l2.3 2.3 4.5-4.6" stroke={RED} /></svg>);
+const IconIndex = () => (<svg {...svg}><path d="M7 4C3.4 7 3.4 17 7 20M17 4c3.6 3 3.6 13 0 16" /><path d="M7 4h10M7 20h10" /><path d="M12 8v8" stroke={RED} strokeWidth="1.3" /></svg>);
+const IconHelp = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 113.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01" strokeLinecap="round" /></svg>);
+const Spinner = () => (<svg className="zl-spin" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3a9 9 0 109 9" /></svg>);
 
-const designIcon = (id) => {
-  if (id === "sv") return <IconSV />;
-  if (id === "bifocal") return <IconBifocal />;
-  if (id === "prog-mid" || id === "prog-high") return <IconProg />;
-  if (id === "frame-only") return <IconFrame />;
-  return <IconReading />;
-};
+const designIcon = (id) => id === "sv" ? <IconSV /> : id === "bifocal" ? <IconBifocal />
+  : (id === "prog-mid" || id === "prog-high") ? <IconProg /> : id === "frame-only" ? <IconFrame /> : <IconSV />;
 
-/* ───────────────────────── Selects de receta ───────────────────────── */
+/* ───────────── Selects de receta ───────────── */
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2);
 function range(min, max, step) {
   const out = [];
@@ -45,6 +41,14 @@ const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
 const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+
+// Cuantiza un valor OCR al paso del selector correspondiente.
+const qStep = (v, lo, hi, step) => {
+  if (v == null || isNaN(v)) return null;
+  let n = Math.round(Number(v) / step) * step;
+  n = Math.max(lo, Math.min(hi, n));
+  return String(Math.round(n * 100) / 100);
+};
 
 function SelectCell({ value, onChange, options }) {
   return (
@@ -65,12 +69,14 @@ function Field({ label, value, onChange, options, t, withEmpty }) {
   );
 }
 
-/* Familias de fotocromáticos (agrupadas como los desplegables de Zeelool) */
 const PHOTO_FAMILIES = [
   { key: "photo",   label: { es: "Fotocromático",         en: "Photochromic" },        ids: ["photo-grey", "photo-brown"] },
   { key: "trans-s", label: { es: "Transitions Gen S",     en: "Transitions Gen S" },   ids: ["trans-s-grey", "trans-s-brown", "trans-s-green"] },
   { key: "trans-x", label: { es: "Transitions XTRActive", en: "Transitions XTRActive" }, ids: ["trans-x-grey", "trans-x-brown"] },
 ];
+
+const MEDUSA_URL = (import.meta.env && import.meta.env.VITE_MEDUSA_URL) ? String(import.meta.env.VITE_MEDUSA_URL).replace(/\/$/, "") : "";
+const PK = (import.meta.env && import.meta.env.VITE_MEDUSA_PUBLISHABLE_KEY) || "";
 
 export default function LensProcess() {
   const { slug } = useParams();
@@ -84,16 +90,28 @@ export default function LensProcess() {
 
   const [step, setStep] = useState(0);
   const [designId, setDesignId] = useState(null);
-  const [rxMethod, setRxMethod] = useState(null); // "scan" | "fill"
+  const [rxMethod, setRxMethod] = useState(null);
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null);
   const [arId, setArId] = useState(null);
-  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", add: "" });
-  const [uploaded, setUploaded] = useState(null);
+  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
+  const [twoPd, setTwoPd] = useState(false);
+  const [ocr, setOcr] = useState({ status: "idle", file: null, msg: "" }); // idle|loading|done|error
   const [openFam, setOpenFam] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pv, setPv] = useState(0);
   useEffect(() => onPrices(() => setPv((v) => v + 1)), []);
+
+  // Header visible: medimos su alto para los offsets sticky (no perder el menú).
+  useEffect(() => {
+    const setH = () => {
+      const h = document.querySelector(".header")?.offsetHeight || 104;
+      document.documentElement.style.setProperty("--zl-hh", h + "px");
+    };
+    setH();
+    window.addEventListener("resize", setH);
+    return () => window.removeEventListener("resize", setH);
+  }, []);
 
   if (!product) return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   const color = product.colors[colorIdx] || product.colors[0];
@@ -107,6 +125,12 @@ export default function LensProcess() {
   const arList = design && !frameOnly ? arListFor(design) : [];
   const arPriceOf = (a) => lensARPrice(a.id, a.price);
   const minDesignPrice = (dId) => Math.min(...MATERIALS.map((m) => basePrice(dId, m.id)));
+  // Materiales ordenados por precio (el más barato = primero = incluido).
+  const sortedMats = useMemo(() => designId && !frameOnly
+    ? [...MATERIALS].sort((a, b) => basePrice(designId, a.id) - basePrice(designId, b.id)) : MATERIALS,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designId, frameOnly, pv]);
+  const matBase = designId && !frameOnly ? minDesignPrice(designId) : 0;
 
   const material = matId ? materialById(matId) : null;
   const photo = photoId ? PHOTO.find((p) => p.id === photoId) : null;
@@ -130,36 +154,66 @@ export default function LensProcess() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.price, designId, matId, photoId, arId, frameOnly, pv]);
 
-  // Flujo dinámico (Zeelool): tipo → método → receta → tratamiento → índice.
-  // "Solo montura" salta todo lo de lentes.
   const stepKeys = frameOnly ? ["type"] : ["type", "rxmethod", "rx", "treatment", "index"];
   const key = stepKeys[Math.min(step, stepKeys.length - 1)];
   const isLast = step >= stepKeys.length - 1;
+  const rxReady = rxMethod === "fill" || ocr.status === "done";
 
   const canNext =
     (key === "type" && designId) ||
     (key === "rxmethod" && rxMethod) ||
-    (key === "rx") ||
+    (key === "rx" && rxReady) ||
     (key === "treatment") ||
     (key === "index" && matId);
 
   const money = (n) => "$" + Number(n).toFixed(2);
+  const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));
+
+  // ── OCR: subir imagen → detectar receta ─────────────────────────────
+  async function handleOcr(file) {
+    if (!file) return;
+    setOcr({ status: "loading", file: file.name, msg: "" });
+    try {
+      if (!MEDUSA_URL) throw new Error("no-backend");
+      const fd = new FormData();
+      fd.append("file", file);
+      const headers = {};
+      if (PK) headers["x-publishable-api-key"] = PK;
+      const res = await fetch(`${MEDUSA_URL}/store/prescriptions/ocr`, { method: "POST", body: fd, headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.fallback) throw new Error(data.error || "fallback");
+      const od = data.od || {}, os = data.os || {};
+      setRx((r) => ({
+        ...r,
+        od_sph: qStep(od.sph, -20, 12, 0.25) ?? "0",
+        od_cyl: qStep(od.cyl, -6, 6, 0.25) ?? "0",
+        od_axis: od.axis != null ? String(Math.max(0, Math.min(180, Math.round(od.axis)))) : "0",
+        os_sph: qStep(os.sph, -20, 12, 0.25) ?? "0",
+        os_cyl: qStep(os.cyl, -6, 6, 0.25) ?? "0",
+        os_axis: os.axis != null ? String(Math.max(0, Math.min(180, Math.round(os.axis)))) : "0",
+        pd: qStep(data.pd, 50, 76, 0.5) ?? r.pd,
+        pd_od: qStep(data.pd_od, 25, 38, 0.5) ?? "",
+        pd_os: qStep(data.pd_os, 25, 38, 0.5) ?? "",
+        add: qStep(od.add ?? os.add, 0.75, 3.5, 0.25) ?? "",
+      }));
+      if (data.pd_od != null && data.pd_os != null) setTwoPd(true);
+      setOcr({ status: "done", file: file.name, msg: "" });
+    } catch (e) {
+      setOcr({ status: "error", file: file?.name || "", msg: String(e.message || "") });
+    }
+  }
 
   const goNext = () => {
-    if (key === "rx" && rxMethod === "fill") { setShowConfirm(true); return; } // Zeelool: modal de confirmación
+    if (key === "rx" && rxReady) { setShowConfirm(true); return; }
     if (isLast) return finish();
     setStep((s) => s + 1);
   };
   const confirmRx = () => { setShowConfirm(false); setStep((s) => s + 1); };
 
   const finish = () => {
-    addItem({
-      sku: product.sku, name: product.name, color: color.name,
-      design: designId, material: matId, photo: photoId, ar: arId, total,
-    });
+    addItem({ sku: product.sku, name: product.name, color: color.name, design: designId, material: matId, photo: photoId, ar: arId, total });
     navigate(`/producto/${product.slug}`);
   };
-  const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));
 
   const progress = ((step + 1) / stepKeys.length) * 100;
   const stepTitle = {
@@ -167,17 +221,37 @@ export default function LensProcess() {
     treatment: t("lens.treatment.title"), index: t("lens.index.title"),
   }[key];
 
+  const RxTable = ({ compact }) => (
+    <table className={`rx-table ${compact ? "compact" : ""}`}>
+      <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th>{design?.add && <th>ADD</th>}</tr></thead>
+      <tbody>
+        <tr>
+          <td>{t("lens.right")}<small>OD</small></td>
+          <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
+          <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
+          <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
+          {design?.add && <td><SelectCell value={rx.add} onChange={setF("add")} options={ADD} /></td>}
+        </tr>
+        <tr>
+          <td>{t("lens.left")}<small>OS</small></td>
+          <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
+          <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
+          <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
+          {design?.add && <td><SelectCell value={rx.add} onChange={setF("add")} options={ADD} /></td>}
+        </tr>
+      </tbody>
+    </table>
+  );
+
   return (
     <div className="zl">
-      {/* ───────── Panel izquierdo: montura + resumen + subtotal ───────── */}
+      {/* ───────── Izquierda: montura + resumen + subtotal ───────── */}
       <aside className="zl-preview">
-        <div className="zl-preview-img">
-          <img src={color.image} alt={product.name} onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
-        </div>
+        <div className="zl-preview-img"><img src={color.image} alt={product.name} onError={(e) => { e.currentTarget.style.opacity = 0.3; }} /></div>
         <dl className="zl-recap">
           <div><dt>{t("card.frame")}</dt><dd>{product.name} · {color.name}<b>{money(product.price)}</b></dd></div>
           {design && <div><dt>{t("lens.use")}</dt><dd>{L(design.label, lang)}</dd></div>}
-          {!frameOnly && rxMethod && <div><dt>{t("lens.q.rx")}</dt><dd>{rxMethod === "scan" ? t("lens.rxmethod.scan") : `OD ${fmt(parseFloat(rx.od_sph) || 0)} · OS ${fmt(parseFloat(rx.os_sph) || 0)}`}</dd></div>}
+          {!frameOnly && rxReady && <div><dt>{t("lens.q.rx")}</dt><dd>OD {fmt(parseFloat(rx.od_sph) || 0)} · OS {fmt(parseFloat(rx.os_sph) || 0)}</dd></div>}
           {photo && !frameOnly && photoPriceOf(photo) != null && <div><dt>{t("lens.photo")}</dt><dd>{L(photo.label, lang)}<b>+{money(photoPriceOf(photo))}</b></dd></div>}
           {ar && !frameOnly && <div><dt>{t("lens.ar")}</dt><dd>{L(ar.label, lang)}<b>+{money(arPriceOf(ar))}</b></dd></div>}
           {material && !frameOnly && <div><dt>{t("lens.material")}</dt><dd>{L(material.label, lang)}<b>{money(basePrice(designId, matId))}</b></dd></div>}
@@ -185,40 +259,33 @@ export default function LensProcess() {
         <div className="zl-subtotal"><span>{t("lens.total")}</span><b>{money(total)}</b></div>
       </aside>
 
-      {/* ───────── Panel derecho: wizard ───────── */}
+      {/* ───────── Derecha: wizard ───────── */}
       <section className="zl-panel">
-        <div className="zl-progress"><i style={{ width: `${progress}%` }} /></div>
-        <div className="zl-top">
-          {step > 0
-            ? <button className="zl-back" onClick={() => setStep((s) => s - 1)}>‹ {t("lens.back2")}</button>
-            : <span />}
-          <Link to={`/producto/${product.slug}`} className="zl-close" aria-label={t("lens.back")}>✕</Link>
-        </div>
-
-        <div className="zl-scroll">
+        <div className="zl-phead">
+          <div className="zl-progress"><i style={{ width: `${progress}%` }} /></div>
+          <div className="zl-top">
+            {step > 0 ? <button className="zl-back" onClick={() => setStep((s) => s - 1)}>‹ {t("lens.back2")}</button> : <span />}
+            <Link to={`/producto/${product.slug}`} className="zl-close" aria-label={t("lens.back")}>✕</Link>
+          </div>
           <div className="zl-title-row">
             <h2>{stepTitle}</h2>
             {key === "type" && <span className="zl-help"><IconHelp /> {t("lens.learnUse")}</span>}
             {key === "rx" && <span className="zl-help"><IconHelp /> {t("lens.rxHelp.link")}</span>}
           </div>
+        </div>
 
+        <div className="zl-scroll">
           {/* STEP: tipo de receta */}
           {key === "type" && (
             <div className="zl-cards">
-              {[...DESIGNS, FRAME_ONLY].map((d) => {
-                const sel = designId === d.id;
-                return (
-                  <button key={d.id} className={`zl-card ${sel ? "sel" : ""}`}
-                          onClick={() => { setDesignId(d.id); setMatId(null); setPhotoId(null); setArId(null); }}>
-                    <span className="zl-card-ic">{designIcon(d.id)}</span>
-                    <span className="zl-card-main">
-                      <b>{L(d.label, lang)}</b>
-                      <small>{t(`lens.desc.${d.id}`)}</small>
-                    </span>
-                    <span className="zl-card-price">{d.id === "frame-only" ? t("lens.included") : `${t("lens.fromPrice")} ${money(minDesignPrice(d.id))}`}</span>
-                  </button>
-                );
-              })}
+              {[...DESIGNS, FRAME_ONLY].map((d) => (
+                <button key={d.id} className={`zl-card ${designId === d.id ? "sel" : ""}`}
+                        onClick={() => { setDesignId(d.id); setMatId(null); setPhotoId(null); setArId(null); }}>
+                  <span className="zl-card-ic">{designIcon(d.id)}</span>
+                  <span className="zl-card-main"><b>{L(d.label, lang)}</b><small>{t(`lens.desc.${d.id}`)}</small></span>
+                  <span className="zl-card-price">{d.id === "frame-only" ? t("lens.included") : `${t("lens.fromPrice")} ${money(minDesignPrice(d.id))}`}</span>
+                </button>
+              ))}
             </div>
           )}
 
@@ -243,54 +310,56 @@ export default function LensProcess() {
           {key === "rx" && (
             <div>
               <div className="zl-banner">{t("lens.rx.sph")}</div>
-              {rxMethod === "scan" ? (
-                <div className="rx-upload">
-                  <label className="upload-box">
-                    <input type="file" accept="image/*,application/pdf" hidden
-                           onChange={(e) => setUploaded(e.target.files?.[0]?.name || null)} />
-                    <span>📤 {t("lens.upload")}</span>
-                    <small>{uploaded ? `${t("lens.upload.file")}: ${uploaded}` : t("lens.upload.sub")}</small>
-                  </label>
-                </div>
-              ) : (
+
+              {rxMethod === "scan" && ocr.status !== "done" && (
                 <>
-                  <table className="rx-table">
-                    <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th></tr></thead>
-                    <tbody>
-                      <tr>
-                        <td>{t("lens.right")}<small>OD</small></td>
-                        <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
-                        <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
-                      </tr>
-                      <tr>
-                        <td>{t("lens.left")}<small>OS</small></td>
-                        <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
-                        <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className="rx-extra">
-                    <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty />
-                    {design?.add && <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty />}
-                  </div>
+                  {ocr.status === "loading" ? (
+                    <div className="zl-ocr-loading"><Spinner /><b>{t("lens.ocr.loading")}</b><small>{ocr.file}</small></div>
+                  ) : (
+                    <label className="zl-upload">
+                      <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => handleOcr(e.target.files?.[0])} />
+                      <span className="zl-upload-ic"><IconScan /></span>
+                      <b>{t("lens.upload")}</b>
+                      <small>{t("lens.upload.sub")}</small>
+                    </label>
+                  )}
+                  {ocr.status === "error" && (
+                    <div className="zl-ocr-error">
+                      {t("lens.ocr.error")}
+                      <button className="link" onClick={() => { setRxMethod("fill"); setOcr({ status: "idle", file: null, msg: "" }); }}>{t("lens.ocr.manual")}</button>
+                    </div>
+                  )}
                 </>
               )}
-              <p className="zl-chat">{t("lens.rx.verify")} <Link to="/catalogo">{t("chat.soon")}</Link></p>
+
+              {rxReady && (
+                <>
+                  {ocr.status === "done" && <div className="zl-detected">✓ {t("lens.ocr.detected")}</div>}
+                  <RxTable />
+                  <div className="rx-extra">
+                    {!twoPd
+                      ? <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty />
+                      : (<>
+                          <Field label={`${t("lens.pd")} OD`} value={rx.pd_od} onChange={setF("pd_od")} options={range(25, 38, 0.5).map((v) => ({ v, label: v.toFixed(1) }))} t={t} withEmpty />
+                          <Field label={`${t("lens.pd")} OS`} value={rx.pd_os} onChange={setF("pd_os")} options={range(25, 38, 0.5).map((v) => ({ v, label: v.toFixed(1) }))} t={t} withEmpty />
+                        </>)}
+                  </div>
+                  <label className="zl-check"><input type="checkbox" checked={twoPd} onChange={(e) => setTwoPd(e.target.checked)} /> {t("lens.pd.two")}</label>
+                  <p className="zl-chat">{t("lens.rx.verify")} <Link to="/catalogo">{t("chat.soon")}</Link></p>
+                </>
+              )}
             </div>
           )}
 
-          {/* STEP: tratamiento (fotocromático + antirreflejo) */}
+          {/* STEP: tratamiento */}
           {key === "treatment" && (
             <div>
-              {/* Fotocromático / Transitions */}
               <h3 className="zl-sub">{t("lens.photo")} <span className="zl-optional">{t("lens.optional")}</span></h3>
               <div className="zl-cards">
                 <button className={`zl-card ${!photoId ? "sel" : ""}`} onClick={() => setPhotoId(null)}>
-                  <span className="zl-card-ic"><IconStandard /></span>
+                  <span className="zl-card-ic"><IconClear /></span>
                   <span className="zl-card-main"><b>{t("lens.transparent")}</b><small>{t("lens.transparent.sub")}</small></span>
-                  <span className="zl-card-price">{t("lens.included")}</span>
+                  <span className="zl-card-price zl-inc">{t("lens.included")}</span>
                 </button>
                 {PHOTO_FAMILIES.map((fam) => {
                   const items = PHOTO.filter((p) => fam.ids.includes(p.id) && photoPriceOf(p) != null);
@@ -308,10 +377,7 @@ export default function LensProcess() {
                         <div className="zl-fam-body">
                           {items.map((p) => (
                             <button key={p.id} className={`zl-variant ${photoId === p.id ? "sel" : ""}`} onClick={() => setPhotoId(p.id)}>
-                              <span className="zl-variant-main">
-                                {L(p.label, lang)}
-                                <span className="zl-dots">{p.colors.map((c) => <i key={c} title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}</span>
-                              </span>
+                              <span className="zl-variant-main">{L(p.label, lang)}<span className="zl-dots">{p.colors.map((c) => <i key={c} title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}</span></span>
                               <b>+{money(photoPriceOf(p))}</b>
                             </button>
                           ))}
@@ -322,13 +388,12 @@ export default function LensProcess() {
                 })}
               </div>
 
-              {/* Antirreflejo */}
               <h3 className="zl-sub">{t("lens.ar")} <span className="zl-optional">{t("lens.optional")}</span></h3>
               <div className="zl-cards">
                 <button className={`zl-card ${!arId ? "sel" : ""}`} onClick={() => setArId(null)}>
                   <span className="zl-card-ic"><IconAR /></span>
                   <span className="zl-card-main"><b>{t("lens.none")}</b><small>{t("lens.ar.basic")}</small></span>
-                  <span className="zl-card-price">{t("lens.included")}</span>
+                  <span className="zl-card-price zl-inc">{t("lens.included")}</span>
                 </button>
                 {arList.map((a) => {
                   const blue = a.id.includes("blue") || a.id.includes("uv");
@@ -344,24 +409,23 @@ export default function LensProcess() {
             </div>
           )}
 
-          {/* STEP: índice / grosor */}
+          {/* STEP: índice / grosor — primera (más barata) = incluida, resto +delta */}
           {key === "index" && (
             <div>
-              <div className="zl-banner">{t("lens.index.coatings")}</div>
+              <div className="zl-banner ok">{t("lens.index.coatings")}</div>
               <div className="zl-cards">
-                {MATERIALS.map((m) => {
+                {sortedMats.map((m) => {
+                  const price = basePrice(designId, m.id);
+                  const delta = Math.round((price - matBase) * 100) / 100;
                   const reco = recommendedMat?.id === m.id;
                   return (
                     <button key={m.id} className={`zl-card zl-card-lg ${matId === m.id ? "sel" : ""}`} onClick={() => setMatId(m.id)}>
                       <span className="zl-card-ic"><IconIndex /></span>
                       <span className="zl-card-main">
                         <b>{L(m.label, lang)} {reco && <span className="zl-badge">{t("lens.recommended")}</span>}</b>
-                        <ul className="zl-specs">
-                          <li>{L(m.desc, lang)}</li>
-                          <li>{t("lens.index.rx")} ±{m.maxAbs === 99 ? "20" : m.maxAbs.toFixed(2)}</li>
-                        </ul>
+                        <ul className="zl-specs"><li>{L(m.desc, lang)}</li><li>{t("lens.index.rx")} ±{m.maxAbs === 99 ? "20" : m.maxAbs.toFixed(2)}</li></ul>
                       </span>
-                      <span className="zl-card-price">{money(basePrice(designId, m.id))}</span>
+                      <span className={`zl-card-price ${delta === 0 ? "zl-inc" : ""}`}>{delta === 0 ? t("lens.included") : `+${money(delta)}`}</span>
                     </button>
                   );
                 })}
@@ -370,26 +434,24 @@ export default function LensProcess() {
           )}
         </div>
 
-        {/* footer del panel: navegación */}
         <div className="zl-foot">
           <div className="zl-foot-total"><span>{t("lens.total")}</span><b>{money(total)}</b></div>
-          <button className="btn btn-primary zl-next" disabled={!canNext} onClick={goNext}>
-            {isLast ? t("lens.addCart") : t("lens.continue")}
-          </button>
+          <button className="btn btn-primary zl-next" disabled={!canNext} onClick={goNext}>{isLast ? t("lens.addCart") : t("lens.continue")}</button>
         </div>
       </section>
 
-      {/* Modal de confirmación de receta (Zeelool) */}
+      {/* Modal de confirmación de receta */}
       {showConfirm && (
         <div className="zl-modal-bg" onClick={() => setShowConfirm(false)}>
           <div className="zl-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{t("lens.confirm.title")}</h3>
-            <table className="rx-table">
+            <p className="zl-modal-sub">{L(design?.label, lang)}</p>
+            <table className="rx-table view">
               <thead><tr><th></th><th>SPH</th><th>CYL</th><th>AXIS</th>{design?.add && <th>ADD</th>}</tr></thead>
               <tbody>
-                <tr><td>OD</td><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis || "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
-                <tr><td>OS</td><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis || "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
-                <tr><td>PD</td><td colSpan={design?.add ? 4 : 3}>{rx.pd || "—"}</td></tr>
+                <tr><td>OD<small>{t("lens.right")}</small></td><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
+                <tr><td>OS<small>{t("lens.left")}</small></td><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td>{design?.add && <td>{rx.add ? "+" + rx.add : "—"}</td>}</tr>
+                <tr><td>PD</td><td colSpan={design?.add ? 4 : 3}>{twoPd ? `${rx.pd_od || "—"} / ${rx.pd_os || "—"}` : (rx.pd || "—")}</td></tr>
               </tbody>
             </table>
             <div className="zl-modal-actions">

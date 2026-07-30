@@ -6,19 +6,22 @@
 import { useSyncExternalStore } from "react";
 import { enrichProducts, PRODUCTS as SEED_PRODUCTS, SEED_FRAMES } from "./products.js";
 import { enrichCases, CASES as SEED_CASES, SEED_CASES as SEED_CASES_RAW } from "./cases.js";
+import { ALLOWED_BRAND_SLUGS } from "./brands.js";
 import { subscribe as onPrices } from "../admin/priceStore.js";
 
 function hash(str){let h=0;const s=String(str);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffffffff;return Math.abs(h);}
 const bySlug = (arr) => Object.fromEntries(arr.map((p) => [p.slug, p]));
+// Solo mostramos monturas de las marcas activas (ver brands.js).
+const inBrand = (arr) => (arr || []).filter((p) => ALLOWED_BRAND_SLUGS.has(p.brand_slug));
 
 // keep the RAW (pre-enrichment) arrays so we can re-price live when the owner edits prices
 let rawFrames = SEED_FRAMES;
 let rawCases = SEED_CASES_RAW;
 
 let state = {
-  products: SEED_PRODUCTS,
+  products: inBrand(SEED_PRODUCTS),
   cases: SEED_CASES,
-  productBySlug: bySlug(SEED_PRODUCTS),
+  productBySlug: bySlug(inBrand(SEED_PRODUCTS)),
   caseBySlug: bySlug(SEED_CASES),
   meta: null,
   live: false,
@@ -61,7 +64,7 @@ export async function loadLive() {
     try { const m = await fetch(`${BASE}/catalog-meta.json`, opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
     rawFrames = frames;
     if (Array.isArray(cases) && cases.length) rawCases = cases;
-    const products = enrichProducts(rawFrames);
+    const products = inBrand(enrichProducts(rawFrames));
     const ecases = enrichCases(rawCases);
     set({
       products,
