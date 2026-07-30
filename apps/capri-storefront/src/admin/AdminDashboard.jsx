@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales, allOrders, updateOrderStatus } from "./analytics.js";
+import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales, allOrders, updateOrderStatus, updateOrderTracking } from "./analytics.js";
+import { ORDER_STATUS, orderStatusMeta } from "../data/orderStatus.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
@@ -509,19 +510,17 @@ function Prices({ preQ }) {
   );
 }
 
-const OSTATUS = {
-  processing: ["📦", "En preparación", "#b26a00", "#fbf0df"],
-  shipped: ["🏷️", "Enviado", "#0E5AD0", "#eaf2ff"],
-  in_transit: ["🚚", "En camino", "#7b4aa0", "#f1e9f7"],
-  delivered: ["✅", "Entregado", "#2e7d46", "#e9f5ee"],
-};
-const OSTEPS = ["processing", "shipped", "in_transit", "delivered"];
+// Estados del pedido: derivados del MODELO COMPARTIDO (orderStatus.js), en español
+// para el panel. `ost(key)` devuelve [icono, etiqueta, color, fondo] con fallback
+// seguro (una clave antigua/desconocida cae en "Recibida" sin romper).
+const ost = (key) => { const m = orderStatusMeta(key); return [m.icon, m.es, m.color, m.bg]; };
+const OSTEPS = ORDER_STATUS.map((s) => s.key);
 
 function orderHaystack(o) {
   return [
     o.id, o.customer?.name, o.customer?.surname, o.customer?.email, o.customer?.phone,
     o.user, o.delivery?.city, o.delivery?.recipient, o.delivery?.phone, o.delivery?.email,
-    o.delivery?.carrier, o.shipping?.method, o.status, OSTATUS[o.status || "processing"]?.[1],
+    o.delivery?.carrier, o.shipping?.method, o.status, ost(o.status)[1], o.tracking,
     ...(o.items || []).map((it) => it.name),
   ].filter(Boolean).join(" ").toLowerCase();
 }
@@ -566,7 +565,7 @@ function Orders() {
             <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Método</th><th className="r">Total</th><th>Estado / proceso</th></tr></thead>
             <tbody>
               {shown.length === 0 ? <tr><td colSpan="6" className="muted">{q ? "Sin resultados para tu búsqueda." : "Sin pedidos."}</td></tr> : shown.map((o) => {
-                const st = OSTATUS[o.status || "processing"];
+                const st = ost(o.status);
                 const ship = o.shipping?.method === "ship";
                 const open = openId === o.id;
                 return [
@@ -578,8 +577,8 @@ function Orders() {
                     <td className="r">{money(o.total)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <span className="ord-badge" style={{ background: st[3], color: st[2] }}>{st[0]} {st[1]}</span>
-                      <select className="adm-sel ord-sel" value={o.status || "processing"} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
-                        {OSTEPS.map((s) => <option key={s} value={s}>{OSTATUS[s][0]} {OSTATUS[s][1]}</option>)}
+                      <select className="adm-sel ord-sel" value={o.status || OSTEPS[0]} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
+                        {ORDER_STATUS.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.es}</option>)}
                       </select>
                     </td>
                   </tr>,
@@ -588,7 +587,16 @@ function Orders() {
                       <div className="ord-detail-grid">
                         <div>
                           <b>🛍️ Artículos</b>
-                          <ul>{o.items.map((it, i) => <li key={i}><span>{it.name}</span><b>{money(it.total)}</b></li>)}</ul>
+                          <ul>{o.items.map((it, i) => (
+                            <li key={i}>
+                              <span>{it.name}{it.color ? ` · ${it.color}` : ""}
+                                {Array.isArray(it.specs) && it.specs.length > 0 && (
+                                  <small className="ord-specs"> {it.specs.map((s) => s.label).join(" · ")}</small>
+                                )}
+                              </span>
+                              <b>{money(it.total)}</b>
+                            </li>
+                          ))}</ul>
                         </div>
                         <div>
                           <b>{ship ? "🚚 Entrega" : "🏬 Recogida en tienda"}</b>
@@ -596,6 +604,11 @@ function Orders() {
                             <p className="ord-addr">📍 {o.delivery.address}, {o.delivery.city}<br />👤 {o.delivery.recipient} · 📞 {o.delivery.phone}<br />✉️ {o.delivery.email} · 🏷️ {o.delivery.carrier || "—"}</p>
                           ) : <p className="ord-addr muted">El cliente recoge en la sucursal.</p>}
                           {o.customer && <p className="ord-addr">🧾 {o.customer.name} {o.customer.surname} · {o.customer.email} · {o.customer.phone}</p>}
+                          {/* Nº de rastreo: el admin lo pega al enviar; el cliente lo ve en "Mi cuenta". */}
+                          <label className="ord-track-input">🔖 Nº de rastreo
+                            <input type="text" defaultValue={o.tracking || ""} placeholder="Ej. 1Z999AA1..."
+                                   onBlur={(e) => { if ((e.target.value.trim() || null) !== (o.tracking || null)) updateOrderTracking(o.id, e.target.value); }} />
+                          </label>
                         </div>
                       </div>
                     </td></tr>

@@ -92,7 +92,7 @@ export default function ProductDetail() {
             <tbody>
               <tr><td>{t("spec.brand")}</td><td>{product.brand}</td></tr>
               <tr><td>{t("spec.shape")}</td><td>{tv(product.attributes.shape) || "—"}</td></tr>
-              <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
+              <tr><td>{t("spec.material")}</td><td>{(Array.isArray(product.attributes.material) ? product.attributes.material : []).map(tv).join(", ") || "—"}</td></tr>
               <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
               <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
               <tr><td>{t("spec.eye")}</td><td>{product.attributes.eye_size}</td></tr>

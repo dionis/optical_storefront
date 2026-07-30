@@ -53,7 +53,7 @@ export default function Reviews({ product }) {
     const u = getUser();
     const r = {
       id: "rev-" + Date.now() + "-" + Math.round(Math.random() * 1e6),
-      name: name.trim() || (u && u.email) || "Anónimo",
+      name: name.trim() || (u && u.email) || t("rev.anon"),
       user: (u && u.email) || null,          // ties the review to the logged-in customer
       product: product.name, slug: product.slug,
       rating, text: text.trim(), photos, date: new Date().toISOString().slice(0, 10),

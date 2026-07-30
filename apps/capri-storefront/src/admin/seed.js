@@ -62,8 +62,9 @@ export function generateDemo(days = 90) {
       const shipCost = !isShip ? 0 : (subtotal >= 59 ? 0 : 6.95);
       const nm = NAMES[Math.floor(rnd() * NAMES.length)];
       const cust = { name: nm[0], surname: nm[1], email: (nm[0] + "." + nm[1]).toLowerCase() + "@correo.com", phone: "+1 281 555 0" + (100 + Math.floor(rnd() * 899)) };
-      // status by age: old orders delivered; recent ones spread across the process
-      const status = i > 9 ? "delivered" : (["processing", "shipped", "in_transit", "delivered"])[Math.floor(rnd() * 4)];
+      // status by age: old orders delivered; recent ones spread across the flow
+      // (claves del modelo compartido orderStatus.js: recibida→fabricación→…→entregada)
+      const status = i > 9 ? "delivered" : (["received", "manufacturing", "shipped", "in_transit", "delivered"])[Math.floor(rnd() * 5)];
       const city = CITIES[Math.floor(rnd() * CITIES.length)];
       orders.push({
         id: "OER-" + key.replace(/-/g, "") + "-" + (o + 1),

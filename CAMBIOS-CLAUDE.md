@@ -205,3 +205,21 @@ Archivos: `src/pages/LensProcess.jsx` (reescrito), `src/styles/index.css` (bloqu
 - **Reordenado:** la 1ª pantalla ahora es la RECETA (Escanear / Rellenar manual / "No necesito graduación"). El sistema **auto-selecciona el diseño** a partir de la receta: sin ADD → **Visión Sencilla** (automático, sin paso extra); con ADD → **multifocal** y muestra Bifocal FT-28 / Progresivo Gama Media (recomendado, pre-seleccionado) / Progresivo Gama Alta. "No necesito graduación" = solo montura → directo al carrito. Campo ADD siempre visible en la receta (rotulado "solo multifocales") para poder deducir el tipo.
 - **OCR (lectura de receta por imagen):** el frontend sube la imagen a `POST {VITE_MEDUSA_URL}/store/prescriptions/ocr` con header `x-publishable-api-key` y mapea `od/os/pd/pd_od/pd_os/add` (incluye recetas de laboratorio tipo "Optical Outsource" con FPD/NPD monoculares → dos DP). Verificado contra el backend en vivo: el endpoint **responde pero devuelve `503 {fallback:true}` porque falta `ANTHROPIC_API_KEY` en el backend** → el lector está apagado del lado servidor. En cuanto Dionis configure esa key (y el CORS del storefront), el OCR leerá automáticamente. Mientras tanto cae a modo manual con aviso claro. Se descomentó `VITE_MEDUSA_PUBLISHABLE_KEY` en el `.env` local (no commiteado, está en .gitignore).
 - Archivos: `src/pages/LensProcess.jsx`, `src/i18n/translations.js` (claves nuevas), `src/styles/index.css`. Solo frontend; no toca el backend de Dionis.
+
+## 2026-07-30 (4) — QA/hardening: precio consistente, seguimiento bilateral, confirmación de compra, robustez
+
+**Precio consistente (cliente = orden = admin):** el carrito ahora conserva el desglose legible del lente (`specs`: etiqueta + precio) además de diseño/material/foto/AR y color; `checkout()` lo pasa íntegro a la orden. Así el MISMO desglose lo ven el comprobante del cliente, "Mis compras" y el panel del admin. Favoritos ahora usan el precio EN VIVO del catálogo (no el congelado). El lente registra su marca (analítica del admin correcta).
+
+**Seguimiento de orden unificado (cliente + admin):** nuevo módulo `data/orderStatus.js` = fuente de verdad ÚNICA con 5 estados bilingües (Recibida → En fabricación → Enviada → En tránsito → Entregada). Lo usan `TrackingTimeline` (cliente), `AccountPage` (cliente), `AdminDashboard` (tienda), `analytics.recordOrder/updateOrderStatus` y el seed. Se corrigió el vocabulario divergente y la clave i18n faltante. Nº de rastreo: el admin lo asigna en el pedido y el cliente lo ve en su cuenta. (Limitación real: las órdenes viven en localStorage por navegador; el sync cliente↔admin entre dispositivos requiere backend.)
+
+**Confirmación + notificación de compra:** al pagar, el cliente ve un COMPROBANTE (nº de orden + total) en vez de un alert, con botón "enviarme el comprobante por correo" (mailto) y "ver mi pedido". El admin ve la orden al instante en su panel. Nuevo `data/orderNotify.js` con `notifyOrder()` que hace POST a un webhook configurable (`VITE_ORDER_NOTIFY_URL`) — punto único para conectar email+SMS reales (Zapier/Make/Twilio/SendGrid o Medusa). Sin configurar, no rompe la compra.
+
+**Robustez anti-caídas:** nuevo `ErrorBoundary` global (main.jsx) evita la pantalla en blanco si una vista lanza. Guards en `ProductDetail` (material no-array), `Home` (lookups del lookbook con `?.`) y accesos a `user.email`.
+
+**Bilingüe:** errores de login ahora son claves i18n; aria-labels del carrusel/collage, "Anónimo", título del footer y fechas ahora respetan el idioma. Claves ES/EN añadidas.
+
+**Responsive:** CSS del ShippingEstimator (clases actuales) + stacks móviles para `.ship-methods`, `.rx-extra` (con "dos DP") y `.co-two`.
+
+**Código:** comentarios/documentación añadidos en todos los módulos tocados.
+
+**QA hecho:** build en entorno tipo Vercel ✓; recorrido en navegador ✓ (checkout→comprobante, orden en cuenta con estado "Recibida" + desglose + rastreo, línea de seguimiento 5 pasos, ES/EN, 0 errores de consola). Admin verificado por código+build (login corporativo protegido). Archivos: 19 (2 nuevos data/, 1 ErrorBoundary + 16 tocados). Solo frontend; no toca el backend de Dionis.

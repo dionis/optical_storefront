@@ -2,12 +2,16 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useUser, logout } from "../components/userAuth.js";
 import { useCart } from "../components/CartContext.jsx";
+import { useCatalog } from "../data/catalogStore.js";
 import { ordersByUser } from "../admin/analytics.js";
+import { orderStatusLabel } from "../data/orderStatus.js";
 import { listByUser, updateReview, removeReview } from "../components/reviewsStore.js";
 import TrackingTimeline from "../components/TrackingTimeline.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+// Fecha en el idioma activo (evita forzar "es" en modo inglés).
+const dateLoc = (iso, lang) => { try { return new Date(iso).toLocaleDateString(lang === "en" ? "en-US" : "es"); } catch { return ""; } };
 
 function Stars({ value, onSelect }) {
   return (
@@ -21,29 +25,36 @@ function Stars({ value, onSelect }) {
 
 function Favorites() {
   const { favorites, toggleFav, addItem } = useCart();
+  const { productBySlug } = useCatalog();
   const { t } = useLang();
   if (!favorites.length) return <p className="muted acc-empty">{t("acc.fav.empty")}</p>;
   return (
     <div className="acc-grid">
-      {favorites.map((f) => (
-        <div className="acc-fav" key={f.slug}>
-          <img src={f.image} alt={f.name} onError={(e) => { e.currentTarget.style.opacity = .25; }} />
-          <div className="acc-fav-info">
-            <Link to={`/producto/${f.slug}`}><b>{f.name}</b></Link>
-            <small>{f.brand} · {money(f.price)}</small>
-            <div className="acc-fav-actions">
-              <button onClick={() => addItem({ sku: f.slug, name: f.name, total: f.price, brand: f.brand })}>{t("common.addCart")}</button>
-              <button className="link-red" onClick={() => toggleFav(f)}>{t("common.remove")}</button>
+      {favorites.map((f) => {
+        // Precio EN VIVO del catálogo (no el congelado al marcar favorito), para que
+        // coincida con lo que ve en la tienda si el dueño cambió el precio.
+        const live = productBySlug[f.slug];
+        const price = live ? live.price : f.price;
+        return (
+          <div className="acc-fav" key={f.slug}>
+            <img src={f.image} alt={f.name} onError={(e) => { e.currentTarget.style.opacity = .25; }} />
+            <div className="acc-fav-info">
+              <Link to={`/producto/${f.slug}`}><b>{f.name}</b></Link>
+              <small>{f.brand} · {money(price)}</small>
+              <div className="acc-fav-actions">
+                <button onClick={() => addItem({ sku: f.slug, name: f.name, total: price, brand: f.brand })}>{t("common.addCart")}</button>
+                <button className="link-red" onClick={() => toggleFav(f)}>{t("common.remove")}</button>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function Orders({ email }) {
-  const { t } = useLang();
+function Orders({ email, onTrack }) {
+  const { t, lang } = useLang();
   const orders = useMemo(() => ordersByUser(email), [email]);
   if (!orders.length) return <p className="muted acc-empty">{t("acc.orders.empty")}</p>;
   return (
@@ -51,14 +62,27 @@ function Orders({ email }) {
       {orders.map((o) => (
         <div className="acc-order" key={o.id}>
           <div className="acc-order-head">
-            <b>{o.id}</b><span className="muted">{new Date(o.t).toLocaleDateString("es")}</span>
-            <span className="acc-status">{t("acc.status." + (o.status || "processing"))}</span>
+            <b>{o.id}</b><span className="muted">{dateLoc(o.t, lang)}</span>
+            <span className="acc-status">{orderStatusLabel(o.status, lang)}</span>
           </div>
-          <ul>{o.items.map((it, i) => <li key={i}><span>{it.name}</span><b>{money(it.total)}</b></li>)}</ul>
+          <ul>
+            {o.items.map((it, i) => (
+              <li key={i}>
+                <div className="acc-oi">
+                  <span>{it.name}{it.color ? ` · ${it.color}` : ""}</span>
+                  {Array.isArray(it.specs) && it.specs.length > 0 && (
+                    <small>{it.specs.map((s) => s.label).join(" · ")}</small>
+                  )}
+                </div>
+                <b>{money(it.total)}</b>
+              </li>
+            ))}
+          </ul>
           <div className="acc-order-foot">
             <span>{t("cart.total")}: <b>{money(o.total)}</b></span>
-            <button className="btn-sm" disabled title={t("acc.track.soon")}>{t("acc.track")} · {t("acc.soon")}</button>
+            <button className="btn-sm" onClick={() => onTrack && onTrack()}>{t("acc.track.view")}</button>
           </div>
+          {o.tracking && <div className="acc-order-track muted">{t("acc.track.number")}: <b>{o.tracking}</b></div>}
         </div>
       ))}
     </div>
@@ -111,7 +135,7 @@ function Reviews({ email }) {
 }
 
 function Tracking({ email }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const orders = useMemo(() => ordersByUser(email), [email]);
   if (!orders.length) {
     return (
@@ -122,16 +146,16 @@ function Tracking({ email }) {
       </div>
     );
   }
-  const etaText = (o) => {
-    const z = o.shipping; if (!z || o.shipping.method === "pickup") return t("acc.track.pickup");
-    return null;
-  };
+  // Texto de ETA: por ahora solo distingue recogida en tienda; el resto queda a
+  // la espera del ETA real por zona/carrier (ver nota en orderStatus.js).
+  const etaText = (o) => (!o.shipping || o.shipping.method === "pickup" ? t("acc.track.pickup") : null);
   return (
     <div className="acc-orders">
       {orders.map((o) => (
         <div className="acc-order" key={o.id}>
-          <div className="acc-order-head"><b>{o.id}</b><span className="muted">{new Date(o.t).toLocaleDateString("es")}</span></div>
-          <TrackingTimeline status={o.status || "processing"} eta={etaText(o)} />
+          <div className="acc-order-head"><b>{o.id}</b><span className="muted">{dateLoc(o.t, lang)}</span></div>
+          <TrackingTimeline status={o.status} eta={etaText(o)} />
+          {o.tracking && <div className="acc-order-track muted">{t("acc.track.number")}: <b>{o.tracking}</b></div>}
         </div>
       ))}
     </div>
@@ -155,10 +179,13 @@ export default function AccountPage() {
     );
   }
 
+  // `user.email` siempre existe tras login; el `?.` evita cualquier crash defensivamente.
+  const initial = (user.email?.[0] || "?").toUpperCase();
+
   return (
     <div className="section account">
       <div className="acc-header">
-        <div className="acc-avatar">{(user.email[0] || "?").toUpperCase()}</div>
+        <div className="acc-avatar">{initial}</div>
         <div>
           <h1>{t("acc.title")}</h1>
           <p className="muted">{user.email}</p>
@@ -170,7 +197,7 @@ export default function AccountPage() {
       </nav>
       <div className="acc-panel">
         {tab === "fav" && <Favorites />}
-        {tab === "orders" && <Orders email={user.email} />}
+        {tab === "orders" && <Orders email={user.email} onTrack={() => setTab("track")} />}
         {tab === "reviews" && <Reviews email={user.email} />}
         {tab === "track" && <Tracking email={user.email} />}
       </div>

@@ -239,7 +239,18 @@ export default function LensProcess() {
   };
 
   const finish = () => {
-    addItem({ sku: product.sku, name: product.name, color: color.name, design: frameOnly ? "frame-only" : designId, material: matId, photo: photoId, ar: arId, total });
+    // Desglose LEGIBLE del lente (etiqueta + precio) — se guarda en el carrito y
+    // luego en la orden, para que cliente y admin vean EXACTAMENTE lo mismo.
+    const specs = [];
+    if (!frameOnly && material) specs.push({ label: `${L(design.label, lang)} · ${L(material.label, lang)}`, price: basePrice(designId, matId) });
+    if (!frameOnly && photo && photoPriceOf(photo) != null) specs.push({ label: L(photo.label, lang), price: photoPriceOf(photo) });
+    if (!frameOnly && ar) specs.push({ label: L(ar.label, lang), price: arPriceOf(ar) });
+    addItem({
+      sku: product.sku, name: product.name, color: color.name,
+      brand: product.brand || product.brand_slug || "—",   // para analítica de marcas del admin
+      design: frameOnly ? "frame-only" : designId, material: matId, photo: photoId, ar: arId,
+      specs, total,
+    });
     navigate(`/producto/${product.slug}`);
   };
 

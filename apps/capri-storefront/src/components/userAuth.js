@@ -17,8 +17,9 @@ export function getUser() {
 export function login(email, phone) {
   const e = String(email || "").trim();
   const p = String(phone || "").trim();
-  if (!/\S+@\S+\.\S+/.test(e)) return { ok: false, error: "Correo inválido" };
-  if (p.replace(/\D/g, "").length < 7) return { ok: false, error: "Celular inválido" };
+  // Devolvemos CLAVES i18n (no texto), para que la UI las muestre en el idioma activo.
+  if (!/\S+@\S+\.\S+/.test(e)) return { ok: false, error: "auth.err.email" };
+  if (p.replace(/\D/g, "").length < 7) return { ok: false, error: "auth.err.phone" };
   try { localStorage.setItem(KEY, JSON.stringify({ email: e, phone: p, since: new Date().toISOString() })); } catch {}
   bump();
   return { ok: true };

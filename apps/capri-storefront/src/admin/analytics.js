@@ -1,7 +1,8 @@
 // Client-side analytics + orders layer for the storefront.
 // Model:
 //   oer_daily  = { "YYYY-MM-DD": { access, view, atc, fav } }  (funnel top counts)
-//   oer_orders = [ { id, t(iso), items:[{sku,name,brand,kind,total}], itemsCount, total, demo? } ]
+//   oer_orders = [ { id, t(iso), status, tracking, items:[{sku,name,brand,kind,total,design?,material?,photo?,ar?,specs?}], itemsCount, total, shipping, customer, delivery, demo? } ]
+//   (status ∈ orderStatus.js: received→manufacturing→shipped→in_transit→delivered)
 // The storefront calls track*(...) as the user browses/buys; the admin dashboard reads
 // these with time filters. Demo data is seeded once (labelled demo) so charts aren't empty.
 //
@@ -9,6 +10,7 @@
 // post events to Dionis's backend — the track*/recordOrder functions are the seam for that.
 import { generateDemo } from "./seed.js";
 import { getUser } from "../components/userAuth.js";
+import { DEFAULT_ORDER_STATUS, isValidOrderStatus } from "../data/orderStatus.js";
 
 const DAILY = "oer_daily";
 const ORDERS = "oer_orders";
@@ -60,6 +62,10 @@ export function trackView() { incDaily("view"); }
 export function trackAddToCart() { incDaily("atc"); }
 export function trackFav() { incDaily("fav"); }
 
+// Crea el registro inmutable de una orden. `items` ya trae el desglose completo
+// (sku, name, brand, kind, total y — para lentes — design/material/photo/ar y
+// `specs` legibles) tal como lo armó el carrito, así el mismo desglose lo ven el
+// cliente y el admin. El total NO se recalcula: es el que confirmó el carrito.
 export function recordOrder(order) {
   const list = getOrders();
   const rec = {
@@ -68,8 +74,9 @@ export function recordOrder(order) {
     items: order.items || [],
     itemsCount: (order.items || []).length,
     total: Math.round((order.total || 0) * 100) / 100,
-    user: (getUser() && getUser().email) || null,   // ties the order to the logged-in customer
-    status: "processing",                             // for future order tracking
+    user: (getUser() && getUser().email) || null,   // liga la orden con el cliente logueado
+    status: DEFAULT_ORDER_STATUS,                     // estado inicial del seguimiento (ver orderStatus.js)
+    tracking: order.tracking || null,                 // nº de rastreo (lo asigna el admin al enviar)
     shipping: order.shipping || null,
     customer: order.customer || null,
     delivery: order.delivery || null,
@@ -86,9 +93,19 @@ export function getOrders() { return rd(ORDERS, []); }
 export function allOrders() {
   return getOrders().slice().sort((a, b) => new Date(b.t) - new Date(a.t));
 }
-// advance/set an order's status (owner moves it through the process)
+// advance/set an order's status (owner moves it through the process).
+// Valida contra el modelo compartido: una clave inválida se ignora (no rompe el flujo).
 export function updateOrderStatus(id, status) {
+  if (!isValidOrderStatus(status)) return;
   wr(ORDERS, getOrders().map((o) => (o.id === id ? { ...o, status } : o)));
+  bump();
+}
+
+// Asigna/actualiza el número de rastreo de una orden (el admin lo pega al enviar;
+// el cliente lo ve en "Mi cuenta"). Cadena vacía = sin rastreo.
+export function updateOrderTracking(id, tracking) {
+  const tk = String(tracking || "").trim() || null;
+  wr(ORDERS, getOrders().map((o) => (o.id === id ? { ...o, tracking: tk } : o)));
   bump();
 }
 

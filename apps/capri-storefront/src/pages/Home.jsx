@@ -138,20 +138,20 @@ export default function Home() {
             {HERO_SLIDES.map((s, i) => (
               <Link key={i} to={s.to} aria-label={t(s.tk)} data-model={lookbookTag(s.ref)}
                     className={`hero-zee-photo${i === slide ? " is-active" : ""}`}>
-                <img src={LOOKBOOK_BY_ID[s.ref].src} alt="" loading={i === 0 ? "eager" : "lazy"}
+                <img src={LOOKBOOK_BY_ID[s.ref]?.src} alt="" loading={i === 0 ? "eager" : "lazy"}
                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
               </Link>
             ))}
             <span className="hero-badge" key={`b${slide}`}>
               {t(HERO_SLIDES[slide].badge).split("\n").map((l, i) => <span key={i}>{l}</span>)}
             </span>
-            <button className="hero-arrow prev" aria-label="Anterior"
+            <button className="hero-arrow prev" aria-label={t("a11y.prev")}
                     onClick={() => setSlide((s) => (s - 1 + nSlides) % nSlides)}>‹</button>
-            <button className="hero-arrow next" aria-label="Siguiente"
+            <button className="hero-arrow next" aria-label={t("a11y.next")}
                     onClick={() => setSlide((s) => (s + 1) % nSlides)}>›</button>
             <div className="hero-dots">
               {HERO_SLIDES.map((_, i) => (
-                <button key={i} className={i === slide ? "is-on" : ""} aria-label={`Slide ${i + 1}`}
+                <button key={i} className={i === slide ? "is-on" : ""} aria-label={`${t("a11y.slide")} ${i + 1}`}
                         onClick={() => setSlide(i)} />
               ))}
             </div>
@@ -160,7 +160,7 @@ export default function Home() {
           <div className="hero-zee-strip">
             {HERO_THUMBS.map((th, i) => (
               <Link className="hero-thumb" key={i} to={th.to} aria-label={t("hero.cta1")} data-model={lookbookTag(th.ref)}>
-                <img src={LOOKBOOK_BY_ID[th.ref].src} alt="" loading="lazy"
+                <img src={LOOKBOOK_BY_ID[th.ref]?.src} alt="" loading="lazy"
                      onError={(e) => { const p = e.currentTarget.closest(".hero-thumb"); if (p) p.style.display = "none"; }} />
               </Link>
             ))}
@@ -239,9 +239,9 @@ export default function Home() {
             return (
               <Link key={i} to={`/producto/${prod.slug}`} className="collage-tile"
                     data-sku={prod.sku || prod.name} data-model={lookbookTag(c.ref)}
-                    data-brand={LOOKBOOK_BY_ID[c.ref].brand || prod.brand}
-                    aria-label={`Comprar ${prod.name}`}>
-                <img className="collage-face" src={LOOKBOOK_BY_ID[c.ref].src} alt="" loading="lazy"
+                    data-brand={LOOKBOOK_BY_ID[c.ref]?.brand || prod.brand}
+                    aria-label={`${t("common.buy")} ${prod.name}`}>
+                <img className="collage-face" src={LOOKBOOK_BY_ID[c.ref]?.src} alt="" loading="lazy"
                      onError={(e) => { const t = e.currentTarget.closest(".collage-tile"); if (t) t.style.display = "none"; }} />
                 <span className="collage-hover">
                   <img className="collage-frame" src={frame} alt={prod.name} loading="lazy" />
