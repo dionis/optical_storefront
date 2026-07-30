@@ -159,3 +159,16 @@ Rama `frontend`. Cambios en `apps/capri-storefront`. No toca backend ni la pasar
 - Se usan en la portada, sin repetir ninguna: hero principal (fotos 2, 5, 14), tira lateral (7, 11, 4), collage (1, 3, 6, 8, 9, 13) y estilos/moods (16 pareja→"En familia", 15 blazer→"Business casual", 10 tweed→"Clásicos").
 - Cada imagen renderiza `data-model` (y el collage además `data-brand` + `data-sku`) como etiqueta invisible de referencia, lista para enlazar a la compra cuando se rellenen marca/modelo.
 - PENDIENTE del usuario: rellenar `brand` y `model` de cada foto en `src/data/lookbook.js` (no se pueden deducir con certeza desde la imagen).
+
+## 2026-07-30 — Documentación: pendientes y logística (rama `frontend`)
+
+Se agregó **`PENDIENTES-Y-LOGISTICA.md`** (raíz) con la lista de requisitos que pasó Daniel:
+- Funciones pendientes: autocompletado de dirección (Google Maps), infografía de materiales
+  (adelgazamiento del cristal, refs Pinterest), infografía de fotocromático (refs Pinterest),
+  seguimiento de orden bilateral, notificación de estado al cliente, tracking del cliente.
+- Tiempos: fabricación de lentes = 5 días.
+- Tabla de logística/envíos (UPS): lab→Osmany $2.75 (3d), CAPRI→Osmany $1.00 (3d),
+  nacional USA $3.00 (3d), Cuba vía consignataria = por definir.
+- Preguntas abiertas registradas (key de Google, canal de notificaciones, tarifa Cuba, fuente del tracking).
+
+Es solo documentación; no toca código de la app ni el backend.
