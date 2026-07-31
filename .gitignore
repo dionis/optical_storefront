@@ -62,3 +62,8 @@ _transfer
 *.log
 .env
 .DS_Store
+
+# Real prescription samples used for testing the OCR pipeline. These are actual
+# patient records (PHI) — they must never reach the repository, and the rule is
+# duplicated in docs/data/.gitignore so it travels with the directory.
+docs/data/

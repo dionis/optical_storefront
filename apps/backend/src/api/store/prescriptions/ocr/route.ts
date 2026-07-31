@@ -98,16 +98,21 @@ async function readWithModel(
   modelId: string,
   sourceBlock: SourceBlock
 ): Promise<Partial<Prescription> | null> {
+  // Safety classifiers occasionally decline benign health-adjacent images;
+  // `fallbacks` re-runs the request on a substitute model instead of handing us
+  // a refusal. Only some models accept the parameter — sending it to one that
+  // does not is a hard 400, which would break every read on that model, so it
+  // is gated on the catalogue rather than sent unconditionally.
+  const fallbackParams = getOcrModel(modelId)?.supports_fallbacks
+    ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+    : {};
+
   const message = await client.beta.messages.create({
     model: modelId,
     // On the thinking-enabled models max_tokens caps thinking plus response
     // together, so this sits far above the size of the JSON itself.
     max_tokens: 8192,
-    // Safety classifiers occasionally decline benign health-adjacent images;
-    // "default" re-runs the request on Anthropic's recommended fallback model
-    // instead of handing us a refusal.
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...fallbackParams,
     system: OCR_SYSTEM_PROMPT,
     output_config: {
       format: { type: "json_schema", schema: PRESCRIPTION_SCHEMA },
@@ -141,9 +146,16 @@ async function readWithModel(
 /**
  * Whether a reading is weak enough to be worth paying for a stronger model.
  *
- * Escalating on *anything* imperfect would defeat the saving, so the bar is a
- * read that is unusable rather than merely incomplete: nothing legible for an
- * eye, or values the fulfilment rules reject outright.
+ * The bar is a read that is *unusable* — nothing legible for an eye, or values
+ * the fulfilment rules reject outright — because escalating on anything merely
+ * imperfect would defeat the saving.
+ *
+ * Know what this cannot do: it detects an absent or impossible reading, never a
+ * confidently wrong one. A cheaper model misreading an axis of 165° as 105°
+ * produces values that are plausible, in range, and fulfillable, so this returns
+ * false and the wrong prescription proceeds. That risk is managed by choosing a
+ * model that reads accurately (see DEFAULT_OCR_MODEL) and by the mandatory
+ * human confirmation step — not here.
  */
 function shouldEscalate(
   rx: Partial<Prescription> | null,
