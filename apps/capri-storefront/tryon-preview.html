@@ -32,12 +32,42 @@
           attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Memoria","Metal"], shape: "Rectángulo" } },
         { label: "Niños redondo (PT212)", hex: "#2e7d5b",
           attributes: { eye_size: "44-47 mm", bridge_size: "16-17 mm", temple_length: "125-130 mm", material: ["Metal"], shape: "Combo" } },
+        // ── Construcción de aro, desde attributes.style ──
+        { label: "SEMI RIMLESS metal", hex: "#8a8f98",
+          attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Metal"], shape: "Rectángulo", style: "Semi Rimless", b_measurement: "31-40 mm" } },
+        { label: "3-PIECE RIMLESS metal", hex: "#b8912f",
+          attributes: { eye_size: "51-53 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Metal"], shape: "Óvalo modificado", style: "3-Piece Rimless", b_measurement: "31-40 mm" } },
+        // ── Formas que faltaban en la tabla ──
+        { label: "Aviador metal", hex: "#c9a227",
+          attributes: { eye_size: "57-59 mm", bridge_size: "13-15 mm", temple_length: "145-150 mm", material: ["Metal"], shape: "Aviador", style: "Full frame", b_measurement: "41-50 mm" } },
+        { label: "Oval acetato", hex: "#7d4a6b",
+          attributes: { eye_size: "51-53 mm", bridge_size: "18-19 mm", temple_length: "140 mm", material: ["Acetato"], shape: "Oval", style: "Full frame", b_measurement: "20-30 mm" } },
+        // ── B Measurement real vs fracción adivinada, mismo calibre ──
+        { label: "B real 31-40 (bajo)", hex: "#1b1b1f",
+          attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Acetato"], shape: "Rectángulo", style: "Full frame", b_measurement: "31-40 mm" } },
+        { label: "B real 41-50 (alto)", hex: "#1b1b1f",
+          attributes: { eye_size: "54-56 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm", material: ["Acetato"], shape: "Rectángulo", style: "Full frame", b_measurement: "41-50 mm" } },
       ];
       // Vistas: de frente y en 3/4, para juzgar aros, puente y varillas.
       const VIEWS = [
         { name: "frente", yaw: 0, pitch: 0 },
         { name: "3/4", yaw: -32, pitch: 8 },
       ];
+
+      // UN SOLO renderer para toda la parrilla. Con uno por panel el navegador
+      // se queda sin contextos WebGL (~16 de límite) y descarta los más viejos:
+      // los primeros paneles salían en blanco al pasar de 12 a 20 vistas.
+      // Aquí se renderiza en un lienzo compartido y se copia a cada panel.
+      const W = 420, H = 260;
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true, alpha: true, preserveDrawingBuffer: true,
+      });
+      renderer.setSize(W, H, false);
+      renderer.setPixelRatio(2);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
       const grid = document.getElementById("grid");
       for (const s of SAMPLES) {
@@ -46,19 +76,15 @@
           const cap = document.createElement("figcaption");
           cap.textContent = `${s.label} · ${view.name}`;
           const canvas = document.createElement("canvas");
+          canvas.width = W * 2; canvas.height = H * 2;
           fig.append(canvas, cap); grid.append(fig);
 
-          const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-          const w = 420, h = 260;
-          renderer.setSize(w, h, false);
-          renderer.setPixelRatio(2);
-          renderer.toneMapping = THREE.ACESFilmicToneMapping;
           const scene = new THREE.Scene();
           scene.background = new THREE.Color(0xffffff);
-          const pmrem = new THREE.PMREMGenerator(renderer);
-          scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+          scene.environment = envMap;
           scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-          const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(0.4, 0.8, 1); scene.add(key);
+          const key = new THREE.DirectionalLight(0xffffff, 1.5);
+          key.position.set(0.4, 0.8, 1); scene.add(key);
 
           const frame = buildFrame(s, s.hex);
           const dim = frameDimensions(s);
@@ -67,10 +93,13 @@
           scene.add(frame);
 
           // Ortográfica encuadrada al ancho total de la montura.
-          const pad = 1.25, halfW = (dim.totalWidth / 2) * pad, halfH = halfW * (h / w);
+          const pad = 1.25, halfW = (dim.totalWidth / 2) * pad, halfH = halfW * (H / W);
           const cam = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, -1000, 1000);
           cam.position.z = 300;
           renderer.render(scene, cam);
+
+          canvas.getContext("2d").drawImage(renderer.domElement, 0, 0);
+          frame.userData.dispose?.();
         }
       }
       window.__previewReady = true;
