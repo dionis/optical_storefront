@@ -1,64 +1,64 @@
 # Estado del proyecto y pendientes para producción
 
-_Actualizado: rama `develop` a `56f13c1`._
+_Actualizado tras probar el backend EN VIVO (vía proxy `/medusa`). Rama desplegable: `frontend_medusa`._
 
-## Qué quedó hecho (integrado en `develop`)
+## Hallazgo importante: el backend YA está listo
 
-**ORDEN 0 — lectura de lo existente.** Se partió de los archivos ya presentes
-en `develop` (medusaCart.js, MedusaCheckout.jsx, ruta configured-line, subscriber
-order-placed, medusa-config.ts) sin reescribirlos.
+Se probó el backend desplegado (`https://api.161-153-9-98.sslip.io`) endpoint por
+endpoint, en vivo. Todo responde 200:
 
-**ORDEN 1 — carrito unificado con Medusa** (`85d7d10`). El carrito del storefront
-es ahora el carrito de Medusa, con precios calculados en el servidor. El cliente
-nunca envía totales. Todos los puntos de "añadir al carrito" usan `variant_id`
-real; sin variante, el botón se deshabilita con aviso (sin fallback local). La
-receta viaja como PHI: solo el `prescription_id` llega al carrito.
+| Prueba | Resultado |
+|---|---|
+| `/store/regions` | ✅ 200 — "United States", USD, país `us` |
+| `/store/products` | ✅ 200 — productos publicados, variantes con `id`, la publishable key funciona (sin 401) |
+| `/store/lens-config/options` | ✅ 200 — **el 500 (raíz de 1.1) está RESUELTO** |
+| `/store/lens-config/quote` | ✅ 200 — precio de lente calculado en servidor (contrato coincide con el front) |
+| crear carrito + añadir variante | ✅ 200 — total correcto |
+| `configured-line` (lente configurado) | ✅ 200 — precio servidor + metadata (`frame_price`, `lens_config`, `prescription_id`) |
+| opciones de envío | ✅ 200 — "Recoger en tienda" + "Envío estándar" |
+| sesión de pago Stripe | ✅ 200 — devuelve `client_secret` (PaymentIntent real) |
+| **test negativo (ORDEN 9)** | ✅ inyectar `price:1` → el servidor lo ignora, mantiene el total real |
 
-**ORDEN 6 — recuperación "pagó pero no se creó la orden"** (`74614bb`). Al
-confirmar Stripe el cobro se persiste un marcador y se completa el pedido con
-reintentos y backoff exponencial, de forma idempotente (completar un carrito ya
-completado devuelve el mismo pedido: nunca doble cobro). Si tras los reintentos
-no hay orden, se muestra "Pago recibido — confirmando tu pedido" y el marcador
-se conserva para recuperación posterior.
+**Conclusión:** ORDEN 2 (región, sales channel + publishable key, proveedor de
+pago, envíos, productos publicados) está **hecho**, y el módulo lens-config está
+**arriba**. Los bloqueadores que asumían los docs anteriores ya no aplican.
 
-**ORDEN 4/5 (parte front) — retorno de Stripe 3D Secure** (`56f13c1`). Si el
-banco exige autenticación, Stripe redirige y al volver el checkout retoma el
-pedido. Endurecido con QA adversarial: TTL de 24 h en el marcador, distinción de
-errores terminales (4xx) vs transitorios (5xx/red), y una salida "Cancelar y
-empezar de nuevo" para que un marcador atascado nunca bloquee el checkout.
+## Lo que quedó hecho en el frontend (rama `frontend_medusa` = `develop` + proxy)
 
-Todo lo anterior compila limpio (Vite build OK), con textos en **es/en**,
-responsive, código comentado y revisado por QA.
+- ORDEN 1: carrito unificado con Medusa, precio en servidor, sin fallback local.
+- ORDEN 6: recuperación "pagó pero no se creó la orden" (marcador + reintentos
+  idempotentes + pantalla de pendiente + recuperación al recargar).
+- ORDEN 4/5 (front): retorno de Stripe 3D Secure; endurecido con QA adversarial.
+- Proxy `/medusa` same-origin para desplegar en Vercel sin CORS.
+- Todo compila, con i18n es/en, responsive, comentado y con QA.
 
-## Bloqueadores actuales (nada de esto es código de front)
+## Lo único que queda para producción (necesita acceso a Vercel)
 
-1. **ORDEN 2 — datos maestros en Medusa Admin (Dionis).** Región, sales channel
-   + publishable key, Stripe habilitado en la región, stock location +
-   fulfillment + opciones de envío, y productos/estuches publicados. Sin esto la
-   Store API responde 401 o el checkout se queda a medias. Guía detallada:
-   `ORDEN-2-MEDUSA-ADMIN-DIONIS.md`.
+1. **Desplegar `frontend_medusa` a un preview de Vercel** con estas variables de
+   entorno:
+   - `VITE_USE_MEDUSA=true`
+   - `VITE_MEDUSA_PUBLISHABLE_KEY=pk_4207238465abeb79cf080e8ab85278a23aecbf56f92cb67c1f4735c375be2e61`
+   - `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51Txnrg…` (la de test que ya está en el `.env`)
+   - `VITE_MEDUSA_URL=` **vacía** (o `/medusa`) → para que use el proxy, no modo directo
+   - `VITE_R2_PUBLIC_URL=…` (la de assets, si aplica)
+   - `VITE_DEFAULT_PAYMENT_PROVIDER=pp_stripe_stripe` (opcional; es el valor por defecto)
+2. **Prueba E2E en el preview** con la tarjeta de test `4242 4242 4242 4242`
+   (comprar una montura con lentes → checkout → pago). Es la validación final de
+   ORDEN 9 sobre la UI real.
+3. **Promover a producción** solo si el E2E pasa (cambiar la rama de producción
+   de Vercel a `frontend_medusa`, o hacer merge a la rama que Vercel despliega).
 
-2. **Clave de OCR en Coolify (Daniel).** Poner `ANTHROPIC_API_KEY` en las
-   variables de entorno del backend en Coolify y redeploy. (Revocar la clave que
-   se expuso en el chat y crear una nueva.)
+## Pendientes menores (no bloquean el cobro)
 
-## Pendiente después de desbloquear
+- ORDEN 4/5 (backend): registrar el webhook de Stripe en
+  `{BACKEND_URL}/hooks/payment/stripe_stripe` (para confirmar pagos de forma
+  asíncrona; el front ya cubre la confirmación en vivo).
+- ORDEN 6 (backend): subscriber de reconciliación (red de seguridad server-side).
+- ORDEN 8: email de pedido (Resend + dominio verificado). Requiere la
+  `ANTHROPIC_API_KEY` en Coolify (pendiente de Daniel) solo si el email/OCR lo usa.
 
-- **ORDEN 3** — verificar que con el entorno Medusa activo el catálogo devuelve
-  `variantId` en producción (ya confirmado en código; falta la validación viva).
-- **ORDEN 4/5 (backend)** — Stripe secret key + registrar el webhook en
-  `{BACKEND_URL}/hooks/payment/stripe_stripe`.
-- **ORDEN 6 (backend)** — subscriber de reconciliación (pago capturado → asegura
-  la orden aunque el navegador se cierre). Es la red de seguridad del front ya
-  hecho.
-- **ORDEN 7** — política de inventario (`manage_inventory`) en el scraper.
-- **ORDEN 8** — email de pedido (Resend + dominio verificado), cliente y admin.
-- **ORDEN 9** — prueba E2E con la tarjeta `4242 4242 4242 4242` + test negativo
-  (el cliente no puede manipular el precio).
+## Nota sobre reconciliación de ramas
 
-## Riesgo estructural abierto
-
-Las ramas `develop` y `frontend_dev` (la desplegada en Vercel) tienen
-**historias git no relacionadas** y funcionalidades divididas. Ver el plan de
-reconciliación en `RECONCILIACION-RAMAS.md`. Requiere una decisión antes de
-tocar nada.
+`frontend_medusa` (esta) desciende de `develop` y lleva todo lo anterior. La UI
+más pulida de `frontend_dev` se puede ir trayendo por partes DESPUÉS de que esto
+esté en producción y estable. Ver `RECONCILIACION-RAMAS.md`.
