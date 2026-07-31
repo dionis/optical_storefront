@@ -17,7 +17,22 @@ import Medusa from "@medusajs/js-sdk";
 
 const env = (import.meta && import.meta.env) || {};
 
-export const MEDUSA_URL = env.VITE_MEDUSA_URL || "http://localhost:9000";
+// Backend base URL. Two modes, chosen by VITE_MEDUSA_URL:
+//   • absolute http(s) URL  → direct mode (the browser talks to the backend and
+//                             the backend must send CORS headers for our origin);
+//   • empty or a "/path"    → same-origin PROXY mode (default). All Store API
+//                             calls go to `${origin}/medusa/...`, which the Vercel
+//                             rewrite and the Vite dev proxy forward to the
+//                             backend. The browser only ever hits its own origin,
+//                             so there is no CORS to configure. This matches how
+//                             the production storefront already reaches the
+//                             catalog, and is the mode we deploy with.
+const RAW_MEDUSA_URL = env.VITE_MEDUSA_URL || "";
+const IS_ABSOLUTE_URL = /^https?:\/\//i.test(RAW_MEDUSA_URL);
+const PROXY_PATH = RAW_MEDUSA_URL && !IS_ABSOLUTE_URL ? RAW_MEDUSA_URL : "/medusa";
+const ORIGIN = typeof window !== "undefined" && window.location ? window.location.origin : "";
+
+export const MEDUSA_URL = IS_ABSOLUTE_URL ? RAW_MEDUSA_URL : (ORIGIN + PROXY_PATH);
 export const MEDUSA_PUBLISHABLE_KEY = env.VITE_MEDUSA_PUBLISHABLE_KEY || "";
 
 // Feature flag to switch data sources page-by-page during the migration.

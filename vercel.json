@@ -5,6 +5,7 @@
   "buildCommand": "cd apps/capri-storefront && npm run build",
   "outputDirectory": "apps/capri-storefront/dist",
   "rewrites": [
+    { "source": "/medusa/:path*", "destination": "https://api.161-153-9-98.sslip.io/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
