@@ -305,6 +305,7 @@ export const T = {
     "checkout.pendingBody": "Tu pago se procesó correctamente. Estamos confirmando el pedido; esto puede tardar unos segundos. No cierres ni recargues repetidamente: si sales, al volver a esta página retomamos la confirmación automáticamente y te enviaremos el correo en cuanto esté listo.",
     "checkout.pendingRetry": "Reintentar confirmación",
     "checkout.pendingRetryFailed": "Aún estamos confirmando tu pedido. Tu pago está seguro; inténtalo de nuevo en un momento o revisa tu correo.",
+    "checkout.pendingCancel": "Cancelar y empezar de nuevo",
   },
   en: {
     "top.bar": "Free shipping on orders over $59 · 30-day guarantee",
@@ -611,6 +612,7 @@ export const T = {
     "checkout.pendingBody": "Your payment went through. We're confirming your order now; this can take a few seconds. Don't close or reload repeatedly: if you leave, returning to this page resumes confirmation automatically, and we'll email you as soon as it's ready.",
     "checkout.pendingRetry": "Retry confirmation",
     "checkout.pendingRetryFailed": "We're still confirming your order. Your payment is safe; try again in a moment or check your email.",
+    "checkout.pendingCancel": "Cancel and start over",
   },
 };
 

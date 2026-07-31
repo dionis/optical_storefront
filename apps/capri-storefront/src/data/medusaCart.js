@@ -166,22 +166,38 @@ export async function completeCart() {
 // already-completed cart returns the SAME order rather than charging again — so
 // re-attempts can never double-charge or duplicate the order.
 const PENDING_KEY = "oer_pending_order";
+// A marker older than this is considered stale and ignored, so an old,
+// unrecoverable attempt can never brick checkout for a brand-new purchase.
+// (The backend reconciliation subscriber is the source of truth for any
+// captured-but-uncompleted payment; this marker is only a client convenience.)
+const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
 /**
  * Record that payment was confirmed for `cartId` but the order is not created
  * yet. Stores only the cart id + a timestamp — never any card or PHI data.
  */
-export function markPaymentConfirmed(cartId) {
+export function markPaymentConfirmed(cartId = readId()) {
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify({ cart_id: cartId, ts: Date.now() }));
   } catch { /* storage unavailable — recovery falls back to the active cart id */ }
 }
 
-/** Read the pending-order marker, or null when there is none. */
+/**
+ * Read the pending-order marker, or null when there is none. A marker without a
+ * usable cart_id, or one older than PENDING_MAX_AGE_MS, is treated as absent and
+ * cleared — this prevents a stale/unrecoverable marker from trapping the user on
+ * the "confirming your order" screen forever.
+ */
 export function getPendingOrder() {
   try {
     const raw = localStorage.getItem(PENDING_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const m = JSON.parse(raw);
+    if (!m || !m.cart_id || (m.ts && Date.now() - m.ts > PENDING_MAX_AGE_MS)) {
+      clearPendingOrder();
+      return null;
+    }
+    return m;
   } catch { return null; }
 }
 
@@ -193,22 +209,36 @@ export function clearPendingOrder() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * A thrown 4xx means the request itself won't succeed on retry (cart not found,
+ * validation/business error) — retrying is pointless and would only loop. 5xx,
+ * timeouts and network errors carry no status (or >= 500) and are transient.
+ */
+function isTerminalError(e) {
+  const status = e && (e.status || (e.response && e.response.status));
+  return typeof status === "number" && status >= 400 && status < 500;
+}
+
+/**
  * Complete the cart → order with retry + exponential backoff, idempotently.
  *
  * `cartId` defaults to the active cart id; recovery passes the id saved in the
  * pending marker (which survives writeId(null)). Returns one of:
- *   { ok: true,  order }                — order created (or already existed)
- *   { ok: false, pending: true, error } — payment was confirmed but the order
- *                                         could not be confirmed after retries;
- *                                         the marker is KEPT so a later load or
- *                                         the backend reconciliation subscriber
- *                                         can still finish it
- *   { ok: false, error: "no_cart" }     — nothing to complete
+ *   { ok: true,  order }                 — order created (or already existed)
+ *   { ok: false, pending: true, error }  — payment confirmed but the order could
+ *                                          not be confirmed after retries; the
+ *                                          marker is KEPT so a later load or the
+ *                                          backend reconciliation subscriber can
+ *                                          still finish it
+ *   { ok: false, terminal: true, error } — a non-retryable 4xx (e.g. the cart no
+ *                                          longer exists). The caller decides
+ *                                          whether to clear the marker; this fn
+ *                                          does NOT, so a genuinely captured
+ *                                          payment is never silently forgotten.
+ *   { ok: false, error: "no_cart" }      — nothing to complete
  *
- * Both in-band completion errors (res.type !== "order", e.g. the payment session
- * not yet authorized right after Stripe) and thrown errors (network / 5xx) are
- * treated as transient and retried; only after exhausting retries do we report
- * `pending` and leave the marker in place.
+ * In-band completion errors (res.type !== "order", e.g. the payment session not
+ * yet authorized right after Stripe) and thrown 5xx/network errors are treated
+ * as transient and retried; only after exhausting retries do we report `pending`.
  */
 export async function completeCartWithRetry(cartId = readId(), { retries = 4, baseDelay = 800 } = {}) {
   if (!cartId) return { ok: false, error: "no_cart" };
@@ -225,7 +255,13 @@ export async function completeCartWithRetry(cartId = readId(), { retries = 4, ba
       // after Stripe confirmation). Keep the reason and retry with backoff.
       lastErr = res.error || res;
     } catch (e) {
-      // Thrown → network / timeout / 5xx. Transient by assumption.
+      if (isTerminalError(e)) {
+        // 4xx — the cart can't be completed (not found / invalid). Stop now and
+        // let the caller decide about the marker (recovery clears it to break
+        // the loop; pay() keeps it since the payment was just captured).
+        return { ok: false, terminal: true, error: (e && e.message) || String(e) };
+      }
+      // Thrown 5xx / timeout / network → transient by assumption.
       lastErr = (e && e.message) || String(e);
     }
     // Backoff between attempts: 0.8s, 1.6s, 3.2s, 6.4s (no wait after the last).

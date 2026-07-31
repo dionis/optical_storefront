@@ -6,7 +6,7 @@ import {
   getCart, updateContact, listShippingOptions, setShippingMethod,
   startPayment, DEFAULT_PROVIDER,
   // ORDEN 6 — payment-confirmed / order-pending recovery helpers.
-  markPaymentConfirmed, completeCartWithRetry, getPendingOrder,
+  markPaymentConfirmed, completeCartWithRetry, getPendingOrder, clearPendingOrder,
 } from "../data/medusaCart.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
@@ -45,21 +45,59 @@ export default function MedusaCheckout() {
 
   useEffect(() => {
     (async () => {
-      // ORDEN 6 recovery: if a previous attempt confirmed payment but never
-      // produced an order (marker present), resume completion instead of showing
-      // the cart/contact form — the customer already paid, so we must not send
-      // them back through checkout (which could charge again).
-      const pend = getPendingOrder();
-      if (pend && pend.cart_id) {
-        const r = await completeCartWithRetry(pend.cart_id);
-        if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
-        else setStep("pending");
+      // try/finally guarantees the loading spinner is always cleared, even if a
+      // future change throws somewhere in this async setup.
+      try {
+        // ORDEN 4/5 front — return from a Stripe 3D Secure / bank redirect.
+        // When the card needs authentication, Stripe leaves this page and comes
+        // back to return_url with ?redirect_status=... in the query string. We
+        // handle that outcome here and then strip the params so a later reload
+        // can't re-trigger it.
+        const params = new URLSearchParams(window.location.search);
+        const redirectStatus = params.get("redirect_status");
+        if (redirectStatus) {
+          navigate("/checkout", { replace: true }); // drop the query string
+          if (redirectStatus === "succeeded") {
+            // Bank authenticated the charge → same guarantee as an in-page
+            // confirmation: mark first, then complete idempotently (ORDEN 6).
+            markPaymentConfirmed();                 // uses the active cart id
+            const r = await completeCartWithRetry();
+            if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
+            else setStep("pending");
+            return;
+          }
+          // Authentication failed or was canceled — no charge was made. Stop
+          // here (do NOT fall through into recovery, which a stale marker could
+          // otherwise hijack) and let them retry from the contact step.
+          setErr(L("failed"));
+          const c0 = await getCart();
+          setCart(c0);
+          return;
+        }
+
+        // ORDEN 6 recovery: if a previous attempt confirmed payment but never
+        // produced an order (marker present + fresh), resume completion instead
+        // of showing the cart/contact form — the customer already paid, so we
+        // must not send them back through checkout (which could charge again).
+        const pend = getPendingOrder();
+        if (pend && pend.cart_id) {
+          const r = await completeCartWithRetry(pend.cart_id);
+          if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
+          else {
+            // A terminal 4xx here means the saved cart is gone/invalid: clear the
+            // marker so reloads can't loop on it. Either way show the pending
+            // screen (money may have moved; the backend subscriber reconciles).
+            if (r.terminal) { clearPendingOrder(); setErr(L("pendingRetryFailed")); }
+            setStep("pending");
+          }
+          return;
+        }
+
+        const c = await getCart();
+        setCart(c);
+      } finally {
         setLoading(false);
-        return;
       }
-      const c = await getCart();
-      setCart(c);
-      setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -105,10 +143,23 @@ export default function MedusaCheckout() {
   const pay = async () => {
     setErr(""); setBusy(true);
     try {
+      // Capture the cart id BEFORE charging: we must know what to complete, and
+      // this guards against ever being charged with no id to reconcile. If it's
+      // missing we bail before touching the card.
+      const cartId = (cart && cart.id) || null;
+      if (!cartId) { setErr(L("failed")); setBusy(false); return; }
+
       const { error } = await stripeRef.current.confirmPayment({
         elements: elementsRef.current,
+        // Required in case the card needs 3D Secure / bank authentication: then
+        // Stripe redirects the browser away and back to this URL. With
+        // "if_required" the redirect only happens when the bank demands it; the
+        // return is handled by the mount effect below (ORDEN 4/5 front).
+        confirmParams: { return_url: window.location.origin + "/checkout" },
         redirect: "if_required",
       });
+      // NOTE: if a redirect DID occur, the browser already left this page and the
+      // lines below never run — completion resumes on return via the mount effect.
       if (error) { setErr(error.message); setBusy(false); return; }
 
       // ── Payment is confirmed by Stripe HERE: the customer has been charged. ──
@@ -116,7 +167,6 @@ export default function MedusaCheckout() {
       // marker — never a bare error that loses the sale. Persist the marker
       // BEFORE attempting completion so a crash/close in between is recoverable
       // (ORDEN 6). completeCartWithRetry is idempotent, so retries are safe.
-      const cartId = (cart && cart.id) || null;
       markPaymentConfirmed(cartId);
 
       const r = await completeCartWithRetry(cartId);
@@ -125,9 +175,11 @@ export default function MedusaCheckout() {
         try { clearCart(); } catch {}
         setStep("done");
       } else {
-        // Charged, but the order couldn't be confirmed after retries. Reassure
-        // the user (do NOT imply the payment failed) and keep the marker so the
-        // next load or the backend reconciliation subscriber can finish it.
+        // Charged, but the order couldn't be confirmed (retries exhausted, or a
+        // terminal error). Reassure the user (do NOT imply the payment failed)
+        // and keep the marker so the next load or the backend reconciliation
+        // subscriber can finish it. Surface a note on terminal failures.
+        if (r.terminal) setErr(L("pendingRetryFailed"));
         setStep("pending");
       }
     } catch (e) { setErr(e.message || String(e)); }
@@ -141,11 +193,21 @@ export default function MedusaCheckout() {
     try {
       const pend = getPendingOrder();
       const cartId = (pend && pend.cart_id) || (cart && cart.id) || null;
+      if (!cartId) { setErr(L("pendingRetryFailed")); setBusy(false); return; }
       const r = await completeCartWithRetry(cartId);
       if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
       else setErr(L("pendingRetryFailed"));
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
+  };
+
+  // Abandon a stuck pending state and start fresh. The backend reconciliation
+  // subscriber remains the source of truth for any captured payment, so clearing
+  // the client-side marker here is safe and just unblocks the UI.
+  const cancelPending = () => {
+    clearPendingOrder();
+    setErr("");
+    navigate("/catalogo");
   };
 
   if (loading) return <div className="section"><p>…</p></div>;
@@ -184,7 +246,10 @@ export default function MedusaCheckout() {
           <button className="btn btn-primary big" disabled={busy} onClick={retryComplete}>
             {busy ? "…" : L("pendingRetry")}
           </button>
-          <Link to="/catalogo" className="btn btn-outline big">{L("toCatalog")}</Link>
+          {/* Escape hatch so a genuinely stuck marker can never trap the user. */}
+          <button className="btn btn-outline big" disabled={busy} onClick={cancelPending}>
+            {L("pendingCancel")}
+          </button>
         </div>
       ) : (
         <>
