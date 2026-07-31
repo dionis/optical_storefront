@@ -101,7 +101,7 @@ export default function LensProcess() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t, lang } = useLang();
-  const { productBySlug, ready } = useCatalog();
+  const { productBySlug } = useCatalog();
   const product = productBySlug[slug];
   const colorIdx = Number(params.get("color") || 0);
   const navigate = useNavigate();
@@ -132,7 +132,6 @@ export default function LensProcess() {
     return () => window.removeEventListener("resize", setH);
   }, []);
 
-  if (!ready) return <div className="section"><p className="muted">{t("loading")}</p></div>;
   if (!product) return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   const color = product.colors[colorIdx] || product.colors[0];
 
