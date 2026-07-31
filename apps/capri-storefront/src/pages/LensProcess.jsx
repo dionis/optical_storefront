@@ -91,6 +91,20 @@ export default function LensProcess() {
   const [pv, setPv] = useState(0);
   useEffect(() => onPrices(() => setPv((v) => v + 1)), []);
 
+  // The prescription upload is hidden when the storefront is not wired to
+  // Medusa, because OCR runs on the backend. Say so in development: a feature
+  // that silently disappears is otherwise indistinguishable from a bug, and
+  // Vite only reads .env at startup — a stale dev server is the usual cause.
+  useEffect(() => {
+    if (!USE_MEDUSA && import.meta.env.DEV) {
+      console.warn(
+        "[LensProcess] Prescription upload hidden: VITE_USE_MEDUSA is not \"true\". " +
+          "Set it in apps/capri-storefront/.env and restart the dev server " +
+          "(Vite reads .env only at startup)."
+      );
+    }
+  }, []);
+
   // Server-side quote (Medusa path): the backend is the single source of truth for
   // lens pricing. Recomputed on every selection change; the total sent to the cart
   // is the one the server returns. Amounts convert dollars↔cents at this boundary.

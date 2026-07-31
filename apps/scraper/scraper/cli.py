@@ -1,6 +1,7 @@
 """CLI entry point for the scraper."""
 
 import asyncio
+import sys
 from pathlib import Path
 
 import click
@@ -23,6 +24,14 @@ _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 @click.group()
 def cli() -> None:
     """Eyewear catalog ingestion CLI."""
+    # The log uses box-drawing rules and ✓/✗ marks. On Windows, Python picks the
+    # console encoding only for a terminal; the moment output is piped or
+    # redirected (`> sync.log`, `| tee`) it falls back to cp1252 and the first
+    # such character kills the run with UnicodeEncodeError — before a single
+    # product is touched. Pin UTF-8 so a redirected run behaves like a live one.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     load_dotenv(_ENV_FILE)
 
 
