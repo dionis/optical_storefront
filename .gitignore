@@ -67,3 +67,10 @@ _transfer
 # patient records (PHI) — they must never reach the repository, and the rule is
 # duplicated in docs/data/.gitignore so it travels with the directory.
 docs/data/
+
+# Regenerable caches and backups — no aportan nada al repo y se rehacen solos
+# .shape_truth.json  → mapa SKU→forma; lo reconstruye measure_shape_classifier.py
+#                      con ~11 peticiones a las facetas del proveedor
+# *.json.bak         → copia que deja backfill_geometry_attrs.py antes de escribir
+apps/scraper/scripts/.shape_truth.json
+*.json.bak
