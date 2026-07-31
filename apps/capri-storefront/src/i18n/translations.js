@@ -301,6 +301,10 @@ export const T = {
     "checkout.testCard": "Tarjeta de prueba: 4242 4242 4242 4242 · cualquier fecha futura · cualquier CVC.",
     "checkout.noStripe": "Falta VITE_STRIPE_PUBLISHABLE_KEY.",
     "checkout.email": "correo@ejemplo.com", "checkout.failed": "No se pudo completar el pedido.",
+    "checkout.pendingTitle": "Pago recibido — confirmando tu pedido",
+    "checkout.pendingBody": "Tu pago se procesó correctamente. Estamos confirmando el pedido; esto puede tardar unos segundos. No cierres ni recargues repetidamente: si sales, al volver a esta página retomamos la confirmación automáticamente y te enviaremos el correo en cuanto esté listo.",
+    "checkout.pendingRetry": "Reintentar confirmación",
+    "checkout.pendingRetryFailed": "Aún estamos confirmando tu pedido. Tu pago está seguro; inténtalo de nuevo en un momento o revisa tu correo.",
   },
   en: {
     "top.bar": "Free shipping on orders over $59 · 30-day guarantee",
@@ -603,6 +607,10 @@ export const T = {
     "checkout.testCard": "Test card: 4242 4242 4242 4242 · any future date · any CVC.",
     "checkout.noStripe": "VITE_STRIPE_PUBLISHABLE_KEY is missing.",
     "checkout.email": "email@example.com", "checkout.failed": "We couldn't complete your order.",
+    "checkout.pendingTitle": "Payment received — confirming your order",
+    "checkout.pendingBody": "Your payment went through. We're confirming your order now; this can take a few seconds. Don't close or reload repeatedly: if you leave, returning to this page resumes confirmation automatically, and we'll email you as soon as it's ready.",
+    "checkout.pendingRetry": "Retry confirmation",
+    "checkout.pendingRetryFailed": "We're still confirming your order. Your payment is safe; try again in a moment or check your email.",
   },
 };
 

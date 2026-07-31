@@ -153,4 +153,86 @@ export async function completeCart() {
   return { ok: false, error: res.error || res };
 }
 
+// ── Payment-confirmed / order-pending recovery (ORDEN 6) ──────────────────────
+// There is an unavoidable gap between two events: Stripe confirming the charge
+// (the customer's money is committed) and the backend turning the cart into an
+// order via cart.complete(). A network blip, a 5xx, or the browser closing in
+// that window would otherwise strand a paying customer with no order and no
+// trace. To close that gap we:
+//   1. persist a marker the instant payment is confirmed (markPaymentConfirmed),
+//   2. retry completion with exponential backoff (completeCartWithRetry), and
+//   3. recover on the next page load by re-attempting completion.
+// This is safe because Medusa's cart.complete() is idempotent: completing an
+// already-completed cart returns the SAME order rather than charging again — so
+// re-attempts can never double-charge or duplicate the order.
+const PENDING_KEY = "oer_pending_order";
+
+/**
+ * Record that payment was confirmed for `cartId` but the order is not created
+ * yet. Stores only the cart id + a timestamp — never any card or PHI data.
+ */
+export function markPaymentConfirmed(cartId) {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ cart_id: cartId, ts: Date.now() }));
+  } catch { /* storage unavailable — recovery falls back to the active cart id */ }
+}
+
+/** Read the pending-order marker, or null when there is none. */
+export function getPendingOrder() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+/** Clear the pending-order marker (order confirmed, or the flow was abandoned). */
+export function clearPendingOrder() {
+  try { localStorage.removeItem(PENDING_KEY); } catch { /* no-op */ }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Complete the cart → order with retry + exponential backoff, idempotently.
+ *
+ * `cartId` defaults to the active cart id; recovery passes the id saved in the
+ * pending marker (which survives writeId(null)). Returns one of:
+ *   { ok: true,  order }                — order created (or already existed)
+ *   { ok: false, pending: true, error } — payment was confirmed but the order
+ *                                         could not be confirmed after retries;
+ *                                         the marker is KEPT so a later load or
+ *                                         the backend reconciliation subscriber
+ *                                         can still finish it
+ *   { ok: false, error: "no_cart" }     — nothing to complete
+ *
+ * Both in-band completion errors (res.type !== "order", e.g. the payment session
+ * not yet authorized right after Stripe) and thrown errors (network / 5xx) are
+ * treated as transient and retried; only after exhausting retries do we report
+ * `pending` and leave the marker in place.
+ */
+export async function completeCartWithRetry(cartId = readId(), { retries = 4, baseDelay = 800 } = {}) {
+  if (!cartId) return { ok: false, error: "no_cart" };
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await medusa.store.cart.complete(cartId);
+      if (res.type === "order") {
+        writeId(null);          // the cart became an order — drop the cart id
+        clearPendingOrder();    // …and the recovery marker
+        return { ok: true, order: res.order };
+      }
+      // In-band failure (commonly "payment not authorized yet" in the seconds
+      // after Stripe confirmation). Keep the reason and retry with backoff.
+      lastErr = res.error || res;
+    } catch (e) {
+      // Thrown → network / timeout / 5xx. Transient by assumption.
+      lastErr = (e && e.message) || String(e);
+    }
+    // Backoff between attempts: 0.8s, 1.6s, 3.2s, 6.4s (no wait after the last).
+    if (attempt < retries) await sleep(baseDelay * Math.pow(2, attempt));
+  }
+  // Money is committed but no order surfaced. Preserve the marker for recovery.
+  return { ok: false, pending: true, error: lastErr };
+}
+
 export function clearCartId() { writeId(null); }

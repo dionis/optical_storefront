@@ -4,7 +4,9 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import {
   getCart, updateContact, listShippingOptions, setShippingMethod,
-  startPayment, completeCart, DEFAULT_PROVIDER,
+  startPayment, DEFAULT_PROVIDER,
+  // ORDEN 6 — payment-confirmed / order-pending recovery helpers.
+  markPaymentConfirmed, completeCartWithRetry, getPendingOrder,
 } from "../data/medusaCart.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
@@ -29,7 +31,7 @@ export default function MedusaCheckout() {
 
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState("contact"); // contact | pay | done
+  const [step, setStep] = useState("contact"); // contact | pay | pending | done
   const [f, setF] = useState({ email: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "" });
   const [ship, setShip] = useState([]);
   const [shipId, setShipId] = useState("");
@@ -43,10 +45,23 @@ export default function MedusaCheckout() {
 
   useEffect(() => {
     (async () => {
+      // ORDEN 6 recovery: if a previous attempt confirmed payment but never
+      // produced an order (marker present), resume completion instead of showing
+      // the cart/contact form — the customer already paid, so we must not send
+      // them back through checkout (which could charge again).
+      const pend = getPendingOrder();
+      if (pend && pend.cart_id) {
+        const r = await completeCartWithRetry(pend.cart_id);
+        if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
+        else setStep("pending");
+        setLoading(false);
+        return;
+      }
       const c = await getCart();
       setCart(c);
       setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -95,16 +110,49 @@ export default function MedusaCheckout() {
         redirect: "if_required",
       });
       if (error) { setErr(error.message); setBusy(false); return; }
-      const r = await completeCart();
+
+      // ── Payment is confirmed by Stripe HERE: the customer has been charged. ──
+      // From this instant the flow must end in an order or a tracked pending
+      // marker — never a bare error that loses the sale. Persist the marker
+      // BEFORE attempting completion so a crash/close in between is recoverable
+      // (ORDEN 6). completeCartWithRetry is idempotent, so retries are safe.
+      const cartId = (cart && cart.id) || null;
+      markPaymentConfirmed(cartId);
+
+      const r = await completeCartWithRetry(cartId);
+      if (r.ok) {
+        setOrder(r.order);
+        try { clearCart(); } catch {}
+        setStep("done");
+      } else {
+        // Charged, but the order couldn't be confirmed after retries. Reassure
+        // the user (do NOT imply the payment failed) and keep the marker so the
+        // next load or the backend reconciliation subscriber can finish it.
+        setStep("pending");
+      }
+    } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  // Manual "try again" from the pending screen: re-run the idempotent completion
+  // using the marker's cart id (falling back to the active cart id).
+  const retryComplete = async () => {
+    setErr(""); setBusy(true);
+    try {
+      const pend = getPendingOrder();
+      const cartId = (pend && pend.cart_id) || (cart && cart.id) || null;
+      const r = await completeCartWithRetry(cartId);
       if (r.ok) { setOrder(r.order); try { clearCart(); } catch {} setStep("done"); }
-      else setErr(typeof r.error === "string" ? r.error : L("failed"));
+      else setErr(L("pendingRetryFailed"));
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
   };
 
   if (loading) return <div className="section"><p>…</p></div>;
 
-  if (step !== "done" && (!cart || !(cart.items || []).length)) {
+  // The "pending" screen has no cart in memory (recovery cleared it), so it is
+  // exempt from the empty-cart guard along with the "done" screen.
+  if (step !== "done" && step !== "pending" && (!cart || !(cart.items || []).length)) {
     return (
       <div className="section checkout">
         <h1>{L("title")}</h1>
@@ -124,6 +172,19 @@ export default function MedusaCheckout() {
           <p>{L("orderNo")}: <b>{order?.display_id ? `#${order.display_id}` : order?.id}</b></p>
           <p className="muted">{L("thanks")}</p>
           <Link to="/catalogo" className="btn btn-primary big">{L("toCatalog")}</Link>
+        </div>
+      ) : step === "pending" ? (
+        /* ORDEN 6 — payment captured but the order is still being confirmed.
+           The copy avoids implying failure; the marker stays until an order
+           exists, so leaving or reloading this page resumes completion. */
+        <div className="checkout-done checkout-pending">
+          <h2>⏳ {L("pendingTitle")}</h2>
+          <p>{L("pendingBody")}</p>
+          {err && <div className="auth-err" style={{ margin: "10px 0" }}>{err}</div>}
+          <button className="btn btn-primary big" disabled={busy} onClick={retryComplete}>
+            {busy ? "…" : L("pendingRetry")}
+          </button>
+          <Link to="/catalogo" className="btn btn-outline big">{L("toCatalog")}</Link>
         </div>
       ) : (
         <>
