@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
-import { useLang } from "../i18n/LanguageContext.jsx";
-import { useUser, login, register, logout, setProfile } from "./userAuth.js";
 import { useFeedback } from "./Feedback.jsx";
-import ShippingEstimator from "./ShippingEstimator.jsx";
+import { useLang } from "../i18n/LanguageContext.jsx";
+import { useUser, login, register, logout } from "./userAuth.js";
+
+const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
 export function SidePanel({ open, onClose, title, children }) {
   return (
@@ -22,39 +23,11 @@ export function SidePanel({ open, onClose, title, children }) {
 }
 
 export function CartPanel({ open, onClose }) {
-  const { items, removeItem, total, clearCart, checkout } = useCart();
+  // Server-side Medusa cart: line items, totals and the checkout flow live on the
+  // backend. The panel only lists what the cart returns and routes to /checkout
+  // (MedusaCheckout) — contact, shipping and payment happen there.
+  const { items, removeItem, total, clearCart, busy } = useCart();
   const { t } = useLang();
-  const { dialog } = useFeedback();
-  const user = useUser();
-  const [ship, setShip] = useState({ method: "pickup", cost: 0 });
-  const [err, setErr] = useState("");
-  const [f, setF] = useState({});
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-
-  const isShip = ship.method === "ship";
-  const grand = total + (ship.cost || 0);
-  const email = user ? user.email : (f.email || "");
-  const phone = user ? user.phone : (f.phone || "");
-
-  const doCheckout = () => {
-    setErr("");
-    if (!f.name || !f.surname) return setErr(t("co.errName"));
-    if (!user) { const r = login(email, phone); if (!r.ok) return setErr(r.error); }
-    if (isShip && (!f.dAddress || !f.dCity || !f.dPhone)) return setErr(t("co.errDelivery"));
-    try { setProfile({ name: `${f.name} ${f.surname}`.trim() }); } catch {}
-    checkout(ship.cost || 0, ship.method, {
-      customer: { name: f.name, surname: f.surname, email, phone },
-      delivery: isShip ? { recipient: f.dName || `${f.name} ${f.surname}`.trim(), phone: f.dPhone, email: f.dEmail || email, address: f.dAddress, city: f.dCity, zone: ship.zoneName || ship.zoneId, carrier: ship.carrier } : null,
-    });
-    onClose();
-    dialog({
-      tone: "success",
-      title: t("cart.doneTitle"),
-      message: t("cart.done"),
-      detail: `${t("cart.doneTotal")}: $${grand.toFixed(2)}`,
-      confirmLabel: t("cart.doneCta"),
-    });
-  };
 
   return (
     <SidePanel open={open} onClose={onClose} title={t("cart.title")}>
@@ -65,55 +38,20 @@ export function CartPanel({ open, onClose }) {
           <ul className="panel-list">
             {items.map((i) => (
               <li key={i.id} className="panel-item">
+                {i.thumbnail && <img className="panel-item-thumb" src={i.thumbnail} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
                 <div className="panel-item-info">
-                  <b>{i.name}{i.isCase ? " · " + t("nav.cases") : ""}</b>
-                  <small>{[i.color, i.usage, i.index].filter(Boolean).join(" · ")}</small>
+                  <b>{i.title}</b>
+                  <small>{[i.metadata?.lens_summary, i.quantity > 1 ? `× ${i.quantity}` : null].filter(Boolean).join(" · ")}</small>
                 </div>
-                <span className="panel-item-price">${(i.total || 0).toFixed(2)}</span>
-                <button className="panel-x" onClick={() => removeItem(i.id)} aria-label={t("common.remove")}>×</button>
+                <span className="panel-item-price">{money(i.total)}</span>
+                <button className="panel-x" onClick={() => removeItem(i.id)} disabled={busy} aria-label={t("common.remove")}>×</button>
               </li>
             ))}
           </ul>
 
-          <ShippingEstimator subtotal={total} onChange={(s) => setShip(s)} />
+          <div className="panel-total"><span>{t("cart.total")}</span><b>{money(total)}</b></div>
 
-          <div className="co-form">
-            <div className="co-h">👤 {t("co.buyer")}</div>
-            <div className="co-fields">
-              <div className="co-two">
-                <input placeholder={t("co.name")} value={f.name || ""} onChange={set("name")} autoComplete="given-name" />
-                <input placeholder={t("co.surname")} value={f.surname || ""} onChange={set("surname")} autoComplete="family-name" />
-              </div>
-              {!user && <>
-                <input type="email" placeholder={t("auth.email")} value={f.email || ""} onChange={set("email")} autoComplete="email" />
-                <input type="tel" placeholder={t("auth.phone")} value={f.phone || ""} onChange={set("phone")} autoComplete="tel" />
-              </>}
-              {user && <div className="co-note">✓ {user.email} · {user.phone}</div>}
-            </div>
-
-            {isShip && (
-              <>
-                <div className="co-h">🚚 {t("co.delivery")}</div>
-                <div className="co-fields">
-                  <input placeholder={t("co.dAddress")} value={f.dAddress || ""} onChange={set("dAddress")} autoComplete="street-address" />
-                  <input placeholder={t("co.dCity")} value={f.dCity || ""} onChange={set("dCity")} />
-                  <div className="co-two">
-                    <input placeholder={t("co.dName")} value={f.dName || ""} onChange={set("dName")} />
-                    <input type="tel" placeholder={t("co.dPhone")} value={f.dPhone || ""} onChange={set("dPhone")} />
-                  </div>
-                  <input type="email" placeholder={t("co.dEmail")} value={f.dEmail || ""} onChange={set("dEmail")} />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="panel-total"><span>{t("cart.total")}</span><b>${grand.toFixed(2)}</b></div>
-          {ship.cost > 0 && <div className="co-note">🚚 {t("cart.incShip")}: ${ship.cost.toFixed(2)}</div>}
-          {err && <div className="auth-err" style={{ margin: "8px 0" }}>{err}</div>}
-
-          <button className="btn btn-primary big" onClick={doCheckout}>
-            {isShip ? "🚚 " : "🏬 "}{t("cart.checkout")} · ${grand.toFixed(2)}
-          </button>
+          <Link to="/checkout" className="btn btn-primary big" onClick={onClose}>{t("cart.checkout")}</Link>
           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
         </>
       )}
@@ -163,8 +101,14 @@ export function AuthPanel({ open, onClose }) {
 }
 
 export function FavPanel({ open, onClose }) {
-  const { favorites, toggleFav, addItem } = useCart();
+  const { favorites, toggleFav, addVariant, busy } = useCart();
+  const { toast } = useFeedback();
   const { t } = useLang();
+  const addFav = async (f) => {
+    if (!f.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try { await addVariant(f.variantId); toast({ tone: "success", message: t("common.addCart") }); }
+    catch { toast({ tone: "error", message: t("cart.addError") }); }
+  };
   return (
     <SidePanel open={open} onClose={onClose} title={t("fav.title")}>
       {favorites.length === 0 ? (
@@ -176,9 +120,9 @@ export function FavPanel({ open, onClose }) {
               <img src={f.image} alt={f.name} onError={(e)=>{e.currentTarget.style.opacity=.25;}} />
               <div className="fav-item-info">
                 <Link to={`/producto/${f.slug}`} onClick={onClose}><b>{f.name}</b></Link>
-                <small>{f.brand} · ${Number(f.price).toFixed(2)}</small>
+                <small>{f.brand} · {money(f.price)}</small>
                 <div className="fav-actions">
-                  <button onClick={() => addItem({ sku: f.slug, name: f.name, total: f.price })}>{t("common.addCart")}</button>
+                  <button disabled={busy} onClick={() => addFav(f)}>{t("common.addCart")}</button>
                   <button className="link-red" onClick={() => toggleFav(f)}>{t("common.remove")}</button>
                 </div>
               </div>

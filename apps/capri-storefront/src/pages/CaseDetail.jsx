@@ -5,6 +5,7 @@ import { useCatalog, recommendedCases } from "../data/catalogStore.js";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
 import { useCart } from "../components/CartContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function CaseDetail() {
@@ -15,7 +16,8 @@ export default function CaseDetail() {
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [added, setAdded] = useState(false);
-  const { addItem, toggleFav, isFav } = useCart();
+  const { addVariant, toggleFav, isFav, busy } = useCart();
+  const { toast } = useFeedback();
   const { t } = useLang();
 
   if (!item) {
@@ -26,10 +28,13 @@ export default function CaseDetail() {
   const others = recommendedCases(item.sku, 3).filter((c) => c.slug !== item.slug).slice(0, 3);
   const multi = item.colors.length > 1;
 
-  const add = () => {
-    addItem({ sku: item.sku, name: item.name, color: multi ? color.name : undefined, total: item.price, isCase: true });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1600);
+  const add = async () => {
+    if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try {
+      await addVariant(color.variantId);
+      setAdded(true);
+      setTimeout(() => setAdded(false), 1600);
+    } catch { toast({ tone: "error", message: t("cart.addError") }); }
   };
 
   return (

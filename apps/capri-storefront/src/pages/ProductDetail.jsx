@@ -8,6 +8,7 @@ import Reviews from "../components/Reviews.jsx";
 // Carga diferida: el probador arrastra three.js y no debe pesar en la PDP.
 const TryOn = lazy(() => import("../components/TryOn.jsx"));
 import { useCart } from "../components/CartContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 
@@ -18,10 +19,18 @@ export default function ProductDetail() {
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [tryOn, setTryOn] = useState(false);
-  const { addItem, toggleFav, isFav } = useCart();
+  const { addVariant, toggleFav, isFav, busy } = useCart();
+  const { toast } = useFeedback();
   const { t, tv } = useLang();
   const navigate = useNavigate();
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
+
+  // Add the frame at its base price via the server cart (no local total).
+  const addFrame = async (variantId) => {
+    if (!variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try { await addVariant(variantId); toast({ tone: "success", message: t("common.addCart") }); }
+    catch { toast({ tone: "error", message: t("cart.addError") }); }
+  };
 
   if (!product) {
     return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
@@ -41,7 +50,7 @@ export default function ProductDetail() {
         <div className="pdp-gallery">
           <div className={`pdp-main ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
             <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand }); }}
+                    onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                     aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
@@ -81,7 +90,8 @@ export default function ProductDetail() {
             <button className="btn btn-primary big" onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
               {t("pdp.selectLens")}
             </button>
-            <button className="btn btn-outline big" onClick={() => addItem({ sku: product.sku, name: product.name, color: color.name, total: product.price })}>
+            <button className="btn btn-outline big" disabled={busy || !color.variantId}
+                    onClick={() => addFrame(color.variantId)}>
               {t("pdp.addFrame")} · ${product.price.toFixed(2)}
             </button>
           </div>

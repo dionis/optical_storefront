@@ -11,7 +11,7 @@ import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { medusa, USE_MEDUSA } from "../data/medusa.js";
-import { addConfiguredFrame, createPrescription, ocrPrescription } from "../data/medusaCart.js";
+import { createPrescription, ocrPrescription } from "../data/medusaCart.js";
 
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2);
 function range(min, max, step) {
@@ -68,7 +68,7 @@ export default function LensProcess() {
   const product = productBySlug[slug];
   const colorIdx = Number(params.get("color") || 0);
   const navigate = useNavigate();
-  const { addItem } = useCart();
+  const { addConfiguredFrame } = useCart();
 
   const STEPS = [t("lens.step.use"), t("lens.step.rx"), t("lens.step.lens"), t("lens.step.summary")];
   const [step, setStep] = useState(0);
@@ -201,43 +201,41 @@ export default function LensProcess() {
   };
 
   const finish = async () => {
-    // Keep the local cart for the header UI badge.
-    addItem({
-      sku: product.sku, name: product.name, color: color.name,
-      design: designId, material: matId, photo: photoId, ar: arId, total,
-    });
-    // Medusa path: add the configured frame (server-priced) and go to checkout.
-    if (USE_MEDUSA && color?.variantId) {
-      try {
-        // Persist the prescription as a health record (PHI) server-side and pass
-        // only its id to the cart. Raw Rx values never leave the backend DB.
-        let prescriptionId = null;
-        if (!frameOnly) {
-          const num = (v) => (v === "" || v == null ? null : parseFloat(v));
-          const addv = rx.add ? parseFloat(rx.add) : null;
-          // Only claim the OCR provenance once the user actually confirmed the
-          // reading — the backend rejects an unconfirmed OCR prescription.
-          const fromOcr = ocr.status === "done" && ocr.confirmed;
-          const rxPayload = {
-            od: { sph: num(rx.od_sph) ?? 0, cyl: num(rx.od_cyl) ?? 0, axis: rx.od_axis ? parseInt(rx.od_axis, 10) : null, add: addv, prism: null, base: null },
-            os: { sph: num(rx.os_sph) ?? 0, cyl: num(rx.os_cyl) ?? 0, axis: rx.os_axis ? parseInt(rx.os_axis, 10) : null, add: addv, prism: null, base: null },
-            pd: num(rx.pd), pd_od: null, pd_os: null,
-            source: fromOcr ? "ocr" : "manual",
-            verified_by_user: true,
-            file_url: fromOcr ? ocr.fileUrl : null,
-          };
-          try { prescriptionId = await createPrescription(rxPayload); } catch { /* non-blocking */ }
-        }
-        await addConfiguredFrame(color.variantId, {
-          design_code: frameOnly ? "frame-only" : designId,
-          material_code: matId, photo_code: photoId, ar_code: arId,
-        }, prescriptionId);
-        navigate("/checkout");
-        return;
-      } catch (e) { /* fall back to the local flow below */ }
+    // The cart is server-side. Without Medusa or without a variant there is no way
+    // to add a real, server-priced line — surface it instead of silently pretending.
+    if (!USE_MEDUSA) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try {
+      // Persist the prescription as a health record (PHI) server-side and pass only
+      // its id to the cart. Raw Rx values never leave the backend DB.
+      let prescriptionId = null;
+      if (!frameOnly) {
+        const num = (v) => (v === "" || v == null ? null : parseFloat(v));
+        const addv = rx.add ? parseFloat(rx.add) : null;
+        // Only claim the OCR provenance once the user actually confirmed the
+        // reading — the backend rejects an unconfirmed OCR prescription.
+        const fromOcr = ocr.status === "done" && ocr.confirmed;
+        const rxPayload = {
+          od: { sph: num(rx.od_sph) ?? 0, cyl: num(rx.od_cyl) ?? 0, axis: rx.od_axis ? parseInt(rx.od_axis, 10) : null, add: addv, prism: null, base: null },
+          os: { sph: num(rx.os_sph) ?? 0, cyl: num(rx.os_cyl) ?? 0, axis: rx.os_axis ? parseInt(rx.os_axis, 10) : null, add: addv, prism: null, base: null },
+          pd: num(rx.pd), pd_od: null, pd_os: null,
+          source: fromOcr ? "ocr" : "manual",
+          verified_by_user: true,
+          file_url: fromOcr ? ocr.fileUrl : null,
+        };
+        prescriptionId = await createPrescription(rxPayload);
+      }
+      // Server prices the frame+lens; the client never sends a total.
+      await addConfiguredFrame(color.variantId, {
+        design_code: frameOnly ? "frame-only" : designId,
+        material_code: matId, photo_code: photoId, ar_code: arId,
+      }, prescriptionId);
+      navigate("/checkout");
+    } catch (e) {
+      // A failed add MUST be visible — this is the bug that produced "empty cart
+      // at checkout": swallowing the error and navigating away as if it worked.
+      toast({ tone: "error", title: t("cart.addError"), message: String(e?.message || e) });
     }
-    toast({ tone: "success", title: t("lens.added"), message: t("lens.addedBody") });
-    navigate(`/producto/${product.slug}`);
   };
   const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));
   const money = (n) => "$" + Number(n).toFixed(0);

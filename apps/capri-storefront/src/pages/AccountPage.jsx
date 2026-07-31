@@ -20,8 +20,12 @@ function Stars({ value, onSelect }) {
 }
 
 function Favorites() {
-  const { favorites, toggleFav, addItem } = useCart();
+  const { favorites, toggleFav, addVariant, busy } = useCart();
   const { t } = useLang();
+  const addFav = async (f) => {
+    if (!f.variantId) { alert(t("cart.noVariant")); return; }
+    try { await addVariant(f.variantId); } catch { alert(t("cart.addError")); }
+  };
   if (!favorites.length) return <p className="muted acc-empty">{t("acc.fav.empty")}</p>;
   return (
     <div className="acc-grid">
@@ -32,7 +36,7 @@ function Favorites() {
             <Link to={`/producto/${f.slug}`}><b>{f.name}</b></Link>
             <small>{f.brand} · {money(f.price)}</small>
             <div className="acc-fav-actions">
-              <button onClick={() => addItem({ sku: f.slug, name: f.name, total: f.price, brand: f.brand })}>{t("common.addCart")}</button>
+              <button disabled={busy} onClick={() => addFav(f)}>{t("common.addCart")}</button>
               <button className="link-red" onClick={() => toggleFav(f)}>{t("common.remove")}</button>
             </div>
           </div>

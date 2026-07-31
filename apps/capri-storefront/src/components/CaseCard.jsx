@@ -1,26 +1,31 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
+import { useFeedback } from "./Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 export default function CaseCard({ item, compact = false }) {
-  const { addItem, toggleFav, isFav } = useCart();
+  const { addVariant, toggleFav, isFav, busy } = useCart();
+  const { toast } = useFeedback();
   const { t } = useLang();
   const [active, setActive] = useState(0);
   const [added, setAdded] = useState(false);
   const color = item.colors[active];
   const to = `/estuche/${item.slug}`;
 
-  const add = (e) => {
+  const add = async (e) => {
     e.preventDefault();
-    addItem({ sku: item.sku, name: item.name, color: item.colors.length > 1 ? color.name : undefined, total: item.price, isCase: true });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1400);
+    if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try {
+      await addVariant(color.variantId);
+      setAdded(true);
+      setTimeout(() => setAdded(false), 1400);
+    } catch { toast({ tone: "error", message: t("cart.addError") }); }
   };
 
   const fav = (e) => {
     e.preventDefault();
-    toggleFav({ slug: item.slug, name: item.name, price: item.price, image: color.image, brand: item.brand, isCase: true });
+    toggleFav({ slug: item.slug, name: item.name, price: item.price, image: color.image, brand: item.brand, isCase: true, variantId: color?.variantId });
   };
 
   return (
