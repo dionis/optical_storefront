@@ -154,19 +154,23 @@ export default class LensConfigModuleService extends MedusaService({
     frame_price_cents: number,
     config: LensConfig
   ): Promise<ComputedLensPrice> {
-    const { index, usage_type, coatings } = config;
+    const { index, usage_type } = config;
+    const coatings = config.coatings ?? [];
 
     const [lensOption] = await this.listLensOptions({
-      filters: { index, usage_type, is_active: true },
-    }).catch(() => [null]);
+      index,
+      usage_type,
+      is_active: true,
+    });
 
     const lens_modifier_cents = (lensOption as { price_modifier_cents?: number } | null)?.price_modifier_cents ?? 0;
 
     let coating_modifiers_cents = 0;
     for (const coatingType of coatings) {
       const [coating] = await this.listCoatingOptions({
-        filters: { type: coatingType, is_active: true },
-      }).catch(() => [null]);
+        type: coatingType,
+        is_active: true,
+      });
       if (coating) {
         coating_modifiers_cents += (coating as { price_modifier_cents: number }).price_modifier_cents;
       }
@@ -184,15 +188,16 @@ export default class LensConfigModuleService extends MedusaService({
   }
 
   async listActiveLensOptions(usage_type?: UsageType) {
+    // MedusaService generates `list<Plural>(filters, config, context)` — the filters
+    // go in as the first argument, NOT wrapped in a `{ filters }` object. Wrapping
+    // them makes MikroORM look for a `filters` column and fail the query.
     const filters: Record<string, unknown> = { is_active: true };
     if (usage_type) filters["usage_type"] = usage_type;
-    return this.listLensOptions({ filters } as Parameters<typeof this.listLensOptions>[0]);
+    return this.listLensOptions(filters);
   }
 
   async listActiveCoatingOptions(usage_type?: UsageType) {
-    const options = await this.listCoatingOptions({
-      filters: { is_active: true },
-    } as Parameters<typeof this.listCoatingOptions>[0]);
+    const options = await this.listCoatingOptions({ is_active: true });
     if (!usage_type) return options;
     return options.filter(
       (c) =>

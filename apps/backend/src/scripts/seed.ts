@@ -2,6 +2,13 @@
  * Seed script: populate lens options and coating options with defaults.
  * Run with: medusa exec src/scripts/seed.ts
  * Safe to re-run (idempotent).
+ *
+ * LEGACY — these two tables no longer price anything. The 2026 matrix
+ * (lens_design × lens_material + photochromic + AR, seeded by migration in
+ * src/modules/lens-config/migrations/SeedLens2026Data3.ts) is the single source of
+ * truth, and /store/lens-config/options, /coatings and /price are views over it —
+ * see src/lib/lens-compat.ts. The prices below are historical defaults kept for
+ * reference; editing them changes nothing a customer is charged.
  */
 
 import type { CoatingType, UsageType } from "@eyewear/shared";
@@ -52,7 +59,8 @@ export default async function seed({
 
   for (const opt of lensOptions) {
     const existing = await lensService.listLensOptions({
-      filters: { usage_type: opt.usage_type, index: opt.index },
+      usage_type: opt.usage_type,
+      index: opt.index,
     });
     if (existing.length === 0) {
       await lensService.createLensOptions(opt);
@@ -100,9 +108,7 @@ export default async function seed({
   ];
 
   for (const coating of coatings) {
-    const existing = await lensService.listCoatingOptions({
-      filters: { type: coating.type },
-    });
+    const existing = await lensService.listCoatingOptions({ type: coating.type });
     if (existing.length === 0) {
       await lensService.createCoatingOptions(coating);
       console.log(`[seed] Created coating: ${coating.label}`);

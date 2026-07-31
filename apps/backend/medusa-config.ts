@@ -160,5 +160,8 @@ export default defineConfig({
     {
       resolve: "./src/modules/prescription",
     },
+    {
+      resolve: "./src/modules/ocr-config",
+    },
   ],
 });

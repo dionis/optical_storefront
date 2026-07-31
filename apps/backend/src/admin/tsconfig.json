@@ -1,0 +1,16 @@
+{
+  // Admin dashboard extensions are bundled by Vite, not by the CommonJS server
+  // build — they need JSX, ESM resolution and the Vite client types for
+  // `import.meta.env`. Typecheck with:
+  //   npx tsc --noEmit -p src/admin/tsconfig.json
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["."]
+}

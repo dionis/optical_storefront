@@ -1,5 +1,7 @@
 import { defineMiddlewares } from "@medusajs/medusa";
 import multer from "multer";
+import { ocrRateLimit } from "./store/prescriptions/ocr/rate-limit";
+import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,7 +29,10 @@ export default defineMiddlewares({
     {
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
-      middlewares: [upload.single("file")],
+      // Rate limit runs before multer so a flood is rejected without buffering
+      // 10 MB per request into memory first.
+      middlewares: [ocrRateLimit, upload.single("file")],
     },
+    ...ocrSettingsMiddlewares,
   ],
 });

@@ -16,5 +16,7 @@
   // `medusa-config.ts` must be part of the program so it gets emitted next to
   // the compiled sources — `medusa start` loads it from the output folder.
   "include": ["src", "medusa-config.ts"],
-  "exclude": ["node_modules", "dist", ".medusa", "tests"]
+  // `src/admin` is JSX/ESM built by the admin bundler (Vite), not by this
+  // CommonJS server build — it has its own tsconfig.
+  "exclude": ["node_modules", "dist", ".medusa", "tests", "src/admin"]
 }
