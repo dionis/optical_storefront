@@ -1,64 +1,73 @@
-# Estado del proyecto y pendientes para producción
+# Estado del proyecto y pendientes — HECHOS COMPROBADOS
 
-_Actualizado tras probar el backend EN VIVO (vía proxy `/medusa`). Rama desplegable: `frontend_medusa`._
+_Actualizado tras probar el backend EN VIVO (curl a `https://api.161-153-9-98.sslip.io`)
+y el código en la rama `develop` (commit 6dfc8da). Cada punto dice si está
+VERIFICADO o NO verificado. Nada aquí es suposición._
 
-## Hallazgo importante: el backend YA está listo
+## ✅ FUNCIONA — verificado en vivo hoy
 
-Se probó el backend desplegado (`https://api.161-153-9-98.sslip.io`) endpoint por
-endpoint, en vivo. Todo responde 200:
-
-| Prueba | Resultado |
+| Prueba (en vivo) | Resultado |
 |---|---|
-| `/store/regions` | ✅ 200 — "United States", USD, país `us` |
-| `/store/products` | ✅ 200 — productos publicados, variantes con `id`, la publishable key funciona (sin 401) |
-| `/store/lens-config/options` | ✅ 200 — **el 500 (raíz de 1.1) está RESUELTO** |
-| `/store/lens-config/quote` | ✅ 200 — precio de lente calculado en servidor (contrato coincide con el front) |
-| crear carrito + añadir variante | ✅ 200 — total correcto |
-| `configured-line` (lente configurado) | ✅ 200 — precio servidor + metadata (`frame_price`, `lens_config`, `prescription_id`) |
-| opciones de envío | ✅ 200 — "Recoger en tienda" + "Envío estándar" |
-| sesión de pago Stripe | ✅ 200 — devuelve `client_secret` (PaymentIntent real) |
-| **test negativo (ORDEN 9)** | ✅ inyectar `price:1` → el servidor lo ignora, mantiene el total real |
+| `GET /store/regions` | **200** |
+| `GET /store/products` | **200** |
+| `GET /store/lens-config/options` | **200** |
+| `POST /store/lens-config/quote` | **200** — `total_cents: 18900` (montura 12900 + lente 6000) |
+| `POST /store/carts/:id/configured-line` | **200** — carrito `total: 189`, 1 item (precio en servidor) |
+| `POST /store/carts/:id/shipping-methods` | **200** |
+| `POST /store/payment-collections` | **200** |
+| `POST .../payment-sessions` (Stripe) | **200** — `client_secret` real, provider `pp_stripe_stripe` |
 
-**Conclusión:** ORDEN 2 (región, sales channel + publishable key, proveedor de
-pago, envíos, productos publicados) está **hecho**, y el módulo lens-config está
-**arriba**. Los bloqueadores que asumían los docs anteriores ya no aplican.
+### 1.1 (precio de lentes) — INTEGRADO front ↔ back ✅
+- El frontend pide el precio al backend en `LensProcess.jsx` (`POST /store/lens-config/quote`)
+  y al añadir al carrito en `medusaCart.js` (`POST /store/carts/:id/configured-line`).
+- El backend (de Dionis) tiene esos endpoints y responden 200; el precio se calcula en el
+  servidor. El cliente nunca manda un total.
 
-## Lo que quedó hecho en el frontend (rama `frontend_medusa` = `develop` + proxy)
+### 1.3 (carrito → checkout → pago) — VERIFICADO end-to-end a nivel API ✅
+- Flujo completo probado en vivo: cart → configured-line (189) → shipping (200) →
+  payment-collection (200) → payment-session Stripe (200, `client_secret`).
 
-- ORDEN 1: carrito unificado con Medusa, precio en servidor, sin fallback local.
-- ORDEN 6: recuperación "pagó pero no se creó la orden" (marcador + reintentos
-  idempotentes + pantalla de pendiente + recuperación al recargar).
-- ORDEN 4/5 (front): retorno de Stripe 3D Secure; endurecido con QA adversarial.
-- Proxy `/medusa` same-origin para desplegar en Vercel sin CORS.
-- Todo compila, con i18n es/en, responsive, comentado y con QA.
+### Cableado "de cara al backend" — VERIFICADO ✅
+- `medusa.js`: modo proxy same-origin por defecto → llamadas a `${origin}/medusa/...`.
+- `vercel.json`: rewrite `/medusa/:path*` → `https://api.161-153-9-98.sslip.io/:path*`.
+- `.env.local` local: `VITE_USE_MEDUSA=true`, `VITE_MEDUSA_URL` vacío (usa proxy).
 
-## Lo único que queda para producción (necesita acceso a Vercel)
+### Frontend — VERIFICADO ✅
+- i18n es/en: **444 = 444 claves, 0 faltantes** en cada idioma.
+- Responsive: 44 media queries; render verificado a 430px (móvil) y desktop en smoke tests.
+  (No probado exhaustivamente en todos los breakpoints.)
+- Build OK (vite build) + smoke test runtime del funnel (popovers, dial, diagramas,
+  DP dual OCR) sin errores en consola.
 
-1. **Desplegar `frontend_medusa` a un preview de Vercel** con estas variables de
-   entorno:
-   - `VITE_USE_MEDUSA=true`
-   - `VITE_MEDUSA_PUBLISHABLE_KEY=pk_4207238465abeb79cf080e8ab85278a23aecbf56f92cb67c1f4735c375be2e61`
-   - `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51Txnrg…` (la de test que ya está en el `.env`)
-   - `VITE_MEDUSA_URL=` **vacía** (o `/medusa`) → para que use el proxy, no modo directo
-   - `VITE_R2_PUBLIC_URL=…` (la de assets, si aplica)
-   - `VITE_DEFAULT_PAYMENT_PROVIDER=pp_stripe_stripe` (opcional; es el valor por defecto)
-2. **Prueba E2E en el preview** con la tarjeta de test `4242 4242 4242 4242`
-   (comprar una montura con lentes → checkout → pago). Es la validación final de
-   ORDEN 9 sobre la UI real.
-3. **Promover a producción** solo si el E2E pasa (cambiar la rama de producción
-   de Vercel a `frontend_medusa`, o hacer merge a la rama que Vercel despliega).
+### Integración de ramas — VERIFICADO ✅
+- `develop` (6dfc8da) = **backend de Dionis + nuestro frontend** en UNA sola rama (monorepo).
+- Construido sobre `1ccf66a` (lo último de Dionis); no hay commits de Dionis posteriores.
+- `origin/develop` = 6dfc8da y el equipo local (device) = 6dfc8da → **sincronizados en origin**.
+  (No se puede verificar el local de Dionis; él debe hacer `git pull` de `develop`.)
+- Backup: rama `develop-backup-preintegracion` @ `1ccf66a` pusheada a origin.
 
-## Pendientes menores (no bloquean el cobro)
+## ❌ NO funciona / PENDIENTE — verificado
 
-- ORDEN 4/5 (backend): registrar el webhook de Stripe en
-  `{BACKEND_URL}/hooks/payment/stripe_stripe` (para confirmar pagos de forma
-  asíncrona; el front ya cubre la confirmación en vivo).
-- ORDEN 6 (backend): subscriber de reconciliación (red de seguridad server-side).
-- ORDEN 8: email de pedido (Resend + dominio verificado). Requiere la
-  `ANTHROPIC_API_KEY` en Coolify (pendiente de Daniel) solo si el email/OCR lo usa.
+- **OCR / lectura de receta (1.2):** `POST /store/prescriptions/ocr` con imagen real →
+  **503** `"No se pudo procesar la imagen... fallback:true"`. Falta **`ANTHROPIC_API_KEY`
+  en Coolify**. (acción de Daniel)
+- **Producción en Vercel:** hoy producción = rama vieja `frontend_dev` (e4380e4, flujo
+  localStorage). El flujo Medusa NO está desplegado. Hay que desplegar `develop` (o
+  `frontend_medusa`) en Vercel con `VITE_USE_MEDUSA=true` y `VITE_MEDUSA_URL` vacío.
+  (acceso a Vercel de Daniel)
+- **Prueba E2E real** en el preview con tarjeta `4242 4242 4242 4242` (validación final de UI).
 
-## Nota sobre reconciliación de ramas
+## ⚠️ Pendiente para 100% seguro/estable — NO verificado en vivo (marcado)
 
-`frontend_medusa` (esta) desciende de `develop` y lleva todo lo anterior. La UI
-más pulida de `frontend_dev` se puede ir trayendo por partes DESPUÉS de que esto
-esté en producción y estable. Ver `RECONCILIACION-RAMAS.md`.
+- **Emails de pedido** (Resend + dominio verificado) — NO verificado. (backend/Dionis + dominio)
+- **Webhook de Stripe** en backend (`/hooks/payment/stripe_stripe`) — NO verificado si está
+  registrado. (backend/Dionis)
+- **Subscriber de reconciliación** server-side ("pagó pero no se creó la orden") — NO verificado.
+- **"Recoger en tienda":** el backend aún la devuelve en shipping-options (verificado); el
+  frontend la filtra, pero conviene deshabilitarla también en backend. (backend/Dionis)
+- **Try-on:** presente en `develop` (de Dionis), no lo toqué; no re-probado por mí esta sesión.
+
+## Resumen de quién desbloquea qué
+- **Daniel:** (1) `ANTHROPIC_API_KEY` en Coolify → OCR/emails; (2) deploy de `develop` en Vercel + E2E.
+- **Dionis (backend):** webhook Stripe, subscriber de reconciliación, emails Resend, deshabilitar pickup.
+- **Nosotros (front):** hecho e integrado en `develop`; a la espera del deploy para probar en vivo.
