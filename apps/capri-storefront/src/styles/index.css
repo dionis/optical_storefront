@@ -1602,6 +1602,20 @@ img { max-width: 100%; }
 .zlx-float-img { width: 100%; max-height: 56vh; min-height: 300px; object-fit: contain; }
 .zlx-float img { max-height: 56vh; width: 100%; object-fit: contain; }
 .zlx-float-name { text-align: center; margin-top: 12px; font-weight: 700; color: var(--ink-soft); }
+/* precio en vivo, centrado debajo del espejuelo */
+.zlx-float-price { text-align: center; margin-top: 4px; font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--cuba-red); font-variant-numeric: tabular-nums; }
+/* miniaturas de color */
+.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.zlx-float-color { width: 58px; height: 46px; padding: 3px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; overflow: hidden; transition: border-color .15s; }
+.zlx-float-color img { width: 100%; height: 100%; object-fit: contain; }
+.zlx-float-color.on { border-color: var(--cuba-blue); box-shadow: 0 0 0 2px rgba(0,42,143,.15); }
+/* fila colección (izq) · material + ayuda (der) */
+.zlx-float-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-soft); }
+.zlx-float-meta .zlx-k { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px; }
+.zlx-float-collection { text-align: left; font-weight: 700; }
+.zlx-float-material { display: inline-flex; align-items: center; gap: 6px; text-align: right; font-weight: 700; color: var(--ink-soft); background: none; border: none; cursor: pointer; }
+.zlx-help-dot { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-blue); }
+.zlx-float-material:hover .zlx-help-dot { color: var(--cuba-red); }
 @media (max-width: 939px) { .zlx-float-img, .zlx-float img { max-height: 44vh; min-height: 200px; } }
 
 /* --- botones de paso (derecha) --- */

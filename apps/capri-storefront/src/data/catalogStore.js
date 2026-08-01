@@ -32,8 +32,14 @@ let state = {
   loading: true,
 };
 
-// re-enrich (re-apply prices) when the admin changes any override
+// re-enrich (re-apply prices) when the admin changes any override.
+// Under Medusa the backend catalog is the single source of truth for prices, so
+// we must NOT re-enrich from the bundled seed here — doing so clobbers the real
+// Medusa prices with the local placeholder prices a moment after load (the
+// "prices flip back to the old values when idle" bug). Only re-price the local
+// seed catalog when NOT running against Medusa.
 onPrices(() => {
+  if (USE_MEDUSA) return;
   const products = enrichProducts(rawFrames);
   const ecases = enrichCases(rawCases);
   set({ products, cases: ecases, productBySlug: bySlug(products), caseBySlug: bySlug(ecases) });

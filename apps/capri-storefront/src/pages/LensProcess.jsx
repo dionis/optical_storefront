@@ -256,7 +256,9 @@ export default function LensProcess() {
   const { DESIGNS, MATERIALS, BASE, PHOTO, AR } = useLensCatalog();
   const { productBySlug, loading } = useCatalog();
   const product = productBySlug[slug];
-  const colorIdx = Number(params.get("color") || 0);
+  // Selected frame colour. Seeded from the ?color= link (so clicking a specific
+  // swatch on a card lands here), but editable via the thumbnails under the frame.
+  const [colorIdx, setColorIdx] = useState(Number(params.get("color") || 0));
   const navigate = useNavigate();
   const { addConfiguredFrame } = useCart();
 
@@ -505,6 +507,34 @@ export default function LensProcess() {
                    onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
             </div>
             <div className="zlx-float-name">{product.name} · {color.name}</div>
+            {/* precio en vivo, debajo del espejuelo */}
+            <div className="zlx-float-price">${total.toFixed(2)}</div>
+            {/* miniaturas de color (elegir variante sin salir del funnel) */}
+            {product.colors.length > 1 && (
+              <div className="zlx-float-colors">
+                {product.colors.map((c, i) => (
+                  <button key={c.name} type="button" title={c.name}
+                          className={`zlx-float-color ${i === colorIdx ? "on" : ""}`}
+                          onClick={() => setColorIdx(i)} aria-label={c.name}>
+                    <img src={c.image} alt={c.name}
+                         onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* colección (abajo-izq) · material + ayuda (abajo-der) */}
+            <div className="zlx-float-meta">
+              <span className="zlx-float-collection">
+                <span className="zlx-k">{t("lens.collection")}</span> {product.brand}
+              </span>
+              <button type="button" className="zlx-float-material"
+                      onClick={() => setPop(pop === "frame" ? null : "frame")}
+                      aria-label={t("lens.frameInfo")}>
+                <span className="zlx-k">{t("lens.frameMaterial")}</span>{" "}
+                {frameMats.length ? frameMats.join(" · ") : "—"}
+                <Ic name="info" className="zlx-help-dot" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -542,23 +572,6 @@ export default function LensProcess() {
               </span>
               {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
             </button>
-          </div>
-
-          {/* ── frame commercial info (req 6) ── */}
-          <div className="zlx-frameinfo">
-            <button type="button" className="zlx-frameinfo-head" onClick={() => setPop(pop === "frame" ? null : "frame")}>
-              <IconMontura className="zlx-ic" />
-              <span>
-                <b>{t("lens.frameInfo")}</b>
-                <small>{t("lens.model")} {product.sku} · {product.brand}</small>
-              </span>
-              <Ic name="info" className="zlx-fab-ok" />
-            </button>
-            <div className="zlx-frameinfo-grid">
-              <div><span className="zlx-k">{t("lens.model")}</span><span className="zlx-v">{product.sku}</span></div>
-              <div><span className="zlx-k">{t("lens.collection")}</span><span className="zlx-v">{product.brand}</span></div>
-              <div><span className="zlx-k">{t("lens.frameMaterial")}</span><span className="zlx-v">{frameMats.length ? frameMats.join(" · ") : "—"}</span></div>
-            </div>
           </div>
 
           {/* ── live summary, always visible beside the frame (req 8, 10) ── */}

@@ -56,7 +56,7 @@ export default function ProductCard({ product }) {
         >
           {fav ? "♥" : "♡"}
         </button>
-        <Link to={`/producto/${product.slug}`} className="card-img-link" aria-label={product.name}>
+        <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
@@ -80,7 +80,7 @@ export default function ProductCard({ product }) {
 
       <div className="card-body">
         <div className="card-row">
-          <Link to={`/producto/${product.slug}`} className="card-name">{product.name}</Link>
+          <Link to={`/recetas/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
           <span className="card-price">${product.price.toFixed(2)}</span>
           <span className="card-rating">★ {product.rating}</span>
         </div>
