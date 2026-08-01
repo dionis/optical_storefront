@@ -471,78 +471,78 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
       {DEBUG && (
         <div className="tryon-tune">
           <div className="tryon-tune-row">
-            <strong>Calibrado</strong>
+            <strong>{t("tryon.tune.title")}</strong>
             {live && (
               <span className="tryon-tune-live">
-                ancho/cara <b className={live.gwOverFace > 0.85 && live.gwOverFace < 1.15 ? "ok" : "bad"}>
+                {t("tryon.tune.widthRatio")} <b className={live.gwOverFace > 0.85 && live.gwOverFace < 1.15 ? "ok" : "bad"}>
                   {live.gwOverFace}
                 </b>
-                {" · "}giro {live.yaw}° · cabeceo {live.pitch}° · ladeo {live.roll}°
+                {" · "}{t("tryon.tune.yaw")} {live.yaw}° · {t("tryon.tune.pitch")} {live.pitch}° · {t("tryon.tune.roll")} {live.roll}°
                 {" · "}{live.construction}
               </span>
             )}
           </div>
           <label>
-            Escala <b>{tune.scale.toFixed(2)}×</b>
+            {t("tryon.tune.scale")} <b>{tune.scale.toFixed(2)}×</b>
             <input type="range" min="0.8" max="1.4" step="0.01"
                    value={tune.scale} onChange={setTuneKey("scale")} />
           </label>
           <label>
-            Profundidad <b>{tune.forwardMm} mm</b>
+            {t("tryon.tune.depth")} <b>{tune.forwardMm} mm</b>
             <input type="range" min="0" max="30" step="0.5"
                    value={tune.forwardMm} onChange={setTuneKey("forwardMm")} />
           </label>
           <label>
-            Oclusor ancho <b>{tune.expand.toFixed(2)}×</b>
+            {t("tryon.tune.occWidth")} <b>{tune.expand.toFixed(2)}×</b>
             <input type="range" min="0.9" max="1.3" step="0.01"
                    value={tune.expand} onChange={setTuneKey("expand")} />
           </label>
           <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.autoHead} onChange={setTuneKey("autoHead")} />
-            Varilla auto {tune.autoHead && <b>{effHalf} mm</b>}
+            {t("tryon.tune.templeAuto")} {tune.autoHead && <b>{effHalf} mm</b>}
           </label>
           {!tune.autoHead && (
             <label>
-              Varilla lateral <b>{tune.headHalfWidth} mm</b>
+              {t("tryon.tune.templeSide")} <b>{tune.headHalfWidth} mm</b>
               <input type="range" min="55" max="85" step="0.5"
                      value={tune.headHalfWidth} onChange={setTuneKey("headHalfWidth")} />
             </label>
           )}
           <label>
-            Oclusor atrás <b>{tune.expandBack.toFixed(2)}×</b>
+            {t("tryon.tune.occBack")} <b>{tune.expandBack.toFixed(2)}×</b>
             <input type="range" min="1" max="1.6" step="0.01"
                    value={tune.expandBack} onChange={setTuneKey("expandBack")} />
           </label>
           <label>
-            Oclusor alto <b>{tune.expandUp.toFixed(2)}×</b>
+            {t("tryon.tune.occHeight")} <b>{tune.expandUp.toFixed(2)}×</b>
             <input type="range" min="1" max="2.2" step="0.02"
                    value={tune.expandUp} onChange={setTuneKey("expandUp")} />
           </label>
           <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.showOccluder} onChange={setTuneKey("showOccluder")} />
-            Ver oclusor
+            {t("tryon.tune.showOcc")}
           </label>
           <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.noOcclusion} onChange={setTuneKey("noOcclusion")} />
-            Sin oclusión
+            {t("tryon.tune.noOcc")}
           </label>
           <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.useEars} onChange={setTuneKey("useEars")} />
-            Oclusor de oreja
+            {t("tryon.tune.useEars")}
           </label>
           <label>
-            Oreja atrás <b>{tune.earOffset} mm</b>
+            {t("tryon.tune.earBack")} <b>{tune.earOffset} mm</b>
             <input type="range" min="0" max="45" step="1"
                    value={tune.earOffset} onChange={setTuneKey("earOffset")} />
           </label>
           <label>
-            Oreja fondo <b>{tune.earDepth} mm</b>
+            {t("tryon.tune.earDepth")} <b>{tune.earDepth} mm</b>
             <input type="range" min="40" max="200" step="5"
                    value={tune.earDepth} onChange={setTuneKey("earDepth")} />
           </label>
           <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.flipYaw} onChange={setTuneKey("flipYaw")} />
-            Invertir giro
+            {t("tryon.tune.flipYaw")}
           </label>
           <button type="button" className="tryon-tune-copy"
                   onClick={() => {
@@ -550,7 +550,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
                     navigator.clipboard?.writeText(out);
                     console.log("[tryon calibrado]", out);
                   }}>
-            Copiar valores
+            {t("tryon.tune.copy")}
           </button>
         </div>
       )}
