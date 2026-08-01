@@ -44,6 +44,17 @@ export default defineConfig(({ mode }) => {
       port: 5198,
       host: true,
       strictPort: true,
+      // Same-origin proxy for local dev, mirroring the Vercel rewrite:
+      // `/medusa/store/...` → `${backend}/store/...`. Keeps the browser talking
+      // only to localhost (no CORS) exactly like production.
+      proxy: {
+        "/medusa": {
+          target: env.VITE_MEDUSA_PROXY_TARGET || "https://api.161-153-9-98.sslip.io",
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p) => p.replace(/^\/medusa/, ""),
+        },
+      },
     },
     preview: {
       port: 5198,

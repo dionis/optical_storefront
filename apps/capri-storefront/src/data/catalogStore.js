@@ -24,6 +24,12 @@ let state = {
   caseBySlug: bySlug(SEED_CASES),
   meta: null,
   live: false,
+  // `loading` is true from first paint until the startup live-load (loadLive)
+  // settles. Deep-linked pages (/producto/:slug, /recetas/:slug) must wait on it
+  // before deciding "not found": under Medusa the real catalog — and thus the
+  // slug being visited — only exists after the fetch resolves, so a synchronous
+  // not-found check against the bundled seed would falsely reject valid links.
+  loading: true,
 };
 
 // re-enrich (re-apply prices) when the admin changes any override
@@ -53,50 +59,57 @@ export async function loadLive() {
   if (loaded) return;
   loaded = true;
 
-  // Medusa path (Phase 1): the Store API is the source of truth. Prices/attributes
-  // come already computed from the backend — no priceStore/enrichment re-pricing.
-  if (USE_MEDUSA) {
-    try {
-      const { products, cases } = await loadFromMedusa();
-      if (Array.isArray(products) && products.length) {
-        set({
-          products,
-          cases: cases.length ? cases : state.cases,
-          productBySlug: bySlug(products),
-          caseBySlug: bySlug(cases.length ? cases : state.cases),
-          meta: { source: "medusa" },
-          live: true,
-        });
-      }
-    } catch (e) {
-      // network/SDK error → keep the bundled seed silently
-    }
-    return;
-  }
-
+  // Whichever branch runs (and however it exits — success, early return, or
+  // error) the live-load attempt is over once we leave: clear `loading` so
+  // deep-linked pages can decide found/not-found against the settled catalog.
   try {
-    const opt = { cache: "no-store" };
-    const [cRes, kRes] = await Promise.all([fetch(`${BASE}/catalog.json`, opt), fetch(`${BASE}/cases.json`, opt)]);
-    if (!cRes.ok || !kRes.ok) return; // keep seed
-    const frames = await cRes.json();
-    const cases = await kRes.json();
-    if (!Array.isArray(frames) || !frames.length) return;
-    let meta = null;
-    try { const m = await fetch(`${BASE}/catalog-meta.json`, opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
-    rawFrames = frames;
-    if (Array.isArray(cases) && cases.length) rawCases = cases;
-    const products = enrichProducts(rawFrames);
-    const ecases = enrichCases(rawCases);
-    set({
-      products,
-      cases: ecases.length ? ecases : state.cases,
-      productBySlug: bySlug(products),
-      caseBySlug: bySlug(ecases.length ? ecases : state.cases),
-      meta,
-      live: true,
-    });
-  } catch (e) {
-    // network/parse error → keep the bundled seed silently
+    // Medusa path (Phase 1): the Store API is the source of truth. Prices/attributes
+    // come already computed from the backend — no priceStore/enrichment re-pricing.
+    if (USE_MEDUSA) {
+      try {
+        const { products, cases } = await loadFromMedusa();
+        if (Array.isArray(products) && products.length) {
+          set({
+            products,
+            cases: cases.length ? cases : state.cases,
+            productBySlug: bySlug(products),
+            caseBySlug: bySlug(cases.length ? cases : state.cases),
+            meta: { source: "medusa" },
+            live: true,
+          });
+        }
+      } catch (e) {
+        // network/SDK error → keep the bundled seed silently
+      }
+      return;
+    }
+
+    try {
+      const opt = { cache: "no-store" };
+      const [cRes, kRes] = await Promise.all([fetch(`${BASE}/catalog.json`, opt), fetch(`${BASE}/cases.json`, opt)]);
+      if (!cRes.ok || !kRes.ok) return; // keep seed
+      const frames = await cRes.json();
+      const cases = await kRes.json();
+      if (!Array.isArray(frames) || !frames.length) return;
+      let meta = null;
+      try { const m = await fetch(`${BASE}/catalog-meta.json`, opt); if (m.ok) meta = await m.json(); } catch { /* ignore */ }
+      rawFrames = frames;
+      if (Array.isArray(cases) && cases.length) rawCases = cases;
+      const products = enrichProducts(rawFrames);
+      const ecases = enrichCases(rawCases);
+      set({
+        products,
+        cases: ecases.length ? ecases : state.cases,
+        productBySlug: bySlug(products),
+        caseBySlug: bySlug(ecases.length ? ecases : state.cases),
+        meta,
+        live: true,
+      });
+    } catch (e) {
+      // network/parse error → keep the bundled seed silently
+    }
+  } finally {
+    set({ loading: false });
   }
 }
 

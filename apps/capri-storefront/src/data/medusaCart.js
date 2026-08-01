@@ -118,11 +118,24 @@ export async function updateContact({ email, shipping_address }) {
   return cart;
 }
 
+// Requirement 14: the storefront is delivery-only — never surface a
+// "pick up in store" option. We drop any shipping option that looks like a
+// pickup/collection method (by fulfillment type, metadata flag, or name in
+// either language) so the customer can only choose home delivery.
+function isPickupOption(o) {
+  if (!o) return false;
+  const md = o.metadata || {};
+  if (md.pickup === true || md.is_pickup === true) return true;
+  const typeCode = (o.type && (o.type.code || o.type.label)) || "";
+  const hay = `${o.name || ""} ${typeCode} ${md.type || ""}`.toLowerCase();
+  return /pickup|pick[- ]?up|recoger|recogida|en tienda|in[- ]?store|collect/.test(hay);
+}
+
 export async function listShippingOptions() {
   const id = readId();
   if (!id) return [];
   const { shipping_options } = await medusa.store.fulfillment.listCartOptions({ cart_id: id });
-  return shipping_options || [];
+  return (shipping_options || []).filter((o) => !isPickupOption(o));
 }
 
 export async function setShippingMethod(optionId) {

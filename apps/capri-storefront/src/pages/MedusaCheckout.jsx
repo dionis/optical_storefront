@@ -8,6 +8,7 @@ import {
   // ORDEN 6 — payment-confirmed / order-pending recovery helpers.
   markPaymentConfirmed, completeCartWithRetry, getPendingOrder, clearPendingOrder,
 } from "../data/medusaCart.js";
+import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
 
@@ -32,7 +33,7 @@ export default function MedusaCheckout() {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState("contact"); // contact | pay | pending | done
-  const [f, setF] = useState({ email: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "" });
+  const [f, setF] = useState({ email: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us" });
   const [ship, setShip] = useState([]);
   const [shipId, setShipId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,6 +43,29 @@ export default function MedusaCheckout() {
   const stripeRef = useRef(null);
   const elementsRef = useRef(null);
   const payElRef = useRef(null);
+  const addrRef = useRef(null);
+
+  // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
+  // configured we attach Places autocomplete to the street input and, on pick,
+  // fill the separate street / ZIP / city / country fields at once. Without a
+  // key this is a no-op and the manual separate fields stay fully usable, so
+  // the build never depends on Google being reachable.
+  useEffect(() => {
+    if (step !== "contact") return;
+    const cleanup = attachAddressAutocomplete(addrRef.current, (parts) => {
+      setF((p) => ({
+        ...p,
+        address_1: parts.address_1 || p.address_1,
+        postal_code: parts.postal_code || p.postal_code,
+        city: parts.city || p.city,
+        country: parts.country || p.country,
+        // Only adopt a resolved country code when present; keep the US default
+        // otherwise so the Medusa region/shipping never breaks.
+        country_code: parts.country_code || p.country_code || "us",
+      }));
+    });
+    return cleanup;
+  }, [step]);
 
   useEffect(() => {
     (async () => {
@@ -105,7 +129,10 @@ export default function MedusaCheckout() {
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const shippingAddress = () => ({
     first_name: f.first_name, last_name: f.last_name, address_1: f.address_1,
-    city: f.city, postal_code: f.postal_code, country_code: "us",
+    city: f.city, postal_code: f.postal_code,
+    // Region is US-only; fall back to "us" so an unrecognized autocomplete
+    // country can never break shipping-option lookup or completion.
+    country_code: (f.country_code || "us").toLowerCase(),
   });
 
   const calcShipping = async () => {
@@ -280,11 +307,13 @@ export default function MedusaCheckout() {
                   <input placeholder={L("first")} value={f.first_name} onChange={set("first_name")} />
                   <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
                 </div>
-                <input placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
                 <div className="co-two">
-                  <input placeholder={L("city")} value={f.city} onChange={set("city")} />
-                  <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} />
+                  <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
+                  <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
                 </div>
+                <input placeholder={L("country")} value={f.country} onChange={set("country")} autoComplete="country-name" />
               </div>
 
               {!ship.length ? (

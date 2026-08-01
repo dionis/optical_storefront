@@ -1,35 +1,71 @@
 import { useState, lazy, Suspense } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
+import { useFeedback } from "./Feedback.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 
 // El probador arrastra three.js (~560 kB). Se carga sólo al abrirlo, no en
 // cada listado de producto.
 const TryOn = lazy(() => import("./TryOn.jsx"));
 
+// Requisito 11 (tarjetas estilo Amazon):
+//  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).
+//  - Al hover aparece un icono "Comprar" que lleva al flujo completo de compra
+//    (/recetas/:slug) — receta + material + tratamientos, no al carrito.
+//  - Clic en el espejuelo = abrir el marco (PDP), donde también arranca el flujo.
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
   const [tryOn, setTryOn] = useState(false);
+  const [added, setAdded] = useState(false);
   const { t, tv } = useLang();
-  const { toggleFav, isFav } = useCart();
+  const { toggleFav, isFav, addVariant, busy } = useCart();
+  const { toast } = useFeedback();
+  const navigate = useNavigate();
   const color = product.colors[active];
   const fav = isFav(product.slug);
+
+  // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
+  // de simular un carrito local (el precio siempre sale del servidor).
+  const addFrameOnly = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try {
+      await addVariant(color.variantId);
+      setAdded(true);
+      setTimeout(() => setAdded(false), 1400);
+      toast({ tone: "success", message: t("common.addCart") });
+    } catch { toast({ tone: "error", message: t("cart.addError") }); }
+  };
+
+  // "Comprar" = flujo completo de compra (receta → material → tratamientos).
+  const buyNow = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(`/recetas/${product.slug}?color=${active}`);
+  };
 
   return (
     <div className="card">
       <div className="card-media">
         <button
           className={`heart ${fav ? "on" : ""}`}
-          onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand })}
+          onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: color.variantId })}
           aria-label={t("a11y.fav")}
         >
           {fav ? "♥" : "♡"}
         </button>
-        <Link to={`/producto/${product.slug}`} className="card-img-link">
+        <Link to={`/producto/${product.slug}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
+
+        {/* Icono "Comprar" que aparece al hover: lleva al flujo completo. */}
+        <button type="button" className="buy-pill" onClick={buyNow} aria-label={t("card.buy")}>
+          <span aria-hidden>🛒</span> {t("card.buy")}
+        </button>
+
         {TRY_ON_ENABLED && (
           <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
             <span aria-hidden>◈</span> {t("card.ar")}
@@ -56,6 +92,16 @@ export default function ProductCard({ product }) {
                     title={c.name} onMouseEnter={() => setActive(i)} onClick={() => setActive(i)} aria-label={c.name} />
           ))}
         </div>
+
+        {/* Añadir SOLO la montura al carrito (estilo Amazon). */}
+        <button
+          type="button"
+          className={`card-add ${added ? "done" : ""}`}
+          disabled={busy || !color.variantId}
+          onClick={addFrameOnly}
+        >
+          {added ? "✓ " + t("case.added") : "+ " + t("card.addFrameOnly")}
+        </button>
       </div>
     </div>
   );

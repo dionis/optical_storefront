@@ -12,6 +12,11 @@
   --bg: #ffffff;
   --soft: #f7f6f3;
   --cream: #faf9f6;
+  /* Bandera cubana — acento de iconos, diagramas y CTAs.
+     azul = base/línea, rojo = activo/seleccionado, blanco = superficie. */
+  --cuba-blue: #002A8F;
+  --cuba-red: #CF142B;
+  --cuba-white: #FFFFFF;
   --radius: 18px;
   --radius-sm: 12px;
   --shadow: 0 1px 2px rgba(23,32,58,.04), 0 10px 26px -16px rgba(23,32,58,.16);
@@ -219,6 +224,12 @@ button { font-family: inherit; cursor: pointer; }
 /* Fields the OCR filled and the user has not checked yet. The amber reads as
    "verify me" without looking like a validation error. */
 .rx-select.from-ocr, .rx-field select.from-ocr { background: #fff7e6; border-color: #d9920b; }
+/* Same amber "verify me" cue on the redesigned funnel inputs (dial + picker). */
+.zlx-picker.from-ocr, .zlx-dial.from-ocr { background: #fff7e6; border: 1.5px solid #d9920b; border-radius: 12px; }
+/* PD single/dual toggle inside the redesigned Rx popover (Cuban palette). */
+.zlx-rx-pdmode { display: inline-flex; gap: 0; margin: 4px 0 12px; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; }
+.zlx-pdmode-opt { padding: 7px 14px; font-size: 13.5px; background: none; border: none; cursor: pointer; color: var(--muted); }
+.zlx-pdmode-opt.on { background: var(--cuba-blue); color: #fff; font-weight: 700; }
 .rx-pd-mode { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; }
 .rx-pd-mode button { padding: 7px 14px; font-size: 14px; background: none; border: none; cursor: pointer; color: var(--muted); }
 .rx-pd-mode button.active { background: var(--blue); color: #fff; font-weight: 700; }
@@ -536,6 +547,18 @@ button { font-family: inherit; cursor: pointer; }
 .co-form .co-fields input { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; width: 100%; }
 .co-form .co-fields input:focus { outline: 2px solid #0E5AD0aa; border-color: var(--blue); }
 .co-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* Address autocomplete hint under the street field (req 15). */
+.co-hint { display: block; color: var(--muted); font-size: 12px; margin: -2px 0 4px; }
+/* Google Places dropdown must float above the checkout card and any overlay. */
+.pac-container { z-index: 100000; border-radius: 10px; box-shadow: 0 12px 30px -12px rgba(0,0,0,.35); font-family: inherit; }
+.pac-item { padding: 6px 10px; font-size: 13.5px; cursor: pointer; }
+/* Req 16: responsive — stack paired fields on narrow screens, no overflow. */
+@media (max-width: 480px) {
+  .co-two { grid-template-columns: 1fr; }
+  .section.checkout { padding-left: 12px; padding-right: 12px; }
+  .co-form { padding: 10px; }
+  .co-form .co-fields input { font-size: 16px; } /* avoids iOS zoom-on-focus */
+}
 
 /* ============================================================
    Cuban tricolor brand system — blue · white · red, used with
@@ -1241,3 +1264,312 @@ img { max-width: 100%; }
 .brand-feature > img { object-position: center 42% !important; }
 /* El hero de marca (banner) también centra un poco más abajo para no cortar las monturas. */
 .brand-hero-media img { object-position: center 42%; }
+
+
+/* ============================================================
+   Requisito 11 — tarjetas estilo Amazon
+   "Añadir al carrito" (solo montura) + icono "Comprar" al hover.
+   ============================================================ */
+/* Icono/pastilla "Comprar" que aparece al pasar el cursor por la imagen. */
+.buy-pill {
+  position: absolute; top: 12px; left: 12px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--red, #d12b2b); color: #fff; border: none;
+  border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 800;
+  cursor: pointer; box-shadow: var(--shadow); white-space: nowrap;
+  opacity: 0; transform: translateY(-4px); transition: opacity .18s, transform .18s, background .15s;
+}
+.card-media:hover .buy-pill,
+.case-media:hover .buy-pill,
+.buy-pill:focus-visible { opacity: 1; transform: none; }
+.buy-pill:hover { background: #b21f1f; }
+
+/* Botón "Añadir montura" (solo-marco) al pie de la tarjeta de producto. */
+.card-add {
+  width: 100%; margin-top: 10px;
+  border: 1.5px solid var(--blue); background: #fff; color: var(--blue);
+  border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 13px;
+  cursor: pointer; transition: .15s;
+}
+.card-add:hover { background: var(--blue); color: #fff; }
+.card-add.done { background: #2e7d46; border-color: #2e7d46; color: #fff; }
+.card-add:disabled { opacity: .45; cursor: not-allowed; }
+
+/* En pantallas táctiles la pastilla "Comprar" siempre visible (no hay hover). */
+@media (hover: none) {
+  .buy-pill { opacity: 1; transform: none; }
+}
+
+/* ============================================================
+   Requisito 6 — ficha comercial del marco al abrirlo
+   Modelo / colección / material + educación de calidad, y estética
+   flotante (.zlx-float) para la imagen del espejuelo en la PDP.
+   ============================================================ */
+/* Estética flotante sutil: el espejuelo "flota" con sombra suave. */
+@keyframes zlxFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.zlx-float img {
+  animation: zlxFloat 4.5s ease-in-out infinite;
+  filter: drop-shadow(0 22px 26px rgba(15, 40, 90, .18));
+}
+.zlx-float.zoom img { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .zlx-float img { animation: none; }
+}
+
+/* Chips de identidad del marco (modelo, colección, material). */
+.frame-id { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+.frame-id-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--blue-soft, #eef4ff); color: var(--ink, #17203a);
+  border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600;
+}
+.frame-id-k { text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; font-weight: 800; color: var(--blue, #0e5ad0); }
+
+/* Bloque de educación de calidad del material del marco. */
+.frame-quality {
+  margin-top: 18px; padding: 16px 18px;
+  background: #f7f9ff; border: 1px solid #e3e9f4; border-radius: 14px;
+}
+.frame-quality-head { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-bottom: 8px; }
+.frame-quality-lead { margin: 0 0 12px; color: var(--muted, #5b6478); font-size: 14px; line-height: 1.5; }
+.frame-quality-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.frame-quality-list li { display: flex; gap: 8px; font-size: 13.5px; line-height: 1.45; }
+.frame-quality-list li > span[aria-hidden] { flex: 0 0 auto; font-weight: 800; }
+.frame-quality-list li.good > span[aria-hidden] { color: #2e7d46; }
+.frame-quality-list li.bad  > span[aria-hidden] { color: var(--red, #d12b2b); }
+
+/* ============================================================
+   Requisito 12 — controles ZLX del configurador de espejuelo
+   Popover anclado, dial de grados (SVG), picker fino de 5 valores,
+   resumen vivo sticky y bloque educativo de material/marco.
+   Mobile-first, responsive, sin solapamientos ni pantalla completa.
+   ============================================================ */
+
+/* --- .zlx-pop: popover pequeño anclado, z-index alto, no tapa el espejuelo --- */
+.zlx-pop {
+  position: absolute;
+  z-index: 60;                     /* por encima de la UI; el espejuelo vive por debajo */
+  min-width: 180px;
+  max-width: min(280px, calc(100vw - 24px));
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  /* anclaje por defecto: debajo-izquierda del disparador; el JS puede reposicionar */
+  top: calc(100% + 8px);
+  left: 0;
+}
+.zlx-pop[data-anchor="right"] { left: auto; right: 0; }
+.zlx-pop[data-anchor="top"]   { top: auto; bottom: calc(100% + 8px); }
+/* Flechita del popover */
+.zlx-pop::before {
+  content: "";
+  position: absolute; top: -6px; left: 18px;
+  width: 11px; height: 11px;
+  background: #fff;
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.zlx-pop[data-anchor="top"]::before { top: auto; bottom: -6px; border: none; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.zlx-pop-title { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--blue); margin: 0 0 6px; }
+@media (max-width: 640px) {
+  /* En móvil el popover se ancla al pie, centrado, sin cubrir el espejuelo (que queda arriba) */
+  .zlx-pop {
+    position: fixed;
+    left: 12px; right: 12px; top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    max-width: none; min-width: 0;
+  }
+  .zlx-pop::before { display: none; }
+}
+
+/* --- .zlx-dial: semicírculo SVG para elegir grados --- */
+.zlx-dial {
+  position: relative;
+  width: 100%;
+  max-width: 220px;
+  margin: 0 auto;
+  aspect-ratio: 2 / 1;             /* semicírculo: ancho doble que alto */
+}
+.zlx-dial svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.zlx-dial-track { fill: none; stroke: var(--line); stroke-width: 10; stroke-linecap: round; }
+.zlx-dial-fill  { fill: none; stroke: var(--blue); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .2s ease; }
+.zlx-dial-knob  { fill: #fff; stroke: var(--blue); stroke-width: 3; cursor: grab; }
+.zlx-dial-knob:active { cursor: grabbing; }
+.zlx-dial-value {
+  position: absolute; left: 0; right: 0; bottom: 2px;
+  text-align: center; font-weight: 800; font-size: 20px; color: var(--ink);
+  font-family: var(--display);
+}
+.zlx-dial-value small { display: block; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* --- .zlx-picker: desplegable fino que muestra 5 valores, no full-screen --- */
+.zlx-picker {
+  position: absolute;
+  z-index: 55;
+  width: max-content;
+  min-width: 92px;
+  max-width: min(160px, calc(100vw - 24px));
+  max-height: calc(5 * 40px + 8px);  /* exactamente ~5 filas visibles */
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.zlx-picker::-webkit-scrollbar { width: 6px; }
+.zlx-picker::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+.zlx-picker-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 40px; padding: 0 12px;
+  border-radius: 8px;
+  font-size: 14px; font-weight: 600; color: var(--ink-soft);
+  cursor: pointer; white-space: nowrap;
+}
+.zlx-picker-item:hover { background: var(--soft); color: var(--ink); }
+.zlx-picker-item[aria-selected="true"] { background: var(--blue-soft); color: var(--blue); font-weight: 800; }
+@media (max-width: 640px) {
+  /* Sigue siendo un desplegable fino, nunca full-screen */
+  .zlx-picker { max-width: calc(100vw - 24px); }
+}
+
+/* --- .zlx-summary: resumen vivo de items+precios bajo el espejuelo, sticky --- */
+.zlx-summary {
+  position: sticky;
+  top: 12px;                        /* se mantiene visible al hacer scroll */
+  z-index: 20;
+  max-height: calc(100vh - 24px);   /* nunca se sale de pantalla */
+  overflow-y: auto;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  overscroll-behavior: contain;
+}
+.zlx-summary-title { font-family: var(--display); font-weight: 600; font-size: 16px; margin: 0 0 12px; }
+.zlx-summary-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.zlx-summary-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font-size: 13.5px; line-height: 1.4;
+}
+.zlx-summary-row .lbl { color: var(--ink-soft); min-width: 0; }
+.zlx-summary-row .lbl small { display: block; color: var(--muted); font-size: 11.5px; }
+.zlx-summary-row .val { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.zlx-summary-total {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 4px;
+  font-weight: 800; font-size: 16px;
+}
+.zlx-summary-total .val { color: var(--blue); font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  /* En columna única deja de "pegarse" para no chocar con otros bloques */
+  .zlx-summary { position: static; max-height: none; }
+}
+
+/* --- .zlx-edu: bloque educativo de material / marco --- */
+.zlx-edu {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: #f7f9ff;
+  border: 1px solid #e3e9f4;
+  border-radius: var(--radius-sm);
+}
+.zlx-edu-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; margin-bottom: 6px; }
+.zlx-edu-head .ico { flex: 0 0 auto; color: var(--blue); }
+.zlx-edu-body { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.zlx-edu-grid { display: grid; gap: 10px; margin-top: 12px; grid-template-columns: 1fr; }
+.zlx-edu-cell {
+  background: #fff; border: 1px solid #e3e9f4; border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.45;
+}
+.zlx-edu-cell b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--blue); margin-bottom: 3px; }
+@media (min-width: 560px) {
+  .zlx-edu-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zlx-dial-fill { transition: none; }
+}
+
+/* --- LensGraphics icons: size the inline SVG set inside the lens funnel ---
+   Cuban-flag accents: azul cubano = base/línea de los iconos; rojo cubano =
+   estado activo/seleccionado (coherente con el logo RUBI_LENS azul+rojo). --- */
+.zlx-fab .zlx-ic,
+.zlx-frameinfo-head .zlx-ic,
+.zlx-pop-head .zlx-ic { width: 22px; height: 22px; flex: 0 0 auto; }
+.zlx-pop-head .zlx-ic { color: var(--cuba-blue); }
+/* Default size for any bare <Ic> (class zlx-ic) NOT caught by a more specific
+   container rule above. A viewBox-only SVG with no width/height stretches to
+   its parent's full width — that is what made the frame-info glyph render as a
+   giant circle. The container-scoped rules above have higher specificity and
+   still win where they apply (pop-head, fab, frameinfo-head, choices, chips). */
+.zlx-ic { width: 20px; height: 20px; flex: 0 0 auto; vertical-align: -4px; }
+/* Confirmation / info badge on the floating buttons and the frame-info header
+   (class zlx-fab-ok had no rule at all → it inherited full width). */
+.zlx-fab-ok { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-red); }
+.zlx-summary-warn .zlx-ic { color: var(--cuba-blue); }
+.zlx-edu-good .zlx-ic { color: #1a7a3c; }
+.zlx-edu-bad .zlx-ic { color: var(--cuba-red); }
+.zlx-chip-ic { width: 26px; height: 26px; display: block; margin: 0 auto 6px; color: var(--cuba-blue); }
+.zlx-chip.sel .zlx-chip-ic { color: var(--cuba-red); }
+.zlx-choice-ic { width: 22px; height: 22px; flex: 0 0 auto; color: var(--cuba-blue); margin-right: 8px; }
+.zlx-choice.sel .zlx-choice-ic { color: var(--cuba-red); }
+.zlx-edu-head .ico { color: var(--cuba-blue); }
+.zlx-pop-title { color: var(--cuba-blue); }
+.frame-id-ic { vertical-align: -3px; margin-right: 4px; color: var(--cuba-blue); }
+.frame-quality-ic { flex: 0 0 auto; color: var(--cuba-blue); }
+
+/* Selected chips/choices carry the Cuban-red accent on their border too, so the
+   active state reads the same whether you look at the icon or the container. */
+.zlx-chip.sel { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red); }
+.zlx-choice.sel { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red); }
+
+/* Funnel CTAs: keep the ink button but add a Cuban-red accent ring on hover/
+   focus so the primary action nods to the flag palette without going fully red. */
+.zlx-pop-done.btn-primary { background: var(--cuba-red); box-shadow: 0 8px 20px -10px rgba(207,20,43,.55); }
+.zlx-pop-done.btn-primary:hover:not(:disabled) { background: var(--cuba-red); filter: brightness(.94); }
+.zlx-pop-done.btn-primary:disabled { background: var(--ink); }
+.zlx-fab { border-color: var(--cuba-blue); }
+.zlx-fab.sel, .zlx-fab.on { border-color: var(--cuba-red); color: var(--cuba-red); }
+
+/* --- Educational diagrams (LensGraphics.DIAGRAMS) inside the help popover ---
+   Layout requirement: the diagram/image sits ABOVE and the caption text BELOW,
+   the block is responsive, and inside .zlx-pop it never goes full-screen on
+   mobile — it scrolls within the popover, which itself is a bottom sheet. --- */
+.zlx-diag-help { margin-top: 14px; display: grid; gap: 14px; }
+.zlx-diag-fig {
+  margin: 0; padding: 12px;
+  background: #fff; border: 1px solid #e3e9f4; border-radius: var(--radius-sm);
+  display: flex; flex-direction: column; align-items: stretch;   /* imagen arriba, texto debajo */
+}
+.zlx-diag-fig .lens-diag { max-width: 420px; width: 100%; margin: 0 auto; height: auto; }
+.zlx-diag-cap { order: 2; margin: 8px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+
+/* When the diagrams live inside the help popover, constrain them so the popover
+   stays a card/sheet and never becomes a full-screen takeover on phones. */
+.zlx-pop .zlx-diag-help { max-height: 52vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+@media (max-width: 640px) {
+  .zlx-pop .zlx-diag-help { max-height: 40vh; }
+  .zlx-diag-fig .lens-diag { max-width: 100%; }
+}
+
+/* --- Catalog deep-link loader (waits out the startup catalog load) --- */
+.capri-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 40vh; color: var(--muted); }
+.capri-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #e3e9f4; border-top-color: var(--blue); animation: capriSpin 0.8s linear infinite; }
+@keyframes capriSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .capri-spinner { animation-duration: 2s; }
+}
