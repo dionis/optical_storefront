@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
-import { useCatalog } from "../data/catalogStore.js";
+import { useCatalog, matchProduct } from "../data/catalogStore.js";
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
 // useLensCatalog; only the presentation-only bits with no backend counterpart —
@@ -254,8 +254,8 @@ export default function LensProcess() {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const { DESIGNS, MATERIALS, BASE, PHOTO, AR } = useLensCatalog();
-  const { productBySlug, loading } = useCatalog();
-  const product = productBySlug[slug];
+  const { productBySlug, products, loading } = useCatalog();
+  const product = matchProduct(slug, productBySlug, products);
   // Selected frame colour. Seeded from the ?color= link (so clicking a specific
   // swatch on a card lands here), but editable via the thumbnails under the frame.
   const [colorIdx, setColorIdx] = useState(Number(params.get("color") || 0));

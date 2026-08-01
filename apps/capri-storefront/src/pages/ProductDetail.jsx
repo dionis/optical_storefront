@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
-import { useCatalog, recommendedCases } from "../data/catalogStore.js";
+import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
@@ -17,7 +17,7 @@ import { IconMontura } from "../components/LensGraphics.jsx";
 export default function ProductDetail() {
   const { slug } = useParams();
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
-  const product = productBySlug[slug];
+  const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [tryOn, setTryOn] = useState(false);

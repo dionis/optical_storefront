@@ -52,6 +52,27 @@ function set(next) { state = { ...state, ...next }; emit(); }
 export function subscribe(f) { subs.add(f); return () => subs.delete(f); }
 export function getState() { return state; }
 
+// Resolve a product from a URL slug that may be a SHORT seed slug ("dc406") OR a
+// full Medusa handle ("dc406-di-caprio"). A link can be built from the seed
+// catalog (short slug) a moment before the Medusa catalog — keyed by handle —
+// finishes loading; without this, that link would render "product not found"
+// even though the product exists. Falls back to matching by sku/handle/prefix.
+const _normKey = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+export function matchProduct(slug, bySlugMap, list) {
+  if (!slug) return null;
+  if (bySlugMap && bySlugMap[slug]) return bySlugMap[slug];
+  const key = _normKey(slug);
+  return (
+    (list || []).find(
+      (p) =>
+        _normKey(p.slug) === key ||
+        _normKey(p.sku) === key ||
+        (p.slug && String(p.slug).startsWith(slug + "-")) ||
+        (p.handle && p.handle === slug)
+    ) || null
+  );
+}
+
 // Where the daily cloud service publishes the catalog. Defaults to same-origin
 // (public/*.json), but for the SaaS/cloud deployment set VITE_CATALOG_URL to the
 // hosted base (e.g. https://cdn.myshop.com/catalog) so the storefront reads the
