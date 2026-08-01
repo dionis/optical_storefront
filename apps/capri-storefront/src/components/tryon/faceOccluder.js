@@ -16,9 +16,19 @@ const FACE_OVAL = [
 ];
 
 const N = FACE_OVAL.length;
-// El óvalo de landmarks marca la silueta visible; la cabeza real (orejas, pelo)
-// es algo más ancha. Ensanchamos para que las varillas no la atraviesen.
-const EXPAND = 1.06;
+// El óvalo de landmarks ya cae prácticamente en el borde de la cara, a la altura
+// de la oreja. Ensancharlo empuja el volumen por FUERA de las varillas y se las
+// traga enteras — que es justo lo que pasaba con 1.06. Se deja a 1.0 y el ancho
+// extra de cabeza se compensa abriendo la varilla en frameGeometry, no inflando
+// el oclusor. Ajustable en caliente (`mesh.expand`) para calibrar sobre una cara.
+export const DEFAULT_EXPAND = 1.0;
+
+// El anillo FACE_OVAL termina a media frente — el landmark 10 no es la
+// coronilla — así que el cráneo queda fuera del volumen. Hay que estirar hacia
+// ARRIBA, y sólo hacia arriba: un `expand` uniforme también ensancharía los
+// laterales y volvería a tragarse las varillas, que es el equilibrio que
+// acabamos de encontrar. Por eso los dos ejes van separados.
+export const DEFAULT_EXPAND_UP = 1.35;
 
 export function createFaceOccluder() {
   // 0 = centro frontal · 1..N = anillo frontal · N+1..2N = anillo trasero
@@ -47,6 +57,17 @@ export function createFaceOccluder() {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -1;              // debe escribir profundidad ANTES de la montura
+  mesh.expand = DEFAULT_EXPAND;       // lateral
+  mesh.expandUp = DEFAULT_EXPAND_UP;  // hacia la frente y el cráneo
+
+  // Al calibrar hace falta VERLO: si el volumen no cubre bien la cabeza las
+  // varillas asoman, y a ciegas eso no se distingue de un fallo de profundidad.
+  mesh.setDebugVisible = (on) => {
+    material.colorWrite = on;
+    material.wireframe = on;
+    material.color.set(0x00ff88);
+    material.needsUpdate = true;
+  };
 
   /**
    * Recoloca el oclusor con los landmarks del fotograma actual.
@@ -75,8 +96,11 @@ export function createFaceOccluder() {
     positions[0] = cx; positions[1] = cy; positions[2] = cz;
     for (let i = 0; i < N; i++) {
       const p = pts[i];
-      const ex = cx + (p.x - cx) * EXPAND;
-      const ey = cy + (p.y - cy) * EXPAND;
+      // La proyección deja +Y hacia arriba, así que dy > 0 es la mitad de la
+      // frente: sólo esa se estira, para no ensanchar de paso los laterales.
+      const dy = p.y - cy;
+      const ex = cx + (p.x - cx) * mesh.expand;
+      const ey = cy + dy * (dy > 0 ? mesh.expandUp : mesh.expand);
       let o = front(i) * 3;
       positions[o] = ex; positions[o + 1] = ey; positions[o + 2] = p.z;
       o = back(i) * 3;

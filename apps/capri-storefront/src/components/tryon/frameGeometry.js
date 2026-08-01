@@ -190,19 +190,26 @@ function templeMesh(dim, side, material, thickness) {
   // Enganchar la varilla en el BORDE REAL del aro a esa altura. Antes se
   // colocaba en el ancho máximo (que sólo ocurre en y=0), y quedaba flotando
   // separada del marco.
-  const x0 = side * ((eye + bridge) / 2 + rimEdgeXSafe(eye, lensH, shape, y0));
+  // Magnitudes positivas; el lado se aplica una sola vez al construir la curva.
+  const hinge = (eye + bridge) / 2 + rimEdgeXSafe(eye, lensH, shape, y0);
   const back = temple * 0.78;       // tramo recto hasta la oreja
   const drop = temple * 0.20;       // caída tras la oreja
-  // La varilla ABRE hacia fuera para salvar la sien y corre pegada al lateral
-  // de la cabeza; sólo se cierra al enganchar detrás de la oreja. Si la curva
-  // fuese hacia dentro, quedaría dentro del volumen de la cabeza y el oclusor
-  // se la tragaría entera.
+
+  // La varilla corre POR FUERA de la cabeza. Su posición lateral es ABSOLUTA,
+  // no un desplazamiento respecto del aro: anchas o de niño, todas rodean la
+  // misma cabeza, así que la estrecha abre más y la ancha menos — como en la
+  // realidad. Con un desplazamiento relativo las monturas estrechas quedaban
+  // dentro del volumen del oclusor y desaparecían enteras.
+  const HEAD_HALF_WIDTH = 73;       // semiancho a la altura de las sienes
+  const lateral = Math.max(hinge + 5, HEAD_HALF_WIDTH + 3);
+  const mid = hinge + (lateral - hinge) * 0.45;
+  const tail = hinge + (lateral - hinge) * 0.65;
   const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(x0, y0, 0),                                          // bisagra
-    new THREE.Vector3(x0 + side * 2, y0 + 0.4, -temple * 0.10),            // sale casi recta
-    new THREE.Vector3(x0 + side * 4, y0 * 0.85, -back * 0.55),             // roza la sien
-    new THREE.Vector3(x0 + side * 3, y0 * 0.40, -back),                    // oreja
-    new THREE.Vector3(x0 + side * 1, y0 * 0.20 - drop, -back - drop * 0.4),// cae detrás
+    new THREE.Vector3(side * hinge, y0, 0),                                  // bisagra
+    new THREE.Vector3(side * mid, y0 + 0.4, -temple * 0.10),                 // abre
+    new THREE.Vector3(side * lateral, y0 * 0.85, -back * 0.45),              // salva la sien
+    new THREE.Vector3(side * lateral, y0 * 0.45, -back * 0.85),              // lateral
+    new THREE.Vector3(side * tail, y0 * 0.20 - drop, -back - drop * 0.4),    // tras la oreja
   ]);
   const geo = new THREE.TubeGeometry(curve, 40, thickness / 2, 10, false);
   return new THREE.Mesh(geo, material);

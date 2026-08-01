@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { buildFrame, frameDimensions } from "./tryon/frameGeometry.js";
-import { createFaceOccluder } from "./tryon/faceOccluder.js";
+import { createFaceOccluder, DEFAULT_EXPAND, DEFAULT_EXPAND_UP } from "./tryon/faceOccluder.js";
 
 // Probador virtual 3D. La montura es geometría real generada a partir de las
 // medidas del catálogo (calibre, puente, varilla, forma, material), NO la foto
@@ -54,6 +54,24 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   const [tracking, setTracking] = useState(false);
   const [size, setSize] = useState(1);
   const [yOff, setYOff] = useState(0);
+
+  // Calibrado en vivo. Estas cuatro constantes sólo se pueden fijar mirando una
+  // cara real, y editarlas a mano obliga a recompilar en cada intento. El panel
+  // sólo aparece en dev / con ?tryonDebug=1.
+  const [tune, setTune] = useState({
+    forwardMm: FRAME_FORWARD_MM,
+    expand: DEFAULT_EXPAND,
+    expandUp: DEFAULT_EXPAND_UP,
+    // Multiplica la escala calculada. >1 agranda la montura. Es independiente
+    // del slider "Size" que ve el cliente: aquí calibramos el valor POR DEFECTO
+    // (la constante OUTER_CANTHAL_MM), no la preferencia de cada usuario.
+    scale: 1,
+    flipYaw: false,
+    showOccluder: false,
+  });
+  const tuneRef = useRef(tune);
+  tuneRef.current = tune;
+  const [live, setLive] = useState(null);   // lecturas para el panel
 
   const color = product.colors[ci] || product.colors[0];
   sizeRef.current = size;
@@ -235,7 +253,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
             const rE = project(lms[33]), lE = project(lms[263]);
             const canthalPx = Math.hypot(rE.x - lE.x, rE.y - lE.y);
-            const pxPerMm = canthalPx / OUTER_CANTHAL_MM;
+            const pxPerMm = (canthalPx / OUTER_CANTHAL_MM) * tuneRef.current.scale;
 
             // Orientación: la matriz rígida de MediaPipe. Como espejamos la
             // imagen, hay que espejar también la rotación → se niegan el giro
@@ -245,7 +263,10 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
               m4.fromArray(mtx);                       // column-major, igual que three
               m4.decompose(tmpPos, quat, tmpScale);
               euler.setFromQuaternion(quat, "YXZ");
-              euler.y = -euler.y;
+              // El vídeo va espejado, así que el giro se invierte. Si en la
+              // prueba con cámara la montura gira al revés que la cabeza, es
+              // este signo: el interruptor del panel lo cambia sin recompilar.
+              euler.y = tuneRef.current.flipYaw ? euler.y : -euler.y;
               euler.z = -euler.z;
               quat.setFromEuler(euler);
               if (!haveQuat) { smoothQuat.copy(quat); haveQuat = true; }
@@ -265,6 +286,8 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
               cz: ema(prev.cz, next.cz), pxPerMm: ema(prev.pxPerMm, next.pxPerMm),
             } : next;
 
+            gl.occluder.expand = tuneRef.current.expand;
+            gl.occluder.expandUp = tuneRef.current.expandUp;
             gl.occluder.updateFromLandmarks(lms, project);
             gl.occluder.visible = true;
             lastSeenRef.current = now;
@@ -273,6 +296,19 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             if (DEBUG && now - lastLogRef.current > 1000) {
               lastLogRef.current = now;
               const d = frameDimensions(product);
+              // Ancho dibujado ÷ ancho real de la cara entre sienes. Debería
+              // rondar 1.0: es la comprobación objetiva de que la escala es
+              // correcta, sin depender de la impresión visual.
+              const sideR = project(lms[234]), sideL = project(lms[454]);
+              const facePx = Math.hypot(sideR.x - sideL.x, sideR.y - sideL.y);
+              const gw = d.totalWidth * pxPerMm * sizeRef.current;
+              setLive({
+                gwOverFace: +(gw / facePx).toFixed(3),
+                yaw: +(euler.y * 180 / Math.PI).toFixed(1),
+                pitch: +(euler.x * 180 / Math.PI).toFixed(1),
+                roll: +(euler.z * 180 / Math.PI).toFixed(1),
+                construction: d.construction,
+              });
               console.log("[tryon3d]", JSON.stringify({
                 sku: product.sku, shape: product?.attributes?.shape,
                 eye: d.eye, bridge: d.bridge, temple: d.temple,
@@ -305,7 +341,8 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
           frame.quaternion.copy(smoothQuat);
           // Adelantar la montura respecto de la superficie de la cara, en la
           // dirección a la que mira la cabeza.
-          forward.set(0, 0, 1).applyQuaternion(smoothQuat).multiplyScalar(FRAME_FORWARD_MM * s);
+          forward.set(0, 0, 1).applyQuaternion(smoothQuat)
+            .multiplyScalar(tuneRef.current.forwardMm * s);
           frame.position.set(
             pose.cx + forward.x,
             pose.cy + forward.y + yOffRef.current * H,
@@ -327,6 +364,17 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [product]);
+
+  // El oclusor es invisible por diseño (sólo escribe profundidad). Poder verlo
+  // en verde es lo que hace evidente si el volumen cubre la cabeza o no.
+  useEffect(() => {
+    glRef.current?.occluder?.setDebugVisible?.(tune.showOccluder);
+  }, [tune.showOccluder]);
+
+  const setTuneKey = (k) => (e) => {
+    const v = e.target.type === "checkbox" ? e.target.checked : parseFloat(e.target.value);
+    setTune((t) => ({ ...t, [k]: v }));
+  };
 
   return createPortal(
     <div className="tryon" role="dialog" aria-modal="true">
@@ -365,6 +413,58 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
           <input type="range" min="-0.15" max="0.15" step="0.005" value={yOff} onChange={(e) => setYOff(parseFloat(e.target.value))} />
         </label>
       </div>
+      {DEBUG && (
+        <div className="tryon-tune">
+          <div className="tryon-tune-row">
+            <strong>Calibrado</strong>
+            {live && (
+              <span className="tryon-tune-live">
+                ancho/cara <b className={live.gwOverFace > 0.85 && live.gwOverFace < 1.15 ? "ok" : "bad"}>
+                  {live.gwOverFace}
+                </b>
+                {" · "}giro {live.yaw}° · cabeceo {live.pitch}° · ladeo {live.roll}°
+                {" · "}{live.construction}
+              </span>
+            )}
+          </div>
+          <label>
+            Escala <b>{tune.scale.toFixed(2)}×</b>
+            <input type="range" min="0.8" max="1.4" step="0.01"
+                   value={tune.scale} onChange={setTuneKey("scale")} />
+          </label>
+          <label>
+            Profundidad <b>{tune.forwardMm} mm</b>
+            <input type="range" min="0" max="30" step="0.5"
+                   value={tune.forwardMm} onChange={setTuneKey("forwardMm")} />
+          </label>
+          <label>
+            Oclusor ancho <b>{tune.expand.toFixed(2)}×</b>
+            <input type="range" min="0.9" max="1.3" step="0.01"
+                   value={tune.expand} onChange={setTuneKey("expand")} />
+          </label>
+          <label>
+            Oclusor alto <b>{tune.expandUp.toFixed(2)}×</b>
+            <input type="range" min="1" max="2.2" step="0.02"
+                   value={tune.expandUp} onChange={setTuneKey("expandUp")} />
+          </label>
+          <label className="tryon-tune-check">
+            <input type="checkbox" checked={tune.showOccluder} onChange={setTuneKey("showOccluder")} />
+            Ver oclusor
+          </label>
+          <label className="tryon-tune-check">
+            <input type="checkbox" checked={tune.flipYaw} onChange={setTuneKey("flipYaw")} />
+            Invertir giro
+          </label>
+          <button type="button" className="tryon-tune-copy"
+                  onClick={() => {
+                    const out = JSON.stringify({ ...tune, size, yOff, live }, null, 2);
+                    navigator.clipboard?.writeText(out);
+                    console.log("[tryon calibrado]", out);
+                  }}>
+            Copiar valores
+          </button>
+        </div>
+      )}
       <p className="tryon-hint">{t("tryon.hint")}</p>
     </div>,
     document.body
