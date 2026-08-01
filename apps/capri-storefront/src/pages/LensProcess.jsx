@@ -497,46 +497,51 @@ export default function LensProcess() {
 
       <div className="zlx-stage">
         {/* ── floating frame with action buttons ON the image (req 1, 2) ── */}
+        {/* IZQUIERDA: el espejuelo grande, protagonista */}
         <div className="zlx-main">
           <div className="zlx-float">
             <div className="zlx-float-inner">
               <img className="zlx-float-img" src={color.image} alt={`${product.name} · ${color.name}`}
                    onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
-              <div className="zlx-float-btns">
-                <button type="button" className={`zlx-fab ${designId ? "on" : ""} ${pop === "rx" ? "open" : ""}`}
-                        onClick={() => setPop(pop === "rx" ? null : "rx")}>
-                  <IconReceta className="zlx-ic" />
-                  <span className="zlx-fab-txt">
-                    <b>{t("lens.step.rx")}</b>
-                    <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
-                  </span>
-                  {designId && <Ic name="check" className="zlx-fab-ok" />}
-                </button>
-
-                <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
-                        disabled={!designId || frameOnly}
-                        onClick={() => setPop(pop === "mat" ? null : "mat")}>
-                  <IconMaterial className="zlx-ic" />
-                  <span className="zlx-fab-txt">
-                    <b>{t("lens.material")}</b>
-                    <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
-                  </span>
-                  {matId && <Ic name="check" className="zlx-fab-ok" />}
-                </button>
-
-                <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
-                        disabled={!designId || frameOnly || !matId}
-                        onClick={() => setPop(pop === "treat" ? null : "treat")}>
-                  <IconTratamiento className="zlx-ic" />
-                  <span className="zlx-fab-txt">
-                    <b>{t("lens.treatBtn")}</b>
-                    <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
-                  </span>
-                  {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
-                </button>
-              </div>
             </div>
             <div className="zlx-float-name">{product.name} · {color.name}</div>
+          </div>
+        </div>
+
+        {/* DERECHA: pasos + info + resumen (columna con aire, no invasiva) */}
+        <div className="zlx-side">
+          <div className="zlx-fabs">
+            <button type="button" className={`zlx-fab ${designId ? "on" : ""} ${pop === "rx" ? "open" : ""}`}
+                    onClick={() => setPop(pop === "rx" ? null : "rx")}>
+              <IconReceta className="zlx-ic" />
+              <span className="zlx-fab-txt">
+                <b>{t("lens.step.rx")}</b>
+                <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
+              </span>
+              {designId && <Ic name="check" className="zlx-fab-ok" />}
+            </button>
+
+            <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
+                    disabled={!designId || frameOnly}
+                    onClick={() => setPop(pop === "mat" ? null : "mat")}>
+              <IconMaterial className="zlx-ic" />
+              <span className="zlx-fab-txt">
+                <b>{t("lens.material")}</b>
+                <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
+              </span>
+              {matId && <Ic name="check" className="zlx-fab-ok" />}
+            </button>
+
+            <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
+                    disabled={!designId || frameOnly || !matId}
+                    onClick={() => setPop(pop === "treat" ? null : "treat")}>
+              <IconTratamiento className="zlx-ic" />
+              <span className="zlx-fab-txt">
+                <b>{t("lens.treatBtn")}</b>
+                <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
+              </span>
+              {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
+            </button>
           </div>
 
           {/* ── frame commercial info (req 6) ── */}
@@ -555,10 +560,9 @@ export default function LensProcess() {
               <div><span className="zlx-k">{t("lens.frameMaterial")}</span><span className="zlx-v">{frameMats.length ? frameMats.join(" · ") : "—"}</span></div>
             </div>
           </div>
-        </div>
 
-        {/* ── live summary, always visible below/beside the frame (req 8, 10) ── */}
-        <aside className="zlx-summary">
+          {/* ── live summary, always visible beside the frame (req 8, 10) ── */}
+          <aside className="zlx-summary">
           <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
           <ul className="zlx-summary-list">
             <li><span>{t("card.frame")} · {color.name}</span><b>${product.price.toFixed(2)}</b></li>
@@ -575,7 +579,8 @@ export default function LensProcess() {
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
           <p className="muted small zlx-summary-note">{t("lens.note")}</p>
-        </aside>
+          </aside>
+        </div>
       </div>
 
       {/* ── RECETA popover: use type + prescription (req 3, 4, 7) ── */}
