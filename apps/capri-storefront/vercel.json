@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
+    { "source": "/medusa/:path*", "destination": "https://api.161-153-9-98.sslip.io/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
