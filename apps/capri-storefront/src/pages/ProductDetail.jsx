@@ -11,6 +11,7 @@ import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
+import { frameMatEdu } from "../data/lensEducation.js";
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -21,7 +22,7 @@ export default function ProductDetail() {
   const [tryOn, setTryOn] = useState(false);
   const { addVariant, toggleFav, isFav, busy } = useCart();
   const { toast } = useFeedback();
-  const { t, tv } = useLang();
+  const { t, tv, lang } = useLang();
   const navigate = useNavigate();
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
 
@@ -40,6 +41,15 @@ export default function ProductDetail() {
   const related = PRODUCTS.filter((p) => p.brand_slug === product.brand_slug && p.slug !== product.slug).slice(0, 4);
   const cases = recommendedCases(product.sku, 3);
 
+  // Requisito 6: info comercial del marco al abrirlo.
+  //  - número de serie (modelo) = SKU; colección/marca = brand.
+  //  - material del marco + explicación de calidad (para qué sirve / para qué no)
+  //    con la copia comercial bilingüe de FRAME_MATERIAL_EDU.
+  const frameMaterials = product.attributes.material || [];
+  // Primer material del marco que tenga copia educativa disponible.
+  const eduMaterial = frameMaterials.find((m) => frameMatEdu(m, lang)) || frameMaterials[0];
+  const frameEdu = eduMaterial ? frameMatEdu(eduMaterial, lang) : null;
+
   return (
     <div className="pdp">
       <div className="breadcrumb">
@@ -48,7 +58,7 @@ export default function ProductDetail() {
 
       <div className="pdp-grid">
         <div className="pdp-gallery">
-          <div className={`pdp-main ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+          <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
             <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                     onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                     aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
@@ -70,6 +80,15 @@ export default function ProductDetail() {
         <div className="pdp-info">
           <div className="pdp-brand">{product.brand}</div>
           <h1 className="pdp-title">{product.name}</h1>
+
+          {/* Requisito 6: ficha comercial del marco al abrirlo. */}
+          <div className="frame-id">
+            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
+            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
+            {frameMaterials.length > 0 && (
+              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
+            )}
+          </div>
           <div className="pdp-meta">
             <span className="stars">★ {product.rating}</span>
             <span className="muted">· {product.reviews} {t("pdp.reviews")}</span>
@@ -111,6 +130,21 @@ export default function ProductDetail() {
               <tr><td>{t("spec.temple")}</td><td>{product.attributes.temple_length}</td></tr>
             </tbody>
           </table>
+
+          {/* Requisito 6: educación de calidad del material del marco. */}
+          {frameEdu && (
+            <div className="frame-quality">
+              <div className="frame-quality-head">
+                <span aria-hidden>💎</span>
+                <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+              </div>
+              {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
+              <ul className="frame-quality-list">
+                <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
+                <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

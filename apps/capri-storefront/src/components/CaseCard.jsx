@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
+// Requisito 11 (tarjeta estilo Amazon): "Añadir al carrito" para el estuche y,
+// al hover, un icono "Comprar" que lleva directo a comprar. Un estuche no tiene
+// flujo de receta, así que "Comprar" = añadirlo y pasar al checkout.
 export default function CaseCard({ item, compact = false }) {
   const { addVariant, toggleFav, isFav, busy } = useCart();
   const { toast } = useFeedback();
   const { t } = useLang();
+  const navigate = useNavigate();
   const [active, setActive] = useState(0);
   const [added, setAdded] = useState(false);
   const color = item.colors[active];
@@ -15,11 +19,23 @@ export default function CaseCard({ item, compact = false }) {
 
   const add = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
     try {
       await addVariant(color.variantId);
       setAdded(true);
       setTimeout(() => setAdded(false), 1400);
+    } catch { toast({ tone: "error", message: t("cart.addError") }); }
+  };
+
+  // "Comprar" (hover): añade el estuche y pasa directo al checkout.
+  const buyNow = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!color?.variantId) { toast({ tone: "info", message: t("cart.noVariant") }); return; }
+    try {
+      await addVariant(color.variantId);
+      navigate("/checkout");
     } catch { toast({ tone: "error", message: t("cart.addError") }); }
   };
 
@@ -36,6 +52,9 @@ export default function CaseCard({ item, compact = false }) {
         </button>
         <img key={color.image} src={color.image} alt={item.name} loading="lazy" className="fade-in"
              onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
+        <button type="button" className="buy-pill" onClick={buyNow} aria-label={t("card.buy")}>
+          <span aria-hidden>🛒</span> {t("card.buy")}
+        </button>
       </div>
       <div className="case-body">
         <div className="case-name">{item.name}</div>
