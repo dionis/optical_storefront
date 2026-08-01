@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
-import { buildFrame, frameDimensions } from "./tryon/frameGeometry.js";
-import { createFaceOccluder, DEFAULT_EXPAND, DEFAULT_EXPAND_UP } from "./tryon/faceOccluder.js";
+import { buildFrame, frameDimensions, DEFAULT_HEAD_HALF_WIDTH } from "./tryon/frameGeometry.js";
+import { createFaceOccluder, createEarOccluders, EAR_INDEX, DEFAULT_EAR,
+         DEFAULT_EXPAND, DEFAULT_EXPAND_UP, DEFAULT_EXPAND_BACK } from "./tryon/faceOccluder.js";
 
 // Probador virtual 3D. La montura es geometría real generada a partir de las
 // medidas del catálogo (calibre, puente, varilla, forma, material), NO la foto
@@ -26,6 +27,13 @@ const OUTER_CANTHAL_MM = 91;
 // cara. Sin este margen la montura se hunde en el oclusor y desaparece.
 const FRAME_FORWARD_MM = 13;
 
+// La varilla no corre al ancho de la CARA sino algo por fuera: el óvalo de
+// MediaPipe mide la silueta facial, y la oreja y el cráneo sobresalen de ella.
+// Calibrado con cámara: semiancho de cara 68.4 mm → varilla a 73.5 mm.
+// Se expresa como razón, no como milímetros fijos, para que escale con cada
+// rostro — que es lo que hace que el probador sirva a cualquier persona.
+const TEMPLE_LATERAL_RATIO = 1.08;
+
 const DEBUG = (typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search))
   || (typeof import.meta !== "undefined" && import.meta.env?.DEV);
 
@@ -46,6 +54,8 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   const stageSizeRef = useRef({ w: 0, h: 0 });
   const trackingRef = useRef(false);
   const lastLogRef = useRef(0);
+  const measuredHalfRef = useRef(null);   // semiancho de cara medido, en mm
+  const effHalfRef = useRef(DEFAULT_HEAD_HALF_WIDTH);
   const sizeRef = useRef(1);
   const yOffRef = useRef(0);
 
@@ -62,16 +72,26 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
     forwardMm: FRAME_FORWARD_MM,
     expand: DEFAULT_EXPAND,
     expandUp: DEFAULT_EXPAND_UP,
+    expandBack: DEFAULT_EXPAND_BACK,
+    headHalfWidth: DEFAULT_HEAD_HALF_WIDTH,
+    autoHead: true,
     // Multiplica la escala calculada. >1 agranda la montura. Es independiente
     // del slider "Size" que ve el cliente: aquí calibramos el valor POR DEFECTO
     // (la constante OUTER_CANTHAL_MM), no la preferencia de cada usuario.
     scale: 1,
     flipYaw: false,
     showOccluder: false,
+    noOcclusion: false,
+    useEars: true,
+    earDepth: DEFAULT_EAR.d,
+    earOffset: DEFAULT_EAR.offset,
   });
   const tuneRef = useRef(tune);
   tuneRef.current = tune;
   const [live, setLive] = useState(null);   // lecturas para el panel
+  // Semiancho efectivo que se usó para hornear la malla. En automático sigue
+  // a la cara medida, con un umbral para no reconstruir en cada fotograma.
+  const [effHalf, setEffHalf] = useState(DEFAULT_HEAD_HALF_WIDTH);
 
   const color = product.colors[ci] || product.colors[0];
   sizeRef.current = size;
@@ -159,12 +179,14 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
 
     const occluder = createFaceOccluder();
     scene.add(occluder);
+    const ears = createEarOccluders();
+    scene.add(ears);
 
     // Contenedor de la montura: aquí se aplican pose y escala.
     const root = new THREE.Group();
     scene.add(root);
 
-    glRef.current = { renderer, scene, camera, occluder, root, pmrem };
+    glRef.current = { renderer, scene, camera, occluder, ears, root, pmrem };
 
     const measure = () => {
       const w = stage.clientWidth, h = stage.clientHeight;
@@ -181,6 +203,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
     return () => {
       ro.disconnect();
       occluder.dispose();
+      ears.dispose();
       pmrem.dispose();
       scene.environment?.dispose?.();
       renderer.dispose();
@@ -192,7 +215,9 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   useEffect(() => {
     const gl = glRef.current;
     if (!gl) return;
-    const frame = buildFrame(product, color?.hex);
+    const headHalf = tune.autoHead ? effHalf : tune.headHalfWidth;
+    effHalfRef.current = headHalf;
+    const frame = buildFrame(product, color?.hex, headHalf);
     gl.root.add(frame);
     frameRef.current = frame;
     return () => {
@@ -200,7 +225,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
       frame.userData.dispose?.();
       if (frameRef.current === frame) frameRef.current = null;
     };
-  }, [product, color?.hex]);
+  }, [product, color?.hex, tune.headHalfWidth, tune.autoHead, effHalf]);
 
   // 5) bucle de render
   useEffect(() => {
@@ -286,10 +311,38 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
               cz: ema(prev.cz, next.cz), pxPerMm: ema(prev.pxPerMm, next.pxPerMm),
             } : next;
 
+            // Semiancho REAL de esta cara, en los mismos mm que la montura.
+            // Antes era una constante, que sólo vale si toda cabeza guarda la
+            // misma proporción con su distancia interocular. Medirlo por cara
+            // es lo que hace que el probador sirva a cualquier persona.
+            const sR = project(lms[234]), sL = project(lms[454]);
+            const measuredHalf = Math.hypot(sR.x - sL.x, sR.y - sL.y) / 2 / pxPerMm;
+            measuredHalfRef.current = measuredHalf;
+            // Reconstruir la malla cuesta unos ms, así que sólo al cambiar de
+            // cara de verdad — no por el jitter de los landmarks.
+            // OJO: la varilla va a `medido × razón`, no al ancho de la cara.
+            // Ponerla en el semiancho facial la deja justo en el borde delantero
+            // del oclusor y desaparece casi entera.
+            const target = measuredHalf * TEMPLE_LATERAL_RATIO;
+            if (tuneRef.current.autoHead && Math.abs(target - effHalfRef.current) > 2) {
+              setEffHalf(+target.toFixed(1));
+            }
+
             gl.occluder.expand = tuneRef.current.expand;
             gl.occluder.expandUp = tuneRef.current.expandUp;
+            gl.occluder.expandBack = tuneRef.current.expandBack;
             gl.occluder.updateFromLandmarks(lms, project);
-            gl.occluder.visible = true;
+            gl.occluder.visible = !tuneRef.current.noOcclusion;
+            // Anclado a la oreja detectada: la varilla se ve hasta ahí y
+            // desaparece a partir de ese punto, sin depender de que el faldón
+            // del prisma la alcance por casualidad.
+            gl.ears.size.d = tuneRef.current.earDepth;
+            gl.ears.size.offset = tuneRef.current.earOffset;
+            gl.ears.update(
+              [project(lms[EAR_INDEX.right]), project(lms[EAR_INDEX.left])],
+              smoothQuat, pxPerMm
+            );
+            gl.ears.visible = tuneRef.current.useEars && !tuneRef.current.noOcclusion;
             lastSeenRef.current = now;
             setTrackingOnce(true);
 
@@ -331,6 +384,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
         if (pose) { poseRef.current = null; lastFrameTimeRef.current = -1; haveQuat = false; }
         setTrackingOnce(false);
         gl.occluder.visible = false;
+        if (gl.ears) gl.ears.visible = false;
       }
 
       if (frame) {
@@ -369,6 +423,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   // en verde es lo que hace evidente si el volumen cubre la cabeza o no.
   useEffect(() => {
     glRef.current?.occluder?.setDebugVisible?.(tune.showOccluder);
+    glRef.current?.ears?.setDebugVisible?.(tune.showOccluder);
   }, [tune.showOccluder]);
 
   const setTuneKey = (k) => (e) => {
@@ -442,6 +497,22 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             <input type="range" min="0.9" max="1.3" step="0.01"
                    value={tune.expand} onChange={setTuneKey("expand")} />
           </label>
+          <label className="tryon-tune-check">
+            <input type="checkbox" checked={tune.autoHead} onChange={setTuneKey("autoHead")} />
+            Varilla auto {tune.autoHead && <b>{effHalf} mm</b>}
+          </label>
+          {!tune.autoHead && (
+            <label>
+              Varilla lateral <b>{tune.headHalfWidth} mm</b>
+              <input type="range" min="55" max="85" step="0.5"
+                     value={tune.headHalfWidth} onChange={setTuneKey("headHalfWidth")} />
+            </label>
+          )}
+          <label>
+            Oclusor atrás <b>{tune.expandBack.toFixed(2)}×</b>
+            <input type="range" min="1" max="1.6" step="0.01"
+                   value={tune.expandBack} onChange={setTuneKey("expandBack")} />
+          </label>
           <label>
             Oclusor alto <b>{tune.expandUp.toFixed(2)}×</b>
             <input type="range" min="1" max="2.2" step="0.02"
@@ -452,12 +523,30 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
             Ver oclusor
           </label>
           <label className="tryon-tune-check">
+            <input type="checkbox" checked={tune.noOcclusion} onChange={setTuneKey("noOcclusion")} />
+            Sin oclusión
+          </label>
+          <label className="tryon-tune-check">
+            <input type="checkbox" checked={tune.useEars} onChange={setTuneKey("useEars")} />
+            Oclusor de oreja
+          </label>
+          <label>
+            Oreja atrás <b>{tune.earOffset} mm</b>
+            <input type="range" min="0" max="45" step="1"
+                   value={tune.earOffset} onChange={setTuneKey("earOffset")} />
+          </label>
+          <label>
+            Oreja fondo <b>{tune.earDepth} mm</b>
+            <input type="range" min="40" max="200" step="5"
+                   value={tune.earDepth} onChange={setTuneKey("earDepth")} />
+          </label>
+          <label className="tryon-tune-check">
             <input type="checkbox" checked={tune.flipYaw} onChange={setTuneKey("flipYaw")} />
             Invertir giro
           </label>
           <button type="button" className="tryon-tune-copy"
                   onClick={() => {
-                    const out = JSON.stringify({ ...tune, size, yOff, live }, null, 2);
+                    const out = JSON.stringify({ ...tune, effHalf, size, yOff, live }, null, 2);
                     navigator.clipboard?.writeText(out);
                     console.log("[tryon calibrado]", out);
                   }}>
