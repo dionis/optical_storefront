@@ -12,6 +12,11 @@
   --bg: #ffffff;
   --soft: #f7f6f3;
   --cream: #faf9f6;
+  /* Bandera cubana — acento de iconos, diagramas y CTAs.
+     azul = base/línea, rojo = activo/seleccionado, blanco = superficie. */
+  --cuba-blue: #002A8F;
+  --cuba-red: #CF142B;
+  --cuba-white: #FFFFFF;
   --radius: 18px;
   --radius-sm: 12px;
   --shadow: 0 1px 2px rgba(23,32,58,.04), 0 10px 26px -16px rgba(23,32,58,.16);
@@ -1470,4 +1475,74 @@ img { max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .zlx-dial-fill { transition: none; }
+}
+
+/* --- LensGraphics icons: size the inline SVG set inside the lens funnel ---
+   Cuban-flag accents: azul cubano = base/línea de los iconos; rojo cubano =
+   estado activo/seleccionado (coherente con el logo RUBI_LENS azul+rojo). --- */
+.zlx-fab .zlx-ic,
+.zlx-frameinfo-head .zlx-ic,
+.zlx-pop-head .zlx-ic { width: 22px; height: 22px; flex: 0 0 auto; }
+.zlx-pop-head .zlx-ic { color: var(--cuba-blue); }
+/* Default size for any bare <Ic> (class zlx-ic) NOT caught by a more specific
+   container rule above. A viewBox-only SVG with no width/height stretches to
+   its parent's full width — that is what made the frame-info glyph render as a
+   giant circle. The container-scoped rules above have higher specificity and
+   still win where they apply (pop-head, fab, frameinfo-head, choices, chips). */
+.zlx-ic { width: 20px; height: 20px; flex: 0 0 auto; vertical-align: -4px; }
+/* Confirmation / info badge on the floating buttons and the frame-info header
+   (class zlx-fab-ok had no rule at all → it inherited full width). */
+.zlx-fab-ok { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-red); }
+.zlx-summary-warn .zlx-ic { color: var(--cuba-blue); }
+.zlx-edu-good .zlx-ic { color: #1a7a3c; }
+.zlx-edu-bad .zlx-ic { color: var(--cuba-red); }
+.zlx-chip-ic { width: 26px; height: 26px; display: block; margin: 0 auto 6px; color: var(--cuba-blue); }
+.zlx-chip.sel .zlx-chip-ic { color: var(--cuba-red); }
+.zlx-choice-ic { width: 22px; height: 22px; flex: 0 0 auto; color: var(--cuba-blue); margin-right: 8px; }
+.zlx-choice.sel .zlx-choice-ic { color: var(--cuba-red); }
+.zlx-edu-head .ico { color: var(--cuba-blue); }
+.zlx-pop-title { color: var(--cuba-blue); }
+.frame-id-ic { vertical-align: -3px; margin-right: 4px; color: var(--cuba-blue); }
+.frame-quality-ic { flex: 0 0 auto; color: var(--cuba-blue); }
+
+/* Selected chips/choices carry the Cuban-red accent on their border too, so the
+   active state reads the same whether you look at the icon or the container. */
+.zlx-chip.sel { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red); }
+.zlx-choice.sel { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red); }
+
+/* Funnel CTAs: keep the ink button but add a Cuban-red accent ring on hover/
+   focus so the primary action nods to the flag palette without going fully red. */
+.zlx-pop-done.btn-primary { background: var(--cuba-red); box-shadow: 0 8px 20px -10px rgba(207,20,43,.55); }
+.zlx-pop-done.btn-primary:hover:not(:disabled) { background: var(--cuba-red); filter: brightness(.94); }
+.zlx-pop-done.btn-primary:disabled { background: var(--ink); }
+.zlx-fab { border-color: var(--cuba-blue); }
+.zlx-fab.sel, .zlx-fab.on { border-color: var(--cuba-red); color: var(--cuba-red); }
+
+/* --- Educational diagrams (LensGraphics.DIAGRAMS) inside the help popover ---
+   Layout requirement: the diagram/image sits ABOVE and the caption text BELOW,
+   the block is responsive, and inside .zlx-pop it never goes full-screen on
+   mobile — it scrolls within the popover, which itself is a bottom sheet. --- */
+.zlx-diag-help { margin-top: 14px; display: grid; gap: 14px; }
+.zlx-diag-fig {
+  margin: 0; padding: 12px;
+  background: #fff; border: 1px solid #e3e9f4; border-radius: var(--radius-sm);
+  display: flex; flex-direction: column; align-items: stretch;   /* imagen arriba, texto debajo */
+}
+.zlx-diag-fig .lens-diag { max-width: 420px; width: 100%; margin: 0 auto; height: auto; }
+.zlx-diag-cap { order: 2; margin: 8px 0 0; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+
+/* When the diagrams live inside the help popover, constrain them so the popover
+   stays a card/sheet and never becomes a full-screen takeover on phones. */
+.zlx-pop .zlx-diag-help { max-height: 52vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+@media (max-width: 640px) {
+  .zlx-pop .zlx-diag-help { max-height: 40vh; }
+  .zlx-diag-fig .lens-diag { max-width: 100%; }
+}
+
+/* --- Catalog deep-link loader (waits out the startup catalog load) --- */
+.capri-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 40vh; color: var(--muted); }
+.capri-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #e3e9f4; border-top-color: var(--blue); animation: capriSpin 0.8s linear infinite; }
+@keyframes capriSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .capri-spinner { animation-duration: 2s; }
 }

@@ -1,7 +1,7 @@
 # Rediseño del funnel de lentes + educación + checkout del paciente (preview)
 
 > Rama: `frontend_medusa` · App: `apps/capri-storefront` (React 18 + Vite)
-> Estado: **preview** — `npx vite build` pasa (227 módulos, sin errores).
+> Estado: **preview** — `npx vite build` pasa (223 módulos, sin errores).
 > Todo el copy nuevo pasa por el diccionario `t(key)` en `src/i18n/translations.js`
 > (`es` + `en`); ningún string queda hardcodeado en los componentes.
 
@@ -105,6 +105,70 @@ La lectura del modelo debe **revisarse y confirmarse** (`ocr.confirmed`) antes d
 poder comprar; el backend rechaza una receta OCR sin confirmar. Todo fallo de
 OCR es recuperable escribiendo los valores a mano — el funnel nunca se bloquea.
 
+## 5.b Iconos profesionales con colores de la bandera cubana
+
+Archivo nuevo: `src/components/LensGraphics.jsx` (~728 líneas)
+
+Toda la iconografía del funnel se rehízo como **SVG vectorial propio**, sin
+dependencias ni emojis, con la paleta de la **bandera cubana**: azul
+`#002A8F` (`BLUE`, `--cuba-blue`) y rojo `#CF142B` (`RED`, `--cuba-red`), más
+neutros de apoyo (`INK`, `MUT`, `LINE`, `NEUT`). Todos parten de un `IconBase`
+común (trazo consistente, `active` cambia el acento a rojo) y son accesibles
+(`role="img"` + título por `t(key)`).
+
+Set de iconos (`ICONS` / `LensIcon`): `IconReceta`, `IconMaterial`,
+`IconTratamiento`, `IconGrados`, `IconMontura`, `IconSencilla`, `IconBifocal`,
+`IconProgresivo`, `IconSol`, `IconAr`, `IconAzul`, `IconPolarizado`,
+`IconFotocromatico`, `IconUv`, `IconIndice`, `IconConduccion`, `IconCarrito`,
+`IconComprar`, `IconFavorito`.
+
+En `LensProcess.jsx` cada opción del catálogo se mapea a su icono:
+- Los FABs y títulos de popover usan `IconReceta` / `IconMaterial` /
+  `IconTratamiento` / `IconMontura` (clase `.zlx-ic`).
+- El **tipo de diseño** se resuelve con `DESIGN_ICON` / `designIcon(id)`
+  (`sv`→sencilla, `bifocal`, `prog-*`→progresivo, `frame-only`→montura), como
+  chip activo/inactivo.
+- El **antirreflejo** usa `arIconOf(id)`: las variantes de luz azul muestran
+  `IconAzul`; el resto `IconAr`. El fotocromático usa `IconFotocromatico`.
+
+## 5.c Diagramas educativos como ayuda al dar clic
+
+En el mismo `LensGraphics.jsx` viven **diagramas SVG educativos** (`DIAGRAMS` /
+`DiagSvg`), que se renderizan **dentro del popover** (`.zlx-pop`) al abrir cada
+paso, ilustrando el concepto que se está eligiendo. Cada diagrama recibe `t`
+para su rótulo bilingüe:
+
+- **`DiagThickness`** (grosor 3D) — compara el perfil del lente por índice de
+  refracción (más alto = más delgado); acompaña la elección de material.
+- **`DiagProgressive`** (progresivo) — zonas de visión lejos / intermedia /
+  cerca de un progresivo; se muestra al elegir el tipo de diseño.
+- **`DiagPolarized`** (polarizado) — filtrado del deslumbramiento reflejado.
+- **`DiagBlueLight`** (luz azul) — bloqueo de luz azul de pantallas; acompaña al
+  antirreflejo de luz azul.
+- **`DiagPhotochromic`** (fotocromático) — oscurecimiento con luz UV; acompaña
+  al tratamiento fotocromático.
+- **`DiagNightDrive`** (conducción nocturna) — reducción de halos/glare al
+  conducir de noche.
+- **`DiagVisionFields`** (campos de visión) — comparación de campos según el
+  diseño del lente.
+
+El wiring elige qué diagrama(s) mostrar por opción seleccionada y los pinta con
+su icono + título; son ayuda visual pasiva (no bloquean ni cambian el precio ni
+el flujo Medusa).
+
+## 5.d Fix del deep-link (entrada directa / refresh al funnel)
+
+Bug: al entrar por **URL directa** o recargar en `/recetas/:slug`, el catálogo
+aún no había cargado y `product` era `undefined`, por lo que el funnel pintaba
+de inmediato la vista **"no encontrado"** aunque el slug fuera válido.
+
+Fix en `LensProcess.jsx`: se guarda la decisión de "no encontrado" tras el
+`loading` de arranque. Mientras el catálogo carga, en vez de "no encontrado" se
+muestra un estado de carga accesible (`role="status"` `aria-live="polite"`,
+`.capri-spinner` + `t("common.loading")`); sólo cuando `loading` termina y el
+producto sigue sin existir se muestra el "no encontrado". Así un deep-link a un
+slug real ya no cae por error en la pantalla de error.
+
 ## 6. Ficha comercial del marco (req 6)
 
 - En el funnel: bloque `.zlx-frameinfo` + popover `frame` con modelo (SKU),
@@ -199,6 +263,7 @@ carga en modo lazy; no es un error del build.)
 | --- | --- |
 | `src/pages/LensProcess.jsx` | Funnel flotante, popovers, dial semicircular, picker fino, educación, OCR, CTA único |
 | `src/data/lensEducation.js` | **nuevo** — copy comercial bilingüe (materiales, tratamientos, monturas) |
+| `src/components/LensGraphics.jsx` | **nuevo** — iconos SVG (bandera cubana) + diagramas educativos (`DIAGRAMS`) |
 | `src/data/addressAutocomplete.js` | **nuevo** — Google Places con fallback manual |
 | `src/pages/MedusaCheckout.jsx` | Datos del paciente + país + autocompletado |
 | `src/data/medusaCart.js` | Filtro de opciones de pickup (envío-solo) |

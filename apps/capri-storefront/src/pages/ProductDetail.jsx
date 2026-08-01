@@ -12,10 +12,11 @@ import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
+import { IconMontura } from "../components/LensGraphics.jsx";
 
 export default function ProductDetail() {
   const { slug } = useParams();
-  const { products: PRODUCTS, productBySlug } = useCatalog();
+  const { products: PRODUCTS, productBySlug, loading } = useCatalog();
   const product = productBySlug[slug];
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
@@ -34,6 +35,18 @@ export default function ProductDetail() {
   };
 
   if (!product) {
+    // Deep-link / refresh guard: the live catalog (and this slug) only exists once
+    // the startup load settles. While it's in flight, show a loader instead of a
+    // false "not found"; only reject once loading has finished and the slug is
+    // genuinely absent.
+    if (loading) {
+      return (
+        <div className="section capri-loading" role="status" aria-live="polite">
+          <span className="capri-spinner" aria-hidden="true" />
+          <p>{t("common.loading")}</p>
+        </div>
+      );
+    }
     return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
   }
 
@@ -86,7 +99,7 @@ export default function ProductDetail() {
             <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
             <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
             {frameMaterials.length > 0 && (
-              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
+              <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
             )}
           </div>
           <div className="pdp-meta">
@@ -135,7 +148,7 @@ export default function ProductDetail() {
           {frameEdu && (
             <div className="frame-quality">
               <div className="frame-quality-head">
-                <span aria-hidden>💎</span>
+                <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
                 <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
               </div>
               {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
