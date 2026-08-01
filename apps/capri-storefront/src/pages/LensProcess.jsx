@@ -24,6 +24,10 @@ const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
 const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
 const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+// Monocular PD, one value per eye. Real prescriptions use this at least as often
+// as a single total: optician order forms label it FPD, DNP or NPD, and forcing
+// it into one field loses the asymmetry it exists to record.
+const PD_MONO = range(25, 40, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
 // OCR returns free-form numbers; the selects only accept values that exist as
 // options. Snap to the closest one so a reading of -2.30 lands on -2.25 instead
@@ -39,18 +43,18 @@ function nearest(value, options) {
   return String(best.v);
 }
 
-function SelectCell({ value, onChange, options }) {
+function SelectCell({ value, onChange, options, flag = "" }) {
   return (
-    <select className="rx-select" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className={`rx-select ${flag}`} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
     </select>
   );
 }
-function Field({ label, value, onChange, options, t, withEmpty }) {
+function Field({ label, value, onChange, options, t, withEmpty, flag = "" }) {
   return (
     <label className="rx-field">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className={flag} value={value} onChange={(e) => onChange(e.target.value)}>
         {withEmpty && <option value="">{t("lens.select")}</option>}
         {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
       </select>
@@ -76,7 +80,14 @@ export default function LensProcess() {
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null); // null = ninguno
   const [arId, setArId] = useState(null);        // null = ninguno
-  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", add: "" });
+  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
+  // "single" = one total PD, "dual" = one value per eye. Switched automatically
+  // when a reading comes back with per-eye values.
+  const [pdMode, setPdMode] = useState("single");
+  // Fields whose current value came from the OCR and the user has not touched
+  // since. Used to highlight what still needs checking — an error the model
+  // makes confidently looks exactly like a value the customer typed.
+  const [ocrFields, setOcrFields] = useState(() => new Set());
   // OCR reading of an uploaded prescription photo. `confirmed` gates step 1:
   // extracted values are a model's reading of a health document and must be
   // reviewed by the user before they can be persisted (the backend rejects an
@@ -176,10 +187,6 @@ export default function LensProcess() {
     (step === 2 && (frameOnly || matId)) ||
     step === 3;
 
-  // Some prescriptions give one PD per eye instead of a single total.
-  const totalPd = (p) =>
-    p.pd != null ? p.pd : p.pd_od != null && p.pd_os != null ? p.pd_od + p.pd_os : null;
-
   const handleRxUpload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // let the user re-pick the same file after an error
@@ -188,18 +195,34 @@ export default function LensProcess() {
     try {
       const res = await ocrPrescription(file);
       const p = res.prescription || {};
+
+      // Per-eye PD when the prescription carries one (the FPD/DNP columns on
+      // optician order forms), a single total otherwise. Never collapse the two
+      // into one number: the whole point of monocular PD is that the eyes can
+      // differ.
+      const dual = p.pd_od != null || p.pd_os != null;
+      const picked = {
+        od_sph: nearest(p.od?.sph, SPH),
+        od_cyl: nearest(p.od?.cyl, CYL),
+        od_axis: nearest(p.od?.axis, AXIS),
+        os_sph: nearest(p.os?.sph, SPH),
+        os_cyl: nearest(p.os?.cyl, CYL),
+        os_axis: nearest(p.os?.axis, AXIS),
+        add: nearest(p.od?.add ?? p.os?.add, ADD),
+        ...(dual
+          ? { pd_od: nearest(p.pd_od, PD_MONO), pd_os: nearest(p.pd_os, PD_MONO) }
+          : { pd: nearest(p.pd, PD) }),
+      };
+      setPdMode(dual ? "dual" : "single");
+      // Flag exactly the fields the model actually filled, so the review
+      // highlight points at what it read rather than at the whole form.
+      setOcrFields(new Set(Object.keys(picked).filter((k) => picked[k] != null)));
       // Keep whatever the user already picked for fields the OCR couldn't read.
-      setRx((r) => ({
-        ...r,
-        od_sph: nearest(p.od?.sph, SPH) ?? r.od_sph,
-        od_cyl: nearest(p.od?.cyl, CYL) ?? r.od_cyl,
-        od_axis: nearest(p.od?.axis, AXIS) ?? r.od_axis,
-        os_sph: nearest(p.os?.sph, SPH) ?? r.os_sph,
-        os_cyl: nearest(p.os?.cyl, CYL) ?? r.os_cyl,
-        os_axis: nearest(p.os?.axis, AXIS) ?? r.os_axis,
-        pd: nearest(totalPd(p), PD) ?? r.pd,
-        add: nearest(p.od?.add ?? p.os?.add, ADD) ?? r.add,
-      }));
+      setRx((r) => {
+        const next = { ...r };
+        for (const [k, v] of Object.entries(picked)) if (v != null) next[k] = v;
+        return next;
+      });
       setOcr({
         status: "done",
         fileName: file.name,
@@ -232,7 +255,11 @@ export default function LensProcess() {
         const rxPayload = {
           od: { sph: num(rx.od_sph) ?? 0, cyl: num(rx.od_cyl) ?? 0, axis: rx.od_axis ? parseInt(rx.od_axis, 10) : null, add: addv, prism: null, base: null },
           os: { sph: num(rx.os_sph) ?? 0, cyl: num(rx.os_cyl) ?? 0, axis: rx.os_axis ? parseInt(rx.os_axis, 10) : null, add: addv, prism: null, base: null },
-          pd: num(rx.pd), pd_od: null, pd_os: null,
+          // Send whichever form the customer actually confirmed. Sending both
+          // would leave the backend guessing which one is authoritative.
+          pd: pdMode === "dual" ? null : num(rx.pd),
+          pd_od: pdMode === "dual" ? num(rx.pd_od) : null,
+          pd_os: pdMode === "dual" ? num(rx.pd_os) : null,
           source: fromOcr ? "ocr" : "manual",
           verified_by_user: true,
           file_url: fromOcr ? ocr.fileUrl : null,
@@ -251,7 +278,17 @@ export default function LensProcess() {
       toast({ tone: "error", title: t("cart.addError"), message: String(e?.message || e) });
     }
   };
-  const setF = (k) => (v) => setRx((r) => ({ ...r, [k]: v }));
+  const setF = (k) => (v) => {
+    setRx((r) => ({ ...r, [k]: v }));
+    // Editing a field is the customer checking it, so it stops being flagged.
+    setOcrFields((s) => {
+      if (!s.has(k)) return s;
+      const next = new Set(s);
+      next.delete(k);
+      return next;
+    });
+  };
+  const ocrClass = (k) => (ocrFields.has(k) ? "from-ocr" : "");
   const money = (n) => "$" + Number(n).toFixed(0);
 
   return (
@@ -330,6 +367,12 @@ export default function LensProcess() {
                     <div className={`rx-ocr-review ${ocr.confirmed ? "ok" : ""}`}>
                       <b>{ocr.confirmed ? `✓ ${t("lens.upload.confirmed")}` : t("lens.upload.reviewTitle")}</b>
                       {!ocr.confirmed && <p>{t("lens.upload.reviewBody")}</p>}
+                      {!ocr.confirmed && ocrFields.size > 0 && (
+                        <p className="rx-ocr-legend">
+                          <span className="rx-ocr-swatch" aria-hidden="true" />
+                          {t("lens.upload.legend")}
+                        </p>
+                      )}
                       {ocr.warnings.length > 0 && (
                         <ul className="rx-ocr-warnings">
                           {ocr.warnings.map((w) => <li key={w}>{w}</li>)}
@@ -349,21 +392,45 @@ export default function LensProcess() {
                     <tbody>
                       <tr>
                         <td>{t("lens.right")}</td>
-                        <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} /></td>
-                        <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} /></td>
+                        <td><SelectCell value={rx.od_sph} onChange={setF("od_sph")} options={SPH} flag={ocrClass("od_sph")} /></td>
+                        <td><SelectCell value={rx.od_cyl} onChange={setF("od_cyl")} options={CYL} flag={ocrClass("od_cyl")} /></td>
+                        <td><SelectCell value={rx.od_axis} onChange={setF("od_axis")} options={AXIS} flag={ocrClass("od_axis")} /></td>
                       </tr>
                       <tr>
                         <td>{t("lens.left")}</td>
-                        <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} /></td>
-                        <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} /></td>
-                        <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} /></td>
+                        <td><SelectCell value={rx.os_sph} onChange={setF("os_sph")} options={SPH} flag={ocrClass("os_sph")} /></td>
+                        <td><SelectCell value={rx.os_cyl} onChange={setF("os_cyl")} options={CYL} flag={ocrClass("os_cyl")} /></td>
+                        <td><SelectCell value={rx.os_axis} onChange={setF("os_axis")} options={AXIS} flag={ocrClass("os_axis")} /></td>
                       </tr>
                     </tbody>
                   </table>
+
+                  {/* Optician forms carry either one total PD or one per eye
+                      (the FPD/DNP columns). Both are offered rather than folded
+                      into a single number. */}
+                  <div className="rx-pd-mode">
+                    <button type="button"
+                            className={pdMode === "single" ? "active" : ""}
+                            onClick={() => setPdMode("single")}>
+                      {t("lens.pd.single")}
+                    </button>
+                    <button type="button"
+                            className={pdMode === "dual" ? "active" : ""}
+                            onClick={() => setPdMode("dual")}>
+                      {t("lens.pd.dual")}
+                    </button>
+                  </div>
+
                   <div className="rx-extra">
-                    <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty />
-                    {design?.add && <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty />}
+                    {pdMode === "single" ? (
+                      <Field label={t("lens.pd")} value={rx.pd} onChange={setF("pd")} options={PD} t={t} withEmpty flag={ocrClass("pd")} />
+                    ) : (
+                      <>
+                        <Field label={t("lens.pd.od")} value={rx.pd_od} onChange={setF("pd_od")} options={PD_MONO} t={t} withEmpty flag={ocrClass("pd_od")} />
+                        <Field label={t("lens.pd.os")} value={rx.pd_os} onChange={setF("pd_os")} options={PD_MONO} t={t} withEmpty flag={ocrClass("pd_os")} />
+                      </>
+                    )}
+                    {design?.add && <Field label={t("lens.addLbl")} value={rx.add} onChange={setF("add")} options={ADD} t={t} withEmpty flag={ocrClass("add")} />}
                   </div>
                 </>
               )}

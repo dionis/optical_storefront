@@ -214,6 +214,14 @@ button { font-family: inherit; cursor: pointer; }
 .rx-ocr-review.ok { border-color: #12805c; background: rgba(18,128,92,.07); }
 .rx-ocr-review p { margin: 0; font-size: 14px; color: var(--muted); }
 .rx-ocr-warnings { margin: 0; padding-left: 18px; font-size: 14px; color: #92400e; }
+.rx-ocr-legend { display: flex; align-items: center; gap: 8px; }
+.rx-ocr-swatch { width: 14px; height: 14px; border-radius: 3px; background: #fff7e6; border: 1.5px solid #d9920b; flex: none; }
+/* Fields the OCR filled and the user has not checked yet. The amber reads as
+   "verify me" without looking like a validation error. */
+.rx-select.from-ocr, .rx-field select.from-ocr { background: #fff7e6; border-color: #d9920b; }
+.rx-pd-mode { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rx-pd-mode button { padding: 7px 14px; font-size: 14px; background: none; border: none; cursor: pointer; color: var(--muted); }
+.rx-pd-mode button.active { background: var(--blue); color: #fff; font-weight: 700; }
 .or { color: var(--muted); font-size: 14px; }
 .rx-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
 .rx-table th, .rx-table td { padding: 8px; text-align: center; font-size: 14px; }
