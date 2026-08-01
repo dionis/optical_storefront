@@ -66,7 +66,13 @@ function constructionFor(style) {
   return "full";
 }
 
-export function frameDimensions(product) {
+// Semiancho de cabeza por defecto, en mm, a la altura por donde pasa la
+// varilla. Calibrado con cámara: el óvalo facial de MediaPipe mide ~69 mm de
+// semiancho, y la varilla debe rozarlo para quedar oculta por detrás sin
+// dibujarse encima.
+export const DEFAULT_HEAD_HALF_WIDTH = 70;
+
+export function frameDimensions(product, headHalfWidth = DEFAULT_HEAD_HALF_WIDTH) {
   const a = product?.attributes || {};
   const eye = parseMm(a.eye_size, 52);
   const bridge = parseMm(a.bridge_size, 18);
@@ -79,6 +85,7 @@ export function frameDimensions(product) {
   return {
     eye, bridge, temple, shape, lensH,
     construction: constructionFor(a.style),
+    headHalfWidth,
     // Ancho total del frente: dos lentes + puente + los aros exteriores.
     totalWidth: 2 * eye + bridge + 8,
   };
@@ -200,8 +207,12 @@ function templeMesh(dim, side, material, thickness) {
   // misma cabeza, así que la estrecha abre más y la ancha menos — como en la
   // realidad. Con un desplazamiento relativo las monturas estrechas quedaban
   // dentro del volumen del oclusor y desaparecían enteras.
-  const HEAD_HALF_WIDTH = 73;       // semiancho a la altura de las sienes
-  const lateral = Math.max(hinge + 5, HEAD_HALF_WIDTH + 3);
+  // Semiancho de cabeza donde corre la varilla. Es el parámetro más delicado
+  // del modelo: demasiado dentro y el oclusor se traga la varilla entera;
+  // demasiado fuera y se dibuja ENCIMA del lateral de la cabeza en vez de pasar
+  // por detrás de la oreja. El punto bueno depende de la cabeza real, así que se
+  // pasa desde fuera y se calibra con la cámara.
+  const lateral = Math.max(hinge + 4, dim.headHalfWidth);
   const mid = hinge + (lateral - hinge) * 0.45;
   const tail = hinge + (lateral - hinge) * 0.65;
   const curve = new THREE.CatmullRomCurve3([
@@ -251,8 +262,8 @@ function frameMaterial(product, hex) {
  * Devuelve un THREE.Group con la montura completa, en milímetros, centrada en
  * el puente y mirando a +Z. `dispose()` libera geometrías y materiales.
  */
-export function buildFrame(product, hex) {
-  const dim = frameDimensions(product);
+export function buildFrame(product, hex, headHalfWidth) {
+  const dim = frameDimensions(product, headHalfWidth);
   const mats = (product?.attributes?.material || []).map((m) => String(m).toLowerCase());
   const isMetal = mats.some((m) => /metal|acero|titanio|memoria/.test(m));
   // El acetato es notablemente más grueso que el metal.
