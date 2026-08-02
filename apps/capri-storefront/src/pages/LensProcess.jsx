@@ -347,6 +347,8 @@ export default function LensProcess() {
   // Revisión previa al checkout: al pulsar "Comprar ahora" mostramos el loader y
   // el MISMO resumen antes de pedir los datos del cliente. idle|loading|show.
   const [reviewing, setReviewing] = useState("idle");
+  // "flechita" que revela los Transitions dentro del popup de tratamientos.
+  const [showTrans, setShowTrans] = useState(false);
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
@@ -623,6 +625,70 @@ export default function LensProcess() {
 
   // Abre la ayuda educativa como globo aparte (no inline).
   const openInfo = (title, edu, diagKeys) => setInfoPop({ title, edu, diagKeys: diagKeys || [] });
+
+  // Agrupa los fotocromáticos por FAMILIA (presentación): en vez de una tarjeta
+  // por color con el mismo nombre y precio, se muestra el nombre UNA vez y las
+  // bolitas de color debajo para elegir. La familia sale del id (sin el sufijo de
+  // color) → funciona igual con el catálogo estático o el de Medusa.
+  const COLOR_SUFFIX = /-(grey|brown|green)$/i;
+  const photoColorWords = Object.values(PHOTO_COLORS).flatMap((c) => [c.es, c.en]);
+  const stripColor = (label) => {
+    let s = label;
+    for (const w of photoColorWords) s = s.replace(new RegExp("\\s*" + w + "\\b", "i"), "");
+    return s.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim() || label;
+  };
+  const photoGroups = [];
+  {
+    const byKey = new Map();
+    for (const p of PHOTO) {
+      const key = String(p.id).replace(COLOR_SUFFIX, "");
+      if (!byKey.has(key)) { const g = { key, label: stripColor(L(p.label, lang)), members: [] }; byKey.set(key, g); photoGroups.push(g); }
+      byKey.get(key).members.push(p);
+    }
+  }
+  const isTransFamily = (g) => /^trans/i.test(g.key) || /transitions/i.test(g.label);
+  const fotoGroups = photoGroups.filter((g) => !isTransFamily(g));
+  const transGroups = photoGroups.filter(isTransFamily);
+  // Una tarjeta por familia: nombre + precio arriba, bolitas de color debajo.
+  const renderPhotoFamily = (g) => {
+    const avail = g.members.filter((m) => photoPriceOf(m) != null);
+    const priceMember = avail[0] || g.members[0];
+    const pp = photoPriceOf(priceMember);
+    const famNa = pp == null;
+    const selMember = g.members.find((m) => m.id === photoId);
+    return (
+      <div key={g.key} className={`zlx-choice-row zlx-photofam-row ${selMember ? "sel" : ""} ${famNa ? "na" : ""}`}>
+        <div className="zlx-choice zlx-choice-stack zlx-photofam">
+          <span className="zlx-choice-top">
+            <span className="zlx-choice-main">
+              <IconFotocromatico className="zlx-choice-ic" active={!!selMember} />
+              <span className="zlx-choice-title">{g.label}</span>
+            </span>
+            <span className="zlx-choice-price">{famNa ? "—" : `+ ${money(pp)}`}</span>
+          </span>
+          <span className="zlx-fam-colors">
+            {g.members.map((m) => {
+              const c = m.colors[0];
+              const cNa = photoPriceOf(m) == null;
+              const on = photoId === m.id;
+              return (
+                <button key={m.id} type="button" disabled={cNa}
+                        className={`zlx-fam-dot ${on ? "on" : ""} ${cNa ? "na" : ""}`}
+                        title={L(PHOTO_COLORS[c], lang)} aria-label={L(PHOTO_COLORS[c], lang)}
+                        onClick={() => setPhotoId(on ? null : m.id)}>
+                  <i style={{ background: PHOTO_COLORS[c]?.hex }} />
+                </button>
+              );
+            })}
+          </span>
+        </div>
+        <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                onClick={() => openInfo(g.label, photoEdu(lang), photoDiagKeys(priceMember))}>
+          <Ic name="info" />
+        </button>
+      </div>
+    );
+  };
   // Comprar ahora → loader breve → resumen de revisión → checkout.
   const startReview = () => { setReviewing("loading"); setTimeout(() => setReviewing("show"), 700); };
   const confirmReview = () => { setReviewing("idle"); finish(); };
@@ -965,35 +1031,24 @@ export default function LensProcess() {
               <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
               <span className="zlx-choice-price">{t("lens.included")}</span>
             </button>
-            {PHOTO.map((p) => {
-              const pp = photoPriceOf(p);
-              const na = pp == null;
-              return (
-                <div key={p.id} className={`zlx-choice-row ${photoId === p.id ? "sel" : ""} ${na ? "na" : ""}`}>
-                  {/* nombre + precio en la 1ª línea; los colores debajo (ahorra espacio) */}
-                  <button type="button" disabled={na} className={`zlx-choice zlx-choice-stack ${photoId === p.id ? "sel" : ""} ${na ? "na" : ""}`}
-                          onClick={() => setPhotoId(p.id)}>
-                    <span className="zlx-choice-top">
-                      <span className="zlx-choice-main">
-                        <IconFotocromatico className="zlx-choice-ic" active={photoId === p.id} />
-                        <span className="zlx-choice-title">{L(p.label, lang)}</span>
-                      </span>
-                      <span className="zlx-choice-price">{na ? "—" : `+ ${money(pp)}`}</span>
-                    </span>
-                    {p.colors.length > 0 && (
-                      <span className="zlx-choice-colors">
-                        {p.colors.map((c) => <i key={c} className="lp-dot" title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}
-                      </span>
-                    )}
-                  </button>
-                  <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
-                          onClick={() => openInfo(L(p.label, lang), photoEdu(lang), photoDiagKeys(p))}>
-                    <Ic name="info" />
-                  </button>
-                </div>
-              );
-            })}
+            {/* Fotocromáticos: una familia, con sus bolitas de color */}
+            {fotoGroups.map(renderPhotoFamily)}
           </div>
+          {transGroups.length > 0 && (
+            <>
+              {/* flechita para ir a Transitions */}
+              <button type="button" className={`zlx-treat-more ${showTrans ? "open" : ""}`}
+                      aria-expanded={showTrans} onClick={() => setShowTrans((s) => !s)}>
+                <span>{t("lens.ph.trans")}</span>
+                <Ic name={showTrans ? "up" : "down"} className="zlx-treat-more-chev" />
+              </button>
+              {showTrans && (
+                <div className="zlx-choices zlx-treat-list">
+                  {transGroups.map(renderPhotoFamily)}
+                </div>
+              )}
+            </>
+          )}
 
           <h4 className="zlx-pop-q">{t("lens.ar")} <span className="lp-opt">{t("lens.optional")}</span></h4>
           <div className="zlx-choices zlx-treat-list">

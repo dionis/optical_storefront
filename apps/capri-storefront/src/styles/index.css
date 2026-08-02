@@ -2066,3 +2066,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-height-i { flex: 0 0 auto; width: 24px; height: 24px; border: none; background: var(--soft); border-radius: 7px; color: var(--cuba-blue); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .zlx-height-i .zlx-ic { width: 15px; height: 15px; }
 .zlx-height-note.req .zlx-height-i { background: var(--red-soft); color: var(--cuba-red); }
+
+/* — Fotocromáticos agrupados por familia: nombre + bolitas de color seleccionables — */
+.zlx-photofam { cursor: default; }
+.zlx-photofam-row.sel .zlx-photofam { border-color: var(--cuba-red); background: var(--red-soft); }
+.zlx-fam-colors { display: flex; flex-wrap: wrap; gap: 9px; padding-left: 32px; margin-top: 3px; }
+.zlx-fam-dot { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; background: none; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: border-color .14s, transform .12s; }
+.zlx-fam-dot i { display: block; width: 100%; height: 100%; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+.zlx-fam-dot:hover:not(:disabled) { transform: scale(1.1); }
+.zlx-fam-dot.on { border-color: var(--cuba-red); }
+.zlx-fam-dot.na { opacity: .3; cursor: not-allowed; }
+.zlx-treat-more { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 8px 0; padding: 10px 13px; border: 1.5px dashed var(--line); border-radius: 12px; background: #fff; cursor: pointer; font-weight: 800; font-size: 14px; color: var(--cuba-blue); transition: background-color .14s, border-color .14s; }
+.zlx-treat-more:hover, .zlx-treat-more.open { border-color: var(--cuba-blue); background: var(--blue-soft); }
+.zlx-treat-more-chev { width: 18px; height: 18px; }
