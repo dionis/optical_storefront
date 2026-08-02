@@ -208,13 +208,25 @@ export default function MedusaCheckout() {
       const cartId = (cart && cart.id) || null;
       if (!cartId) { setErr(L("failed")); setBusy(false); return; }
 
+      // Al ocultar el email del Element con `fields.billingDetails.email: "never"`
+      // (ver el useEffect de montaje), Stripe EXIGE recibirlo aquí; si no, avisa
+      // con "you did not pass confirmParams.payment_method_data.billing_details.email"
+      // y la tarjeta se guarda sin email. Mandarlo en confirmParams NO reabre la
+      // verificación de Link que daba 401: esa la dispara el campo de email del
+      // Element, que sigue oculto. Si la tarjeta no es del paciente, sólo va el
+      // email (nombre y dirección los teclea el cliente en el Element).
+      const billing = { ...(cardMatches ? buildBilling() : {}), email: f.email };
+
       const { error } = await stripeRef.current.confirmPayment({
         elements: elementsRef.current,
         // Required in case the card needs 3D Secure / bank authentication: then
         // Stripe redirects the browser away and back to this URL. With
         // "if_required" the redirect only happens when the bank demands it; the
         // return is handled by the mount effect below (ORDEN 4/5 front).
-        confirmParams: { return_url: window.location.origin + "/checkout" },
+        confirmParams: {
+          return_url: window.location.origin + "/checkout",
+          payment_method_data: { billing_details: billing },
+        },
         redirect: "if_required",
       });
       // NOTE: if a redirect DID occur, the browser already left this page and the
