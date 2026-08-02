@@ -14,6 +14,8 @@ export default async function priceSyncJob(container: MedusaContainer) {
 
 export const config = {
   name: "price-sync",
-  // Every 4 hours, on the hour (00:00, 04:00, 08:00, ...). UTC.
-  schedule: "0 */4 * * *",
+  // Hourly, on the hour. UTC. Idempotent and light (~one upsert per variant),
+  // so running it every hour keeps the storefront prices reconciled quickly
+  // after any price-book change without meaningful load.
+  schedule: "0 * * * *",
 };
