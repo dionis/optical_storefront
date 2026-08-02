@@ -83,6 +83,13 @@ const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) })
 const PD = range(48, 80, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 // Monocular PD (one value per eye) uses a lower range than the binocular total.
 const PD_MONO = range(24, 40, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+// ALTURA DE MONTAJE (fitting/seg height): distancia vertical del borde interior
+// inferior de la montura al centro de la pupila. Es OBLIGATORIA en multifocales —
+// sin altura no se puede fabricar un progresivo. (Se mide con la montura puesta,
+// al 0.5 mm.)  Progresivo: 14–30 mm (típico 18–22).  Bifocal: 10–20 mm (tope del
+// segmento al borde del párpado inferior).  Refs: lens.com, optogrid, icarelabs.
+const HEIGHT_PROG = range(14, 30, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+const HEIGHT_BIFOCAL = range(10, 20, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
 // OCR returns free-form numbers; the pickers only accept values that exist as
 // options. Snap to the closest one so a reading of -2.30 lands on -2.25 instead
@@ -331,7 +338,7 @@ export default function LensProcess() {
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null);   // null = ninguno
   const [arId, setArId] = useState(null);         // null = ninguno
-  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
+  const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "", seg_height: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
   const [rxNote, setRxNote] = useState(null);     // aviso del auto-cambio de tipo por la adición (ADD)
   // Ayuda educativa en un GLOBO/popover aparte (NO inline): así la ventana de
@@ -390,6 +397,10 @@ export default function LensProcess() {
   const design = designId === "frame-only" ? FRAME_ONLY : (DESIGNS.find((d) => d.id === designId) || null);
   const frameOnly = designId === "frame-only";
   const cat = design && design.cat; // sv | bifocal | prog
+  // Multifocales (bifocal/progresivo) requieren ALTURA de montaje para poder
+  // fabricarse; el rango depende del tipo (bifocal 10–20, progresivo 14–30).
+  const isMulti = cat === "bifocal" || cat === "prog";
+  const heightOptions = cat === "bifocal" ? HEIGHT_BIFOCAL : HEIGHT_PROG;
 
   // Auto-cambio de tipo según la ADICIÓN (ADD), siguiendo la práctica optométrica:
   //   sin ADD → Visión Sencilla   ·   con ADD → multifocal (bifocal/progresivo).
@@ -468,7 +479,9 @@ export default function LensProcess() {
   const awaitingRxConfirm = !frameOnly && ocr.status === "done" && !ocr.confirmed;
   // Ready to buy: a use must be chosen, lenses need a material, and any pending
   // OCR reading must be confirmed first. No "continue" steps — this gates the CTA.
-  const canBuy = !!designId && (frameOnly || !!matId) && !awaitingRxConfirm && ocr.status !== "loading";
+  // La altura es obligatoria en multifocales: sin ella no se puede fabricar.
+  const heightMissing = isMulti && !frameOnly && !rx.seg_height;
+  const canBuy = !!designId && (frameOnly || !!matId) && !heightMissing && !awaitingRxConfirm && ocr.status !== "loading";
 
   const chooseDesign = (id) => {
     setDesignId(id);
@@ -557,6 +570,13 @@ export default function LensProcess() {
           pd: pdMode === "dual" ? null : num(rx.pd),
           pd_od: pdMode === "dual" ? num(rx.pd_od) : null,
           pd_os: pdMode === "dual" ? num(rx.pd_os) : null,
+          // Altura de montaje (mm). Obligatoria en multifocales. NOTA para la
+          // simulación en cara (try-on): esta altura es la que posiciona el tope
+          // del segmento (bifocal) o el inicio del corredor (progresivo) sobre el
+          // lente respecto al centro de la pupila; el render debe consumirla desde
+          // aquí. El backend actual la ignora sin romper — persistir cuando exista
+          // la columna. (No se toca el render de Dionis.)
+          seg_height: num(rx.seg_height),
           source: fromOcr ? "ocr" : "manual",
           verified_by_user: true,
           file_url: fromOcr ? ocr.fileUrl : null,
@@ -647,6 +667,9 @@ export default function LensProcess() {
             </div>
             {design?.add && rx.add && (
               <div className="zlx-meas-add"><span>{t("lens.addLbl")}</span><b>{fmt(parseFloat(rx.add) || 0)}</b></div>
+            )}
+            {isMulti && rx.seg_height && (
+              <div className="zlx-meas-add"><span>{t("lens.height")}</span><b>{rx.seg_height} mm</b></div>
             )}
           </div>
         </div>
@@ -867,7 +890,18 @@ export default function LensProcess() {
                             {/* ADD siempre visible: en Visión Sencilla es el disparador del
                                 auto-cambio a multifocal; en multifocal es obligatorio. */}
                             <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addS")} withEmpty flag={ocrClass("add")} />
+                            {/* ALTURA de montaje: obligatoria en multifocales (bifocal/progresivo) */}
+                            {isMulti && (
+                              <ZlxStepper value={rx.seg_height} options={heightOptions} onChange={setF("seg_height")} label={t("lens.heightS")} withEmpty flag={`${ocrClass("seg_height")} ${heightMissing ? "req" : ""}`} />
+                            )}
                           </div>
+                          {isMulti && (
+                            <p className={`zlx-height-note ${heightMissing ? "req" : ""}`}>
+                              <button type="button" className="zlx-height-i" aria-label={t("lens.help")}
+                                      onClick={() => openInfo(t("lens.height"), null, ["fittingHeight"])}><Ic name="info" /></button>
+                              <span>{heightMissing ? t("lens.height.required") : t("lens.height.note")}</span>
+                            </p>
+                          )}
                           {/* Botón "Material del lente": pasa al material dentro del MISMO popup */}
                           <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select" onClick={() => setPop("mat")}>
                             <IconMaterial className="zlx-ic" /> {t("lens.material")} <Ic name="down" className="zlx-step-chev" />

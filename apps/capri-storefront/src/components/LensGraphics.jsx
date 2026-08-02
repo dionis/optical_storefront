@@ -717,6 +717,40 @@ export function DiagVisionFields({ t, ...props }) {
 }
 
 // Registry for data-driven diagram rendering.
+// ---------------------------------------------------------------------------
+// DiagFittingHeight — cómo se mide la altura de montaje: del borde interior
+// inferior de la montura al centro de la pupila. Misma línea visual que el resto.
+// ---------------------------------------------------------------------------
+export function DiagFittingHeight({ t, ...props }) {
+  return (
+    <DiagSvg viewBox="0 0 340 180" title={txt(t, "diag.fittingHeight.title", "Altura de montaje")} {...props}>
+      {/* montura (lente) */}
+      <rect x="74" y="26" width="150" height="126" rx="30" fill={NEUT} stroke={BLUE} strokeWidth="2.4" />
+      {/* ojo: iris + pupila, en la zona superior */}
+      <circle cx="149" cy="72" r="18" fill="#fff" stroke={INK} strokeWidth="1.6" />
+      <circle cx="149" cy="72" r="9.5" fill={BLUE} />
+      <circle cx="149" cy="72" r="3.6" fill={INK} />
+      <circle cx="152.5" cy="68.5" r="2" fill="#fff" />
+      {/* guía: centro de la pupila y borde inferior */}
+      <path d="M64 72 h196" stroke={RED} strokeWidth="1.3" strokeDasharray="4 4" opacity=".75" />
+      <path d="M64 152 h196" stroke={LINE} strokeWidth="1.4" strokeDasharray="4 4" />
+      {/* flecha de medida (altura) a la derecha */}
+      <g stroke={RED} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M250 72 v80" />
+        <path d="M244 79 l6 -7 l6 7" />
+        <path d="M244 145 l6 7 l6 -7" />
+      </g>
+      <rect x="234" y="101" width="32" height="22" rx="6" fill={RED} />
+      <text x="250" y="116" fill="#fff" fontSize="12.5" fontWeight="700" fontFamily="sans-serif" textAnchor="middle">mm</text>
+      {/* etiquetas */}
+      <g fontFamily="sans-serif">
+        <text x="149" y="17" fill={INK} fontSize="11.5" fontWeight="600" textAnchor="middle">{txt(t, "diag.fittingHeight.pupil", "Centro de la pupila")}</text>
+        <text x="149" y="172" fill={MUT} fontSize="10.5" textAnchor="middle">{txt(t, "diag.fittingHeight.edge", "Borde inferior de la montura")}</text>
+      </g>
+    </DiagSvg>
+  );
+}
+
 export const DIAGRAMS = {
   thickness: DiagThickness,
   progressive: DiagProgressive,
@@ -725,4 +759,5 @@ export const DIAGRAMS = {
   photochromic: DiagPhotochromic,
   nightDrive: DiagNightDrive,
   visionFields: DiagVisionFields,
+  fittingHeight: DiagFittingHeight,
 };

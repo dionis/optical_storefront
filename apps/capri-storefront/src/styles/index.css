@@ -2058,3 +2058,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .zlx-review-overlay { padding: 0; place-items: end center; }
   .zlx-review-card { width: 100%; max-height: 88vh; border-radius: 20px 20px 0 0; }
 }
+
+/* — Altura de montaje (fitting height): nota + estado obligatorio — */
+.zlx-stepper.req .zlx-stepper-ctl { border-color: var(--cuba-red); box-shadow: 0 0 0 2px var(--red-soft); }
+.zlx-height-note { display: flex; align-items: flex-start; gap: 8px; margin: 8px 2px 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.zlx-height-note.req { color: var(--cuba-red); font-weight: 600; }
+.zlx-height-i { flex: 0 0 auto; width: 24px; height: 24px; border: none; background: var(--soft); border-radius: 7px; color: var(--cuba-blue); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.zlx-height-i .zlx-ic { width: 15px; height: 15px; }
+.zlx-height-note.req .zlx-height-i { background: var(--red-soft); color: var(--cuba-red); }
