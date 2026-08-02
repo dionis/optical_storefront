@@ -22,6 +22,7 @@ import {
   type OrderEmailData,
 } from "../lib/email/order-confirmation";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
+import { resolveStoreSettings } from "../lib/store-settings";
 
 const ORDER_FIELDS = [
   "id",
@@ -111,34 +112,37 @@ export default async function orderPlacedSubscriber({
     logger.warn(`[order-placed] order ${order.id} has no email — customer copy skipped.`);
   }
 
-  // Store copy. Falls back to the sender address so a misconfigured deployment
-  // still lands the notification somewhere the operator can see.
-  const storeRecipient =
-    process.env.STORE_ORDER_NOTIFICATION_EMAIL ?? process.env.RESEND_FROM_EMAIL;
+  // Store copy. The owner's contact settings come from the admin-configurable
+  // store settings (resolveStoreSettings), which itself falls back to the
+  // STORE_ORDER_NOTIFICATION_* / RESEND_FROM_EMAIL env vars — so behaviour is
+  // identical to before until an owner saves settings in the admin.
+  const storeSettings = await resolveStoreSettings(container);
+  const storeRecipient = storeSettings.owner_notification_email;
 
+  // No early return here: even without a store email, the SMS section below must
+  // still run (owner SMS / customer SMS are independent of the email copy).
   if (!storeRecipient) {
     logger.warn(
-      "[order-placed] STORE_ORDER_NOTIFICATION_EMAIL is unset — the store copy was not sent."
+      "[order-placed] owner notification email is unset — the store email copy was not sent."
     );
-    return;
-  }
-
-  try {
-    const adminEmail = renderAdminOrderNotification(order, storeLocale);
-    await notificationService.createNotifications({
-      to: storeRecipient,
-      channel: "email",
-      template: "order-placed-admin",
-      trigger_type: "order.placed",
-      resource_id: order.id,
-      resource_type: "order",
-      content: adminEmail,
-      data: { order_id: order.id, display_id: order.display_id },
-    });
-  } catch (error) {
-    logger.error(
-      `[order-placed] store notification for order ${order.id} failed: ${(error as Error).message}`
-    );
+  } else {
+    try {
+      const adminEmail = renderAdminOrderNotification(order, storeLocale);
+      await notificationService.createNotifications({
+        to: storeRecipient,
+        channel: "email",
+        template: "order-placed-admin",
+        trigger_type: "order.placed",
+        resource_id: order.id,
+        resource_type: "order",
+        content: adminEmail,
+        data: { order_id: order.id, display_id: order.display_id },
+      });
+    } catch (error) {
+      logger.error(
+        `[order-placed] store notification for order ${order.id} failed: ${(error as Error).message}`
+      );
+    }
   }
 
   // ── SMS (opcional) ──────────────────────────────────────────────────────
@@ -174,9 +178,10 @@ export default async function orderPlacedSubscriber({
     }
   }
 
-  // Owner SMS copy — only when an owner number is configured. Kept separate from
-  // the customer opt-in: the store always wants to hear about a new order.
-  const ownerSmsRecipient = process.env.STORE_ORDER_NOTIFICATION_SMS;
+  // Owner SMS copy — only when an owner number is configured (admin settings,
+  // falling back to STORE_ORDER_NOTIFICATION_SMS). Kept separate from the
+  // customer opt-in: the store always wants to hear about a new order.
+  const ownerSmsRecipient = storeSettings.owner_notification_sms;
   if (ownerSmsRecipient) {
     try {
       const adminSmsText = renderAdminOrderSms(order, storeLocale);

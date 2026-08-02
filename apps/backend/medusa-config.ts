@@ -200,5 +200,8 @@ export default defineConfig({
     {
       resolve: "./src/modules/ocr-config",
     },
+    {
+      resolve: "./src/modules/store-settings",
+    },
   ],
 });
