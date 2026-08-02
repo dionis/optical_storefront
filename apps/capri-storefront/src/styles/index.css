@@ -380,14 +380,20 @@ button { font-family: inherit; cursor: pointer; }
 .side-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .side-panel-head h3 { margin: 0; font-size: 19px; }
 .side-close { border: none; background: none; font-size: 26px; line-height: 1; color: var(--muted); }
-.side-panel-body { padding: 18px 20px; overflow-y: auto; flex: 1; }
+.side-panel-body { padding: 18px 20px; overflow-y: auto; overflow-x: hidden; flex: 1; }
 .panel-empty { color: var(--muted); text-align: center; margin-top: 30px; }
 .panel-list { list-style: none; margin: 0 0 14px; padding: 0; }
 .panel-item { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.panel-item-info { flex: 1; display: flex; flex-direction: column; }
-.panel-item-info small { color: var(--muted); font-size: 12px; }
-.panel-item-price { color: var(--red); font-weight: 800; }
-.panel-x { border: none; background: none; color: var(--muted); font-size: 20px; }
+/* Miniatura acotada: sin esto la imagen sale a tamaño natural y empuja el precio
+   y la × fuera de la vista (por eso "no dejaba eliminar" del carrito). */
+.panel-item-thumb { flex: 0 0 auto; width: 54px; height: 54px; object-fit: contain; border-radius: 8px; background: var(--soft); padding: 3px; }
+.panel-item-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.panel-item-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-item-info small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-item-price { flex: 0 0 auto; color: var(--red); font-weight: 800; white-space: nowrap; }
+.panel-x { flex: 0 0 auto; border: none; background: none; color: var(--muted); font-size: 22px; line-height: 1; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background-color .14s, color .14s; }
+.panel-x:hover:not(:disabled) { background: var(--red-soft); color: var(--red); }
+.panel-x:disabled { opacity: .4; cursor: default; }
 .panel-total { display: flex; justify-content: space-between; font-size: 19px; padding: 12px 0; border-top: 2px solid var(--line); margin-bottom: 14px; }
 .panel-total b { color: var(--red); }
 .panel-clear { width: 100%; border: none; background: none; color: var(--muted); text-decoration: underline; margin-top: 10px; font-size: 13px; }
