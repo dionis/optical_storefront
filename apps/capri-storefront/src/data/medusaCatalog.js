@@ -109,6 +109,18 @@ function toCase(product) {
 const FIELDS =
   "id,title,handle,description,thumbnail,*images,*variants,*variants.calculated_price,metadata";
 
+// Curated collections: the store sells ONLY these 9 (8 frame brands + Cases).
+// The backend catalog also contains other brands (Ago, Candy Shoppe, Versailles
+// Palace, Eyeleos, Artistik Eyewear/Galerie, Simplylite, Slimfold) that come from
+// other suppliers and have no real wholesale price — they must NOT appear in the
+// storefront. We filter by brand_slug here rather than unpublishing in the
+// backend so Dionis's catalog data stays intact and a brand can be re-enabled by
+// editing this one list.
+const ALLOWED_BRAND_SLUGS = new Set([
+  "di-caprio", "peachtree", "4u", "millennial",
+  "flexure", "trendy", "grande", "prorx", "case",
+]);
+
 // Fetch every published product for the store's first region, paginated.
 export async function loadFromMedusa() {
   const { regions } = await medusa.store.region.list();
@@ -132,6 +144,8 @@ export async function loadFromMedusa() {
   const cases = [];
   for (const p of all) {
     const slug = ((p.metadata || {}).brand_slug || (p.metadata || {}).collection_slug || "");
+    // Skip any product outside the curated collections (see ALLOWED_BRAND_SLUGS).
+    if (!ALLOWED_BRAND_SLUGS.has(slug)) continue;
     if (slug === "case") cases.push(toCase(p));
     else frames.push(toFrame(p));
   }
