@@ -74,3 +74,7 @@ docs/data/
 # *.json.bak         → copia que deja backfill_geometry_attrs.py antes de escribir
 apps/scraper/scripts/.shape_truth.json
 *.json.bak
+
+# Artefactos de sesion del MCP de Playwright — snapshots de accesibilidad
+# generados en cada navegacion; no aportan nada al repo
+.playwright-mcp/
