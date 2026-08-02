@@ -64,6 +64,14 @@ cd apps/scraper
 python -m scraper sync [--full] [--collection SLUG] [--dry-run]
 ```
 
+## Checkout, notifications & store settings
+
+- **Checkout (`apps/capri-storefront/src/pages/MedusaCheckout.jsx`)**: full order summary above "Finalizar compra" (lens type via `DESIGN_LBL`, material/photo/AR codes, "✓ con receta", subtotal/envío/impuestos/total); patient mobile phone captured organically (sent in `shipping_address.phone` + cart `metadata`); "card = patient" checkbox autofills Stripe `billingDetails`; email/SMS confirmation checkboxes → cart `metadata.notify_email/notify_sms`. Anti-double-click loaders on the buy transition and checkout buttons.
+- **Notifications (`apps/backend`)**: `order.placed` subscriber sends **email** (Resend provider, `src/modules/notification-resend`) and **SMS** (Twilio provider, `src/modules/notification-twilio`) to the customer (when opted in) and the store owner. Each provider registers only when its credentials exist; otherwise the channel falls back to `notification-local` (logs) so the backend always boots. Env: `RESEND_*`, `TWILIO_*`, `STORE_ORDER_NOTIFICATION_EMAIL/SMS`.
+- **Store settings (`src/modules/store-settings`)**: single-row admin-configurable config (owner email, owner SMS, active payment provider), resolved via `src/lib/store-settings.ts` with env fallback. Routes: `GET/POST /admin/store-settings`, `GET /store/store-settings` (public: payment provider only). Mirrors the `ocr-config` module pattern.
+- **Deploy split**: storefront (Vercel) deploys from `develop`; backend (Coolify) deploys from `main`. Work lands on `develop`; backend changes go live only after a `develop`→`main` merge.
+- **Tax note**: per-line tax exemption by prescription is **not** expressible in Medusa v2 — the tax layer only sees `product_id`/`product_type_id`, never line metadata (`get-item-tax-lines` `normalizeLineItemsForTax`). Requires modeling prescription lenses as a tax-exempt product type. No custom tax provider can read `prescription_id`.
+
 ## Environment variables
 
 See `.env.example` in each app.
