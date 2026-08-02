@@ -130,12 +130,15 @@ export default function MedusaCheckout() {
   });
 
   // Datos de facturación para Stripe, tomados del paciente (autofill).
+  // NO pasamos email ni teléfono a Stripe a propósito: si Stripe recibe un email
+  // reconocido por Stripe Link, dispara su verificación ("Confirma que eres tú")
+  // que en esta cuenta falla con 401 y bloquea el pago. El email/teléfono ya se
+  // capturan en los datos del paciente y viajan al backend; para la TARJETA sólo
+  // hace falta nombre + dirección de facturación.
   const buildBilling = () => {
     const name = `${f.first_name} ${f.last_name}`.trim();
     const bd = {};
     if (name) bd.name = name;
-    if (f.email) bd.email = f.email;
-    if (f.phone) bd.phone = f.phone;
     const address = {};
     if (f.address_1) address.line1 = f.address_1;
     if (f.city) address.city = f.city;
@@ -184,7 +187,11 @@ export default function MedusaCheckout() {
     if (step !== "pay" || !elementsRef.current || !payElRef.current) return;
     const elements = elementsRef.current;
     if (payMountRef.current) { try { payMountRef.current.destroy(); } catch { /* noop */ } payMountRef.current = null; }
-    const opts = cardMatches ? { defaultValues: { billingDetails: buildBilling() } } : {};
+    // `fields.billingDetails.email: "never"` evita que Stripe muestre el campo de
+    // email de Link, que es el que dispara la verificación fallida (401). El email
+    // ya lo capturamos en los datos del paciente.
+    const opts = { fields: { billingDetails: { email: "never" } } };
+    if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
     const el = elements.create("payment", opts);
     el.mount(payElRef.current);
     payMountRef.current = el;
