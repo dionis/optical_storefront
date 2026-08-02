@@ -13,6 +13,7 @@ export class CreateStoreSetting1 extends Migration {
         owner_notification_email  TEXT,
         owner_notification_sms    TEXT,
         active_payment_provider   TEXT,
+        frame_tax_rate            TEXT,
         updated_by                TEXT,
         created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),

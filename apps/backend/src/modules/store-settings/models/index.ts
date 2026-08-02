@@ -23,6 +23,13 @@ export const StoreSetting = model.define("store_setting", {
    * which registered provider is active.
    */
   active_payment_provider: model.text().nullable(),
+  /**
+   * Sales-tax rate applied to FRAME-ONLY purchases (no prescription), as a
+   * decimal string, e.g. "0.07" for 7%. Prescription eyewear is tax-exempt, so
+   * it never uses this. Stored as text to avoid ORM numeric-precision surprises;
+   * parsed and clamped to [0, 1] on read. Empty/unset = no frame tax.
+   */
+  frame_tax_rate: model.text().nullable(),
   /** Admin user who last changed the configuration. */
   updated_by: model.text().nullable(),
 });

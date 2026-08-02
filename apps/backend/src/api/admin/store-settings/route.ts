@@ -9,6 +9,7 @@ import {
   KNOWN_PAYMENT_PROVIDERS,
   STORE_SETTING_ID,
   isKnownPaymentProvider,
+  parseTaxRate,
   resolveStoreSettings,
 } from "../../../lib/store-settings";
 
@@ -20,6 +21,7 @@ interface UpdateBody {
   owner_notification_email?: string | null;
   owner_notification_sms?: string | null;
   active_payment_provider?: string | null;
+  frame_tax_rate?: string | number | null;
 }
 
 function buildPayload(
@@ -60,6 +62,10 @@ export async function POST(
     body.active_payment_provider == null
       ? null
       : String(body.active_payment_provider).trim() || null;
+  // Store the frame tax rate as a normalized decimal string ("0.07"); empty clears it.
+  const taxRaw =
+    body.frame_tax_rate == null ? null : String(body.frame_tax_rate).trim() || null;
+  const frameTaxRate = taxRaw == null ? null : String(parseTaxRate(taxRaw));
 
   if (email && !EMAIL_RE.test(email)) {
     throw new MedusaError(
@@ -90,6 +96,7 @@ export async function POST(
     owner_notification_email: email,
     owner_notification_sms: sms,
     active_payment_provider: provider,
+    frame_tax_rate: frameTaxRate,
     updated_by: req.auth_context?.actor_id ?? null,
   };
 

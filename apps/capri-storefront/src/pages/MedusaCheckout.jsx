@@ -130,12 +130,15 @@ export default function MedusaCheckout() {
   });
 
   // Datos de facturación para Stripe, tomados del paciente (autofill).
+  // NO pasamos email ni teléfono a Stripe a propósito: si Stripe recibe un email
+  // reconocido por Stripe Link, dispara su verificación ("Confirma que eres tú")
+  // que en esta cuenta falla con 401 y bloquea el pago. El email/teléfono ya se
+  // capturan en los datos del paciente y viajan al backend; para la TARJETA sólo
+  // hace falta nombre + dirección de facturación.
   const buildBilling = () => {
     const name = `${f.first_name} ${f.last_name}`.trim();
     const bd = {};
     if (name) bd.name = name;
-    if (f.email) bd.email = f.email;
-    if (f.phone) bd.phone = f.phone;
     const address = {};
     if (f.address_1) address.line1 = f.address_1;
     if (f.city) address.city = f.city;
@@ -184,7 +187,11 @@ export default function MedusaCheckout() {
     if (step !== "pay" || !elementsRef.current || !payElRef.current) return;
     const elements = elementsRef.current;
     if (payMountRef.current) { try { payMountRef.current.destroy(); } catch { /* noop */ } payMountRef.current = null; }
-    const opts = cardMatches ? { defaultValues: { billingDetails: buildBilling() } } : {};
+    // `fields.billingDetails.email: "never"` evita que Stripe muestre el campo de
+    // email de Link, que es el que dispara la verificación fallida (401). El email
+    // ya lo capturamos en los datos del paciente.
+    const opts = { fields: { billingDetails: { email: "never" } } };
+    if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
     const el = elements.create("payment", opts);
     el.mount(payElRef.current);
     payMountRef.current = el;
@@ -201,13 +208,25 @@ export default function MedusaCheckout() {
       const cartId = (cart && cart.id) || null;
       if (!cartId) { setErr(L("failed")); setBusy(false); return; }
 
+      // Al ocultar el email del Element con `fields.billingDetails.email: "never"`
+      // (ver el useEffect de montaje), Stripe EXIGE recibirlo aquí; si no, avisa
+      // con "you did not pass confirmParams.payment_method_data.billing_details.email"
+      // y la tarjeta se guarda sin email. Mandarlo en confirmParams NO reabre la
+      // verificación de Link que daba 401: esa la dispara el campo de email del
+      // Element, que sigue oculto. Si la tarjeta no es del paciente, sólo va el
+      // email (nombre y dirección los teclea el cliente en el Element).
+      const billing = { ...(cardMatches ? buildBilling() : {}), email: f.email };
+
       const { error } = await stripeRef.current.confirmPayment({
         elements: elementsRef.current,
         // Required in case the card needs 3D Secure / bank authentication: then
         // Stripe redirects the browser away and back to this URL. With
         // "if_required" the redirect only happens when the bank demands it; the
         // return is handled by the mount effect below (ORDEN 4/5 front).
-        confirmParams: { return_url: window.location.origin + "/checkout" },
+        confirmParams: {
+          return_url: window.location.origin + "/checkout",
+          payment_method_data: { billing_details: billing },
+        },
         redirect: "if_required",
       });
       // NOTE: if a redirect DID occur, the browser already left this page and the
@@ -277,6 +296,12 @@ export default function MedusaCheckout() {
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
               <div><span>{L("shippingLine")}</span><b>{cart.shipping_total > 0 ? money(cart.shipping_total) : L("free")}</b></div>
               {cart.tax_total > 0 && <div><span>{L("tax")}</span><b>{money(cart.tax_total)}</b></div>}
+              {(() => {
+                // Impuesto de montura sola horneado en el precio (server-side);
+                // se muestra como informativo "impuesto incluido".
+                const inc = (cart.items || []).reduce((s, i) => s + Number(i.metadata?.tax_amount || 0), 0);
+                return inc > 0 ? <div><span>{L("taxIncluded")}</span><b>{money(inc)}</b></div> : null;
+              })()}
             </div>
             <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
           </div>

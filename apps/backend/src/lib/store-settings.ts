@@ -22,9 +22,29 @@ export interface StoreSettings {
   owner_notification_email: string | null;
   owner_notification_sms: string | null;
   active_payment_provider: string;
+  /** Frame-only sales-tax rate as a decimal in [0, 1] (0 = no frame tax). */
+  frame_tax_rate: number;
   source: "database" | "env";
   updated_by?: string | null;
   updated_at?: string | null;
+}
+
+/** Parse a tax rate ("0.07", "7%" → 0.07) and clamp to [0, 1]; invalid → 0. */
+export function parseTaxRate(value: unknown): number {
+  if (value == null) return 0;
+  let s = String(value).trim();
+  if (!s) return 0;
+  let pct = false;
+  if (s.endsWith("%")) {
+    pct = true;
+    s = s.slice(0, -1).trim();
+  }
+  let n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  if (pct) n = n / 100;
+  // A value like "7" almost certainly means 7%, not 700% — treat >1 as percent.
+  if (n > 1) n = n / 100;
+  return Math.min(Math.max(n, 0), 1);
 }
 
 export function isKnownPaymentProvider(value: unknown): value is PaymentProviderId {
@@ -46,6 +66,7 @@ function envDefaults(): StoreSettings {
     active_payment_provider: isKnownPaymentProvider(envProvider)
       ? envProvider
       : "pp_stripe_stripe",
+    frame_tax_rate: parseTaxRate(process.env.STORE_FRAME_TAX_RATE),
     source: "env",
   };
 }
@@ -87,6 +108,10 @@ export async function resolveStoreSettings(
     active_payment_provider: isKnownPaymentProvider(storedProvider)
       ? storedProvider
       : defaults.active_payment_provider,
+    frame_tax_rate:
+      row["frame_tax_rate"] != null
+        ? parseTaxRate(row["frame_tax_rate"])
+        : defaults.frame_tax_rate,
     source: "database",
     updated_by: (row["updated_by"] as string | null) ?? null,
     updated_at: (row["updated_at"] as string | null) ?? null,
