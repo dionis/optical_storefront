@@ -61,7 +61,9 @@ button { font-family: inherit; cursor: pointer; }
 .search { flex: 1; display: flex; max-width: 380px; margin-left: auto; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; }
 .search:focus-within { border-color: var(--blue); }
 .search input { flex: 1; border: none; padding: 11px 16px; outline: none; font-size: 14px; background: transparent; }
-.search button { border: none; background: var(--soft); padding: 0 16px; font-size: 18px; color: var(--blue); }
+.search button { border: none; background: var(--soft); padding: 0 16px; font-size: 18px; color: var(--blue); cursor: pointer; }
+.search .search-clear { background: transparent; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px 0 8px; display: flex; align-items: center; }
+.search .search-clear:hover { color: var(--cuba-red); }
 .header-actions { display: flex; gap: 6px; align-items: center; }
 .lang-btn { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); display: flex; gap: 4px; }
 .lang-btn .on { color: var(--blue); }
@@ -1590,25 +1592,38 @@ img { max-width: 100%; }
 /* --- maqueta: 2 columnas en escritorio, 1 en móvil --- */
 .zlx-stage { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
 @media (min-width: 940px) {
-  .zlx-stage { grid-template-columns: minmax(0, 1.55fr) minmax(346px, 430px); gap: 36px; }
-  .zlx-side { position: sticky; top: 84px; }
+  .zlx-stage { grid-template-columns: minmax(0, 1.55fr) minmax(346px, 430px); gap: 36px; align-items: stretch; }
 }
-.zlx-main { min-width: 0; }
+.zlx-main { min-width: 0; display: flex; flex-direction: column; }
 .zlx-side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
 /* --- espejuelo grande, protagonista (izquierda) --- */
-.zlx-float { background: linear-gradient(180deg, var(--cream), #fff); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: var(--shadow); }
-.zlx-float-inner { display: flex; align-items: center; justify-content: center; }
+.zlx-float { background: linear-gradient(180deg, var(--cream), #fff); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: var(--shadow); flex: 1 1 auto; display: flex; flex-direction: column; }
+.zlx-float-inner { display: flex; align-items: center; justify-content: center; flex: 1 1 auto; }
 .zlx-float-img { width: 100%; max-height: 56vh; min-height: 300px; object-fit: contain; }
 .zlx-float img { max-height: 56vh; width: 100%; object-fit: contain; }
 .zlx-float-name { text-align: center; margin-top: 12px; font-weight: 700; color: var(--ink-soft); }
 /* precio en vivo, centrado debajo del espejuelo */
 .zlx-float-price { text-align: center; margin-top: 4px; font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--cuba-red); font-variant-numeric: tabular-nums; }
 /* miniaturas de color */
-.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.zlx-float-color { width: 58px; height: 46px; padding: 3px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; overflow: hidden; transition: border-color .15s; }
-.zlx-float-color img { width: 100%; height: 100%; object-fit: contain; }
+.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.zlx-float-color { position: relative; width: 84px; height: 66px; padding: 5px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; overflow: visible; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.zlx-float-color:hover { transform: translateY(-2px); }
+.zlx-float-color img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
 .zlx-float-color.on { border-color: var(--cuba-blue); box-shadow: 0 0 0 2px rgba(0,42,143,.15); }
+/* bolita en la esquina superior derecha; muestra el nombre del color al pasar el cursor */
+.zlx-color-dot { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--cuba-blue); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(15,25,45,.25); cursor: help; }
+.zlx-float-color.on .zlx-color-dot { background: var(--cuba-red); }
+.zlx-color-dot::after { content: attr(data-name); position: absolute; bottom: calc(100% + 7px); right: 50%; transform: translateX(50%) scale(.9); transform-origin: bottom center; white-space: nowrap; background: #0f172a; color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 7px; opacity: 0; pointer-events: none; transition: opacity .14s, transform .14s; z-index: 20; }
+.zlx-color-dot::before { content: ""; position: absolute; bottom: calc(100% + 2px); right: 50%; transform: translateX(50%); border: 5px solid transparent; border-top-color: #0f172a; opacity: 0; transition: opacity .14s; z-index: 20; }
+.zlx-color-dot:hover::after, .zlx-color-dot:focus-visible::after { opacity: 1; transform: translateX(50%) scale(1); }
+.zlx-color-dot:hover::before, .zlx-color-dot:focus-visible::before { opacity: 1; }
+/* bolita de ayuda en el encabezado del resumen del pedido */
+.zlx-summary-h { display: flex; align-items: center; gap: 8px; }
+.zlx-summary-help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: var(--cuba-blue); cursor: help; }
+.zlx-summary-help .zlx-ic { width: 16px; height: 16px; }
+.zlx-summary-help::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 0; white-space: normal; width: max-content; max-width: 230px; background: #0f172a; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 7px 10px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .14s; z-index: 30; box-shadow: 0 6px 20px rgba(15,25,45,.22); }
+.zlx-summary-help:hover::after, .zlx-summary-help:focus-visible::after { opacity: 1; }
 /* fila colección (izq) · material + ayuda (der) */
 .zlx-float-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-soft); }
 .zlx-float-meta .zlx-k { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px; }

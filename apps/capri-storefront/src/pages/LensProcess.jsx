@@ -507,22 +507,7 @@ export default function LensProcess() {
                    onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
             </div>
             <div className="zlx-float-name">{product.name} · {color.name}</div>
-            {/* precio en vivo, debajo del espejuelo */}
-            <div className="zlx-float-price">${total.toFixed(2)}</div>
-            {/* miniaturas de color (elegir variante sin salir del funnel) */}
-            {product.colors.length > 1 && (
-              <div className="zlx-float-colors">
-                {product.colors.map((c, i) => (
-                  <button key={c.name} type="button" title={c.name}
-                          className={`zlx-float-color ${i === colorIdx ? "on" : ""}`}
-                          onClick={() => setColorIdx(i)} aria-label={c.name}>
-                    <img src={c.image} alt={c.name}
-                         onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* colección (abajo-izq) · material + ayuda (abajo-der) */}
+            {/* colección (izq) · material + ayuda (der) — bajo el nombre, sin precio */}
             <div className="zlx-float-meta">
               <span className="zlx-float-collection">
                 <span className="zlx-k">{t("lens.collection")}</span> {product.brand}
@@ -535,6 +520,20 @@ export default function LensProcess() {
                 <Ic name="info" className="zlx-help-dot" />
               </button>
             </div>
+            {/* miniaturas de color más grandes; bolita con el nombre del color al pasar el cursor */}
+            {product.colors.length > 1 && (
+              <div className="zlx-float-colors">
+                {product.colors.map((c, i) => (
+                  <button key={c.name} type="button"
+                          className={`zlx-float-color ${i === colorIdx ? "on" : ""}`}
+                          onClick={() => setColorIdx(i)} aria-label={c.name}>
+                    <img src={c.image} alt={c.name}
+                         onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+                    <span className="zlx-color-dot" data-name={c.name} tabIndex={0} aria-label={c.name} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -576,7 +575,16 @@ export default function LensProcess() {
 
           {/* ── live summary, always visible beside the frame (req 8, 10) ── */}
           <aside className="zlx-summary">
-          <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
+          <h3 className="zlx-summary-h">
+            {t("lens.summary")}
+            {(!designId || awaitingRxConfirm) && (
+              <span className="zlx-summary-help" tabIndex={0}
+                    data-tip={awaitingRxConfirm ? t("lens.confirmRx") : t("lens.needChoice")}
+                    aria-label={awaitingRxConfirm ? t("lens.confirmRx") : t("lens.needChoice")}>
+                <Ic name="info" />
+              </span>
+            )}
+          </h3>
           <ul className="zlx-summary-list">
             <li><span>{t("card.frame")} · {color.name}</span><b>${product.price.toFixed(2)}</b></li>
             {design && <li><span>{t("lens.use")}: {L(design.label, lang)}</span><b>{frameOnly ? t("lens.included") : ""}</b></li>}
@@ -586,12 +594,9 @@ export default function LensProcess() {
             {rxSet && <li><span>{t("lens.q.rx")}: OD {fmt(parseFloat(rx.od_sph) || 0)} / OS {fmt(parseFloat(rx.os_sph) || 0)}</span><b><Ic name="check" /></b></li>}
           </ul>
           <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
-          {awaitingRxConfirm && <p className="zlx-summary-warn"><Ic name="info" /> {t("lens.confirmRx")}</p>}
-          {!designId && <p className="zlx-summary-warn"><Ic name="info" /> {t("lens.needChoice")}</p>}
           <button type="button" className="btn btn-primary zlx-buy" disabled={!canBuy} onClick={finish}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
-          <p className="muted small zlx-summary-note">{t("lens.note")}</p>
           </aside>
         </div>
       </div>

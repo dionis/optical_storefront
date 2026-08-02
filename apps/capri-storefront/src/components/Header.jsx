@@ -61,6 +61,7 @@ export default function Header() {
 
         <form className="search desktop-only" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
+          {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
           <button type="submit" aria-label={t("a11y.search")}>⌕</button>
         </form>
 
@@ -95,6 +96,7 @@ export default function Header() {
       <div className={`drawer ${menu ? "open" : ""}`}>
         <form className="search mobile-search" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
+          {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
           <button type="submit" aria-label={t("a11y.search")}>⌕</button>
         </form>
         <nav className="drawer-nav">{links}</nav>
