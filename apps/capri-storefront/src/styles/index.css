@@ -1935,3 +1935,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-rx-eye .zlx-dial-svg { overflow: hidden; }
 .zlx-rx-eye .zlx-dial-lbl { margin-top: 8px; }
 .zlx-rx-fields { width: 100%; }
+
+/* Receta: popup un poco más ancho + tarjeta de ojo con aire (etiquetas cortas) */
+.zlx-pop-rx { width: min(94vw, 500px); }
+.zlx-solo-actions { margin: 10px 0 4px; }
+.zlx-rx-eye { gap: 2px; }
+.zlx-rx-eye .zlx-dial { max-width: 140px; margin: 4px auto 6px; }
+.zlx-rx-eye .zlx-dial-lbl { margin-top: 4px; font-size: 11.5px; }
+.zlx-rx-fields { gap: 12px; margin-top: 12px; }
+.zlx-stepper-lbl { font-size: 11px; }

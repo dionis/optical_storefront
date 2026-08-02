@@ -72,13 +72,17 @@ function range(min, max, step) {
   for (let v = min; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
   return out;
 }
-const SPH = range(-20, 12, 0.25).map((v) => ({ v, label: fmt(v) }));
+// Rangos acotados a los valores optométricos estándar:
+//  SPH  −20.00…+20.00 (0.25)   CYL −6.00…+6.00 (0.25)
+//  AXIS 1…180° (entero; "—" = sin cilindro)   ADD +0.75…+3.50 (0.25)
+//  PD total 48…80 mm (0.5)     PD monocular 24…40 mm (0.5)
+const SPH = range(-20, 20, 0.25).map((v) => ({ v, label: fmt(v) }));
 const CYL = range(-6, 6, 0.25).map((v) => ({ v, label: fmt(v) }));
-const AXIS = range(0, 180, 1).map((v) => ({ v, label: v === 0 ? "—" : v + "°" }));
+const AXIS = [{ v: 0, label: "—" }, ...range(1, 180, 1).map((v) => ({ v, label: v + "°" }))];
 const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) }));
-const PD = range(50, 76, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+const PD = range(48, 80, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 // Monocular PD (one value per eye) uses a lower range than the binocular total.
-const PD_MONO = range(25, 40, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+const PD_MONO = range(24, 40, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 
 // OCR returns free-form numbers; the pickers only accept values that exist as
 // options. Snap to the closest one so a reading of -2.30 lands on -2.25 instead
@@ -661,8 +665,8 @@ export default function LensProcess() {
               <table className="zlx-rx-table">
                 <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
                 <tbody>
-                  <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{(rx.od_axis || "0")}°</td></tr>
-                  <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{(rx.os_axis || "0")}°</td></tr>
+                  <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td></tr>
+                  <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td></tr>
                 </tbody>
               </table>
               <div className="zlx-rx-extras">
@@ -691,17 +695,18 @@ export default function LensProcess() {
             {frameOnly && <Ic name="check" className="zlx-use-check" />}
           </button>
 
-          {frameOnly ? (
-            <>
+          {/* Aviso "solo montura": el acordeón sigue abajo para poder rectificar */}
+          {frameOnly && (
+            <div className="zlx-solo-actions">
               <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
               <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="select" onClick={() => setPop(null)}>
                 <Ic name="check" /> {t("lens.done")}
               </button>
-            </>
-          ) : (
-            <>
-              {/* 2) Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
-              {USE_MEDUSA && (
+            </div>
+          )}
+
+          {/* 2) Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
+          {USE_MEDUSA && (
                 <div className="zlx-rx-upload">
                   <label className="zlx-upload-box">
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden
@@ -774,10 +779,10 @@ export default function LensProcess() {
                             {[{ eye: "od", label: t("lens.right") }, { eye: "os", label: t("lens.left") }].map(({ eye, label }) => (
                               <div key={eye} className="zlx-rx-eye">
                                 <div className="zlx-rx-eye-h">{label}</div>
-                                <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sph")} flag={ocrClass(`${eye}_sph`)} />
+                                <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sphS")} flag={ocrClass(`${eye}_sph`)} />
                                 <div className="zlx-rx-fields">
-                                  <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cyl")} flag={ocrClass(`${eye}_cyl`)} />
-                                  <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axis")} flag={ocrClass(`${eye}_axis`)} />
+                                  <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cylS")} flag={ocrClass(`${eye}_cyl`)} />
+                                  <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axisS")} flag={ocrClass(`${eye}_axis`)} />
                                 </div>
                               </div>
                             ))}
@@ -789,15 +794,15 @@ export default function LensProcess() {
                           <div className="zlx-rx-extra">
                             {pdMode === "dual" ? (
                               <>
-                                <ZlxStepper value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.od")} withEmpty flag={ocrClass("pd_od")} />
-                                <ZlxStepper value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.os")} withEmpty flag={ocrClass("pd_os")} />
+                                <ZlxStepper value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.odS")} withEmpty flag={ocrClass("pd_od")} />
+                                <ZlxStepper value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.osS")} withEmpty flag={ocrClass("pd_os")} />
                               </>
                             ) : (
-                              <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
+                              <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pdS")} withEmpty flag={ocrClass("pd")} />
                             )}
                             {/* ADD siempre visible: en Visión Sencilla es el disparador del
                                 auto-cambio a multifocal; en multifocal es obligatorio. */}
-                            <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />
+                            <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addS")} withEmpty flag={ocrClass("add")} />
                           </div>
                         </div>
                       )}
@@ -836,8 +841,6 @@ export default function LensProcess() {
                   </div>
                 </div>
               )}
-            </>
-          )}
         </ZlxPop>
       )}
 
