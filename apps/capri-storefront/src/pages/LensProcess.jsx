@@ -279,6 +279,28 @@ function ZlxPop({ title, icon, onClose, onBack, closeLabel, backLabel, className
   );
 }
 
+// ── floating info popover: education/diagrams float in their OWN little dialog
+// (a "globo") over everything, so the working popup never grows a scrollbar. ──
+function ZlxInfoPop({ title, onClose, closeLabel, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="zlx-infopop-backdrop" onClick={onClose} />
+      <div className="zlx-infopop" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="zlx-infopop-head">
+          <b><Ic name="info" /> {title}</b>
+          <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
+        </div>
+        <div className="zlx-infopop-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
 // ── salesman-style education block (requirement 5) ──────────────────────────
 function EduBlock({ edu, goodLbl, notLbl }) {
   if (!edu) return null;
@@ -311,9 +333,13 @@ export default function LensProcess() {
   const [arId, setArId] = useState(null);         // null = ninguno
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
-  const [diagFor, setDiagFor] = useState(null);   // qué diseño tiene su infografía (i) abierta
   const [rxNote, setRxNote] = useState(null);     // aviso del auto-cambio de tipo por la adición (ADD)
-  const [matHelp, setMatHelp] = useState(null);   // material cuyo (i) de ayuda está abierto
+  // Ayuda educativa en un GLOBO/popover aparte (NO inline): así la ventana de
+  // trabajo no se llena de scroll. Guarda {title, edu, diagKeys} de la opción.
+  const [infoPop, setInfoPop] = useState(null);
+  // Revisión previa al checkout: al pulsar "Comprar ahora" mostramos el loader y
+  // el MISMO resumen antes de pedir los datos del cliente. idle|loading|show.
+  const [reviewing, setReviewing] = useState("idle");
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
@@ -401,6 +427,17 @@ export default function LensProcess() {
     if (product?.attributes?.age === "Niños") return MATERIALS.find((m) => m.id === "poly");
     return MATERIALS.find((m) => maxAbs <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
   }, [maxAbs, product?.attributes?.age, MATERIALS]);
+  // Sólo mostramos materiales APTOS para la graduación (los no aptos se quitan de
+  // la lista, no se tachan). La idea: dar la opción más barata pero con calidad.
+  const suitableMats = useMemo(() => {
+    const ok = MATERIALS.filter((m) => maxAbs <= m.maxAbs);
+    return ok.length ? ok : [MATERIALS[MATERIALS.length - 1]];
+  }, [maxAbs, MATERIALS]);
+  // Si la graduación sube y el material elegido deja de ser apto, se deselecciona
+  // (evita quedar con un material que ya no aparece en la lista).
+  useEffect(() => {
+    if (matId && !suitableMats.some((m) => m.id === matId)) setMatId(null);
+  }, [suitableMats, matId]);
 
   const clientTotal = useMemo(() => {
     let x = product?.price || 0;
@@ -564,6 +601,59 @@ export default function LensProcess() {
   const goodLbl = t("lens.goodFor");
   const notLbl = t("lens.notFor");
 
+  // Abre la ayuda educativa como globo aparte (no inline).
+  const openInfo = (title, edu, diagKeys) => setInfoPop({ title, edu, diagKeys: diagKeys || [] });
+  // Comprar ahora → loader breve → resumen de revisión → checkout.
+  const startReview = () => { setReviewing("loading"); setTimeout(() => setReviewing("show"), 700); };
+  const confirmReview = () => { setReviewing("idle"); finish(); };
+
+  // Contenido del resumen (lista + receta + medidas), reutilizado en el panel
+  // lateral y en la pantalla de revisión previa al checkout. Muestra claramente
+  // Colección, color, tratamiento y transitions; y las medidas con DP primero
+  // (simétrico) y la ADD debajo.
+  const summaryInner = (
+    <>
+      <ul className="zlx-summary-list">
+        <li><span>{t("card.frame")}</span><b>${product.price.toFixed(2)}</b></li>
+        <li className="zlx-sum-sub"><span>{t("lens.collection")}</span><b>{product.brand}</b></li>
+        <li className="zlx-sum-sub"><span>{t("lens.color")}</span><b>{color.name}</b></li>
+        {design && <li><span>{t("lens.use")}</span><b>{frameOnly ? t("lens.included") : L(design.label, lang)}</b></li>}
+        {material && !frameOnly && <li><span>{t("lens.material")}: {L(material.label, lang)}</span><b>{money(basePrice(designId, matId))}</b></li>}
+        {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{t("lens.transitions")}: {L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
+        {ar && !frameOnly && <li><span>{t("lens.treatment")}: {L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
+      </ul>
+      {rxSet && (
+        <div className="zlx-summary-rx">
+          <div className="zlx-summary-rx-h"><Ic name="check" /> {t("lens.rxValues")}</div>
+          <table className="zlx-rx-table">
+            <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
+            <tbody>
+              <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td></tr>
+              <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td></tr>
+            </tbody>
+          </table>
+          {/* Medidas: DP primero y simétrico, ADD debajo */}
+          <div className="zlx-meas">
+            <div className="zlx-meas-h">{t("lens.measures")}</div>
+            <div className="zlx-meas-pd">
+              {pdMode === "dual" ? (
+                <>
+                  <div className="zlx-meas-cell"><span>{t("lens.pd.odS")}</span><b>{rx.pd_od || "—"}</b></div>
+                  <div className="zlx-meas-cell"><span>{t("lens.pd.osS")}</span><b>{rx.pd_os || "—"}</b></div>
+                </>
+              ) : (
+                <div className="zlx-meas-cell zlx-meas-wide"><span>{t("lens.pdS")}</span><b>{rx.pd || "—"}</b></div>
+              )}
+            </div>
+            {design?.add && rx.add && (
+              <div className="zlx-meas-add"><span>{t("lens.addLbl")}</span><b>{fmt(parseFloat(rx.add) || 0)}</b></div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="zlx">
       <div className="zlx-head">
@@ -660,34 +750,9 @@ export default function LensProcess() {
               </span>
             )}
           </h3>
-          <ul className="zlx-summary-list">
-            <li><span>{t("card.frame")} · {color.name}</span><b>${product.price.toFixed(2)}</b></li>
-            {design && <li><span>{t("lens.use")}: {L(design.label, lang)}</span><b>{frameOnly ? t("lens.included") : ""}</b></li>}
-            {material && !frameOnly && <li><span>{t("lens.material")}: {L(material.label, lang)}</span><b>{money(basePrice(designId, matId))}</b></li>}
-            {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
-            {ar && !frameOnly && <li><span>{L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
-          </ul>
-          {/* Todos los valores de la receta y las mediciones, en el resumen */}
-          {rxSet && (
-            <div className="zlx-summary-rx">
-              <div className="zlx-summary-rx-h"><Ic name="check" /> {t("lens.rxValues")}</div>
-              <table className="zlx-rx-table">
-                <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
-                <tbody>
-                  <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td></tr>
-                  <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td></tr>
-                </tbody>
-              </table>
-              <div className="zlx-rx-extras">
-                {design?.add && rx.add && <span>{t("lens.addLbl")}: <b>{fmt(parseFloat(rx.add) || 0)}</b></span>}
-                {pdMode === "dual"
-                  ? (<>{rx.pd_od && <span>{t("lens.pd.od")}: <b>{rx.pd_od}</b></span>}{rx.pd_os && <span>{t("lens.pd.os")}: <b>{rx.pd_os}</b></span>}</>)
-                  : (rx.pd && <span>{t("lens.pd")}: <b>{rx.pd}</b></span>)}
-              </div>
-            </div>
-          )}
+          {summaryInner}
           <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
-          <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={finish}>
+          <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={startReview}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
           </aside>
@@ -757,13 +822,12 @@ export default function LensProcess() {
                           <span className={`zlx-use-chev ${sel ? "up" : ""}`} aria-hidden="true"><Ic name="down" /></span>
                         </button>
                         {hasDiag && (
-                          <button type="button" className={`zlx-use-info ${diagFor === d.id ? "on" : ""}`}
-                                  aria-label={t("lens.help")} onClick={() => setDiagFor(diagFor === d.id ? null : d.id)}>
+                          <button type="button" className="zlx-use-info"
+                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d))}>
                             <Ic name="info" />
                           </button>
                         )}
                       </div>
-                      {hasDiag && diagFor === d.id && <DiagHelp keys={designDiagKeys(d)} t={t} />}
                       {sel && isFO && (
                         <div className="zlx-use-fill">
                           <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
@@ -829,38 +893,25 @@ export default function LensProcess() {
               <span>{t("lens.recommendHint")}</span>
             </div>
           )}
-          <div className="zlx-choices">
-            {MATERIALS.map((m) => {
-              const unsuitable = maxAbs > m.maxAbs;            // graduación por encima del máx. del material
+          <div className="zlx-choices zlx-mat-list">
+            {suitableMats.map((m) => {
               const isReco = recommendedMat?.id === m.id;
-              const helpOpen = matHelp === m.id || (matHelp === null && isReco); // se sugiere → ya explicado
               return (
-                <div key={m.id} className={`zlx-choice-wrap ${unsuitable ? "bad" : ""} ${matId === m.id ? "sel" : ""}`}>
-                  <div className="zlx-choice-row">
-                    <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""} ${unsuitable ? "na" : ""}`}
-                            onClick={() => !unsuitable && setMatId(m.id)} disabled={unsuitable}>
-                      <span className="zlx-choice-main">
-                        <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
-                        <span className="zlx-choice-title">
-                          {L(m.label, lang)}
-                          {isReco && <span className="reco-badge">★</span>}
-                          {unsuitable && <span className="zlx-bad-tag">{t("lens.mat.notSuitable")}</span>}
-                        </span>
+                <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
+                  <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => setMatId(m.id)}>
+                    <span className="zlx-choice-main">
+                      <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
+                      <span className="zlx-choice-title">
+                        {L(m.label, lang)}
+                        {isReco && <span className="reco-badge">★</span>}
                       </span>
-                      <span className="zlx-choice-price">{money(basePrice(designId, m.id))}</span>
-                    </button>
-                    <button type="button" className={`zlx-use-info ${helpOpen ? "on" : ""}`} aria-label={t("lens.help")}
-                            onClick={() => setMatHelp(matHelp === m.id ? "" : m.id)}>
-                      <Ic name="info" />
-                    </button>
-                  </div>
-                  {helpOpen && (
-                    <div className="zlx-mat-help">
-                      {unsuitable && <p className="zlx-bad-why"><Ic name="info" /> {t("lens.mat.whyNot")}</p>}
-                      <EduBlock edu={materialEdu(m.id, lang)} goodLbl={goodLbl} notLbl={notLbl} />
-                      <DiagHelp keys={materialDiagKeys()} t={t} />
-                    </div>
-                  )}
+                    </span>
+                    <span className="zlx-choice-price">{money(basePrice(designId, m.id))}</span>
+                  </button>
+                  <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                          onClick={() => openInfo(L(m.label, lang), materialEdu(m.id, lang), materialDiagKeys())}>
+                    <Ic name="info" />
+                  </button>
                 </div>
               );
             })}
@@ -875,7 +926,7 @@ export default function LensProcess() {
       {pop === "treat" && !frameOnly && design && (
         <ZlxPop title={t("lens.treatBtn")} icon={<IconTratamiento className="zlx-ic" />} onClose={() => setPop(null)} onBack={() => setPop("mat")} closeLabel={closeLabel} backLabel={t("lens.back")} className="zlx-pop-treat">
           <h4 className="zlx-pop-q">{t("lens.photo")} <span className="lp-opt">{t("lens.optional")}</span></h4>
-          <div className="zlx-choices">
+          <div className="zlx-choices zlx-treat-list">
             <button type="button" className={`zlx-choice ${!photoId ? "sel" : ""}`} onClick={() => setPhotoId(null)}>
               <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
               <span className="zlx-choice-price">{t("lens.included")}</span>
@@ -884,46 +935,58 @@ export default function LensProcess() {
               const pp = photoPriceOf(p);
               const na = pp == null;
               return (
-                <button key={p.id} type="button" disabled={na} className={`zlx-choice ${photoId === p.id ? "sel" : ""} ${na ? "na" : ""}`}
-                        onClick={() => setPhotoId(p.id)}>
-                  <span className="zlx-choice-main">
-                    <IconFotocromatico className="zlx-choice-ic" active={photoId === p.id} />
-                    <span className="zlx-choice-title">
-                      {L(p.label, lang)}
-                      {p.colors.map((c) => <i key={c} className="lp-dot" title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}
+                <div key={p.id} className={`zlx-choice-row ${photoId === p.id ? "sel" : ""} ${na ? "na" : ""}`}>
+                  {/* nombre + precio en la 1ª línea; los colores debajo (ahorra espacio) */}
+                  <button type="button" disabled={na} className={`zlx-choice zlx-choice-stack ${photoId === p.id ? "sel" : ""} ${na ? "na" : ""}`}
+                          onClick={() => setPhotoId(p.id)}>
+                    <span className="zlx-choice-top">
+                      <span className="zlx-choice-main">
+                        <IconFotocromatico className="zlx-choice-ic" active={photoId === p.id} />
+                        <span className="zlx-choice-title">{L(p.label, lang)}</span>
+                      </span>
+                      <span className="zlx-choice-price">{na ? "—" : `+ ${money(pp)}`}</span>
                     </span>
-                  </span>
-                  <span className="zlx-choice-price">{na ? "—" : `+ ${money(pp)}`}</span>
-                </button>
+                    {p.colors.length > 0 && (
+                      <span className="zlx-choice-colors">
+                        {p.colors.map((c) => <i key={c} className="lp-dot" title={L(PHOTO_COLORS[c], lang)} style={{ background: PHOTO_COLORS[c]?.hex }} />)}
+                      </span>
+                    )}
+                  </button>
+                  <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                          onClick={() => openInfo(L(p.label, lang), photoEdu(lang), photoDiagKeys(p))}>
+                    <Ic name="info" />
+                  </button>
+                </div>
               );
             })}
           </div>
-          {photo && <EduBlock edu={photoEdu(lang)} goodLbl={goodLbl} notLbl={notLbl} />}
-          {/* photochromic (and, for Xtractive, sun/glare) education diagrams */}
-          {photo && <DiagHelp keys={photoDiagKeys(photo)} t={t} />}
 
           <h4 className="zlx-pop-q">{t("lens.ar")} <span className="lp-opt">{t("lens.optional")}</span></h4>
-          <div className="zlx-choices">
+          <div className="zlx-choices zlx-treat-list">
             <button type="button" className={`zlx-choice ${!arId ? "sel" : ""}`} onClick={() => setArId(null)}>
               <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
               <span className="zlx-choice-price">{t("lens.included")}</span>
             </button>
             {arList.map((a) => {
               const AIcon = arIconOf(a.id);
+              // antirreflejos: cada uno en UNA sola línea con su globito (i)
               return (
-                <button key={a.id} type="button" className={`zlx-choice ${arId === a.id ? "sel" : ""}`} onClick={() => setArId(a.id)}>
-                  <span className="zlx-choice-main">
-                    <AIcon className="zlx-choice-ic" active={arId === a.id} />
-                    <span className="zlx-choice-title">{L(a.label, lang)}</span>
-                  </span>
-                  <span className="zlx-choice-price">+ {money(arPriceOf(a))}</span>
-                </button>
+                <div key={a.id} className={`zlx-choice-row ${arId === a.id ? "sel" : ""}`}>
+                  <button type="button" className={`zlx-choice ${arId === a.id ? "sel" : ""}`} onClick={() => setArId(a.id)}>
+                    <span className="zlx-choice-main">
+                      <AIcon className="zlx-choice-ic" active={arId === a.id} />
+                      <span className="zlx-choice-title">{L(a.label, lang)}</span>
+                    </span>
+                    <span className="zlx-choice-price">+ {money(arPriceOf(a))}</span>
+                  </button>
+                  <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                          onClick={() => openInfo(L(a.label, lang), arEdu(a.id, lang), arDiagKeys(a.id))}>
+                    <Ic name="info" />
+                  </button>
+                </div>
               );
             })}
           </div>
-          {ar && <EduBlock edu={arEdu(arId, lang)} goodLbl={goodLbl} notLbl={notLbl} />}
-          {/* blue-light vs night-driving glare diagram for the picked coating */}
-          {ar && <DiagHelp keys={arDiagKeys(arId)} t={t} />}
           <button type="button" className="btn btn-primary zlx-pop-done" onClick={() => setPop(null)}>
             <Ic name="check" /> {t("lens.done")}
           </button>
@@ -946,6 +1009,40 @@ export default function LensProcess() {
             </div>
           )}
         </ZlxPop>
+      )}
+
+      {/* ── Ayuda educativa en globo aparte (no inline): evita scrollbars ── */}
+      {infoPop && (
+        <ZlxInfoPop title={infoPop.title} onClose={() => setInfoPop(null)} closeLabel={closeLabel}>
+          {infoPop.edu && <EduBlock edu={infoPop.edu} goodLbl={goodLbl} notLbl={notLbl} />}
+          <DiagHelp keys={infoPop.diagKeys} t={t} />
+        </ZlxInfoPop>
+      )}
+
+      {/* ── Revisión previa al checkout: loader → MISMO resumen → datos cliente ── */}
+      {reviewing !== "idle" && (
+        <div className="zlx-review-overlay" role="dialog" aria-modal="true" aria-label={t("lens.review")}>
+          <div className="zlx-review-card">
+            {reviewing === "loading" ? (
+              <div className="zlx-review-loading"><GlassesLoader /><p>{t("lens.review.prep")}</p></div>
+            ) : (
+              <>
+                <div className="zlx-review-head">
+                  <b><IconReceta className="zlx-ic" /> {t("lens.review")}</b>
+                  <button type="button" className="zlx-pop-close" onClick={() => setReviewing("idle")} aria-label={closeLabel}><Ic name="close" /></button>
+                </div>
+                <p className="zlx-review-sub">{t("lens.review.sub")}</p>
+                <div className="zlx-review-body">
+                  {summaryInner}
+                  <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
+                </div>
+                <button type="button" className="btn btn-primary zlx-review-go" data-sfx="success" onClick={confirmReview}>
+                  <Ic name="buy" /> {t("lens.review.go")} · ${total.toFixed(2)}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1967,3 +1967,88 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-mat-help { padding: 0 14px 12px; border-top: 1px dashed var(--line); }
 .zlx-bad-why { display: flex; gap: 6px; align-items: flex-start; color: var(--cuba-red); font-size: 12.5px; line-height: 1.4; margin: 10px 0 0; font-weight: 600; }
 .zlx-bad-why .zlx-ic { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Funnel v3 (noche 02-ago): dials/steppers más finos, materiales/tratamientos
+   compactos, ayudas en GLOBO aparte (no inline), resumen enriquecido y
+   revisión previa al checkout. Todo scoped a .zlx para no afectar otras vistas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* — 1) Dial y steppers más finos: menos alto ⇒ menos scroll en la ventana (img 1) — */
+.zlx-rx-eye { padding: 9px 6px; }
+.zlx-rx-eye .zlx-dial { max-width: 128px; margin: 0 auto 4px; }
+.zlx-rx-eye .zlx-dial-val { font-size: 22px; }
+.zlx-dial-lbl { margin-top: 2px; font-size: 10px; }
+.zlx-rx-fields { gap: 7px; margin-top: 6px; }
+.zlx-rx-grid { gap: 10px; margin: 8px 0 10px; }
+.zlx-stepper { gap: 3px; }
+.zlx-stepper-lbl { font-size: 10px; }
+.zlx-stepper-ctl { width: 86px; border-radius: 10px; }
+.zlx-stepper-btn { height: 22px; }
+.zlx-stepper-btn .zlx-ic { width: 13px; height: 13px; }
+.zlx-stepper-val { padding: 5px 4px; font-size: 14px; }
+.zlx-rx-pdmode { margin: 4px 0 8px; }
+.zlx-rx-extra { gap: 10px; }
+.zlx-pop-rx .zlx-step-next { margin-top: 10px; }
+
+/* — 2) Materiales y tratamientos: una fila compacta por opción (img 2, 3) — */
+.zlx-mat-list, .zlx-treat-list { display: flex; flex-direction: column; gap: 7px; }
+.zlx-mat-list .zlx-choice-row, .zlx-treat-list .zlx-choice-row { align-items: center; }
+.zlx-mat-list .zlx-choice, .zlx-treat-list .zlx-choice { padding: 9px 12px; }
+.zlx-mat-list .zlx-choice-title, .zlx-treat-list .zlx-choice-title { display: inline-flex; align-items: center; gap: 8px; }
+.zlx-choice-row .zlx-use-info { width: 30px; height: 30px; margin: 0 0 0 6px; }
+.zlx-choice-row .zlx-use-info .zlx-ic { width: 16px; height: 16px; }
+
+/* fotocromáticos: nombre+precio arriba, colores debajo (ahorra espacio) */
+.zlx-choice-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+.zlx-choice-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zlx-choice-colors { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 32px; }
+.zlx-choice-colors .lp-dot { margin-left: 0; width: 13px; height: 13px; }
+
+/* — 3) Ayuda educativa en GLOBO aparte (no inline): sin scroll en la ventana — */
+.zlx-infopop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.22); z-index: 90; }
+.zlx-infopop {
+  position: fixed; z-index: 91; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(92vw, 420px); max-height: 82vh; overflow-y: auto; background: #fff;
+  border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-lg);
+  animation: zlx-info-in .16s ease;
+}
+@keyframes zlx-info-in { from { opacity: 0; transform: translate(-50%,-46%); } to { opacity: 1; transform: translate(-50%,-50%); } }
+.zlx-infopop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; border-radius: 16px 16px 0 0; }
+.zlx-infopop-head b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.zlx-infopop-head .zlx-ic { width: 18px; height: 18px; color: var(--cuba-blue); }
+.zlx-infopop-body { padding: 14px 16px 18px; }
+@media (max-width: 640px) {
+  .zlx-infopop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 74vh; border-radius: 18px 18px 0 0; animation: none; }
+  .zlx-infopop-head { border-radius: 18px 18px 0 0; }
+}
+
+/* — 4) Resumen enriquecido: colección/color como subfilas + medidas (img 4) — */
+.zlx-summary-list .zlx-sum-sub { color: var(--muted); font-size: 12.5px; }
+.zlx-summary-list .zlx-sum-sub b { color: var(--ink-soft); font-weight: 700; }
+.zlx-meas { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.zlx-meas-h { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 7px; }
+.zlx-meas-pd { display: flex; gap: 8px; }
+.zlx-meas-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); }
+.zlx-meas-cell.zlx-meas-wide { flex: 1; }
+.zlx-meas-cell span { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.zlx-meas-cell b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--cuba-blue); }
+.zlx-meas-add { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 11px; }
+.zlx-meas-add span { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.zlx-meas-add b { font-variant-numeric: tabular-nums; color: var(--cuba-blue); }
+
+/* — 5) Revisión previa al checkout: loader → mismo resumen → datos cliente — */
+.zlx-review-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 20px; background: rgba(10,20,40,.5); backdrop-filter: blur(3px); animation: dlg-fade .18s ease; }
+.zlx-review-card { width: min(94vw, 440px); max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 18px; box-shadow: var(--shadow-lg); padding: 18px 18px 20px; }
+.zlx-review-loading { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0; }
+.zlx-review-loading p { color: var(--muted); font-weight: 700; }
+.zlx-review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zlx-review-head b { display: flex; align-items: center; gap: 8px; font-size: 17px; font-family: var(--display); }
+.zlx-review-head .zlx-ic { width: 20px; height: 20px; color: var(--cuba-blue); }
+.zlx-review-sub { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+.zlx-review-body { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.zlx-review-go { width: 100%; justify-content: center; margin-top: 14px; }
+@media (max-width: 640px) {
+  .zlx-review-overlay { padding: 0; place-items: end center; }
+  .zlx-review-card { width: 100%; max-height: 88vh; border-radius: 20px 20px 0 0; }
+}
