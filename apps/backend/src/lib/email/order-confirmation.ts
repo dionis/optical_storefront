@@ -125,6 +125,13 @@ function lensLines(item: OrderEmailLineItem, locale: EmailLocale): string[] {
   if (config.material_code) {
     rows.push(`${t(locale, "lens_material")}: ${String(config.material_code)}`);
   }
+  // El carrito guarda photo_code (fotocromático) y ar_code (antirreflejo).
+  if (config.photo_code) {
+    rows.push(`${t(locale, "lens_photochromic")}: ${String(config.photo_code)}`);
+  }
+  if (config.ar_code) {
+    rows.push(`${t(locale, "lens_ar")}: ${String(config.ar_code)}`);
+  }
   if (config.treatment_code) {
     rows.push(`${t(locale, "lens_treatment")}: ${String(config.treatment_code)}`);
   }
@@ -299,10 +306,124 @@ function textLines(order: OrderEmailData, locale: EmailLocale): string[] {
   return lines;
 }
 
+export interface RxEyeForEmail {
+  sph: number | null;
+  cyl: number | null;
+  axis: number | null;
+  add: number | null;
+  prism: number | null;
+  base: string | null;
+}
+export interface PrescriptionForEmail {
+  od: RxEyeForEmail;
+  os: RxEyeForEmail;
+  pd: number | null;
+  pd_od: number | null;
+  pd_os: number | null;
+  seg_height?: number | null;
+}
+
+/** Dioptric values carry an explicit sign; blanks render as an em dash. */
+const dpt = (v: number | null | undefined): string =>
+  v == null ? "—" : (v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
+const plain = (v: number | string | null | undefined): string =>
+  v == null || v === "" ? "—" : String(v);
+
+/** OD/OS table + measurements for a single prescription. */
+function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
+  const head = ["SPH", "CYL", "AXIS", "ADD", "PRISM", "BASE"];
+  const row = (label: string, e: RxEyeForEmail) => `
+      <tr>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};font-weight:600;white-space:nowrap">${esc(label)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(dpt(e.sph))}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(dpt(e.cyl))}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(plain(e.axis))}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(dpt(e.add))}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(dpt(e.prism))}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid ${BORDER};text-align:center">${esc(plain(e.base))}</td>
+      </tr>`;
+  const pdText = rx.pd != null
+    ? `${plain(rx.pd)} mm`
+    : [rx.pd_od, rx.pd_os].some((v) => v != null)
+      ? `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`
+      : "—";
+  return `
+  <div style="margin-top:20px">
+    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(t(locale, "prescription_values"))}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr>
+          <th style="padding:6px 8px;border-bottom:2px solid ${BORDER}"></th>
+          ${head.map((h) => `<th style="padding:6px 8px;border-bottom:2px solid ${BORDER};font-size:11px;color:${MUTED};text-align:center">${esc(h)}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${row(t(locale, "right_eye"), rx.od)}
+        ${row(t(locale, "left_eye"), rx.os)}
+      </tbody>
+    </table>
+    <div style="margin-top:8px;font-size:13px;color:#374151">
+      ${esc(t(locale, "pupillary_distance"))}: <strong>${esc(pdText)}</strong>${
+        rx.seg_height != null
+          ? ` &nbsp;·&nbsp; ${esc(t(locale, "fitting_height"))}: <strong>${esc(plain(rx.seg_height))} mm</strong>`
+          : ""
+      }
+    </div>
+  </div>`;
+}
+
+/** Renders every distinct prescription referenced by the order's line items. */
+function renderPrescriptions(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined,
+  locale: EmailLocale
+): string {
+  if (!prescriptions) return "";
+  const seen = new Set<string>();
+  const blocks: string[] = [];
+  for (const item of order.items ?? []) {
+    const pid = item.metadata?.["prescription_id"];
+    if (!pid) continue;
+    const key = String(pid);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rx = prescriptions[key];
+    if (rx) blocks.push(rxTable(rx, locale));
+  }
+  return blocks.join("");
+}
+
+/** Plain-text version of the prescriptions, for the email's text/plain part. */
+function rxTextLines(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined,
+  locale: EmailLocale
+): string[] {
+  if (!prescriptions) return [];
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const item of order.items ?? []) {
+    const pid = item.metadata?.["prescription_id"];
+    if (!pid) continue;
+    const key = String(pid);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rx = prescriptions[key];
+    if (!rx) continue;
+    lines.push("", t(locale, "prescription_values") + ":");
+    lines.push(`  ${t(locale, "right_eye")}: SPH ${dpt(rx.od.sph)} CYL ${dpt(rx.od.cyl)} AXIS ${plain(rx.od.axis)} ADD ${dpt(rx.od.add)}`);
+    lines.push(`  ${t(locale, "left_eye")}: SPH ${dpt(rx.os.sph)} CYL ${dpt(rx.os.cyl)} AXIS ${plain(rx.os.axis)} ADD ${dpt(rx.os.add)}`);
+    const pd = rx.pd != null ? `${plain(rx.pd)} mm` : `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`;
+    lines.push(`  ${t(locale, "pupillary_distance")}: ${pd}`);
+  }
+  return lines;
+}
+
 /** Customer-facing "we got your payment" email. */
 export function renderCustomerOrderConfirmation(
   order: OrderEmailData,
-  locale: EmailLocale
+  locale: EmailLocale,
+  prescriptions?: Record<string, PrescriptionForEmail>
 ): RenderedEmail {
   const displayId = String(order.display_id ?? order.id);
   const name = customerName(order);
@@ -319,6 +440,7 @@ export function renderCustomerOrderConfirmation(
       &nbsp;·&nbsp; ${esc(formatDate(order.created_at, locale))}
     </div>
     ${renderItemsTable(order, locale)}
+    ${renderPrescriptions(order, prescriptions, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
     <div style="margin-top:28px;padding:16px;background:#f9fafb;border-radius:8px">
@@ -333,6 +455,7 @@ export function renderCustomerOrderConfirmation(
     t(locale, "order_confirmation_intro"),
     "",
     ...textLines(order, locale),
+    ...rxTextLines(order, prescriptions, locale),
     "",
     t(locale, "order_confirmation_next_steps_title"),
     t(locale, "order_confirmation_next_steps_body"),
@@ -352,7 +475,8 @@ export function renderCustomerOrderConfirmation(
 /** Internal copy for the store inbox. Always rendered in the store locale. */
 export function renderAdminOrderNotification(
   order: OrderEmailData,
-  locale: EmailLocale
+  locale: EmailLocale,
+  prescriptions?: Record<string, PrescriptionForEmail>
 ): RenderedEmail {
   const displayId = String(order.display_id ?? order.id);
   const total = formatMoney(order.total, order.currency_code, locale);
@@ -384,6 +508,7 @@ export function renderAdminOrderNotification(
     </table>
     ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
     ${renderItemsTable(order, locale)}
+    ${renderPrescriptions(order, prescriptions, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}`;
 
@@ -394,6 +519,7 @@ export function renderAdminOrderNotification(
     ...(hasPrescription ? [t(locale, "prescription_attached")] : []),
     "",
     ...textLines(order, locale),
+    ...rxTextLines(order, prescriptions, locale),
   ].join("\n");
 
   const subject = t(locale, "admin_order_subject", { display_id: displayId, total });

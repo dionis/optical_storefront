@@ -44,6 +44,13 @@ interface EmailCopy {
   lens_design: string;
   lens_material: string;
   lens_treatment: string;
+  lens_photochromic: string;
+  lens_ar: string;
+  prescription_values: string;
+  pupillary_distance: string;
+  fitting_height: string;
+  right_eye: string;
+  left_eye: string;
   prescription_attached: string;
   payment_confirmed: string;
   questions: string;
@@ -80,6 +87,13 @@ const es: EmailCopy = {
   lens_design: "Diseño",
   lens_material: "Material",
   lens_treatment: "Tratamiento",
+  lens_photochromic: "Fotocromático",
+  lens_ar: "Antirreflejo",
+  prescription_values: "Datos de la receta",
+  pupillary_distance: "Distancia pupilar (DP)",
+  fitting_height: "Altura de montaje",
+  right_eye: "OD (derecho)",
+  left_eye: "OS (izquierdo)",
   prescription_attached: "Receta médica asociada al pedido.",
   payment_confirmed: "Pago confirmado",
   questions: "Si tienes alguna duda, responde a este correo y te ayudamos.",
@@ -116,6 +130,13 @@ const en: EmailCopy = {
   lens_design: "Design",
   lens_material: "Material",
   lens_treatment: "Treatment",
+  lens_photochromic: "Photochromic",
+  lens_ar: "Anti-reflective",
+  prescription_values: "Prescription details",
+  pupillary_distance: "Pupillary distance (PD)",
+  fitting_height: "Fitting height",
+  right_eye: "OD (right)",
+  left_eye: "OS (left)",
   prescription_attached: "A prescription is linked to this order.",
   payment_confirmed: "Payment confirmed",
   questions: "If you have any questions, just reply to this email.",

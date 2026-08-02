@@ -20,9 +20,12 @@ import {
   renderAdminOrderNotification,
   renderCustomerOrderConfirmation,
   type OrderEmailData,
+  type PrescriptionForEmail,
 } from "../lib/email/order-confirmation";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 import { resolveStoreSettings } from "../lib/store-settings";
+import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
+import type PrescriptionModuleService from "../modules/prescription/service";
 
 const ORDER_FIELDS = [
   "id",
@@ -87,12 +90,43 @@ export default async function orderPlacedSubscriber({
   const customerLocale = resolveEmailLocale(order.locale ?? order.metadata?.["locale"]);
   const storeLocale = resolveEmailLocale(process.env.STORE_NOTIFICATION_LOCALE);
 
+  // Load the prescription values referenced by the order's line items so both
+  // emails can show the full Rx (the lab needs it to make the lenses, and the
+  // customer gets a copy of their own). PHI stays server-side otherwise; here it
+  // only goes into the order emails the customer and owner already receive.
+  const prescriptions: Record<string, PrescriptionForEmail> = {};
+  try {
+    const rxService = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
+    const ids = new Set<string>();
+    for (const it of order.items ?? []) {
+      const pid = it.metadata?.["prescription_id"];
+      if (pid) ids.add(String(pid));
+    }
+    for (const pid of ids) {
+      try {
+        const record = (await rxService.retrievePrescriptionRecord(pid)) as Record<string, unknown>;
+        const rx = rxService.recordToRx(record);
+        prescriptions[pid] = {
+          od: rx.od,
+          os: rx.os,
+          pd: rx.pd,
+          pd_od: rx.pd_od,
+          pd_os: rx.pd_os,
+        };
+      } catch (error) {
+        logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);
+      }
+    }
+  } catch {
+    // Prescription module unavailable — emails still send, just without the Rx block.
+  }
+
   if (order.email) {
     try {
       // Rendering is inside the try on purpose: a template that throws on some
       // unusual order shape must not take the store's copy down with it, which
       // is exactly what would happen if this ran before the guard.
-      const customerEmail = renderCustomerOrderConfirmation(order, customerLocale);
+      const customerEmail = renderCustomerOrderConfirmation(order, customerLocale, prescriptions);
       await notificationService.createNotifications({
         to: order.email,
         channel: "email",
@@ -127,7 +161,7 @@ export default async function orderPlacedSubscriber({
     );
   } else {
     try {
-      const adminEmail = renderAdminOrderNotification(order, storeLocale);
+      const adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions);
       await notificationService.createNotifications({
         to: storeRecipient,
         channel: "email",
