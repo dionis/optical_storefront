@@ -277,6 +277,12 @@ export default function MedusaCheckout() {
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
               <div><span>{L("shippingLine")}</span><b>{cart.shipping_total > 0 ? money(cart.shipping_total) : L("free")}</b></div>
               {cart.tax_total > 0 && <div><span>{L("tax")}</span><b>{money(cart.tax_total)}</b></div>}
+              {(() => {
+                // Impuesto de montura sola horneado en el precio (server-side);
+                // se muestra como informativo "impuesto incluido".
+                const inc = (cart.items || []).reduce((s, i) => s + Number(i.metadata?.tax_amount || 0), 0);
+                return inc > 0 ? <div><span>{L("taxIncluded")}</span><b>{money(inc)}</b></div> : null;
+              })()}
             </div>
             <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
           </div>

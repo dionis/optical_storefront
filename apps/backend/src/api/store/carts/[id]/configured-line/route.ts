@@ -6,6 +6,7 @@ import {
 import { addToCartWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import { computeLensAddonCents, type LensSelection } from "../../../../../lib/lens-quote";
+import { resolveStoreSettings } from "../../../../../lib/store-settings";
 
 /**
  * POST /store/carts/:id/configured-line
@@ -75,7 +76,27 @@ export async function POST(
     return;
   }
 
-  const unit_price = Math.round((frameAmount + lensCents / 100) * 100) / 100;
+  const preTax = Math.round((frameAmount + lensCents / 100) * 100) / 100;
+
+  // Impuesto: SOLO a "montura sola" (frame-only) SIN receta. La receta (lente
+  // graduado) es un producto médico exento. Medusa v2 no puede eximir por línea
+  // según metadata (el cálculo de impuestos sólo ve product_id/product_type_id),
+  // así que — a la tasa configurable de la tienda — el impuesto se calcula aquí,
+  // server-side, y se hornea en el precio. El monto se guarda en metadata para
+  // poder mostrarlo como "impuesto incluido" y para contabilidad.
+  const isFrameOnly = body.selection.design_code === "frame-only";
+  const hasRx = Boolean(body.prescription_id);
+  let taxRate = 0;
+  let taxAmount = 0;
+  let unit_price = preTax;
+  if (isFrameOnly && !hasRx) {
+    const settings = await resolveStoreSettings(req.scope);
+    if (settings.frame_tax_rate > 0) {
+      taxRate = settings.frame_tax_rate;
+      taxAmount = Math.round(preTax * taxRate * 100) / 100;
+      unit_price = Math.round((preTax + taxAmount) * 100) / 100;
+    }
+  }
 
   await addToCartWorkflow(req.scope).run({
     input: {
@@ -93,6 +114,10 @@ export async function POST(
             prescription_id: body.prescription_id ?? null,
             frame_price: frameAmount,
             lens_addon: Math.round(lensCents) / 100,
+            // Impuesto horneado en el precio (0 salvo montura sola gravada).
+            tax_amount: taxAmount,
+            tax_rate: taxRate,
+            price_pretax: preTax,
           },
         },
       ],
