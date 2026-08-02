@@ -299,6 +299,7 @@ export default function LensProcess() {
   const [arId, setArId] = useState(null);         // null = ninguno
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
+  const [diagFor, setDiagFor] = useState(null);   // qué diseño tiene su infografía (i) abierta
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
@@ -431,6 +432,15 @@ export default function LensProcess() {
           : { pd: nearest(p.pd, PD) }),
       };
       setPdMode(dual ? "dual" : "single");
+      // Auto-suggest the lens type from the reading and preselect it (unless the
+      // user already picked a real lens type): an ADD value means presbyopia →
+      // progressive; otherwise single vision. The customer can still change it.
+      const hasAdd = picked.add != null && parseFloat(picked.add) > 0;
+      const suggested = hasAdd ? "prog-mid" : "sv";
+      if (!designId || designId === "frame-only") {
+        setDesignId(suggested);
+        setMatId(null); setPhotoId(null); setArId(null);
+      }
       // Flag exactly the fields the model actually filled, so the review
       // highlight points at what it read rather than at the whole form.
       setOcrFields(new Set(Object.keys(picked).filter((k) => picked[k] != null)));
@@ -636,33 +646,18 @@ export default function LensProcess() {
       {/* ── RECETA popover: use type + prescription (req 3, 4, 7) ── */}
       {pop === "rx" && (
         <ZlxPop title={t("lens.q.rx")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} closeLabel={closeLabel} className="zlx-pop-rx">
-          <div className="zlx-uselist">
-            <span className="zlx-pop-q">{t("lens.q.use")}</span>
-            <div className="zlx-use-chips">
-              {DESIGNS.map((d) => {
-                const DIcon = designIcon(d.id);
-                return (
-                  <button key={d.id} type="button" className={`zlx-chip ${designId === d.id ? "sel" : ""}`} onClick={() => chooseDesign(d.id)}>
-                    <DIcon className="zlx-chip-ic" active={designId === d.id} />
-                    <b>{L(d.label, lang)}</b>
-                    <span className="zlx-chip-price">{t("lens.fromPrice")} {money(Math.min(...MATERIALS.map((m) => basePrice(d.id, m.id))))}</span>
-                  </button>
-                );
-              })}
-              <button type="button" className={`zlx-chip ${frameOnly ? "sel" : ""}`} onClick={() => chooseDesign("frame-only")}>
-                <IconMontura className="zlx-chip-ic" active={frameOnly} />
-                <b>{L(FRAME_ONLY.label, lang)}</b>
-                <span className="zlx-chip-price">{t("lens.included")}</span>
-              </button>
-            </div>
-            {/* Educational diagram for the picked lens type (progressives). */}
-            {design && !frameOnly && <DiagHelp keys={designDiagKeys(design)} t={t} />}
-          </div>
+          {/* 1) Solo montura — una línea, arriba del todo */}
+          <button type="button" className={`zlx-use-row solo ${frameOnly ? "sel" : ""}`} onClick={() => chooseDesign("frame-only")}>
+            <IconMontura className="zlx-use-ic" active={frameOnly} />
+            <span className="zlx-use-txt"><b>{L(FRAME_ONLY.label, lang)}</b><small>{t("lens.included")}</small></span>
+            {frameOnly && <Ic name="check" className="zlx-use-check" />}
+          </button>
 
           {frameOnly ? (
-            <p className="muted">{t("lens.rx.none")}</p>
-          ) : design ? (
+            <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
+          ) : (
             <>
+              {/* 2) Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
               {USE_MEDUSA && (
                 <div className="zlx-rx-upload">
                   <label className="zlx-upload-box">
@@ -677,73 +672,91 @@ export default function LensProcess() {
                     </small>
                   </label>
                   {ocr.status === "error" && <p className="rx-ocr-error">{t("lens.upload.error")}</p>}
-                  <span className="zlx-or">{t("lens.or")}</span>
-                </div>
-              )}
-
-              {ocr.status === "done" && (
-                <div className={`rx-ocr-review ${ocr.confirmed ? "ok" : ""}`}>
-                  <b>{ocr.confirmed ? <><Ic name="check" /> {t("lens.upload.confirmed")}</> : t("lens.upload.reviewTitle")}</b>
-                  {!ocr.confirmed && <p>{t("lens.upload.reviewBody")}</p>}
-                  {!ocr.confirmed && ocrFields.size > 0 && (
-                    <p className="rx-ocr-legend">
-                      <span className="rx-ocr-swatch" aria-hidden="true" />
-                      {t("lens.upload.legend")}
-                    </p>
-                  )}
-                  {ocr.warnings.length > 0 && (
-                    <ul className="rx-ocr-warnings">{ocr.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
-                  )}
-                  {!ocr.confirmed && (
-                    <button type="button" className="btn btn-outline" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>
-                      {t("lens.upload.confirm")}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <p className="muted small">{t("lens.rxDialHint")}</p>
-              <div className="zlx-rx-grid">
-                {[
-                  { eye: "od", label: t("lens.right") },
-                  { eye: "os", label: t("lens.left") },
-                ].map(({ eye, label }) => (
-                  <div key={eye} className="zlx-rx-eye">
-                    <div className="zlx-rx-eye-h">{label}</div>
-                    <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sph")} flag={ocrClass(`${eye}_sph`)} />
-                    <div className="zlx-rx-fields">
-                      <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cyl")} flag={ocrClass(`${eye}_cyl`)} />
-                      <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axis")} flag={ocrClass(`${eye}_axis`)} />
+                  {ocr.status === "done" && (
+                    <div className={`rx-ocr-review ${ocr.confirmed ? "ok" : ""}`}>
+                      <b>{ocr.confirmed ? <><Ic name="check" /> {t("lens.upload.confirmed")}</> : t("lens.upload.reviewTitle")}</b>
+                      {!ocr.confirmed && <p>{t("lens.upload.reviewBody")}</p>}
+                      {!ocr.confirmed && ocrFields.size > 0 && (
+                        <p className="rx-ocr-legend"><span className="rx-ocr-swatch" aria-hidden="true" />{t("lens.upload.legend")}</p>
+                      )}
+                      {ocr.warnings.length > 0 && (<ul className="rx-ocr-warnings">{ocr.warnings.map((w) => <li key={w}>{w}</li>)}</ul>)}
+                      {!ocr.confirmed && (
+                        <button type="button" className="btn btn-outline" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("lens.upload.confirm")}</button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
+              )}
+
+              {/* 3) O elige el tipo — una opción por línea; (i) despliega la infografía;
+                     al seleccionar, se abre debajo su formulario para rellenar */}
+              <div className="zlx-use-sep"><span>{t("lens.q.use")}</span></div>
+              <div className="zlx-use-rows">
+                {DESIGNS.map((d) => {
+                  const DIcon = designIcon(d.id);
+                  const sel = designId === d.id;
+                  const hasDiag = d.cat === "prog";
+                  const from = money(Math.min(...MATERIALS.map((m) => basePrice(d.id, m.id))));
+                  return (
+                    <div key={d.id} className={`zlx-use-item ${sel ? "open" : ""}`}>
+                      <div className={`zlx-use-row ${sel ? "sel" : ""}`}>
+                        <button type="button" className="zlx-use-main" onClick={() => chooseDesign(d.id)}>
+                          <DIcon className="zlx-use-ic" active={sel} />
+                          <span className="zlx-use-txt">
+                            <b>{L(d.label, lang)}{sel && ocr.status === "done" && ocrFields.size > 0 && <em className="zlx-use-sugg">{t("lens.suggested")}</em>}</b>
+                            <small>{t("lens.fromPrice")} {from}</small>
+                          </span>
+                          {sel && <Ic name="check" className="zlx-use-check" />}
+                        </button>
+                        {hasDiag && (
+                          <button type="button" className={`zlx-use-info ${diagFor === d.id ? "on" : ""}`}
+                                  aria-label={t("lens.help")} onClick={() => setDiagFor(diagFor === d.id ? null : d.id)}>
+                            <Ic name="info" />
+                          </button>
+                        )}
+                      </div>
+                      {hasDiag && diagFor === d.id && <DiagHelp keys={designDiagKeys(d)} t={t} />}
+                      {sel && (
+                        <div className="zlx-use-fill">
+                          <p className="muted small">{t("lens.rxDialHint")}</p>
+                          <div className="zlx-rx-grid">
+                            {[{ eye: "od", label: t("lens.right") }, { eye: "os", label: t("lens.left") }].map(({ eye, label }) => (
+                              <div key={eye} className="zlx-rx-eye">
+                                <div className="zlx-rx-eye-h">{label}</div>
+                                <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sph")} flag={ocrClass(`${eye}_sph`)} />
+                                <div className="zlx-rx-fields">
+                                  <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cyl")} flag={ocrClass(`${eye}_cyl`)} />
+                                  <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axis")} flag={ocrClass(`${eye}_axis`)} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="zlx-rx-pdmode" role="radiogroup" aria-label={t("lens.pd")}>
+                            <button type="button" role="radio" aria-checked={pdMode === "single"} className={`zlx-pdmode-opt ${pdMode === "single" ? "on" : ""}`} onClick={() => setPdMode("single")}>{t("lens.pd.single")}</button>
+                            <button type="button" role="radio" aria-checked={pdMode === "dual"} className={`zlx-pdmode-opt ${pdMode === "dual" ? "on" : ""}`} onClick={() => setPdMode("dual")}>{t("lens.pd.dual")}</button>
+                          </div>
+                          <div className="zlx-rx-extra">
+                            {pdMode === "dual" ? (
+                              <>
+                                <ZlxStepper value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.od")} withEmpty flag={ocrClass("pd_od")} />
+                                <ZlxStepper value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.os")} withEmpty flag={ocrClass("pd_os")} />
+                              </>
+                            ) : (
+                              <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
+                            )}
+                            {d.add && <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />}
+                          </div>
+                          <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="select" onClick={() => setPop("mat")}>
+                            <Ic name="material" /> {t("lens.material")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              {/* PD: one total, or one value per eye (dual). Auto-switches to dual
-                  when the OCR reads monocular PD; the customer can toggle either way. */}
-              <div className="zlx-rx-pdmode" role="radiogroup" aria-label={t("lens.pd")}>
-                <button type="button" role="radio" aria-checked={pdMode === "single"}
-                        className={`zlx-pdmode-opt ${pdMode === "single" ? "on" : ""}`}
-                        onClick={() => setPdMode("single")}>{t("lens.pd.single")}</button>
-                <button type="button" role="radio" aria-checked={pdMode === "dual"}
-                        className={`zlx-pdmode-opt ${pdMode === "dual" ? "on" : ""}`}
-                        onClick={() => setPdMode("dual")}>{t("lens.pd.dual")}</button>
-              </div>
-              <div className="zlx-rx-extra">
-                {pdMode === "dual" ? (
-                  <>
-                    <ZlxStepper value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.od")} withEmpty flag={ocrClass("pd_od")} />
-                    <ZlxStepper value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.os")} withEmpty flag={ocrClass("pd_os")} />
-                  </>
-                ) : (
-                  <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
-                )}
-                {design?.add && <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />}
-              </div>
-              <button type="button" className="btn btn-primary zlx-pop-done" onClick={() => setPop("mat")}>
-                <Ic name="material" /> {t("lens.material")}
-              </button>
             </>
-          ) : null}
+          )}
         </ZlxPop>
       )}
 

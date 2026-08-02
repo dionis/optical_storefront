@@ -1717,12 +1717,15 @@ img { max-width: 100%; }
 .zlx-or { text-align: center; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
 
 /* --- rejilla de graduación (OD/OS) --- */
-.zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0 12px; }
-@media (max-width: 560px) { .zlx-rx-grid { grid-template-columns: 1fr; } }
-.zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+/* OD | OS SIEMPRE lado a lado (simetría perfecta, sin desplazamiento lateral) */
+.zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 12px; }
+.zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.zlx-rx-eye .zlx-dial { max-width: 100%; }
 .zlx-rx-eye-h { font-weight: 800; text-align: center; margin-bottom: 6px; color: var(--cuba-blue); }
-.zlx-rx-fields { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 12px; }
+/* CYL/AXIS apilados dentro de cada ojo → columnas estrechas que caben sin scroll */
+.zlx-rx-fields { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; width: 100%; }
 .zlx-rx-extra { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 6px; }
+@media (max-width: 560px) { .zlx-rx-grid { gap: 8px; } .zlx-rx-eye { padding: 10px 5px; } .zlx-stepper-ctl { width: 82px; } }
 /* stepper acotado (flechas ↑/↓): AXIS, CYL, PD, ADD — sin scroll ni solapamiento */
 .zlx-stepper { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .zlx-stepper-lbl { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -1864,3 +1867,34 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   button, .btn, .icon-btn, .zlx-fab, .brand-circle, .product-card, .zlx-float-img { transition: none !important; transform: none !important; }
 }
+
+/* ── Popup de receta: flujo "solo montura → subir receta → elegir tipo" ────────
+   Opciones una por línea; al seleccionar se abre debajo su formulario; la
+   infografía sólo aparece al pulsar la (i). */
+.zlx-use-sep { display: flex; align-items: center; gap: 10px; margin: 14px 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.zlx-use-sep::before, .zlx-use-sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.zlx-use-rows { display: flex; flex-direction: column; gap: 10px; }
+.zlx-use-item { border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .16s, box-shadow .16s; background: #fff; }
+.zlx-use-item.open { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red), 0 8px 22px rgba(15,25,45,.07); }
+.zlx-use-row { display: flex; align-items: center; gap: 10px; }
+/* fila "solo montura" arriba del todo */
+.zlx-use-row.solo { width: 100%; border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; background: #fff; cursor: pointer; transition: border-color .16s, box-shadow .16s, transform .12s; }
+.zlx-use-row.solo:hover { transform: translateY(-1px); }
+.zlx-use-row.solo.sel { border-color: var(--cuba-red); background: var(--red-soft); box-shadow: 0 0 0 1px var(--cuba-red); }
+.zlx-use-main { flex: 1; display: flex; align-items: center; gap: 12px; padding: 13px 14px; background: none; border: none; cursor: pointer; text-align: left; min-width: 0; }
+.zlx-use-ic { width: 30px; height: 30px; flex: 0 0 auto; color: var(--cuba-blue); }
+.zlx-use-row.sel .zlx-use-ic, .zlx-use-row.solo.sel .zlx-use-ic { color: var(--cuba-red); }
+.zlx-use-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zlx-use-txt b { font-size: 15px; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zlx-use-txt small { font-size: 12.5px; color: var(--muted); }
+.zlx-use-sugg { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #fff; background: var(--cuba-red); padding: 2px 7px; border-radius: 999px; }
+.zlx-use-check { width: 20px; height: 20px; flex: 0 0 auto; color: var(--cuba-red); margin-right: 12px; }
+.zlx-use-info { flex: 0 0 auto; width: 34px; height: 34px; margin-right: 8px; border: none; background: var(--soft); border-radius: 10px; color: var(--cuba-blue); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background-color .14s, color .14s; }
+.zlx-use-info:hover, .zlx-use-info.on { background: var(--cuba-blue); color: #fff; }
+.zlx-use-info .zlx-ic { width: 18px; height: 18px; }
+.zlx-use-item .zlx-diag-help { padding: 0 14px 12px; margin-top: 0; }
+.zlx-use-fill { padding: 4px 12px 14px; border-top: 1px dashed var(--line); animation: zlxFillIn .22s ease; }
+@keyframes zlxFillIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.zlx-solo-note { text-align: center; margin: 10px 0 2px; }
+.zlx-pop-done { width: 100%; margin-top: 14px; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .zlx-use-fill { animation: none; } }
