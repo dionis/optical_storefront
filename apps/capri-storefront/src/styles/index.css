@@ -1720,7 +1720,8 @@ img { max-width: 100%; }
 /* OD | OS SIEMPRE lado a lado (simetría perfecta, sin desplazamiento lateral) */
 .zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 12px; }
 .zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; min-width: 0; display: flex; flex-direction: column; align-items: center; }
-.zlx-rx-eye .zlx-dial { max-width: 100%; }
+.zlx-rx-eye .zlx-dial { max-width: 150px; margin: 0 auto 8px; }
+.zlx-rx-eye .zlx-dial-val { font-size: 20px; }
 .zlx-rx-eye-h { font-weight: 800; text-align: center; margin-bottom: 6px; color: var(--cuba-blue); }
 /* CYL/AXIS apilados dentro de cada ojo → columnas estrechas que caben sin scroll */
 .zlx-rx-fields { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; width: 100%; }
@@ -1748,7 +1749,7 @@ img { max-width: 100%; }
 .zlx-dial-thumb { fill: #fff; stroke: var(--cuba-red); cursor: grab; }
 .zlx-dial-svg.drag .zlx-dial-thumb { cursor: grabbing; }
 .zlx-dial-val { font-size: 30px; font-weight: 800; fill: var(--ink); }
-.zlx-dial-lbl { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.zlx-dial-lbl { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin-top: 6px; }
 
 /* --- picker fino (5 valores) --- */
 .zlx-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
