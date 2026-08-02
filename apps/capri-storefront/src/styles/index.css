@@ -1603,9 +1603,9 @@ img { max-width: 100%; }
 .zlx-float-inner { display: flex; align-items: center; justify-content: center; flex: 1 1 auto; }
 .zlx-float-img { width: 100%; max-height: 56vh; min-height: 300px; object-fit: contain; }
 .zlx-float img { max-height: 56vh; width: 100%; object-fit: contain; }
-.zlx-float-name { text-align: center; margin-top: 12px; font-weight: 700; color: var(--ink-soft); }
-/* precio en vivo, centrado debajo del espejuelo */
-.zlx-float-price { text-align: center; margin-top: 4px; font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--cuba-red); font-variant-numeric: tabular-nums; }
+/* cabecera: nombre + colección + material, TODO en una sola línea (imagen 1) */
+.zlx-float-head { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px; font-size: 13.5px; color: var(--ink-soft); }
+.zlx-float-head .zlx-float-name { font-weight: 800; color: var(--ink); font-size: 16.5px; }
 /* miniaturas de color */
 .zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .zlx-float-color { position: relative; width: 84px; height: 66px; padding: 5px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; overflow: visible; transition: border-color .15s, box-shadow .15s, transform .15s; }
@@ -1625,11 +1625,10 @@ img { max-width: 100%; }
 .zlx-summary-help .zlx-ic { width: 16px; height: 16px; }
 .zlx-summary-help::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 0; white-space: normal; width: max-content; max-width: 230px; background: #0f172a; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 7px 10px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .14s; z-index: 30; box-shadow: 0 6px 20px rgba(15,25,45,.22); }
 .zlx-summary-help:hover::after, .zlx-summary-help:focus-visible::after { opacity: 1; }
-/* fila colección (izq) · material + ayuda (der) */
-.zlx-float-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-soft); }
-.zlx-float-meta .zlx-k { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 2px; }
-.zlx-float-collection { text-align: left; font-weight: 700; }
-.zlx-float-material { display: inline-flex; align-items: center; gap: 6px; text-align: right; font-weight: 700; color: var(--ink-soft); background: none; border: none; cursor: pointer; }
+/* colección y material, en línea con el nombre */
+.zlx-float-head .zlx-k { display: inline; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+.zlx-float-collection { font-weight: 700; }
+.zlx-float-material { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink-soft); background: none; border: none; cursor: pointer; font-size: 13.5px; }
 .zlx-help-dot { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-blue); }
 .zlx-float-material:hover .zlx-help-dot { color: var(--cuba-red); }
 @media (max-width: 939px) { .zlx-float-img, .zlx-float img { max-height: 44vh; min-height: 200px; } }
@@ -1809,4 +1808,37 @@ img { max-width: 100%; }
   .gll-float, .gll-spin, .gll-shadow, .gll-pip, .gll-paint { animation: none !important; }
   .gll-spin { transform: rotateY(-24deg) rotateX(8deg); }
   .gll-paint { fill: var(--cuba-blue); }
+}
+
+/* ── Micro-interacciones globales (sutiles, premium) ──────────────────────────
+   Movimiento suave, realce y glow en hover/active, anillo de foco accesible.
+   Colores de marca: azul/rojo. No invasivo — respeta prefers-reduced-motion. */
+button, .btn, .icon-btn, a.btn, .zlx-fab, .brand-circle, .flag-btn, .pdp-thumb, .swatch, .choice {
+  transition: transform .16s cubic-bezier(.2,.7,.3,1), box-shadow .16s ease, filter .16s ease,
+              background-color .16s ease, color .16s ease, border-color .16s ease;
+}
+.btn:hover { transform: translateY(-1.5px); }
+.btn:active { transform: translateY(0) scale(.985); }
+.btn-primary:hover { box-shadow: 0 10px 24px rgba(14,90,208,.34); filter: saturate(1.05); }
+.btn-outline:hover { box-shadow: 0 8px 20px rgba(14,90,208,.16); }
+.icon-btn:hover { transform: translateY(-1px); color: var(--blue); filter: drop-shadow(0 3px 8px rgba(14,90,208,.28)); }
+.icon-btn:active { transform: translateY(0) scale(.94); }
+/* anillo de foco accesible y elegante */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px;
+}
+/* toque de color en iconos que ya se ven profesionales */
+.zlx-fab .zlx-ic { color: var(--cuba-blue); transition: color .16s ease, transform .16s ease; }
+.zlx-fab:hover:not(:disabled) .zlx-ic { transform: scale(1.08); }
+.zlx-fab.on .zlx-ic { color: var(--cuba-red); }
+.zlx-fab.on { box-shadow: 0 0 0 1.5px rgba(207,20,43,.25), 0 6px 18px rgba(15,25,45,.06); }
+.zlx-fab:hover:not(:disabled) { transform: translateY(-1.5px); box-shadow: 0 8px 20px rgba(15,25,45,.10); }
+/* realce del espejuelo al pasar el cursor (enfoque suave) */
+.zlx-float-img { transition: transform .3s ease, filter .3s ease; }
+.zlx-float:hover .zlx-float-img { transform: scale(1.015); filter: drop-shadow(0 8px 20px rgba(15,25,45,.12)); }
+/* producto: leve zoom+glow */
+.product-card { transition: transform .18s ease, box-shadow .18s ease; }
+.product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(15,25,45,.12); }
+@media (prefers-reduced-motion: reduce) {
+  button, .btn, .icon-btn, .zlx-fab, .brand-circle, .product-card, .zlx-float-img { transition: none !important; transform: none !important; }
 }

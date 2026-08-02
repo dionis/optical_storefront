@@ -506,16 +506,16 @@ export default function LensProcess() {
               <img className="zlx-float-img" src={color.image} alt={`${product.name} · ${color.name}`}
                    onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
             </div>
-            <div className="zlx-float-name">{product.name} · {color.name}</div>
-            {/* colección (izq) · material + ayuda (der) — bajo el nombre, sin precio */}
-            <div className="zlx-float-meta">
+            {/* nombre + colección + material, todo en una sola línea (imagen 1) */}
+            <div className="zlx-float-head">
+              <span className="zlx-float-name">{product.name} · {color.name}</span>
               <span className="zlx-float-collection">
-                <span className="zlx-k">{t("lens.collection")}</span> {product.brand}
+                <span className="zlx-k">{t("lens.collection")}:</span> {product.brand}
               </span>
               <button type="button" className="zlx-float-material"
                       onClick={() => setPop(pop === "frame" ? null : "frame")}
                       aria-label={t("lens.frameInfo")}>
-                <span className="zlx-k">{t("lens.frameMaterial")}</span>{" "}
+                <span className="zlx-k">{t("lens.frameMaterial")}:</span>{" "}
                 {frameMats.length ? frameMats.join(" · ") : "—"}
                 <Ic name="info" className="zlx-help-dot" />
               </button>
@@ -594,7 +594,7 @@ export default function LensProcess() {
             {rxSet && <li><span>{t("lens.q.rx")}: OD {fmt(parseFloat(rx.od_sph) || 0)} / OS {fmt(parseFloat(rx.os_sph) || 0)}</span><b><Ic name="check" /></b></li>}
           </ul>
           <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
-          <button type="button" className="btn btn-primary zlx-buy" disabled={!canBuy} onClick={finish}>
+          <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={finish}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
           </aside>
