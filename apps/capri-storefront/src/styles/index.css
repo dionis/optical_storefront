@@ -61,7 +61,9 @@ button { font-family: inherit; cursor: pointer; }
 .search { flex: 1; display: flex; max-width: 380px; margin-left: auto; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; }
 .search:focus-within { border-color: var(--blue); }
 .search input { flex: 1; border: none; padding: 11px 16px; outline: none; font-size: 14px; background: transparent; }
-.search button { border: none; background: var(--soft); padding: 0 16px; font-size: 18px; color: var(--blue); }
+.search button { border: none; background: var(--soft); padding: 0 16px; font-size: 18px; color: var(--blue); cursor: pointer; }
+.search .search-clear { background: transparent; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px 0 8px; display: flex; align-items: center; }
+.search .search-clear:hover { color: var(--cuba-red); }
 .header-actions { display: flex; gap: 6px; align-items: center; }
 .lang-btn { border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); display: flex; gap: 4px; }
 .lang-btn .on { color: var(--blue); }
@@ -941,7 +943,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ===== Marcas estilo Capri: círculos + destacado ===== */
 .brands-layout { display: grid; grid-template-columns: 1.75fr 1fr; gap: 28px; align-items: stretch; margin-top: 6px; }
-.brands-circles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; align-content: start; }
+.brands-circles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-content: start; }
 .brand-circle {
   aspect-ratio: 1; border-radius: 50%; background: #fff; border: 1px solid #edf0f5;
   display: grid; place-items: center; padding: 15%;
@@ -959,7 +961,7 @@ button { font-family: inherit; cursor: pointer; }
 .brand-feature-text h3 { margin: 0 0 8px; font-size: 26px; font-weight: 800; text-shadow: 0 2px 16px rgba(0,0,0,.4); }
 .brand-feature-text p { margin: 0 0 12px; font-size: 14.5px; color: rgba(255,255,255,.92); }
 .brand-feature-cta { font-weight: 800; color: #fff; font-size: 13.5px; }
-@media (max-width: 900px) { .brands-layout { grid-template-columns: 1fr; } .brands-circles { grid-template-columns: repeat(4, 1fr); } .brand-feature { min-height: 260px; } }
+@media (max-width: 900px) { .brands-layout { grid-template-columns: 1fr; } .brands-circles { grid-template-columns: repeat(3, 1fr); } .brand-feature { min-height: 260px; } }
 @media (max-width: 560px) { .brands-circles { grid-template-columns: repeat(3, 1fr); } }
 
 
@@ -1310,13 +1312,13 @@ img { max-width: 100%; }
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-10px); }
 }
-.zlx-float img {
+.zlx-float-img {
   animation: zlxFloat 4.5s ease-in-out infinite;
   filter: drop-shadow(0 22px 26px rgba(15, 40, 90, .18));
 }
-.zlx-float.zoom img { animation: none; }
+.zlx-float.zoom .zlx-float-img { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .zlx-float img { animation: none; }
+  .zlx-float-img { animation: none; }
 }
 
 /* Chips de identidad del marco (modelo, colección, material). */
@@ -1590,19 +1592,48 @@ img { max-width: 100%; }
 /* --- maqueta: 2 columnas en escritorio, 1 en móvil --- */
 .zlx-stage { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
 @media (min-width: 940px) {
-  .zlx-stage { grid-template-columns: minmax(0, 1.55fr) minmax(346px, 430px); gap: 36px; }
-  .zlx-side { position: sticky; top: 84px; }
+  .zlx-stage { grid-template-columns: minmax(0, 1.55fr) minmax(346px, 430px); gap: 36px; align-items: stretch; }
+  .zlx-side { justify-content: space-between; }
 }
-.zlx-main { min-width: 0; }
+.zlx-main { min-width: 0; display: flex; flex-direction: column; }
 .zlx-side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
 /* --- espejuelo grande, protagonista (izquierda) --- */
-.zlx-float { background: linear-gradient(180deg, var(--cream), #fff); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: var(--shadow); }
-.zlx-float-inner { display: flex; align-items: center; justify-content: center; }
+.zlx-float { background: linear-gradient(180deg, var(--cream), #fff); border: 1px solid var(--line); border-radius: 22px; padding: 22px; box-shadow: var(--shadow); flex: 1 1 auto; display: flex; flex-direction: column; }
+.zlx-float-inner { display: flex; align-items: center; justify-content: center; flex: 1 1 auto; }
 .zlx-float-img { width: 100%; max-height: 56vh; min-height: 300px; object-fit: contain; }
-.zlx-float img { max-height: 56vh; width: 100%; object-fit: contain; }
-.zlx-float-name { text-align: center; margin-top: 12px; font-weight: 700; color: var(--ink-soft); }
-@media (max-width: 939px) { .zlx-float-img, .zlx-float img { max-height: 44vh; min-height: 200px; } }
+/* cabecera: nombre + colección + material, TODO en una sola línea (imagen 1) */
+.zlx-float-head { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px; font-size: 13.5px; color: var(--ink-soft); }
+.zlx-float-head .zlx-float-name { font-weight: 800; color: var(--ink); font-size: 16.5px; }
+/* miniaturas de color */
+.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; max-width: 100%; }
+.zlx-float-color { position: relative; width: 82px; height: 64px; padding: 0; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; overflow: visible; transition: border-color .15s, box-shadow .15s, transform .15s; flex: 0 0 auto; }
+.zlx-float-color:hover { transform: translateY(-2px); }
+/* wrapper que RECORTA la imagen dentro del recuadro (evita que el espejuelo se
+   salga del card en responsive); solo la bolita sobresale. */
+.zlx-float-color-inner { display: block; width: 100%; height: 100%; border-radius: 11px; overflow: hidden; }
+.zlx-float-color-inner img { display: block; width: 100%; height: 100%; object-fit: contain; padding: 5px; }
+.zlx-float-color.on { border-color: var(--cuba-blue); box-shadow: 0 0 0 2px rgba(0,42,143,.15); }
+/* bolita en la esquina superior derecha; muestra el nombre del color al pasar el cursor */
+.zlx-color-dot { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--cuba-blue); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(15,25,45,.25); cursor: help; }
+.zlx-float-color.on .zlx-color-dot { background: var(--cuba-red); }
+.zlx-color-dot::after { content: attr(data-name); position: absolute; bottom: calc(100% + 7px); right: 50%; transform: translateX(50%) scale(.9); transform-origin: bottom center; white-space: nowrap; background: #0f172a; color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 7px; opacity: 0; pointer-events: none; transition: opacity .14s, transform .14s; z-index: 20; }
+.zlx-color-dot::before { content: ""; position: absolute; bottom: calc(100% + 2px); right: 50%; transform: translateX(50%); border: 5px solid transparent; border-top-color: #0f172a; opacity: 0; transition: opacity .14s; z-index: 20; }
+.zlx-color-dot:hover::after, .zlx-color-dot:focus-visible::after { opacity: 1; transform: translateX(50%) scale(1); }
+.zlx-color-dot:hover::before, .zlx-color-dot:focus-visible::before { opacity: 1; }
+/* bolita de ayuda en el encabezado del resumen del pedido */
+.zlx-summary-h { display: flex; align-items: center; gap: 8px; }
+.zlx-summary-help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: var(--cuba-blue); cursor: help; }
+.zlx-summary-help .zlx-ic { width: 16px; height: 16px; }
+.zlx-summary-help::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 0; white-space: normal; width: max-content; max-width: 230px; background: #0f172a; color: #fff; font-size: 12px; font-weight: 500; line-height: 1.35; padding: 7px 10px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .14s; z-index: 30; box-shadow: 0 6px 20px rgba(15,25,45,.22); }
+.zlx-summary-help:hover::after, .zlx-summary-help:focus-visible::after { opacity: 1; }
+/* colección y material, en línea con el nombre */
+.zlx-float-head .zlx-k { display: inline; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+.zlx-float-collection { font-weight: 700; }
+.zlx-float-material { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ink-soft); background: none; border: none; cursor: pointer; font-size: 13.5px; }
+.zlx-help-dot { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-blue); }
+.zlx-float-material:hover .zlx-help-dot { color: var(--cuba-red); }
+@media (max-width: 939px) { .zlx-float-img { max-height: 44vh; min-height: 200px; } }
 
 /* --- botones de paso (derecha) --- */
 .zlx-fabs { display: flex; flex-direction: column; gap: 10px; }
@@ -1642,7 +1673,7 @@ img { max-width: 100%; }
 .zlx-summary-note { margin-top: 8px; text-align: center; }
 
 /* --- popover: panel centrado NO invasivo (sheet en móvil) --- */
-.zlx-pop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.28); z-index: 60; }
+.zlx-pop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.14); z-index: 60; }
 .zlx-pop { position: fixed; z-index: 61; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(93vw, 470px); max-height: 86vh; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 0; }
 .zlx-pop::before { display: none; }
 .zlx-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; border-radius: 18px 18px 0 0; z-index: 1; }
@@ -1651,7 +1682,14 @@ img { max-width: 100%; }
 .zlx-pop-body { padding: 16px 18px 20px; }
 .zlx-pop-q { display: block; font-weight: 800; margin-bottom: 8px; font-size: 14px; }
 .zlx-pop-done { width: 100%; justify-content: center; margin-top: 14px; }
-@media (max-width: 560px) { .zlx-pop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 90vh; border-radius: 18px 18px 0 0; } }
+/* Móvil: panel inferior que NUNCA tapa el espejuelo — se limita a ~62vh y deja
+   la parte superior (la montura) siempre visible; su contenido se desliza dentro
+   si hiciera falta, pero el espejuelo no desaparece aunque crezca el popup. */
+@media (max-width: 640px) {
+  .zlx-pop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 62vh; border-radius: 20px 20px 0 0; box-shadow: 0 -12px 40px rgba(15,25,45,.22); }
+  .zlx-pop-head { border-radius: 20px 20px 0 0; }
+  .zlx-pop-body { padding: 12px 14px 18px; }
+}
 
 /* --- selección de uso (chips de diseño) --- */
 .zlx-uselist { margin-bottom: 6px; }
@@ -1679,22 +1717,41 @@ img { max-width: 100%; }
 .zlx-or { text-align: center; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
 
 /* --- rejilla de graduación (OD/OS) --- */
-.zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0 12px; }
-@media (max-width: 560px) { .zlx-rx-grid { grid-template-columns: 1fr; } }
-.zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+/* OD | OS SIEMPRE lado a lado (simetría perfecta, sin desplazamiento lateral) */
+.zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 12px; }
+.zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.zlx-rx-eye .zlx-dial { max-width: 150px; margin: 0 auto 8px; }
+.zlx-rx-eye .zlx-dial-val { font-size: 20px; }
 .zlx-rx-eye-h { font-weight: 800; text-align: center; margin-bottom: 6px; color: var(--cuba-blue); }
-.zlx-rx-fields { display: grid; gap: 10px; margin-top: 10px; }
-.zlx-rx-extra { display: grid; gap: 12px; margin-bottom: 6px; }
+/* CYL/AXIS apilados dentro de cada ojo → columnas estrechas que caben sin scroll */
+.zlx-rx-fields { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10px; width: 100%; }
+.zlx-rx-extra { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 6px; }
+@media (max-width: 560px) { .zlx-rx-grid { gap: 8px; } .zlx-rx-eye { padding: 10px 5px; } .zlx-stepper-ctl { width: 82px; } }
+/* stepper acotado (flechas ↑/↓): AXIS, CYL, PD, ADD — sin scroll ni solapamiento */
+.zlx-stepper { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.zlx-stepper-lbl { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.zlx-stepper-ctl { display: flex; flex-direction: column; align-items: stretch; width: 92px; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(15,25,45,.05); }
+.zlx-stepper-btn { height: 26px; border: none; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--cuba-blue); transition: background-color .14s; }
+.zlx-stepper-btn:hover:not(:disabled) { background: var(--blue-soft); }
+.zlx-stepper-btn:active:not(:disabled) { background: #dbe7fb; }
+.zlx-stepper-btn:disabled { opacity: .3; cursor: not-allowed; }
+.zlx-stepper-btn .zlx-ic { width: 15px; height: 15px; }
+.zlx-stepper-val { text-align: center; padding: 7px 4px; font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); outline: none; }
+.zlx-stepper-val:focus-visible { background: var(--blue-soft); }
+.zlx-stepper.from-ocr .zlx-stepper-ctl { border-color: #d9920b; background: #fff7e6; }
+.zlx-stepper.from-ocr .zlx-stepper-val { border-color: #f0d38a; }
 
 /* --- dial semicircular (nombres reales del JSX) --- */
-.zlx-dial { width: 100%; max-width: 260px; margin: 0 auto; }
+/* aspect-ratio:auto y position:static anulan una regla .zlx-dial antigua que
+   aplastaba el contenedor (aspect-ratio 2/1) y solapaba las etiquetas. */
+.zlx-dial { width: 100%; max-width: 260px; margin: 0 auto; aspect-ratio: auto; position: static; display: block; }
 .zlx-dial-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .zlx-dial-track { stroke: var(--line); }
 .zlx-dial-prog { stroke: var(--cuba-blue); }
 .zlx-dial-thumb { fill: #fff; stroke: var(--cuba-red); cursor: grab; }
 .zlx-dial-svg.drag .zlx-dial-thumb { cursor: grabbing; }
 .zlx-dial-val { font-size: 30px; font-weight: 800; fill: var(--ink); }
-.zlx-dial-lbl { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.zlx-dial-lbl { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin-top: 6px; }
 
 /* --- picker fino (5 valores) --- */
 .zlx-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -1708,3 +1765,290 @@ img { max-width: 100%; }
 /* --- bloque educativo (extras) --- */
 .zlx-edu-quality { font-weight: 700; margin: 0 0 8px; }
 .zlx-edu-price { display: flex; align-items: center; gap: 6px; color: var(--cuba-blue); font-weight: 700; margin-top: 6px; }
+
+/* ── Premium 3D glasses loader (GlassesLoader.jsx) ─────────────────────────────
+   A pair of glasses that floats and SPINS a full 360° as a solid 3D object.
+   The volume is real: several copies of the frame are stacked along Z inside a
+   preserve-3d scene, so the turn reveals thickness rather than a flat wobble. */
+.gll { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 40px 20px; }
+.gll-compact { padding: 24px 12px; gap: 14px; }
+.gll-scene {
+  position: relative; width: 260px; height: 170px;
+  display: grid; place-items: center;
+  perspective: 900px; perspective-origin: 50% 45%;
+}
+.gll-compact .gll-scene { width: 190px; height: 120px; }
+
+/* vertical float (the "in the air" feel) */
+.gll-float { animation: gllFloat 3s ease-in-out infinite; transform-style: preserve-3d; }
+/* the real rotation: a full, continuous 360° turn on the Y axis */
+.gll-spin {
+  position: relative; width: 240px; height: 108px;
+  transform-style: preserve-3d;
+  animation: gllSpin 4.6s linear infinite;
+  will-change: transform;
+}
+.gll-compact .gll-spin { transform: scale(.72); }
+
+/* each extrusion layer, centred and pushed to its own depth */
+.gll-layer {
+  position: absolute; top: 50%; left: 50%;
+  width: 240px; height: 108px; overflow: visible;
+  backface-visibility: visible;
+  filter: drop-shadow(0 0 0.5px rgba(15,23,42,.25));
+}
+/* the painted frame body — colour cycles through the Cuban flag */
+.gll-paint { animation: gllFlag 4.6s linear infinite; }
+
+/* soft ground shadow that breathes opposite to the float */
+.gll-shadow {
+  position: absolute; bottom: 14px; width: 140px; height: 18px; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(15,23,42,.22), rgba(15,23,42,0) 70%);
+  animation: gllShadow 3s ease-in-out infinite; filter: blur(1px);
+}
+
+@keyframes gllFloat { 0%,100% { transform: translateY(0) rotateX(6deg); } 50% { transform: translateY(-16px) rotateX(6deg); } }
+@keyframes gllSpin  { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+@keyframes gllShadow{ 0%,100% { opacity:.30; transform: scaleX(1); } 50% { opacity:.14; transform: scaleX(.62); } }
+/* blue → white → red → blue. A persistent drop-shadow keeps the shape defined
+   even through the white phase so it never vanishes on a white background. */
+@keyframes gllFlag {
+  0%,14%   { fill: #0038a8; }
+  33%,47%  { fill: #f4f6fb; }
+  66%,80%  { fill: #e10f21; }
+  100%     { fill: #0038a8; }
+}
+
+.gll-msg { font-size: 16px; font-weight: 600; color: var(--ink, #0f172a); min-height: 22px; text-align: center; letter-spacing: .01em; }
+.gll-dots { display: inline-block; width: 18px; text-align: left; }
+.gll-dots::after { content: ''; animation: gllDots 1.4s steps(4,end) infinite; }
+@keyframes gllDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+.gll-pips { display: flex; gap: 8px; }
+.gll-pip { width: 9px; height: 9px; border-radius: 50%; opacity: .35; }
+.gll-pip.b { background: var(--cuba-blue); animation: gllPip 1.2s ease-in-out infinite; }
+.gll-pip.w { background: #cbd5e1; animation: gllPip 1.2s ease-in-out infinite .2s; }
+.gll-pip.r { background: var(--cuba-red); animation: gllPip 1.2s ease-in-out infinite .4s; }
+@keyframes gllPip { 0%,100% { opacity:.3; transform: scale(1); } 50% { opacity:1; transform: scale(1.25); } }
+
+/* Accessibility: users who prefer reduced motion get a still, legible frame. */
+@media (prefers-reduced-motion: reduce) {
+  .gll-float, .gll-spin, .gll-shadow, .gll-pip, .gll-paint { animation: none !important; }
+  .gll-spin { transform: rotateY(-24deg) rotateX(8deg); }
+  .gll-paint { fill: var(--cuba-blue); }
+}
+
+/* ── Micro-interacciones globales (sutiles, premium) ──────────────────────────
+   Movimiento suave, realce y glow en hover/active, anillo de foco accesible.
+   Colores de marca: azul/rojo. No invasivo — respeta prefers-reduced-motion. */
+button, .btn, .icon-btn, a.btn, .zlx-fab, .brand-circle, .flag-btn, .pdp-thumb, .swatch, .choice {
+  transition: transform .16s cubic-bezier(.2,.7,.3,1), box-shadow .16s ease, filter .16s ease,
+              background-color .16s ease, color .16s ease, border-color .16s ease;
+}
+.btn:hover { transform: translateY(-1.5px); }
+.btn:active { transform: translateY(0) scale(.985); }
+.btn-primary:hover { box-shadow: 0 10px 24px rgba(14,90,208,.34); filter: saturate(1.05); }
+.btn-outline:hover { box-shadow: 0 8px 20px rgba(14,90,208,.16); }
+.icon-btn:hover { transform: translateY(-1px); color: var(--blue); filter: drop-shadow(0 3px 8px rgba(14,90,208,.28)); }
+.icon-btn:active { transform: translateY(0) scale(.94); }
+/* anillo de foco accesible y elegante */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px;
+}
+/* toque de color en iconos que ya se ven profesionales */
+.zlx-fab .zlx-ic { color: var(--cuba-blue); transition: color .16s ease, transform .16s ease; }
+.zlx-fab:hover:not(:disabled) .zlx-ic { transform: scale(1.08); }
+.zlx-fab.on .zlx-ic { color: var(--cuba-red); }
+.zlx-fab.on { box-shadow: 0 0 0 1.5px rgba(207,20,43,.25), 0 6px 18px rgba(15,25,45,.06); }
+.zlx-fab:hover:not(:disabled) { transform: translateY(-1.5px); box-shadow: 0 8px 20px rgba(15,25,45,.10); }
+/* realce del espejuelo al pasar el cursor (enfoque suave) */
+.zlx-float-img { transition: transform .3s ease, filter .3s ease; }
+.zlx-float:hover .zlx-float-img { transform: scale(1.015); filter: drop-shadow(0 8px 20px rgba(15,25,45,.12)); }
+/* producto: leve zoom+glow */
+.product-card { transition: transform .18s ease, box-shadow .18s ease; }
+.product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(15,25,45,.12); }
+@media (prefers-reduced-motion: reduce) {
+  button, .btn, .icon-btn, .zlx-fab, .brand-circle, .product-card, .zlx-float-img { transition: none !important; transform: none !important; }
+}
+
+/* ── Popup de receta: flujo "solo montura → subir receta → elegir tipo" ────────
+   Opciones una por línea; al seleccionar se abre debajo su formulario; la
+   infografía sólo aparece al pulsar la (i). */
+.zlx-use-sep { display: flex; align-items: center; gap: 10px; margin: 14px 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.zlx-use-sep::before, .zlx-use-sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.zlx-use-rows { display: flex; flex-direction: column; gap: 10px; }
+.zlx-use-item { border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .16s, box-shadow .16s; background: #fff; }
+.zlx-use-item.open { border-color: var(--cuba-red); box-shadow: 0 0 0 1px var(--cuba-red), 0 8px 22px rgba(15,25,45,.07); }
+.zlx-use-row { display: flex; align-items: center; gap: 10px; }
+/* fila "solo montura" arriba del todo */
+.zlx-use-row.solo { width: 100%; border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; background: #fff; cursor: pointer; transition: border-color .16s, box-shadow .16s, transform .12s; }
+.zlx-use-row.solo:hover { transform: translateY(-1px); }
+.zlx-use-row.solo.sel { border-color: var(--cuba-red); background: var(--red-soft); box-shadow: 0 0 0 1px var(--cuba-red); }
+.zlx-use-main { flex: 1; display: flex; align-items: center; gap: 12px; padding: 13px 14px; background: none; border: none; cursor: pointer; text-align: left; min-width: 0; }
+.zlx-use-ic { width: 30px; height: 30px; flex: 0 0 auto; color: var(--cuba-blue); }
+.zlx-use-row.sel .zlx-use-ic, .zlx-use-row.solo.sel .zlx-use-ic { color: var(--cuba-red); }
+.zlx-use-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zlx-use-txt b { font-size: 15px; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zlx-use-txt small { font-size: 12.5px; color: var(--muted); }
+.zlx-use-sugg { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #fff; background: var(--cuba-red); padding: 2px 7px; border-radius: 999px; }
+.zlx-use-check { width: 20px; height: 20px; flex: 0 0 auto; color: var(--cuba-red); margin-right: 12px; }
+.zlx-use-info { flex: 0 0 auto; width: 34px; height: 34px; margin-right: 8px; border: none; background: var(--soft); border-radius: 10px; color: var(--cuba-blue); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background-color .14s, color .14s; }
+.zlx-use-info:hover, .zlx-use-info.on { background: var(--cuba-blue); color: #fff; }
+.zlx-use-info .zlx-ic { width: 18px; height: 18px; }
+.zlx-use-item .zlx-diag-help { padding: 0 14px 12px; margin-top: 0; }
+.zlx-use-fill { padding: 4px 12px 14px; border-top: 1px dashed var(--line); animation: zlxFillIn .22s ease; }
+@keyframes zlxFillIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.zlx-solo-note { text-align: center; margin: 10px 0 2px; }
+.zlx-pop-done { width: 100%; margin-top: 14px; justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .zlx-use-fill { animation: none; } }
+
+/* ── Receta: aviso de auto-cambio, chevron del acordeón, materiales inline ─────*/
+.zlx-rx-note { display: flex; align-items: flex-start; gap: 8px; background: var(--blue-soft); border: 1px solid #bcd3f7; color: #0a3a86; border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; font-size: 12.5px; line-height: 1.4; }
+.zlx-rx-note .zlx-ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-blue); margin-top: 1px; }
+.zlx-rx-note-x { margin-left: auto; background: none; border: none; font-size: 18px; line-height: 1; color: #0a3a86; cursor: pointer; padding: 0 2px; flex: 0 0 auto; }
+.zlx-use-chev { margin-left: auto; margin-right: 10px; color: var(--muted); display: inline-flex; transition: transform .18s ease; }
+.zlx-use-chev .zlx-ic { width: 18px; height: 18px; }
+.zlx-use-chev.up { transform: rotate(180deg); color: var(--cuba-red); }
+.zlx-use-main { padding-right: 4px; }
+.zlx-mat-inline { margin-top: 14px; }
+.zlx-pop-actions { display: flex; gap: 10px; margin-top: 14px; }
+.zlx-pop-actions .btn { flex: 1; justify-content: center; }
+@media (max-width: 420px) { .zlx-pop-actions { flex-direction: column; } }
+
+/* ── Resumen: TODOS los valores de la receta (responsive, sin solapes) ─────────*/
+.zlx-summary-rx { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.zlx-summary-rx-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--cuba-blue); margin-bottom: 8px; }
+.zlx-summary-rx-h .zlx-ic { width: 15px; height: 15px; color: var(--cuba-red); }
+.zlx-rx-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.zlx-rx-table th, .zlx-rx-table td { padding: 5px 4px; text-align: center; }
+.zlx-rx-table thead th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 800; }
+.zlx-rx-table tbody th { text-align: left; color: var(--cuba-blue); font-weight: 800; }
+.zlx-rx-table tbody td { color: var(--ink); font-weight: 700; }
+.zlx-rx-table tbody tr + tr th, .zlx-rx-table tbody tr + tr td { border-top: 1px solid var(--line); }
+.zlx-rx-extras { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); }
+.zlx-rx-extras b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Receta: evitar cualquier scroll horizontal y dar aire a las etiquetas del ojo */
+.zlx-pop-body { overflow-x: hidden; }
+.zlx-rx-eye { overflow: hidden; }
+.zlx-rx-eye .zlx-dial { max-width: 132px; margin: 2px auto 12px; }
+.zlx-rx-eye .zlx-dial-svg { overflow: hidden; }
+.zlx-rx-eye .zlx-dial-lbl { margin-top: 8px; }
+.zlx-rx-fields { width: 100%; }
+
+/* Receta: popup un poco más ancho + tarjeta de ojo con aire (etiquetas cortas) */
+.zlx-pop-rx { width: min(94vw, 500px); }
+.zlx-solo-actions { margin: 10px 0 4px; }
+.zlx-rx-eye { gap: 2px; }
+.zlx-rx-eye .zlx-dial { max-width: 140px; margin: 4px auto 6px; }
+.zlx-rx-eye .zlx-dial-lbl { margin-top: 4px; font-size: 11.5px; }
+.zlx-rx-fields { gap: 12px; margin-top: 12px; }
+.zlx-stepper-lbl { font-size: 11px; }
+
+/* ── Popup receta como pasos del MISMO popup ──────────────────────────────────*/
+.zlx-pop-back { background: none; border: none; cursor: pointer; color: var(--cuba-blue); padding: 2px 6px 2px 0; display: inline-flex; align-items: center; }
+.zlx-pop-back:hover { color: var(--cuba-red); }
+.zlx-pop-back .zlx-ic { width: 20px; height: 20px; }
+/* botón "siguiente paso" (Material / Tratamientos) con icono y flecha */
+.zlx-step-next { width: 100%; justify-content: center; gap: 8px; margin-top: 14px; }
+.zlx-step-chev { width: 16px; height: 16px; opacity: .85; }
+/* material: recomendado, no-apto en rojo, ayuda tras (i) */
+.zlx-choices { display: grid; gap: 10px; }
+.zlx-choice-wrap { border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.zlx-choice-wrap.sel { border-color: var(--cuba-blue); box-shadow: 0 0 0 1px var(--cuba-blue); }
+.zlx-choice-wrap.bad { border-color: #f0c2c8; background: #fdf3f4; }
+.zlx-choice-row { display: flex; align-items: stretch; }
+.zlx-choice-wrap .zlx-choice { flex: 1; border: none; background: none; border-radius: 0; }
+.zlx-choice-wrap .zlx-choice.na { opacity: .85; cursor: not-allowed; }
+.zlx-choice-wrap.bad .zlx-choice-title { color: var(--cuba-red); }
+.zlx-choice-wrap.bad .zlx-choice-price { color: var(--cuba-red); text-decoration: line-through; opacity: .7; }
+.zlx-bad-tag { display: inline-block; margin-left: 8px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: #fff; background: var(--cuba-red); padding: 2px 7px; border-radius: 999px; vertical-align: middle; }
+.zlx-choice-row .zlx-use-info { align-self: center; margin: 0 8px; }
+.zlx-mat-help { padding: 0 14px 12px; border-top: 1px dashed var(--line); }
+.zlx-bad-why { display: flex; gap: 6px; align-items: flex-start; color: var(--cuba-red); font-size: 12.5px; line-height: 1.4; margin: 10px 0 0; font-weight: 600; }
+.zlx-bad-why .zlx-ic { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Funnel v3 (noche 02-ago): dials/steppers más finos, materiales/tratamientos
+   compactos, ayudas en GLOBO aparte (no inline), resumen enriquecido y
+   revisión previa al checkout. Todo scoped a .zlx para no afectar otras vistas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* — 1) Dial y steppers más finos: menos alto ⇒ menos scroll en la ventana (img 1) — */
+.zlx-rx-eye { padding: 9px 6px; }
+.zlx-rx-eye .zlx-dial { max-width: 128px; margin: 0 auto 4px; }
+.zlx-rx-eye .zlx-dial-val { font-size: 22px; }
+.zlx-dial-lbl { margin-top: 2px; font-size: 10px; }
+.zlx-rx-fields { gap: 7px; margin-top: 6px; }
+.zlx-rx-grid { gap: 10px; margin: 8px 0 10px; }
+.zlx-stepper { gap: 3px; }
+.zlx-stepper-lbl { font-size: 10px; }
+.zlx-stepper-ctl { width: 86px; border-radius: 10px; }
+.zlx-stepper-btn { height: 22px; }
+.zlx-stepper-btn .zlx-ic { width: 13px; height: 13px; }
+.zlx-stepper-val { padding: 5px 4px; font-size: 14px; }
+.zlx-rx-pdmode { margin: 4px 0 8px; }
+.zlx-rx-extra { gap: 10px; }
+.zlx-pop-rx .zlx-step-next { margin-top: 10px; }
+
+/* — 2) Materiales y tratamientos: una fila compacta por opción (img 2, 3) — */
+.zlx-mat-list, .zlx-treat-list { display: flex; flex-direction: column; gap: 7px; }
+.zlx-mat-list .zlx-choice-row, .zlx-treat-list .zlx-choice-row { align-items: center; }
+.zlx-mat-list .zlx-choice, .zlx-treat-list .zlx-choice { padding: 9px 12px; }
+.zlx-mat-list .zlx-choice-title, .zlx-treat-list .zlx-choice-title { display: inline-flex; align-items: center; gap: 8px; }
+.zlx-choice-row .zlx-use-info { width: 30px; height: 30px; margin: 0 0 0 6px; }
+.zlx-choice-row .zlx-use-info .zlx-ic { width: 16px; height: 16px; }
+
+/* fotocromáticos: nombre+precio arriba, colores debajo (ahorra espacio) */
+.zlx-choice-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+.zlx-choice-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zlx-choice-colors { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 32px; }
+.zlx-choice-colors .lp-dot { margin-left: 0; width: 13px; height: 13px; }
+
+/* — 3) Ayuda educativa en GLOBO aparte (no inline): sin scroll en la ventana — */
+.zlx-infopop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.22); z-index: 90; }
+.zlx-infopop {
+  position: fixed; z-index: 91; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(92vw, 420px); max-height: 82vh; overflow-y: auto; background: #fff;
+  border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-lg);
+  animation: zlx-info-in .16s ease;
+}
+@keyframes zlx-info-in { from { opacity: 0; transform: translate(-50%,-46%); } to { opacity: 1; transform: translate(-50%,-50%); } }
+.zlx-infopop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; border-radius: 16px 16px 0 0; }
+.zlx-infopop-head b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.zlx-infopop-head .zlx-ic { width: 18px; height: 18px; color: var(--cuba-blue); }
+.zlx-infopop-body { padding: 14px 16px 18px; }
+@media (max-width: 640px) {
+  .zlx-infopop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 74vh; border-radius: 18px 18px 0 0; animation: none; }
+  .zlx-infopop-head { border-radius: 18px 18px 0 0; }
+}
+
+/* — 4) Resumen enriquecido: colección/color como subfilas + medidas (img 4) — */
+.zlx-summary-list .zlx-sum-sub { color: var(--muted); font-size: 12.5px; }
+.zlx-summary-list .zlx-sum-sub b { color: var(--ink-soft); font-weight: 700; }
+.zlx-meas { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.zlx-meas-h { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 7px; }
+.zlx-meas-pd { display: flex; gap: 8px; }
+.zlx-meas-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); }
+.zlx-meas-cell.zlx-meas-wide { flex: 1; }
+.zlx-meas-cell span { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.zlx-meas-cell b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--cuba-blue); }
+.zlx-meas-add { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 11px; }
+.zlx-meas-add span { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.zlx-meas-add b { font-variant-numeric: tabular-nums; color: var(--cuba-blue); }
+
+/* — 5) Revisión previa al checkout: loader → mismo resumen → datos cliente — */
+.zlx-review-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 20px; background: rgba(10,20,40,.5); backdrop-filter: blur(3px); animation: dlg-fade .18s ease; }
+.zlx-review-card { width: min(94vw, 440px); max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 18px; box-shadow: var(--shadow-lg); padding: 18px 18px 20px; }
+.zlx-review-loading { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0; }
+.zlx-review-loading p { color: var(--muted); font-weight: 700; }
+.zlx-review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zlx-review-head b { display: flex; align-items: center; gap: 8px; font-size: 17px; font-family: var(--display); }
+.zlx-review-head .zlx-ic { width: 20px; height: 20px; color: var(--cuba-blue); }
+.zlx-review-sub { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+.zlx-review-body { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.zlx-review-go { width: 100%; justify-content: center; margin-top: 14px; }
+@media (max-width: 640px) {
+  .zlx-review-overlay { padding: 0; place-items: end center; }
+  .zlx-review-card { width: 100%; max-height: 88vh; border-radius: 20px 20px 0 0; }
+}

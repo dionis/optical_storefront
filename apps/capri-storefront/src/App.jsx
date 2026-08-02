@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { loadLive } from "./data/catalogStore.js";
 import { trackAccess } from "./admin/analytics.js";
+import { initSfx } from "./lib/sfx.js";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
@@ -20,7 +21,7 @@ import { LanguageProvider } from "./i18n/LanguageContext.jsx";
 export default function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname.startsWith("/admin");
-  useEffect(() => { loadLive(); trackAccess(); }, []);
+  useEffect(() => { loadLive(); trackAccess(); initSfx(); }, []);
 
   if (isAdmin) {
     return (

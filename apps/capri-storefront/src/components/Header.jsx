@@ -4,6 +4,7 @@ import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { CartPanel, FavPanel, AuthPanel } from "./StorePanels.jsx";
 import { useUser } from "./userAuth.js";
+import { isMuted, toggleMuted } from "../lib/sfx.js";
 
 export default function Header() {
   const { count, favCount } = useCart();
@@ -12,6 +13,7 @@ export default function Header() {
   const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
   const [panel, setPanel] = useState(null); // 'cart' | 'fav' | 'account' | null
+  const [sound, setSound] = useState(!isMuted());
   const navigate = useNavigate();
 
   const submit = (e) => {
@@ -61,6 +63,7 @@ export default function Header() {
 
         <form className="search desktop-only" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
+          {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
           <button type="submit" aria-label={t("a11y.search")}>⌕</button>
         </form>
 
@@ -79,6 +82,11 @@ export default function Header() {
               </svg>
             </button>
           </div>
+          <button className="icon-btn sound-toggle" title={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
+                  aria-label={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
+                  onClick={() => { const m = toggleMuted(); setSound(!m); }}>
+            {sound ? "🔊" : "🔇"}
+          </button>
           <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")}
                   onClick={() => (user ? navigate("/cuenta") : setPanel("account"))}>
             {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : "👤"}
@@ -95,6 +103,7 @@ export default function Header() {
       <div className={`drawer ${menu ? "open" : ""}`}>
         <form className="search mobile-search" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
+          {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
           <button type="submit" aria-label={t("a11y.search")}>⌕</button>
         </form>
         <nav className="drawer-nav">{links}</nav>
