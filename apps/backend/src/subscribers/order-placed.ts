@@ -21,6 +21,7 @@ import {
   renderCustomerOrderConfirmation,
   type OrderEmailData,
 } from "../lib/email/order-confirmation";
+import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 
 const ORDER_FIELDS = [
   "id",
@@ -138,6 +139,62 @@ export default async function orderPlacedSubscriber({
     logger.error(
       `[order-placed] store notification for order ${order.id} failed: ${(error as Error).message}`
     );
+  }
+
+  // ── SMS (opcional) ──────────────────────────────────────────────────────
+  // The storefront records the shopper's SMS opt-in and phone on the cart, which
+  // the order inherits as metadata (see calcShipping in medusaCart/MedusaCheckout).
+  // Only text the customer when they asked for it AND we have a number. If Twilio
+  // isn't configured the notification module routes SMS to the logging provider,
+  // so this never crashes an order — same contract as the email above.
+  const md = (order.metadata ?? {}) as Record<string, unknown>;
+  const wantsSms = md["notify_sms"] === true || md["notify_sms"] === "true";
+  const customerPhone =
+    (typeof md["phone"] === "string" && md["phone"].trim()) ||
+    (order.shipping_address?.phone ? String(order.shipping_address.phone).trim() : "") ||
+    "";
+
+  if (wantsSms && customerPhone) {
+    try {
+      const smsText = renderCustomerOrderSms(order, customerLocale);
+      await notificationService.createNotifications({
+        to: customerPhone,
+        channel: "sms",
+        template: "order-placed-customer-sms",
+        trigger_type: "order.placed",
+        resource_id: order.id,
+        resource_type: "order",
+        content: { subject: "", text: smsText },
+        data: { order_id: order.id, display_id: order.display_id },
+      });
+    } catch (error) {
+      logger.error(
+        `[order-placed] customer SMS for order ${order.id} failed: ${(error as Error).message}`
+      );
+    }
+  }
+
+  // Owner SMS copy — only when an owner number is configured. Kept separate from
+  // the customer opt-in: the store always wants to hear about a new order.
+  const ownerSmsRecipient = process.env.STORE_ORDER_NOTIFICATION_SMS;
+  if (ownerSmsRecipient) {
+    try {
+      const adminSmsText = renderAdminOrderSms(order, storeLocale);
+      await notificationService.createNotifications({
+        to: ownerSmsRecipient,
+        channel: "sms",
+        template: "order-placed-admin-sms",
+        trigger_type: "order.placed",
+        resource_id: order.id,
+        resource_type: "order",
+        content: { subject: "", text: adminSmsText },
+        data: { order_id: order.id, display_id: order.display_id },
+      });
+    } catch (error) {
+      logger.error(
+        `[order-placed] owner SMS for order ${order.id} failed: ${(error as Error).message}`
+      );
+    }
   }
 }
 

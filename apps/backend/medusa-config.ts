@@ -26,34 +26,71 @@ const hasResendCredentials = Boolean(
   process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL
 );
 
+// SMS via Twilio. Same reasoning as Resend: only register the real provider
+// when its credentials are present; otherwise the SMS channel falls back to the
+// logging provider so a deployment without Twilio still boots and order.placed
+// SMS attempts are logged instead of crashing.
+const hasTwilioCredentials = Boolean(
+  process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    process.env.TWILIO_FROM_NUMBER
+);
+
 if (!hasResendCredentials) {
   console.warn(
     "[notification] Resend credentials missing — emails will be logged, not sent. " +
       "Set RESEND_API_KEY and RESEND_FROM_EMAIL to deliver order confirmations."
   );
 }
+if (!hasTwilioCredentials) {
+  console.warn(
+    "[notification] Twilio credentials missing — SMS will be logged, not sent. " +
+      "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER to deliver SMS."
+  );
+}
 
-const notificationProviders = hasResendCredentials
-  ? [
-      {
-        resolve: "./src/modules/notification-resend",
-        id: "resend",
-        options: {
-          channels: ["email"],
-          api_key: process.env.RESEND_API_KEY,
-          from: process.env.RESEND_FROM_EMAIL,
-        },
-      },
-    ]
-  : [
-      {
-        resolve: "@medusajs/medusa/notification-local",
-        id: "local",
-        options: {
-          channels: ["email"],
-        },
-      },
-    ];
+// One provider per channel. Real providers take their channel when configured;
+// a single logging provider covers whatever real provider is absent, so every
+// channel the subscribers use (email, sms) always resolves.
+const notificationProviders: Array<Record<string, unknown>> = [];
+
+if (hasResendCredentials) {
+  notificationProviders.push({
+    resolve: "./src/modules/notification-resend",
+    id: "resend",
+    options: {
+      channels: ["email"],
+      api_key: process.env.RESEND_API_KEY,
+      from: process.env.RESEND_FROM_EMAIL,
+    },
+  });
+}
+
+if (hasTwilioCredentials) {
+  notificationProviders.push({
+    resolve: "./src/modules/notification-twilio",
+    id: "twilio",
+    options: {
+      channels: ["sms"],
+      account_sid: process.env.TWILIO_ACCOUNT_SID,
+      auth_token: process.env.TWILIO_AUTH_TOKEN,
+      from: process.env.TWILIO_FROM_NUMBER,
+    },
+  });
+}
+
+const fallbackChannels: string[] = [];
+if (!hasResendCredentials) fallbackChannels.push("email");
+if (!hasTwilioCredentials) fallbackChannels.push("sms");
+if (fallbackChannels.length) {
+  notificationProviders.push({
+    resolve: "@medusajs/medusa/notification-local",
+    id: "local",
+    options: {
+      channels: fallbackChannels,
+    },
+  });
+}
 
 const fileProviders = hasR2Credentials
   ? [
