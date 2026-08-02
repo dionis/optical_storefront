@@ -455,17 +455,26 @@ export default function LensProcess() {
     if (matId && !suitableMats.some((m) => m.id === matId)) setMatId(null);
   }, [suitableMats, matId]);
 
+  // Running total for DISPLAY. Se calcula con los MISMOS valores que las líneas
+  // del resumen (montura + material + fotocromático + AR), para que el total y el
+  // desglose siempre coincidan y se actualicen al instante con cada selección.
+  // El cobro real lo calcula el servidor al añadir al carrito (configured-line);
+  // este total es sólo la vista previa.
   const clientTotal = useMemo(() => {
     let x = product?.price || 0;
-    if (design && !frameOnly && matId) x += basePrice(designId, matId);
+    // Gate en `material`/`photo`/`ar` (los objetos que muestran las líneas), no en
+    // `design`, para que el precio del material se sume aunque cambie el diseño.
+    if (!frameOnly && material && matId) x += basePrice(designId, matId);
     if (!frameOnly && photo) { const pp = photoPriceOf(photo); if (pp) x += pp; }
     if (!frameOnly && ar) x += arPriceOf(ar);
     return Math.round(x * 100) / 100;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.price, designId, matId, photoId, arId, frameOnly, pv, BASE, PHOTO, AR]);
+  }, [product?.price, designId, matId, photoId, arId, frameOnly, material, photo, ar, pv, BASE, PHOTO, AR]);
 
-  // Effective total: server-computed under Medusa (authoritative), else client-side.
-  const total = USE_MEDUSA && serverTotal != null ? serverTotal : clientTotal;
+  // Total mostrado: siempre el cálculo cliente (instantáneo y consistente con el
+  // desglose). `serverTotal` se sigue consultando para validación, pero NO se usa
+  // para la vista porque quedaba desactualizado al cambiar material/tratamiento.
+  const total = clientTotal;
 
   if (!product) {
     // Deep-link / refresh guard: wait for the startup catalog load to settle
