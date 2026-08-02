@@ -1901,3 +1901,29 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-solo-note { text-align: center; margin: 10px 0 2px; }
 .zlx-pop-done { width: 100%; margin-top: 14px; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { .zlx-use-fill { animation: none; } }
+
+/* ── Receta: aviso de auto-cambio, chevron del acordeón, materiales inline ─────*/
+.zlx-rx-note { display: flex; align-items: flex-start; gap: 8px; background: var(--blue-soft); border: 1px solid #bcd3f7; color: #0a3a86; border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; font-size: 12.5px; line-height: 1.4; }
+.zlx-rx-note .zlx-ic { width: 18px; height: 18px; flex: 0 0 auto; color: var(--cuba-blue); margin-top: 1px; }
+.zlx-rx-note-x { margin-left: auto; background: none; border: none; font-size: 18px; line-height: 1; color: #0a3a86; cursor: pointer; padding: 0 2px; flex: 0 0 auto; }
+.zlx-use-chev { margin-left: auto; margin-right: 10px; color: var(--muted); display: inline-flex; transition: transform .18s ease; }
+.zlx-use-chev .zlx-ic { width: 18px; height: 18px; }
+.zlx-use-chev.up { transform: rotate(180deg); color: var(--cuba-red); }
+.zlx-use-main { padding-right: 4px; }
+.zlx-mat-inline { margin-top: 14px; }
+.zlx-pop-actions { display: flex; gap: 10px; margin-top: 14px; }
+.zlx-pop-actions .btn { flex: 1; justify-content: center; }
+@media (max-width: 420px) { .zlx-pop-actions { flex-direction: column; } }
+
+/* ── Resumen: TODOS los valores de la receta (responsive, sin solapes) ─────────*/
+.zlx-summary-rx { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.zlx-summary-rx-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--cuba-blue); margin-bottom: 8px; }
+.zlx-summary-rx-h .zlx-ic { width: 15px; height: 15px; color: var(--cuba-red); }
+.zlx-rx-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.zlx-rx-table th, .zlx-rx-table td { padding: 5px 4px; text-align: center; }
+.zlx-rx-table thead th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 800; }
+.zlx-rx-table tbody th { text-align: left; color: var(--cuba-blue); font-weight: 800; }
+.zlx-rx-table tbody td { color: var(--ink); font-weight: 700; }
+.zlx-rx-table tbody tr + tr th, .zlx-rx-table tbody tr + tr td { border-top: 1px solid var(--line); }
+.zlx-rx-extras { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12.5px; color: var(--ink-soft); }
+.zlx-rx-extras b { color: var(--ink); font-variant-numeric: tabular-nums; }

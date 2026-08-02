@@ -300,6 +300,7 @@ export default function LensProcess() {
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
   const [diagFor, setDiagFor] = useState(null);   // qué diseño tiene su infografía (i) abierta
+  const [rxNote, setRxNote] = useState(null);     // aviso del auto-cambio de tipo por la adición (ADD)
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
@@ -404,8 +405,26 @@ export default function LensProcess() {
   const chooseDesign = (id) => {
     setDesignId(id);
     setMatId(null); setPhotoId(null); setArId(null);
-    if (id === "frame-only") { setPop(null); }
+    setRxNote(null); // elección manual → limpia el aviso de auto-cambio
+    // Nota: "solo montura" ya NO cierra el popup, para poder rectificar la elección.
   };
+
+  // Auto-cambio de tipo según la ADICIÓN (ADD), siguiendo la práctica optométrica:
+  //   sin ADD  → Visión Sencilla     ·     con ADD → multifocal (bifocal/progresivo)
+  // (bifocal vs progresivo es elección del paciente, así que sólo forzamos el salto
+  //  Sencilla ↔ multifocal y dejamos que elija el formato). Se explica con un aviso.
+  useEffect(() => {
+    if (frameOnly || !designId) return;
+    const add = parseFloat(rx.add) || 0;
+    if (add > 0 && designId === "sv") {
+      setDesignId("prog-mid"); setMatId(null);
+      setRxNote({ kind: "toMulti" });
+    } else if (add <= 0 && (designId === "bifocal" || designId === "prog-mid" || designId === "prog-high")) {
+      setDesignId("sv"); setMatId(null);
+      setRxNote({ kind: "toSingle" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rx.add]);
 
   const handleRxUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -633,8 +652,26 @@ export default function LensProcess() {
             {material && !frameOnly && <li><span>{t("lens.material")}: {L(material.label, lang)}</span><b>{money(basePrice(designId, matId))}</b></li>}
             {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
             {ar && !frameOnly && <li><span>{L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
-            {rxSet && <li><span>{t("lens.q.rx")}: OD {fmt(parseFloat(rx.od_sph) || 0)} / OS {fmt(parseFloat(rx.os_sph) || 0)}</span><b><Ic name="check" /></b></li>}
           </ul>
+          {/* Todos los valores de la receta y las mediciones, en el resumen */}
+          {rxSet && (
+            <div className="zlx-summary-rx">
+              <div className="zlx-summary-rx-h"><Ic name="check" /> {t("lens.rxValues")}</div>
+              <table className="zlx-rx-table">
+                <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
+                <tbody>
+                  <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{(rx.od_axis || "0")}°</td></tr>
+                  <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{(rx.os_axis || "0")}°</td></tr>
+                </tbody>
+              </table>
+              <div className="zlx-rx-extras">
+                {design?.add && rx.add && <span>{t("lens.addLbl")}: <b>{fmt(parseFloat(rx.add) || 0)}</b></span>}
+                {pdMode === "dual"
+                  ? (<>{rx.pd_od && <span>{t("lens.pd.od")}: <b>{rx.pd_od}</b></span>}{rx.pd_os && <span>{t("lens.pd.os")}: <b>{rx.pd_os}</b></span>}</>)
+                  : (rx.pd && <span>{t("lens.pd")}: <b>{rx.pd}</b></span>)}
+              </div>
+            </div>
+          )}
           <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
           <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={finish}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
@@ -643,10 +680,10 @@ export default function LensProcess() {
         </div>
       </div>
 
-      {/* ── RECETA popover: use type + prescription (req 3, 4, 7) ── */}
+      {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
       {pop === "rx" && (
         <ZlxPop title={t("lens.q.rx")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} closeLabel={closeLabel} className="zlx-pop-rx">
-          {/* 1) Solo montura — una línea, arriba del todo */}
+          {/* 1) Solo montura — una línea; ya NO cierra el popup, se puede rectificar */}
           <button type="button" className={`zlx-use-row solo ${frameOnly ? "sel" : ""}`} onClick={() => chooseDesign("frame-only")}>
             <IconMontura className="zlx-use-ic" active={frameOnly} />
             <span className="zlx-use-txt"><b>{L(FRAME_ONLY.label, lang)}</b><small>{t("lens.included")}</small></span>
@@ -654,7 +691,12 @@ export default function LensProcess() {
           </button>
 
           {frameOnly ? (
-            <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
+            <>
+              <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
+              <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="select" onClick={() => setPop(null)}>
+                <Ic name="check" /> {t("lens.done")}
+              </button>
+            </>
           ) : (
             <>
               {/* 2) Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
@@ -688,9 +730,16 @@ export default function LensProcess() {
                 </div>
               )}
 
-              {/* 3) O elige el tipo — una opción por línea; (i) despliega la infografía;
-                     al seleccionar, se abre debajo su formulario para rellenar */}
+              {/* 3) Acordeón de tipos — una línea; al seleccionar se abre su formulario.
+                     La adición (ADD) puede cambiar el tipo automáticamente (ver aviso). */}
               <div className="zlx-use-sep"><span>{t("lens.q.use")}</span></div>
+              {rxNote && (
+                <div className="zlx-rx-note" role="status">
+                  <Ic name="info" />
+                  <span>{rxNote.kind === "toMulti" ? t("lens.switch.multi") : t("lens.switch.single")}</span>
+                  <button type="button" className="zlx-rx-note-x" aria-label={closeLabel} onClick={() => setRxNote(null)}>×</button>
+                </div>
+              )}
               <div className="zlx-use-rows">
                 {DESIGNS.map((d) => {
                   const DIcon = designIcon(d.id);
@@ -700,13 +749,14 @@ export default function LensProcess() {
                   return (
                     <div key={d.id} className={`zlx-use-item ${sel ? "open" : ""}`}>
                       <div className={`zlx-use-row ${sel ? "sel" : ""}`}>
-                        <button type="button" className="zlx-use-main" onClick={() => chooseDesign(d.id)}>
+                        <button type="button" className="zlx-use-main" onClick={() => chooseDesign(sel ? null : d.id)}>
                           <DIcon className="zlx-use-ic" active={sel} />
                           <span className="zlx-use-txt">
                             <b>{L(d.label, lang)}{sel && ocr.status === "done" && ocrFields.size > 0 && <em className="zlx-use-sugg">{t("lens.suggested")}</em>}</b>
                             <small>{t("lens.fromPrice")} {from}</small>
                           </span>
                           {sel && <Ic name="check" className="zlx-use-check" />}
+                          <span className={`zlx-use-chev ${sel ? "up" : ""}`} aria-hidden="true"><Ic name="down" /></span>
                         </button>
                         {hasDiag && (
                           <button type="button" className={`zlx-use-info ${diagFor === d.id ? "on" : ""}`}
@@ -744,17 +794,47 @@ export default function LensProcess() {
                             ) : (
                               <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
                             )}
-                            {d.add && <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />}
+                            {/* ADD siempre visible: en Visión Sencilla es el disparador del
+                                auto-cambio a multifocal; en multifocal es obligatorio. */}
+                            <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />
                           </div>
-                          <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="select" onClick={() => setPop("mat")}>
-                            <Ic name="material" /> {t("lens.material")}
-                          </button>
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
+
+              {/* 4) Materiales — FUERA del acordeón (aparecen al elegir un tipo). El
+                     precio del resumen se actualiza al instante con cada cambio. */}
+              {design && !frameOnly && (
+                <div className="zlx-mat-inline">
+                  <div className="zlx-use-sep"><span>{t("lens.material")}</span></div>
+                  {recommendedMat && (
+                    <div className="reco"><b>{t("lens.recommend")} {L(recommendedMat.label, lang)}</b><span>{t("lens.recommendHint")}</span></div>
+                  )}
+                  <div className="zlx-choices">
+                    {MATERIALS.map((m) => (
+                      <button key={m.id} type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => setMatId(m.id)}>
+                        <span className="zlx-choice-main">
+                          <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
+                          <span className="zlx-choice-title">{L(m.label, lang)}{recommendedMat?.id === m.id && <span className="reco-badge">★</span>}</span>
+                        </span>
+                        <span className="zlx-choice-price">{money(basePrice(designId, m.id))}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <EduBlock edu={materialEdu(eduMatId, lang)} goodLbl={goodLbl} notLbl={notLbl} />
+                  <div className="zlx-pop-actions">
+                    <button type="button" className="btn btn-outline" data-sfx="select" onClick={() => setPop("treat")} disabled={!matId}>
+                      <Ic name="treat" /> {t("lens.treatBtn")}
+                    </button>
+                    <button type="button" className="btn btn-primary" data-sfx="select" onClick={() => setPop(null)} disabled={!matId}>
+                      <Ic name="check" /> {t("lens.done")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </ZlxPop>
