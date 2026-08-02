@@ -1944,3 +1944,26 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-rx-eye .zlx-dial-lbl { margin-top: 4px; font-size: 11.5px; }
 .zlx-rx-fields { gap: 12px; margin-top: 12px; }
 .zlx-stepper-lbl { font-size: 11px; }
+
+/* ── Popup receta como pasos del MISMO popup ──────────────────────────────────*/
+.zlx-pop-back { background: none; border: none; cursor: pointer; color: var(--cuba-blue); padding: 2px 6px 2px 0; display: inline-flex; align-items: center; }
+.zlx-pop-back:hover { color: var(--cuba-red); }
+.zlx-pop-back .zlx-ic { width: 20px; height: 20px; }
+/* botón "siguiente paso" (Material / Tratamientos) con icono y flecha */
+.zlx-step-next { width: 100%; justify-content: center; gap: 8px; margin-top: 14px; }
+.zlx-step-chev { width: 16px; height: 16px; opacity: .85; }
+/* material: recomendado, no-apto en rojo, ayuda tras (i) */
+.zlx-choices { display: grid; gap: 10px; }
+.zlx-choice-wrap { border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.zlx-choice-wrap.sel { border-color: var(--cuba-blue); box-shadow: 0 0 0 1px var(--cuba-blue); }
+.zlx-choice-wrap.bad { border-color: #f0c2c8; background: #fdf3f4; }
+.zlx-choice-row { display: flex; align-items: stretch; }
+.zlx-choice-wrap .zlx-choice { flex: 1; border: none; background: none; border-radius: 0; }
+.zlx-choice-wrap .zlx-choice.na { opacity: .85; cursor: not-allowed; }
+.zlx-choice-wrap.bad .zlx-choice-title { color: var(--cuba-red); }
+.zlx-choice-wrap.bad .zlx-choice-price { color: var(--cuba-red); text-decoration: line-through; opacity: .7; }
+.zlx-bad-tag { display: inline-block; margin-left: 8px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: #fff; background: var(--cuba-red); padding: 2px 7px; border-radius: 999px; vertical-align: middle; }
+.zlx-choice-row .zlx-use-info { align-self: center; margin: 0 8px; }
+.zlx-mat-help { padding: 0 14px 12px; border-top: 1px dashed var(--line); }
+.zlx-bad-why { display: flex; gap: 6px; align-items: flex-start; color: var(--cuba-red); font-size: 12.5px; line-height: 1.4; margin: 10px 0 0; font-weight: 600; }
+.zlx-bad-why .zlx-ic { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
