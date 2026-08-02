@@ -1742,7 +1742,9 @@ img { max-width: 100%; }
 .zlx-stepper.from-ocr .zlx-stepper-val { border-color: #f0d38a; }
 
 /* --- dial semicircular (nombres reales del JSX) --- */
-.zlx-dial { width: 100%; max-width: 260px; margin: 0 auto; }
+/* aspect-ratio:auto y position:static anulan una regla .zlx-dial antigua que
+   aplastaba el contenedor (aspect-ratio 2/1) y solapaba las etiquetas. */
+.zlx-dial { width: 100%; max-width: 260px; margin: 0 auto; aspect-ratio: auto; position: static; display: block; }
 .zlx-dial-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .zlx-dial-track { stroke: var(--line); }
 .zlx-dial-prog { stroke: var(--cuba-blue); }
