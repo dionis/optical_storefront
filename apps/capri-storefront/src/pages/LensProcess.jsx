@@ -215,6 +215,36 @@ function ZlxPicker({ value, options, onChange, label, withEmpty, flag = "" }) {
   );
 }
 
+// ── compact stepper: bounded up/down arrows, no scroll window, no overflow ────
+// Used for AXIS / CYL / PD / ADD (the sphere keeps its semicircle dial). Fixed
+// width so several sit side by side without horizontal scrollbars or overlap.
+function ZlxStepper({ value, options, onChange, label, withEmpty, flag = "" }) {
+  const opts = withEmpty ? [{ v: "", label: "—" }, ...options] : options;
+  const N = opts.length;
+  let i = opts.findIndex((o) => String(o.v) === String(value));
+  if (i < 0) i = 0;
+  const setBy = (d) => { const j = Math.max(0, Math.min(N - 1, i + d)); onChange(String(opts[j].v)); };
+  return (
+    <div className={`zlx-stepper ${flag}`}>
+      <div className="zlx-stepper-lbl">{label}</div>
+      <div className="zlx-stepper-ctl">
+        <button type="button" className="zlx-stepper-btn" aria-label="+" tabIndex={-1}
+                onClick={() => setBy(1)} disabled={i >= N - 1}><Ic name="up" /></button>
+        <div className="zlx-stepper-val" role="spinbutton" tabIndex={0} aria-label={label}
+             aria-valuetext={opts[i]?.label}
+             onKeyDown={(e) => {
+               if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); setBy(1); }
+               if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); setBy(-1); }
+             }}>
+          {opts[i]?.label}
+        </div>
+        <button type="button" className="zlx-stepper-btn" aria-label="−" tabIndex={-1}
+                onClick={() => setBy(-1)} disabled={i <= 0}><Ic name="down" /></button>
+      </div>
+    </div>
+  );
+}
+
 // ── popover shell (requirement 3): floats OVER the stage, frame stays visible ─
 function ZlxPop({ title, icon, onClose, closeLabel, className, children }) {
   useEffect(() => {
@@ -527,8 +557,10 @@ export default function LensProcess() {
                   <button key={c.name} type="button"
                           className={`zlx-float-color ${i === colorIdx ? "on" : ""}`}
                           onClick={() => setColorIdx(i)} aria-label={c.name}>
-                    <img src={c.image} alt={c.name}
-                         onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+                    <span className="zlx-float-color-inner">
+                      <img src={c.image} alt={c.name}
+                           onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+                    </span>
                     <span className="zlx-color-dot" data-name={c.name} tabIndex={0} aria-label={c.name} />
                   </button>
                 ))}
@@ -680,8 +712,8 @@ export default function LensProcess() {
                     <div className="zlx-rx-eye-h">{label}</div>
                     <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sph")} flag={ocrClass(`${eye}_sph`)} />
                     <div className="zlx-rx-fields">
-                      <ZlxPicker value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cyl")} flag={ocrClass(`${eye}_cyl`)} />
-                      <ZlxPicker value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axis")} flag={ocrClass(`${eye}_axis`)} />
+                      <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cyl")} flag={ocrClass(`${eye}_cyl`)} />
+                      <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axis")} flag={ocrClass(`${eye}_axis`)} />
                     </div>
                   </div>
                 ))}
@@ -699,13 +731,13 @@ export default function LensProcess() {
               <div className="zlx-rx-extra">
                 {pdMode === "dual" ? (
                   <>
-                    <ZlxPicker value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.od")} withEmpty flag={ocrClass("pd_od")} />
-                    <ZlxPicker value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.os")} withEmpty flag={ocrClass("pd_os")} />
+                    <ZlxStepper value={rx.pd_od} options={PD_MONO} onChange={setF("pd_od")} label={t("lens.pd.od")} withEmpty flag={ocrClass("pd_od")} />
+                    <ZlxStepper value={rx.pd_os} options={PD_MONO} onChange={setF("pd_os")} label={t("lens.pd.os")} withEmpty flag={ocrClass("pd_os")} />
                   </>
                 ) : (
-                  <ZlxPicker value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
+                  <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pd")} withEmpty flag={ocrClass("pd")} />
                 )}
-                {design?.add && <ZlxPicker value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />}
+                {design?.add && <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addLbl")} withEmpty flag={ocrClass("add")} />}
               </div>
               <button type="button" className="btn btn-primary zlx-pop-done" onClick={() => setPop("mat")}>
                 <Ic name="material" /> {t("lens.material")}

@@ -1607,10 +1607,13 @@ img { max-width: 100%; }
 .zlx-float-head { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px; font-size: 13.5px; color: var(--ink-soft); }
 .zlx-float-head .zlx-float-name { font-weight: 800; color: var(--ink); font-size: 16.5px; }
 /* miniaturas de color */
-.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
-.zlx-float-color { position: relative; width: 84px; height: 66px; padding: 5px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; overflow: visible; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.zlx-float-colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; max-width: 100%; }
+.zlx-float-color { position: relative; width: 82px; height: 64px; padding: 0; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; overflow: visible; transition: border-color .15s, box-shadow .15s, transform .15s; flex: 0 0 auto; }
 .zlx-float-color:hover { transform: translateY(-2px); }
-.zlx-float-color img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
+/* wrapper que RECORTA la imagen dentro del recuadro (evita que el espejuelo se
+   salga del card en responsive); solo la bolita sobresale. */
+.zlx-float-color-inner { display: block; width: 100%; height: 100%; border-radius: 11px; overflow: hidden; }
+.zlx-float-color-inner img { display: block; width: 100%; height: 100%; object-fit: contain; padding: 5px; }
 .zlx-float-color.on { border-color: var(--cuba-blue); box-shadow: 0 0 0 2px rgba(0,42,143,.15); }
 /* bolita en la esquina superior derecha; muestra el nombre del color al pasar el cursor */
 .zlx-color-dot { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--cuba-blue); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(15,25,45,.25); cursor: help; }
@@ -1671,7 +1674,7 @@ img { max-width: 100%; }
 .zlx-summary-note { margin-top: 8px; text-align: center; }
 
 /* --- popover: panel centrado NO invasivo (sheet en móvil) --- */
-.zlx-pop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.28); z-index: 60; }
+.zlx-pop-backdrop { position: fixed; inset: 0; background: rgba(15,25,55,.14); z-index: 60; }
 .zlx-pop { position: fixed; z-index: 61; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(93vw, 470px); max-height: 86vh; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow-lg); padding: 0; }
 .zlx-pop::before { display: none; }
 .zlx-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; border-radius: 18px 18px 0 0; z-index: 1; }
@@ -1680,7 +1683,14 @@ img { max-width: 100%; }
 .zlx-pop-body { padding: 16px 18px 20px; }
 .zlx-pop-q { display: block; font-weight: 800; margin-bottom: 8px; font-size: 14px; }
 .zlx-pop-done { width: 100%; justify-content: center; margin-top: 14px; }
-@media (max-width: 560px) { .zlx-pop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 90vh; border-radius: 18px 18px 0 0; } }
+/* Móvil: panel inferior que NUNCA tapa el espejuelo — se limita a ~62vh y deja
+   la parte superior (la montura) siempre visible; su contenido se desliza dentro
+   si hiciera falta, pero el espejuelo no desaparece aunque crezca el popup. */
+@media (max-width: 640px) {
+  .zlx-pop { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 62vh; border-radius: 20px 20px 0 0; box-shadow: 0 -12px 40px rgba(15,25,45,.22); }
+  .zlx-pop-head { border-radius: 20px 20px 0 0; }
+  .zlx-pop-body { padding: 12px 14px 18px; }
+}
 
 /* --- selección de uso (chips de diseño) --- */
 .zlx-uselist { margin-bottom: 6px; }
@@ -1712,8 +1722,21 @@ img { max-width: 100%; }
 @media (max-width: 560px) { .zlx-rx-grid { grid-template-columns: 1fr; } }
 .zlx-rx-eye { border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
 .zlx-rx-eye-h { font-weight: 800; text-align: center; margin-bottom: 6px; color: var(--cuba-blue); }
-.zlx-rx-fields { display: grid; gap: 10px; margin-top: 10px; }
-.zlx-rx-extra { display: grid; gap: 12px; margin-bottom: 6px; }
+.zlx-rx-fields { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 12px; }
+.zlx-rx-extra { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 6px; }
+/* stepper acotado (flechas ↑/↓): AXIS, CYL, PD, ADD — sin scroll ni solapamiento */
+.zlx-stepper { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.zlx-stepper-lbl { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.zlx-stepper-ctl { display: flex; flex-direction: column; align-items: stretch; width: 92px; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(15,25,45,.05); }
+.zlx-stepper-btn { height: 26px; border: none; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--cuba-blue); transition: background-color .14s; }
+.zlx-stepper-btn:hover:not(:disabled) { background: var(--blue-soft); }
+.zlx-stepper-btn:active:not(:disabled) { background: #dbe7fb; }
+.zlx-stepper-btn:disabled { opacity: .3; cursor: not-allowed; }
+.zlx-stepper-btn .zlx-ic { width: 15px; height: 15px; }
+.zlx-stepper-val { text-align: center; padding: 7px 4px; font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); outline: none; }
+.zlx-stepper-val:focus-visible { background: var(--blue-soft); }
+.zlx-stepper.from-ocr .zlx-stepper-ctl { border-color: #d9920b; background: #fff7e6; }
+.zlx-stepper.from-ocr .zlx-stepper-val { border-color: #f0d38a; }
 
 /* --- dial semicircular (nombres reales del JSX) --- */
 .zlx-dial { width: 100%; max-width: 260px; margin: 0 auto; }
