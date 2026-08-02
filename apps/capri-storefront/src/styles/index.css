@@ -2079,3 +2079,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-treat-more { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 8px 0; padding: 10px 13px; border: 1.5px dashed var(--line); border-radius: 12px; background: #fff; cursor: pointer; font-weight: 800; font-size: 14px; color: var(--cuba-blue); transition: background-color .14s, border-color .14s; }
 .zlx-treat-more:hover, .zlx-treat-more.open { border-color: var(--cuba-blue); background: var(--blue-soft); }
 .zlx-treat-more-chev { width: 18px; height: 18px; }
+
+/* — Confirmación de la receta antes de materiales — */
+.zlx-rxconfirm-body { background: var(--soft); }
+.zlx-rxconfirm-actions { display: flex; gap: 10px; margin-top: 14px; }
+.zlx-rxconfirm-edit { flex: 0 0 auto; }
+.zlx-rxconfirm-go { flex: 1 1 auto; justify-content: center; }

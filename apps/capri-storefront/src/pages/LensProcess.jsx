@@ -349,6 +349,9 @@ export default function LensProcess() {
   const [reviewing, setReviewing] = useState("idle");
   // "flechita" que revela los Transitions dentro del popup de tratamientos.
   const [showTrans, setShowTrans] = useState(false);
+  // Confirmación de la receta antes de pasar a materiales (si se modificó algo).
+  const [confirmRx, setConfirmRx] = useState(false);
+  const [rxDirty, setRxDirty] = useState(false); // ¿se tocó algún valor de la receta?
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
@@ -535,6 +538,7 @@ export default function LensProcess() {
         for (const [k, v] of Object.entries(picked)) if (v != null) next[k] = v;
         return next;
       });
+      setRxDirty(true); // la OCR rellenó valores → confirmar la receta antes de materiales
       setOcr({
         status: "done",
         fileName: file.name,
@@ -600,6 +604,7 @@ export default function LensProcess() {
   };
   const setF = (k) => (v) => {
     setRx((r) => ({ ...r, [k]: v }));
+    setRxDirty(true); // se modificó la receta → habrá que confirmarla antes de materiales
     // Editing a field is the customer checking it, so it stops being flagged.
     setOcrFields((s) => {
       if (!s.has(k)) return s;
@@ -697,6 +702,41 @@ export default function LensProcess() {
   // lateral y en la pantalla de revisión previa al checkout. Muestra claramente
   // Colección, color, tratamiento y transitions; y las medidas con DP primero
   // (simétrico) y la ADD debajo.
+  // Detalle de la receta (tabla OD/OS + medidas), reutilizable en el resumen y en
+  // la ventana de CONFIRMACIÓN previa a materiales.
+  const rxDetails = (
+    <div className="zlx-summary-rx">
+      <div className="zlx-summary-rx-h"><Ic name="check" /> {t("lens.rxValues")}</div>
+      <table className="zlx-rx-table">
+        <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
+        <tbody>
+          <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td></tr>
+          <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td></tr>
+        </tbody>
+      </table>
+      {/* Medidas: DP primero y simétrico, ADD y altura debajo */}
+      <div className="zlx-meas">
+        <div className="zlx-meas-h">{t("lens.measures")}</div>
+        <div className="zlx-meas-pd">
+          {pdMode === "dual" ? (
+            <>
+              <div className="zlx-meas-cell"><span>{t("lens.pd.odS")}</span><b>{rx.pd_od || "—"}</b></div>
+              <div className="zlx-meas-cell"><span>{t("lens.pd.osS")}</span><b>{rx.pd_os || "—"}</b></div>
+            </>
+          ) : (
+            <div className="zlx-meas-cell zlx-meas-wide"><span>{t("lens.pdS")}</span><b>{rx.pd || "—"}</b></div>
+          )}
+        </div>
+        {design?.add && rx.add && (
+          <div className="zlx-meas-add"><span>{t("lens.addLbl")}</span><b>{fmt(parseFloat(rx.add) || 0)}</b></div>
+        )}
+        {isMulti && rx.seg_height && (
+          <div className="zlx-meas-add"><span>{t("lens.height")}</span><b>{rx.seg_height} mm</b></div>
+        )}
+      </div>
+    </div>
+  );
+
   const summaryInner = (
     <>
       <ul className="zlx-summary-list">
@@ -708,38 +748,7 @@ export default function LensProcess() {
         {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{t("lens.transitions")}: {L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
         {ar && !frameOnly && <li><span>{t("lens.treatment")}: {L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
       </ul>
-      {rxSet && (
-        <div className="zlx-summary-rx">
-          <div className="zlx-summary-rx-h"><Ic name="check" /> {t("lens.rxValues")}</div>
-          <table className="zlx-rx-table">
-            <thead><tr><th aria-hidden="true"></th><th>{t("lens.sph")}</th><th>{t("lens.cyl")}</th><th>{t("lens.axis")}</th></tr></thead>
-            <tbody>
-              <tr><th>{t("lens.right")}</th><td>{fmt(parseFloat(rx.od_sph) || 0)}</td><td>{fmt(parseFloat(rx.od_cyl) || 0)}</td><td>{rx.od_axis && rx.od_axis !== "0" ? rx.od_axis + "°" : "—"}</td></tr>
-              <tr><th>{t("lens.left")}</th><td>{fmt(parseFloat(rx.os_sph) || 0)}</td><td>{fmt(parseFloat(rx.os_cyl) || 0)}</td><td>{rx.os_axis && rx.os_axis !== "0" ? rx.os_axis + "°" : "—"}</td></tr>
-            </tbody>
-          </table>
-          {/* Medidas: DP primero y simétrico, ADD debajo */}
-          <div className="zlx-meas">
-            <div className="zlx-meas-h">{t("lens.measures")}</div>
-            <div className="zlx-meas-pd">
-              {pdMode === "dual" ? (
-                <>
-                  <div className="zlx-meas-cell"><span>{t("lens.pd.odS")}</span><b>{rx.pd_od || "—"}</b></div>
-                  <div className="zlx-meas-cell"><span>{t("lens.pd.osS")}</span><b>{rx.pd_os || "—"}</b></div>
-                </>
-              ) : (
-                <div className="zlx-meas-cell zlx-meas-wide"><span>{t("lens.pdS")}</span><b>{rx.pd || "—"}</b></div>
-              )}
-            </div>
-            {design?.add && rx.add && (
-              <div className="zlx-meas-add"><span>{t("lens.addLbl")}</span><b>{fmt(parseFloat(rx.add) || 0)}</b></div>
-            )}
-            {isMulti && rx.seg_height && (
-              <div className="zlx-meas-add"><span>{t("lens.height")}</span><b>{rx.seg_height} mm</b></div>
-            )}
-          </div>
-        </div>
-      )}
+      {rxSet && rxDetails}
     </>
   );
 
@@ -969,7 +978,8 @@ export default function LensProcess() {
                             </p>
                           )}
                           {/* Botón "Material del lente": pasa al material dentro del MISMO popup */}
-                          <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select" onClick={() => setPop("mat")}>
+                          <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select"
+                                  onClick={() => (rxDirty ? setConfirmRx(true) : setPop("mat"))}>
                             <IconMaterial className="zlx-ic" /> {t("lens.material")} <Ic name="down" className="zlx-step-chev" />
                           </button>
                         </div>
@@ -1106,6 +1116,29 @@ export default function LensProcess() {
           {infoPop.edu && <EduBlock edu={infoPop.edu} goodLbl={goodLbl} notLbl={notLbl} />}
           <DiagHelp keys={infoPop.diagKeys} t={t} />
         </ZlxInfoPop>
+      )}
+
+      {/* ── Confirmación de la receta antes de pasar a materiales (si se modificó) ── */}
+      {confirmRx && (
+        <div className="zlx-review-overlay" role="dialog" aria-modal="true" aria-label={t("lens.rx.confirm")}>
+          <div className="zlx-review-card">
+            <div className="zlx-review-head">
+              <b><IconReceta className="zlx-ic" /> {t("lens.rx.confirm")}</b>
+              <button type="button" className="zlx-pop-close" onClick={() => setConfirmRx(false)} aria-label={closeLabel}><Ic name="close" /></button>
+            </div>
+            <p className="zlx-review-sub">{t("lens.rx.confirmSub")}</p>
+            <div className="zlx-review-body zlx-rxconfirm-body">{rxDetails}</div>
+            <div className="zlx-rxconfirm-actions">
+              <button type="button" className="btn btn-outline zlx-rxconfirm-edit" onClick={() => setConfirmRx(false)}>
+                <Ic name="edit" /> {t("lens.edit")}
+              </button>
+              <button type="button" className="btn btn-primary zlx-rxconfirm-go" data-sfx="success"
+                      onClick={() => { setConfirmRx(false); setRxDirty(false); setPop("mat"); }}>
+                <Ic name="check" /> {t("lens.rx.confirmGo")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Revisión previa al checkout: loader → MISMO resumen → datos cliente ── */}
