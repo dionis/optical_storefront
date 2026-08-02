@@ -19,6 +19,7 @@ import {
   IconFotocromatico, IconAr, IconAzul,
   DIAGRAMS,
 } from "../components/LensGraphics.jsx";
+import GlassesLoader from "../components/GlassesLoader.jsx";
 
 // ── LensGraphics wiring ─────────────────────────────────────────────────────
 // Map each catalog option to its LensGraphics icon and to the educational
@@ -355,9 +356,8 @@ export default function LensProcess() {
     // before deciding not-found — the visited slug may only exist after it does.
     if (loading) {
       return (
-        <div className="section capri-loading" role="status" aria-live="polite">
-          <span className="capri-spinner" aria-hidden="true" />
-          <p>{t("common.loading")}</p>
+        <div className="section">
+          <GlassesLoader />
         </div>
       );
     }

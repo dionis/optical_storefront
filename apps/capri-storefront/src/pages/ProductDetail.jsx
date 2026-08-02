@@ -13,6 +13,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
+import GlassesLoader from "../components/GlassesLoader.jsx";
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -41,9 +42,8 @@ export default function ProductDetail() {
     // genuinely absent.
     if (loading) {
       return (
-        <div className="section capri-loading" role="status" aria-live="polite">
-          <span className="capri-spinner" aria-hidden="true" />
-          <p>{t("common.loading")}</p>
+        <div className="section">
+          <GlassesLoader />
         </div>
       );
     }

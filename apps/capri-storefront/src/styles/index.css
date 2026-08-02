@@ -1722,3 +1722,75 @@ img { max-width: 100%; }
 /* --- bloque educativo (extras) --- */
 .zlx-edu-quality { font-weight: 700; margin: 0 0 8px; }
 .zlx-edu-price { display: flex; align-items: center; gap: 6px; color: var(--cuba-blue); font-weight: 700; margin-top: 6px; }
+
+/* ── Premium 3D glasses loader (GlassesLoader.jsx) ─────────────────────────────
+   A pair of glasses that floats and SPINS a full 360° as a solid 3D object.
+   The volume is real: several copies of the frame are stacked along Z inside a
+   preserve-3d scene, so the turn reveals thickness rather than a flat wobble. */
+.gll { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 40px 20px; }
+.gll-compact { padding: 24px 12px; gap: 14px; }
+.gll-scene {
+  position: relative; width: 260px; height: 170px;
+  display: grid; place-items: center;
+  perspective: 900px; perspective-origin: 50% 45%;
+}
+.gll-compact .gll-scene { width: 190px; height: 120px; }
+
+/* vertical float (the "in the air" feel) */
+.gll-float { animation: gllFloat 3s ease-in-out infinite; transform-style: preserve-3d; }
+/* the real rotation: a full, continuous 360° turn on the Y axis */
+.gll-spin {
+  position: relative; width: 240px; height: 108px;
+  transform-style: preserve-3d;
+  animation: gllSpin 4.6s linear infinite;
+  will-change: transform;
+}
+.gll-compact .gll-spin { transform: scale(.72); }
+
+/* each extrusion layer, centred and pushed to its own depth */
+.gll-layer {
+  position: absolute; top: 50%; left: 50%;
+  width: 240px; height: 108px; overflow: visible;
+  backface-visibility: visible;
+  filter: drop-shadow(0 0 0.5px rgba(15,23,42,.25));
+}
+/* the painted frame body — colour cycles through the Cuban flag */
+.gll-paint { animation: gllFlag 4.6s linear infinite; }
+
+/* soft ground shadow that breathes opposite to the float */
+.gll-shadow {
+  position: absolute; bottom: 14px; width: 140px; height: 18px; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(15,23,42,.22), rgba(15,23,42,0) 70%);
+  animation: gllShadow 3s ease-in-out infinite; filter: blur(1px);
+}
+
+@keyframes gllFloat { 0%,100% { transform: translateY(0) rotateX(6deg); } 50% { transform: translateY(-16px) rotateX(6deg); } }
+@keyframes gllSpin  { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+@keyframes gllShadow{ 0%,100% { opacity:.30; transform: scaleX(1); } 50% { opacity:.14; transform: scaleX(.62); } }
+/* blue → white → red → blue. A persistent drop-shadow keeps the shape defined
+   even through the white phase so it never vanishes on a white background. */
+@keyframes gllFlag {
+  0%,14%   { fill: #0038a8; }
+  33%,47%  { fill: #f4f6fb; }
+  66%,80%  { fill: #e10f21; }
+  100%     { fill: #0038a8; }
+}
+
+.gll-msg { font-size: 16px; font-weight: 600; color: var(--ink, #0f172a); min-height: 22px; text-align: center; letter-spacing: .01em; }
+.gll-dots { display: inline-block; width: 18px; text-align: left; }
+.gll-dots::after { content: ''; animation: gllDots 1.4s steps(4,end) infinite; }
+@keyframes gllDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+.gll-pips { display: flex; gap: 8px; }
+.gll-pip { width: 9px; height: 9px; border-radius: 50%; opacity: .35; }
+.gll-pip.b { background: var(--cuba-blue); animation: gllPip 1.2s ease-in-out infinite; }
+.gll-pip.w { background: #cbd5e1; animation: gllPip 1.2s ease-in-out infinite .2s; }
+.gll-pip.r { background: var(--cuba-red); animation: gllPip 1.2s ease-in-out infinite .4s; }
+@keyframes gllPip { 0%,100% { opacity:.3; transform: scale(1); } 50% { opacity:1; transform: scale(1.25); } }
+
+/* Accessibility: users who prefer reduced motion get a still, legible frame. */
+@media (prefers-reduced-motion: reduce) {
+  .gll-float, .gll-spin, .gll-shadow, .gll-pip, .gll-paint { animation: none !important; }
+  .gll-spin { transform: rotateY(-24deg) rotateX(8deg); }
+  .gll-paint { fill: var(--cuba-blue); }
+}
