@@ -3,7 +3,7 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm install",
+  "installCommand": "npm install --fetch-retries=6 --fetch-retry-mintimeout=15000 --fetch-retry-maxtimeout=120000 --fetch-retry-factor=3",
   "rewrites": [
     { "source": "/medusa/:path*", "destination": "https://api.161-153-9-98.sslip.io/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
