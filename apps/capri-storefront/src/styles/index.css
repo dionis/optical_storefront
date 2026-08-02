@@ -1593,6 +1593,7 @@ img { max-width: 100%; }
 .zlx-stage { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
 @media (min-width: 940px) {
   .zlx-stage { grid-template-columns: minmax(0, 1.55fr) minmax(346px, 430px); gap: 36px; align-items: stretch; }
+  .zlx-side { justify-content: space-between; }
 }
 .zlx-main { min-width: 0; display: flex; flex-direction: column; }
 .zlx-side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
