@@ -29,6 +29,9 @@ const ORDER_FIELDS = [
   "currency_code",
   "created_at",
   "metadata",
+  // Medusa carries `locale` from the cart onto the order; the storefront sets it
+  // from the active UI language (see apps/capri-storefront/src/data/medusaCart.js).
+  "locale",
   "subtotal",
   "shipping_total",
   "tax_total",
@@ -50,7 +53,12 @@ export default async function orderPlacedSubscriber({
     Modules.NOTIFICATION
   );
 
-  let order: (OrderEmailData & { metadata?: Record<string, unknown> | null }) | undefined;
+  let order:
+    | (OrderEmailData & {
+        locale?: string | null;
+        metadata?: Record<string, unknown> | null;
+      })
+    | undefined;
   try {
     const { data: orders } = await query.graph({
       entity: "order",
@@ -71,13 +79,18 @@ export default async function orderPlacedSubscriber({
   }
 
   // The storefront stores the shopper's active language on the cart, which the
-  // order inherits. Absent that, `es` is the store default.
-  const customerLocale = resolveEmailLocale(order.metadata?.["locale"]);
+  // order inherits as `order.locale`. `metadata.locale` is checked as a fallback
+  // so orders placed before the storefront started setting the native field
+  // still resolve. Absent both, `es` is the store default.
+  const customerLocale = resolveEmailLocale(order.locale ?? order.metadata?.["locale"]);
   const storeLocale = resolveEmailLocale(process.env.STORE_NOTIFICATION_LOCALE);
 
   if (order.email) {
-    const customerEmail = renderCustomerOrderConfirmation(order, customerLocale);
     try {
+      // Rendering is inside the try on purpose: a template that throws on some
+      // unusual order shape must not take the store's copy down with it, which
+      // is exactly what would happen if this ran before the guard.
+      const customerEmail = renderCustomerOrderConfirmation(order, customerLocale);
       await notificationService.createNotifications({
         to: order.email,
         channel: "email",
@@ -109,8 +122,8 @@ export default async function orderPlacedSubscriber({
     return;
   }
 
-  const adminEmail = renderAdminOrderNotification(order, storeLocale);
   try {
+    const adminEmail = renderAdminOrderNotification(order, storeLocale);
     await notificationService.createNotifications({
       to: storeRecipient,
       channel: "email",

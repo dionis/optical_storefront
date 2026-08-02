@@ -12,9 +12,29 @@ export const DEFAULT_PROVIDER =
   (import.meta.env && import.meta.env.VITE_DEFAULT_PAYMENT_PROVIDER) || "pp_stripe_stripe";
 
 const CART_FIELDS =
-  "id,email,currency_code,region_id,total,item_total,shipping_total,tax_total,completed_at," +
+  "id,email,currency_code,region_id,total,item_total,shipping_total,tax_total,completed_at,locale," +
   "items.id,items.title,items.quantity,items.unit_price,items.total,items.thumbnail,items.metadata," +
   "shipping_methods.id,shipping_methods.amount,shipping_address.*";
+
+// Key LanguageContext persists the active UI language under. Read directly rather
+// than through the React context: this module is plain JS called from event
+// handlers, and the value is a single localStorage read either way.
+const LANG_KEY = "oer_lang";
+
+/**
+ * The shopper's active language, as a locale Medusa will carry from the cart onto
+ * the order. The backend reads `order.locale` to pick which language to send the
+ * confirmation email in (see apps/backend/src/subscribers/order-placed.ts); `es`
+ * is the store default, matching the i18n dictionary.
+ */
+function activeLocale() {
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    return saved === "en" ? "en" : "es";
+  } catch {
+    return "es";
+  }
+}
 
 let regionIdCache = null;
 async function regionId() {
@@ -36,7 +56,10 @@ export async function ensureCart() {
       if (cart && !cart.completed_at) return cart;
     } catch { /* fall through to create */ }
   }
-  const { cart } = await medusa.store.cart.create({ region_id: await regionId() }, { fields: CART_FIELDS });
+  const { cart } = await medusa.store.cart.create(
+    { region_id: await regionId(), locale: activeLocale() },
+    { fields: CART_FIELDS }
+  );
   writeId(cart.id);
   return cart;
 }
@@ -111,7 +134,10 @@ export async function removeItem(lineItemId) {
 export async function updateContact({ email, shipping_address }) {
   const id = readId();
   if (!id) return null;
-  const body = {};
+  // Re-send the locale on every contact update: this is the last write before
+  // payment, so it captures a language the shopper switched to after the cart was
+  // created — which is the language their confirmation email should arrive in.
+  const body = { locale: activeLocale() };
   if (email) body.email = email;
   if (shipping_address) body.shipping_address = shipping_address;
   const { cart } = await medusa.store.cart.update(id, body, { fields: CART_FIELDS });
@@ -222,13 +248,41 @@ export function clearPendingOrder() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * A thrown 4xx means the request itself won't succeed on retry (cart not found,
- * validation/business error) — retrying is pointless and would only loop. 5xx,
- * timeouts and network errors carry no status (or >= 500) and are transient.
+ * Statuses that mean "not yet", not "never" — the request is worth repeating.
+ *
+ * 400 is the important one. Right after a successful charge, `/complete` answers
+ *   400 {"type":"not_allowed","message":"Session: payses_… was not authorized
+ *        with the provider."}
+ * because `stripe.confirmPayment()` resolves as soon as the charge is accepted,
+ * while the PaymentIntent can still read `processing` for a few seconds. Medusa's
+ * Stripe provider maps `processing` to PENDING rather than AUTHORIZED, so
+ * completion is refused until the intent settles into `succeeded` /
+ * `requires_capture`. That is the single most likely outcome in the seconds after
+ * payment and it clears on its own, so it MUST be retried.
+ *
+ * 409 gets the same treatment: a concurrent completion of the same cart (e.g. the
+ * payment webhook and this tab racing) resolves once the other side finishes.
+ */
+const RETRYABLE_HTTP_STATUS = new Set([400, 409]);
+
+/**
+ * Whether a failure is worth giving up on immediately.
+ *
+ * A thrown 4xx usually means the request won't succeed on retry (cart not found,
+ * gone, unauthorized) — retrying is pointless and would only loop. The exceptions
+ * are listed in RETRYABLE_HTTP_STATUS above. 5xx, timeouts and network errors
+ * carry no status (or >= 500) and are transient.
+ *
+ * NOTE: every completion error arrives here as a thrown FetchError, never as the
+ * SDK's documented in-band `{ type: "cart", error }` value — `cart.complete()`
+ * goes straight through `client.fetch`, which throws for any status >= 300. The
+ * in-band branch in completeCartWithRetry is kept only as a belt-and-braces guard.
  */
 function isTerminalError(e) {
   const status = e && (e.status || (e.response && e.response.status));
-  return typeof status === "number" && status >= 400 && status < 500;
+  if (typeof status !== "number") return false;        // network / timeout
+  if (RETRYABLE_HTTP_STATUS.has(status)) return false; // "not yet" — keep trying
+  return status >= 400 && status < 500;
 }
 
 /**
@@ -239,8 +293,11 @@ function isTerminalError(e) {
  *   { ok: true,  order }                 — order created (or already existed)
  *   { ok: false, pending: true, error }  — payment confirmed but the order could
  *                                          not be confirmed after retries; the
- *                                          marker is KEPT so a later load or the
- *                                          backend reconciliation subscriber can
+ *                                          marker is KEPT so a later load — or
+ *                                          Medusa's own webhook-driven
+ *                                          `processPaymentWorkflow`, which
+ *                                          completes the cart server-side once
+ *                                          the gateway reports the capture — can
  *                                          still finish it
  *   { ok: false, terminal: true, error } — a non-retryable 4xx (e.g. the cart no
  *                                          longer exists). The caller decides
@@ -249,12 +306,17 @@ function isTerminalError(e) {
  *                                          payment is never silently forgotten.
  *   { ok: false, error: "no_cart" }      — nothing to complete
  *
- * In-band completion errors (res.type !== "order", e.g. the payment session not
- * yet authorized right after Stripe) and thrown 5xx/network errors are treated
- * as transient and retried; only after exhausting retries do we report `pending`.
+ * "Payment session not authorized yet" (HTTP 400) is the expected first answer in
+ * the seconds after Stripe confirms, so it is retried rather than reported — see
+ * RETRYABLE_HTTP_STATUS. Thrown 5xx/network errors are transient too. Only after
+ * exhausting the retry window do we report `pending`.
  */
-export async function completeCartWithRetry(cartId = readId(), { retries = 4, baseDelay = 800 } = {}) {
+export async function completeCartWithRetry(
+  cartId = readId(),
+  { retries = 6, baseDelay = 500, maxDelay = 3000, budgetMs = 20000 } = {}
+) {
   if (!cartId) return { ok: false, error: "no_cart" };
+  const startedAt = Date.now();
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -264,21 +326,35 @@ export async function completeCartWithRetry(cartId = readId(), { retries = 4, ba
         clearPendingOrder();    // …and the recovery marker
         return { ok: true, order: res.order };
       }
-      // In-band failure (commonly "payment not authorized yet" in the seconds
-      // after Stripe confirmation). Keep the reason and retry with backoff.
+      // Belt-and-braces: the SDK throws rather than returning this shape (see
+      // isTerminalError), but if that ever changes, treat it as retryable.
       lastErr = res.error || res;
     } catch (e) {
       if (isTerminalError(e)) {
-        // 4xx — the cart can't be completed (not found / invalid). Stop now and
-        // let the caller decide about the marker (recovery clears it to break
-        // the loop; pay() keeps it since the payment was just captured).
+        // A 4xx we can't recover from (cart not found / gone / unauthorized).
+        // Stop now and let the caller decide about the marker (recovery clears
+        // it to break the loop; pay() keeps it — the payment was just captured).
         return { ok: false, terminal: true, error: (e && e.message) || String(e) };
       }
       // Thrown 5xx / timeout / network → transient by assumption.
       lastErr = (e && e.message) || String(e);
     }
-    // Backoff between attempts: 0.8s, 1.6s, 3.2s, 6.4s (no wait after the last).
-    if (attempt < retries) await sleep(baseDelay * Math.pow(2, attempt));
+    if (attempt >= retries) break;
+
+    // Backoff between attempts, capped (0.5s, 1s, 2s, 3s, 3s, 3s) so the tail
+    // stays responsive: we are waiting on Stripe to settle an intent, which takes
+    // a few seconds at most, and more attempts inside the same window catch the
+    // moment it flips sooner than fewer, ever-longer sleeps would.
+    const wait = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+
+    // The sleeps are not what bounds this loop — a *rejected* /complete costs
+    // ~5s server-side on its own (measured against the deployed backend), so the
+    // attempt count alone would leave a customer watching a spinner for ~48s
+    // before the pending screen appears. Stop starting attempts once the budget
+    // is spent; the pending screen and the payment webhook both still recover it.
+    if (Date.now() - startedAt + wait >= budgetMs) break;
+
+    await sleep(wait);
   }
   // Money is committed but no order surfaced. Preserve the marker for recovery.
   return { ok: false, pending: true, error: lastErr };
