@@ -352,6 +352,24 @@ export default function LensProcess() {
   const frameOnly = designId === "frame-only";
   const cat = design && design.cat; // sv | bifocal | prog
 
+  // Auto-cambio de tipo según la ADICIÓN (ADD), siguiendo la práctica optométrica:
+  //   sin ADD → Visión Sencilla   ·   con ADD → multifocal (bifocal/progresivo).
+  // (bifocal vs progresivo es elección del paciente: sólo forzamos Sencilla ↔
+  //  multifocal y dejamos que elija el formato). Se explica con un aviso.
+  // IMPORTANTE: este hook debe ir ANTES del early return `if (!product)`.
+  useEffect(() => {
+    if (frameOnly || !designId) return;
+    const add = parseFloat(rx.add) || 0;
+    if (add > 0 && designId === "sv") {
+      setDesignId("prog-mid"); setMatId(null);
+      setRxNote({ kind: "toMulti" });
+    } else if (add <= 0 && (designId === "bifocal" || designId === "prog-mid" || designId === "prog-high")) {
+      setDesignId("sv"); setMatId(null);
+      setRxNote({ kind: "toSingle" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rx.add]);
+
   // precios efectivos (override-aware). pv bump re-render on admin edits.
   const basePrice = (dId, mId) => lensBasePrice(dId, mId, (BASE[dId] || {})[mId] ?? 0);
   const photoPriceOf = (p) => (p.price[cat] == null ? null : lensPhotoPrice(p.id, cat, p.price[cat]));
@@ -408,23 +426,6 @@ export default function LensProcess() {
     setRxNote(null); // elección manual → limpia el aviso de auto-cambio
     // Nota: "solo montura" ya NO cierra el popup, para poder rectificar la elección.
   };
-
-  // Auto-cambio de tipo según la ADICIÓN (ADD), siguiendo la práctica optométrica:
-  //   sin ADD  → Visión Sencilla     ·     con ADD → multifocal (bifocal/progresivo)
-  // (bifocal vs progresivo es elección del paciente, así que sólo forzamos el salto
-  //  Sencilla ↔ multifocal y dejamos que elija el formato). Se explica con un aviso.
-  useEffect(() => {
-    if (frameOnly || !designId) return;
-    const add = parseFloat(rx.add) || 0;
-    if (add > 0 && designId === "sv") {
-      setDesignId("prog-mid"); setMatId(null);
-      setRxNote({ kind: "toMulti" });
-    } else if (add <= 0 && (designId === "bifocal" || designId === "prog-mid" || designId === "prog-high")) {
-      setDesignId("sv"); setMatId(null);
-      setRxNote({ kind: "toSingle" });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rx.add]);
 
   const handleRxUpload = async (e) => {
     const file = e.target.files?.[0];
