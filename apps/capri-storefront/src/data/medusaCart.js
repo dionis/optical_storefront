@@ -131,7 +131,7 @@ export async function removeItem(lineItemId) {
   return getCart();
 }
 
-export async function updateContact({ email, shipping_address }) {
+export async function updateContact({ email, shipping_address, metadata }) {
   const id = readId();
   if (!id) return null;
   // Re-send the locale on every contact update: this is the last write before
@@ -140,6 +140,9 @@ export async function updateContact({ email, shipping_address }) {
   const body = { locale: activeLocale() };
   if (email) body.email = email;
   if (shipping_address) body.shipping_address = shipping_address;
+  // Preferencias de notificación (email/SMS), celular e idioma para que el
+  // backend pueda enviar la confirmación del pedido por el canal elegido.
+  if (metadata && typeof metadata === "object") body.metadata = metadata;
   const { cart } = await medusa.store.cart.update(id, body, { fields: CART_FIELDS });
   return cart;
 }

@@ -21,8 +21,18 @@ function loadStripe(pk) {
   });
 }
 
+// Etiquetas legibles para el tipo de lente en el resumen del checkout (el carrito
+// sólo guarda los códigos; la receta/PHI vive en el servidor).
+const DESIGN_LBL = {
+  "frame-only": { es: "Solo montura", en: "Frame only" },
+  sv: { es: "Visión Sencilla", en: "Single Vision" },
+  bifocal: { es: "Bifocal", en: "Bifocal" },
+  "prog-mid": { es: "Progresivo", en: "Progressive" },
+  "prog-high": { es: "Progresivo gama alta", en: "Progressive premium" },
+};
+
 export default function MedusaCheckout() {
-  const { t, tv } = useLang();
+  const { t, tv, lang } = useLang();
   const { clearCart } = useCart();
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
@@ -31,7 +41,12 @@ export default function MedusaCheckout() {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState("contact"); // contact | pay | done
-  const [f, setF] = useState({ email: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us" });
+  const [f, setF] = useState({ email: "", phone: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us" });
+  // Cómo recibir la confirmación del pedido (el envío real es del backend).
+  const [notify, setNotify] = useState({ email: true, sms: false });
+  // ¿La dirección de facturación de la tarjeta es la misma del paciente? Si sí,
+  // autorellenamos los datos de facturación de Stripe con los del paciente.
+  const [cardMatches, setCardMatches] = useState(true);
   const [ship, setShip] = useState([]);
   const [shipId, setShipId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +56,7 @@ export default function MedusaCheckout() {
   const stripeRef = useRef(null);
   const elementsRef = useRef(null);
   const payElRef = useRef(null);
+  const payMountRef = useRef(null); // instancia montada del Payment Element
   const addrRef = useRef(null);
 
   // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
@@ -107,15 +123,37 @@ export default function MedusaCheckout() {
   const shippingAddress = () => ({
     first_name: f.first_name, last_name: f.last_name, address_1: f.address_1,
     city: f.city, postal_code: f.postal_code,
+    phone: f.phone || null, // celular del paciente (para SMS y contacto)
     // Region is US-only; fall back to "us" so an unrecognized autocomplete
     // country can never break shipping-option lookup or completion.
     country_code: (f.country_code || "us").toLowerCase(),
   });
 
+  // Datos de facturación para Stripe, tomados del paciente (autofill).
+  const buildBilling = () => {
+    const name = `${f.first_name} ${f.last_name}`.trim();
+    const bd = {};
+    if (name) bd.name = name;
+    if (f.email) bd.email = f.email;
+    if (f.phone) bd.phone = f.phone;
+    const address = {};
+    if (f.address_1) address.line1 = f.address_1;
+    if (f.city) address.city = f.city;
+    if (f.postal_code) address.postal_code = f.postal_code;
+    address.country = (f.country_code || "us").toUpperCase();
+    bd.address = address;
+    return bd;
+  };
+
   const calcShipping = async () => {
     setErr(""); setBusy(true);
     try {
-      await updateContact({ email: f.email, shipping_address: shippingAddress() });
+      await updateContact({
+        email: f.email,
+        shipping_address: shippingAddress(),
+        // Preferencias que el backend usará para notificar (email/SMS) + idioma.
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang },
+      });
       const opts = await listShippingOptions();
       setShip(opts);
       if (opts[0]) setShipId(opts[0].id);
@@ -134,15 +172,25 @@ export default function MedusaCheckout() {
       stripeRef.current = stripe;
       const elements = stripe.elements({ clientSecret });
       elementsRef.current = elements;
-      setStep("pay");
-      // mount after the pay step DOM renders
-      setTimeout(() => {
-        const el = elements.create("payment");
-        el.mount(payElRef.current);
-      }, 0);
+      setStep("pay"); // el Payment Element se monta en el useEffect de abajo
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
   };
+
+  // Monta (y re-monta) el Payment Element de Stripe. Si el cliente marca que la
+  // tarjeta es del paciente, autorellenamos los datos de facturación con los
+  // suyos (defaultValues.billingDetails); si lo desmarca, Stripe los pide.
+  useEffect(() => {
+    if (step !== "pay" || !elementsRef.current || !payElRef.current) return;
+    const elements = elementsRef.current;
+    if (payMountRef.current) { try { payMountRef.current.destroy(); } catch { /* noop */ } payMountRef.current = null; }
+    const opts = cardMatches ? { defaultValues: { billingDetails: buildBilling() } } : {};
+    const el = elements.create("payment", opts);
+    el.mount(payElRef.current);
+    payMountRef.current = el;
+    return () => { try { el.destroy(); } catch { /* noop */ } payMountRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, cardMatches]);
 
   const pay = async () => {
     setErr(""); setBusy(true);
@@ -205,21 +253,33 @@ export default function MedusaCheckout() {
         </div>
       ) : (
         <>
-          {/* order summary */}
-          <ul className="panel-list">
-            {(cart.items || []).map((i) => (
-              <li key={i.id} className="panel-item">
-                <div className="panel-item-info">
-                  <b>{i.title}</b>
-                  {i.metadata?.lens_config && (
-                    <small>{[i.metadata.lens_config.design_code, i.metadata.lens_config.material_code].filter(Boolean).join(" · ")}</small>
-                  )}
-                </div>
-                <span className="panel-item-price">{money(i.unit_price)}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
+          {/* Resumen del pedido COMPLETO, siempre visible arriba de "Finalizar compra" */}
+          <div className="co-summary">
+            <div className="co-summary-h">🧾 {L("summary")}</div>
+            <ul className="panel-list">
+              {(cart.items || []).map((i) => {
+                const lc = i.metadata?.lens_config || {};
+                const dl = DESIGN_LBL[lc.design_code];
+                const parts = [dl ? (dl[lang] || dl.es) : lc.design_code, lc.material_code, lc.photo_code, lc.ar_code].filter(Boolean);
+                return (
+                  <li key={i.id} className="panel-item">
+                    <div className="panel-item-info">
+                      <b>{i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
+                      {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                      {i.metadata?.prescription_id && <small className="co-rx">✓ {L("withRx")}</small>}
+                    </div>
+                    <span className="panel-item-price">{money(i.total ?? i.unit_price)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="co-totals">
+              {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
+              <div><span>{L("shippingLine")}</span><b>{cart.shipping_total > 0 ? money(cart.shipping_total) : L("free")}</b></div>
+              {cart.tax_total > 0 && <div><span>{L("tax")}</span><b>{money(cart.tax_total)}</b></div>}
+            </div>
+            <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
+          </div>
 
           {err && <div className="auth-err" style={{ margin: "10px 0" }}>{err}</div>}
 
@@ -232,6 +292,9 @@ export default function MedusaCheckout() {
                   <input placeholder={L("first")} value={f.first_name} onChange={set("first_name")} />
                   <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
                 </div>
+                {/* Celular del paciente: se toma de forma orgánica junto al resto
+                    del contacto; sirve para SMS de confirmación y contacto. */}
+                <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
                 <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
                 {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
                 <div className="co-two">
@@ -241,9 +304,23 @@ export default function MedusaCheckout() {
                 <input placeholder={L("country")} value={f.country} onChange={set("country")} autoComplete="country-name" />
               </div>
 
+              {/* ¿Cómo quiere recibir la confirmación del pedido? El envío real de
+                  email/SMS lo hace el backend con estas preferencias. */}
+              <div className="co-notify">
+                <div className="co-notify-h">🔔 {L("notify")}</div>
+                <label className="co-check">
+                  <input type="checkbox" checked={notify.email} onChange={(e) => setNotify((p) => ({ ...p, email: e.target.checked }))} />
+                  <span>{L("notifyEmail")}</span>
+                </label>
+                <label className="co-check">
+                  <input type="checkbox" checked={notify.sms} onChange={(e) => setNotify((p) => ({ ...p, sms: e.target.checked }))} />
+                  <span>{L("notifySms")}</span>
+                </label>
+              </div>
+
               {!ship.length ? (
                 <button className="btn btn-outline big" disabled={busy || !f.email || !f.address_1} onClick={calcShipping}>
-                  {busy ? "…" : L("calcShip")}
+                  {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("calcShip")}
                 </button>
               ) : (
                 <>
@@ -258,7 +335,7 @@ export default function MedusaCheckout() {
                     ))}
                   </div>
                   <button className="btn btn-primary big" disabled={busy || !shipId} onClick={goToPay}>
-                    {busy ? "…" : L("toPay")}
+                    {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("toPay")}
                   </button>
                 </>
               )}
@@ -268,10 +345,17 @@ export default function MedusaCheckout() {
           {step === "pay" && (
             <div className="co-form">
               <div className="co-h">💳 {L("payment")}</div>
+              {/* Si la tarjeta es del paciente, autorellenamos los datos de
+                  facturación de Stripe con los del paciente. Al cambiar, el
+                  useEffect vuelve a montar el Payment Element. */}
+              <label className="co-check co-cardmatch">
+                <input type="checkbox" checked={cardMatches} onChange={(e) => setCardMatches(e.target.checked)} />
+                <span>{L("cardMatches")}</span>
+              </label>
               <div ref={payElRef} style={{ margin: "12px 0" }} />
               <p className="muted small">{L("testCard")}</p>
               <button className="btn btn-primary big" disabled={busy} onClick={pay}>
-                {busy ? L("paying") : `${L("pay")} · ${money(cart.total)}`}
+                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
               </button>
             </div>
           )}

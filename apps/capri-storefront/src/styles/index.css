@@ -555,6 +555,34 @@ button { font-family: inherit; cursor: pointer; }
 .co-form .co-fields input { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; width: 100%; }
 .co-form .co-fields input:focus { outline: 2px solid #0E5AD0aa; border-color: var(--blue); }
 .co-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* Full order summary shown above "Finalizar compra" (mirror of the funnel resumen). */
+.co-summary { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; margin: 10px 0; background: #fafbfc; }
+.co-summary-h { font-weight: 700; font-size: 13.5px; margin: 2px 0 8px; display: flex; align-items: center; gap: 6px; }
+.co-summary .panel-list { list-style: none; margin: 0; padding: 0; }
+.co-summary .panel-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+.co-summary .panel-item:last-child { border-bottom: 0; }
+.co-summary .panel-item-info { display: flex; flex-direction: column; gap: 2px; }
+.co-summary .panel-item-info b { font-size: 13.5px; }
+.co-summary .panel-item-info small { color: var(--muted); font-size: 11.5px; }
+.co-summary .panel-item-info small.co-rx { color: var(--blue); font-weight: 600; }
+.co-summary .panel-item-price { font-weight: 700; white-space: nowrap; font-size: 13.5px; }
+.co-totals { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.co-totals > div { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 2px 0; }
+.co-totals > div b { color: var(--ink, #222); font-weight: 600; }
+.co-summary .panel-total { margin-bottom: 0; }
+
+/* Notification preferences (email/SMS) + card-matches checkbox. */
+.co-notify { margin: 8px 0 4px; }
+.co-notify-h { font-weight: 700; font-size: 13px; margin: 4px 0 6px; }
+.co-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; padding: 4px 0; }
+.co-check input { width: 17px; height: 17px; accent-color: var(--blue); flex-shrink: 0; }
+.co-cardmatch { margin: 4px 0 8px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: #f7f9fc; }
+
+/* Inline spinner inside busy buttons (anti double-click feedback). */
+.btn-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: btn-spin-rot .6s linear infinite; }
+@keyframes btn-spin-rot { to { transform: rotate(360deg); } }
+
 /* Address autocomplete hint under the street field (req 15). */
 .co-hint { display: block; color: var(--muted); font-size: 12px; margin: -2px 0 4px; }
 /* Google Places dropdown must float above the checkout card and any overlay. */

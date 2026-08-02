@@ -696,7 +696,14 @@ export default function LensProcess() {
   };
   // Comprar ahora → loader breve → resumen de revisión → checkout.
   const startReview = () => { setReviewing("loading"); setTimeout(() => setReviewing("show"), 700); };
-  const confirmReview = () => { setReviewing("idle"); finish(); };
+  // Al confirmar mantenemos el LOADER visible mientras finish() crea la receta,
+  // agrega al carrito y navega — así el cliente ve que algo está pasando y no
+  // pulsa "comprar" dos veces (evita PaymentIntents/pedidos duplicados). Si
+  // finish() falla (toast), quitamos el loader para que pueda reintentar.
+  const confirmReview = async () => {
+    setReviewing("loading");
+    try { await finish(); } finally { setReviewing((s) => (s === "loading" ? "show" : s)); }
+  };
 
   // Contenido del resumen (lista + receta + medidas), reutilizado en el panel
   // lateral y en la pantalla de revisión previa al checkout. Muestra claramente
