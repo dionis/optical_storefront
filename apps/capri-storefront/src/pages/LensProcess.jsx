@@ -902,7 +902,10 @@ export default function LensProcess() {
           {USE_MEDUSA && (
                 <div className="zlx-rx-upload">
                   <label className="zlx-upload-box">
-                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden
+                    {/* Visually hidden en vez de `hidden` (display:none): algunos
+                        navegadores móviles no abren el selector de archivos si el
+                        input está en display:none, aunque esté dentro del label. */}
+                    <input type="file" accept="image/*,application/pdf" className="zlx-upload-input"
                            disabled={ocr.status === "loading"} onChange={handleRxUpload} />
                     <Ic name="upload" />
                     <span>{t("lens.upload")}</span>

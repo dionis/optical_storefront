@@ -34,6 +34,24 @@ const STYLE_CHIPS = [
   { key: "home.chip.round", param: "shape", value: "Redondo" },
 ];
 
+// Íconos inline (SVG, sin dependencias) para cada chip de estilo. Mejoran la
+// lectura sobre todo en móvil, donde el texto solo se ve pobre. `currentColor`
+// hace que hereden el color del chip (y su estado hover/activo).
+const svg = (children) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
+);
+const CHIP_ICONS = {
+  "home.chip.all": svg(<><circle cx="6.5" cy="14" r="3.3" /><circle cx="17.5" cy="14" r="3.3" /><path d="M9.8 13.4c1.2-1.1 3.2-1.1 4.4 0M2.6 12l1.6-2M21.4 12l-1.6-2" /></>),
+  "home.chip.women": svg(<><circle cx="12" cy="8" r="5" /><path d="M12 13v8M9 18h6" /></>),
+  "home.chip.men": svg(<><circle cx="10" cy="14" r="5" /><path d="M15 9l5-5M15 4h5v5" /></>),
+  "home.chip.unisex": svg(<><circle cx="12" cy="7" r="3.6" /><path d="M5.5 20c0-3.6 2.9-6.2 6.5-6.2S18.5 16.4 18.5 20" /></>),
+  "home.chip.kids": svg(<><circle cx="12" cy="6" r="3" /><path d="M12 9v6M8.5 21l3.5-6 3.5 6M8.5 12.5h7" /></>),
+  "home.chip.aviator": svg(<><path d="M3 10h7c0 3-1.6 5-3.5 5S3 13 3 10z" /><path d="M14 10h7c0 3-1.6 5-3.5 5S14 13 14 10z" /><path d="M10 11h4M3 10 2 9M21 10l1-1" /></>),
+  "home.chip.cateye": svg(<><path d="M2 12c2-3 6-3 8-.5-.2 2.2-2 3.5-4 3.5S2.4 14 2 12z" /><path d="M14 11.5c2-2.5 6-2.5 8 .5-.4 2-2.1 3-4 3s-3.8-1.3-4-3.5z" /><path d="M10 11.5h4" /></>),
+  "home.chip.round": svg(<><circle cx="7" cy="13" r="4" /><circle cx="17" cy="13" r="4" /><path d="M11 12.5h2M3.4 11 2 9.6M20.6 11 22 9.6" /></>),
+};
+
 const SHAPES = [
   { key: "home.shape.round", value: "Redondo", lens: "round" },
   { key: "home.shape.square", value: "Cuadrado", lens: "square" },
@@ -175,7 +193,10 @@ export default function Home() {
         </div>
         <div className="chip-row">
           {STYLE_CHIPS.map((c) => (
-            <Link key={c.key} to={chipHref(c)} className="style-chip">{t(c.key)}</Link>
+            <Link key={c.key} to={chipHref(c)} className="style-chip">
+              {CHIP_ICONS[c.key] && <span className="style-chip-ic">{CHIP_ICONS[c.key]}</span>}
+              <span>{t(c.key)}</span>
+            </Link>
           ))}
         </div>
       </section>
