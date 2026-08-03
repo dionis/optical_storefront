@@ -17,6 +17,20 @@ export const StoreSetting = model.define("store_setting", {
   /** Phone (E.164) that receives an SMS heads-up for every paid order. */
   owner_notification_sms: model.text().nullable(),
   /**
+   * Additional administrators copied on every paid order, stored as a
+   * comma-separated list. Kept as one text column rather than a child table on
+   * purpose: it is a short list edited as a whole from a single admin field, and
+   * a table would buy nothing but a join. Falls back to
+   * STORE_ADMIN_NOTIFICATION_EMAILS when unset.
+   */
+  admin_notification_emails: model.text().nullable(),
+  /**
+   * Inbox that receives customer messages sent from the order-tracking page
+   * (complaints, delays). Falls back to STORE_SUPPORT_EMAIL, then to the owner's
+   * notification email, so the form is never a dead end.
+   */
+  support_email: model.text().nullable(),
+  /**
    * Payment provider the storefront should offer at checkout, e.g.
    * "pp_stripe_stripe", "pp_paypal_paypal", "pp_square_square". The provider must
    * still be registered (with its credentials) in medusa-config; this only picks

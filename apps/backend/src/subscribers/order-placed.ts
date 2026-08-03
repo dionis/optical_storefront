@@ -151,31 +151,51 @@ export default async function orderPlacedSubscriber({
   // STORE_ORDER_NOTIFICATION_* / RESEND_FROM_EMAIL env vars — so behaviour is
   // identical to before until an owner saves settings in the admin.
   const storeSettings = await resolveStoreSettings(container);
-  const storeRecipient = storeSettings.owner_notification_email;
+  // Every administrator, owner included and de-duplicated by resolveStoreSettings.
+  // Configured in the admin dashboard, falling back to
+  // STORE_ADMIN_NOTIFICATION_EMAILS / STORE_ORDER_NOTIFICATION_EMAIL.
+  const adminRecipients = storeSettings.admin_notification_emails;
 
   // No early return here: even without a store email, the SMS section below must
   // still run (owner SMS / customer SMS are independent of the email copy).
-  if (!storeRecipient) {
+  if (!adminRecipients.length) {
     logger.warn(
-      "[order-placed] owner notification email is unset — the store email copy was not sent."
+      "[order-placed] no administrator notification email is configured — the store email copy was not sent."
     );
   } else {
+    // Rendered once and reused: identical for every administrator, and a template
+    // that throws should fail before we start sending, not halfway down the list.
+    let adminEmail: ReturnType<typeof renderAdminOrderNotification> | null = null;
     try {
-      const adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions);
-      await notificationService.createNotifications({
-        to: storeRecipient,
-        channel: "email",
-        template: "order-placed-admin",
-        trigger_type: "order.placed",
-        resource_id: order.id,
-        resource_type: "order",
-        content: adminEmail,
-        data: { order_id: order.id, display_id: order.display_id },
-      });
+      adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions);
     } catch (error) {
       logger.error(
-        `[order-placed] store notification for order ${order.id} failed: ${(error as Error).message}`
+        `[order-placed] store notification for order ${order.id} could not be rendered: ${(error as Error).message}`
       );
+    }
+
+    if (adminEmail) {
+      // Sent one by one rather than as a single multi-recipient message so the
+      // administrators cannot see each other's addresses, and so one bad address
+      // does not sink the notification for everybody else.
+      for (const recipient of adminRecipients) {
+        try {
+          await notificationService.createNotifications({
+            to: recipient,
+            channel: "email",
+            template: "order-placed-admin",
+            trigger_type: "order.placed",
+            resource_id: order.id,
+            resource_type: "order",
+            content: adminEmail,
+            data: { order_id: order.id, display_id: order.display_id },
+          });
+        } catch (error) {
+          logger.error(
+            `[order-placed] store notification for order ${order.id} to ${recipient} failed: ${(error as Error).message}`
+          );
+        }
+      }
     }
   }
 

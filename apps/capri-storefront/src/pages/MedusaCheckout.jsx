@@ -268,7 +268,14 @@ export default function MedusaCheckout() {
           <h2>✅ {L("done")}</h2>
           <p>{L("orderNo")}: <b>{order?.display_id ? `#${order.display_id}` : order?.id}</b></p>
           <p className="muted">{L("thanks")}</p>
-          <Link to="/catalogo" className="btn btn-primary big">{L("toCatalog")}</Link>
+          {/* El seguimiento no lleva token aquí: la página pide el correo y
+              manda un enlace, para no dejar una credencial en el historial del
+              navegador ni en un enlace que se pueda compartir. */}
+          <p className="muted">{L("trackHint")}</p>
+          <div className="checkout-done-actions">
+            <Link to="/mis-pedidos" className="btn btn-primary big">{L("trackCta")}</Link>
+            <Link to="/catalogo" className="btn btn-outline big">{L("toCatalog")}</Link>
+          </div>
         </div>
       ) : (
         <>

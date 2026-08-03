@@ -13,6 +13,7 @@ import CaseDetail from "./pages/CaseDetail.jsx";
 import LensProcess from "./pages/LensProcess.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import AccountPage from "./pages/AccountPage.jsx";
+import MyOrders from "./pages/MyOrders.jsx";
 import MedusaCheckout from "./pages/MedusaCheckout.jsx";
 import { CartProvider } from "./components/CartContext.jsx";
 import { FeedbackProvider } from "./components/Feedback.jsx";
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="/recetas/:slug" element={<LensProcess />} />
               <Route path="/checkout" element={<MedusaCheckout />} />
               <Route path="/cuenta" element={<AccountPage />} />
+              <Route path="/mis-pedidos" element={<MyOrders />} />
             </Routes>
           </main>
           <Footer />

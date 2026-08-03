@@ -165,6 +165,15 @@ export default defineConfig({
             options: {
               apiKey: process.env.STRIPE_SECRET_KEY,
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+              // Charge the customer on confirmation instead of only holding the
+              // funds. Without this the provider defaults to
+              // `capture_method: "manual"`, so every intent lands on Stripe as
+              // "Uncaptured" — money authorized but never taken, and the
+              // authorization expires after ~7 days. Nothing in this codebase
+              // captures afterwards (see src/subscribers/order-placed.ts), so
+              // automatic capture is the only correct setting here: we ship a
+              // physical product and the order is final once placed.
+              capture: true,
             },
           },
           {
