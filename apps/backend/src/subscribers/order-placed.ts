@@ -20,8 +20,11 @@ import {
   renderAdminOrderNotification,
   renderCustomerOrderConfirmation,
   type OrderEmailData,
+  type OrderEmailExtras,
   type PrescriptionForEmail,
 } from "../lib/email/order-confirmation";
+import { enrichLensItems, extractPaymentInfo, extractTracking } from "../lib/email/order-enrich";
+import type { Knex } from "@mikro-orm/knex";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 import { resolveStoreSettings } from "../lib/store-settings";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
@@ -112,6 +115,7 @@ export default async function orderPlacedSubscriber({
           pd: rx.pd,
           pd_od: rx.pd_od,
           pd_os: rx.pd_os,
+          source: (rx as { source?: string | null }).source ?? null,
         };
       } catch (error) {
         logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);
@@ -121,12 +125,60 @@ export default async function orderPlacedSubscriber({
     // Prescription module unavailable — emails still send, just without the Rx block.
   }
 
+  // Extra email data (rich lens breakdown with names+prices, delivery method,
+  // payment method for the admin, tracking). All best-effort — any failure leaves
+  // the base email intact. Reads only; never touches the cart/checkout flow.
+  let customerExtras: OrderEmailExtras | undefined;
+  let adminExtras: OrderEmailExtras | undefined;
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const { data: extRows } = await query.graph({
+      entity: "order",
+      fields: [
+        "shipping_methods.name",
+        "shipping_methods.amount",
+        "payment_collections.payments.provider_id",
+        "payment_collections.payments.data",
+        "fulfillments.labels.tracking_number",
+        "fulfillments.labels.tracking_url",
+      ],
+      filters: { id: data.id },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ext = extRows?.[0] as Record<string, any> | undefined;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shippingMethods = (ext?.shipping_methods ?? []) as Array<any>;
+    const shippingMethod = shippingMethods[0]?.name
+      ? { name: String(shippingMethods[0].name), amount: Number(shippingMethods[0].amount ?? 0) }
+      : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payments = ((ext?.payment_collections ?? []) as Array<any>).flatMap((pc) => pc?.payments ?? []);
+    const payment = await extractPaymentInfo(payments, process.env.STRIPE_SECRET_KEY);
+
+    const tracking = extractTracking(ext?.fulfillments);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderItems = (order.items ?? []) as Array<Record<string, any>>;
+    const itemsCustomer = await enrichLensItems(pg, orderItems, customerLocale);
+    const itemsAdmin =
+      customerLocale === storeLocale
+        ? itemsCustomer
+        : await enrichLensItems(pg, orderItems, storeLocale);
+
+    customerExtras = { items: itemsCustomer, shippingMethod, tracking };
+    adminExtras = { items: itemsAdmin, shippingMethod, tracking, payment };
+  } catch (error) {
+    logger.warn(`[order-placed] could not build email extras for order ${order.id}: ${(error as Error).message}`);
+  }
+
   if (order.email) {
     try {
       // Rendering is inside the try on purpose: a template that throws on some
       // unusual order shape must not take the store's copy down with it, which
       // is exactly what would happen if this ran before the guard.
-      const customerEmail = renderCustomerOrderConfirmation(order, customerLocale, prescriptions);
+      const customerEmail = renderCustomerOrderConfirmation(order, customerLocale, prescriptions, customerExtras);
       await notificationService.createNotifications({
         to: order.email,
         channel: "email",
@@ -161,7 +213,7 @@ export default async function orderPlacedSubscriber({
     );
   } else {
     try {
-      const adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions);
+      const adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions, adminExtras);
       await notificationService.createNotifications({
         to: storeRecipient,
         channel: "email",

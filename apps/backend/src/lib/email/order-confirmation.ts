@@ -11,6 +11,15 @@
  */
 
 import { t, type EmailLocale } from "./copy";
+import type { EnrichedItem, PaymentInfo, TrackingInfo } from "./order-enrich";
+
+/** Extra data the emails render but that isn't on OrderEmailData (built by the subscriber). */
+export interface OrderEmailExtras {
+  items?: EnrichedItem[]; // rich per-line lens breakdown (names + prices)
+  shippingMethod?: { name: string; amount: number } | null;
+  payment?: PaymentInfo | null; // admin copy only
+  tracking?: TrackingInfo[];
+}
 
 export interface OrderEmailLineItem {
   title?: string | null;
@@ -321,6 +330,7 @@ export interface PrescriptionForEmail {
   pd_od: number | null;
   pd_os: number | null;
   seg_height?: number | null;
+  source?: string | null; // "manual" | "ocr" — shown in the admin copy
 }
 
 /** Dioptric values carry an explicit sign; blanks render as an em dash. */
@@ -419,11 +429,121 @@ function rxTextLines(
   return lines;
 }
 
+/** Full date + time of purchase, in the message locale. */
+function formatDateTime(value: string | Date | null | undefined, locale: EmailLocale): string {
+  if (!value) return "—";
+  try {
+    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "es-US", {
+      dateStyle: "long",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+/** Rich per-line lens breakdown (frame, brand, color, use, material/photo/AR with prices). */
+function renderEnrichedItems(
+  items: EnrichedItem[],
+  currency: string | null | undefined,
+  locale: EmailLocale
+): string {
+  const row = (label: string, value: string, plus = false) => `
+      <tr>
+        <td style="padding:6px 0;border-bottom:1px solid ${BORDER};color:#374151">${esc(label)}</td>
+        <td style="padding:6px 0;border-bottom:1px solid ${BORDER};text-align:right;white-space:nowrap;font-weight:600">${esc((plus ? "+ " : "") + value)}</td>
+      </tr>`;
+  return items
+    .map((it) => {
+      const rows: string[] = [];
+      rows.push(
+        row(
+          t(locale, "order_frame") + (it.frame_name ? `: ${it.frame_name}` : "") + (it.quantity > 1 ? ` × ${it.quantity}` : ""),
+          formatMoney(it.frame_price, currency, locale)
+        )
+      );
+      if (it.collection) rows.push(row(t(locale, "order_brand"), it.collection));
+      if (it.color) rows.push(row(t(locale, "order_color"), it.color));
+      if (it.design) rows.push(row(t(locale, "order_use"), it.design));
+      if (it.material)
+        rows.push(row(`${t(locale, "lens_material")}: ${it.material.label}`, formatMoney(it.material.price, currency, locale)));
+      if (it.photo)
+        rows.push(row(`${t(locale, "lens_photochromic")}: ${it.photo.label}`, formatMoney(it.photo.price, currency, locale), true));
+      if (it.ar)
+        rows.push(row(`${t(locale, "lens_treatment")}: ${it.ar.label}`, formatMoney(it.ar.price, currency, locale), true));
+      if (it.with_rx)
+        rows.push(row(`✓ ${t(locale, "prescription_attached")}`, ""));
+      return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
+      <tbody>${rows.join("")}</tbody>
+    </table>`;
+    })
+    .join("");
+}
+
+/** Delivery method + tracking (shown in both copies). */
+function renderDeliveryTracking(extras: OrderEmailExtras | undefined, locale: EmailLocale): string {
+  const parts: string[] = [];
+  if (extras?.shippingMethod?.name) {
+    parts.push(`<div><strong>${esc(t(locale, "delivery_method"))}:</strong> ${esc(extras.shippingMethod.name)}</div>`);
+  }
+  const tr = extras?.tracking ?? [];
+  if (tr.length) {
+    const links = tr
+      .map((x) => (x.url ? `<a href="${esc(x.url)}" style="color:#0E5AD0">${esc(x.number)}</a>` : esc(x.number)))
+      .join(", ");
+    parts.push(`<div><strong>${esc(t(locale, "tracking"))}:</strong> ${links}</div>`);
+  } else {
+    parts.push(`<div style="color:${MUTED}">${esc(t(locale, "tracking_pending"))}</div>`);
+  }
+  if (!parts.length) return "";
+  return `<div style="margin-top:16px;font-size:14px;line-height:1.7;color:#374151">${parts.join("")}</div>`;
+}
+
+/** Payment method for the ADMIN copy: card brand + last 4, or Stripe Link. */
+function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: EmailLocale): string {
+  if (!payment) return "";
+  let label: string;
+  if (payment.method === "link") {
+    label = t(locale, "payment_link");
+  } else {
+    const brand = payment.brand
+      ? payment.brand.charAt(0).toUpperCase() + payment.brand.slice(1)
+      : t(locale, "payment_card");
+    label = payment.last4 ? `${brand} ${t(locale, "card_ending")} ${payment.last4}` : brand;
+  }
+  return `<div style="margin-top:12px;font-size:14px;color:#374151"><strong>${esc(t(locale, "payment_method"))}:</strong> ${esc(label)}</div>`;
+}
+
+/** Prescription source (manual vs uploaded photo) for the ADMIN copy. */
+function renderRxSourceAdmin(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined,
+  locale: EmailLocale
+): string {
+  if (!prescriptions) return "";
+  const seen = new Set<string>();
+  const sources: string[] = [];
+  for (const item of order.items ?? []) {
+    const pid = item.metadata?.["prescription_id"];
+    if (!pid) continue;
+    const key = String(pid);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rx = prescriptions[key];
+    if (!rx) continue;
+    sources.push(rx.source === "ocr" ? t(locale, "rx_source_ocr") : t(locale, "rx_source_manual"));
+  }
+  if (!sources.length) return "";
+  return `<div style="margin-top:8px;font-size:14px;color:#374151"><strong>${esc(t(locale, "rx_source"))}:</strong> ${esc(sources.join(", "))}</div>`;
+}
+
 /** Customer-facing "we got your payment" email. */
 export function renderCustomerOrderConfirmation(
   order: OrderEmailData,
   locale: EmailLocale,
-  prescriptions?: Record<string, PrescriptionForEmail>
+  prescriptions?: Record<string, PrescriptionForEmail>,
+  extras?: OrderEmailExtras
 ): RenderedEmail {
   const displayId = String(order.display_id ?? order.id);
   const name = customerName(order);
@@ -437,12 +557,13 @@ export function renderCustomerOrderConfirmation(
     <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:#ecfdf5;color:#047857;font-size:12px;font-weight:600">${esc(t(locale, "payment_confirmed"))}</div>
     <div style="margin-top:20px;font-size:14px;color:${MUTED}">
       ${esc(t(locale, "order_number"))} <strong style="color:#111827">#${esc(displayId)}</strong>
-      &nbsp;·&nbsp; ${esc(formatDate(order.created_at, locale))}
+      &nbsp;·&nbsp; ${esc(t(locale, "purchase_datetime"))}: ${esc(formatDateTime(order.created_at, locale))}
     </div>
-    ${renderItemsTable(order, locale)}
+    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
+    ${renderDeliveryTracking(extras, locale)}
     <div style="margin-top:28px;padding:16px;background:#f9fafb;border-radius:8px">
       <div style="font-size:14px;font-weight:600;margin-bottom:6px">${esc(t(locale, "order_confirmation_next_steps_title"))}</div>
       <div style="font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "order_confirmation_next_steps_body"))}</div>
@@ -476,7 +597,8 @@ export function renderCustomerOrderConfirmation(
 export function renderAdminOrderNotification(
   order: OrderEmailData,
   locale: EmailLocale,
-  prescriptions?: Record<string, PrescriptionForEmail>
+  prescriptions?: Record<string, PrescriptionForEmail>,
+  extras?: OrderEmailExtras
 ): RenderedEmail {
   const displayId = String(order.display_id ?? order.id);
   const total = formatMoney(order.total, order.currency_code, locale);
@@ -494,8 +616,8 @@ export function renderAdminOrderNotification(
         <td style="padding:2px 0;font-weight:600">#${esc(displayId)}</td>
       </tr>
       <tr>
-        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "order_date"))}</td>
-        <td style="padding:2px 0">${esc(formatDate(order.created_at, locale))}</td>
+        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "purchase_datetime"))}</td>
+        <td style="padding:2px 0">${esc(formatDateTime(order.created_at, locale))}</td>
       </tr>
       <tr>
         <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "customer"))}</td>
@@ -506,16 +628,23 @@ export function renderAdminOrderNotification(
         <td style="padding:2px 0;font-weight:700">${esc(total)}</td>
       </tr>
     </table>
+    ${renderPaymentAdmin(extras?.payment, locale)}
+    ${renderRxSourceAdmin(order, prescriptions, locale)}
     ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
-    ${renderItemsTable(order, locale)}
+    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
     ${renderTotals(order, locale)}
-    ${renderAddress(order, locale)}`;
+    ${renderAddress(order, locale)}
+    ${renderDeliveryTracking(extras, locale)}`;
 
   const text = [
     t(locale, "admin_order_intro"),
     "",
     `${t(locale, "customer")}: ${name ? `${name} · ` : ""}${order.email ?? ""}`,
+    `${t(locale, "purchase_datetime")}: ${formatDateTime(order.created_at, locale)}`,
+    ...(extras?.payment
+      ? [`${t(locale, "payment_method")}: ${extras.payment.method === "link" ? t(locale, "payment_link") : `${extras.payment.brand ?? t(locale, "payment_card")}${extras.payment.last4 ? ` ${t(locale, "card_ending")} ${extras.payment.last4}` : ""}`}`]
+      : []),
     ...(hasPrescription ? [t(locale, "prescription_attached")] : []),
     "",
     ...textLines(order, locale),

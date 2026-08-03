@@ -51,6 +51,21 @@ interface EmailCopy {
   fitting_height: string;
   right_eye: string;
   left_eye: string;
+  order_frame: string;
+  order_brand: string;
+  order_color: string;
+  order_use: string;
+  delivery_method: string;
+  purchase_datetime: string;
+  tracking: string;
+  tracking_pending: string;
+  payment_method: string;
+  payment_card: string;
+  payment_link: string;
+  card_ending: string;
+  rx_source: string;
+  rx_source_manual: string;
+  rx_source_ocr: string;
   prescription_attached: string;
   payment_confirmed: string;
   questions: string;
@@ -94,6 +109,21 @@ const es: EmailCopy = {
   fitting_height: "Altura de montaje",
   right_eye: "OD (derecho)",
   left_eye: "OS (izquierdo)",
+  order_frame: "Montura",
+  order_brand: "Marca / colección",
+  order_color: "Color",
+  order_use: "Uso",
+  delivery_method: "Método de envío",
+  purchase_datetime: "Fecha y hora de compra",
+  tracking: "Seguimiento",
+  tracking_pending: "El número de seguimiento se enviará cuando el pedido salga a reparto.",
+  payment_method: "Método de pago",
+  payment_card: "Tarjeta",
+  payment_link: "Stripe Link",
+  card_ending: "terminada en",
+  rx_source: "Origen de la receta",
+  rx_source_manual: "Ingresada manualmente",
+  rx_source_ocr: "Foto subida (leída por OCR)",
   prescription_attached: "Receta médica asociada al pedido.",
   payment_confirmed: "Pago confirmado",
   questions: "Si tienes alguna duda, responde a este correo y te ayudamos.",
@@ -137,6 +167,21 @@ const en: EmailCopy = {
   fitting_height: "Fitting height",
   right_eye: "OD (right)",
   left_eye: "OS (left)",
+  order_frame: "Frame",
+  order_brand: "Brand / collection",
+  order_color: "Color",
+  order_use: "Use",
+  delivery_method: "Delivery method",
+  purchase_datetime: "Purchase date & time",
+  tracking: "Tracking",
+  tracking_pending: "The tracking number will be sent once the order ships.",
+  payment_method: "Payment method",
+  payment_card: "Card",
+  payment_link: "Stripe Link",
+  card_ending: "ending in",
+  rx_source: "Prescription source",
+  rx_source_manual: "Entered manually",
+  rx_source_ocr: "Uploaded photo (read by OCR)",
   prescription_attached: "A prescription is linked to this order.",
   payment_confirmed: "Payment confirmed",
   questions: "If you have any questions, just reply to this email.",
