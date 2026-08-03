@@ -11,6 +11,7 @@
  */
 
 import { t, type EmailLocale } from "./copy";
+import { storefrontOrigin } from "../order-access";
 
 export interface OrderEmailLineItem {
   title?: string | null;
@@ -422,12 +423,7 @@ function rxTextLines(
 /** Customer-facing "we got your payment" email. */
 /** Storefront tracking page. No token in the URL on purpose — see below. */
 function trackingUrl(): string {
-  const base = (
-    process.env.STOREFRONT_URL ||
-    process.env.STORE_CORS?.split(",")[0] ||
-    "http://localhost:5173"
-  ).trim().replace(/\/+$/, "");
-  return `${base}/my-orders`;
+  return `${storefrontOrigin()}/my-orders`;
 }
 
 /**

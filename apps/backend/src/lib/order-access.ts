@@ -157,12 +157,25 @@ export function readSessionToken(req: {
   return null;
 }
 
-/** Absolute URL of the storefront page that redeems a magic link. */
+/**
+ * Absolute URL of the storefront page that redeems a magic link.
+ *
+ * The dev fallback is port 5198, which is where the storefront actually runs
+ * (`vite --port 5198` in apps/capri-storefront/package.json) — a wrong default
+ * here does not fail loudly, it just mails people a dead link.
+ */
 export function buildMagicLink(token: string): string {
-  const base = (
+  const base = storefrontOrigin();
+  return `${base}/my-orders?token=${encodeURIComponent(token)}`;
+}
+
+/** Public origin of the storefront, shared by every outbound link we build. */
+export function storefrontOrigin(): string {
+  return (
     process.env.STOREFRONT_URL ||
     process.env.STORE_CORS?.split(",")[0] ||
-    "http://localhost:5173"
-  ).trim().replace(/\/+$/, "");
-  return `${base}/my-orders?token=${encodeURIComponent(token)}`;
+    "http://localhost:5198"
+  )
+    .trim()
+    .replace(/\/+$/, "");
 }
