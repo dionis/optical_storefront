@@ -9,7 +9,7 @@
     "^.+\\.tsx?$": ["ts-jest", {
       "tsconfig": {
         "module": "CommonJS",
-        "moduleResolution": "Node"
+        "moduleResolution": "Bundler"
       }
     }]
   }

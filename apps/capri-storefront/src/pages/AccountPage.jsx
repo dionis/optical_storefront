@@ -1,13 +1,59 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useUser, logout } from "../components/userAuth.js";
 import { useCart } from "../components/CartContext.jsx";
-import { ordersByUser } from "../admin/analytics.js";
 import { listByUser, updateReview, removeReview } from "../components/reviewsStore.js";
 import TrackingTimeline from "../components/TrackingTimeline.jsx";
+import { fetchMyOrders, getSession } from "../data/orderAccess.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+
+/**
+ * Real orders for the account tabs.
+ *
+ * The account login is a client-side demo gate (any email + phone), so it proves
+ * nothing to the backend and cannot be used to fetch orders. The order-access
+ * session from /mis-pedidos is the real credential; when it is absent both tabs
+ * point there rather than showing seeded demo rows as if they were purchases.
+ */
+function useRealOrders() {
+  const [state, setState] = useState({ loading: true, orders: null, session: getSession() });
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session) {
+      setState({ loading: false, orders: null, session: null });
+      return;
+    }
+    let alive = true;
+    fetchMyOrders()
+      .then((data) => {
+        if (alive) setState({ loading: false, orders: data ? data.orders : null, session });
+      })
+      .catch(() => {
+        if (alive) setState({ loading: false, orders: null, session: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return state;
+}
+
+/** Shown in place of the order lists when there is no tracking session yet. */
+function NeedsTrackingSession() {
+  const { t } = useLang();
+  return (
+    <div className="acc-soon-box">
+      <div className="acc-soon-emoji">📦</div>
+      <h3>{t("acc.orders.linkTitle")}</h3>
+      <p className="muted">{t("acc.orders.linkBody")}</p>
+      <Link to="/mis-pedidos" className="btn btn-primary">{t("acc.orders.linkCta")}</Link>
+    </div>
+  );
+}
 
 function Stars({ value, onSelect }) {
   return (
@@ -46,22 +92,33 @@ function Favorites() {
   );
 }
 
-function Orders({ email }) {
-  const { t } = useLang();
-  const orders = useMemo(() => ordersByUser(email), [email]);
-  if (!orders.length) return <p className="muted acc-empty">{t("acc.orders.empty")}</p>;
+function Orders() {
+  const { t, lang } = useLang();
+  const { loading, orders, session } = useRealOrders();
+
+  if (loading) return <p className="muted acc-empty">…</p>;
+  if (!session) return <NeedsTrackingSession />;
+  if (!orders || !orders.length) return <p className="muted acc-empty">{t("acc.orders.empty")}</p>;
+
   return (
     <div className="acc-orders">
       {orders.map((o) => (
         <div className="acc-order" key={o.id}>
           <div className="acc-order-head">
-            <b>{o.id}</b><span className="muted">{new Date(o.t).toLocaleDateString("es")}</span>
-            <span className="acc-status">{t("acc.status." + (o.status || "processing"))}</span>
+            <b>#{o.display_id ?? o.id}</b>
+            <span className="muted">
+              {o.created_at ? new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es") : ""}
+            </span>
+            <span className="acc-status">{t("track." + (o.terminal || o.stage))}</span>
           </div>
-          <ul>{o.items.map((it, i) => <li key={i}><span>{it.name}</span><b>{money(it.total)}</b></li>)}</ul>
+          <ul>
+            {(o.items || []).map((it) => (
+              <li key={it.id}><span>{it.title}</span><b>{money(it.total)}</b></li>
+            ))}
+          </ul>
           <div className="acc-order-foot">
             <span>{t("cart.total")}: <b>{money(o.total)}</b></span>
-            <button className="btn-sm" disabled title={t("acc.track.soon")}>{t("acc.track")} · {t("acc.soon")}</button>
+            <Link className="btn-sm" to="/mis-pedidos">{t("acc.track")}</Link>
           </div>
         </div>
       ))}
@@ -114,10 +171,13 @@ function Reviews({ email }) {
   );
 }
 
-function Tracking({ email }) {
-  const { t } = useLang();
-  const orders = useMemo(() => ordersByUser(email), [email]);
-  if (!orders.length) {
+function Tracking() {
+  const { t, lang } = useLang();
+  const { loading, orders, session } = useRealOrders();
+
+  if (loading) return <p className="muted acc-empty">…</p>;
+  if (!session) return <NeedsTrackingSession />;
+  if (!orders || !orders.length) {
     return (
       <div className="acc-soon-box">
         <div className="acc-soon-emoji">🚚</div>
@@ -126,16 +186,21 @@ function Tracking({ email }) {
       </div>
     );
   }
-  const etaText = (o) => {
-    const z = o.shipping; if (!z || o.shipping.method === "pickup") return t("acc.track.pickup");
-    return null;
-  };
   return (
     <div className="acc-orders">
       {orders.map((o) => (
         <div className="acc-order" key={o.id}>
-          <div className="acc-order-head"><b>{o.id}</b><span className="muted">{new Date(o.t).toLocaleDateString("es")}</span></div>
-          <TrackingTimeline status={o.status || "processing"} eta={etaText(o)} />
+          <div className="acc-order-head">
+            <b>#{o.display_id ?? o.id}</b>
+            <span className="muted">
+              {o.created_at ? new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es") : ""}
+            </span>
+          </div>
+          <TrackingTimeline
+            status={o.stage}
+            terminal={o.terminal}
+            hasPrescription={o.has_prescription}
+          />
         </div>
       ))}
     </div>
@@ -174,9 +239,9 @@ export default function AccountPage() {
       </nav>
       <div className="acc-panel">
         {tab === "fav" && <Favorites />}
-        {tab === "orders" && <Orders email={user.email} />}
+        {tab === "orders" && <Orders />}
         {tab === "reviews" && <Reviews email={user.email} />}
-        {tab === "track" && <Tracking email={user.email} />}
+        {tab === "track" && <Tracking />}
       </div>
     </div>
   );

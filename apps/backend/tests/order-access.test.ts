@@ -1,0 +1,166 @@
+/**
+ * Unit tests for guest order access.
+ *
+ * These cover the two things that decide whether a stranger can read someone
+ * else's order: the signed token, and the stage derivation that the tracking
+ * page renders. Both are pure functions, so no database and no HTTP — same
+ * "no live I/O in CI" rule the other suites follow.
+ *
+ * NOTE: adding this suite required switching jest.config.json's `moduleResolution`
+ * from "Node" to "Bundler". store-settings.ts imports @medusajs/framework/types,
+ * whose subpaths are published through an `exports` map that classic Node
+ * resolution cannot read; the config is JSON so the reason is recorded here.
+ */
+
+const SECRET = "test-secret-not-a-real-key";
+
+describe("order-access tokens", () => {
+  let mod: typeof import("../src/lib/order-access");
+
+  beforeAll(async () => {
+    process.env.ORDER_ACCESS_SECRET = SECRET;
+    mod = await import("../src/lib/order-access");
+  });
+
+  it("round-trips an email through a session token", () => {
+    const token = mod.issueToken("Shopper@Example.COM", "session");
+    const verified = mod.verifyToken(token, "session");
+    expect(verified).not.toBeNull();
+    // Normalized on the way in, so the email is a stable identifier.
+    expect(verified!.email).toBe("shopper@example.com");
+  });
+
+  it("refuses a token presented for the wrong purpose", () => {
+    // The whole point of splitting the kinds: a link scraped from an inbox must
+    // not work as a long-lived session credential.
+    const magic = mod.issueToken("a@b.com", "magic");
+    expect(mod.verifyToken(magic, "session")).toBeNull();
+
+    const session = mod.issueToken("a@b.com", "session");
+    expect(mod.verifyToken(session, "magic")).toBeNull();
+  });
+
+  it("rejects a tampered payload", () => {
+    const token = mod.issueToken("victim@example.com", "session");
+    const [body, sig] = token.split(".");
+
+    // Re-encode the payload with a different email, keep the original signature.
+    const decoded = JSON.parse(
+      Buffer.from(body.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    );
+    decoded.email = "attacker@example.com";
+    const forgedBody = Buffer.from(JSON.stringify(decoded))
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    expect(mod.verifyToken(`${forgedBody}.${sig}`, "session")).toBeNull();
+  });
+
+  it("rejects an expired token", () => {
+    const token = mod.issueToken("a@b.com", "magic");
+    const realNow = Date.now;
+    try {
+      Date.now = () => realNow() + mod.ORDER_ACCESS_TTL_MS.magic + 1000;
+      expect(mod.verifyToken(token, "magic")).toBeNull();
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it("rejects malformed input without throwing", () => {
+    for (const bad of [null, undefined, "", "nodot", "a.b.c", 42, {}]) {
+      expect(mod.verifyToken(bad, "session")).toBeNull();
+    }
+  });
+
+  it("reads a bearer header and falls back to the query token", () => {
+    expect(
+      mod.readSessionToken({ headers: { authorization: "Bearer abc123" } })
+    ).toBe("abc123");
+    expect(mod.readSessionToken({ headers: {}, query: { token: "q1" } })).toBe("q1");
+    expect(mod.readSessionToken({ headers: {} })).toBeNull();
+  });
+});
+
+describe("order stage derivation", () => {
+  let mod: typeof import("../src/lib/order-status");
+
+  beforeAll(async () => {
+    mod = await import("../src/lib/order-status");
+  });
+
+  const rxItem = { metadata: { prescription_id: "rx_1" } };
+
+  it("treats an unpaid order as pending, not as progress", () => {
+    const p = mod.deriveOrderProgress({
+      payment_status: "not_paid",
+      fulfillment_status: "not_fulfilled",
+    });
+    expect(p.paid).toBe(false);
+    expect(p.terminal).toBe("payment_pending");
+  });
+
+  it("puts a paid, unfulfilled prescription order in the lab", () => {
+    const p = mod.deriveOrderProgress({
+      payment_status: "captured",
+      fulfillment_status: "not_fulfilled",
+      items: [rxItem],
+    });
+    expect(p.stage).toBe("in_lab");
+    expect(p.terminal).toBeNull();
+    expect(p.has_prescription).toBe(true);
+  });
+
+  it("lets fulfillment outrank a stale manual lab stage", () => {
+    // The owner left lab_stage at in_lab but Medusa says it shipped — believe
+    // the shipment, never the note.
+    const p = mod.deriveOrderProgress({
+      payment_status: "captured",
+      fulfillment_status: "shipped",
+      metadata: { lab_stage: "in_lab" },
+    });
+    expect(p.stage).toBe("in_transit");
+  });
+
+  it("never lets a manual stage claim shipping Medusa has no record of", () => {
+    const p = mod.deriveOrderProgress({
+      payment_status: "captured",
+      fulfillment_status: "not_fulfilled",
+      metadata: { lab_stage: "delivered" },
+    });
+    expect(p.stage).toBe("in_lab");
+  });
+
+  it("marks cancellations and refunds as terminal", () => {
+    expect(
+      mod.deriveOrderProgress({ payment_status: "canceled" }).terminal
+    ).toBe("canceled");
+    expect(
+      mod.deriveOrderProgress({ payment_status: "refunded" }).terminal
+    ).toBe("refunded");
+  });
+
+  it("reports delivered orders as delivered", () => {
+    const p = mod.deriveOrderProgress({
+      payment_status: "captured",
+      fulfillment_status: "delivered",
+    });
+    expect(p.stage).toBe("delivered");
+    expect(mod.stageIndex(p.stage)).toBe(mod.ORDER_STAGES.length - 1);
+  });
+});
+
+describe("admin recipient list parsing", () => {
+  it("splits on commas, semicolons and newlines, de-duplicating", async () => {
+    const { parseEmailList } = await import("../src/lib/store-settings");
+    expect(parseEmailList("a@x.com, B@X.com\nc@y.com; a@x.com")).toEqual([
+      "a@x.com",
+      "b@x.com",
+      "c@y.com",
+    ]);
+    expect(parseEmailList(null)).toEqual([]);
+    expect(parseEmailList("   ")).toEqual([]);
+  });
+});

@@ -21,12 +21,35 @@ export type PaymentProviderId = (typeof KNOWN_PAYMENT_PROVIDERS)[number];
 export interface StoreSettings {
   owner_notification_email: string | null;
   owner_notification_sms: string | null;
+  /**
+   * Everyone who gets a copy of a paid order, owner included and de-duplicated.
+   * Always the list to iterate — callers should not read owner_notification_email
+   * separately or the owner ends up mailed twice.
+   */
+  admin_notification_emails: string[];
+  /** Where order-tracking support messages go. */
+  support_email: string | null;
   active_payment_provider: string;
   /** Frame-only sales-tax rate as a decimal in [0, 1] (0 = no frame tax). */
   frame_tax_rate: number;
   source: "database" | "env";
   updated_by?: string | null;
   updated_at?: string | null;
+}
+
+/**
+ * Split an admin-entered recipient list. Accepts commas, semicolons, whitespace
+ * and newlines because people paste from all three; lowercases and de-duplicates
+ * so the same person can't be mailed twice by a stray capital.
+ */
+export function parseEmailList(value: unknown): string[] {
+  if (value == null) return [];
+  const seen = new Set<string>();
+  for (const part of String(value).split(/[,;\s]+/)) {
+    const email = part.trim().toLowerCase();
+    if (email) seen.add(email);
+  }
+  return [...seen];
 }
 
 /** Parse a tax rate ("0.07", "7%" → 0.07) and clamp to [0, 1]; invalid → 0. */
@@ -57,18 +80,31 @@ export function isKnownPaymentProvider(value: unknown): value is PaymentProvider
 /** Values used until an admin saves a row — matches today's env-only behaviour. */
 function envDefaults(): StoreSettings {
   const envProvider = process.env.DEFAULT_PAYMENT_PROVIDER;
+  const owner =
+    process.env.STORE_ORDER_NOTIFICATION_EMAIL ??
+    process.env.RESEND_FROM_EMAIL ??
+    null;
+  const admins = mergeRecipients(owner, process.env.STORE_ADMIN_NOTIFICATION_EMAILS);
   return {
-    owner_notification_email:
-      process.env.STORE_ORDER_NOTIFICATION_EMAIL ??
-      process.env.RESEND_FROM_EMAIL ??
-      null,
+    owner_notification_email: owner,
     owner_notification_sms: process.env.STORE_ORDER_NOTIFICATION_SMS ?? null,
+    admin_notification_emails: admins,
+    support_email: process.env.STORE_SUPPORT_EMAIL ?? owner ?? null,
     active_payment_provider: isKnownPaymentProvider(envProvider)
       ? envProvider
       : "pp_stripe_stripe",
     frame_tax_rate: parseTaxRate(process.env.STORE_FRAME_TAX_RATE),
     source: "env",
   };
+}
+
+/** Owner first, then the extra administrators, de-duplicated. */
+function mergeRecipients(owner: string | null, list: unknown): string[] {
+  const seen = new Set<string>();
+  const ownerEmail = owner ? owner.trim().toLowerCase() : "";
+  if (ownerEmail) seen.add(ownerEmail);
+  for (const email of parseEmailList(list)) seen.add(email);
+  return [...seen];
 }
 
 /**
@@ -97,14 +133,24 @@ export async function resolveStoreSettings(
   if (!row) return defaults;
 
   const storedProvider = row["active_payment_provider"];
+  const owner =
+    (row["owner_notification_email"] as string | null) ??
+    defaults.owner_notification_email;
+  // A saved (even empty) admin list replaces the env one; only a NULL column —
+  // meaning the owner never touched the field — falls back.
+  const admins =
+    row["admin_notification_emails"] != null
+      ? mergeRecipients(owner, row["admin_notification_emails"])
+      : mergeRecipients(owner, process.env.STORE_ADMIN_NOTIFICATION_EMAILS);
 
   return {
-    owner_notification_email:
-      (row["owner_notification_email"] as string | null) ??
-      defaults.owner_notification_email,
+    owner_notification_email: owner,
     owner_notification_sms:
       (row["owner_notification_sms"] as string | null) ??
       defaults.owner_notification_sms,
+    admin_notification_emails: admins,
+    support_email:
+      (row["support_email"] as string | null) ?? defaults.support_email ?? owner,
     active_payment_provider: isKnownPaymentProvider(storedProvider)
       ? storedProvider
       : defaults.active_payment_provider,
