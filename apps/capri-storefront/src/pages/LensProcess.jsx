@@ -496,6 +496,16 @@ export default function LensProcess() {
   // La altura es obligatoria en multifocales: sin ella no se puede fabricar.
   const heightMissing = isMulti && !frameOnly && !rx.seg_height;
   const canBuy = !!designId && (frameOnly || !!matId) && !heightMissing && !awaitingRxConfirm && ocr.status !== "loading";
+  // Los tratamientos (fotocromático/AR) son OPCIONALES: con la receta y el
+  // material del cristal seleccionados el botón de comprar ya se habilita. Si
+  // sigue deshabilitado, `buyHint` explica exactamente qué falta (bilingüe).
+  const buyHint = canBuy ? null
+    : !designId ? t("lens.hint.design")
+    : (!frameOnly && !matId) ? t("lens.hint.material")
+    : ocr.status === "loading" ? t("lens.upload.reading")
+    : awaitingRxConfirm ? t("lens.hint.confirmRx")
+    : heightMissing ? t("lens.hint.height")
+    : null;
 
   const chooseDesign = (id) => {
     setDesignId(id);
@@ -880,6 +890,7 @@ export default function LensProcess() {
           <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={startReview}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
+          {buyHint && <p className="zlx-buy-hint">{buyHint}</p>}
           </aside>
         </div>
       </div>
@@ -1163,6 +1174,19 @@ export default function LensProcess() {
                       onClick={() => { setConfirmRx(false); setRxDirty(false); setPop("mat"); }}>
                 <Ic name="check" /> {t("lens.rx.confirmGo")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cargando OCR: overlay con loader y mensajes para que el sitio no
+          parezca congelado mientras se lee la foto de la receta ── */}
+      {ocr.status === "loading" && (
+        <div className="zlx-review-overlay" role="dialog" aria-modal="true" aria-label={t("lens.upload.reading")}>
+          <div className="zlx-review-card">
+            <div className="zlx-review-loading">
+              <GlassesLoader messages={["loader.ocrRead", "loader.ocrEyes", "loader.ocrValues", "loader.ocrAlmost"]} />
+              <p>{t("lens.upload.reading")}</p>
             </div>
           </div>
         </div>
