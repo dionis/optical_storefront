@@ -70,6 +70,38 @@ interface EmailCopy {
   payment_confirmed: string;
   questions: string;
   footer_automatic: string;
+  // ── Order tracking (magic link + stage names) ──
+  track_cta: string;
+  track_link_intro: string;
+  magic_link_subject: string;
+  magic_link_title: string;
+  magic_link_intro: string;
+  magic_link_button: string;
+  magic_link_expiry: string;
+  magic_link_ignore: string;
+  stage_confirmed: string;
+  stage_in_lab: string;
+  stage_in_lab_frame: string;
+  stage_shipped: string;
+  stage_in_transit: string;
+  stage_delivered: string;
+  state_canceled: string;
+  state_refunded: string;
+  state_payment_pending: string;
+  // ── Support message raised from the tracking page ──
+  support_subject: string;
+  support_title: string;
+  support_intro: string;
+  support_from: string;
+  support_reason: string;
+  support_message: string;
+  support_ack_subject: string;
+  support_ack_title: string;
+  support_ack_body: string;
+  reason_delay: string;
+  reason_wrong: string;
+  reason_cancel: string;
+  reason_other: string;
 }
 
 const es: EmailCopy = {
@@ -128,6 +160,41 @@ const es: EmailCopy = {
   payment_confirmed: "Pago confirmado",
   questions: "Si tienes alguna duda, responde a este correo y te ayudamos.",
   footer_automatic: "Este es un correo automático. No compartas datos de tarjeta por esta vía.",
+  track_cta: "Ver el estado de mi pedido",
+  track_link_intro:
+    "Puedes seguir el estado de este y de todos tus pedidos desde un mismo lugar:",
+  magic_link_subject: "Tus pedidos en {{store}}",
+  magic_link_title: "Acceso a tus pedidos",
+  magic_link_intro:
+    "Pulsa el botón para ver el estado de todos tus pedidos. No necesitas contraseña.",
+  magic_link_button: "Ver mis pedidos",
+  magic_link_expiry: "Este enlace caduca en 30 minutos por seguridad.",
+  magic_link_ignore:
+    "Si no pediste este enlace, puedes ignorar este correo: nadie ha accedido a tus datos.",
+  stage_confirmed: "Pedido confirmado",
+  stage_in_lab: "Lentes en el laboratorio",
+  stage_in_lab_frame: "Preparando tu pedido",
+  stage_shipped: "Listo para enviar",
+  stage_in_transit: "En camino",
+  stage_delivered: "Entregado",
+  state_canceled: "Pedido cancelado",
+  state_refunded: "Pedido reembolsado",
+  state_payment_pending: "Pago pendiente",
+  support_subject: "Consulta sobre el pedido #{{display_id}} ({{reason}})",
+  support_title: "Mensaje de un cliente sobre su pedido",
+  support_intro:
+    "Un cliente escribió desde la página de seguimiento. Responde directamente a su correo.",
+  support_from: "Cliente",
+  support_reason: "Motivo",
+  support_message: "Mensaje",
+  support_ack_subject: "Recibimos tu mensaje sobre el pedido #{{display_id}}",
+  support_ack_title: "Tu mensaje llegó",
+  support_ack_body:
+    "Gracias por escribirnos. Nuestro equipo revisará tu pedido y te responderá a este mismo correo lo antes posible.",
+  reason_delay: "Demora en la entrega",
+  reason_wrong: "Algo no está correcto",
+  reason_cancel: "Quiero cancelar o cambiar",
+  reason_other: "Otra consulta",
 };
 
 const en: EmailCopy = {
@@ -186,6 +253,40 @@ const en: EmailCopy = {
   payment_confirmed: "Payment confirmed",
   questions: "If you have any questions, just reply to this email.",
   footer_automatic: "This is an automated message. Never send card details by email.",
+  track_cta: "Track my order",
+  track_link_intro: "You can follow this and all your other orders in one place:",
+  magic_link_subject: "Your orders at {{store}}",
+  magic_link_title: "Access your orders",
+  magic_link_intro:
+    "Tap the button to see the status of all your orders. No password needed.",
+  magic_link_button: "View my orders",
+  magic_link_expiry: "This link expires in 30 minutes for your security.",
+  magic_link_ignore:
+    "If you did not request this link you can ignore this email — nobody accessed your data.",
+  stage_confirmed: "Order confirmed",
+  stage_in_lab: "Lenses in the lab",
+  stage_in_lab_frame: "Preparing your order",
+  stage_shipped: "Ready to ship",
+  stage_in_transit: "On its way",
+  stage_delivered: "Delivered",
+  state_canceled: "Order canceled",
+  state_refunded: "Order refunded",
+  state_payment_pending: "Payment pending",
+  support_subject: "Question about order #{{display_id}} ({{reason}})",
+  support_title: "Customer message about their order",
+  support_intro:
+    "A customer wrote in from the order tracking page. Reply straight to their address.",
+  support_from: "Customer",
+  support_reason: "Reason",
+  support_message: "Message",
+  support_ack_subject: "We received your message about order #{{display_id}}",
+  support_ack_title: "Your message arrived",
+  support_ack_body:
+    "Thanks for reaching out. Our team will review your order and reply to this email as soon as possible.",
+  reason_delay: "Delivery is late",
+  reason_wrong: "Something is not right",
+  reason_cancel: "I want to cancel or change it",
+  reason_other: "Another question",
 };
 
 const DICTIONARY: Record<EmailLocale, EmailCopy> = { es, en };

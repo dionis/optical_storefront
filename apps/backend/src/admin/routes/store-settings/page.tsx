@@ -9,6 +9,7 @@ import {
   Input,
   Select,
   Text,
+  Textarea,
   toast,
 } from "@medusajs/ui";
 import { sdk } from "../../lib/client";
@@ -18,6 +19,8 @@ interface StoreSettingsPayload {
   settings: {
     owner_notification_email: string | null;
     owner_notification_sms: string | null;
+    admin_notification_emails: string[];
+    support_email: string | null;
     active_payment_provider: string;
     frame_tax_rate: number;
     source: "database" | "env";
@@ -43,14 +46,23 @@ const StoreSettingsPage = () => {
 
   const [email, setEmail] = useState("");
   const [sms, setSms] = useState("");
+  // Edited as free text (one per line) because that is how people paste a list;
+  // the API splits, lowercases and de-duplicates it.
+  const [admins, setAdmins] = useState("");
+  const [support, setSupport] = useState("");
   const [provider, setProvider] = useState("");
   // Tax rate is edited as a percentage for humans; sent to the API with a "%".
   const [taxPct, setTaxPct] = useState("0");
+
+  /** The saved list, shown one per line in the textarea. */
+  const adminsText = (data?.settings.admin_notification_emails ?? []).join("\n");
 
   useEffect(() => {
     if (!data) return;
     setEmail(data.settings.owner_notification_email ?? "");
     setSms(data.settings.owner_notification_sms ?? "");
+    setAdmins(data.settings.admin_notification_emails.join("\n"));
+    setSupport(data.settings.support_email ?? "");
     setProvider(data.settings.active_payment_provider);
     setTaxPct(String(Math.round((data.settings.frame_tax_rate ?? 0) * 10000) / 100));
   }, [data]);
@@ -59,6 +71,8 @@ const StoreSettingsPage = () => {
     mutationFn: (body: {
       owner_notification_email: string | null;
       owner_notification_sms: string | null;
+      admin_notification_emails: string | null;
+      support_email: string | null;
       active_payment_provider: string | null;
       frame_tax_rate: string | null;
     }) => sdk.client.fetch("/admin/store-settings", { method: "POST", body }),
@@ -93,6 +107,8 @@ const StoreSettingsPage = () => {
   const dirty =
     email !== (data.settings.owner_notification_email ?? "") ||
     sms !== (data.settings.owner_notification_sms ?? "") ||
+    admins.trim() !== adminsText ||
+    support !== (data.settings.support_email ?? "") ||
     provider !== data.settings.active_payment_provider ||
     taxPct !== currentTaxPct;
 
@@ -100,6 +116,10 @@ const StoreSettingsPage = () => {
     save.mutate({
       owner_notification_email: email.trim() || null,
       owner_notification_sms: sms.trim() || null,
+      // Empty string (not null) so clearing the box really clears the list —
+      // null means "never configured" and falls back to the env var.
+      admin_notification_emails: admins.trim(),
+      support_email: support.trim() || null,
       active_payment_provider: provider || null,
       // Send as a percentage string; the API normalizes to a decimal.
       frame_tax_rate: taxPct.trim() === "" ? null : `${taxPct.trim()}%`,
@@ -109,6 +129,8 @@ const StoreSettingsPage = () => {
   const reset = () => {
     setEmail(data.settings.owner_notification_email ?? "");
     setSms(data.settings.owner_notification_sms ?? "");
+    setAdmins(adminsText);
+    setSupport(data.settings.support_email ?? "");
     setProvider(data.settings.active_payment_provider);
     setTaxPct(currentTaxPct);
   };
@@ -153,6 +175,41 @@ const StoreSettingsPage = () => {
               value={sms}
               onChange={(e) => setSms(e.target.value)}
             />
+          </div>
+
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <Text size="small" leading="compact" weight="plus">
+              Administradores notificados de cada pago (uno por línea)
+            </Text>
+            <Textarea
+              rows={4}
+              placeholder={"admin1@ejemplo.com\nadmin2@ejemplo.com"}
+              value={admins}
+              onChange={(e) => setAdmins(e.target.value)}
+            />
+            <Text size="small" leading="compact" className="text-ui-fg-subtle">
+              Cada uno recibe su propia copia del pedido, así no se ven las
+              direcciones entre ellos. El correo del dueño se incluye siempre, no
+              hace falta repetirlo aquí. Si dejas la lista vacía se usa la
+              variable STORE_ADMIN_NOTIFICATION_EMAILS del servidor.
+            </Text>
+          </div>
+
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <Text size="small" leading="compact" weight="plus">
+              Correo de soporte (reclamos y demoras)
+            </Text>
+            <Input
+              type="email"
+              placeholder="soporte@ejemplo.com"
+              value={support}
+              onChange={(e) => setSupport(e.target.value)}
+            />
+            <Text size="small" leading="compact" className="text-ui-fg-subtle">
+              Recibe los mensajes que los clientes envían desde la página de
+              seguimiento de su pedido. Si lo dejas vacío se usa el correo del
+              dueño.
+            </Text>
           </div>
 
           <div className="flex flex-col gap-2">

@@ -12,6 +12,7 @@
 
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, PaymentInfo, TrackingInfo } from "./order-enrich";
+import { storefrontOrigin } from "../order-access";
 
 /** Extra data the emails render but that isn't on OrderEmailData (built by the subscriber). */
 export interface OrderEmailExtras {
@@ -65,12 +66,12 @@ export interface RenderedEmail {
   text: string;
 }
 
-const BRAND = "#1f3a5f";
-const MUTED = "#6b7280";
-const BORDER = "#e5e7eb";
+export const BRAND = "#1f3a5f";
+export const MUTED = "#6b7280";
+export const BORDER = "#e5e7eb";
 
 /** Escapes text destined for an HTML body. Order data is customer-supplied. */
-function esc(value: unknown): string {
+export function esc(value: unknown): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -257,7 +258,7 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
   </div>`;
 }
 
-function shell(title: string, preheader: string, inner: string, locale: EmailLocale): string {
+export function shell(title: string, preheader: string, inner: string, locale: EmailLocale): string {
   return `<!doctype html>
 <html lang="${locale}">
   <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827">
@@ -539,6 +540,28 @@ function renderRxSourceAdmin(
 }
 
 /** Customer-facing "we got your payment" email. */
+/** Storefront tracking page. No token in the URL on purpose — see below. */
+function trackingUrl(): string {
+  return `${storefrontOrigin()}/my-orders`;
+}
+
+/**
+ * Link to the tracking page, deliberately WITHOUT an access token.
+ *
+ * A confirmation email is kept, forwarded and searched for years; embedding a
+ * credential in it would make every archived copy a standing key to the
+ * shopper's order history. The page asks for an email and mails a short-lived
+ * link instead — one extra step, once, and from then on the browser session
+ * carries it.
+ */
+function renderTrackingCta(locale: EmailLocale): string {
+  return `
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid ${BORDER}">
+      <div style="font-size:14px;line-height:1.6;color:#374151;margin-bottom:12px">${esc(t(locale, "track_link_intro"))}</div>
+      <a href="${esc(trackingUrl())}" style="display:inline-block;padding:12px 24px;background:${BRAND};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px">${esc(t(locale, "track_cta"))}</a>
+    </div>`;
+}
+
 export function renderCustomerOrderConfirmation(
   order: OrderEmailData,
   locale: EmailLocale,
@@ -568,6 +591,7 @@ export function renderCustomerOrderConfirmation(
       <div style="font-size:14px;font-weight:600;margin-bottom:6px">${esc(t(locale, "order_confirmation_next_steps_title"))}</div>
       <div style="font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "order_confirmation_next_steps_body"))}</div>
     </div>
+    ${renderTrackingCta(locale)}
     <p style="margin:20px 0 0;font-size:13px;color:${MUTED}">${esc(t(locale, "questions"))}</p>`;
 
   const text = [
@@ -580,6 +604,9 @@ export function renderCustomerOrderConfirmation(
     "",
     t(locale, "order_confirmation_next_steps_title"),
     t(locale, "order_confirmation_next_steps_body"),
+    "",
+    t(locale, "track_link_intro"),
+    trackingUrl(),
     "",
     t(locale, "questions"),
   ].join("\n");

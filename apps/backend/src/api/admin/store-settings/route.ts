@@ -9,6 +9,7 @@ import {
   KNOWN_PAYMENT_PROVIDERS,
   STORE_SETTING_ID,
   isKnownPaymentProvider,
+  parseEmailList,
   parseTaxRate,
   resolveStoreSettings,
 } from "../../../lib/store-settings";
@@ -20,6 +21,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface UpdateBody {
   owner_notification_email?: string | null;
   owner_notification_sms?: string | null;
+  /** Free-form list (commas / newlines) of extra administrators to copy. */
+  admin_notification_emails?: string | string[] | null;
+  support_email?: string | null;
   active_payment_provider?: string | null;
   frame_tax_rate?: string | number | null;
 }
@@ -67,10 +71,39 @@ export async function POST(
     body.frame_tax_rate == null ? null : String(body.frame_tax_rate).trim() || null;
   const frameTaxRate = taxRaw == null ? null : String(parseTaxRate(taxRaw));
 
+  // The admin list is stored normalized ("a@x.com,b@y.com") so reads never have
+  // to re-guess the separator the owner happened to type.
+  const adminList =
+    body.admin_notification_emails == null
+      ? null
+      : parseEmailList(
+          Array.isArray(body.admin_notification_emails)
+            ? body.admin_notification_emails.join(",")
+            : body.admin_notification_emails
+        );
+  const support =
+    body.support_email == null ? null : String(body.support_email).trim() || null;
+
   if (email && !EMAIL_RE.test(email)) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
       `'${email}' is not a valid email address.`
+    );
+  }
+  // Reject the whole list on one bad entry rather than silently dropping it —
+  // a typo'd administrator would otherwise never be notified and nobody would
+  // find out until an order went unanswered.
+  const badAdmin = adminList?.find((value) => !EMAIL_RE.test(value));
+  if (badAdmin) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      `'${badAdmin}' is not a valid email address.`
+    );
+  }
+  if (support && !EMAIL_RE.test(support)) {
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      `'${support}' is not a valid email address.`
     );
   }
   if (sms && !/^\+?[0-9()\-\s]{7,20}$/.test(sms)) {
@@ -95,6 +128,8 @@ export async function POST(
     id: STORE_SETTING_ID,
     owner_notification_email: email,
     owner_notification_sms: sms,
+    admin_notification_emails: adminList === null ? null : adminList.join(","),
+    support_email: support,
     active_payment_provider: provider,
     frame_tax_rate: frameTaxRate,
     updated_by: req.auth_context?.actor_id ?? null,
@@ -111,6 +146,8 @@ export async function POST(
       event: "store_settings.updated",
       owner_notification_email: email,
       owner_notification_sms: sms,
+      admin_notification_emails: adminList,
+      support_email: support,
       active_payment_provider: provider,
       admin_user_id: req.auth_context?.actor_id ?? null,
       timestamp: new Date().toISOString(),
