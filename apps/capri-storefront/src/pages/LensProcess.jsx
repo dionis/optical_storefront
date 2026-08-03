@@ -632,7 +632,18 @@ export default function LensProcess() {
   const frameEduName = frameMats.find((m) => frameMatEdu(m, lang));
   const frameEdu = frameEduName ? frameMatEdu(frameEduName, lang) : null;
 
-  const rxSet = !frameOnly && (parseFloat(rx.od_sph) || parseFloat(rx.os_sph) || ocr.confirmed);
+  // ¿Hay receta que mostrar? Mirar SOLO la esfera dejaba invisible una receta
+  // legítima: de doce recetas reales verificadas, dos traen esfera en blanco y
+  // solo cilindro (astigmatismo puro), y ahí la tabla nunca aparecía aunque los
+  // valores estuvieran cargados. Cuenta cualquier dato con contenido clínico.
+  const hasRxValue = (v) => v !== "" && v != null && (parseFloat(v) || 0) !== 0;
+  const rxSet =
+    !frameOnly &&
+    (hasRxValue(rx.od_sph) || hasRxValue(rx.os_sph) ||
+      hasRxValue(rx.od_cyl) || hasRxValue(rx.os_cyl) ||
+      hasRxValue(rx.pd) || hasRxValue(rx.pd_od) || hasRxValue(rx.pd_os) ||
+      hasRxValue(rx.add) ||
+      ocr.confirmed);
   const eduMatId = matId || (recommendedMat && recommendedMat.id);
   const goodLbl = t("lens.goodFor");
   const notLbl = t("lens.notFor");
