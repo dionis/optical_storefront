@@ -427,7 +427,7 @@ function trackingUrl(): string {
     process.env.STORE_CORS?.split(",")[0] ||
     "http://localhost:5173"
   ).trim().replace(/\/+$/, "");
-  return `${base}/mis-pedidos`;
+  return `${base}/my-orders`;
 }
 
 /**

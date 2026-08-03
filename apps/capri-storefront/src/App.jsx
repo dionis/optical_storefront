@@ -54,7 +54,7 @@ export default function App() {
               <Route path="/recetas/:slug" element={<LensProcess />} />
               <Route path="/checkout" element={<MedusaCheckout />} />
               <Route path="/cuenta" element={<AccountPage />} />
-              <Route path="/mis-pedidos" element={<MyOrders />} />
+              <Route path="/my-orders" element={<MyOrders />} />
             </Routes>
           </main>
           <Footer />

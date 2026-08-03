@@ -14,7 +14,7 @@ const money = (n) => "$" + (Number(n) || 0).toFixed(2);
  *
  * The account login is a client-side demo gate (any email + phone), so it proves
  * nothing to the backend and cannot be used to fetch orders. The order-access
- * session from /mis-pedidos is the real credential; when it is absent both tabs
+ * session from /my-orders is the real credential; when it is absent both tabs
  * point there rather than showing seeded demo rows as if they were purchases.
  */
 function useRealOrders() {
@@ -50,7 +50,7 @@ function NeedsTrackingSession() {
       <div className="acc-soon-emoji">📦</div>
       <h3>{t("acc.orders.linkTitle")}</h3>
       <p className="muted">{t("acc.orders.linkBody")}</p>
-      <Link to="/mis-pedidos" className="btn btn-primary">{t("acc.orders.linkCta")}</Link>
+      <Link to="/my-orders" className="btn btn-primary">{t("acc.orders.linkCta")}</Link>
     </div>
   );
 }
@@ -118,7 +118,7 @@ function Orders() {
           </ul>
           <div className="acc-order-foot">
             <span>{t("cart.total")}: <b>{money(o.total)}</b></span>
-            <Link className="btn-sm" to="/mis-pedidos">{t("acc.track")}</Link>
+            <Link className="btn-sm" to="/my-orders">{t("acc.track")}</Link>
           </div>
         </div>
       ))}

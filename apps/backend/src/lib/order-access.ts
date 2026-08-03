@@ -164,5 +164,5 @@ export function buildMagicLink(token: string): string {
     process.env.STORE_CORS?.split(",")[0] ||
     "http://localhost:5173"
   ).trim().replace(/\/+$/, "");
-  return `${base}/mis-pedidos?token=${encodeURIComponent(token)}`;
+  return `${base}/my-orders?token=${encodeURIComponent(token)}`;
 }

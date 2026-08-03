@@ -273,7 +273,7 @@ export default function MedusaCheckout() {
               navegador ni en un enlace que se pueda compartir. */}
           <p className="muted">{L("trackHint")}</p>
           <div className="checkout-done-actions">
-            <Link to="/mis-pedidos" className="btn btn-primary big">{L("trackCta")}</Link>
+            <Link to="/my-orders" className="btn btn-primary big">{L("trackCta")}</Link>
             <Link to="/catalogo" className="btn btn-outline big">{L("toCatalog")}</Link>
           </div>
         </div>
