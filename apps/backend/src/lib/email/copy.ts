@@ -55,6 +55,21 @@ interface EmailCopy {
   order_brand: string;
   order_color: string;
   order_use: string;
+  // ── Ficha técnica de la montura ──
+  frame_specs: string;
+  frame_sku: string;
+  frame_size: string;
+  frame_lens_width: string;
+  frame_lens_height: string;
+  frame_bridge: string;
+  frame_temple: string;
+  frame_shape: string;
+  frame_style: string;
+  frame_material: string;
+  frame_gender: string;
+  frame_age: string;
+  frame_features: string;
+  frame_size_note: string;
   delivery_method: string;
   purchase_datetime: string;
   tracking: string;
@@ -156,6 +171,20 @@ const es: EmailCopy = {
   order_brand: "Marca / colección",
   order_color: "Color",
   order_use: "Uso",
+  frame_specs: "Ficha técnica de la montura",
+  frame_sku: "Código (SKU/UPC)",
+  frame_size: "Medidas",
+  frame_lens_width: "Ancho del lente",
+  frame_lens_height: "Alto del lente",
+  frame_bridge: "Puente",
+  frame_temple: "Varilla",
+  frame_shape: "Forma",
+  frame_style: "Estilo",
+  frame_material: "Material de la montura",
+  frame_gender: "Público",
+  frame_age: "Edad",
+  frame_features: "Características",
+  frame_size_note: "Formato óptico: ancho del lente □ puente – varilla (mm).",
   delivery_method: "Método de envío",
   purchase_datetime: "Fecha y hora de compra",
   tracking: "Seguimiento",
@@ -263,6 +292,20 @@ const en: EmailCopy = {
   order_brand: "Brand / collection",
   order_color: "Color",
   order_use: "Use",
+  frame_specs: "Frame specifications",
+  frame_sku: "Code (SKU/UPC)",
+  frame_size: "Measurements",
+  frame_lens_width: "Lens width",
+  frame_lens_height: "Lens height",
+  frame_bridge: "Bridge",
+  frame_temple: "Temple",
+  frame_shape: "Shape",
+  frame_style: "Style",
+  frame_material: "Frame material",
+  frame_gender: "Audience",
+  frame_age: "Age",
+  frame_features: "Features",
+  frame_size_note: "Optical format: lens width □ bridge – temple (mm).",
   delivery_method: "Delivery method",
   purchase_datetime: "Purchase date & time",
   tracking: "Tracking",

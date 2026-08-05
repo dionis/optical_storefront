@@ -20,6 +20,8 @@ export const PrescriptionRecord = model.define("prescription", {
   pd: model.float().nullable(),
   pd_od: model.float().nullable(),
   pd_os: model.float().nullable(),
+  /** Fitting/segment height in mm — required to cut a progressive/bifocal */
+  seg_height: model.float().nullable(),
   // Metadata
   source: model.enum(["manual", "ocr"]).default("manual"),
   verified_by_user: model.boolean().default(false),

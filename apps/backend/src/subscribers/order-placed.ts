@@ -116,6 +116,7 @@ export default async function orderPlacedSubscriber({
           pd: rx.pd,
           pd_od: rx.pd_od,
           pd_os: rx.pd_os,
+          seg_height: rx.seg_height ?? null,
           source: (rx as { source?: string | null }).source ?? null,
         };
       } catch (error) {

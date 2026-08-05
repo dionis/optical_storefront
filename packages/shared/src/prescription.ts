@@ -27,6 +27,12 @@ export interface Prescription {
   pd_od: number | null;
   /** Left eye PD when dual PD is measured separately (25-40 per eye) */
   pd_os: number | null;
+  /**
+   * Fitting/segment height in mm: frame bottom inner edge → pupil center.
+   * Mandatory for multifocals — a progressive or bifocal cannot be cut without
+   * it — and also what positions the segment in the on-face try-on render.
+   */
+  seg_height?: number | null;
   source: PrescriptionSource;
   /** User has reviewed and explicitly confirmed the values */
   verified_by_user: boolean;

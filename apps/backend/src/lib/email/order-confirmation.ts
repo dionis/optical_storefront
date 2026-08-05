@@ -11,7 +11,7 @@
  */
 
 import { t, type EmailLocale } from "./copy";
-import type { EnrichedItem, PaymentInfo, TrackingInfo } from "./order-enrich";
+import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
 import { storefrontOrigin } from "../order-access";
 
 /** Extra data the emails render but that isn't on OrderEmailData (built by the subscriber). */
@@ -288,19 +288,46 @@ export function shell(title: string, preheader: string, inner: string, locale: E
 </html>`;
 }
 
-function textLines(order: OrderEmailData, locale: EmailLocale): string[] {
+function textLines(
+  order: OrderEmailData,
+  locale: EmailLocale,
+  extras?: OrderEmailExtras
+): string[] {
   const currency = order.currency_code;
   const lines: string[] = [];
   lines.push(`${t(locale, "order_number")}: #${order.display_id ?? order.id}`);
   lines.push(`${t(locale, "order_date")}: ${formatDate(order.created_at, locale)}`);
   lines.push("");
   lines.push(`${t(locale, "items")}:`);
-  for (const item of order.items ?? []) {
-    lines.push(
-      `- ${itemLabel(item)} x${item.quantity ?? 1} — ${formatMoney(item.total ?? item.unit_price, currency, locale)}`
-    );
-    for (const extra of lensLines(item, locale)) {
-      lines.push(`    ${extra}`);
+  // The text/plain part must carry the same detail as the HTML one: plenty of
+  // clients (and forwarding to a lab) show only this half of the message.
+  if (extras?.items?.length) {
+    for (const it of extras.items) {
+      lines.push(
+        `- ${it.frame_name}${it.quantity > 1 ? ` x${it.quantity}` : ""} — ${formatMoney(it.total, currency, locale)}`
+      );
+      if (it.collection) lines.push(`    ${t(locale, "order_brand")}: ${it.collection}`);
+      if (it.color) lines.push(`    ${t(locale, "order_color")}: ${it.color}`);
+      if (it.design) lines.push(`    ${t(locale, "order_use")}: ${it.design}`);
+      if (it.material)
+        lines.push(`    ${t(locale, "lens_material")}: ${it.material.label} — ${formatMoney(it.material.price, currency, locale)}`);
+      if (it.photo)
+        lines.push(`    ${t(locale, "lens_photochromic")}: ${it.photo.label} — + ${formatMoney(it.photo.price, currency, locale)}`);
+      if (it.ar)
+        lines.push(`    ${t(locale, "lens_treatment")}: ${it.ar.label} — + ${formatMoney(it.ar.price, currency, locale)}`);
+      if (it.specs) {
+        lines.push(`    ${t(locale, "frame_specs")}:`);
+        for (const [k, v] of frameSpecRows(it.specs, locale)) lines.push(`      ${k}: ${v}`);
+      }
+    }
+  } else {
+    for (const item of order.items ?? []) {
+      lines.push(
+        `- ${itemLabel(item)} x${item.quantity ?? 1} — ${formatMoney(item.total ?? item.unit_price, currency, locale)}`
+      );
+      for (const extra of lensLines(item, locale)) {
+        lines.push(`    ${extra}`);
+      }
     }
   }
   lines.push("");
@@ -421,11 +448,19 @@ function rxTextLines(
     seen.add(key);
     const rx = prescriptions[key];
     if (!rx) continue;
+    const eyeLine = (e: RxEyeForEmail) =>
+      `SPH ${dpt(e.sph)} CYL ${dpt(e.cyl)} AXIS ${plain(e.axis)} ADD ${dpt(e.add)}` +
+      (e.prism != null || e.base ? ` PRISM ${dpt(e.prism)} BASE ${plain(e.base)}` : "");
     lines.push("", t(locale, "prescription_values") + ":");
-    lines.push(`  ${t(locale, "right_eye")}: SPH ${dpt(rx.od.sph)} CYL ${dpt(rx.od.cyl)} AXIS ${plain(rx.od.axis)} ADD ${dpt(rx.od.add)}`);
-    lines.push(`  ${t(locale, "left_eye")}: SPH ${dpt(rx.os.sph)} CYL ${dpt(rx.os.cyl)} AXIS ${plain(rx.os.axis)} ADD ${dpt(rx.os.add)}`);
+    lines.push(`  ${t(locale, "right_eye")}: ${eyeLine(rx.od)}`);
+    lines.push(`  ${t(locale, "left_eye")}: ${eyeLine(rx.os)}`);
     const pd = rx.pd != null ? `${plain(rx.pd)} mm` : `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`;
     lines.push(`  ${t(locale, "pupillary_distance")}: ${pd}`);
+    // The lab cannot cut a progressive/bifocal without it, so it is never omitted
+    // from the text part when the customer supplied one.
+    if (rx.seg_height != null) {
+      lines.push(`  ${t(locale, "fitting_height")}: ${plain(rx.seg_height)} mm`);
+    }
   }
   return lines;
 }
@@ -441,6 +476,54 @@ function formatDateTime(value: string | Date | null | undefined, locale: EmailLo
   } catch {
     return String(value);
   }
+}
+
+/**
+ * Frame technical sheet: the physical characteristics of the glasses that were
+ * bought. Printed for the customer (proof of what they ordered) and for the lab
+ * (it mounts the lenses to these measurements). Rows with no data are dropped.
+ */
+function frameSpecRows(specs: FrameSpecs, locale: EmailLocale): Array<[string, string]> {
+  const mm = (v: number | null) => (v == null ? null : `${v} mm`);
+  const pairs: Array<[string, string | null]> = [
+    [t(locale, "frame_sku"), specs.sku],
+    [t(locale, "frame_size"), specs.size],
+    [t(locale, "frame_lens_width"), mm(specs.lens_width)],
+    [t(locale, "frame_lens_height"), mm(specs.lens_height)],
+    [t(locale, "frame_bridge"), mm(specs.bridge)],
+    [t(locale, "frame_temple"), mm(specs.temple)],
+    [t(locale, "frame_shape"), specs.shape],
+    [t(locale, "frame_style"), specs.style],
+    [t(locale, "frame_material"), specs.material],
+    [t(locale, "frame_gender"), specs.gender],
+    [t(locale, "frame_age"), specs.age_group],
+    [t(locale, "frame_features"), specs.features.length ? specs.features.join(", ") : null],
+  ];
+  return pairs.filter((p): p is [string, string] => Boolean(p[1]));
+}
+
+function renderFrameSpecs(specs: FrameSpecs | null, locale: EmailLocale): string {
+  if (!specs) return "";
+  const rows = frameSpecRows(specs, locale);
+  if (!rows.length) return "";
+  return `
+    <div style="margin-top:10px;padding:12px 14px;background:#f9fafb;border-radius:8px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:8px">${esc(t(locale, "frame_specs"))}</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
+        <tbody>
+          ${rows
+            .map(
+              ([k, v]) => `
+          <tr>
+            <td style="padding:3px 0;color:${MUTED};white-space:nowrap">${esc(k)}</td>
+            <td style="padding:3px 0;text-align:right;color:#374151;font-weight:600">${esc(v)}</td>
+          </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+      ${specs.size ? `<div style="margin-top:8px;font-size:11px;color:${MUTED}">${esc(t(locale, "frame_size_note"))}</div>` : ""}
+    </div>`;
 }
 
 /** Rich per-line lens breakdown (frame, brand, color, use, material/photo/AR with prices). */
@@ -477,7 +560,8 @@ function renderEnrichedItems(
       return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
       <tbody>${rows.join("")}</tbody>
-    </table>`;
+    </table>
+    ${renderFrameSpecs(it.specs, locale)}`;
     })
     .join("");
 }
@@ -599,7 +683,7 @@ export function renderCustomerOrderConfirmation(
     "",
     t(locale, "order_confirmation_intro"),
     "",
-    ...textLines(order, locale),
+    ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
     "",
     t(locale, "order_confirmation_next_steps_title"),
@@ -674,7 +758,7 @@ export function renderAdminOrderNotification(
       : []),
     ...(hasPrescription ? [t(locale, "prescription_attached")] : []),
     "",
-    ...textLines(order, locale),
+    ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
   ].join("\n");
 

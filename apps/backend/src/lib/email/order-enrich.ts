@@ -12,6 +12,27 @@ export interface EnrichedComponent {
   label: string;
   price: number;
 }
+/**
+ * Technical sheet of the frame that was actually bought, read from the product
+ * metadata the scraper writes (see apps/scraper/scraper/medusa_push.py). The lab
+ * needs the measurements to mount the lenses and the customer wants a record of
+ * exactly which frame they paid for — neither was in the emails before.
+ */
+export interface FrameSpecs {
+  sku: string | null; // variant SKU / UPC of the color actually ordered
+  /** Standard optical notation: eye □ bridge - temple, in mm. */
+  size: string | null;
+  lens_width: number | null; // A
+  lens_height: number | null; // B
+  bridge: number | null;
+  temple: number | null;
+  shape: string | null;
+  style: string | null; // full-rim, semi-rimless…
+  material: string | null;
+  gender: string | null;
+  age_group: string | null;
+  features: string[];
+}
 export interface EnrichedItem {
   frame_name: string;
   collection: string | null;
@@ -21,6 +42,7 @@ export interface EnrichedItem {
   material: EnrichedComponent | null;
   photo: EnrichedComponent | null;
   ar: EnrichedComponent | null;
+  specs: FrameSpecs | null;
   with_rx: boolean;
   quantity: number;
   total: number;
@@ -47,6 +69,137 @@ const first = async (pg: Knex, table: string, where: Record<string, unknown>) =>
   }
 };
 
+// Frame attribute values arrive from the scraper as English slugs (parser.py).
+// The storefront localizes them in medusaCatalog.js; the emails need the same
+// wording, so the tables are mirrored here — server-side code cannot reach the
+// browser dictionary. An unknown slug falls through as-is rather than vanishing.
+const SHAPE_LABELS: Record<EmailLocale, Record<string, string>> = {
+  es: {
+    square: "Cuadrado", round: "Redondo", "cat-eye": "Ojo de gato", navigator: "Navegador",
+    rectangle: "Rectángulo", aviator: "Aviador", geometric: "Geométrico", oval: "Oval",
+    "modified-oval": "Óvalo modificado", "modified-round": "Ronda modificada",
+    combo: "Combo", "full-frame": "Marco completo",
+  },
+  en: {
+    square: "Square", round: "Round", "cat-eye": "Cat eye", navigator: "Navigator",
+    rectangle: "Rectangle", aviator: "Aviator", geometric: "Geometric", oval: "Oval",
+    "modified-oval": "Modified oval", "modified-round": "Modified round",
+    combo: "Combo", "full-frame": "Full frame",
+  },
+};
+// `injection-2` is a supplier code for the same injected plastic as `injection`
+// — it is the second most common material in the catalog, so it gets a name
+// rather than leaking the raw slug into a customer's inbox.
+const MATERIAL_LABELS: Record<EmailLocale, Record<string, string>> = {
+  es: {
+    acetate: "Acetato", plastic: "Plástica", metal: "Metal", "stainless-steel": "Acero inoxidable",
+    memory: "Memoria", titanium: "Titanio", injection: "Inyección", "injection-2": "Inyección",
+    tr90: "TR-90", ultem: "Ultem",
+  },
+  en: {
+    acetate: "Acetate", plastic: "Plastic", metal: "Metal", "stainless-steel": "Stainless steel",
+    memory: "Memory metal", titanium: "Titanium", injection: "Injection", "injection-2": "Injection",
+    tr90: "TR-90", ultem: "Ultem",
+  },
+};
+/** Rim construction (`style` in the scraped metadata), not the frame's outline. */
+const STYLE_LABELS: Record<EmailLocale, Record<string, string>> = {
+  es: {
+    "full-frame": "Marco completo", "full-rim": "Marco completo", combo: "Combinado",
+    "semi-rimless": "Semi al aire", "3-piece-rimless": "Al aire (3 piezas)",
+    rimless: "Al aire", wireless: "Sin alambre", sunglasses: "Gafas de sol",
+  },
+  en: {
+    "full-frame": "Full rim", "full-rim": "Full rim", combo: "Combo",
+    "semi-rimless": "Semi-rimless", "3-piece-rimless": "3-piece rimless",
+    rimless: "Rimless", wireless: "Wireless", sunglasses: "Sunglasses",
+  },
+};
+const GENDER_LABELS: Record<EmailLocale, Record<string, string>> = {
+  es: { men: "Hombres", women: "Señoras", unisex: "Unisexo", kids: "Niños" },
+  en: { men: "Men", women: "Women", unisex: "Unisex", kids: "Kids" },
+};
+const AGE_LABELS: Record<EmailLocale, Record<string, string>> = {
+  es: { adult: "Adulto", kids: "Niños" },
+  en: { adult: "Adult", kids: "Kids" },
+};
+
+const label = (
+  table: Record<EmailLocale, Record<string, string>>,
+  value: unknown,
+  locale: EmailLocale
+): string | null => {
+  if (value == null || value === "") return null;
+  const key = String(value).toLowerCase();
+  return table[locale][key] ?? String(value);
+};
+
+const numOrNull = (v: unknown): number | null => {
+  const n = Number(v);
+  return v == null || v === "" || Number.isNaN(n) ? null : n;
+};
+
+/** Frame metadata for every product in the order, in one query. Never throws. */
+async function loadProductMetadata(
+  pg: Knex,
+  productIds: string[]
+): Promise<Map<string, Record<string, unknown>>> {
+  const map = new Map<string, Record<string, unknown>>();
+  if (!productIds.length) return map;
+  try {
+    const rows = await pg("product").whereIn("id", productIds).select("id", "metadata");
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const md = row["metadata"];
+      map.set(String(row["id"]), (md as Record<string, unknown>) ?? {});
+    }
+  } catch {
+    // Unknown schema / missing table — the emails just skip the technical sheet.
+  }
+  return map;
+}
+
+/** Technical sheet of the frame, from product metadata + the ordered variant. */
+function frameSpecsOf(
+  metadata: Record<string, unknown> | undefined,
+  item: Record<string, unknown>,
+  locale: EmailLocale
+): FrameSpecs | null {
+  if (!metadata) return null;
+  const eye = numOrNull(metadata["eye_size"]);
+  const bridge = numOrNull(metadata["bridge_size"]);
+  const temple = numOrNull(metadata["temple_length"]);
+  // Optical shorthand every optician reads at a glance: 52□18-140.
+  const size =
+    eye != null && bridge != null && temple != null
+      ? `${eye}□${bridge}-${temple}`
+      : eye != null
+        ? `${eye} mm`
+        : null;
+  const features = Array.isArray(metadata["features"])
+    ? (metadata["features"] as unknown[]).map(String).filter(Boolean)
+    : [];
+
+  const specs: FrameSpecs = {
+    sku: (item["variant_sku"] as string) || null,
+    size,
+    lens_width: numOrNull(metadata["a"]) ?? eye,
+    lens_height: numOrNull(metadata["b"]),
+    bridge,
+    temple,
+    shape: label(SHAPE_LABELS, metadata["shape"], locale),
+    style: label(STYLE_LABELS, metadata["style"], locale),
+    material: label(MATERIAL_LABELS, metadata["material"], locale),
+    gender: label(GENDER_LABELS, metadata["gender"], locale),
+    age_group: label(AGE_LABELS, metadata["age_group"], locale),
+    features,
+  };
+  // Nothing worth printing (a case, or a product without scraped attributes).
+  const empty =
+    !specs.sku && !specs.size && !specs.shape && !specs.material && !specs.style &&
+    !specs.gender && !specs.age_group && !specs.lens_height && !features.length;
+  return empty ? null : specs;
+}
+
 /** Rich per-line lens breakdown (name + price of each component) from the matrix. */
 export async function enrichLensItems(
   pg: Knex,
@@ -55,6 +208,11 @@ export async function enrichLensItems(
 ): Promise<EnrichedItem[]> {
   const col = locale === "en" ? "label_en" : "label_es";
   const out: EnrichedItem[] = [];
+
+  const productMeta = await loadProductMetadata(
+    pg,
+    [...new Set(items.map((i) => i["product_id"]).filter(Boolean).map(String))]
+  );
 
   for (const item of items) {
     const md = (item["metadata"] as Record<string, unknown>) || {};
@@ -118,6 +276,7 @@ export async function enrichLensItems(
       material,
       photo,
       ar,
+      specs: frameSpecsOf(productMeta.get(String(item["product_id"] ?? "")), item, locale),
       with_rx: Boolean(md["prescription_id"]),
       quantity: Number(item["quantity"] ?? 1),
       total: Number(item["total"] ?? item["unit_price"] ?? 0),
