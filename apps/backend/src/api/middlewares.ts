@@ -67,37 +67,66 @@ class UnsupportedUploadError extends Error {
 }
 
 /**
- * Turns multer's rejections into the same coded JSON the OCR route returns.
+ * Turns multer's rejections into the same coded JSON the routes return.
  *
- * Without this, a too-large or wrong-type upload escapes as an unhandled error
- * and reaches the storefront as an opaque 500 — indistinguishable from "the
- * service is broken", which is exactly the wrong advice when the fix is "take a
- * smaller photo". Express only routes to a handler with four arguments, so the
- * unused `_next` is load-bearing.
+ * Returns false when the error is not one of ours, so the caller can forward it.
  */
-function ocrUploadErrorHandler(
+function respondToUploadError(
   err: unknown,
-  _req: MedusaRequest,
   res: MedusaResponse,
-  next: MedusaNextFunction
-): void {
+  opts: { unsupportedMessage: string; tooLargeMessage: string }
+): boolean {
   if (err instanceof UnsupportedUploadError) {
     res.status(415).json({
       error_code: "unsupported_media_type",
-      error: "Unsupported media type. Send a JPEG, PNG, WEBP, GIF, HEIC or PDF.",
+      error: opts.unsupportedMessage,
     });
-    return;
+    return true;
   }
   // multer tags its own failures with a `code`; LIMIT_FILE_SIZE is the only one
   // reachable here, and it is the common one on a modern phone camera.
   if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
     res.status(413).json({
       error_code: "file_too_large",
-      error: `File exceeds the ${Math.round(OCR_MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB limit.`,
+      error: opts.tooLargeMessage,
     });
-    return;
+    return true;
   }
-  next(err);
+  return false;
+}
+
+/**
+ * Runs multer and converts its rejections into coded JSON.
+ *
+ * This deliberately does NOT use Express's four-argument error-handler form.
+ * Medusa passes every entry in `defineMiddlewares` through `wrapHandler`, which
+ * returns a three-argument function — so Express never classifies a four-arg
+ * middleware as an error handler and calls it in the normal chain instead. The
+ * arguments then land shifted (`err` receives the request, `next` receives
+ * nothing), `next(err)` throws `TypeError: next is not a function`, and EVERY
+ * request to the route dies as an opaque 500, upload or not. Calling multer
+ * directly and handling its callback keeps the arity at three.
+ */
+function ocrUpload(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  upload.single("file")(req as never, res as never, (err: unknown) => {
+    if (!err) return next();
+    if (
+      respondToUploadError(err, res, {
+        unsupportedMessage:
+          "Unsupported media type. Send a JPEG, PNG, WEBP, GIF, HEIC or PDF.",
+        tooLargeMessage: `File exceeds the ${Math.round(
+          OCR_MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        )} MB limit.`,
+      })
+    ) {
+      return;
+    }
+    next(err);
+  });
 }
 
 const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -113,27 +142,26 @@ const reviewPhotoUpload = multer({
   },
 });
 
-function reviewPhotoErrorHandler(
-  err: unknown,
-  _req: MedusaRequest,
+/** Same three-argument shape as `ocrUpload`, and for the same reason. */
+function reviewPhotosUpload(
+  req: MedusaRequest,
   res: MedusaResponse,
   next: MedusaNextFunction
 ): void {
-  if (err instanceof UnsupportedUploadError) {
-    res.status(415).json({
-      error_code: "unsupported_media_type",
-      error: "Review photos must be JPEG, PNG or WEBP.",
-    });
-    return;
-  }
-  if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
-    res.status(413).json({
-      error_code: "file_too_large",
-      error: `Each photo must be under ${Math.round(REVIEW_PHOTO_MAX_BYTES / (1024 * 1024))} MB.`,
-    });
-    return;
-  }
-  next(err);
+  reviewPhotoUpload.array("files", 3)(req as never, res as never, (err: unknown) => {
+    if (!err) return next();
+    if (
+      respondToUploadError(err, res, {
+        unsupportedMessage: "Review photos must be JPEG, PNG or WEBP.",
+        tooLargeMessage: `Each photo must be under ${Math.round(
+          REVIEW_PHOTO_MAX_BYTES / (1024 * 1024)
+        )} MB.`,
+      })
+    ) {
+      return;
+    }
+    next(err);
+  });
 }
 
 export default defineMiddlewares({
@@ -142,9 +170,9 @@ export default defineMiddlewares({
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering
-      // 10 MB per request into memory first. The error handler comes last: it
-      // only ever sees what multer threw.
-      middlewares: [ocrRateLimit, upload.single("file"), ocrUploadErrorHandler],
+      // 10 MB per request into memory first. `ocrUpload` runs multer and owns
+      // its error reporting — see the note on its definition.
+      middlewares: [ocrRateLimit, ocrUpload],
     },
     {
       // Review photos are ordinary public images — a much tighter allowlist
@@ -152,7 +180,7 @@ export default defineMiddlewares({
       // to accommodate here and these are served to every visitor.
       matcher: "/store/product-review-photos",
       method: ["POST"],
-      middlewares: [reviewPhotoUpload.array("files", 3), reviewPhotoErrorHandler],
+      middlewares: [reviewPhotosUpload],
     },
     {
       matcher: "/store/orders/:id",
