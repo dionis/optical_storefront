@@ -3,6 +3,7 @@ import {
   MedusaResponse,
 } from "@medusajs/framework/http";
 import { MedusaError } from "@medusajs/framework/utils";
+import { notificationHealth } from "../../../lib/notification-health";
 import { STORE_SETTINGS_MODULE } from "../../../modules/store-settings/index";
 import type StoreSettingsModuleService from "../../../modules/store-settings/service";
 import {
@@ -34,6 +35,11 @@ function buildPayload(
   return {
     settings,
     payment_providers: KNOWN_PAYMENT_PROVIDERS,
+    // Whether email/SMS can actually be delivered. Configuring a recipient here
+    // does nothing if no provider is wired: the notification module quietly
+    // falls back to writing messages to the server log. Surfacing it next to
+    // the very fields it makes useless is the point.
+    notification_health: notificationHealth(),
   };
 }
 

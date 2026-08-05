@@ -7,6 +7,7 @@ import Reviews from "../components/Reviews.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 
 export default function CaseDetail() {
   const { slug } = useParams();
@@ -19,6 +20,8 @@ export default function CaseDetail() {
   const { addVariant, toggleFav, isFav, busy } = useCart();
   const { toast } = useFeedback();
   const { t } = useLang();
+  // Before the early return: hook order must not change between renders.
+  const review = useReviewSummary(slug);
 
   if (!item) {
     return <div className="section"><p>{t("notfound")} <Link to="/marca/case">{t("notfound.link")}</Link></p></div>;
@@ -66,9 +69,17 @@ export default function CaseDetail() {
         <div className="pdp-info">
           <div className="pdp-brand">{t("nav.cases")}</div>
           <h1 className="pdp-title">{item.name}</h1>
+          {/* Same rule as the frame page: only ratings real customers gave.
+              `item.rating`/`item.reviews` are scraper filler. */}
           <div className="pdp-meta">
-            <span className="stars">★ {item.rating}</span>
-            <span className="muted">· {item.reviews} {t("pdp.reviews")}</span>
+            {review ? (
+              <>
+                <span className="stars">★ {review.average.toFixed(1)}</span>
+                <span className="muted">· {review.count} {t("pdp.reviews")}</span>
+              </>
+            ) : (
+              <span className="muted">{t("rev.none")}</span>
+            )}
           </div>
           <div className="pdp-price">${item.price.toFixed(2)}</div>
 

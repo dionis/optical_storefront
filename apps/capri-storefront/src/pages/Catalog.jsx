@@ -7,6 +7,7 @@ import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { fetchReviewSummaries } from "../data/reviews.js";
 
 export default function Catalog() {
   const { slug } = useParams();
@@ -40,6 +41,19 @@ export default function Catalog() {
   // Applying a filter, sort or search jumps back to the top of the listing.
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }, [selected, sort, q, slug]);
 
+  // Ratings for "sort by rating". Only fetched when that sort is chosen: the
+  // cards fetch their own summaries lazily as they render, but ORDERING the
+  // list needs every frame's rating up front, not just the visible ones.
+  const [ratings, setRatings] = useState({});
+  useEffect(() => {
+    if (sort !== "rating") return;
+    let cancelled = false;
+    fetchReviewSummaries(PRODUCTS.map((p) => p.slug))
+      .then((found) => { if (!cancelled) setRatings(found); })
+      .catch(() => { /* leave the list in its current order */ });
+    return () => { cancelled = true; };
+  }, [sort, PRODUCTS]);
+
   const toggle = (key, opt) => {
     setSelected((prev) => {
       const cur = prev[key] || [];
@@ -57,9 +71,19 @@ export default function Catalog() {
     });
     if (sort === "price-asc") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "price-desc") list = [...list].sort((a, b) => b.price - a.price);
-    if (sort === "rating") list = [...list].sort((a, b) => b.rating - a.rating);
+    // Sorting by rating means sorting by what customers actually gave. Frames
+    // nobody has reviewed sort last rather than as a zero — they are unrated,
+    // not badly rated. (This used to sort by the scraper's invented `rating`,
+    // which put frames in a confident order nobody had voted on.)
+    if (sort === "rating") {
+      list = [...list].sort((a, b) => {
+        const ra = ratings[a.slug]?.average ?? -1;
+        const rb = ratings[b.slug]?.average ?? -1;
+        return rb - ra;
+      });
+    }
     return list;
-  }, [PRODUCTS, brand, q, selected, sort]);
+  }, [PRODUCTS, brand, q, selected, sort, ratings]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
   const urlFilterLabel = shapeParam ? tv(shapeParam) : genderParam ? tv(genderParam) : ageParam ? tv(ageParam) : null;

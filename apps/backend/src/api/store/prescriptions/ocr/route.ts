@@ -39,8 +39,23 @@ type AcceptedMediaType = AcceptedImageType | typeof PDF_MEDIA_TYPE;
 const isAcceptedImageType = (value: string): value is AcceptedImageType =>
   (ACCEPTED_IMAGE_TYPES as readonly string[]).includes(value);
 
-const isAcceptedMediaType = (value: string): value is AcceptedMediaType =>
-  value === PDF_MEDIA_TYPE || isAcceptedImageType(value);
+/**
+ * Formats we accept on the way IN but cannot forward to the vision API.
+ *
+ * HEIC/HEIF is what an iPhone hands over from its photo library. The API takes
+ * none of it, so it has to be transcoded first — `downscaleForOcr` does that
+ * whenever sharp was built with HEIF support. We accept it at the door anyway
+ * because refusing it outright is what produced the dead end this fixes: the
+ * upload failed before the route ran and the funnel showed a generic error with
+ * every prescription field still at 0.00.
+ */
+const TRANSCODE_ONLY_TYPES = ["image/heic", "image/heif"] as const;
+
+const isTranscodeOnlyType = (value: string): boolean =>
+  (TRANSCODE_ONLY_TYPES as readonly string[]).includes(value);
+
+const isAcceptedMediaType = (value: string): boolean =>
+  value === PDF_MEDIA_TYPE || isAcceptedImageType(value) || isTranscodeOnlyType(value);
 
 /**
  * The response shape is enforced by the API through `output_config.format`
@@ -175,18 +190,22 @@ export async function POST(
   // File is available via multer or Medusa's built-in file handling
   const file = (req as unknown as { file?: Express.Multer.File }).file;
   if (!file) {
-    res.status(400).json({ error: "Se requiere un archivo de imagen o PDF." });
+    res.status(400).json({ error_code: "file_required", error: "A file is required." });
     return;
   }
 
+  // Statuses match what the multer error handler in src/api/middlewares.ts
+  // returns for the same conditions, so the storefront maps one reason per
+  // failure whichever layer caught it.
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    res.status(400).json({ error: "El archivo excede el límite de 10 MB." });
+    res.status(413).json({ error_code: "file_too_large", error: "File exceeds the 10 MB limit." });
     return;
   }
 
   if (!isAcceptedMediaType(file.mimetype)) {
-    res.status(400).json({
-      error: "Formato no soportado. Sube una imagen (JPEG, PNG, WEBP, GIF) o un PDF.",
+    res.status(415).json({
+      error_code: "unsupported_media_type",
+      error: "Unsupported media type. Send a JPEG, PNG, WEBP, GIF, HEIC or PDF.",
     });
     return;
   }
@@ -195,7 +214,8 @@ export async function POST(
   if (!apiKey) {
     // Graceful fallback: return empty prescription, let user fill manually
     res.status(503).json({
-      error: "OCR no disponible. Por favor ingresa tu receta manualmente.",
+      error_code: "ocr_unavailable",
+      error: "ANTHROPIC_API_KEY is not configured.",
       fallback: true,
     });
     return;
@@ -212,6 +232,18 @@ export async function POST(
     Math.min(settings.max_image_px, primaryModel?.max_image_edge_px ?? settings.max_image_px)
   );
   const mediaType = downscaled.media_type as AcceptedMediaType;
+
+  // `downscaleForOcr` converts whatever it can decode to JPEG. If a HEIC came
+  // through unchanged, this build of sharp has no HEIF decoder and the API
+  // would reject the bytes — say so plainly instead of burning a request and
+  // reporting it as a failed read.
+  if (isTranscodeOnlyType(mediaType)) {
+    res.status(415).json({
+      error_code: "unsupported_media_type",
+      error: "HEIC/HEIF could not be converted on this server. Send a JPEG, PNG or PDF.",
+    });
+    return;
+  }
 
   // ── Upload to R2 (PHI compliance) ──────────────────────────────────────
   let fileUrl: string | null = null;
@@ -312,9 +344,10 @@ export async function POST(
       err instanceof Anthropic.RateLimitError ||
       (err instanceof Error && err.message.includes("rate_limit"));
     res.status(503).json({
+      error_code: isRateLimit ? "ocr_rate_limited" : "ocr_failed",
       error: isRateLimit
-        ? "Servicio OCR temporalmente no disponible. Por favor ingresa tu receta manualmente."
-        : "No se pudo procesar la imagen. Por favor ingresa tu receta manualmente.",
+        ? "Upstream model rate limit reached."
+        : "The model call failed.",
       fallback: true,
     });
     return;
@@ -322,8 +355,8 @@ export async function POST(
 
   if (!extracted) {
     res.status(422).json({
-      error:
-        "No se pudo leer la receta automáticamente. Por favor ingrésala manualmente.",
+      error_code: "ocr_unreadable",
+      error: "The model returned no usable reading.",
       fallback: true,
     });
     return;
@@ -342,7 +375,9 @@ export async function POST(
       image_resized: downscaled.resized,
       bytes_sent: downscaled.final_bytes,
     },
-    message:
-      "Por favor revisa y confirma que los valores extraídos son correctos antes de continuar.",
+    // No `message` here on purpose. The "review and confirm these values"
+    // prompt is UI copy and belongs to the storefront dictionary, which knows
+    // the customer's language; this endpoint does not. `verified_by_user:false`
+    // is the machine-readable signal that confirmation is still required.
   });
 }

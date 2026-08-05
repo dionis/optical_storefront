@@ -25,26 +25,116 @@ function blockUnauthenticatedOrderRetrieve(
   });
 }
 
+const OCR_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: OCR_MAX_FILE_SIZE_BYTES },
   fileFilter: (_req, file, cb) => {
     // Keep in sync with ACCEPTED_IMAGE_TYPES / PDF_MEDIA_TYPE in
     // src/api/store/prescriptions/ocr/route.ts.
+    //
+    // HEIC/HEIF earn their place here even though sharp may not decode them:
+    // it is what an iPhone hands over from the photo library, and rejecting it
+    // at the door meant the request never reached the route — the storefront
+    // just showed "we couldn't read it" while the prescription fields sat at
+    // 0.00. The storefront now re-encodes to JPEG before uploading, so this is
+    // the safety net for a browser that could not; the route reports a proper
+    // reason if the decode then fails.
     const allowed = [
       "image/jpeg",
       "image/png",
       "image/webp",
       "image/gif",
+      "image/heic",
+      "image/heif",
       "application/pdf",
     ];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Solo se permiten imágenes (JPEG, PNG, WEBP, GIF) o PDF."));
+      cb(new UnsupportedUploadError(file.mimetype));
     }
   },
 });
+
+/** Marker so the handler below can tell a rejected type from a real crash. */
+class UnsupportedUploadError extends Error {
+  constructor(public readonly mimetype: string) {
+    super(`Unsupported upload media type: ${mimetype}`);
+    this.name = "UnsupportedUploadError";
+  }
+}
+
+/**
+ * Turns multer's rejections into the same coded JSON the OCR route returns.
+ *
+ * Without this, a too-large or wrong-type upload escapes as an unhandled error
+ * and reaches the storefront as an opaque 500 — indistinguishable from "the
+ * service is broken", which is exactly the wrong advice when the fix is "take a
+ * smaller photo". Express only routes to a handler with four arguments, so the
+ * unused `_next` is load-bearing.
+ */
+function ocrUploadErrorHandler(
+  err: unknown,
+  _req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  if (err instanceof UnsupportedUploadError) {
+    res.status(415).json({
+      error_code: "unsupported_media_type",
+      error: "Unsupported media type. Send a JPEG, PNG, WEBP, GIF, HEIC or PDF.",
+    });
+    return;
+  }
+  // multer tags its own failures with a `code`; LIMIT_FILE_SIZE is the only one
+  // reachable here, and it is the common one on a modern phone camera.
+  if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({
+      error_code: "file_too_large",
+      error: `File exceeds the ${Math.round(OCR_MAX_FILE_SIZE_BYTES / (1024 * 1024))} MB limit.`,
+    });
+    return;
+  }
+  next(err);
+}
+
+const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Uploads for review photos: public images only, and small ones. */
+const reviewPhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: REVIEW_PHOTO_MAX_BYTES, files: 3 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new UnsupportedUploadError(file.mimetype));
+  },
+});
+
+function reviewPhotoErrorHandler(
+  err: unknown,
+  _req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  if (err instanceof UnsupportedUploadError) {
+    res.status(415).json({
+      error_code: "unsupported_media_type",
+      error: "Review photos must be JPEG, PNG or WEBP.",
+    });
+    return;
+  }
+  if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({
+      error_code: "file_too_large",
+      error: `Each photo must be under ${Math.round(REVIEW_PHOTO_MAX_BYTES / (1024 * 1024))} MB.`,
+    });
+    return;
+  }
+  next(err);
+}
 
 export default defineMiddlewares({
   routes: [
@@ -52,8 +142,17 @@ export default defineMiddlewares({
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering
-      // 10 MB per request into memory first.
-      middlewares: [ocrRateLimit, upload.single("file")],
+      // 10 MB per request into memory first. The error handler comes last: it
+      // only ever sees what multer threw.
+      middlewares: [ocrRateLimit, upload.single("file"), ocrUploadErrorHandler],
+    },
+    {
+      // Review photos are ordinary public images — a much tighter allowlist
+      // than the prescription upload, since there is no camera-format problem
+      // to accommodate here and these are served to every visitor.
+      matcher: "/store/product-review-photos",
+      method: ["POST"],
+      middlewares: [reviewPhotoUpload.array("files", 3), reviewPhotoErrorHandler],
     },
     {
       matcher: "/store/orders/:id",

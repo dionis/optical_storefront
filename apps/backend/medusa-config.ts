@@ -212,5 +212,8 @@ export default defineConfig({
     {
       resolve: "./src/modules/store-settings",
     },
+    {
+      resolve: "./src/modules/product-review",
+    },
   ],
 });

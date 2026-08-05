@@ -14,6 +14,7 @@ import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
+import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -26,6 +27,9 @@ export default function ProductDetail() {
   const { toast } = useFeedback();
   const { t, tv, lang } = useLang();
   const navigate = useNavigate();
+  // Hook order matters: this must run before the `if (!product)` early return,
+  // or React sees a different hook count between renders and crashes.
+  const review = useReviewSummary(slug);
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
 
   // Add the frame at its base price via the server cart (no local total).
@@ -102,9 +106,18 @@ export default function ProductDetail() {
               <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
             )}
           </div>
+          {/* Real reviews only. `product.rating`/`product.reviews` are numbers
+              the scraper's filler generates for presentation; showing them here
+              put a review score on frames nobody had ever reviewed. */}
           <div className="pdp-meta">
-            <span className="stars">★ {product.rating}</span>
-            <span className="muted">· {product.reviews} {t("pdp.reviews")}</span>
+            {review ? (
+              <>
+                <span className="stars">★ {review.average.toFixed(1)}</span>
+                <span className="muted">· {review.count} {t("pdp.reviews")}</span>
+              </>
+            ) : (
+              <span className="muted">{t("rev.none")}</span>
+            )}
           </div>
           <div className="pdp-price">${product.price.toFixed(2)} <span className="muted small">{t("pdp.lensesFrom")}</span></div>
 

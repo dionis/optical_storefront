@@ -1,6 +1,7 @@
 import type {
   Prescription,
   PrescriptionValidationResult,
+  PrescriptionWarning,
   LensIndex,
 } from "@eyewear/shared";
 
@@ -41,57 +42,67 @@ export const DEFAULT_RX_RANGES: RxRanges = {
 /**
  * Validates a prescription and returns fulfillability, warnings,
  * and recommended lens index.  Called by the API route and before checkout.
+ *
+ * Warnings are emitted as codes plus parameters, never as sentences: this runs
+ * server-side with no knowledge of the customer's language, and the storefront
+ * owns all user-facing copy.
  */
 export function validatePrescription(
   rx: Prescription,
   ranges: RxRanges = DEFAULT_RX_RANGES,
   context: { usage_type?: string; eye_size?: number } = {}
 ): PrescriptionValidationResult {
-  const warnings: string[] = [];
+  const warnings: PrescriptionWarning[] = [];
   let fulfillable = true;
 
   const eyes = [
-    { label: "OD", data: rx.od },
-    { label: "OS", data: rx.os },
+    { eye: "od", data: rx.od },
+    { eye: "os", data: rx.os },
   ] as const;
 
-  for (const { label, data } of eyes) {
+  for (const { eye, data } of eyes) {
     if (data.sph !== null) {
       if (data.sph < ranges.sph_min || data.sph > ranges.sph_max) {
-        warnings.push(
-          `${label} SPH ${data.sph} está fuera del rango soportado (${ranges.sph_min} a +${ranges.sph_max}).`
-        );
+        warnings.push({
+          code: "sph_out_of_range",
+          eye,
+          params: { value: data.sph, min: ranges.sph_min, max: ranges.sph_max },
+        });
         fulfillable = false;
       }
       if (!isMultipleOf025(data.sph)) {
-        warnings.push(`${label} SPH debe ser múltiplo de 0.25.`);
+        warnings.push({ code: "sph_not_step", eye, params: { step: 0.25 } });
         fulfillable = false;
       }
     }
 
     if (data.cyl !== null) {
       if (data.cyl < ranges.cyl_min || data.cyl > ranges.cyl_max) {
-        warnings.push(
-          `${label} CYL ${data.cyl} está fuera del rango soportado (${ranges.cyl_min} a +${ranges.cyl_max}).`
-        );
+        warnings.push({
+          code: "cyl_out_of_range",
+          eye,
+          params: { value: data.cyl, min: ranges.cyl_min, max: ranges.cyl_max },
+        });
         fulfillable = false;
       }
       if (!isMultipleOf025(data.cyl)) {
-        warnings.push(`${label} CYL debe ser múltiplo de 0.25.`);
+        warnings.push({ code: "cyl_not_step", eye, params: { step: 0.25 } });
         fulfillable = false;
       }
       // Axis required when CYL ≠ 0
       if (data.cyl !== 0) {
         if (data.axis === null) {
-          warnings.push(`${label} AXIS es obligatorio cuando CYL ≠ 0.`);
+          warnings.push({ code: "axis_required", eye });
           fulfillable = false;
         } else if (
           data.axis < ranges.axis_min ||
           data.axis > ranges.axis_max
         ) {
-          warnings.push(
-            `${label} AXIS ${data.axis} debe estar entre ${ranges.axis_min} y ${ranges.axis_max}.`
-          );
+          warnings.push({
+            code: "axis_out_of_range",
+            eye,
+            params: { value: data.axis, min: ranges.axis_min, max: ranges.axis_max },
+          });
           fulfillable = false;
         }
       }
@@ -99,9 +110,11 @@ export function validatePrescription(
 
     if (data.add !== null) {
       if (data.add < ranges.add_min || data.add > ranges.add_max) {
-        warnings.push(
-          `${label} ADD ${data.add} está fuera del rango soportado (+${ranges.add_min} a +${ranges.add_max}).`
-        );
+        warnings.push({
+          code: "add_out_of_range",
+          eye,
+          params: { value: data.add, min: ranges.add_min, max: ranges.add_max },
+        });
         fulfillable = false;
       }
     }
@@ -110,9 +123,7 @@ export function validatePrescription(
   // ADD required for progressive
   if (context.usage_type === "progressive") {
     if (rx.od.add === null || rx.os.add === null) {
-      warnings.push(
-        "ADD es obligatorio para lentes progresivos. Consulta tu oftalmólogo."
-      );
+      warnings.push({ code: "add_required_progressive" });
       fulfillable = false;
     }
   }
@@ -120,22 +131,25 @@ export function validatePrescription(
   // PD validation
   const hasDualPd = rx.pd_od !== null || rx.pd_os !== null;
   if (hasDualPd) {
-    for (const [side, val] of [
-      ["OD", rx.pd_od],
-      ["OS", rx.pd_os],
+    for (const [eye, val] of [
+      ["od", rx.pd_od],
+      ["os", rx.pd_os],
     ] as const) {
       if (val !== null && (val < ranges.pd_dual_min || val > ranges.pd_dual_max)) {
-        warnings.push(
-          `PD ${side} ${val} mm está fuera del rango (${ranges.pd_dual_min}–${ranges.pd_dual_max} mm por ojo).`
-        );
+        warnings.push({
+          code: "pd_dual_out_of_range",
+          eye,
+          params: { value: val, min: ranges.pd_dual_min, max: ranges.pd_dual_max },
+        });
         fulfillable = false;
       }
     }
   } else if (rx.pd !== null) {
     if (rx.pd < ranges.pd_single_min || rx.pd > ranges.pd_single_max) {
-      warnings.push(
-        `PD ${rx.pd} mm está fuera del rango soportado (${ranges.pd_single_min}–${ranges.pd_single_max} mm).`
-      );
+      warnings.push({
+        code: "pd_single_out_of_range",
+        params: { value: rx.pd, min: ranges.pd_single_min, max: ranges.pd_single_max },
+      });
       fulfillable = false;
     }
   }
@@ -154,17 +168,19 @@ export function validatePrescription(
   let recommended_index: LensIndex | null = null;
   if (isHighRx) {
     recommended_index = 1.67;
-    warnings.push(
-      "Tu prescripción es alta. Se recomienda índice 1.67 o superior para mayor comodidad y lentes más delgadas."
-    );
+    warnings.push({
+      code: "high_rx_index_recommended",
+      params: { index: 1.67 },
+    });
   }
 
   // Rimless / small-frame rule
   if (context.eye_size !== undefined && context.eye_size < 46) {
     if (maxSph > 6) {
-      warnings.push(
-        "Esta montura pequeña (eye_size < 46) no es compatible con una graduación alta (|SPH| > 6)."
-      );
+      warnings.push({
+        code: "small_frame_high_rx",
+        params: { eye_size: context.eye_size, max_sph: 6 },
+      });
       fulfillable = false;
     }
   }

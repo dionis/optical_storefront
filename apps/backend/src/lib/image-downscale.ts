@@ -38,11 +38,16 @@ export async function downscaleForOcr(
   // API renders their pages itself.
   if (!mediaType.startsWith("image/")) return unchanged;
 
+  // HEIC/HEIF must be re-encoded whatever its size — the vision API does not
+  // accept the format at all, so "already small enough" is not a reason to skip
+  // the conversion the way it is for a JPEG.
+  const mustTranscode = mediaType === "image/heic" || mediaType === "image/heif";
+
   try {
     const image = sharp(input, { failOn: "none" });
     const { width, height } = await image.metadata();
     if (!width || !height) return unchanged;
-    if (Math.max(width, height) <= maxEdgePx) return unchanged;
+    if (!mustTranscode && Math.max(width, height) <= maxEdgePx) return unchanged;
 
     // JPEG at quality 85 keeps prescription digits legible while cutting the
     // upload well below the 10 MB cap.

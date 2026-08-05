@@ -168,6 +168,14 @@ export default function MedusaCheckout() {
     if (!PK) { setErr(L("noStripe")); return; }
     setErr(""); setBusy(true);
     try {
+      // Re-send the notification preferences before leaving this step.
+      // `calcShipping` was the only place that wrote them, so a shopper who
+      // ticked "email me" AFTER the shipping options appeared — the checkboxes
+      // are still on screen at that point — had the change silently dropped and
+      // the order carried whatever was set on the earlier click.
+      await updateContact({
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang },
+      });
       await setShippingMethod(shipId);
       const { clientSecret } = await startPayment(DEFAULT_PROVIDER);
       setCart(await getCart());

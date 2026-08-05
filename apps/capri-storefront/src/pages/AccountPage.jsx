@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useUser, logout } from "../components/userAuth.js";
 import { useCart } from "../components/CartContext.jsx";
-import { listByUser, updateReview, removeReview } from "../components/reviewsStore.js";
+import { listOwnReviews, updateOwnReview, removeOwnReview } from "../components/reviewsStore.js";
 import TrackingTimeline from "../components/TrackingTimeline.jsx";
 import { fetchMyOrders, getSession } from "../data/orderAccess.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -126,41 +126,80 @@ function Orders() {
   );
 }
 
-function Reviews({ email }) {
+/**
+ * The reviews this browser wrote. Backed by the server now, with the edit
+ * tokens kept locally — see components/reviewsStore.js for why authorship is
+ * proved by a token rather than by the signed-in email.
+ */
+function Reviews() {
   const { t } = useLang();
-  const [items, setItems] = useState(() => listByUser(email));
-  const [editing, setEditing] = useState(null); // {slug,id}
+  const [items, setItems] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [editing, setEditing] = useState(null); // review id
   const [draft, setDraft] = useState({ rating: 5, text: "" });
-  const refresh = () => setItems(listByUser(email));
+  const [busy, setBusy] = useState(false);
 
+  const refresh = useCallback(async () => {
+    try {
+      setItems(await listOwnReviews());
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const save = async (id) => {
+    if (!draft.text.trim() || busy) return;
+    setBusy(true);
+    try {
+      await updateOwnReview(id, { rating: draft.rating, body: draft.text.trim() });
+      setEditing(null);
+      await refresh();
+    } catch { /* the row stays as it was */ }
+    setBusy(false);
+  };
+
+  const remove = async (id) => {
+    if (busy) return;
+    setBusy(true);
+    try { await removeOwnReview(id); await refresh(); } catch { /* keep it listed */ }
+    setBusy(false);
+  };
+
+  if (status === "loading") return <p className="muted acc-empty">…</p>;
   if (!items.length) return <p className="muted acc-empty">{t("acc.rev.empty")}</p>;
+
   return (
     <div className="acc-reviews">
       {items.map((r) => {
-        const on = editing && editing.id === r.id;
+        const on = editing === r.id;
         return (
           <div className="acc-review" key={r.id}>
             <div className="acc-review-head">
-              <Link to={`/producto/${r.slug}`}><b>{r.product || r.slug}</b></Link>
-              <span className="muted">{r.date}</span>
+              <Link to={`/producto/${r.product_handle}`}><b>{r.product_handle}</b></Link>
+              <span className="muted">{(r.created_at || "").slice(0, 10)}</span>
             </div>
             {on ? (
               <>
                 <Stars value={draft.rating} onSelect={(v) => setDraft((d) => ({ ...d, rating: v }))} />
                 <textarea rows={3} value={draft.text} onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))} />
                 <div className="acc-review-actions">
-                  <button className="btn-sm" onClick={() => { updateReview(r.slug, r.id, { rating: draft.rating, text: draft.text.trim() }); setEditing(null); refresh(); }}>{t("acc.save")}</button>
+                  <button className="btn-sm" disabled={busy} onClick={() => save(r.id)}>{t("acc.save")}</button>
                   <button className="btn-sm" onClick={() => setEditing(null)}>{t("acc.cancel")}</button>
                 </div>
               </>
             ) : (
               <>
                 <Stars value={r.rating} />
-                <p>{r.text}</p>
-                {r.photos && r.photos.length > 0 && <div className="rev-thumbs">{r.photos.map((p, j) => <img key={j} src={p} alt="" />)}</div>}
+                <p>{r.body}</p>
+                {r.photo_urls && r.photo_urls.length > 0 && (
+                  <div className="rev-thumbs">{r.photo_urls.map((u) => <img key={u} src={u} alt="" />)}</div>
+                )}
                 <div className="acc-review-actions">
-                  <button className="btn-sm" onClick={() => { setEditing({ slug: r.slug, id: r.id }); setDraft({ rating: r.rating, text: r.text }); }}>{t("acc.edit")}</button>
-                  <button className="btn-sm danger" onClick={() => { removeReview(r.slug, r.id); refresh(); }}>{t("acc.delete")}</button>
+                  <button className="btn-sm" onClick={() => { setEditing(r.id); setDraft({ rating: r.rating, text: r.body }); }}>{t("acc.edit")}</button>
+                  <button className="btn-sm danger" disabled={busy} onClick={() => remove(r.id)}>{t("acc.delete")}</button>
                 </div>
               </>
             )}
@@ -240,7 +279,7 @@ export default function AccountPage() {
       <div className="acc-panel">
         {tab === "fav" && <Favorites />}
         {tab === "orders" && <Orders />}
-        {tab === "reviews" && <Reviews email={user.email} />}
+        {tab === "reviews" && <Reviews />}
         {tab === "track" && <Tracking />}
       </div>
     </div>

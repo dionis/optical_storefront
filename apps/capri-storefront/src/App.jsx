@@ -18,6 +18,7 @@ import MedusaCheckout from "./pages/MedusaCheckout.jsx";
 import { CartProvider } from "./components/CartContext.jsx";
 import { FeedbackProvider } from "./components/Feedback.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
+import { ReviewSummaryProvider } from "./components/ReviewSummaryContext.jsx";
 
 export default function App() {
   const { pathname } = useLocation();
@@ -41,6 +42,7 @@ export default function App() {
     <LanguageProvider>
       <FeedbackProvider>
         <CartProvider>
+          <ReviewSummaryProvider>
           <ScrollToTop />
           <Header />
           <main className="site-main">
@@ -58,6 +60,7 @@ export default function App() {
             </Routes>
           </main>
           <Footer />
+          </ReviewSummaryProvider>
         </CartProvider>
       </FeedbackProvider>
     </LanguageProvider>

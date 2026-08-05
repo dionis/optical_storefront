@@ -60,10 +60,14 @@ export function ocrRateLimit(
 
   if (times.length >= max) {
     const retryAfterMs = WINDOW_MS - (now - times[0]);
-    res.setHeader("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+    const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    // The storefront tells this apart from a failed read: "wait and retry" is
+    // useful advice, "we couldn't read it" is not.
     res.status(429).json({
-      error:
-        "Has superado el límite de lecturas automáticas. Inténtalo más tarde o ingresa tu receta manualmente.",
+      error_code: "ocr_rate_limited",
+      error: "Too many OCR reads from this client.",
+      retry_after_seconds: retryAfterSeconds,
       fallback: true,
     });
     return;

@@ -83,6 +83,21 @@ const ADD = range(0.75, 3.5, 0.25).map((v) => ({ v, label: "+" + v.toFixed(2) })
 const PD = range(48, 80, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
 // Monocular PD (one value per eye) uses a lower range than the binocular total.
 const PD_MONO = range(24, 40, 0.5).map((v) => ({ v, label: v.toFixed(1) }));
+
+// Which piece of advice fits the failure. `ocrPrescription` normalises every
+// backend reason into an OcrError code (falling back to one derived from the
+// HTTP status when the backend predates error codes), and each code maps to
+// copy that tells the customer what to actually DO next. Anything unrecognised
+// lands on the generic message rather than leaving the reason blank.
+const OCR_ERROR_REASON = {
+  file_required: "badFile",
+  file_too_large: "tooLarge",
+  unsupported_media_type: "badFormat",
+  ocr_rate_limited: "rateLimited",
+  ocr_unavailable: "unavailable",
+  ocr_unreadable: "unreadable",
+};
+const ocrErrorReason = (code) => OCR_ERROR_REASON[code] || "generic";
 // ALTURA DE MONTAJE (fitting/seg height): distancia vertical del borde interior
 // inferior de la montura al centro de la pupila. Es OBLIGATORIA en multifocales —
 // sin altura no se puede fabricar un progresivo. (Se mide con la montura puesta,
@@ -518,7 +533,7 @@ export default function LensProcess() {
     const file = e.target.files?.[0];
     e.target.value = ""; // let the user re-pick the same file after an error
     if (!file) return;
-    setOcr({ status: "loading", fileName: file.name, warnings: [], fileUrl: null, confirmed: false });
+    setOcr({ status: "loading", fileName: file.name, warnings: [], fileUrl: null, confirmed: false, reason: null });
     try {
       const res = await ocrPrescription(file);
       const p = res.prescription || {};
@@ -565,10 +580,20 @@ export default function LensProcess() {
         fileUrl: p.file_url ?? null,
         confirmed: false,
       });
-    } catch {
+    } catch (err) {
       // Every OCR failure mode is recoverable by typing the values in, so we
-      // never block the funnel on it.
-      setOcr({ status: "error", fileName: file.name, warnings: [], fileUrl: null, confirmed: false });
+      // never block the funnel on it — but "wait and retry", "that file is too
+      // big" and "we couldn't read it" are different pieces of advice and
+      // deserve different copy. Leaving the values at 0.00 behind a single
+      // generic message is what made this look like the read had "worked".
+      setOcr({
+        status: "error",
+        fileName: file.name,
+        warnings: [],
+        fileUrl: null,
+        confirmed: false,
+        reason: ocrErrorReason(err?.code),
+      });
     }
   };
 
@@ -634,6 +659,13 @@ export default function LensProcess() {
   };
   // OCR-highlight class for a field the model filled and the user hasn't checked.
   const ocrClass = (k) => (ocrFields.has(k) ? "from-ocr" : "");
+
+  // Validation warnings arrive from the backend as { code, eye, params } so the
+  // wording can follow the language the customer picked. Unknown codes fall back
+  // to the raw code rather than rendering nothing — a silent gap would hide a
+  // real problem with the prescription.
+  const rxWarningText = (w) =>
+    t(`rx.warn.${w.code}`, { ...(w.params || {}), eye: w.eye ? t(`rx.eye.${w.eye}`) : "" });
   const money = (n) => "$" + Number(n || 0).toFixed(0);
   const closeLabel = t("common.close");
 
@@ -915,7 +947,25 @@ export default function LensProcess() {
                         : t("lens.upload.sub")}
                     </small>
                   </label>
-                  {ocr.status === "error" && <p className="rx-ocr-error">{t("lens.upload.error")}</p>}
+                  {/* Cómo debe ser la foto. Va ANTES de subirla, no como consejo
+                      tras el fallo: casi todas las lecturas que fallan lo hacen
+                      por la foto (recortada, con brillo del flash, el papel
+                      doblado o un dedo encima de los valores), y para entonces
+                      el cliente ya se ha llevado el chasco. Se oculta mientras
+                      lee y una vez confirmada la receta, cuando ya no aporta. */}
+                  {ocr.status !== "loading" && !ocr.confirmed && (
+                    <div className="zlx-rx-tips">
+                      <b><Ic name="info" /> {t("lens.upload.tips.title")}</b>
+                      <ul>
+                        <li>{t("lens.upload.tips.whole")}</li>
+                        <li>{t("lens.upload.tips.light")}</li>
+                        <li>{t("lens.upload.tips.flat")}</li>
+                        <li>{t("lens.upload.tips.clear")}</li>
+                      </ul>
+                      <small>{t("lens.upload.tips.note")}</small>
+                    </div>
+                  )}
+                  {ocr.status === "error" && <p className="rx-ocr-error">{t(`lens.upload.err.${ocr.reason || "generic"}`)}</p>}
                   {ocr.status === "done" && (
                     <div className={`rx-ocr-review ${ocr.confirmed ? "ok" : ""}`}>
                       <b>{ocr.confirmed ? <><Ic name="check" /> {t("lens.upload.confirmed")}</> : t("lens.upload.reviewTitle")}</b>
@@ -923,7 +973,11 @@ export default function LensProcess() {
                       {!ocr.confirmed && ocrFields.size > 0 && (
                         <p className="rx-ocr-legend"><span className="rx-ocr-swatch" aria-hidden="true" />{t("lens.upload.legend")}</p>
                       )}
-                      {ocr.warnings.length > 0 && (<ul className="rx-ocr-warnings">{ocr.warnings.map((w) => <li key={w}>{w}</li>)}</ul>)}
+                      {ocr.warnings.length > 0 && (
+                        <ul className="rx-ocr-warnings">
+                          {ocr.warnings.map((w, i) => <li key={`${w.code}-${w.eye ?? ""}-${i}`}>{rxWarningText(w)}</li>)}
+                        </ul>
+                      )}
                       {!ocr.confirmed && (
                         <button type="button" className="btn btn-outline" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("lens.upload.confirm")}</button>
                       )}

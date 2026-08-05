@@ -28,7 +28,7 @@ export async function POST(
 
   const rx = body.prescription;
   if (!rx || !rx.od || !rx.os) {
-    res.status(400).json({ error: "Campo 'prescription' con 'od' y 'os' requerido." });
+    res.status(400).json({ error_code: "prescription_required", error: "Body must carry 'prescription' with 'od' and 'os'." });
     return;
   }
 
@@ -41,8 +41,8 @@ export async function POST(
   // was bypassed.
   if (source === "ocr" && rx.verified_by_user !== true) {
     res.status(400).json({
-      error:
-        "Los valores leídos automáticamente deben confirmarse antes de guardarse.",
+      error_code: "ocr_not_confirmed",
+      error: "An OCR prescription must be confirmed by the user before it is stored.",
     });
     return;
   }

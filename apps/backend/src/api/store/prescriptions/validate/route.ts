@@ -18,7 +18,10 @@ export async function POST(
   };
 
   if (!body.prescription) {
-    res.status(400).json({ error: "Campo 'prescription' requerido." });
+    res.status(400).json({
+      error_code: "prescription_required",
+      error: "Body must carry a 'prescription'.",
+    });
     return;
   }
 

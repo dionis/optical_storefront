@@ -33,7 +33,7 @@ describe("validatePrescription", () => {
     });
     const result = validatePrescription(rx);
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("SPH"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "sph_out_of_range")).toBe(true);
   });
 
   it("requires AXIS when CYL is non-zero", () => {
@@ -43,7 +43,7 @@ describe("validatePrescription", () => {
     });
     const result = validatePrescription(rx);
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("AXIS"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "axis_required")).toBe(true);
   });
 
   it("recommends index 1.67 for high Rx (|SPH| > 4)", () => {
@@ -74,7 +74,7 @@ describe("validatePrescription", () => {
       eye_size: 44,
     });
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("montura pequeña"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "small_frame_high_rx")).toBe(true);
   });
 
   it("requires ADD for progressive", () => {
@@ -86,7 +86,7 @@ describe("validatePrescription", () => {
       usage_type: "progressive",
     });
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("ADD"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "add_required_progressive")).toBe(true);
   });
 
   it("validates dual PD range", () => {
@@ -97,13 +97,13 @@ describe("validatePrescription", () => {
     });
     const result = validatePrescription(rx);
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("PD"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "pd_dual_out_of_range")).toBe(true);
   });
 
   it("validates single PD range", () => {
     const rx = buildRx({ pd: 85 });
     const result = validatePrescription(rx);
     expect(result.fulfillable).toBe(false);
-    expect(result.warnings.some((w: string) => w.includes("PD"))).toBe(true);
+    expect(result.warnings.some((w) => w.code === "pd_single_out_of_range")).toBe(true);
   });
 });

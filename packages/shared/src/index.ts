@@ -1,4 +1,4 @@
-export type { Prescription, PrescriptionEye, PrescriptionSource, PrescriptionValidationResult } from "./prescription";
+export type { Prescription, PrescriptionEye, PrescriptionSource, PrescriptionValidationResult, PrescriptionWarning, PrescriptionWarningCode, PrescriptionErrorCode } from "./prescription";
 export type { LensConfig, UsageType, LensIndex, CoatingType, CartLensMetadata } from "./lens-config";
 export type { FrameAttributes, FrameSize, FrameShape, FrameMaterial } from "./frame-attributes";
 export type { MeilisearchFrameDocument, FrameTranslations } from "./search";

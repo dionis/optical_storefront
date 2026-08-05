@@ -26,6 +26,7 @@ import {
 import { enrichLensItems, extractPaymentInfo, extractTracking } from "../lib/email/order-enrich";
 import type { Knex } from "@mikro-orm/knex";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
+import { notificationHealth, undeliverableReason } from "../lib/notification-health";
 import { resolveStoreSettings } from "../lib/store-settings";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
@@ -173,7 +174,29 @@ export default async function orderPlacedSubscriber({
     logger.warn(`[order-placed] could not build email extras for order ${order.id}: ${(error as Error).message}`);
   }
 
-  if (order.email) {
+  // The storefront records the shopper's email opt-in on the cart, which the
+  // order inherits as metadata (complete-cart copies `cart.metadata` verbatim).
+  // Absent means SEND: orders placed before the checkbox existed, and any order
+  // created outside the storefront, must still get their confirmation — an
+  // opt-in we never asked for is not a refusal.
+  // Say it out loud, once per order, when a channel cannot actually deliver.
+  // createNotifications() succeeds either way — the logging fallback reports
+  // success — so without this an order confirmation that went nowhere is
+  // indistinguishable in the logs from one that landed in the inbox.
+  const health = notificationHealth();
+  const emailUndeliverable = undeliverableReason(health.email);
+  if (emailUndeliverable) {
+    logger.error(`[order-placed] order ${data.id} email ${emailUndeliverable}`);
+  }
+
+  const orderMetadata = (order.metadata ?? {}) as Record<string, unknown>;
+  const wantsEmail =
+    orderMetadata["notify_email"] === undefined ||
+    orderMetadata["notify_email"] === null ||
+    orderMetadata["notify_email"] === true ||
+    orderMetadata["notify_email"] === "true";
+
+  if (order.email && wantsEmail) {
     try {
       // Rendering is inside the try on purpose: a template that throws on some
       // unusual order shape must not take the store's copy down with it, which
@@ -194,8 +217,10 @@ export default async function orderPlacedSubscriber({
         `[order-placed] customer confirmation for order ${order.id} failed: ${(error as Error).message}`
       );
     }
-  } else {
+  } else if (!order.email) {
     logger.warn(`[order-placed] order ${order.id} has no email — customer copy skipped.`);
+  } else {
+    logger.info(`[order-placed] order ${order.id} opted out of the email copy.`);
   }
 
   // Store copy. The owner's contact settings come from the admin-configurable
@@ -263,6 +288,11 @@ export default async function orderPlacedSubscriber({
     (typeof md["phone"] === "string" && md["phone"].trim()) ||
     (order.shipping_address?.phone ? String(order.shipping_address.phone).trim() : "") ||
     "";
+
+  const smsUndeliverable = undeliverableReason(health.sms);
+  if (smsUndeliverable && (wantsSms || storeSettings.owner_notification_sms)) {
+    logger.error(`[order-placed] order ${order.id} SMS ${smsUndeliverable}`);
+  }
 
   if (wantsSms && customerPhone) {
     try {

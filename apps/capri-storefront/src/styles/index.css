@@ -1765,6 +1765,22 @@ img { max-width: 100%; }
 .zlx-upload-box .zlx-ic { width: 26px; height: 26px; color: var(--cuba-blue); }
 .zlx-or { text-align: center; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
 
+/* Cómo debe ser la foto de la receta. Se lee como un aviso (barra azul a la
+   izquierda) y no como texto de relleno, porque seguirlo es lo que decide si la
+   lectura automática funciona. */
+.zlx-rx-tips { border-left: 3px solid var(--cuba-blue); background: var(--blue-soft, #eef4ff); border-radius: 0 10px 10px 0; padding: 10px 12px; }
+.zlx-rx-tips > b { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--cuba-blue); margin-bottom: 6px; }
+.zlx-rx-tips > b .zlx-ic { width: 16px; height: 16px; flex: 0 0 auto; }
+.zlx-rx-tips ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.zlx-rx-tips li { font-size: 12.5px; line-height: 1.4; color: var(--ink, #222); }
+.zlx-rx-tips > small { display: block; margin-top: 7px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+/* En móvil la ventana del funnel es estrecha: algo más de aire entre líneas
+   para que la lista siga siendo escaneable de un vistazo. */
+@media (max-width: 560px) {
+  .zlx-rx-tips { padding: 9px 10px; }
+  .zlx-rx-tips li { font-size: 12px; line-height: 1.45; }
+}
+
 /* --- rejilla de graduación (OD/OS) --- */
 /* OD | OS SIEMPRE lado a lado (simetría perfecta, sin desplazamiento lateral) */
 .zlx-rx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 12px; }

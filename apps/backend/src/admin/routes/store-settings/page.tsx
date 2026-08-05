@@ -28,7 +28,39 @@ interface StoreSettingsPayload {
     updated_at?: string | null;
   };
   payment_providers: string[];
+  /**
+   * Whether each channel can actually deliver. Absent on a backend deployed
+   * before this field existed, so every read of it must tolerate undefined.
+   */
+  notification_health?: {
+    email: { configured: boolean; provider: string; missing: string[] };
+    sms: { configured: boolean; provider: string; missing: string[] };
+  };
 }
+
+/**
+ * Banner for a channel with no real provider behind it.
+ *
+ * Filling in a recipient above does nothing in that state — the notification
+ * module writes the message to the server log and reports success — so this
+ * warning belongs next to the fields it invalidates, not only in the boot log
+ * nobody re-reads.
+ */
+const ChannelWarning = ({
+  label,
+  health,
+}: {
+  label: string;
+  health?: { configured: boolean; missing: string[] };
+}) => {
+  if (!health || health.configured) return null;
+  return (
+    <Text size="small" className="text-ui-fg-error">
+      ⚠ {label}: no se está enviando nada. Falta configurar {health.missing.join(", ")} en
+      el entorno del backend; mientras tanto los mensajes sólo se escriben en el log.
+    </Text>
+  );
+};
 
 const PROVIDER_LABELS: Record<string, string> = {
   pp_stripe_stripe: "Stripe",
@@ -151,6 +183,14 @@ const StoreSettingsPage = () => {
             {data.settings.source === "database" ? "Configurado" : "Valores por defecto"}
           </Badge>
         </div>
+
+        {(data.notification_health &&
+          (!data.notification_health.email.configured || !data.notification_health.sms.configured)) && (
+          <div className="flex flex-col gap-1 border-t border-ui-border-base bg-ui-bg-subtle px-6 py-4">
+            <ChannelWarning label="Correo" health={data.notification_health.email} />
+            <ChannelWarning label="SMS" health={data.notification_health.sms} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 border-t border-ui-border-base px-6 py-4 md:grid-cols-2">
           <div className="flex flex-col gap-2">

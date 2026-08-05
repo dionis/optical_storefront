@@ -4,6 +4,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
+import { useReviewSummary } from "./ReviewSummaryContext.jsx";
 
 // El probador arrastra three.js (~560 kB). Se carga sólo al abrirlo, no en
 // cada listado de producto.
@@ -24,6 +25,8 @@ export default function ProductCard({ product }) {
   const navigate = useNavigate();
   const color = product.colors[active];
   const fav = isFav(product.slug);
+  // null until somebody actually reviews this frame.
+  const review = useReviewSummary(product.slug);
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).
@@ -82,7 +85,10 @@ export default function ProductCard({ product }) {
         <div className="card-row">
           <Link to={`/recetas/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
           <span className="card-price">${product.price.toFixed(2)}</span>
-          <span className="card-rating">★ {product.rating}</span>
+          {/* Only a rating real customers gave. This used to print
+              `product.rating`, a number the scraper's filler invented for every
+              frame — so all 549 showed a review score nobody had written. */}
+          {review && <span className="card-rating">★ {review.average.toFixed(1)}</span>}
         </div>
         <div className="card-sub">{product.brand} · {tv(product.attributes.shape || "Montura")}</div>
 

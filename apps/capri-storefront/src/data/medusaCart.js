@@ -4,6 +4,7 @@
 // dollars (Medusa v2) — never cents. Lens configuration is priced server-side via
 // the /store/carts/:id/configured-line route (the client never sends a total).
 import { medusa } from "./medusa.js";
+import { preparePrescriptionFile } from "../lib/imagePrep.js";
 
 const CART_KEY = "oer_medusa_cart";
 
@@ -86,23 +87,73 @@ export async function createPrescription(prescription, ctx = {}) {
 }
 
 /**
+ * Failure reasons the OCR endpoint can report, normalised for the UI.
+ *
+ * The caller needs to tell these apart: "your photo is too big" and "the
+ * service is down" call for completely different advice, and collapsing both
+ * into "we couldn't read it" is what left customers re-uploading the same
+ * photo while the prescription fields sat at 0.00.
+ *
+ * `code` is whatever the backend sent in `error_code`, falling back to a
+ * status-derived guess so an older backend (one deployed before error codes
+ * existed) still produces something better than nothing.
+ */
+export class OcrError extends Error {
+  constructor(code, status, retryAfterSeconds) {
+    super(code);
+    this.name = "OcrError";
+    this.code = code;
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds ?? null;
+  }
+}
+
+/** Best guess at a reason when the backend predates `error_code`. */
+function codeFromStatus(status) {
+  if (status === 413) return "file_too_large";
+  if (status === 415) return "unsupported_media_type";
+  if (status === 429) return "ocr_rate_limited";
+  if (status === 422) return "ocr_unreadable";
+  if (status === 503) return "ocr_unavailable";
+  return "ocr_failed";
+}
+
+/**
  * Read a prescription photo via the backend OCR endpoint. The file is uploaded
  * as multipart and never touches R2 from the browser — the backend owns the
  * private PHI bucket. Returns { prescription, validation, message }; the
  * prescription always comes back with verified_by_user=false, so the caller
  * must have the user confirm the values before persisting them.
+ *
+ * The file is re-encoded first (see lib/imagePrep.js): a phone photo arrives as
+ * HEIC and/or well over the 10 MB cap, and both were rejected before the read
+ * ever started.
  */
 export async function ocrPrescription(file) {
+  const prepared = await preparePrescriptionFile(file);
   const form = new FormData();
-  form.append("file", file);
-  return medusa.client.fetch("/store/prescriptions/ocr", {
-    method: "POST",
-    body: form,
-    // The SDK defaults to application/json and would JSON.stringify the
-    // FormData; dropping the header lets the browser set the multipart
-    // boundary itself.
-    headers: { "content-type": null },
-  });
+  form.append("file", prepared);
+  try {
+    return await medusa.client.fetch("/store/prescriptions/ocr", {
+      method: "POST",
+      body: form,
+      // The SDK defaults to application/json and would JSON.stringify the
+      // FormData; dropping the header lets the browser set the multipart
+      // boundary itself.
+      headers: { "content-type": null },
+    });
+  } catch (err) {
+    // The SDK throws a plain Error carrying the status; the parsed body hangs
+    // off it on the versions that expose one. Read both defensively so a shape
+    // change downgrades the message instead of throwing over the throw.
+    const status = err?.status ?? err?.response?.status ?? 0;
+    const body = err?.body ?? err?.response?.data ?? null;
+    throw new OcrError(
+      body?.error_code || codeFromStatus(status),
+      status,
+      body?.retry_after_seconds
+    );
+  }
 }
 
 /** Add a frame configured with lenses — priced entirely server-side. */

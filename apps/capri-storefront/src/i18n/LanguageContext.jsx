@@ -22,7 +22,16 @@ export function LanguageProvider({ children }) {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const t = useCallback((key) => T[lang][key] ?? T.es[key] ?? key, [lang]);
+  // `params` fills `{name}` placeholders — needed for messages whose values come
+  // from the backend (prescription ranges, measured values) rather than the copy.
+  const t = useCallback(
+    (key, params) => {
+      const s = T[lang][key] ?? T.es[key] ?? key;
+      if (!params) return s;
+      return s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
+    },
+    [lang]
+  );
   const translateValue = useCallback((v) => tv(v, lang), [lang]);
   const toggle = useCallback(() => setLang((l) => (l === "es" ? "en" : "es")), []);
 
