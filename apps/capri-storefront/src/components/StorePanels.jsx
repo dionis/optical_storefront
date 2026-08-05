@@ -89,7 +89,7 @@ export function AuthPanel({ open, onClose }) {
             <button type="button" className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>{t("auth.login")}</button>
             <button type="button" className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>{t("auth.register")}</button>
           </div>
-          <label>{t("auth.email")}<input type="email" value={email} placeholder="tucorreo@ejemplo.com" autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
+          <label>{t("auth.email")}<input type="email" value={email} placeholder={t("auth.emailPh")} autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
           <label>{t("auth.phone")}<input type="tel" value={phone} placeholder="+1 281 555 0100" autoComplete="tel" onChange={(e) => setPhone(e.target.value)} /></label>
           {err && <div className="auth-err">{err}</div>}
           <button className="btn btn-primary big" type="submit">{mode === "login" ? t("auth.login") : t("auth.register")}</button>

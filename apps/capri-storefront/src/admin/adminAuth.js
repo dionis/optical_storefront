@@ -46,7 +46,7 @@ export async function authenticate(user, pass) {
   if (DEMO_LOGIN) {
     const email = String(user || "").trim();
     if (!/\S+@\S+\.\S+/.test(email) || !String(pass || "")) {
-      return { ok: false, error: "Introduce un correo y una contraseña" };
+      return { ok: false, error: "adm.err.needBoth" };
     }
     saveDemoSession(email);
     return { ok: true };
@@ -60,7 +60,7 @@ export async function authenticate(user, pass) {
 
 /** Second factor, when Medusa asked for one. */
 export async function verifyOtp(code) {
-  if (DEMO_LOGIN) return { ok: false, error: "Vuelve a iniciar sesión" };
+  if (DEMO_LOGIN) return { ok: false, error: "adm.err.relogin" };
   return verifyMfa(code);
 }
 

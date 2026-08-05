@@ -358,7 +358,9 @@ export interface PrescriptionForEmail {
   pd_od: number | null;
   pd_os: number | null;
   seg_height?: number | null;
-  source?: string | null; // "manual" | "ocr" — shown in the admin copy
+  source?: string | null; // "manual" | "ocr" — where the values came from
+  /** The customer reviewed the values on screen before paying. */
+  verified_by_user?: boolean;
 }
 
 /** Dioptric values carry an explicit sign; blanks render as an em dash. */
@@ -600,13 +602,31 @@ function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: Ema
   return `<div style="margin-top:12px;font-size:14px;color:#374151"><strong>${esc(t(locale, "payment_method"))}:</strong> ${esc(label)}</div>`;
 }
 
-/** Prescription source (manual vs uploaded photo) for the ADMIN copy. */
-function renderRxSourceAdmin(
+/**
+ * Where the prescription values came from — typed in, or read by the OCR from a
+ * photo the customer uploaded and then confirmed on screen.
+ *
+ * Shown in BOTH copies. The lab uses it to weigh how much to trust an odd-looking
+ * value; the customer needs it to recognise a misreading months later, when the
+ * only record left is this email.
+ */
+function renderRxProvenance(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
   locale: EmailLocale
 ): string {
-  if (!prescriptions) return "";
+  const sources = rxProvenanceLines(order, prescriptions, locale);
+  if (!sources.length) return "";
+  return `<div style="margin-top:8px;font-size:14px;color:#374151"><strong>${esc(t(locale, "rx_source"))}:</strong> ${esc(sources.join(", "))}</div>`;
+}
+
+/** Same information as plain strings, for the text part and the HTML above. */
+function rxProvenanceLines(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined,
+  locale: EmailLocale
+): string[] {
+  if (!prescriptions) return [];
   const seen = new Set<string>();
   const sources: string[] = [];
   for (const item of order.items ?? []) {
@@ -617,10 +637,31 @@ function renderRxSourceAdmin(
     seen.add(key);
     const rx = prescriptions[key];
     if (!rx) continue;
-    sources.push(rx.source === "ocr" ? t(locale, "rx_source_ocr") : t(locale, "rx_source_manual"));
+    const origin = rx.source === "ocr" ? t(locale, "rx_source_ocr") : t(locale, "rx_source_manual");
+    sources.push(rx.verified_by_user ? `${origin} — ${t(locale, "rx_confirmed")}` : origin);
   }
-  if (!sources.length) return "";
-  return `<div style="margin-top:8px;font-size:14px;color:#374151"><strong>${esc(t(locale, "rx_source"))}:</strong> ${esc(sources.join(", "))}</div>`;
+  return sources;
+}
+
+/**
+ * Plain-language glossary of the Rx table, for the CUSTOMER copy only. The store
+ * copy goes to people who read these values for a living.
+ */
+function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocale): string {
+  if (!hasRx) return "";
+  const lines = [
+    t(locale, "rx_gloss_sph"),
+    t(locale, "rx_gloss_cyl"),
+    t(locale, "rx_gloss_axis"),
+    t(locale, "rx_gloss_add"),
+    t(locale, "rx_gloss_pd"),
+    ...(hasHeight ? [t(locale, "rx_gloss_height")] : []),
+  ];
+  return `
+    <div style="margin-top:16px;padding:14px;background:#f9fafb;border-radius:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${esc(t(locale, "rx_glossary_title"))}</div>
+      <div style="font-size:12.5px;line-height:1.7;color:${MUTED}">${lines.map(esc).join("<br/>")}</div>
+    </div>`;
 }
 
 /** Customer-facing "we got your payment" email. */
@@ -657,6 +698,11 @@ export function renderCustomerOrderConfirmation(
   const greeting = t(locale, "order_confirmation_greeting", {
     name: name ? ` ${name}` : "",
   });
+  // The glossary only earns its space when there is an Rx table above it, and
+  // the fitting-height line only when a multifocal was actually ordered.
+  const rxList = Object.values(prescriptions ?? {});
+  const hasRx = rxList.length > 0;
+  const hasFittingHeight = rxList.some((rx) => rx.seg_height != null);
 
   const inner = `
     <p style="margin:0 0 12px;font-size:16px;font-weight:600">${esc(greeting)}</p>
@@ -668,6 +714,8 @@ export function renderCustomerOrderConfirmation(
     </div>
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
+    ${renderRxProvenance(order, prescriptions, locale)}
+    ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
     ${renderDeliveryTracking(extras, locale)}
@@ -685,6 +733,21 @@ export function renderCustomerOrderConfirmation(
     "",
     ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
+    ...rxProvenanceLines(order, prescriptions, locale).map(
+      (source) => `  ${t(locale, "rx_source")}: ${source}`
+    ),
+    ...(hasRx
+      ? [
+          "",
+          t(locale, "rx_glossary_title") + ":",
+          `  ${t(locale, "rx_gloss_sph")}`,
+          `  ${t(locale, "rx_gloss_cyl")}`,
+          `  ${t(locale, "rx_gloss_axis")}`,
+          `  ${t(locale, "rx_gloss_add")}`,
+          `  ${t(locale, "rx_gloss_pd")}`,
+          ...(hasFittingHeight ? [`  ${t(locale, "rx_gloss_height")}`] : []),
+        ]
+      : []),
     "",
     t(locale, "order_confirmation_next_steps_title"),
     t(locale, "order_confirmation_next_steps_body"),
@@ -740,7 +803,7 @@ export function renderAdminOrderNotification(
       </tr>
     </table>
     ${renderPaymentAdmin(extras?.payment, locale)}
-    ${renderRxSourceAdmin(order, prescriptions, locale)}
+    ${renderRxProvenance(order, prescriptions, locale)}
     ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
@@ -760,6 +823,9 @@ export function renderAdminOrderNotification(
     "",
     ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
+    ...rxProvenanceLines(order, prescriptions, locale).map(
+      (source) => `  ${t(locale, "rx_source")}: ${source}`
+    ),
   ].join("\n");
 
   const subject = t(locale, "admin_order_subject", { display_id: displayId, total });

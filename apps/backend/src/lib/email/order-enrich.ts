@@ -7,16 +7,22 @@
  */
 import type { Knex } from "@mikro-orm/knex";
 import type { EmailLocale } from "./copy";
+import {
+  frameSizeNotation,
+  loadProductMetadata,
+  rawFrameSpecs,
+  type RawFrameSpecs,
+} from "../frame-specs";
 
 export interface EnrichedComponent {
   label: string;
   price: number;
 }
 /**
- * Technical sheet of the frame that was actually bought, read from the product
- * metadata the scraper writes (see apps/scraper/scraper/medusa_push.py). The lab
- * needs the measurements to mount the lenses and the customer wants a record of
- * exactly which frame they paid for — neither was in the emails before.
+ * Technical sheet of the frame that was actually bought, with every attribute
+ * already localized for the message. The raw values come from
+ * `lib/frame-specs.ts`, which the tracking page shares — see the note there on
+ * why the labels are applied at the edge instead of in the shared reader.
  */
 export interface FrameSpecs {
   sku: string | null; // variant SKU / UPC of the color actually ordered
@@ -134,70 +140,23 @@ const label = (
   return table[locale][key] ?? String(value);
 };
 
-const numOrNull = (v: unknown): number | null => {
-  const n = Number(v);
-  return v == null || v === "" || Number.isNaN(n) ? null : n;
-};
-
-/** Frame metadata for every product in the order, in one query. Never throws. */
-async function loadProductMetadata(
-  pg: Knex,
-  productIds: string[]
-): Promise<Map<string, Record<string, unknown>>> {
-  const map = new Map<string, Record<string, unknown>>();
-  if (!productIds.length) return map;
-  try {
-    const rows = await pg("product").whereIn("id", productIds).select("id", "metadata");
-    for (const row of rows as Array<Record<string, unknown>>) {
-      const md = row["metadata"];
-      map.set(String(row["id"]), (md as Record<string, unknown>) ?? {});
-    }
-  } catch {
-    // Unknown schema / missing table — the emails just skip the technical sheet.
-  }
-  return map;
-}
-
-/** Technical sheet of the frame, from product metadata + the ordered variant. */
-function frameSpecsOf(
-  metadata: Record<string, unknown> | undefined,
-  item: Record<string, unknown>,
-  locale: EmailLocale
-): FrameSpecs | null {
-  if (!metadata) return null;
-  const eye = numOrNull(metadata["eye_size"]);
-  const bridge = numOrNull(metadata["bridge_size"]);
-  const temple = numOrNull(metadata["temple_length"]);
-  // Optical shorthand every optician reads at a glance: 52□18-140.
-  const size =
-    eye != null && bridge != null && temple != null
-      ? `${eye}□${bridge}-${temple}`
-      : eye != null
-        ? `${eye} mm`
-        : null;
-  const features = Array.isArray(metadata["features"])
-    ? (metadata["features"] as unknown[]).map(String).filter(Boolean)
-    : [];
-
-  const specs: FrameSpecs = {
-    sku: (item["variant_sku"] as string) || null,
-    size,
-    lens_width: numOrNull(metadata["a"]) ?? eye,
-    lens_height: numOrNull(metadata["b"]),
-    bridge,
-    temple,
-    shape: label(SHAPE_LABELS, metadata["shape"], locale),
-    style: label(STYLE_LABELS, metadata["style"], locale),
-    material: label(MATERIAL_LABELS, metadata["material"], locale),
-    gender: label(GENDER_LABELS, metadata["gender"], locale),
-    age_group: label(AGE_LABELS, metadata["age_group"], locale),
-    features,
+/** Localizes the raw technical sheet for the message's language. */
+function localizeSpecs(raw: RawFrameSpecs | null, locale: EmailLocale): FrameSpecs | null {
+  if (!raw) return null;
+  return {
+    sku: raw.sku,
+    size: frameSizeNotation(raw),
+    lens_width: raw.lens_width,
+    lens_height: raw.lens_height,
+    bridge: raw.bridge_size,
+    temple: raw.temple_length,
+    shape: label(SHAPE_LABELS, raw.shape, locale),
+    style: label(STYLE_LABELS, raw.style, locale),
+    material: label(MATERIAL_LABELS, raw.material, locale),
+    gender: label(GENDER_LABELS, raw.gender, locale),
+    age_group: label(AGE_LABELS, raw.age_group, locale),
+    features: raw.features,
   };
-  // Nothing worth printing (a case, or a product without scraped attributes).
-  const empty =
-    !specs.sku && !specs.size && !specs.shape && !specs.material && !specs.style &&
-    !specs.gender && !specs.age_group && !specs.lens_height && !features.length;
-  return empty ? null : specs;
 }
 
 /** Rich per-line lens breakdown (name + price of each component) from the matrix. */
@@ -211,7 +170,7 @@ export async function enrichLensItems(
 
   const productMeta = await loadProductMetadata(
     pg,
-    [...new Set(items.map((i) => i["product_id"]).filter(Boolean).map(String))]
+    items.map((i) => String(i["product_id"] ?? ""))
   );
 
   for (const item of items) {
@@ -276,7 +235,10 @@ export async function enrichLensItems(
       material,
       photo,
       ar,
-      specs: frameSpecsOf(productMeta.get(String(item["product_id"] ?? "")), item, locale),
+      specs: localizeSpecs(
+        rawFrameSpecs(productMeta.get(String(item["product_id"] ?? "")), item),
+        locale
+      ),
       with_rx: Boolean(md["prescription_id"]),
       quantity: Number(item["quantity"] ?? 1),
       total: Number(item["total"] ?? item["unit_price"] ?? 0),

@@ -163,13 +163,13 @@ export default function Home() {
             <span className="hero-badge" key={`b${slide}`}>
               {t(HERO_SLIDES[slide].badge).split("\n").map((l, i) => <span key={i}>{l}</span>)}
             </span>
-            <button className="hero-arrow prev" aria-label="Anterior"
+            <button className="hero-arrow prev" aria-label={t("a11y.prevSlide")}
                     onClick={() => setSlide((s) => (s - 1 + nSlides) % nSlides)}>‹</button>
-            <button className="hero-arrow next" aria-label="Siguiente"
+            <button className="hero-arrow next" aria-label={t("a11y.nextSlide")}
                     onClick={() => setSlide((s) => (s + 1) % nSlides)}>›</button>
             <div className="hero-dots">
               {HERO_SLIDES.map((_, i) => (
-                <button key={i} className={i === slide ? "is-on" : ""} aria-label={`Slide ${i + 1}`}
+                <button key={i} className={i === slide ? "is-on" : ""} aria-label={t("a11y.slideN", { n: i + 1 })}
                         onClick={() => setSlide(i)} />
               ))}
             </div>

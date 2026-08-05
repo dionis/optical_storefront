@@ -78,7 +78,8 @@ const prescriptions: Record<string, PrescriptionForEmail> = {
     pd_od: 31.5,
     pd_os: 31.5,
     seg_height: 22,
-    source: "manual",
+    source: "ocr",
+    verified_by_user: true,
   },
 };
 
@@ -117,6 +118,28 @@ describe("order confirmation emails", () => {
           expect(mail.html).toContain("22");
           expect(mail.text).toContain("22 mm");
         }
+      });
+
+      it("says where the prescription came from, in both copies", () => {
+        // A value read by a model from a photo is not the same claim as one the
+        // customer typed — both the lab and the buyer need to know which it was.
+        const ocr = locale === "es" ? "OCR" : "OCR";
+        const confirmed = locale === "es" ? "confirmada por el cliente" : "confirmed by the customer";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(ocr);
+            expect(part).toContain(confirmed);
+          }
+        }
+      });
+
+      it("explains the prescription terms to the customer but not to the lab", () => {
+        const title = locale === "es" ? "Cómo leer tu receta" : "How to read your prescription";
+        expect(customer.html).toContain(title);
+        expect(customer.text).toContain(title);
+        // The store copy goes to people who read these values for a living.
+        expect(admin.html).not.toContain(title);
+        expect(admin.text).not.toContain(title);
       });
 
       it("keeps the per-eye prescription values", () => {

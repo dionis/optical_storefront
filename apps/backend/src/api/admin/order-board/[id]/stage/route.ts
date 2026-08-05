@@ -41,8 +41,44 @@ interface StageBody {
   no_notification?: boolean;
 }
 
-function fail(res: MedusaResponse, status: number, reason: string, message: string): void {
-  res.status(status).json({ type: "invalid_data", reason, message });
+/**
+ * Every refusal carries a `reason` code.
+ *
+ * The panel is bilingual and this route is not: a Spanish sentence baked into
+ * the response would be the one string on screen that ignores the language the
+ * owner picked. So the code is the contract and the panel owns the wording
+ * (`adm.err.stage.*` in the storefront dictionary); `message` stays as an
+ * English developer note for logs and for any client that has no dictionary.
+ */
+type StageErrorReason =
+  | "unknown_stage"
+  | "not_found"
+  | "terminal"
+  | "not_allowed"
+  | "no_location"
+  | "nothing_to_fulfill"
+  | "nothing_to_ship"
+  | "nothing_to_deliver";
+
+/** Thrown by the transition helpers; carries the code the panel translates. */
+class StageError extends Error {
+  constructor(
+    readonly reason: StageErrorReason,
+    message: string
+  ) {
+    super(message);
+    this.name = "StageError";
+  }
+}
+
+function fail(
+  res: MedusaResponse,
+  status: number,
+  reason: StageErrorReason,
+  message: string,
+  extra: Record<string, unknown> = {}
+): void {
+  res.status(status).json({ type: "invalid_data", reason, message, ...extra });
 }
 
 export async function POST(
@@ -58,43 +94,33 @@ export async function POST(
   const tracking = String(body.tracking_number ?? "").trim();
 
   if (!isOrderStage(target)) {
-    fail(
-      res,
-      400,
-      "unknown_stage",
-      `Etapa desconocida '${target}'. Permitidas: ${ORDER_STAGES.join(", ")}.`
-    );
+    fail(res, 400, "unknown_stage", `Unknown stage '${target}'. Allowed: ${ORDER_STAGES.join(", ")}.`);
     return;
   }
 
   const before = await fetchBoardOrder(req.scope, orderId);
   if (!before) {
-    res.status(404).json({ type: "not_found", message: "Pedido no encontrado." });
+    fail(res, 404, "not_found", `Order '${orderId}' not found.`);
     return;
   }
 
   // `before` was projected by the same function that fed the panel, so "the
   // button was there" and "the server accepted it" cannot disagree.
   if (before.terminal === "canceled" || before.terminal === "refunded") {
-    fail(
-      res,
-      409,
-      "terminal",
-      "Este pedido está cancelado o reembolsado: su seguimiento ya terminó."
-    );
+    fail(res, 409, "terminal", "Order is canceled or refunded; its timeline has ended.");
     return;
   }
 
   const allowed = before.next_stages;
   if (!allowed.includes(target)) {
+    // The stage and the legal moves ride along so the panel can say what the
+    // order actually is now, in the owner's language, without a second request.
     fail(
       res,
       409,
       "not_allowed",
-      `El pedido está en '${before.stage}' y no puede pasar a '${target}'. ` +
-        (allowed.length
-          ? `Etapas posibles ahora: ${allowed.join(", ")}.`
-          : "No admite más cambios de etapa desde aquí.")
+      `Order is at '${before.stage}' and cannot move to '${target}'.`,
+      { stage: before.stage, next_stages: allowed }
     );
     return;
   }
@@ -122,21 +148,23 @@ export async function POST(
     const message = (error as Error).message ?? "";
     logger.error(`[order-board] ${orderId} → ${target} failed: ${message}`);
 
+    // Our own refusals already know what to call themselves.
+    if (error instanceof StageError) {
+      fail(res, 409, error.reason, message);
+      return;
+    }
     // The one failure the owner can actually fix themselves, and the one Medusa
     // reports most opaquely: no stock location to fulfil from.
     if (/location/i.test(message)) {
-      fail(
-        res,
-        409,
-        "no_location",
-        "No hay una ubicación de stock asociada al método de envío de este pedido. " +
-          "Configúrala en Ajustes → Ubicaciones antes de marcarlo como enviado."
-      );
+      fail(res, 409, "no_location", "No stock location resolved for this order's shipping method.");
       return;
     }
+    // Anything else is a bug, not a workflow rule. There is no code for it, so
+    // the raw message goes through untranslated rather than being dressed up as
+    // a known condition — the panel shows it verbatim and it lands in the log.
     res.status(500).json({
       type: "error",
-      message: `No se pudo mover el pedido a '${target}'. ${message}`.trim(),
+      message: `Could not move order to '${target}'. ${message}`.trim(),
     });
     return;
   }
@@ -205,7 +233,7 @@ async function createFulfillment(
     .filter((item) => item.id && item.quantity > 0);
 
   if (!items.length) {
-    throw new Error("No hay artículos pendientes de preparar en este pedido.");
+    throw new StageError("nothing_to_fulfill", "No order line has quantity left to fulfill.");
   }
 
   await createOrderFulfillmentWorkflow(req.scope).run({
@@ -254,7 +282,7 @@ async function createShipment(
   }).find((f) => !f.shipped_at);
 
   if (!pending?.id) {
-    throw new Error("No hay ninguna preparación pendiente de enviar en este pedido.");
+    throw new StageError("nothing_to_ship", "No live fulfillment on this order is awaiting shipment.");
   }
 
   await createOrderShipmentWorkflow(req.scope).run({
@@ -299,7 +327,7 @@ async function markDelivered(
   );
 
   if (!pending.length) {
-    throw new Error("Ninguna preparación de este pedido está en camino todavía.");
+    throw new StageError("nothing_to_deliver", "No shipped fulfillment on this order is awaiting delivery.");
   }
 
   // Sequentially: each one registers a delivery against the same order, and

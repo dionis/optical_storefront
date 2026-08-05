@@ -164,7 +164,9 @@ export function summarize({ from, to }) {
   // accesses vs purchases on the SAME daily chart
   const accessVsBuy = days.map((k) => ({ label: k.slice(5), access: (daily[k]?.access) || 0, orders: ordByDay[k] }));
   // day-of-week analysis: which weekdays get more visits / more purchases
-  const DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  // Dictionary keys, not names: this module is plain state with no language
+  // hook, so `label` travels as a key and the panel resolves it at render.
+  const DOW = ["adm.dow.0", "adm.dow.1", "adm.dow.2", "adm.dow.3", "adm.dow.4", "adm.dow.5", "adm.dow.6"];
   const wAcc = [0, 0, 0, 0, 0, 0, 0], wOrd = [0, 0, 0, 0, 0, 0, 0], wCnt = [0, 0, 0, 0, 0, 0, 0];
   for (const k of days) {
     const dow = new Date(k + "T12:00:00").getDay();
@@ -187,11 +189,12 @@ export function summarize({ from, to }) {
   return {
     kpis: { revenue, ordersCount, units, aov, access, view, atc, fav, conv },
     salesSeries, ordersSeries, accessSeries, accessVsBuy, weekday,
+    // Same as DOW above — keys, resolved by the caller.
     funnel: [
-      { label: "Accesos", value: access },
-      { label: "Vistas de producto", value: view },
-      { label: "Añadido al carrito", value: atc },
-      { label: "Compras", value: ordersCount },
+      { label: "adm.funnel.access", value: access },
+      { label: "adm.funnel.view", value: view },
+      { label: "adm.funnel.atc", value: atc },
+      { label: "adm.funnel.buy", value: ordersCount },
     ],
     topProducts: top(prodMap, 8),
     topBrands: top(brandMap, 6),

@@ -118,6 +118,7 @@ export default async function orderPlacedSubscriber({
           pd_os: rx.pd_os,
           seg_height: rx.seg_height ?? null,
           source: (rx as { source?: string | null }).source ?? null,
+          verified_by_user: rx.verified_by_user,
         };
       } catch (error) {
         logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);

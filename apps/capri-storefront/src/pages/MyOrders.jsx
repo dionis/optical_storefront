@@ -3,14 +3,17 @@
 // never have to dig through their inbox again.
 //
 // Three states: no session (ask for the email), redeeming a link from the URL,
-// and the order list. Order data comes from /store/my-orders — it carries stage
-// and totals only, never prescription values.
+// and the order list. Order data comes from /store/my-orders, which returns the
+// shopper's own order in full — stage, totals, lens configuration, frame sheet
+// and the prescription it was cut to (see that route's header on what is
+// deliberately left out of the payload).
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import TrackingTimeline from "../components/TrackingTimeline.jsx";
+import OrderGlassesDetails from "../components/OrderGlassesDetails.jsx";
 import { resolveImage } from "../data/imageUrl.js";
-import { lensConfigRows, lensSummary } from "../data/lensLabels.js";
+import { lensSummary } from "../data/lensLabels.js";
 import {
   cancelOrder,
   clearSession,
@@ -241,28 +244,11 @@ function OrderCard({ order, onChanged }) {
 
       {openDetails && (
         <div className="mo-details">
-          {(order.items || []).map((it) => {
-            const rows = lensConfigRows(it.lens, lang, t);
-            const bd = it.breakdown || {};
-            return (
-              <section key={it.id} className="mo-dblock">
-                <h4>{it.title}</h4>
-                {rows.map((r) => (
-                  <DetailRow key={r.key} label={r.label} value={r.value} />
-                ))}
-                {it.quantity > 1 && <DetailRow label={L("qty")} value={it.quantity} />}
-                {bd.frame_price != null && (
-                  <DetailRow label={L("framePrice")} value={money(bd.frame_price)} />
-                )}
-                {bd.lens_addon != null && bd.lens_addon > 0 && (
-                  <DetailRow label={L("lensPrice")} value={money(bd.lens_addon)} />
-                )}
-                {bd.tax_amount != null && bd.tax_amount > 0 && (
-                  <DetailRow label={L("taxes")} value={money(bd.tax_amount)} />
-                )}
-              </section>
-            );
-          })}
+          {/* Full record of what was bought: lens configuration, the frame's
+              technical sheet and the prescription it was cut to. */}
+          {(order.items || []).map((it) => (
+            <OrderGlassesDetails key={it.id} item={it} money={money} />
+          ))}
 
           <section className="mo-dblock">
             <DetailRow label={L("placedOn")} value={date} />

@@ -33,10 +33,14 @@ export async function GET(
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const query = req.query as Record<string, string | undefined>;
 
+  // Refusals carry a `reason` code rather than a sentence: the panel is
+  // bilingual and picks its own wording from `adm.err.*`. See the longer note in
+  // the sibling stage route.
   const stage = query.stage;
   if (stage && !isOrderStage(stage)) {
     res.status(400).json({
       type: "invalid_data",
+      reason: "unknown_stage",
       message: `Unknown stage '${stage}'. Allowed: ${ORDER_STAGES.join(", ")}.`,
     });
     return;
@@ -46,6 +50,7 @@ export async function GET(
   if (terminal && !["canceled", "refunded", "payment_pending"].includes(terminal)) {
     res.status(400).json({
       type: "invalid_data",
+      reason: "unknown_terminal",
       message: `Unknown terminal state '${terminal}'.`,
     });
     return;
@@ -58,6 +63,7 @@ export async function GET(
   if (from === false || to === false) {
     res.status(400).json({
       type: "invalid_data",
+      reason: "bad_date",
       message: "Dates must be ISO (YYYY-MM-DD).",
     });
     return;
@@ -89,7 +95,11 @@ export async function GET(
     });
   } catch (error) {
     logger.error(`[order-board] could not list orders: ${(error as Error).message}`);
-    res.status(500).json({ type: "error", message: "No se pudieron cargar los pedidos." });
+    res.status(500).json({
+      type: "error",
+      reason: "list_failed",
+      message: "Could not list orders.",
+    });
   }
 }
 

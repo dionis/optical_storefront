@@ -2234,6 +2234,22 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .mo-drow { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; font-size: 13.5px; padding: 3px 0; }
 .mo-dlabel { color: #6b7280; flex: none; }
 .mo-dvalue { text-align: right; color: #111827; }
+.mo-dhint { display: block; font-size: 11.5px; color: #9ca3af; }
+.mo-dnote { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #6b7280; }
+
+/* — Receta del pedido: tabla OD/OS + glosario plegable — */
+/* La tabla es el único bloque ancho de la tarjeta: se desplaza dentro de su
+   caja para que el móvil no acabe con scroll horizontal en toda la página. */
+.mo-rx-scroll { overflow-x: auto; margin: 8px 0 4px; }
+.mo-rx-table { border-collapse: collapse; width: 100%; min-width: 320px; font-size: 13px; }
+.mo-rx-table th, .mo-rx-table td { padding: 6px 8px; text-align: center; white-space: nowrap; }
+.mo-rx-table thead th { font-size: 11px; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+.mo-rx-table tbody th { text-align: left; font-weight: 600; color: var(--cuba-blue, #1f3a5f); }
+.mo-rx-table tbody td { border-bottom: 1px solid #e5e7eb; font-variant-numeric: tabular-nums; }
+.mo-gloss-toggle { margin-top: 10px; background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand, #1f3a5f); cursor: pointer; text-decoration: underline; }
+.mo-gloss { margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.mo-gloss-row dt { font-size: 12.5px; font-weight: 700; color: #111827; }
+.mo-gloss-row dd { margin: 2px 0 0; font-size: 12.5px; line-height: 1.5; color: #4b5563; }
 .mo-totals .mo-dtotal { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 8px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-weight: 700; font-size: 15px; }
 .mo-totals .mo-dtotal .mo-dlabel { color: #111827; }
 

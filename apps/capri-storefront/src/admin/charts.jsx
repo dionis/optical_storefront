@@ -1,4 +1,5 @@
 import { useState, useRef, useId } from "react";
+import { useLang } from "../i18n/LanguageContext.jsx";
 
 // ---------------------------------------------------------------------------
 // Capri admin dashboard — dependency-free, responsive, accessible SVG charts.
@@ -65,7 +66,9 @@ function labelStep(count, maxTicks = 7) {
   return Math.ceil(count / maxTicks);
 }
 
-function Empty({ height, msg = "sin datos" }) {
+function Empty({ height, msg }) {
+  const { t } = useLang();
+  msg = msg ?? t("adm.chart.noData");
   return (
     <div
       style={{
@@ -116,7 +119,9 @@ function Tip({ x, y, W, H, caption, value, valueColor, lines = [] }) {
 }
 
 // signed percentage vs a reference (e.g. average) as a colored tooltip line
-function deltaLine(value, ref, labelText = "vs promedio") {
+// `labelText` is passed in already translated — this is a plain helper, not a
+// component, so it cannot reach the dictionary itself.
+function deltaLine(value, ref, labelText) {
   if (!ref || ref <= 0) return null;
   const pct = ((value - ref) / ref) * 100;
   const sign = pct > 0 ? "+" : "";
@@ -217,6 +222,7 @@ export function LineChart({
   valuePrefix = "",
   area = true,
 }) {
+  const { t } = useLang();
   const gid = useId().replace(/[:]/g, "");
   const [hover, setHover] = useState(null); // {x, y, i}
   const wrapRef = useRef(null);
@@ -413,8 +419,8 @@ export function LineChart({
           caption={hp.d.label}
           value={`${valuePrefix}${fmt(hv)}`}
           lines={[
-            { text: `${hpct.toFixed(1)}% del total`, color: "rgba(255,255,255,0.72)" },
-            deltaLine(hv, avg),
+            { text: t("adm.chart.pctOfTotal", { pct: hpct.toFixed(1) }), color: "rgba(255,255,255,0.72)" },
+            deltaLine(hv, avg, t("adm.chart.vsAvg")),
           ].filter(Boolean)}
         />
       ) : null}
@@ -431,6 +437,7 @@ export function BarChart({
   horizontal = false,
   valuePrefix = "",
 }) {
+  const { t } = useLang();
   const [hover, setHover] = useState(null);
 
   if (!Array.isArray(data) || data.length === 0)
@@ -445,14 +452,15 @@ export function BarChart({
   const W = 720;
   const H = height;
 
-  const ariaLabel = `Gráfico de barras, ${n} categorías, máximo ${valuePrefix}${fmt(
-    rawMax
-  )}`;
+  const ariaLabel = t("adm.chart.ariaBar", { n, max: `${valuePrefix}${fmt(rawMax)}` });
 
   const tipLines = (v) =>
     [
-      { text: `${total > 0 ? ((v / total) * 100).toFixed(1) : "0"}% del total`, color: "rgba(255,255,255,0.72)" },
-      deltaLine(v, avg),
+      {
+        text: t("adm.chart.pctOfTotal", { pct: total > 0 ? ((v / total) * 100).toFixed(1) : "0" }),
+        color: "rgba(255,255,255,0.72)",
+      },
+      deltaLine(v, avg, t("adm.chart.vsAvg")),
     ].filter(Boolean);
 
   if (horizontal) {
@@ -710,6 +718,7 @@ export function BarChart({
 // ---------------------------------------------------------------------------
 // 4. DonutChart
 export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
+  const { t } = useLang();
   const [hi, setHi] = useState(-1);
 
   if (!Array.isArray(data) || data.length === 0)
@@ -742,7 +751,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
     return seg;
   });
 
-  const ariaLabel = `Gráfico de dona, total ${fmt(total)}, ${items.length} categorías`;
+  const ariaLabel = t("adm.chart.ariaDonut", { total: fmt(total), n: items.length });
   const active = hi >= 0 ? segs[hi] : null;
 
   return (
@@ -932,6 +941,8 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
 // ---------------------------------------------------------------------------
 // 5. Sparkline
 export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 }) {
+  // Above the empty-data guard: hooks cannot sit behind an early return.
+  const { t } = useLang();
   if (!Array.isArray(data) || data.length === 0) {
     return (
       <svg
@@ -939,7 +950,7 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
         width={width}
         height={height}
         role="img"
-        aria-label="sin datos"
+        aria-label={t("adm.chart.noData")}
         style={{ display: "inline-block", verticalAlign: "middle" }}
       />
     );
@@ -1001,6 +1012,7 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
 // ---------------------------------------------------------------------------
 // 6. Funnel
 export function Funnel({ steps }) {
+  const { t } = useLang();
   const [hi, setHi] = useState(-1);
 
   if (!Array.isArray(steps) || steps.length === 0)
@@ -1024,7 +1036,7 @@ export function Funnel({ steps }) {
         gap: 10,
       }}
       role="img"
-      aria-label={`Embudo de conversión, ${rows.length} pasos`}
+      aria-label={t("adm.chart.ariaFunnel", { n: rows.length })}
     >
       {rows.map((r, i) => {
         const wpct = (r.value / maxV) * 100;
@@ -1132,11 +1144,12 @@ export function Funnel({ steps }) {
 // Combo: daily ACCESSES (line/area) vs PURCHASES (bars) on the same chart.
 // data = [{ label, access, orders }]
 export function AccessVsBuyChart({ data, height = 250 }) {
+  const { t } = useLang();
   const gid = useId();
   const [hi, setHi] = useState(-1);
   const W = 720, H = height, PL = 44, PR = 14, PT = 18, PB = 30;
   const iw = W - PL - PR, ih = H - PT - PB;
-  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>Sin datos</div>;
+  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
   const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
   const nice = Math.ceil(max / 4) * 4;
   const x = (i) => PL + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
@@ -1148,10 +1161,10 @@ export function AccessVsBuyChart({ data, height = 250 }) {
   const hd = hi >= 0 ? data[hi] : null;
   const conv = hd && hd.access ? (hd.orders / hd.access) * 100 : 0;
   return (
-    <div className="chart-wrap" role="img" aria-label="Accesos vs compras por día">
+    <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaAccessVsBuy")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
-        <span><i style={{ background: "#FD0E3F" }} />Compras</span>
+        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
       </div>
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
@@ -1197,9 +1210,9 @@ export function AccessVsBuyChart({ data, height = 250 }) {
             caption={hd.label}
             value={null}
             lines={[
-              { text: `Accesos: ${fmt(hd.access)}`, color: "#8fc0ff" },
-              { text: `Compras: ${fmt(hd.orders)}`, color: "#ff9db0" },
-              { text: `Conversión: ${conv.toFixed(1)}%`, color: "#7ee2a0" },
+              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#8fc0ff" },
+              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#ff9db0" },
+              { text: t("adm.chart.conv", { pct: conv.toFixed(1) }), color: "#7ee2a0" },
             ]}
           />
         )}
@@ -1210,11 +1223,12 @@ export function AccessVsBuyChart({ data, height = 250 }) {
 
 // Grouped bars per weekday: accesses vs purchases. data = [{label, access, orders, conv}]
 export function WeekdayChart({ data, height = 230 }) {
+  const { t } = useLang();
   const [hi, setHi] = useState(-1);
   const gid = useId();
   const W = 720, H = height, PL = 40, PR = 12, PT = 16, PB = 42;
   const iw = W - PL - PR, ih = H - PT - PB;
-  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>Sin datos</div>;
+  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
   const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
   const nice = Math.ceil(max / 4) * 4;
   const gw = iw / data.length, bw = Math.min(22, gw / 3);
@@ -1227,10 +1241,10 @@ export function WeekdayChart({ data, height = 230 }) {
   });
   const hd = hi >= 0 ? data[hi] : null;
   return (
-    <div className="chart-wrap" role="img" aria-label="Accesos y compras por día de la semana">
+    <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaWeekday")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />Accesos</span>
-        <span><i style={{ background: "#FD0E3F" }} />Compras</span>
+        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
       </div>
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }} onMouseLeave={() => setHi(-1)}>
@@ -1270,12 +1284,12 @@ export function WeekdayChart({ data, height = 230 }) {
             y={Math.min(y(hd.access), y(hd.orders))}
             W={W}
             H={H}
-            caption={`${hd.label}${hi === bestIdx ? "  ★ mejor día" : ""}`}
+            caption={`${hd.label}${hi === bestIdx ? `  ${t("adm.chart.bestDay")}` : ""}`}
             value={null}
             lines={[
-              { text: `Accesos: ${fmt(hd.access)}`, color: "#8fc0ff" },
-              { text: `Compras: ${fmt(hd.orders)}`, color: "#ff9db0" },
-              { text: `Conversión: ${hd.conv}%`, color: "#7ee2a0" },
+              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#8fc0ff" },
+              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#ff9db0" },
+              { text: t("adm.chart.conv", { pct: hd.conv }), color: "#7ee2a0" },
             ]}
           />
         )}

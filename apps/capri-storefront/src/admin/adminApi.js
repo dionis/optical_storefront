@@ -34,13 +34,23 @@ export const ADMIN_API_URL =
 // `session.user` without knowing the token behind it changed meaning.
 const SESSION_KEY = "oer_admin_session";
 
-/** Thrown by adminFetch so callers can branch on the status instead of the copy. */
+/**
+ * Thrown by adminFetch so callers can branch on the status instead of the copy.
+ *
+ * This module has no access to the language hook — it is not a component — so
+ * it never produces user-facing prose. `reason` is a machine code (either ours
+ * or the backend's) and `message` is either a dictionary KEY (`adm.err.*`) or,
+ * for an unmapped server failure, the server's own English note. Whoever renders
+ * decides the wording; see `stageErrorText` in adminOrders.js.
+ */
 export class AdminApiError extends Error {
-  constructor(message, { status, reason } = {}) {
+  constructor(message, { status, reason, payload } = {}) {
     super(message);
     this.name = "AdminApiError";
     this.status = status;
     this.reason = reason;
+    /** Full body, so callers can read extras like `next_stages`. */
+    this.payload = payload ?? null;
   }
 }
 
@@ -119,7 +129,7 @@ async function call(path, { method = "GET", body, token, query } = {}) {
   } catch {
     // Distinguishable from a 4xx so the UI can say "no connection" rather than
     // "wrong password" when the backend is simply down.
-    throw new AdminApiError("No se pudo conectar con el servidor.", { reason: "offline" });
+    throw new AdminApiError("adm.err.offline", { reason: "offline" });
   }
 
   let payload = null;
@@ -130,9 +140,12 @@ async function call(path, { method = "GET", body, token, query } = {}) {
   }
 
   if (!res.ok) {
+    // `message` is the server's English developer note; `reason` is the code the
+    // UI turns into translated copy. Callers should prefer the reason.
     throw new AdminApiError(payload?.message || `HTTP ${res.status}`, {
       status: res.status,
       reason: payload?.reason,
+      payload,
     });
   }
   return payload;
@@ -147,7 +160,7 @@ async function call(path, { method = "GET", body, token, query } = {}) {
  */
 export async function adminFetch(path, options = {}) {
   const session = getSession();
-  if (!session) throw new AdminApiError("Sesión caducada.", { status: 401 });
+  if (!session) throw new AdminApiError("adm.err.sessionExpired", { status: 401 });
   try {
     return await call(path, { ...options, token: session.token });
   } catch (error) {
@@ -172,7 +185,7 @@ let pendingMfa = null;
 export async function login(email, password) {
   const user = String(email || "").trim();
   if (!user || !password) {
-    return { ok: false, error: "Introduce tu correo y contraseña." };
+    return { ok: false, error: "adm.err.needBoth" };
   }
 
   let data;
@@ -183,14 +196,14 @@ export async function login(email, password) {
     });
   } catch (error) {
     if (error.reason === "offline") {
-      return { ok: false, error: "No se pudo conectar con el servidor." };
+      return { ok: false, error: "adm.err.offline" };
     }
     // Medusa answers 401 for both "no such user" and "wrong password", and so
     // do we — telling them apart is how you enumerate accounts.
     if (error.status === 401 || error.status === 400) {
-      return { ok: false, error: "Credenciales incorrectas." };
+      return { ok: false, error: "adm.err.badCredentials" };
     }
-    return { ok: false, error: error.message || "Error de autenticación." };
+    return { ok: false, error: "adm.err.auth" };
   }
 
   if (data?.mfa_required) {
@@ -204,7 +217,7 @@ export async function login(email, password) {
   }
 
   if (!data?.token) {
-    return { ok: false, error: "El servidor no devolvió una sesión." };
+    return { ok: false, error: "adm.err.noSession" };
   }
 
   saveSession(user, data.token);
@@ -213,9 +226,9 @@ export async function login(email, password) {
 
 /** Step two: the one-time code, when the backend asked for one. */
 export async function verifyMfa(code) {
-  if (!pendingMfa) return { ok: false, error: "Vuelve a iniciar sesión." };
+  if (!pendingMfa) return { ok: false, error: "adm.err.relogin" };
   const value = String(code || "").trim();
-  if (!value) return { ok: false, error: "Introduce el código." };
+  if (!value) return { ok: false, error: "adm.err.needCode" };
 
   try {
     const data = await call(
@@ -226,15 +239,15 @@ export async function verifyMfa(code) {
         body: { method: pendingMfa.method, code: value },
       }
     );
-    if (!data?.token) return { ok: false, error: "Código inválido." };
+    if (!data?.token) return { ok: false, error: "adm.err.badCode" };
     saveSession(pendingMfa.user, data.token);
     pendingMfa = null;
     return { ok: true };
   } catch (error) {
     if (error.reason === "offline") {
-      return { ok: false, error: "No se pudo conectar con el servidor." };
+      return { ok: false, error: "adm.err.offline" };
     }
-    return { ok: false, error: "Código inválido." };
+    return { ok: false, error: "adm.err.badCode" };
   }
 }
 

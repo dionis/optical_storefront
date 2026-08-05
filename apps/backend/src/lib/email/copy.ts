@@ -81,6 +81,15 @@ interface EmailCopy {
   rx_source: string;
   rx_source_manual: string;
   rx_source_ocr: string;
+  rx_confirmed: string;
+  // ── "How to read your prescription" (customer copy only) ──
+  rx_glossary_title: string;
+  rx_gloss_sph: string;
+  rx_gloss_cyl: string;
+  rx_gloss_axis: string;
+  rx_gloss_add: string;
+  rx_gloss_pd: string;
+  rx_gloss_height: string;
   prescription_attached: string;
   payment_confirmed: string;
   questions: string;
@@ -196,6 +205,20 @@ const es: EmailCopy = {
   rx_source: "Origen de la receta",
   rx_source_manual: "Ingresada manualmente",
   rx_source_ocr: "Foto subida (leída por OCR)",
+  rx_confirmed: "revisada y confirmada por el cliente antes de pagar",
+  rx_glossary_title: "Cómo leer tu receta",
+  rx_gloss_sph:
+    "SPH (esfera): cuánta graduación necesita el ojo. Negativo = miopía, positivo = hipermetropía o vista cansada.",
+  rx_gloss_cyl:
+    "CYL (cilindro): corrige el astigmatismo. En 0 significa que no tienes.",
+  rx_gloss_axis:
+    "AXIS (eje): en qué ángulo, de 0° a 180°, va colocado ese cilindro.",
+  rx_gloss_add:
+    "ADD (adición): la graduación extra para ver de cerca; es lo que hace el lente bifocal o progresivo.",
+  rx_gloss_pd:
+    "DP (distancia pupilar): separación entre los centros de tus pupilas; centra el lente frente al ojo.",
+  rx_gloss_height:
+    "Altura de montaje: del borde inferior de la montura al centro de la pupila; marca dónde empieza la zona de cerca.",
   prescription_attached: "Receta médica asociada al pedido.",
   payment_confirmed: "Pago confirmado",
   questions: "Si tienes alguna duda, responde a este correo y te ayudamos.",
@@ -317,6 +340,18 @@ const en: EmailCopy = {
   rx_source: "Prescription source",
   rx_source_manual: "Entered manually",
   rx_source_ocr: "Uploaded photo (read by OCR)",
+  rx_confirmed: "reviewed and confirmed by the customer before paying",
+  rx_glossary_title: "How to read your prescription",
+  rx_gloss_sph:
+    "SPH (sphere): how much correction the eye needs. Negative = short-sighted, positive = long-sighted or reading vision.",
+  rx_gloss_cyl: "CYL (cylinder): corrects astigmatism. Zero means you have none.",
+  rx_gloss_axis: "AXIS: the angle, from 0° to 180°, that cylinder sits at.",
+  rx_gloss_add:
+    "ADD (addition): the extra power for close-up vision; it is what makes a lens bifocal or progressive.",
+  rx_gloss_pd:
+    "PD (pupillary distance): the gap between your pupil centers; it centers the lens in front of the eye.",
+  rx_gloss_height:
+    "Fitting height: from the frame's bottom edge to the pupil center; it marks where the near zone starts.",
   prescription_attached: "A prescription is linked to this order.",
   payment_confirmed: "Payment confirmed",
   questions: "If you have any questions, just reply to this email.",
