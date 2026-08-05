@@ -86,6 +86,10 @@ export type PrescriptionErrorCode =
   | "ocr_unavailable"
   | "ocr_rate_limited"
   | "ocr_failed"
+  | "ocr_unreachable"
+  | "ocr_unauthorized"
+  | "ocr_no_credit"
+  | "ocr_upstream_error"
   | "ocr_unreadable"
   | "prescription_required"
   | "ocr_not_confirmed";

@@ -1,6 +1,14 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales, allOrders, updateOrderStatus } from "./analytics.js";
+import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales } from "./analytics.js";
+// The Orders tab is the one part of this panel backed by the real store: it
+// reads and mutates Medusa orders instead of the seeded localStorage the other
+// tabs still use. `money` is aliased because this file already has its own,
+// which assumes dollars and knows nothing about an order's currency.
+import {
+  STAGES, STAGE_BY_KEY, TERMINALS, TERMINAL_BY_KEY, STAGE_ACTION,
+  fetchOrders, setOrderStage, orderLabel, money as fmtMoney,
+} from "./adminOrders.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
@@ -533,101 +541,405 @@ function Prices({ preQ }) {
   );
 }
 
-const OSTATUS = {
-  processing: ["📦", "En preparación", "#b26a00", "#fbf0df"],
-  shipped: ["🏷️", "Enviado", "#0E5AD0", "#eaf2ff"],
-  in_transit: ["🚚", "En camino", "#7b4aa0", "#f1e9f7"],
-  delivered: ["✅", "Entregado", "#2e7d46", "#e9f5ee"],
-};
-const OSTEPS = ["processing", "shipped", "in_transit", "delivered"];
+/* ───────────────────────────  Pedidos (Medusa)  ───────────────────────────
+ * Real orders from the Admin API. Every filter, stage and transition shown here
+ * comes from the server: `stage` is what the customer's tracking page shows, and
+ * `next_stages` is what the API will actually accept — the panel never decides
+ * for itself which move is legal, so a button that exists always works.
+ */
 
-function orderHaystack(o) {
-  return [
-    o.id, o.customer?.name, o.customer?.surname, o.customer?.email, o.customer?.phone,
-    o.user, o.delivery?.city, o.delivery?.recipient, o.delivery?.phone, o.delivery?.email,
-    o.delivery?.carrier, o.shipping?.method, o.status, OSTATUS[o.status || "processing"]?.[1],
-    ...(o.items || []).map((it) => it.name),
-  ].filter(Boolean).join(" ").toLowerCase();
+const PAGE_SIZE = 20;
+
+/**
+ * Quick ranges. They resolve to an absolute `from` date immediately rather than
+ * being sent as "30d", so the server never has to guess which clock the window
+ * was measured against — and so the date inputs below can show what a preset
+ * actually selected.
+ */
+const DATE_PRESETS = [
+  ["all", "Todo"],
+  ["7d", "7 días"],
+  ["30d", "30 días"],
+  ["90d", "90 días"],
+];
+
+const ymd = (d) => new Date(d).toISOString().slice(0, 10);
+
+function presetFrom(preset) {
+  const days = { "7d": 7, "30d": 30, "90d": 90 }[preset];
+  return days ? ymd(Date.now() - days * 864e5) : "";
+}
+
+/** Coloured pill for the stage, or for the terminal state that replaced it. */
+function StageBadge({ order }) {
+  const term = order.terminal && TERMINAL_BY_KEY[order.terminal];
+  // A canceled or refunded order is not "somewhere on the timeline" — showing a
+  // stage for it would be a lie, exactly as TrackingTimeline decides.
+  if (term && order.terminal !== "payment_pending") {
+    return <span className="ord-badge" style={{ background: term.bg, color: term.color }}>{term.icon} {term.label}</span>;
+  }
+  const st = STAGE_BY_KEY[order.stage] || STAGE_BY_KEY.confirmed;
+  return (
+    <span className="ord-badge" style={{ background: st.bg, color: st.color }}>
+      {st.icon} {st.label}
+      {term && <span className="ord-badge-sub" title="El pago aún no está confirmado"> · ⏳</span>}
+    </span>
+  );
+}
+
+/**
+ * The "advance" control.
+ *
+ * Only `order.next_stages` is offered. Moving to `in_transit` asks for the
+ * courier reference first, because that number is what the customer's tracking
+ * page renders — collecting it after the fact means an email that says "on its
+ * way" with nothing to track.
+ */
+function StageControl({ order, busy, onMove }) {
+  const [asking, setAsking] = useState(null);
+  const [tracking, setTracking] = useState("");
+  const next = order.next_stages || [];
+
+  if (!next.length) {
+    return <span className="muted ord-nomove">Sin cambios disponibles</span>;
+  }
+
+  if (asking) {
+    return (
+      <form
+        className="ord-track-form"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onMove(asking, { trackingNumber: tracking.trim() });
+          setAsking(null);
+          setTracking("");
+        }}
+      >
+        <input
+          autoFocus
+          placeholder="Nº de seguimiento (opcional)"
+          value={tracking}
+          onChange={(e) => setTracking(e.target.value)}
+        />
+        <button className="btn-sm primary" disabled={busy}>Confirmar</button>
+        <button type="button" className="btn-sm" onClick={() => { setAsking(null); setTracking(""); }}>Cancelar</button>
+      </form>
+    );
+  }
+
+  return (
+    <div className="ord-moves" onClick={(e) => e.stopPropagation()}>
+      {next.map((key) => {
+        const st = STAGE_BY_KEY[key];
+        return (
+          <button
+            key={key}
+            className="btn-sm ord-move"
+            disabled={busy}
+            title={STAGE_ACTION[key]}
+            onClick={() => (key === "in_transit" ? setAsking(key) : onMove(key, {}))}
+          >
+            {st.icon} {st.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrderDetail({ order }) {
+  const addr = order.shipping_address;
+  return (
+    <div className="ord-detail-grid">
+      <div>
+        <b>🛍️ Artículos</b>
+        <ul>
+          {order.items.map((it) => (
+            <li key={it.id}>
+              <span>
+                {it.quantity > 1 && <em className="ord-qty">{it.quantity}× </em>}
+                {it.title}
+                {it.has_prescription && <span className="ord-rx" title="Lleva receta">👓 receta</span>}
+              </span>
+              <b>{fmtMoney(it.total, order.currency_code)}</b>
+            </li>
+          ))}
+        </ul>
+        <p className="ord-totals muted">
+          Artículos {fmtMoney(order.item_total, order.currency_code)}
+          {" · "}Envío {fmtMoney(order.shipping_total, order.currency_code)}
+          {" · "}Impuestos {fmtMoney(order.tax_total, order.currency_code)}
+        </p>
+      </div>
+      <div>
+        <b>{addr ? "🚚 Entrega" : "🏬 Recogida en tienda"}</b>
+        {addr ? (
+          <p className="ord-addr">
+            📍 {[addr.address_1, addr.address_2].filter(Boolean).join(", ")}
+            {addr.city ? `, ${addr.city}` : ""}
+            {addr.postal_code ? ` (${addr.postal_code})` : ""}
+            <br />
+            👤 {order.customer.name || "—"}
+            {order.customer.phone ? ` · 📞 ${order.customer.phone}` : ""}
+            <br />
+            ✉️ {order.customer.email || "—"}
+            {order.shipping_method ? ` · 🏷️ ${order.shipping_method}` : ""}
+          </p>
+        ) : (
+          <p className="ord-addr muted">Sin dirección de envío en este pedido.</p>
+        )}
+        {order.tracking_number && (
+          <p className="ord-addr">📦 Seguimiento: <b>{order.tracking_number}</b></p>
+        )}
+        {order.lab_stage && (
+          <p className="ord-addr muted">🔬 Etapa de laboratorio fijada a mano: {order.lab_stage}</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Orders() {
-  const snap = useAnalyticsTick();
-  const [filter, setFilter] = useState("all");
+  const { toast } = useFeedback();
   const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  // `preset` only drives which quick-range button looks active; `from`/`to` are
+  // the single source of truth for what gets requested.
+  const [preset, setPreset] = useState("30d");
+  const [from, setFrom] = useState(() => presetFrom("30d"));
+  const [to, setTo] = useState("");
+  const [stage, setStage] = useState("");
+  const [terminal, setTerminal] = useState("");
+  const [rx, setRx] = useState("");
+  const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState(null);
-  const orders = useMemo(() => allOrders(), [snap]);
-  const q = query.trim().toLowerCase();
-  const base = filter === "all" ? orders : filter === "done" ? orders.filter((o) => o.status === "delivered") : orders.filter((o) => o.status !== "delivered");
-  const shown = useMemo(() => (q ? base.filter((o) => orderHaystack(o).includes(q)) : base), [base, q]);
-  const proc = orders.filter((o) => o.status !== "delivered").length;
-  const done = orders.length - proc;
-  const revenue = orders.reduce((s, o) => s + o.total, 0);
+  const [busyId, setBusyId] = useState(null);
+
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  // Bumped after a transition so the effect re-runs without duplicating its body.
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Typing shouldn't fire a request per keystroke against a route that reads
+  // hundreds of orders with all their relations.
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  // Any change to the filters invalidates the page number — staying on page 4
+  // of a result set that now has one page shows an empty table.
+  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchOrders({
+      q: debounced,
+      from,
+      to,
+      stage,
+      terminal,
+      hasPrescription: rx,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    })
+      .then((result) => {
+        if (!alive) return;
+        setData(result);
+        setError("");
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError(
+          e.status === 401
+            ? "Tu sesión caducó. Vuelve a entrar."
+            : e.message || "No se pudieron cargar los pedidos."
+        );
+        // Drop the rows too: leaving the previous page on screen behind an error
+        // banner offers "avanzar" buttons that are already going to fail, and
+        // makes a dead session look like a working one.
+        if (e.status === 401) setData(null);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, [debounced, from, to, stage, terminal, rx, page, reloadKey]);
+
+  function applyPreset(key) {
+    setPreset(key);
+    setFrom(presetFrom(key));
+    setTo("");
+  }
+
+  const orders = data?.orders ?? [];
+  const count = data?.count ?? 0;
+  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+
+  async function move(order, target, opts) {
+    setBusyId(order.id);
+    try {
+      const updated = await setOrderStage(order.id, target, opts);
+      toast({
+        tone: "success",
+        title: `${orderLabel(order)} → ${STAGE_BY_KEY[updated?.stage ?? target]?.label ?? target}`,
+      });
+      // Re-read the page rather than patching the row: a transition can change
+      // the order's stage AND drop it out of the current filter, and only the
+      // server knows which.
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      toast({ tone: "error", title: e.message || "No se pudo actualizar el pedido.", duration: 8000 });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="adm-section">
-      <div className="adm-head-row"><h2>Pedidos</h2>
+      <div className="adm-head-row">
+        <h2>Pedidos</h2>
         <div className="adm-orders-tools">
-          <div className="adm-find compact" title="Buscar un pedido para verlo y actualizar su estado">
+          <div className="adm-find compact" title="Buscar por número, cliente, ciudad, correo, teléfono o artículo">
             <span aria-hidden="true">🔎</span>
-            <input placeholder="Buscar pedido: #, cliente, ciudad, correo…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input
+              placeholder="Buscar pedido: #, cliente, ciudad, correo…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
             {query && <button className="adm-find-x" title="Limpiar" onClick={() => setQuery("")}>×</button>}
           </div>
           <div className="adm-range">
-            {[["all", "Todos"], ["proc", "En proceso"], ["done", "Entregados"]].map(([k, l]) =>
-              <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}</button>)}
+            {DATE_PRESETS.map(([k, l]) => (
+              <button key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>{l}</button>
+            ))}
           </div>
         </div>
       </div>
-      {q && <div className="adm-find-note muted">🔎 {shown.length} resultado{shown.length === 1 ? "" : "s"} para “{query}”</div>}
-      <div className="adm-kpis">
-        <KpiCard label="Pedidos" value={int(orders.length)} icon="🧾" />
-        <KpiCard label="En proceso" value={int(proc)} icon="⏳" />
-        <KpiCard label="Entregados" value={int(done)} icon="✅" deltaGood />
-        <KpiCard label="Ingresos" value={money(revenue)} icon="💵" />
+
+      <div className="adm-orders-filters">
+        <label>
+          Desde
+          <input
+            type="date"
+            className="adm-sel"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => { setFrom(e.target.value); setPreset("custom"); }}
+          />
+        </label>
+        <label>
+          Hasta
+          <input
+            type="date"
+            className="adm-sel"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => { setTo(e.target.value); setPreset("custom"); }}
+          />
+        </label>
+        <label>
+          Etapa
+          <select className="adm-sel" value={stage} onChange={(e) => setStage(e.target.value)}>
+            <option value="">Todas</option>
+            {STAGES.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Estado
+          <select className="adm-sel" value={terminal} onChange={(e) => setTerminal(e.target.value)}>
+            <option value="">Todos</option>
+            {TERMINALS.map((s) => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Tipo
+          <select className="adm-sel" value={rx} onChange={(e) => setRx(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="true">👓 Con receta</option>
+            <option value="false">🕶️ Sin receta</option>
+          </select>
+        </label>
+        {(stage || terminal || rx || debounced || preset === "custom") && (
+          <button
+            className="btn-sm"
+            onClick={() => { setStage(""); setTerminal(""); setRx(""); setQuery(""); applyPreset("30d"); }}
+          >
+            Limpiar filtros
+          </button>
+        )}
       </div>
+
+      {error && <div className="adm-login-err">{error}</div>}
+
+      {data?.truncated && (
+        <div className="adm-find-note muted">
+          ⚠️ Mostrando los {data.scan_limit} pedidos más recientes del rango. Acota la fecha para ver pedidos anteriores.
+        </div>
+      )}
+
       <div className="adm-card">
         <div className="adm-table-wrap">
           <table className="adm-table orders">
-            <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Método</th><th className="r">Total</th><th>Estado / proceso</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Entrega</th>
+                <th className="r">Total</th><th>Etapa</th><th>Avanzar a</th>
+              </tr>
+            </thead>
             <tbody>
-              {shown.length === 0 ? <tr><td colSpan="6" className="muted">{q ? "Sin resultados para tu búsqueda." : "Sin pedidos."}</td></tr> : shown.map((o) => {
-                const st = OSTATUS[o.status || "processing"];
-                const ship = o.shipping?.method === "ship";
+              {loading && !orders.length ? (
+                <tr><td colSpan="7" className="muted">Cargando pedidos…</td></tr>
+              ) : error && !orders.length ? (
+                // Never say "no orders" when the truth is "we could not ask".
+                <tr><td colSpan="7" className="muted">No se pudo consultar el listado.</td></tr>
+              ) : !orders.length ? (
+                <tr><td colSpan="7" className="muted">
+                  {debounced || stage || terminal || rx ? "Sin resultados para estos filtros." : "Sin pedidos en este rango."}
+                </td></tr>
+              ) : orders.map((o) => {
                 const open = openId === o.id;
                 return [
                   <tr key={o.id} className="ord-row" onClick={() => setOpenId(open ? null : o.id)}>
-                    <td><b>{o.id}</b>{o.demo && <span className="tag-demo">demo</span>}</td>
-                    <td>{new Date(o.t).toLocaleDateString("es")}</td>
-                    <td>{o.customer ? <span title={o.customer.email}>{o.customer.name} {o.customer.surname}</span> : (o.user || "—")}</td>
-                    <td>{ship ? `🚚 ${o.delivery?.city || "Envío"}` : "🏬 Recogida"}</td>
-                    <td className="r">{money(o.total)}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <span className="ord-badge" style={{ background: st[3], color: st[2] }}>{st[0]} {st[1]}</span>
-                      <select className="adm-sel ord-sel" value={o.status || "processing"} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
-                        {OSTEPS.map((s) => <option key={s} value={s}>{OSTATUS[s][0]} {OSTATUS[s][1]}</option>)}
-                      </select>
+                    <td>
+                      <b>{orderLabel(o)}</b>
+                      {o.has_prescription && <span className="ord-rx" title="Lleva receta">👓</span>}
+                    </td>
+                    <td>{o.created_at ? new Date(o.created_at).toLocaleDateString("es") : "—"}</td>
+                    <td><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span></td>
+                    <td>{o.shipping_address?.city ? `🚚 ${o.shipping_address.city}` : "🏬 Recogida"}</td>
+                    <td className="r">{fmtMoney(o.total, o.currency_code)}</td>
+                    <td><StageBadge order={o} /></td>
+                    <td>
+                      <StageControl
+                        order={o}
+                        busy={busyId === o.id}
+                        onMove={(target, opts) => move(o, target, opts)}
+                      />
                     </td>
                   </tr>,
                   open && (
-                    <tr key={o.id + "-d"} className="ord-detail"><td colSpan="6">
-                      <div className="ord-detail-grid">
-                        <div>
-                          <b>🛍️ Artículos</b>
-                          <ul>{o.items.map((it, i) => <li key={i}><span>{it.name}</span><b>{money(it.total)}</b></li>)}</ul>
-                        </div>
-                        <div>
-                          <b>{ship ? "🚚 Entrega" : "🏬 Recogida en tienda"}</b>
-                          {ship && o.delivery ? (
-                            <p className="ord-addr">📍 {o.delivery.address}, {o.delivery.city}<br />👤 {o.delivery.recipient} · 📞 {o.delivery.phone}<br />✉️ {o.delivery.email} · 🏷️ {o.delivery.carrier || "—"}</p>
-                          ) : <p className="ord-addr muted">El cliente recoge en la sucursal.</p>}
-                          {o.customer && <p className="ord-addr">🧾 {o.customer.name} {o.customer.surname} · {o.customer.email} · {o.customer.phone}</p>}
-                        </div>
-                      </div>
-                    </td></tr>
+                    <tr key={o.id + "-d"} className="ord-detail">
+                      <td colSpan="7"><OrderDetail order={o} /></td>
+                    </tr>
                   ),
                 ];
               })}
             </tbody>
           </table>
+        </div>
+
+        <div className="adm-pager">
+          <span className="muted">
+            {count === 0 ? "0 pedidos" : `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, count)} de ${int(count)}`}
+            {loading && orders.length ? " · actualizando…" : ""}
+          </span>
+          <div>
+            <button className="btn-sm" disabled={page === 0 || loading} onClick={() => setPage((p) => Math.max(0, p - 1))}>← Anterior</button>
+            <span className="adm-pager-n">{page + 1} / {pages}</span>
+            <button className="btn-sm" disabled={page + 1 >= pages || loading} onClick={() => setPage((p) => p + 1)}>Siguiente →</button>
+          </div>
         </div>
       </div>
     </div>

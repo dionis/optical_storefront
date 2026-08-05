@@ -183,6 +183,82 @@ function shouldEscalate(
   return validation !== null && !validation.fulfillable;
 }
 
+interface ModelFailure {
+  code: string;
+  error: string;
+  http_status: number;
+  status?: number;
+  type?: string;
+  name: string;
+  message: string;
+}
+
+/**
+ * Turns an SDK exception into something an operator can act on.
+ *
+ * The distinctions matter because the remedies are completely different: an
+ * exhausted credit balance needs a payment, a rejected key needs a new secret,
+ * and a connection error means the host cannot reach the API at all — which no
+ * amount of staring at application code will fix. Collapsing them all into "the
+ * model call failed" is what made the first outage take so long to place.
+ */
+function classifyModelFailure(err: unknown): ModelFailure {
+  const name = err instanceof Error ? err.constructor.name : typeof err;
+  const message = err instanceof Error ? err.message : String(err);
+  const status = (err as { status?: number })?.status;
+  const type = (err as { error?: { error?: { type?: string } } })?.error?.error?.type;
+
+  // No HTTP status means the request never completed — DNS, egress firewall,
+  // TLS. The SDK retries these, so it surfaces after a few seconds.
+  if (err instanceof Anthropic.APIConnectionError || status === undefined) {
+    return {
+      code: "ocr_unreachable",
+      error: "Could not reach the model API from this host.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  if (err instanceof Anthropic.RateLimitError || status === 429) {
+    return {
+      code: "ocr_rate_limited",
+      error: "Upstream model rate limit reached.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      code: "ocr_unauthorized",
+      error: "The model API rejected the credentials.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  // A depleted balance arrives as a 400 whose message names the credit balance.
+  if (status === 400 && /credit balance|billing/i.test(message)) {
+    return {
+      code: "ocr_no_credit",
+      error: "The model API account has no remaining credit.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  if (status >= 500) {
+    return {
+      code: "ocr_upstream_error",
+      error: "The model API is unavailable.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  return {
+    code: "ocr_failed",
+    error: "The model call failed.",
+    http_status: 503,
+    status, type, name, message,
+  };
+}
+
 export async function POST(
   req: MedusaRequest,
   res: MedusaResponse
@@ -340,14 +416,29 @@ export async function POST(
       }
     }
   } catch (err: unknown) {
-    const isRateLimit =
-      err instanceof Anthropic.RateLimitError ||
-      (err instanceof Error && err.message.includes("rate_limit"));
-    res.status(503).json({
-      error_code: isRateLimit ? "ocr_rate_limited" : "ocr_failed",
-      error: isRateLimit
-        ? "Upstream model rate limit reached."
-        : "The model call failed.",
+    const failure = classifyModelFailure(err);
+
+    // Log it. An earlier version swallowed the upstream error entirely, so a
+    // production outage showed up as a bare 503 with nothing in the logs to say
+    // whether the key was rejected, the credit had run out, or the host simply
+    // could not reach the API. Never the prompt or the image — that is health
+    // data — only what is needed to tell those cases apart.
+    console.error(
+      JSON.stringify({
+        event: "prescription_ocr.failed",
+        error_code: failure.code,
+        model: settings.model_id,
+        upstream_status: failure.status ?? null,
+        upstream_type: failure.type ?? null,
+        error_name: failure.name,
+        message: failure.message,
+        timestamp: new Date().toISOString(),
+      })
+    );
+
+    res.status(failure.http_status).json({
+      error_code: failure.code,
+      error: failure.error,
       fallback: true,
     });
     return;

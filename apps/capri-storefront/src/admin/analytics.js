@@ -82,15 +82,13 @@ export function recordOrder(order) {
 // ---- reads ----
 export function getDaily() { return rd(DAILY, {}); }
 export function getOrders() { return rd(ORDERS, []); }
-// all orders, newest first (for the board's Orders registry)
-export function allOrders() {
-  return getOrders().slice().sort((a, b) => new Date(b.t) - new Date(a.t));
-}
-// advance/set an order's status (owner moves it through the process)
-export function updateOrderStatus(id, status) {
-  wr(ORDERS, getOrders().map((o) => (o.id === id ? { ...o, status } : o)));
-  bump();
-}
+// NOTE: `allOrders()` and `updateOrderStatus()` used to live here and backed the
+// panel's Orders tab. They read and wrote seeded localStorage that no real
+// checkout ever touched, so advancing an order there changed nothing for the
+// customer. The tab now goes through the Medusa Admin API (see adminOrders.js);
+// these were removed rather than left, because a function named
+// `updateOrderStatus` sitting next to the real one is an invitation to call the
+// wrong one. The remaining readers below only power the demo charts.
 
 // units sold per product — this month and all-time (for the Prices tab)
 export function productSales() {
