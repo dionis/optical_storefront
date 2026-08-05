@@ -521,19 +521,33 @@ button { font-family: inherit; cursor: pointer; }
 .ship-sum { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 13.5px; }
 .ship-sum b { color: var(--ink); }
 
-/* ===== tracking timeline (account) ===== */
+/* ===== tracking timeline (account + mis pedidos) =====
+   Los selectores siguen el marcado real de TrackingTimeline.jsx: cada paso es
+   `.track-node`, el círculo interior es `.track-circle` y el pie `.track-label`.
+   (Antes esto apuntaba a un `.track-step` que el componente ya no dibuja, así
+   que `.track-node` recibía el estilo del círculo y los cinco pasos se
+   encimaban unos sobre otros. El fallo estuvo oculto mientras la página de
+   pedidos mostraba siempre la insignia de "pago pendiente" en vez de la línea
+   de tiempo.) */
 .track-tl { display: flex; align-items: flex-start; position: relative; margin: 10px 0; gap: 0; }
-.track-line { position: absolute; top: 20px; left: 8%; right: 8%; height: 3px; background: var(--line); border-radius: 3px; z-index: 0; }
+.track-line { position: absolute; top: 20px; left: 10%; right: 10%; height: 3px; background: var(--line); border-radius: 3px; z-index: 0; }
 .track-line .fill { height: 100%; background: linear-gradient(90deg, var(--blue), #4f8be8); border-radius: 3px; transition: width .6s cubic-bezier(.2,.8,.2,1); }
-.track-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 1; text-align: center; }
-.track-node { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: #fff; border: 2px solid var(--line); color: #9aa3b0; transition: .2s; }
-.track-step.done .track-node { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
-.track-step.active .track-node { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 0 0 0 5px #0E5AD022; animation: trackPulse 1.6s ease-in-out infinite; }
+.track-node { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 1; text-align: center; }
+.track-circle { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: #fff; border: 2px solid var(--line); color: #9aa3b0; transition: .2s; }
+.track-node.done .track-circle { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
+.track-node.active .track-circle { background: var(--blue); color: #fff; border-color: var(--blue); box-shadow: 0 0 0 5px #0E5AD022; animation: trackPulse 1.6s ease-in-out infinite; }
 @keyframes trackPulse { 0%,100%{ box-shadow: 0 0 0 5px #0E5AD022; } 50%{ box-shadow: 0 0 0 9px #0E5AD00f; } }
-.track-step small { font-size: 11.5px; color: var(--muted); max-width: 80px; }
-.track-step.done small { color: var(--ink); font-weight: 600; }
+.track-ico { line-height: 1; }
+.track-label { font-size: 11.5px; color: var(--muted); max-width: 92px; line-height: 1.35; }
+.track-node.done .track-label { color: var(--ink); font-weight: 600; }
 .track-eta { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
-@media (max-width: 560px) { .track-tl { overflow-x: auto; } .track-step { min-width: 78px; } }
+@media (max-width: 560px) {
+  /* Cinco etiquetas no caben en un móvil: se desliza en horizontal en vez de
+     apilarse una encima de otra. */
+  .track-tl { overflow-x: auto; padding-bottom: 4px; }
+  .track-node { flex: 0 0 84px; }
+  .track-line { left: 42px; right: 42px; }
+}
 
 /* ===== review photos + checkout auth gate ===== */
 .rev-photos { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
@@ -2126,6 +2140,29 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-height-i .zlx-ic { width: 15px; height: 15px; }
 .zlx-height-note.req .zlx-height-i { background: var(--red-soft); color: var(--cuba-red); }
 
+/* El campo de la altura vive dentro del popup de receta: cuando se llega a él
+   desde el aviso del botón de comprar, destella para que salte a la vista. */
+.zlx-height-field { border-radius: 12px; }
+.zlx-height-field.seek { animation: zlx-seek 1.1s ease-in-out 2; }
+@keyframes zlx-seek {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+  50% { box-shadow: 0 0 0 4px var(--red-soft); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zlx-height-field.seek { animation: none; box-shadow: 0 0 0 4px var(--red-soft); }
+}
+
+/* Aviso bajo "Comprar": es un botón que abre el paso que falta, no un texto muerto. */
+.zlx-buy-hint-go { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: none; background: none; font: inherit; font-size: .82rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.zlx-buy-hint-go.req { color: var(--cuba-red); font-weight: 600; }
+.zlx-buy-hint-ic { width: 14px; height: 14px; flex: 0 0 auto; }
+
+/* Paso incompleto (falta la altura): ni "on" ni visto verde, avisa en rojo. */
+.zlx-fab.warn { border-color: var(--cuba-red); background: var(--red-soft); }
+.zlx-fab.warn .zlx-fab-txt small { color: var(--cuba-red); font-weight: 600; }
+.zlx-fab-ok.warn { color: var(--cuba-red); }
+.zlx-meas-add.req b { color: var(--cuba-red); }
+
 /* — Fotocromáticos agrupados por familia: nombre + bolitas de color seleccionables — */
 .zlx-photofam { cursor: default; }
 .zlx-photofam-row.sel .zlx-photofam { border-color: var(--cuba-red); background: var(--red-soft); }
@@ -2186,6 +2223,36 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .mo-support textarea { padding: 12px; border: 1px solid #d9dde3; border-radius: 10px; font: inherit; resize: vertical; }
 .mo-support-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .mo-sent { margin-top: 16px; padding: 12px 14px; background: #ecfdf5; color: #047857; border-radius: 10px; font-size: 14px; }
+
+/* — Detalle desplegable del pedido — */
+.mo-item-noimg { width: 52px; height: 52px; flex: none; border-radius: 8px; background: #f4f5f7; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.mo-details-toggle { margin-top: 14px; background: none; border: 0; padding: 0; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--brand, #1f3a5f); cursor: pointer; }
+.mo-details-toggle:hover { text-decoration: underline; }
+.mo-details { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+.mo-dblock { padding: 14px; background: #f9fafb; border-radius: 12px; }
+.mo-dblock h4 { margin: 0 0 8px; font-size: 14px; }
+.mo-drow { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; font-size: 13.5px; padding: 3px 0; }
+.mo-dlabel { color: #6b7280; flex: none; }
+.mo-dvalue { text-align: right; color: #111827; }
+.mo-totals .mo-dtotal { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 8px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-weight: 700; font-size: 15px; }
+.mo-totals .mo-dtotal .mo-dlabel { color: #111827; }
+
+/* — Cancelación: confirmación explícita, nunca un window.confirm() — */
+.mo-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.mo-actions .mo-support-open { margin-top: 0; flex: 1 1 220px; width: auto; }
+.mo-cancel { margin-top: 16px; padding: 16px; background: #fff7f6; border: 1px solid #f3c8c2; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.mo-cancel-h { font-weight: 700; }
+.mo-cancel-body, .mo-cancel-warn, .mo-cancel-money { margin: 0; font-size: 13.5px; line-height: 1.6; }
+.mo-cancel-warn { color: #9a3412; font-weight: 600; }
+.mo-cancel-money { color: #4b5563; }
+.mo-cancel .mo-support-actions { margin-top: 6px; }
+.btn-danger { background: #b42318; border-color: #b42318; color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #912018; border-color: #912018; }
+.btn-ghost-danger { background: #fff; border-color: #e4b4ae; color: #b42318; }
+.btn-ghost-danger:hover:not(:disabled) { background: #fef3f2; border-color: #b42318; }
+
+/* La línea de tiempo mantiene la insignia de "pago pendiente" encima. */
+.track-wrap > .track-terminal { margin-bottom: 12px; }
 
 /* Estado terminal: cancelado / reembolsado / pago pendiente. Sustituye a la
    línea de tiempo porque dibujar "progreso" ahí sería mentir. */

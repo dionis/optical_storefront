@@ -152,6 +152,109 @@ describe("order stage derivation", () => {
   });
 });
 
+/**
+ * Self-cancellation gates real money: whether the shopper is offered the button,
+ * and which promise the confirmation makes about the refund. Both are pure
+ * functions of the order's status fields, so they are cheap to pin down here —
+ * and expensive to get wrong in front of a customer.
+ */
+describe("customer cancellation eligibility", () => {
+  let mod: typeof import("../src/lib/order-status");
+
+  beforeAll(async () => {
+    mod = await import("../src/lib/order-status");
+  });
+
+  const rxItem = { metadata: { prescription_id: "rx_1" } };
+
+  it("allows cancelling a paid order that has not been fulfilled", () => {
+    const e = mod.cancelEligibility({
+      status: "pending",
+      payment_status: "captured",
+      fulfillment_status: "not_fulfilled",
+    });
+    expect(e.cancelable).toBe(true);
+    expect(e.blocked_by).toBeNull();
+  });
+
+  it("refuses once anything has been fulfilled — that is a return, not a cancellation", () => {
+    for (const fulfillment of [
+      "fulfilled",
+      "partially_fulfilled",
+      "shipped",
+      "partially_shipped",
+      "delivered",
+    ]) {
+      const e = mod.cancelEligibility({
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: fulfillment,
+      });
+      expect(e.cancelable).toBe(false);
+      expect(e.blocked_by).toBe("fulfilled");
+    }
+  });
+
+  it("treats a canceled fulfillment as nothing shipped", () => {
+    const e = mod.cancelEligibility({
+      status: "pending",
+      payment_status: "captured",
+      fulfillment_status: "canceled",
+    });
+    expect(e.cancelable).toBe(true);
+  });
+
+  it("refuses an order that is already canceled or completed", () => {
+    expect(mod.cancelEligibility({ status: "canceled" }).blocked_by).toBe("canceled");
+    expect(mod.cancelEligibility({ status: "completed" }).blocked_by).toBe("completed");
+  });
+
+  it("distinguishes a refund from releasing a hold from nothing at all", () => {
+    const outcome = (payment_status: string) =>
+      mod.cancelEligibility({ status: "pending", payment_status }).refund_outcome;
+    // Captured money goes back to the card.
+    expect(outcome("captured")).toBe("refund");
+    expect(outcome("partially_captured")).toBe("refund");
+    // Only authorized — there is nothing to send back, just a hold to drop.
+    expect(outcome("authorized")).toBe("release_hold");
+    expect(outcome("partially_authorized")).toBe("release_hold");
+    // Never charged.
+    expect(outcome("not_paid")).toBe("nothing");
+    expect(outcome("awaiting")).toBe("nothing");
+  });
+
+  it("flags lens production only for a paid prescription order still in the lab", () => {
+    expect(
+      mod.cancelEligibility({
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: "not_fulfilled",
+        items: [rxItem],
+      }).lab_started
+    ).toBe(true);
+
+    // Frame-only: nothing is being ground, so no warning.
+    expect(
+      mod.cancelEligibility({
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: "not_fulfilled",
+        items: [{ metadata: {} }],
+      }).lab_started
+    ).toBe(false);
+
+    // Unpaid: the lab has not started on an order we have not been paid for.
+    expect(
+      mod.cancelEligibility({
+        status: "pending",
+        payment_status: "not_paid",
+        fulfillment_status: "not_fulfilled",
+        items: [rxItem],
+      }).lab_started
+    ).toBe(false);
+  });
+});
+
 describe("admin recipient list parsing", () => {
   it("splits on commas, semicolons and newlines, de-duplicating", async () => {
     const { parseEmailList } = await import("../src/lib/store-settings");

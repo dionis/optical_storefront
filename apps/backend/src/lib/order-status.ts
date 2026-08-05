@@ -40,6 +40,7 @@ export interface OrderProgress {
 interface OrderLike {
   payment_status?: string | null;
   fulfillment_status?: string | null;
+  status?: string | null;
   metadata?: Record<string, unknown> | null;
   items?: { metadata?: Record<string, unknown> | null }[] | null;
 }
@@ -110,4 +111,80 @@ export function deriveOrderProgress(order: OrderLike): OrderProgress {
 /** Index of a stage on the timeline, for progress bars. */
 export function stageIndex(stage: OrderStage): number {
   return ORDER_STAGES.indexOf(stage);
+}
+
+/* ────────────────────────────  self-cancellation  ──────────────────────────── */
+
+/** Why the shopper cannot cancel this order themselves. */
+export type CancelBlockedReason =
+  /** Already canceled — nothing left to do. */
+  | "canceled"
+  /** Medusa closed the order; refunds go through the return flow instead. */
+  | "completed"
+  /** Something already left the building — that is a return, not a cancellation. */
+  | "fulfilled";
+
+/** What canceling does to the shopper's money. */
+export type RefundOutcome =
+  /** Money was captured — it goes back to the original payment method. */
+  | "refund"
+  /** Only an authorization hold exists — canceling releases it. */
+  | "release_hold"
+  /** Nothing was ever taken. */
+  | "nothing";
+
+export interface CancelEligibility {
+  cancelable: boolean;
+  blocked_by: CancelBlockedReason | null;
+  refund_outcome: RefundOutcome;
+  /**
+   * True when lenses are plausibly already in production. Not a blocker — the
+   * shopper still owns the decision — but the UI warns before confirming.
+   */
+  lab_started: boolean;
+}
+
+const CAPTURED_STATUSES = new Set(["captured", "partially_captured"]);
+const HELD_STATUSES = new Set(["authorized", "partially_authorized"]);
+
+/**
+ * Can the shopper cancel this order from the tracking page?
+ *
+ * The rule is deliberately the same one `cancelOrderWorkflow` enforces server-
+ * side (no live fulfillments, not completed, not already canceled) so the button
+ * we render never leads to an error the shopper cannot act on. Everything past
+ * that point is a return, which needs a human — the support form covers it.
+ */
+export function cancelEligibility(order: OrderLike): CancelEligibility {
+  const status = String(order.status ?? "");
+  const fulfillment = String(order.fulfillment_status ?? "");
+  const payment = String(order.payment_status ?? "");
+  const progress = deriveOrderProgress(order);
+
+  const refund_outcome: RefundOutcome = CAPTURED_STATUSES.has(payment)
+    ? "refund"
+    : HELD_STATUSES.has(payment)
+      ? "release_hold"
+      : "nothing";
+
+  // The lab step only means anything once the money is committed and the order
+  // carries a prescription — a frame-only order is picked off a shelf.
+  const lab_started =
+    progress.has_prescription && progress.terminal === null && progress.stage === "in_lab";
+
+  // `status` is the authority on whether the ORDER is canceled. Deliberately not
+  // `progress.terminal`, which also reports "canceled" for an order whose
+  // fulfillments were all canceled or whose payment was voided — neither of
+  // which cancels the order itself, and neither of which stops
+  // `cancelOrderWorkflow` (its validator only rejects live fulfillments).
+  // Reading terminal here would hide the button on exactly the orders a shopper
+  // most needs to cancel: the ones whose shipment was called back.
+  let blocked_by: CancelBlockedReason | null = null;
+  if (status === "canceled") blocked_by = "canceled";
+  else if (status === "completed") blocked_by = "completed";
+  else if (fulfillment !== "" && fulfillment !== "not_fulfilled" && fulfillment !== "canceled") {
+    blocked_by = "fulfilled";
+  }
+
+  return { cancelable: blocked_by === null, blocked_by, refund_outcome, lab_started };
 }

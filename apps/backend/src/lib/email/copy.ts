@@ -102,6 +102,17 @@ interface EmailCopy {
   reason_wrong: string;
   reason_cancel: string;
   reason_other: string;
+  // ── Order canceled by the shopper from the tracking page ──
+  cancel_ack_subject: string;
+  cancel_ack_title: string;
+  cancel_ack_body: string;
+  cancel_refund_issued: string;
+  cancel_hold_released: string;
+  cancel_nothing_charged: string;
+  cancel_admin_subject: string;
+  cancel_admin_title: string;
+  cancel_admin_intro: string;
+  cancel_money: string;
 }
 
 const es: EmailCopy = {
@@ -195,6 +206,20 @@ const es: EmailCopy = {
   reason_wrong: "Algo no está correcto",
   reason_cancel: "Quiero cancelar o cambiar",
   reason_other: "Otra consulta",
+  cancel_ack_subject: "Cancelamos tu pedido #{{display_id}}",
+  cancel_ack_title: "Pedido cancelado",
+  cancel_ack_body:
+    "Cancelamos tu pedido tal como pediste. No hay nada más que tengas que hacer.",
+  cancel_refund_issued:
+    "Devolvimos {{amount}} al mismo método de pago con el que compraste. Según tu banco, puede tardar entre 5 y 10 días hábiles en aparecer en tu estado de cuenta.",
+  cancel_hold_released:
+    "Liberamos la retención sobre tu tarjeta. Nunca llegamos a cobrarte, así que no verás ningún cargo.",
+  cancel_nothing_charged: "No se te cobró nada por este pedido.",
+  cancel_admin_subject: "Pedido #{{display_id}} cancelado por el cliente",
+  cancel_admin_title: "Cancelación del cliente",
+  cancel_admin_intro:
+    "El cliente canceló este pedido desde la página de seguimiento. Medusa ya lo marcó como cancelado y procesó el reembolso que correspondiera.",
+  cancel_money: "Dinero",
 };
 
 const en: EmailCopy = {
@@ -287,6 +312,19 @@ const en: EmailCopy = {
   reason_wrong: "Something is not right",
   reason_cancel: "I want to cancel or change it",
   reason_other: "Another question",
+  cancel_ack_subject: "We canceled your order #{{display_id}}",
+  cancel_ack_title: "Order canceled",
+  cancel_ack_body: "We canceled your order as you asked. There is nothing else for you to do.",
+  cancel_refund_issued:
+    "We refunded {{amount}} to the payment method you used. Depending on your bank it can take 5 to 10 business days to show up on your statement.",
+  cancel_hold_released:
+    "We released the hold on your card. You were never charged, so no charge will appear.",
+  cancel_nothing_charged: "You were not charged for this order.",
+  cancel_admin_subject: "Order #{{display_id}} canceled by the customer",
+  cancel_admin_title: "Customer cancellation",
+  cancel_admin_intro:
+    "The customer canceled this order from the tracking page. Medusa has already marked it canceled and processed any refund that was due.",
+  cancel_money: "Money",
 };
 
 const DICTIONARY: Record<EmailLocale, EmailCopy> = { es, en };

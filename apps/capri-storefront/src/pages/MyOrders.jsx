@@ -9,7 +9,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import TrackingTimeline from "../components/TrackingTimeline.jsx";
+import { resolveImage } from "../data/imageUrl.js";
+import { lensConfigRows, lensSummary } from "../data/lensLabels.js";
 import {
+  cancelOrder,
   clearSession,
   fetchMyOrders,
   getSession,
@@ -18,16 +21,19 @@ import {
   sendSupportMessage,
 } from "../data/orderAccess.js";
 
-// Same codes the checkout summary uses (DESIGN_LBL in MedusaCheckout).
-const DESIGN_LBL = {
-  "frame-only": { es: "Solo montura", en: "Frame only" },
-  sv: { es: "Visión Sencilla", en: "Single Vision" },
-  bifocal: { es: "Bifocal", en: "Bifocal" },
-  "prog-mid": { es: "Progresivo", en: "Progressive" },
-  "prog-high": { es: "Progresivo gama alta", en: "Progressive premium" },
-};
-
 const REASONS = ["delay", "wrong", "cancel", "other"];
+
+/**
+ * Which sentence the cancel dialog uses for the money. The backend decides —
+ * `refund_outcome` reflects what the payment provider will actually be asked to
+ * do — so this only maps its answer to copy. Promising a refund on an order that
+ * was never captured would be a lie the shopper waits ten days to discover.
+ */
+const MONEY_COPY = {
+  refund: "orders.cancelMoneyRefund",
+  release_hold: "orders.cancelMoneyHold",
+  nothing: "orders.cancelMoneyNothing",
+};
 
 /** Support form shown inline under one order. */
 function SupportForm({ order, onDone }) {
@@ -93,15 +99,83 @@ function SupportForm({ order, onDone }) {
   );
 }
 
-function OrderCard({ order }) {
+/** Confirmation step for cancelling. Deliberately not a window.confirm(). */
+function CancelPanel({ order, onCancelled, onDismiss }) {
+  const { t, lang } = useLang();
+  const L = (k) => t(`orders.${k}`);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const confirm = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      await cancelOrder({ orderId: order.id, locale: lang });
+      onCancelled();
+    } catch (e) {
+      // The backend answers 409 with a `reason` when the order moved on since
+      // the list was fetched — say which, rather than a generic failure.
+      const key = e.reason ? `orders.cancelBlocked.${e.reason}` : "";
+      const specific = key ? t(key) : "";
+      setErr(specific && specific !== key ? specific : e.message || L("cancelError"));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mo-cancel" role="group" aria-label={L("cancelTitle")}>
+      <div className="mo-cancel-h">{L("cancelTitle")}</div>
+      <p className="mo-cancel-body">{L("cancelBody")}</p>
+      {order.lab_started && <p className="mo-cancel-warn">⚠️ {L("cancelWarnLab")}</p>}
+      <p className="mo-cancel-money">
+        {t(MONEY_COPY[order.refund_outcome] || MONEY_COPY.nothing)}
+      </p>
+      {err && <div className="auth-err">{err}</div>}
+      <div className="mo-support-actions">
+        <button type="button" className="btn btn-outline" onClick={onDismiss} disabled={busy}>
+          {L("cancelKeep")}
+        </button>
+        <button type="button" className="btn btn-danger" onClick={confirm} disabled={busy}>
+          {busy ? (
+            <><span className="btn-spin" aria-hidden="true" /> {L("canceling")}</>
+          ) : (
+            L("cancelConfirm")
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** One labelled row in the details drawer. */
+function DetailRow({ label, value }) {
+  return (
+    <div className="mo-drow">
+      <span className="mo-dlabel">{label}</span>
+      <span className="mo-dvalue">{value}</span>
+    </div>
+  );
+}
+
+function OrderCard({ order, onChanged }) {
   const { t, lang } = useLang();
   const L = (k) => t(`orders.${k}`);
   const money = (n) => "$" + Number(n || 0).toFixed(2);
   const [openSupport, setOpenSupport] = useState(false);
   const [sent, setSent] = useState(false);
+  const [openDetails, setOpenDetails] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
 
   const date = order.created_at
     ? new Date(order.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es")
+    : "";
+
+  const addr = order.shipping_address;
+  const addrLine = addr
+    ? [addr.name, addr.address_1, addr.address_2, addr.city, addr.province, addr.postal_code]
+        .filter(Boolean)
+        .join(", ")
     : "";
 
   return (
@@ -128,22 +202,25 @@ function OrderCard({ order }) {
 
       <ul className="mo-items">
         {(order.items || []).map((it) => {
-          const dl = DESIGN_LBL[it.lens?.design_code];
-          const parts = [
-            dl ? dl[lang] || dl.es : it.lens?.design_code,
-            it.lens?.material_code,
-            it.lens?.photo_code,
-            it.lens?.ar_code,
-          ].filter(Boolean);
+          const summary = lensSummary(it.lens, lang);
+          const src = resolveImage(it.thumbnail);
           return (
             <li key={it.id} className="mo-item">
-              {it.thumbnail && <img src={it.thumbnail} alt="" loading="lazy" />}
+              {/* Always render the frame, even without an image, so the rows
+                  line up instead of jumping between two layouts. */}
+              {src ? (
+                <img src={src} alt={it.title} loading="lazy" />
+              ) : (
+                <span className="mo-item-noimg" aria-hidden="true">
+                  🕶️
+                </span>
+              )}
               <div className="mo-item-info">
                 <b>
                   {it.title}
                   {it.quantity > 1 ? ` × ${it.quantity}` : ""}
                 </b>
-                {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                {summary && <small>{summary}</small>}
                 {it.has_prescription && <small className="mo-rx">✓ {L("withRx")}</small>}
               </div>
               <span className="mo-item-price">{money(it.total)}</span>
@@ -152,7 +229,81 @@ function OrderCard({ order }) {
         })}
       </ul>
 
-      {sent ? (
+      <button
+        type="button"
+        className="mo-details-toggle"
+        aria-expanded={openDetails}
+        onClick={() => setOpenDetails((v) => !v)}
+      >
+        {openDetails ? L("hideDetails") : L("showDetails")}
+        <span aria-hidden="true">{openDetails ? " ▲" : " ▼"}</span>
+      </button>
+
+      {openDetails && (
+        <div className="mo-details">
+          {(order.items || []).map((it) => {
+            const rows = lensConfigRows(it.lens, lang, t);
+            const bd = it.breakdown || {};
+            return (
+              <section key={it.id} className="mo-dblock">
+                <h4>{it.title}</h4>
+                {rows.map((r) => (
+                  <DetailRow key={r.key} label={r.label} value={r.value} />
+                ))}
+                {it.quantity > 1 && <DetailRow label={L("qty")} value={it.quantity} />}
+                {bd.frame_price != null && (
+                  <DetailRow label={L("framePrice")} value={money(bd.frame_price)} />
+                )}
+                {bd.lens_addon != null && bd.lens_addon > 0 && (
+                  <DetailRow label={L("lensPrice")} value={money(bd.lens_addon)} />
+                )}
+                {bd.tax_amount != null && bd.tax_amount > 0 && (
+                  <DetailRow label={L("taxes")} value={money(bd.tax_amount)} />
+                )}
+              </section>
+            );
+          })}
+
+          <section className="mo-dblock">
+            <DetailRow label={L("placedOn")} value={date} />
+            {order.shipping_method && (
+              <DetailRow label={L("shippingMethod")} value={order.shipping_method} />
+            )}
+            {addrLine && <DetailRow label={L("shipTo")} value={addrLine} />}
+          </section>
+
+          <section className="mo-dblock mo-totals">
+            <DetailRow label={L("subtotal")} value={money(order.item_total)} />
+            <DetailRow label={L("shipping")} value={money(order.shipping_total)} />
+            {Number(order.discount_total) > 0 && (
+              <DetailRow label={L("discount")} value={"−" + money(order.discount_total)} />
+            )}
+            {Number(order.tax_total) > 0 && (
+              <DetailRow label={L("taxes")} value={money(order.tax_total)} />
+            )}
+            <div className="mo-drow mo-dtotal">
+              <span className="mo-dlabel">{L("totalLabel")}</span>
+              <span className="mo-dvalue">{money(order.total)}</span>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {cancelled ? (
+        <div className="mo-sent">✅ {L("cancelDone")}</div>
+      ) : confirmingCancel ? (
+        <CancelPanel
+          order={order}
+          onDismiss={() => setConfirmingCancel(false)}
+          onCancelled={() => {
+            setConfirmingCancel(false);
+            setCancelled(true);
+            // Refetch so the timeline and the buttons reflect the new state
+            // rather than this component's local memory of it.
+            onChanged();
+          }}
+        />
+      ) : sent ? (
         <div className="mo-sent">✅ {L("supportSent")}</div>
       ) : openSupport ? (
         <SupportForm
@@ -163,9 +314,19 @@ function OrderCard({ order }) {
           }}
         />
       ) : (
-        <button className="btn btn-outline mo-support-open" onClick={() => setOpenSupport(true)}>
-          {L("supportOpen")}
-        </button>
+        <div className="mo-actions">
+          <button className="btn btn-outline mo-support-open" onClick={() => setOpenSupport(true)}>
+            {L("supportOpen")}
+          </button>
+          {order.cancelable && (
+            <button
+              className="btn btn-ghost-danger"
+              onClick={() => setConfirmingCancel(true)}
+            >
+              {L("cancelOrder")}
+            </button>
+          )}
+        </div>
       )}
     </article>
   );
@@ -319,7 +480,7 @@ export default function MyOrders() {
       ) : (
         <div className="mo-list">
           {orders.map((o) => (
-            <OrderCard key={o.id} order={o} />
+            <OrderCard key={o.id} order={o} onChanged={load} />
           ))}
         </div>
       )}

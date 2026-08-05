@@ -12,6 +12,7 @@
 // existing filters.js + tv() (Spanish→English display) keep working unchanged.
 import { medusa } from "./medusa.js";
 import { hexFor } from "./products.js";
+import { resolveImage } from "./imageUrl.js";
 
 // English (scraper) → canonical Spanish (storefront) for nominal attributes.
 const SHAPE_ES = {
@@ -30,14 +31,7 @@ const AGE_ES = { adult: "Adulto", kids: "Niños" };
 const mapEnum = (table, v) => (v ? table[String(v).toLowerCase()] || v : v);
 
 // R2 keys are stored bare; hotlinked/dev images are already absolute URLs.
-const R2_PUBLIC = (import.meta.env && import.meta.env.VITE_R2_PUBLIC_URL
-  ? String(import.meta.env.VITE_R2_PUBLIC_URL).replace(/\/$/, "")
-  : "");
-function resolveImage(key) {
-  if (!key) return "";
-  if (/^https?:\/\//i.test(key)) return key;
-  return R2_PUBLIC ? `${R2_PUBLIC}/${key.replace(/^\//, "")}` : key;
-}
+// Shared with the order history — see src/data/imageUrl.js.
 
 // Lowest variant price from Medusa's server-computed calculated_price. Medusa v2
 // stores amounts as decimal dollars (e.g. 99), so use them as-is — never /100.

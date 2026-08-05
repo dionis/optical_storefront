@@ -106,6 +106,83 @@ export function renderSupportEmail(
   };
 }
 
+/** What canceling did to the shopper's money — mirrors RefundOutcome. */
+export type CancelMoneyOutcome = "refund" | "release_hold" | "nothing";
+
+export interface CancelNoticeData {
+  displayId: string;
+  orderId: string;
+  customerEmail: string;
+  outcome: CancelMoneyOutcome;
+  /** Formatted with its currency, e.g. "$132.00" — only used for a refund. */
+  refundAmount: string;
+}
+
+function moneyLine(data: CancelNoticeData, locale: EmailLocale): string {
+  if (data.outcome === "refund") {
+    return t(locale, "cancel_refund_issued", { amount: data.refundAmount });
+  }
+  if (data.outcome === "release_hold") return t(locale, "cancel_hold_released");
+  return t(locale, "cancel_nothing_charged");
+}
+
+/**
+ * Confirmation to the shopper. The money sentence is the part people actually
+ * open this for, so it is explicit about which of the three things happened
+ * rather than a generic "we'll be in touch".
+ */
+export function renderCancelAckEmail(
+  data: CancelNoticeData,
+  locale: EmailLocale
+): RenderedEmail {
+  const subject = t(locale, "cancel_ack_subject", { display_id: data.displayId });
+  const body = t(locale, "cancel_ack_body");
+  const money = moneyLine(data, locale);
+
+  const inner = `
+    <div style="font-size:15px;line-height:1.7;color:#374151">${esc(body)}</div>
+    <div style="margin-top:20px;padding:16px;background:#f9fafb;border-radius:8px;font-size:14px;line-height:1.7;color:#374151">${esc(money)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:20px">
+      ${row(t(locale, "order_number"), `#${data.displayId}`)}
+    </table>`;
+
+  return {
+    subject,
+    html: shell(t(locale, "cancel_ack_title"), body, inner, locale),
+    text: [body, "", money, "", `${t(locale, "order_number")}: #${data.displayId}`].join("\n"),
+  };
+}
+
+/** The same event, told to whoever runs the store. */
+export function renderCancelAdminEmail(
+  data: CancelNoticeData,
+  locale: EmailLocale
+): RenderedEmail {
+  const subject = t(locale, "cancel_admin_subject", { display_id: data.displayId });
+  const intro = t(locale, "cancel_admin_intro");
+  const money = moneyLine(data, locale);
+
+  const inner = `
+    <div style="font-size:15px;line-height:1.7;color:#374151">${esc(intro)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:20px">
+      ${row(t(locale, "order_number"), `#${data.displayId}`)}
+      ${row(t(locale, "customer"), data.customerEmail)}
+      ${row(t(locale, "cancel_money"), money)}
+    </table>`;
+
+  return {
+    subject,
+    html: shell(t(locale, "cancel_admin_title"), intro, inner, locale),
+    text: [
+      intro,
+      "",
+      `${t(locale, "order_number")}: #${data.displayId}`,
+      `${t(locale, "customer")}: ${data.customerEmail}`,
+      `${t(locale, "cancel_money")}: ${money}`,
+    ].join("\n"),
+  };
+}
+
 /** Receipt sent back to the shopper so they know the message landed. */
 export function renderSupportAckEmail(
   data: Pick<SupportMessageData, "displayId" | "reasonLabel" | "message">,

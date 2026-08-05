@@ -65,6 +65,10 @@ async function call(path, { method = "GET", body, token } = {}) {
   if (!res.ok) {
     const err = new Error((payload && payload.message) || `HTTP ${res.status}`);
     err.status = res.status;
+    // Machine-readable cause when the backend sends one (e.g. why a cancellation
+    // was refused), so the UI can show its own translated copy instead of the
+    // server's Spanish-only message.
+    if (payload && payload.reason) err.reason = payload.reason;
     throw err;
   }
   return payload;
@@ -109,6 +113,24 @@ export async function fetchMyOrders() {
     if (e.status === 401) clearSession();
     throw e;
   }
+}
+
+/**
+ * Cancel an order and get the money back.
+ *
+ * The refund is entirely the backend's business — it decides whether the card
+ * gets refunded, the authorization hold released, or nothing at all, and returns
+ * which of those happened as `refund_outcome` so the confirmation can say the
+ * true thing rather than a generic "we'll be in touch".
+ */
+export function cancelOrder({ orderId, locale }) {
+  const session = getSession();
+  if (!session) throw new Error("no-session");
+  return call(`/store/my-orders/${encodeURIComponent(orderId)}/cancel`, {
+    method: "POST",
+    token: session.token,
+    body: { locale },
+  });
 }
 
 /** Raise an issue about one order (delay, something wrong, cancellation). */

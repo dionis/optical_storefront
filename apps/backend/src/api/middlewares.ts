@@ -199,6 +199,14 @@ export default defineMiddlewares({
       method: ["POST"],
       middlewares: [orderAccessRateLimit],
     },
+    {
+      // Self-cancellation moves money and sends mail. The session token already
+      // gates it, but the same per-IP ceiling keeps a leaked token from being
+      // used to hammer the payment provider with refund calls.
+      matcher: "/store/my-orders/:id/cancel",
+      method: ["POST"],
+      middlewares: [orderAccessRateLimit],
+    },
     ...ocrSettingsMiddlewares,
   ],
 });

@@ -28,6 +28,15 @@ const TERMINAL_LABEL = {
   payment_pending: "track.payment_pending",
 };
 
+/**
+ * "Payment pending" is the one non-stage that still has a road ahead of it, so
+ * it gets the badge AND the timeline rather than replacing it. Hiding the steps
+ * left the page with nothing but a grey chip and no sense of what happens next
+ * — which is exactly what an order stuck at this state looks like to someone
+ * checking on it.
+ */
+const KEEPS_TIMELINE = new Set(["payment_pending"]);
+
 export default function TrackingTimeline({
   status = "confirmed",
   eta,
@@ -38,17 +47,19 @@ export default function TrackingTimeline({
   const current = INDEX[status] != null ? INDEX[status] : 0;
   const fillPct = (current / (STEPS.length - 1)) * 100;
 
-  if (terminal && TERMINAL_LABEL[terminal]) {
-    return (
+  const badge =
+    terminal && TERMINAL_LABEL[terminal] ? (
       <div className={`track-terminal ${terminal}`} role="status">
         <span aria-hidden="true">{terminal === "payment_pending" ? "⏳" : "⚠️"}</span>
         <span>{t(TERMINAL_LABEL[terminal])}</span>
       </div>
-    );
-  }
+    ) : null;
+
+  if (badge && !KEEPS_TIMELINE.has(terminal)) return badge;
 
   return (
     <div className="track-wrap" aria-label={t("track.aria")}>
+      {badge}
       <div className="track-tl" role="list">
         <div className="track-line" aria-hidden="true">
           <div className="fill" style={{ width: fillPct + "%" }} />

@@ -355,6 +355,11 @@ export default function LensProcess() {
   const [arId, setArId] = useState(null);         // null = ninguno
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "", seg_height: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
+  // El campo que falta vive DENTRO del popup de receta: al pulsar el aviso del
+  // botón de comprar abrimos ese popup y hacemos scroll/destello sobre la altura,
+  // que si no queda invisible con el popup cerrado y el pago parece bloqueado.
+  const [seekHeight, setSeekHeight] = useState(false);
+  const heightRef = useRef(null);
   const [rxNote, setRxNote] = useState(null);     // aviso del auto-cambio de tipo por la adición (ADD)
   // Ayuda educativa en un GLOBO/popover aparte (NO inline): así la ventana de
   // trabajo no se llena de scroll. Guarda {title, edu, diagKeys} de la opción.
@@ -387,6 +392,17 @@ export default function LensProcess() {
   });
   const [pv, setPv] = useState(0);
   useEffect(() => onPrices(() => setPv((v) => v + 1)), []);
+
+  // Al abrir el popup desde el aviso "falta la altura": lleva el campo a la vista
+  // y lo destaca un momento. El destello se apaga solo (y al cerrar el popup).
+  useEffect(() => {
+    if (!seekHeight) return;
+    if (pop !== "rx") { setSeekHeight(false); return; }
+    const el = heightRef.current;
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const id = setTimeout(() => setSeekHeight(false), 2400);
+    return () => clearTimeout(id);
+  }, [seekHeight, pop]);
 
   // Server-side quote (Medusa path): the backend is the single source of truth for
   // lens pricing. Recomputed on every selection change; the total sent to the cart
@@ -521,6 +537,13 @@ export default function LensProcess() {
     : awaitingRxConfirm ? t("lens.hint.confirmRx")
     : heightMissing ? t("lens.hint.height")
     : null;
+  // El aviso lleva al paso que falta: los campos viven dentro de los popups, así
+  // que un texto suelto deja al cliente sin saber dónde tocar (el pago se ve
+  // bloqueado sin salida). `null` = nada que abrir (ej. mientras lee el OCR).
+  const buyHintGo = !buyHint || ocr.status === "loading" ? null
+    : (!frameOnly && !matId && designId) ? () => setPop("mat")
+    : heightMissing ? () => { setPop("rx"); setSeekHeight(true); }
+    : () => setPop("rx");
 
   const chooseDesign = (id) => {
     setDesignId(id);
@@ -799,8 +822,9 @@ export default function LensProcess() {
         {design?.add && rx.add && (
           <div className="zlx-meas-add"><span>{t("lens.addLbl")}</span><b>{fmt(parseFloat(rx.add) || 0)}</b></div>
         )}
-        {isMulti && rx.seg_height && (
-          <div className="zlx-meas-add"><span>{t("lens.height")}</span><b>{rx.seg_height} mm</b></div>
+        {isMulti && (rx.seg_height
+          ? <div className="zlx-meas-add"><span>{t("lens.height")}</span><b>{rx.seg_height} mm</b></div>
+          : <div className="zlx-meas-add req"><span>{t("lens.height")}</span><b>{t("lens.height.missing")}</b></div>
         )}
       </div>
     </div>
@@ -872,14 +896,16 @@ export default function LensProcess() {
         {/* DERECHA: pasos + info + resumen (columna con aire, no invasiva) */}
         <div className="zlx-side">
           <div className="zlx-fabs">
-            <button type="button" className={`zlx-fab ${designId ? "on" : ""} ${pop === "rx" ? "open" : ""}`}
-                    onClick={() => setPop(pop === "rx" ? null : "rx")}>
+            {/* Sin la altura el paso NO está completo: marcarlo con el visto verde
+                hacía creer que la receta estaba lista y el pago bloqueado sin motivo. */}
+            <button type="button" className={`zlx-fab ${designId && !heightMissing ? "on" : ""} ${heightMissing ? "warn" : ""} ${pop === "rx" ? "open" : ""}`}
+                    onClick={() => { if (pop === "rx") { setPop(null); return; } setPop("rx"); if (heightMissing) setSeekHeight(true); }}>
               <IconReceta className="zlx-ic" />
               <span className="zlx-fab-txt">
                 <b>{t("lens.step.rx")}</b>
-                <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
+                <small>{heightMissing ? t("lens.height.missing") : frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
               </span>
-              {designId && <Ic name="check" className="zlx-fab-ok" />}
+              {designId && (heightMissing ? <Ic name="info" className="zlx-fab-ok warn" /> : <Ic name="check" className="zlx-fab-ok" />)}
             </button>
 
             <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
@@ -922,7 +948,11 @@ export default function LensProcess() {
           <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={startReview}>
             <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
           </button>
-          {buyHint && <p className="zlx-buy-hint">{buyHint}</p>}
+          {buyHint && (buyHintGo
+            ? <button type="button" className={`zlx-buy-hint zlx-buy-hint-go ${heightMissing ? "req" : ""}`} onClick={buyHintGo}>
+                {buyHint} <Ic name="edit" className="zlx-buy-hint-ic" />
+              </button>
+            : <p className="zlx-buy-hint">{buyHint}</p>)}
           </aside>
         </div>
       </div>
@@ -1062,7 +1092,9 @@ export default function LensProcess() {
                             <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addS")} withEmpty flag={ocrClass("add")} />
                             {/* ALTURA de montaje: obligatoria en multifocales (bifocal/progresivo) */}
                             {isMulti && (
-                              <ZlxStepper value={rx.seg_height} options={heightOptions} onChange={setF("seg_height")} label={t("lens.heightS")} withEmpty flag={`${ocrClass("seg_height")} ${heightMissing ? "req" : ""}`} />
+                              <div ref={heightRef} className={`zlx-height-field ${seekHeight ? "seek" : ""}`}>
+                                <ZlxStepper value={rx.seg_height} options={heightOptions} onChange={setF("seg_height")} label={t("lens.heightS")} withEmpty flag={`${ocrClass("seg_height")} ${heightMissing ? "req" : ""}`} />
+                              </div>
                             )}
                           </div>
                           {isMulti && (
