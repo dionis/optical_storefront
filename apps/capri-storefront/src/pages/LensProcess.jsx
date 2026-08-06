@@ -1178,7 +1178,7 @@ export default function LensProcess() {
               const isReco = recommendedMat?.id === m.id;
               return (
                 <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
-                  <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => setMatId(m.id)}>
+                  <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
                     <span className="zlx-choice-main">
                       <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
                       <span className="zlx-choice-title">
@@ -1192,9 +1192,6 @@ export default function LensProcess() {
               );
             })}
           </div>
-          <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select" disabled={!matId} onClick={() => setPop("treat")}>
-            <IconTratamiento className="zlx-ic" /> {t("lens.treatBtn")} <Ic name="down" className="zlx-step-chev" />
-          </button>
         </ZlxPop>
       )}
 
