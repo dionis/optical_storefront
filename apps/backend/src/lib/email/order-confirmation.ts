@@ -303,8 +303,11 @@ function textLines(
   // clients (and forwarding to a lab) show only this half of the message.
   if (extras?.items?.length) {
     for (const it of extras.items) {
+      // Same rows, same order and same prices as the HTML block above: the frame
+      // priced on its own line, then each lens component. Printing the LINE total
+      // next to the frame name read as "the frame costs 276".
       lines.push(
-        `- ${it.frame_name}${it.quantity > 1 ? ` x${it.quantity}` : ""} — ${formatMoney(it.total, currency, locale)}`
+        `- ${t(locale, "order_frame")}: ${it.frame_name}${it.quantity > 1 ? ` × ${it.quantity}` : ""} — ${formatMoney(it.frame_price, currency, locale)}`
       );
       if (it.collection) lines.push(`    ${t(locale, "order_brand")}: ${it.collection}`);
       if (it.color) lines.push(`    ${t(locale, "order_color")}: ${it.color}`);
@@ -315,6 +318,8 @@ function textLines(
         lines.push(`    ${t(locale, "lens_photochromic")}: ${it.photo.label} — + ${formatMoney(it.photo.price, currency, locale)}`);
       if (it.ar)
         lines.push(`    ${t(locale, "lens_treatment")}: ${it.ar.label} — + ${formatMoney(it.ar.price, currency, locale)}`);
+      if (it.with_rx) lines.push(`    ✓ ${t(locale, "prescription_attached")}`);
+      lines.push(`    ${t(locale, "line_total")}: ${formatMoney(it.total, currency, locale)}`);
       if (it.specs) {
         lines.push(`    ${t(locale, "frame_specs")}:`);
         for (const [k, v] of frameSpecRows(it.specs, locale)) lines.push(`      ${k}: ${v}`);
@@ -387,6 +392,19 @@ function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
     : [rx.pd_od, rx.pd_os].some((v) => v != null)
       ? `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`
       : "—";
+  // Measurements block, laid out like the funnel's own summary: PD, the addition
+  // and the fitting height. ADD is in the table too, but the customer met it as a
+  // single labelled measurement on screen and looks for it as one here.
+  const measures = [`${t(locale, "pupillary_distance")}: <strong>${esc(pdText)}</strong>`];
+  const addText = additionText(rx);
+  if (addText) {
+    measures.push(`${t(locale, "rx_addition")}: <strong>${esc(addText)}</strong>`);
+  }
+  if (rx.seg_height != null) {
+    measures.push(
+      `${t(locale, "fitting_height")}: <strong>${esc(plain(rx.seg_height))} mm</strong>`
+    );
+  }
   return `
   <div style="margin-top:20px">
     <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(t(locale, "prescription_values"))}</div>
@@ -403,13 +421,22 @@ function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
       </tbody>
     </table>
     <div style="margin-top:8px;font-size:13px;color:#374151">
-      ${esc(t(locale, "pupillary_distance"))}: <strong>${esc(pdText)}</strong>${
-        rx.seg_height != null
-          ? ` &nbsp;·&nbsp; ${esc(t(locale, "fitting_height"))}: <strong>${esc(plain(rx.seg_height))} mm</strong>`
-          : ""
-      }
+      ${measures.join(" &nbsp;·&nbsp; ")}
     </div>
   </div>`;
+}
+
+/**
+ * The addition as one measurement. Both eyes normally share it — the funnel only
+ * offers a single ADD — so a per-eye split is only spelled out when the stored
+ * values actually differ (an OCR reading of a prescription that had two).
+ */
+function additionText(rx: PrescriptionForEmail): string | null {
+  const od = rx.od?.add ?? null;
+  const os = rx.os?.add ?? null;
+  if (od == null && os == null) return null;
+  if (od != null && os != null && od === os) return dpt(od);
+  return `OD ${dpt(od)} / OS ${dpt(os)}`;
 }
 
 /** Renders every distinct prescription referenced by the order's line items. */
@@ -458,6 +485,8 @@ function rxTextLines(
     lines.push(`  ${t(locale, "left_eye")}: ${eyeLine(rx.os)}`);
     const pd = rx.pd != null ? `${plain(rx.pd)} mm` : `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`;
     lines.push(`  ${t(locale, "pupillary_distance")}: ${pd}`);
+    const addText = additionText(rx);
+    if (addText) lines.push(`  ${t(locale, "rx_addition")}: ${addText}`);
     // The lab cannot cut a progressive/bifocal without it, so it is never omitted
     // from the text part when the customer supplied one.
     if (rx.seg_height != null) {
@@ -559,6 +588,9 @@ function renderEnrichedItems(
         rows.push(row(`${t(locale, "lens_treatment")}: ${it.ar.label}`, formatMoney(it.ar.price, currency, locale), true));
       if (it.with_rx)
         rows.push(row(`✓ ${t(locale, "prescription_attached")}`, ""));
+      // What this pair added up to, so a multi-item order can be reconciled line
+      // by line against the totals block below.
+      rows.push(row(t(locale, "line_total"), formatMoney(it.total, currency, locale)));
       return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
       <tbody>${rows.join("")}</tbody>

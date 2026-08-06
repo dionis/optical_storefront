@@ -26,7 +26,7 @@ export function CartPanel({ open, onClose }) {
   // Server-side Medusa cart: line items, totals and the checkout flow live on the
   // backend. The panel only lists what the cart returns and routes to /checkout
   // (MedusaCheckout) — contact, shipping and payment happen there.
-  const { items, removeItem, total, clearCart, busy } = useCart();
+  const { items, removeItem, total, clearCart, busy, priceChanges, ackPriceChanges } = useCart();
   const { t } = useLang();
 
   return (
@@ -35,6 +35,20 @@ export function CartPanel({ open, onClose }) {
         <p className="panel-empty">{t("cart.empty")}</p>
       ) : (
         <>
+          {/* El carrito se re-cotiza solo al cargar. Si un precio cambió respecto
+              al que el cliente vio al agregarlo, se avisa aquí — no se le pide
+              que decida nada, sólo que se entere antes de pagar. */}
+          {priceChanges.length > 0 && (
+            <div className="panel-repriced" role="status">
+              <b>{t("cart.repriced")}</b>
+              <ul>
+                {priceChanges.map((r) => (
+                  <li key={r.item_id}>{r.title} · <s>{money(r.from)}</s> → <b>{money(r.to)}</b></li>
+                ))}
+              </ul>
+              <button className="panel-repriced-x" onClick={ackPriceChanges}>{t("common.gotIt")}</button>
+            </div>
+          )}
           <ul className="panel-list">
             {items.map((i) => (
               <li key={i.id} className="panel-item">

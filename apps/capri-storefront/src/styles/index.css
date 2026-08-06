@@ -397,6 +397,16 @@ button { font-family: inherit; cursor: pointer; }
 .panel-total { display: flex; justify-content: space-between; font-size: 19px; padding: 12px 0; border-top: 2px solid var(--line); margin-bottom: 14px; }
 .panel-total b { color: var(--red); }
 .panel-clear { width: 100%; border: none; background: none; color: var(--muted); text-decoration: underline; margin-top: 10px; font-size: 13px; }
+/* Aviso de re-cotización del carrito: informativo, no bloquea nada. Mismo par de
+   estilos que .co-repriced en el checkout — es el mismo mensaje en dos pantallas. */
+.panel-repriced, .co-repriced { background: #fff8e6; border: 1px solid #f0d99a; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+.panel-repriced b, .co-repriced b { display: block; margin-bottom: 6px; }
+.panel-repriced ul, .co-repriced ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.panel-repriced li, .co-repriced li { color: var(--muted); }
+.panel-repriced li b, .co-repriced li b { display: inline; color: var(--ink, #222); }
+.panel-repriced s, .co-repriced s { opacity: .65; }
+.co-repriced small { display: block; margin-top: 6px; color: var(--muted); }
+.panel-repriced-x { border: none; background: none; color: var(--muted); text-decoration: underline; padding: 6px 0 0; font-size: 12px; cursor: pointer; }
 .fav-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .fav-item img { width: 74px; height: 60px; object-fit: contain; background: #fff; border-radius: 8px; }
 .fav-item-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }

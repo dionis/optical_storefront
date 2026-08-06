@@ -120,6 +120,31 @@ describe("order confirmation emails", () => {
         }
       });
 
+      it("repeats the measurements the shopper saw in the funnel summary", () => {
+        // PD, addition and fitting height, each as its own labelled measurement —
+        // that is how the customer met them on screen and how they look for them.
+        const pd = locale === "es" ? "Distancia pupilar" : "Pupillary distance";
+        const add = locale === "es" ? "Adición (ADD)" : "Addition (ADD)";
+        const height = locale === "es" ? "Altura de montaje" : "Fitting height";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(pd);
+            expect(part).toContain(add);
+            expect(part).toContain(height);
+          }
+        }
+        // Both eyes share the addition, so it prints once, not per eye.
+        expect(customer.text).toContain(`${add}: +2.00`);
+      });
+
+      it("shows the brand, which the line item snapshot never carries", () => {
+        const brandLabel = locale === "es" ? "Marca / colección" : "Brand / collection";
+        for (const mail of [customer, admin]) {
+          expect(mail.html).toContain(brandLabel);
+          expect(mail.html).toContain("Flexure");
+        }
+      });
+
       it("says where the prescription came from, in both copies", () => {
         // A value read by a model from a photo is not the same claim as one the
         // customer typed — both the lab and the buyer need to know which it was.
@@ -159,6 +184,7 @@ describe("order confirmation emails", () => {
     const productRow = {
       id: "prod_1",
       metadata: {
+        brand: "Di Caprio", brand_slug: "di-caprio",
         eye_size: 52, bridge_size: 16, temple_length: 140,
         a: null, b: null,
         shape: "cat-eye", style: "full-frame", material: "injection-2",
@@ -178,6 +204,9 @@ describe("order confirmation emails", () => {
       [{ product_id: "prod_1", variant_sku: "US134-0", product_title: "DC407", quantity: 1 }],
       "es"
     );
+    // `product_collection` is null on every order in this store, so the brand row
+    // can only come from product metadata — without this fallback it never shows.
+    expect(it0.collection).toBe("Di Caprio");
     expect(it0.specs).toEqual({
       sku: "US134-0",
       size: "52□16-140",

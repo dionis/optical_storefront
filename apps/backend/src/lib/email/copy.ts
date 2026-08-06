@@ -49,6 +49,7 @@ interface EmailCopy {
   prescription_values: string;
   pupillary_distance: string;
   fitting_height: string;
+  rx_addition: string;
   right_eye: string;
   left_eye: string;
   order_frame: string;
@@ -147,7 +148,7 @@ const es: EmailCopy = {
     "Gracias por tu compra. Confirmamos que el pago se procesó correctamente y tu pedido ya está en preparación.",
   order_confirmation_next_steps_title: "¿Qué sigue?",
   order_confirmation_next_steps_body:
-    "Nuestro laboratorio tallará los lentes según tu graduación y montará el armazón. Te escribiremos de nuevo cuando el pedido salga hacia tu dirección.",
+    "Nuestro laboratorio tallará los lentes según tu graduación y montará el armazón: son 10 días hábiles hasta que el pedido está listo para recoger o para salir hacia tu dirección. Te escribiremos de nuevo en cuanto se envíe.",
   admin_order_subject: "Nuevo pedido #{{display_id}} — {{total}}",
   admin_order_title: "Nuevo pedido pagado",
   admin_order_intro: "Se completó un pedido y la pasarela confirmó el pago.",
@@ -174,6 +175,7 @@ const es: EmailCopy = {
   prescription_values: "Datos de la receta",
   pupillary_distance: "Distancia pupilar (DP)",
   fitting_height: "Altura de montaje",
+  rx_addition: "Adición (ADD)",
   right_eye: "OD (derecho)",
   left_eye: "OS (izquierdo)",
   order_frame: "Montura",
@@ -282,7 +284,7 @@ const en: EmailCopy = {
     "Thanks for your purchase. Your payment went through and we have started preparing your order.",
   order_confirmation_next_steps_title: "What happens next?",
   order_confirmation_next_steps_body:
-    "Our lab will cut the lenses to your prescription and fit the frame. We will email you again as soon as the order ships.",
+    "Our lab will cut the lenses to your prescription and fit the frame: that takes 10 business days until the order is ready for pickup or ready to ship to your address. We will email you again as soon as it ships.",
   admin_order_subject: "New order #{{display_id}} — {{total}}",
   admin_order_title: "New paid order",
   admin_order_intro: "An order was completed and the gateway confirmed the payment.",
@@ -309,6 +311,7 @@ const en: EmailCopy = {
   prescription_values: "Prescription details",
   pupillary_distance: "Pupillary distance (PD)",
   fitting_height: "Fitting height",
+  rx_addition: "Addition (ADD)",
   right_eye: "OD (right)",
   left_eye: "OS (left)",
   order_frame: "Frame",

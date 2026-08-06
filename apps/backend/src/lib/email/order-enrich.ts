@@ -226,19 +226,21 @@ export async function enrichLensItems(
       }
     }
 
+    const raw = rawFrameSpecs(productMeta.get(String(item["product_id"] ?? "")), item);
+
     out.push({
       frame_name: (item["product_title"] as string) || (item["title"] as string) || "",
-      collection: (item["product_collection"] as string) || null,
+      // `product_collection` is null on every order in this store — the brand is
+      // product metadata, not a Medusa collection — so the snapshot is only a
+      // first choice, never the only one, or the row silently disappears.
+      collection: (item["product_collection"] as string) || raw?.brand || null,
       color: (item["variant_title"] as string) || null,
       frame_price: Number(md["frame_price"] ?? item["unit_price"] ?? 0),
       design,
       material,
       photo,
       ar,
-      specs: localizeSpecs(
-        rawFrameSpecs(productMeta.get(String(item["product_id"] ?? "")), item),
-        locale
-      ),
+      specs: localizeSpecs(raw, locale),
       with_rx: Boolean(md["prescription_id"]),
       quantity: Number(item["quantity"] ?? 1),
       total: Number(item["total"] ?? item["unit_price"] ?? 0),
