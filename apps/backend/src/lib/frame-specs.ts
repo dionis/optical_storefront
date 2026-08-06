@@ -14,6 +14,13 @@
 import type { Knex } from "@mikro-orm/knex";
 
 export interface RawFrameSpecs {
+  /**
+   * Display brand ("Four You", "Di Caprio"). Lives in product metadata, NOT in a
+   * Medusa collection — `order_line_item.product_collection` is null on every
+   * order in this store, which is why the brand row never rendered anywhere that
+   * relied on it.
+   */
+  brand: string | null;
   /** Variant SKU / UPC of the exact color ordered. */
   sku: string | null;
   eye_size: number | null;
@@ -74,6 +81,7 @@ export function rawFrameSpecs(
   const md = metadata ?? {};
   const eye = numOrNull(md["eye_size"]);
   const specs: RawFrameSpecs = {
+    brand: strOrNull(md["brand"]) ?? strOrNull(md["brand_slug"]),
     sku: strOrNull(item["variant_sku"]),
     eye_size: eye,
     bridge_size: numOrNull(md["bridge_size"]),
@@ -93,8 +101,9 @@ export function rawFrameSpecs(
   };
 
   const empty =
-    !specs.sku && !specs.eye_size && !specs.shape && !specs.material && !specs.style &&
-    !specs.gender && !specs.age_group && !specs.lens_height && !specs.features.length;
+    !specs.brand && !specs.sku && !specs.eye_size && !specs.shape && !specs.material &&
+    !specs.style && !specs.gender && !specs.age_group && !specs.lens_height &&
+    !specs.features.length;
   return empty ? null : specs;
 }
 

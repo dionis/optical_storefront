@@ -7,5 +7,26 @@
   "rewrites": [
     { "source": "/medusa/:path*", "destination": "https://api.161-153-9-98.sslip.io/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/medusa/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "CDN-Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/(catalog|cases|catalog-meta|catalog-history|build-id).json",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/((?!assets/|.*\\.).*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, must-revalidate" }]
+    }
   ]
 }

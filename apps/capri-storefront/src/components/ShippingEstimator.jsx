@@ -22,6 +22,9 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
 
   const zone = zones.find((z) => z.id === zoneId) || zones[0];
   const isFree = zone && zone.id === "us" && subtotal >= (cfg.freeThreshold || 0);
+  // Fabricación en el laboratorio: va ANTES de recoger o de enviar, así que se
+  // muestra aparte del tránsito del transportista.
+  const labDays = Number(cfg.labDays) || 0;
 
   // Notify parent on any change to the selection.
   useEffect(() => {
@@ -71,6 +74,11 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
                 <div className="ship-line">
                   <span aria-hidden="true">🕒</span> {cfg.pickup.hours}
                 </div>
+                {labDays > 0 && (
+                  <div className="ship-line">
+                    <span aria-hidden="true">🔬</span> {t("ship.labPickup", { days: labDays })}
+                  </div>
+                )}
                 <a
                   className="ship-maps"
                   href={cfg.pickup.mapsUrl}
@@ -118,6 +126,11 @@ export default function ShippingEstimator({ subtotal = 0, onChange }) {
                       <span aria-hidden="true">⏱️</span> {zone.etaMin}–{zone.etaMax} {t("ship.days")}
                     </span>
                   </div>
+                  {labDays > 0 && (
+                    <div className="ship-origin muted">
+                      <span aria-hidden="true">🔬</span> {t("ship.labShip", { days: labDays })}
+                    </div>
+                  )}
                   <div className="ship-origin muted">
                     <span aria-hidden="true">📦</span> {t("ship.shippedFrom")} {cfg.origin ? cfg.origin.city : ""}
                   </div>

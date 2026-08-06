@@ -284,7 +284,11 @@ function ShippingConfig({ ov }) {
             <label>{t("adm.ship.city")}<TxtInput value={pk.city} onCommit={(v) => PS.setPickup({ city: v })} wide /></label>
             <label>{t("adm.ship.hours")}<TxtInput value={pk.hours} onCommit={(v) => PS.setPickup({ hours: v })} wide /></label>
             <label>{t("adm.ship.mapUrl")}<TxtInput value={pk.mapsUrl} onCommit={(v) => PS.setPickup({ mapsUrl: v })} wide /></label>
+            {/* Vive en shipping (no en pickup): el mismo plazo aplica a lo que se
+                envía, porque el laboratorio tarda igual. */}
+            <label>{t("adm.ship.labDays")}<PriceInput value={sh.labDays} placeholder="10" onCommit={(v) => PS.setShipping({ labDays: Math.max(0, Math.round(Number(v) || 0)) })} /></label>
           </div>
+          <p className="muted">{t("adm.ship.labDaysHint")}</p>
         </div>
         <div className="ship-block">
           <div className="ship-h"><span>📦</span> {t("adm.ship.origin")}</div>

@@ -8,6 +8,10 @@ const KEY = "oer_price_overrides";
 
 const DEFAULT_SHIPPING = {
   standard: 4.95, express: 12.95, freeThreshold: 59,
+  // Días HÁBILES que el laboratorio tarda en tallar y montar los lentes. Es el
+  // tiempo previo a recoger en tienda o a que salga el envío — no incluye el
+  // tránsito del transportista (eso son etaMin/etaMax por zona).
+  labDays: 10,
   // pickup in store (configurable). Default: main branch on Fry Rd, Katy.
   pickup: {
     enabled: true,

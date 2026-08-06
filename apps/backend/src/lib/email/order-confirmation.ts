@@ -303,8 +303,11 @@ function textLines(
   // clients (and forwarding to a lab) show only this half of the message.
   if (extras?.items?.length) {
     for (const it of extras.items) {
+      // Same rows, same order and same prices as the HTML block above: the frame
+      // priced on its own line, then each lens component. Printing the LINE total
+      // next to the frame name read as "the frame costs 276".
       lines.push(
-        `- ${it.frame_name}${it.quantity > 1 ? ` x${it.quantity}` : ""} — ${formatMoney(it.total, currency, locale)}`
+        `- ${t(locale, "order_frame")}: ${it.frame_name}${it.quantity > 1 ? ` × ${it.quantity}` : ""} — ${formatMoney(it.frame_price, currency, locale)}`
       );
       if (it.collection) lines.push(`    ${t(locale, "order_brand")}: ${it.collection}`);
       if (it.color) lines.push(`    ${t(locale, "order_color")}: ${it.color}`);
@@ -315,6 +318,8 @@ function textLines(
         lines.push(`    ${t(locale, "lens_photochromic")}: ${it.photo.label} — + ${formatMoney(it.photo.price, currency, locale)}`);
       if (it.ar)
         lines.push(`    ${t(locale, "lens_treatment")}: ${it.ar.label} — + ${formatMoney(it.ar.price, currency, locale)}`);
+      if (it.with_rx) lines.push(`    ✓ ${t(locale, "prescription_attached")}`);
+      lines.push(`    ${t(locale, "line_total")}: ${formatMoney(it.total, currency, locale)}`);
       if (it.specs) {
         lines.push(`    ${t(locale, "frame_specs")}:`);
         for (const [k, v] of frameSpecRows(it.specs, locale)) lines.push(`      ${k}: ${v}`);
@@ -361,6 +366,12 @@ export interface PrescriptionForEmail {
   source?: string | null; // "manual" | "ocr" — where the values came from
   /** The customer reviewed the values on screen before paying. */
   verified_by_user?: boolean;
+  /** When the record was captured — not the same as the order date. */
+  created_at?: string | Date | null;
+  /** A photo/PDF of the prescription is on file (private bucket, never linked). */
+  has_file?: boolean;
+  /** Record id. Printed in the STORE copy only, so the owner can open it. */
+  id?: string | null;
 }
 
 /** Dioptric values carry an explicit sign; blanks render as an em dash. */
@@ -369,8 +380,45 @@ const dpt = (v: number | null | undefined): string =>
 const plain = (v: number | string | null | undefined): string =>
   v == null || v === "" ? "—" : String(v);
 
+/**
+ * Everything stored about one prescription, as label/value pairs: where the
+ * values came from, whether the customer confirmed them, when they were captured
+ * and whether a photo of the original is on file.
+ *
+ * `withRecordId` is the store copy only — the id is what the owner types into the
+ * admin to pull the record (and the uploaded photo) up. It is a lookup key for a
+ * health record, so it does not belong in a copy that gets forwarded around.
+ */
+function rxMetaRows(
+  rx: PrescriptionForEmail,
+  locale: EmailLocale,
+  withRecordId: boolean
+): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const origin = rx.source === "ocr" ? t(locale, "rx_source_ocr") : t(locale, "rx_source_manual");
+  rows.push([
+    t(locale, "rx_source"),
+    rx.verified_by_user ? `${origin} — ${t(locale, "rx_confirmed")}` : origin,
+  ]);
+  if (rx.created_at) {
+    rows.push([t(locale, "rx_captured_on"), formatDateTime(rx.created_at, locale)]);
+  }
+  if (rx.has_file) {
+    rows.push([t(locale, "rx_photo"), t(locale, "rx_photo_on_file")]);
+  }
+  if (withRecordId && rx.id) {
+    rows.push([t(locale, "rx_record_id"), rx.id]);
+  }
+  return rows;
+}
+
 /** OD/OS table + measurements for a single prescription. */
-function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
+function rxTable(
+  rx: PrescriptionForEmail,
+  locale: EmailLocale,
+  forFrames: string[],
+  withRecordId: boolean
+): string {
   const head = ["SPH", "CYL", "AXIS", "ADD", "PRISM", "BASE"];
   const row = (label: string, e: RxEyeForEmail) => `
       <tr>
@@ -387,9 +435,37 @@ function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
     : [rx.pd_od, rx.pd_os].some((v) => v != null)
       ? `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`
       : "—";
+  // Measurements block, laid out like the funnel's own summary: PD, the addition
+  // and the fitting height. ADD is in the table too, but the customer met it as a
+  // single labelled measurement on screen and looks for it as one here.
+  const measures = [`${t(locale, "pupillary_distance")}: <strong>${esc(pdText)}</strong>`];
+  const addText = additionText(rx);
+  if (addText) {
+    measures.push(`${t(locale, "rx_addition")}: <strong>${esc(addText)}</strong>`);
+  }
+  if (rx.seg_height != null) {
+    measures.push(
+      `${t(locale, "fitting_height")}: <strong>${esc(plain(rx.seg_height))} mm</strong>`
+    );
+  }
+  const metaRows = rxMetaRows(rx, locale, withRecordId)
+    .map(
+      ([k, v]) => `
+        <tr>
+          <td style="padding:3px 8px 3px 0;color:${MUTED};white-space:nowrap">${esc(k)}</td>
+          <td style="padding:3px 0;color:#374151">${esc(v)}</td>
+        </tr>`
+    )
+    .join("");
+
   return `
-  <div style="margin-top:20px">
+  <div style="margin-top:20px;padding:14px;border:1px solid ${BORDER};border-radius:8px">
     <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(t(locale, "prescription_values"))}</div>
+    ${
+      forFrames.length
+        ? `<div style="font-size:13px;color:#374151;margin-bottom:8px"><strong>${esc(t(locale, "rx_for"))}:</strong> ${esc(forFrames.join(", "))}</div>`
+        : ""
+    }
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
       <thead>
         <tr>
@@ -403,65 +479,126 @@ function rxTable(rx: PrescriptionForEmail, locale: EmailLocale): string {
       </tbody>
     </table>
     <div style="margin-top:8px;font-size:13px;color:#374151">
-      ${esc(t(locale, "pupillary_distance"))}: <strong>${esc(pdText)}</strong>${
-        rx.seg_height != null
-          ? ` &nbsp;·&nbsp; ${esc(t(locale, "fitting_height"))}: <strong>${esc(plain(rx.seg_height))} mm</strong>`
-          : ""
-      }
+      ${measures.join(" &nbsp;·&nbsp; ")}
     </div>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px;font-size:12.5px">
+      <tbody>${metaRows}</tbody>
+    </table>
   </div>`;
+}
+
+/**
+ * The addition as one measurement. Both eyes normally share it — the funnel only
+ * offers a single ADD — so a per-eye split is only spelled out when the stored
+ * values actually differ (an OCR reading of a prescription that had two).
+ */
+function additionText(rx: PrescriptionForEmail): string | null {
+  const od = rx.od?.add ?? null;
+  const os = rx.os?.add ?? null;
+  if (od == null && os == null) return null;
+  if (od != null && os != null && od === os) return dpt(od);
+  return `OD ${dpt(od)} / OS ${dpt(os)}`;
+}
+
+/**
+ * Groups the order's prescriptions by record, keeping the frames each one was
+ * cut for. Two pairs can share a single Rx, and an order can carry two different
+ * ones — an unlabelled block leaves the lab guessing which lenses it belongs to.
+ */
+function prescriptionGroups(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined
+): Array<{ id: string; rx: PrescriptionForEmail; frames: string[] }> {
+  if (!prescriptions) return [];
+  const byId = new Map<string, { id: string; rx: PrescriptionForEmail; frames: string[] }>();
+  for (const item of order.items ?? []) {
+    const pid = item.metadata?.["prescription_id"];
+    if (!pid) continue;
+    const key = String(pid);
+    const rx = prescriptions[key];
+    if (!rx) continue;
+    const group = byId.get(key) ?? { id: key, rx, frames: [] };
+    const label = itemLabel(item);
+    if (label && !group.frames.includes(label)) group.frames.push(label);
+    byId.set(key, group);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * True when the order was placed with a prescription that is not in the map —
+ * the values could not be read.
+ *
+ * This case used to render as nothing at all, which is the worst possible
+ * outcome: the email looks complete, the lab has no values, and only a warning
+ * buried in the server log says why. It is now stated in the message itself.
+ */
+function hasUnloadedPrescription(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined
+): boolean {
+  return (order.items ?? []).some((item) => {
+    const pid = item.metadata?.["prescription_id"];
+    return Boolean(pid) && !prescriptions?.[String(pid)];
+  });
 }
 
 /** Renders every distinct prescription referenced by the order's line items. */
 function renderPrescriptions(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
-  locale: EmailLocale
+  locale: EmailLocale,
+  withRecordId = false
 ): string {
-  if (!prescriptions) return "";
-  const seen = new Set<string>();
-  const blocks: string[] = [];
-  for (const item of order.items ?? []) {
-    const pid = item.metadata?.["prescription_id"];
-    if (!pid) continue;
-    const key = String(pid);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const rx = prescriptions[key];
-    if (rx) blocks.push(rxTable(rx, locale));
-  }
-  return blocks.join("");
+  const blocks = prescriptionGroups(order, prescriptions)
+    .map((g) => rxTable({ ...g.rx, id: g.rx.id ?? g.id }, locale, g.frames, withRecordId))
+    .join("");
+
+  if (!hasUnloadedPrescription(order, prescriptions)) return blocks;
+  // Store copy gets the actionable wording — it is the one that can fix it.
+  const warning = withRecordId ? t(locale, "rx_missing_store") : t(locale, "rx_missing_customer");
+  return `${blocks}
+  <div style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-radius:8px;font-size:13px;line-height:1.6;color:#991b1b">
+    ${esc(warning)}
+  </div>`;
 }
 
-/** Plain-text version of the prescriptions, for the email's text/plain part. */
+/**
+ * Plain-text version of the prescriptions. Carries exactly the same fields as
+ * the HTML block — this half is what gets forwarded to a lab or an optician.
+ */
 function rxTextLines(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
-  locale: EmailLocale
+  locale: EmailLocale,
+  withRecordId = false
 ): string[] {
-  if (!prescriptions) return [];
-  const seen = new Set<string>();
   const lines: string[] = [];
-  for (const item of order.items ?? []) {
-    const pid = item.metadata?.["prescription_id"];
-    if (!pid) continue;
-    const key = String(pid);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const rx = prescriptions[key];
-    if (!rx) continue;
+  if (hasUnloadedPrescription(order, prescriptions)) {
+    lines.push(
+      "",
+      withRecordId ? t(locale, "rx_missing_store") : t(locale, "rx_missing_customer")
+    );
+  }
+  for (const { id, rx, frames } of prescriptionGroups(order, prescriptions)) {
     const eyeLine = (e: RxEyeForEmail) =>
       `SPH ${dpt(e.sph)} CYL ${dpt(e.cyl)} AXIS ${plain(e.axis)} ADD ${dpt(e.add)}` +
       (e.prism != null || e.base ? ` PRISM ${dpt(e.prism)} BASE ${plain(e.base)}` : "");
     lines.push("", t(locale, "prescription_values") + ":");
+    if (frames.length) lines.push(`  ${t(locale, "rx_for")}: ${frames.join(", ")}`);
     lines.push(`  ${t(locale, "right_eye")}: ${eyeLine(rx.od)}`);
     lines.push(`  ${t(locale, "left_eye")}: ${eyeLine(rx.os)}`);
     const pd = rx.pd != null ? `${plain(rx.pd)} mm` : `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`;
     lines.push(`  ${t(locale, "pupillary_distance")}: ${pd}`);
+    const addText = additionText(rx);
+    if (addText) lines.push(`  ${t(locale, "rx_addition")}: ${addText}`);
     // The lab cannot cut a progressive/bifocal without it, so it is never omitted
     // from the text part when the customer supplied one.
     if (rx.seg_height != null) {
       lines.push(`  ${t(locale, "fitting_height")}: ${plain(rx.seg_height)} mm`);
+    }
+    for (const [k, v] of rxMetaRows({ ...rx, id: rx.id ?? id }, locale, withRecordId)) {
+      lines.push(`  ${k}: ${v}`);
     }
   }
   return lines;
@@ -559,6 +696,9 @@ function renderEnrichedItems(
         rows.push(row(`${t(locale, "lens_treatment")}: ${it.ar.label}`, formatMoney(it.ar.price, currency, locale), true));
       if (it.with_rx)
         rows.push(row(`✓ ${t(locale, "prescription_attached")}`, ""));
+      // What this pair added up to, so a multi-item order can be reconciled line
+      // by line against the totals block below.
+      rows.push(row(t(locale, "line_total"), formatMoney(it.total, currency, locale)));
       return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
       <tbody>${rows.join("")}</tbody>
@@ -600,47 +740,6 @@ function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: Ema
     label = payment.last4 ? `${brand} ${t(locale, "card_ending")} ${payment.last4}` : brand;
   }
   return `<div style="margin-top:12px;font-size:14px;color:#374151"><strong>${esc(t(locale, "payment_method"))}:</strong> ${esc(label)}</div>`;
-}
-
-/**
- * Where the prescription values came from — typed in, or read by the OCR from a
- * photo the customer uploaded and then confirmed on screen.
- *
- * Shown in BOTH copies. The lab uses it to weigh how much to trust an odd-looking
- * value; the customer needs it to recognise a misreading months later, when the
- * only record left is this email.
- */
-function renderRxProvenance(
-  order: OrderEmailData,
-  prescriptions: Record<string, PrescriptionForEmail> | undefined,
-  locale: EmailLocale
-): string {
-  const sources = rxProvenanceLines(order, prescriptions, locale);
-  if (!sources.length) return "";
-  return `<div style="margin-top:8px;font-size:14px;color:#374151"><strong>${esc(t(locale, "rx_source"))}:</strong> ${esc(sources.join(", "))}</div>`;
-}
-
-/** Same information as plain strings, for the text part and the HTML above. */
-function rxProvenanceLines(
-  order: OrderEmailData,
-  prescriptions: Record<string, PrescriptionForEmail> | undefined,
-  locale: EmailLocale
-): string[] {
-  if (!prescriptions) return [];
-  const seen = new Set<string>();
-  const sources: string[] = [];
-  for (const item of order.items ?? []) {
-    const pid = item.metadata?.["prescription_id"];
-    if (!pid) continue;
-    const key = String(pid);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const rx = prescriptions[key];
-    if (!rx) continue;
-    const origin = rx.source === "ocr" ? t(locale, "rx_source_ocr") : t(locale, "rx_source_manual");
-    sources.push(rx.verified_by_user ? `${origin} — ${t(locale, "rx_confirmed")}` : origin);
-  }
-  return sources;
 }
 
 /**
@@ -714,7 +813,6 @@ export function renderCustomerOrderConfirmation(
     </div>
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
-    ${renderRxProvenance(order, prescriptions, locale)}
     ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
@@ -733,9 +831,6 @@ export function renderCustomerOrderConfirmation(
     "",
     ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
-    ...rxProvenanceLines(order, prescriptions, locale).map(
-      (source) => `  ${t(locale, "rx_source")}: ${source}`
-    ),
     ...(hasRx
       ? [
           "",
@@ -803,10 +898,11 @@ export function renderAdminOrderNotification(
       </tr>
     </table>
     ${renderPaymentAdmin(extras?.payment, locale)}
-    ${renderRxProvenance(order, prescriptions, locale)}
     ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
-    ${renderPrescriptions(order, prescriptions, locale)}
+    ${/* Store copy carries the record id: it is how the owner opens the Rx — and
+          the uploaded photo — in the admin. */ ""}
+    ${renderPrescriptions(order, prescriptions, locale, true)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
     ${renderDeliveryTracking(extras, locale)}`;
@@ -822,10 +918,7 @@ export function renderAdminOrderNotification(
     ...(hasPrescription ? [t(locale, "prescription_attached")] : []),
     "",
     ...textLines(order, locale, extras),
-    ...rxTextLines(order, prescriptions, locale),
-    ...rxProvenanceLines(order, prescriptions, locale).map(
-      (source) => `  ${t(locale, "rx_source")}: ${source}`
-    ),
+    ...rxTextLines(order, prescriptions, locale, true),
   ].join("\n");
 
   const subject = t(locale, "admin_order_subject", { display_id: displayId, total });

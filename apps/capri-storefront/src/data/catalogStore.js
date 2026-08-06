@@ -81,10 +81,35 @@ const BASE = (import.meta.env && import.meta.env.VITE_CATALOG_URL
   ? String(import.meta.env.VITE_CATALOG_URL).replace(/\/$/, "")
   : "");
 
-let loaded = false;
-export async function loadLive() {
-  if (loaded) return;
-  loaded = true;
+// When the live catalog was last fetched successfully, and whether a fetch is in
+// flight. A boolean "loaded once" flag meant a tab left open all afternoon never
+// saw a price or stock change — the catalog was pinned to whatever existed at
+// first paint. Now the load can repeat, and does (see startAutoRevalidate).
+let lastLoadedAt = 0;
+let inFlight = null;
+
+// How stale the catalog may get before a revalidation is worth doing. Short
+// enough that a price edit reaches an open tab within the hour, long enough that
+// tab-switching doesn't turn into a request per switch.
+const MAX_AGE_MS = 5 * 60 * 1000;
+
+/**
+ * Fetch the live catalog. Repeat calls inside MAX_AGE_MS are no-ops, and
+ * concurrent calls share one request.
+ *
+ * `force` skips the freshness check (used by the revalidation triggers). The
+ * swap is silent by design: `state` feeds useSyncExternalStore, so every screen
+ * re-renders with the new data on its own — the shopper is never asked to
+ * reload, and never sees a "refresh?" prompt.
+ */
+export async function loadLive({ force = false } = {}) {
+  if (inFlight) return inFlight;
+  if (!force && lastLoadedAt && Date.now() - lastLoadedAt < MAX_AGE_MS) return;
+  inFlight = doLoad();
+  try { await inFlight; } finally { inFlight = null; }
+}
+
+async function doLoad() {
 
   // Whichever branch runs (and however it exits — success, early return, or
   // error) the live-load attempt is over once we leave: clear `loading` so
@@ -104,6 +129,10 @@ export async function loadLive() {
             meta: { source: "medusa" },
             live: true,
           });
+          // Only a successful swap counts as "fresh". After a failure the age
+          // check stays expired, so the next trigger retries instead of waiting
+          // out MAX_AGE_MS on data we never actually got.
+          lastLoadedAt = Date.now();
         }
       } catch (e) {
         // network/SDK error → keep the bundled seed silently
@@ -132,12 +161,35 @@ export async function loadLive() {
         meta,
         live: true,
       });
+      lastLoadedAt = Date.now();
     } catch (e) {
       // network/parse error → keep the bundled seed silently
     }
   } finally {
     set({ loading: false });
   }
+}
+
+/**
+ * Keep an open tab's catalog current without the shopper doing anything.
+ *
+ * Revalidates when the tab becomes visible again (the moment that matters: a tab
+ * parked for an hour is exactly the one showing yesterday's prices) and when the
+ * browser reports the network coming back. `loadLive` throttles by MAX_AGE_MS,
+ * so these triggers can fire freely.
+ *
+ * Returns a teardown function. Safe to call outside a browser (SSR/tests).
+ */
+export function startAutoRevalidate() {
+  if (typeof document === "undefined") return () => {};
+  const onVisible = () => { if (!document.hidden) loadLive(); };
+  const onOnline = () => loadLive({ force: true });
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("online", onOnline);
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("online", onOnline);
+  };
 }
 
 export function recommendedCases(seed, n = 3) {

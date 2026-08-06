@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { loadLive } from "./data/catalogStore.js";
+import { loadLive, startAutoRevalidate } from "./data/catalogStore.js";
 import { trackAccess } from "./admin/analytics.js";
 import { initSfx } from "./lib/sfx.js";
+import { checkBuildVersion } from "./lib/buildVersion.js";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
@@ -24,6 +25,11 @@ export default function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname.startsWith("/admin");
   useEffect(() => { loadLive(); trackAccess(); initSfx(); }, []);
+  // El catálogo se revalida solo al volver a la pestaña o al recuperar la red.
+  useEffect(() => startAutoRevalidate(), []);
+  // …y en cada cambio de ruta se compara la versión del bundle: si hay un deploy
+  // nuevo, esta pestaña se recarga sola en un punto seguro (nunca en /checkout).
+  useEffect(() => { checkBuildVersion(pathname); }, [pathname]);
 
   if (isAdmin) {
     return (

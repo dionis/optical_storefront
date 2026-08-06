@@ -166,6 +166,44 @@ export async function addConfiguredFrame(variantId, selection, prescriptionId = 
   return res.cart;
 }
 
+/**
+ * Re-price the cart against today's catalog. Returns the cart plus what moved.
+ *
+ * A configured line is priced once, when it is added, and Medusa never revisits a
+ * custom price — so a cart left open carries stale frame prices, a stale lens
+ * matrix and a stale tax rate. The backend re-quotes from the line's own metadata
+ * (see /store/carts/:id/revalidate); the client sends no amounts and computes
+ * none. Called automatically on cart load and on entering checkout, so the
+ * shopper never has to ask for it.
+ *
+ * Shape: { cart, repriced: [{item_id, title, from, to}], stale: [...], locked }.
+ * `repriced` is what the UI must surface — silently charging a different total
+ * than the one the customer last saw is not an acceptable way to be transparent.
+ * A failure here is non-fatal: the caller keeps the cart it already had.
+ */
+export async function revalidateCart() {
+  const id = readId();
+  if (!id) return null;
+  let res;
+  try {
+    res = await medusa.client.fetch(`/store/carts/${id}/revalidate`, { method: "POST" });
+  } catch {
+    return null;
+  }
+  // Deliberately re-read through getCart() instead of using the cart the route
+  // returns: that one carries a trimmed field set, and the checkout summary
+  // needs CART_FIELDS (shipping_total, tax_total, shipping_address…). Reusing it
+  // would blank out the shipping and tax lines right where the customer is
+  // checking the total.
+  const cart = await getCart();
+  return {
+    cart,
+    repriced: (res && res.repriced) || [],
+    stale: (res && res.stale) || [],
+    locked: Boolean(res && res.locked),
+  };
+}
+
 /** Add a plain variant (frame at base price, or a case) at its own server price. */
 export async function addVariant(variantId, quantity = 1) {
   const cart = await ensureCart();

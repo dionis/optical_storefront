@@ -115,10 +115,24 @@ export function useLensCatalog() {
 
   useEffect(() => {
     let cancelled = false;
-    loadLensCatalog().then((c) => {
-      if (!cancelled) setCatalog(c);
-    });
-    return () => { cancelled = true; };
+    const apply = (c) => { if (!cancelled) setCatalog(c); };
+    loadLensCatalog().then(apply);
+
+    // The wizard is the one screen a shopper leaves open while they hunt for
+    // their prescription — long enough for the owner to edit the lens matrix in
+    // the meantime. Re-fetch when they come back, so the prices they are picking
+    // from are the ones the backend will actually charge. (The quote in
+    // LensProcess is server-side either way; this keeps the menu honest.)
+    const onVisible = () => {
+      if (document.hidden) return;
+      resetLensCatalog();
+      loadLensCatalog().then(apply);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   return { ...catalog, live: catalog !== STATIC_CATALOG };

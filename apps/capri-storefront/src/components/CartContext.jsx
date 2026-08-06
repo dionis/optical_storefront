@@ -22,12 +22,38 @@ export function CartProvider({ children }) {
 
   useEffect(() => { try { localStorage.setItem("oer_fav", JSON.stringify(favorites)); } catch {} }, [favorites]);
 
+  // Lines whose price moved during the last revalidation. Purely informational —
+  // the customer is TOLD, never asked. See `refresh` below.
+  const [priceChanges, setPriceChanges] = useState([]);
+
   // Hydrate the existing server cart on mount (if any).
-  const refresh = useCallback(async () => {
-    try { const c = await mcart.getCart(); setCart(c); return c; }
-    catch { setCart(null); return null; }
+  //
+  // `revalidate` asks the backend to re-quote the cart against today's catalog
+  // first (stale frame price / lens matrix / tax rate on a cart left open). It is
+  // opt-in per call so ordinary refreshes after an add or a remove — where the
+  // price was just computed — don't pay for a second round trip.
+  const refresh = useCallback(async ({ revalidate = false } = {}) => {
+    try {
+      // Never re-price a cart whose payment is already in flight: the amount is
+      // committed to the gateway. The backend refuses too, but not asking is
+      // cheaper and keeps the recovery screen from doing pointless work.
+      if (revalidate && !mcart.getPendingOrder()) {
+        const r = await mcart.revalidateCart();
+        if (r && r.cart) {
+          setPriceChanges(r.repriced || []);
+          setCart(r.cart);
+          return r.cart;
+        }
+      }
+      const c = await mcart.getCart();
+      setCart(c);
+      return c;
+    } catch { setCart(null); return null; }
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh({ revalidate: true }); }, [refresh]);
+
+  /** Dismiss the "price updated" notice once the customer has seen it. */
+  const ackPriceChanges = useCallback(() => setPriceChanges([]), []);
 
   // Add a plain variant (frame at base price, or a case). Throws if no variantId —
   // the caller must disable the buy button and show a notice instead of falling
@@ -55,7 +81,7 @@ export function CartProvider({ children }) {
   }, []);
 
   // Local reset of the cart reference (used after a completed order or by "clear").
-  const clearCart = useCallback(async () => { mcart.clearCartId(); setCart(null); }, []);
+  const clearCart = useCallback(async () => { mcart.clearCartId(); setCart(null); setPriceChanges([]); }, []);
 
   const toggleFav = useCallback((p) => {
     setFavorites((prev) => (prev.find((x) => x.slug === p.slug)
@@ -74,6 +100,7 @@ export function CartProvider({ children }) {
     <CartContext.Provider value={{
       cart, items, count, total, busy,
       refresh, addVariant, addConfiguredFrame, removeItem, clearCart,
+      priceChanges, ackPriceChanges,
       favorites, toggleFav, isFav, favCount: favorites.length,
     }}>
       {children}

@@ -4,9 +4,10 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import {
   getCart, updateContact, listShippingOptions, setShippingMethod,
-  startPayment, DEFAULT_PROVIDER, completeCart,
+  startPayment, DEFAULT_PROVIDER, completeCart, revalidateCart,
 } from "../data/medusaCart.js";
 import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
+import { shipping as shippingConfig } from "../admin/priceStore.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
 
@@ -37,6 +38,9 @@ export default function MedusaCheckout() {
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
   const money = (n) => "$" + Number(n || 0).toFixed(2);
+  // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
+  // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
+  const labDays = Number(shippingConfig().labDays) || 0;
 
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +56,8 @@ export default function MedusaCheckout() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [order, setOrder] = useState(null);
+  // Líneas cuyo precio cambió al revalidar el carrito al entrar al checkout.
+  const [repriced, setRepriced] = useState([]);
 
   const stripeRef = useRef(null);
   const elementsRef = useRef(null);
@@ -110,8 +116,19 @@ export default function MedusaCheckout() {
           return;
         }
 
-        const c = await getCart();
-        setCart(c);
+        // Last chance to correct a stale price before the customer commits: a
+        // cart left open carries the frame price, lens matrix and tax rate from
+        // whenever it was built. The backend re-quotes; we only display what it
+        // says moved (`repriced`), because a total that changes between the cart
+        // panel and the card form has to be stated, not slipped in.
+        const r = await revalidateCart();
+        if (r && r.cart) {
+          setCart(r.cart);
+          setRepriced(r.repriced || []);
+        } else {
+          const c = await getCart();
+          setCart(c);
+        }
       } finally {
         setLoading(false);
       }
@@ -290,6 +307,21 @@ export default function MedusaCheckout() {
           {/* Resumen del pedido COMPLETO, siempre visible arriba de "Finalizar compra" */}
           <div className="co-summary">
             <div className="co-summary-h">🧾 {L("summary")}</div>
+            {/* El carrito se revalidó al abrir esta página. Si algún precio se
+                movió respecto al que el cliente vio, se dice — no se pregunta. */}
+            {repriced.length > 0 && (
+              <div className="co-repriced" role="status">
+                <b>{L("repricedTitle")}</b>
+                <ul>
+                  {repriced.map((r) => (
+                    <li key={r.item_id}>
+                      {r.title} · <s>{money(r.from)}</s> → <b>{money(r.to)}</b>
+                    </li>
+                  ))}
+                </ul>
+                <small>{L("repricedNote")}</small>
+              </div>
+            )}
             <ul className="panel-list">
               {(cart.items || []).map((i) => {
                 const lc = i.metadata?.lens_config || {};
@@ -374,6 +406,11 @@ export default function MedusaCheckout() {
                       </label>
                     ))}
                   </div>
+                  {/* El plazo del transportista no es el plazo del pedido: antes hay
+                      que fabricar los lentes. Se dice aquí, donde se elige entrega. */}
+                  {labDays > 0 && (
+                    <small className="co-hint">🔬 {t("ship.labNote", { days: labDays })}</small>
+                  )}
                   <button className="btn btn-primary big" disabled={busy || !shipId} onClick={goToPay}>
                     {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("toPay")}
                   </button>

@@ -42,7 +42,7 @@ const plain = (v) => (v == null || v === "" ? "—" : String(v));
  * before we cut anything. Saying so is what lets them spot a misread later.
  */
 function PrescriptionBlock({ rx }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const L = (k) => t(`orders.${k}`);
   const [openHelp, setOpenHelp] = useState(false);
 
@@ -57,6 +57,16 @@ function PrescriptionBlock({ rx }) {
       : rx.pd_od != null || rx.pd_os != null
         ? `${t("lens.pd.odS")} ${plain(rx.pd_od)} · ${t("lens.pd.osS")} ${plain(rx.pd_os)} mm`
         : "—";
+  // Both eyes normally share one addition — the funnel only offers a single ADD
+  // — so it is only split when the stored values actually differ.
+  const odAdd = rx.od?.add ?? null;
+  const osAdd = rx.os?.add ?? null;
+  const addText =
+    odAdd == null && osAdd == null
+      ? null
+      : odAdd != null && osAdd != null && Number(odAdd) === Number(osAdd)
+        ? dpt(odAdd)
+        : `${t("orders.rxRight")} ${dpt(odAdd)} · ${t("orders.rxLeft")} ${dpt(osAdd)}`;
 
   return (
     <section className="mo-dblock mo-rx-block">
@@ -95,10 +105,21 @@ function PrescriptionBlock({ rx }) {
         </table>
       </div>
 
+      {/* Same measurements block the shopper saw when choosing the lenses:
+          PD, addition and fitting height, in that order. */}
       <Row label={t("lens.pd")} value={pdText} />
+      {addText && <Row label={t("lens.addLbl")} value={addText} />}
       {rx.seg_height != null && (
         <Row label={t("lens.height")} value={`${rx.seg_height} mm`} />
       )}
+      {/* Same closing rows as the order emails, so both records read alike. */}
+      {rx.created_at && (
+        <Row
+          label={L("rxCapturedOn")}
+          value={new Date(rx.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es")}
+        />
+      )}
+      {rx.has_file && <Row label={L("rxPhoto")} value={L("rxPhotoOnFile")} />}
 
       <button
         type="button"
@@ -141,6 +162,9 @@ export default function OrderGlassesDetails({ item, money }) {
     <>
       <section className="mo-dblock">
         <h4>{item.title}</h4>
+        {/* Brand lives in product metadata, never in a Medusa collection — the
+            line item's own snapshot of it is always empty in this store. */}
+        {item.frame?.brand && <Row label={L("frameBrand")} value={item.frame.brand} />}
         {item.variant_title && <Row label={L("frameColor")} value={item.variant_title} />}
         {lensRows.map((r) => (
           <Row key={r.key} label={r.label} value={r.value} />

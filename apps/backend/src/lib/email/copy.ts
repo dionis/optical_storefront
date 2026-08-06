@@ -49,6 +49,7 @@ interface EmailCopy {
   prescription_values: string;
   pupillary_distance: string;
   fitting_height: string;
+  rx_addition: string;
   right_eye: string;
   left_eye: string;
   order_frame: string;
@@ -82,6 +83,13 @@ interface EmailCopy {
   rx_source_manual: string;
   rx_source_ocr: string;
   rx_confirmed: string;
+  rx_for: string;
+  rx_captured_on: string;
+  rx_photo: string;
+  rx_photo_on_file: string;
+  rx_record_id: string;
+  rx_missing_customer: string;
+  rx_missing_store: string;
   // ── "How to read your prescription" (customer copy only) ──
   rx_glossary_title: string;
   rx_gloss_sph: string;
@@ -147,7 +155,7 @@ const es: EmailCopy = {
     "Gracias por tu compra. Confirmamos que el pago se procesó correctamente y tu pedido ya está en preparación.",
   order_confirmation_next_steps_title: "¿Qué sigue?",
   order_confirmation_next_steps_body:
-    "Nuestro laboratorio tallará los lentes según tu graduación y montará el armazón. Te escribiremos de nuevo cuando el pedido salga hacia tu dirección.",
+    "Nuestro laboratorio tallará los lentes según tu graduación y montará el armazón: son 10 días hábiles hasta que el pedido está listo para recoger o para salir hacia tu dirección. Te escribiremos de nuevo en cuanto se envíe.",
   admin_order_subject: "Nuevo pedido #{{display_id}} — {{total}}",
   admin_order_title: "Nuevo pedido pagado",
   admin_order_intro: "Se completó un pedido y la pasarela confirmó el pago.",
@@ -174,6 +182,7 @@ const es: EmailCopy = {
   prescription_values: "Datos de la receta",
   pupillary_distance: "Distancia pupilar (DP)",
   fitting_height: "Altura de montaje",
+  rx_addition: "Adición (ADD)",
   right_eye: "OD (derecho)",
   left_eye: "OS (izquierdo)",
   order_frame: "Montura",
@@ -206,6 +215,15 @@ const es: EmailCopy = {
   rx_source_manual: "Ingresada manualmente",
   rx_source_ocr: "Foto subida (leída por OCR)",
   rx_confirmed: "revisada y confirmada por el cliente antes de pagar",
+  rx_for: "Para",
+  rx_captured_on: "Fecha de la receta",
+  rx_photo: "Foto de la receta",
+  rx_photo_on_file: "Guardada con el pedido",
+  rx_record_id: "Nº de registro",
+  rx_missing_customer:
+    "No pudimos incluir los valores de tu receta en este correo. Están guardados con el pedido: puedes verlos en el seguimiento o responder a este mensaje y te los enviamos.",
+  rx_missing_store:
+    "ATENCIÓN: este pedido lleva receta, pero no se pudieron cargar sus valores para este correo. Búscala en el panel antes de mandar a fabricar.",
   rx_glossary_title: "Cómo leer tu receta",
   rx_gloss_sph:
     "SPH (esfera): cuánta graduación necesita el ojo. Negativo = miopía, positivo = hipermetropía o vista cansada.",
@@ -282,7 +300,7 @@ const en: EmailCopy = {
     "Thanks for your purchase. Your payment went through and we have started preparing your order.",
   order_confirmation_next_steps_title: "What happens next?",
   order_confirmation_next_steps_body:
-    "Our lab will cut the lenses to your prescription and fit the frame. We will email you again as soon as the order ships.",
+    "Our lab will cut the lenses to your prescription and fit the frame: that takes 10 business days until the order is ready for pickup or ready to ship to your address. We will email you again as soon as it ships.",
   admin_order_subject: "New order #{{display_id}} — {{total}}",
   admin_order_title: "New paid order",
   admin_order_intro: "An order was completed and the gateway confirmed the payment.",
@@ -309,6 +327,7 @@ const en: EmailCopy = {
   prescription_values: "Prescription details",
   pupillary_distance: "Pupillary distance (PD)",
   fitting_height: "Fitting height",
+  rx_addition: "Addition (ADD)",
   right_eye: "OD (right)",
   left_eye: "OS (left)",
   order_frame: "Frame",
@@ -341,6 +360,15 @@ const en: EmailCopy = {
   rx_source_manual: "Entered manually",
   rx_source_ocr: "Uploaded photo (read by OCR)",
   rx_confirmed: "reviewed and confirmed by the customer before paying",
+  rx_for: "For",
+  rx_captured_on: "Prescription date",
+  rx_photo: "Prescription photo",
+  rx_photo_on_file: "Stored with the order",
+  rx_record_id: "Record no.",
+  rx_missing_customer:
+    "We couldn't include your prescription values in this email. They are stored with your order: check the tracking page, or reply to this message and we'll send them over.",
+  rx_missing_store:
+    "ATTENTION: this order has a prescription, but its values could not be loaded for this email. Look it up in the admin before sending it to the lab.",
   rx_glossary_title: "How to read your prescription",
   rx_gloss_sph:
     "SPH (sphere): how much correction the eye needs. Negative = short-sighted, positive = long-sighted or reading vision.",

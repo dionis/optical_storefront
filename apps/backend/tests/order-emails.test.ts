@@ -80,6 +80,9 @@ const prescriptions: Record<string, PrescriptionForEmail> = {
     seg_height: 22,
     source: "ocr",
     verified_by_user: true,
+    created_at: "2026-08-04T10:30:00.000Z",
+    has_file: true,
+    id: "rx_01",
   },
 };
 
@@ -120,6 +123,31 @@ describe("order confirmation emails", () => {
         }
       });
 
+      it("repeats the measurements the shopper saw in the funnel summary", () => {
+        // PD, addition and fitting height, each as its own labelled measurement —
+        // that is how the customer met them on screen and how they look for them.
+        const pd = locale === "es" ? "Distancia pupilar" : "Pupillary distance";
+        const add = locale === "es" ? "Adición (ADD)" : "Addition (ADD)";
+        const height = locale === "es" ? "Altura de montaje" : "Fitting height";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(pd);
+            expect(part).toContain(add);
+            expect(part).toContain(height);
+          }
+        }
+        // Both eyes share the addition, so it prints once, not per eye.
+        expect(customer.text).toContain(`${add}: +2.00`);
+      });
+
+      it("shows the brand, which the line item snapshot never carries", () => {
+        const brandLabel = locale === "es" ? "Marca / colección" : "Brand / collection";
+        for (const mail of [customer, admin]) {
+          expect(mail.html).toContain(brandLabel);
+          expect(mail.html).toContain("Flexure");
+        }
+      });
+
       it("says where the prescription came from, in both copies", () => {
         // A value read by a model from a photo is not the same claim as one the
         // customer typed — both the lab and the buyer need to know which it was.
@@ -150,6 +178,48 @@ describe("order confirmation emails", () => {
           expect(mail.text).toContain("ADD +2.00");
         }
       });
+
+      it("says which glasses each prescription belongs to", () => {
+        // An order can carry two different prescriptions, or one shared by two
+        // pairs — an unlabelled block leaves the lab guessing.
+        const forLabel = locale === "es" ? "Para" : "For";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(forLabel);
+            expect(part).toContain("Flexure 2043");
+          }
+        }
+      });
+
+      it("records when the prescription was captured and that a photo is on file", () => {
+        const date = locale === "es" ? "Fecha de la receta" : "Prescription date";
+        const photo = locale === "es" ? "Foto de la receta" : "Prescription photo";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(date);
+            expect(part).toContain(photo);
+          }
+        }
+      });
+
+      it("gives the record id to the store only", () => {
+        // It is the lookup key for a health record: useful in the owner's inbox,
+        // wrong in a copy that gets forwarded around.
+        expect(admin.html).toContain("rx_01");
+        expect(admin.text).toContain("rx_01");
+        expect(customer.html).not.toContain("rx_01");
+        expect(customer.text).not.toContain("rx_01");
+      });
+
+      it("never leaks the uploaded prescription file key", () => {
+        // The R2 bucket is private; the emails may say a photo exists, never where.
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).not.toContain("prescriptions/");
+            expect(part).not.toContain(".r2.");
+          }
+        }
+      });
     });
   }
 
@@ -159,6 +229,7 @@ describe("order confirmation emails", () => {
     const productRow = {
       id: "prod_1",
       metadata: {
+        brand: "Di Caprio", brand_slug: "di-caprio",
         eye_size: 52, bridge_size: 16, temple_length: 140,
         a: null, b: null,
         shape: "cat-eye", style: "full-frame", material: "injection-2",
@@ -178,6 +249,9 @@ describe("order confirmation emails", () => {
       [{ product_id: "prod_1", variant_sku: "US134-0", product_title: "DC407", quantity: 1 }],
       "es"
     );
+    // `product_collection` is null on every order in this store, so the brand row
+    // can only come from product metadata — without this fallback it never shows.
+    expect(it0.collection).toBe("Di Caprio");
     expect(it0.specs).toEqual({
       sku: "US134-0",
       size: "52□16-140",
@@ -192,6 +266,27 @@ describe("order confirmation emails", () => {
       age_group: "Adulto",
       features: ["Spring Hinge"],
     });
+  });
+
+  // Regression guard for the bug that made every order email ship without an Rx:
+  // the loader threw, the map came back empty, and the section rendered as
+  // nothing — so the message looked complete while the lab had no values.
+  it("never stays silent when a prescription could not be loaded", () => {
+    const noRx = renderCustomerOrderConfirmation(order, "es", {}, extras);
+    const noRxAdmin = renderAdminOrderNotification(order, "es", {}, extras);
+    for (const part of [noRx.html, noRx.text]) {
+      expect(part).toContain("No pudimos incluir los valores de tu receta");
+    }
+    for (const part of [noRxAdmin.html, noRxAdmin.text]) {
+      expect(part).toContain("ATENCIÓN");
+      expect(part).toContain("antes de mandar a fabricar");
+    }
+  });
+
+  it("says nothing about missing values when the prescription did load", () => {
+    const ok = renderCustomerOrderConfirmation(order, "es", prescriptions, extras);
+    expect(ok.html).not.toContain("No pudimos incluir");
+    expect(ok.text).not.toContain("No pudimos incluir");
   });
 
   it("still renders when the frame has no scraped attributes", () => {
