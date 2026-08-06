@@ -59,4 +59,7 @@ EXPOSE 9000
 # The `cd` is deliberate rather than relying on WORKDIR alone: an orchestrator
 # that sets its own working_dir (Coolify writes the compose file for us) would
 # otherwise silently move the process out of the build output folder.
-CMD ["sh", "-c", "cd /app/apps/backend/.medusa/server && exec /app/apps/backend/node_modules/.bin/medusa start -H 0.0.0.0"]
+# Corre las migraciones pendientes ANTES de arrancar, para que los cambios de
+# esquema/datos (p. ej. la matriz de precios) se apliquen solos en cada deploy,
+# sin pasos manuales. `db:migrate` es idempotente: omite las ya aplicadas.
+CMD ["sh", "-c", "cd /app/apps/backend/.medusa/server && /app/apps/backend/node_modules/.bin/medusa db:migrate && exec /app/apps/backend/node_modules/.bin/medusa start -H 0.0.0.0"]
