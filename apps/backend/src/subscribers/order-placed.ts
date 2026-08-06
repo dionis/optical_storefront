@@ -24,6 +24,7 @@ import {
   type PrescriptionForEmail,
 } from "../lib/email/order-confirmation";
 import { enrichLensItems, extractPaymentInfo, extractTracking } from "../lib/email/order-enrich";
+import { loadPrescriptionRecords } from "../lib/prescription-read";
 import type { Knex } from "@mikro-orm/knex";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 import { notificationHealth, undeliverableReason } from "../lib/notification-health";
@@ -101,14 +102,23 @@ export default async function orderPlacedSubscriber({
   const prescriptions: Record<string, PrescriptionForEmail> = {};
   try {
     const rxService = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
     const ids = new Set<string>();
     for (const it of order.items ?? []) {
       const pid = it.metadata?.["prescription_id"];
       if (pid) ids.add(String(pid));
     }
+    // Read with the shared PG connection, NOT the module service: every generated
+    // data method on it throws in this project (see lib/prescription-read.ts).
+    // That failure is what left the Rx section empty in every order email.
+    const records = await loadPrescriptionRecords(pg, ids);
     for (const pid of ids) {
       try {
-        const record = (await rxService.retrievePrescriptionRecord(pid)) as Record<string, unknown>;
+        const record = records.get(pid);
+        if (!record) {
+          logger.warn(`[order-placed] prescription ${pid} not found for order ${order.id}.`);
+          continue;
+        }
         const rx = rxService.recordToRx(record);
         prescriptions[pid] = {
           od: rx.od,
@@ -129,8 +139,14 @@ export default async function orderPlacedSubscriber({
         logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);
       }
     }
-  } catch {
-    // Prescription module unavailable — emails still send, just without the Rx block.
+  } catch (error) {
+    // Loud on purpose. A silent catch here is precisely what let the emails go
+    // out with an empty prescription section for months: the order still sends,
+    // so nothing downstream complains, and the lab quietly loses the values it
+    // needs to cut the lenses.
+    logger.error(
+      `[order-placed] prescription values could NOT be loaded for order ${order.id} — the emails are going out without the Rx: ${(error as Error).message}`
+    );
   }
 
   // Extra email data (rich lens breakdown with names+prices, delivery method,

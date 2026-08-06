@@ -88,6 +88,8 @@ interface EmailCopy {
   rx_photo: string;
   rx_photo_on_file: string;
   rx_record_id: string;
+  rx_missing_customer: string;
+  rx_missing_store: string;
   // ── "How to read your prescription" (customer copy only) ──
   rx_glossary_title: string;
   rx_gloss_sph: string;
@@ -218,6 +220,10 @@ const es: EmailCopy = {
   rx_photo: "Foto de la receta",
   rx_photo_on_file: "Guardada con el pedido",
   rx_record_id: "Nº de registro",
+  rx_missing_customer:
+    "No pudimos incluir los valores de tu receta en este correo. Están guardados con el pedido: puedes verlos en el seguimiento o responder a este mensaje y te los enviamos.",
+  rx_missing_store:
+    "ATENCIÓN: este pedido lleva receta, pero no se pudieron cargar sus valores para este correo. Búscala en el panel antes de mandar a fabricar.",
   rx_glossary_title: "Cómo leer tu receta",
   rx_gloss_sph:
     "SPH (esfera): cuánta graduación necesita el ojo. Negativo = miopía, positivo = hipermetropía o vista cansada.",
@@ -359,6 +365,10 @@ const en: EmailCopy = {
   rx_photo: "Prescription photo",
   rx_photo_on_file: "Stored with the order",
   rx_record_id: "Record no.",
+  rx_missing_customer:
+    "We couldn't include your prescription values in this email. They are stored with your order: check the tracking page, or reply to this message and we'll send them over.",
+  rx_missing_store:
+    "ATTENTION: this order has a prescription, but its values could not be loaded for this email. Look it up in the admin before sending it to the lab.",
   rx_glossary_title: "How to read your prescription",
   rx_gloss_sph:
     "SPH (sphere): how much correction the eye needs. Negative = short-sighted, positive = long-sighted or reading vision.",

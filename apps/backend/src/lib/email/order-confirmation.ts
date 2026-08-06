@@ -525,6 +525,24 @@ function prescriptionGroups(
   return [...byId.values()];
 }
 
+/**
+ * True when the order was placed with a prescription that is not in the map —
+ * the values could not be read.
+ *
+ * This case used to render as nothing at all, which is the worst possible
+ * outcome: the email looks complete, the lab has no values, and only a warning
+ * buried in the server log says why. It is now stated in the message itself.
+ */
+function hasUnloadedPrescription(
+  order: OrderEmailData,
+  prescriptions: Record<string, PrescriptionForEmail> | undefined
+): boolean {
+  return (order.items ?? []).some((item) => {
+    const pid = item.metadata?.["prescription_id"];
+    return Boolean(pid) && !prescriptions?.[String(pid)];
+  });
+}
+
 /** Renders every distinct prescription referenced by the order's line items. */
 function renderPrescriptions(
   order: OrderEmailData,
@@ -532,9 +550,17 @@ function renderPrescriptions(
   locale: EmailLocale,
   withRecordId = false
 ): string {
-  return prescriptionGroups(order, prescriptions)
+  const blocks = prescriptionGroups(order, prescriptions)
     .map((g) => rxTable({ ...g.rx, id: g.rx.id ?? g.id }, locale, g.frames, withRecordId))
     .join("");
+
+  if (!hasUnloadedPrescription(order, prescriptions)) return blocks;
+  // Store copy gets the actionable wording — it is the one that can fix it.
+  const warning = withRecordId ? t(locale, "rx_missing_store") : t(locale, "rx_missing_customer");
+  return `${blocks}
+  <div style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-radius:8px;font-size:13px;line-height:1.6;color:#991b1b">
+    ${esc(warning)}
+  </div>`;
 }
 
 /**
@@ -548,6 +574,12 @@ function rxTextLines(
   withRecordId = false
 ): string[] {
   const lines: string[] = [];
+  if (hasUnloadedPrescription(order, prescriptions)) {
+    lines.push(
+      "",
+      withRecordId ? t(locale, "rx_missing_store") : t(locale, "rx_missing_customer")
+    );
+  }
   for (const { id, rx, frames } of prescriptionGroups(order, prescriptions)) {
     const eyeLine = (e: RxEyeForEmail) =>
       `SPH ${dpt(e.sph)} CYL ${dpt(e.cyl)} AXIS ${plain(e.axis)} ADD ${dpt(e.add)}` +

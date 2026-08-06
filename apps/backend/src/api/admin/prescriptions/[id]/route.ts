@@ -1,6 +1,9 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../../modules/prescription/service";
+import { loadPrescriptionRecord } from "../../../../lib/prescription-read";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import {
   createStorageClient,
@@ -31,10 +34,13 @@ export async function GET(
 
   const { id } = req.params as { id: string };
 
-  let record: Record<string, unknown>;
-  try {
-    record = (await prescriptionService.retrievePrescriptionRecord(id)) as Record<string, unknown>;
-  } catch {
+  // Read with the shared PG connection: the module's generated `retrieve` throws
+  // in this project (see lib/prescription-read.ts), which made this route answer
+  // 404 for records that exist — including the ones the store's order email now
+  // cites by record number.
+  const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const record = await loadPrescriptionRecord(pg, id);
+  if (!record) {
     res.status(404).json({ error: "Prescription not found." });
     return;
   }
@@ -77,10 +83,13 @@ export async function DELETE(
 
   const { id } = req.params as { id: string };
 
-  let record: Record<string, unknown>;
-  try {
-    record = (await prescriptionService.retrievePrescriptionRecord(id)) as Record<string, unknown>;
-  } catch {
+  // Same story as GET: the module's generated methods throw here, so this route
+  // answered 404 for every existing record and the erasure never happened. For a
+  // GDPR/CCPA path that is not a cosmetic bug — it means "delete my health data"
+  // silently did nothing.
+  const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const record = await loadPrescriptionRecord(pg, id);
+  if (!record) {
     res.status(404).json({ error: "Prescription not found." });
     return;
   }
@@ -107,7 +116,10 @@ export async function DELETE(
     }
   }
 
-  await prescriptionService.deletePrescriptionRecords(id);
+  // Hard delete, matching this route's stated contract (and what
+  // `deletePrescriptionRecords` would have done): the record is erased, not
+  // flagged. A soft delete would leave the health data in the table.
+  await pg("prescription").where({ id }).del();
 
   // Audit log
   console.info(

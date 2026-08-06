@@ -268,6 +268,27 @@ describe("order confirmation emails", () => {
     });
   });
 
+  // Regression guard for the bug that made every order email ship without an Rx:
+  // the loader threw, the map came back empty, and the section rendered as
+  // nothing — so the message looked complete while the lab had no values.
+  it("never stays silent when a prescription could not be loaded", () => {
+    const noRx = renderCustomerOrderConfirmation(order, "es", {}, extras);
+    const noRxAdmin = renderAdminOrderNotification(order, "es", {}, extras);
+    for (const part of [noRx.html, noRx.text]) {
+      expect(part).toContain("No pudimos incluir los valores de tu receta");
+    }
+    for (const part of [noRxAdmin.html, noRxAdmin.text]) {
+      expect(part).toContain("ATENCIÓN");
+      expect(part).toContain("antes de mandar a fabricar");
+    }
+  });
+
+  it("says nothing about missing values when the prescription did load", () => {
+    const ok = renderCustomerOrderConfirmation(order, "es", prescriptions, extras);
+    expect(ok.html).not.toContain("No pudimos incluir");
+    expect(ok.text).not.toContain("No pudimos incluir");
+  });
+
   it("still renders when the frame has no scraped attributes", () => {
     const bare = [{ ...enriched[0], specs: null }];
     const mail = renderCustomerOrderConfirmation(order, "es", prescriptions, { items: bare });

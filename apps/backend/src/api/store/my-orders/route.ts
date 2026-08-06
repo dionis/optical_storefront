@@ -6,6 +6,7 @@ import { getOrdersListWorkflow } from "@medusajs/medusa/core-flows";
 import { readSessionToken, verifyToken } from "../../../lib/order-access";
 import { cancelEligibility, deriveOrderProgress, stageIndex } from "../../../lib/order-status";
 import { loadProductMetadata, rawFrameSpecs, type RawFrameSpecs } from "../../../lib/frame-specs";
+import { loadPrescriptionRecords } from "../../../lib/prescription-read";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
 
@@ -229,17 +230,15 @@ async function loadPrescriptions(
   if (!ids.size) return out;
 
   try {
-    // One query for the whole page. Retrieving them one by one would mean up to
-    // MAX_ORDERS round trips before the shopper sees anything.
+    // One query for the whole page, through the shared reader — the module's own
+    // data methods throw in this project (see lib/prescription-read.ts).
     const rxService = req.scope.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
     const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
-    const rows = (await pg("prescription")
-      .whereIn("id", [...ids])
-      .whereNull("deleted_at")) as Array<Record<string, unknown>>;
+    const records = await loadPrescriptionRecords(pg, ids);
 
-    for (const record of rows) {
+    for (const [id, record] of records) {
       const rx = rxService.recordToRx(record);
-      out.set(String(record["id"]), {
+      out.set(id, {
         od: { ...rx.od },
         os: { ...rx.os },
         pd: rx.pd,
