@@ -493,9 +493,9 @@ export const T = {
     // Cartel de cómo fotografiar la receta. Va antes de subirla: casi todo
     // fallo de lectura viene de la foto, no del modelo.
     "lens.upload.tips.title": "Para que podamos leerla bien",
-    "lens.upload.tips.whole": "Fotografía la receta original completa: que se vean los valores de ambos ojos (OD y OI), la esfera, el cilindro, el eje y la DIP.",
-    "lens.upload.tips.light": "Con buena luz y sin reflejos: evita el flash directo y las sombras sobre el papel.",
-    "lens.upload.tips.flat": "El papel plano y derecho, sin dobleces ni arrugas, y encuadrado de frente.",
+    "lens.upload.tips.whole": "Receta completa y legible: ambos ojos (OD y OI), esfera, cilindro, eje y DIP.",
+    "lens.upload.tips.light": "Buena luz, sin reflejos ni sombras.",
+    "lens.upload.tips.flat": "Papel plano y de frente; nada tapando los números.",
     "lens.upload.tips.clear": "Nada encima que tape los números: ni dedos, ni objetos, ni marcas de agua.",
     "lens.upload.tips.note": "Sirve una foto del papel o un PDF. Si tu receta es difícil de leer, siempre puedes escribir los valores a mano abajo.",
     // Motivos concretos del fallo de lectura. Cada uno dice qué hacer a
@@ -1345,9 +1345,9 @@ export const T = {
     // Guidance on photographing the prescription. Shown before the upload:
     // nearly every failed read comes from the photo, not from the model.
     "lens.upload.tips.title": "So we can read it properly",
-    "lens.upload.tips.whole": "Photograph the whole original prescription: both eyes (OD and OS), sphere, cylinder, axis and PD must all be visible.",
-    "lens.upload.tips.light": "Good light, no glare: avoid direct flash and shadows falling across the paper.",
-    "lens.upload.tips.flat": "Keep the paper flat and straight, no folds or creases, shot square-on.",
+    "lens.upload.tips.whole": "Full, legible prescription: both eyes (OD/OS), sphere, cylinder, axis and PD.",
+    "lens.upload.tips.light": "Good light, no glare or shadows.",
+    "lens.upload.tips.flat": "Paper flat and square-on; nothing covering the numbers.",
     "lens.upload.tips.clear": "Nothing covering the numbers: no fingers, no objects, no watermarks.",
     "lens.upload.tips.note": "A photo of the paper or a PDF both work. If your prescription is hard to read, you can always type the values in below.",
     // Specific read-failure reasons. Each one says what to do next: a single

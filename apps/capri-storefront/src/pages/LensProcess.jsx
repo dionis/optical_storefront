@@ -984,14 +984,11 @@ export default function LensProcess() {
                       lee y una vez confirmada la receta, cuando ya no aporta. */}
                   {ocr.status !== "loading" && !ocr.confirmed && (
                     <div className="zlx-rx-tips">
-                      <b><Ic name="info" /> {t("lens.upload.tips.title")}</b>
                       <ul>
                         <li>{t("lens.upload.tips.whole")}</li>
                         <li>{t("lens.upload.tips.light")}</li>
                         <li>{t("lens.upload.tips.flat")}</li>
-                        <li>{t("lens.upload.tips.clear")}</li>
                       </ul>
-                      <small>{t("lens.upload.tips.note")}</small>
                     </div>
                   )}
                   {ocr.status === "error" && <p className="rx-ocr-error">{t(`lens.upload.err.${ocr.reason || "generic"}`)}</p>}
@@ -1260,7 +1257,7 @@ export default function LensProcess() {
                 <Ic name="edit" /> {t("lens.edit")}
               </button>
               <button type="button" className="btn btn-primary zlx-rxconfirm-go" data-sfx="success"
-                      onClick={() => { setConfirmRx(false); setRxDirty(false); setPop("mat"); }}>
+                      onClick={() => { setConfirmRx(false); setRxDirty(false); setMatId((cur) => cur || (recommendedMat ? recommendedMat.id : cur)); setPop("mat"); }}>
                 <Ic name="check" /> {t("lens.rx.confirmGo")}
               </button>
             </div>
