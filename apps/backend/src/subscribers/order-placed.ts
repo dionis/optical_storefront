@@ -119,6 +119,11 @@ export default async function orderPlacedSubscriber({
           seg_height: rx.seg_height ?? null,
           source: (rx as { source?: string | null }).source ?? null,
           verified_by_user: rx.verified_by_user,
+          created_at: rx.created_at ?? null,
+          // Only whether a photo exists — the R2 key itself is never emailed:
+          // that bucket is private and reachable through presigned URLs only.
+          has_file: Boolean(rx.file_url),
+          id: pid,
         };
       } catch (error) {
         logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);

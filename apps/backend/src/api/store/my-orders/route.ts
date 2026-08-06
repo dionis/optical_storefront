@@ -125,6 +125,8 @@ interface ProjectedRx {
   source: string;
   verified_by_user: boolean;
   created_at: string | null;
+  /** Whether a photo of the original is on file — never the key to it. */
+  has_file: boolean;
 }
 
 function projectItem(
@@ -247,6 +249,7 @@ async function loadPrescriptions(
         source: rx.source,
         verified_by_user: rx.verified_by_user,
         created_at: rx.created_at ?? null,
+        has_file: Boolean(rx.file_url),
       });
     }
   } catch (error) {

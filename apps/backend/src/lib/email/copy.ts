@@ -83,6 +83,11 @@ interface EmailCopy {
   rx_source_manual: string;
   rx_source_ocr: string;
   rx_confirmed: string;
+  rx_for: string;
+  rx_captured_on: string;
+  rx_photo: string;
+  rx_photo_on_file: string;
+  rx_record_id: string;
   // ── "How to read your prescription" (customer copy only) ──
   rx_glossary_title: string;
   rx_gloss_sph: string;
@@ -208,6 +213,11 @@ const es: EmailCopy = {
   rx_source_manual: "Ingresada manualmente",
   rx_source_ocr: "Foto subida (leída por OCR)",
   rx_confirmed: "revisada y confirmada por el cliente antes de pagar",
+  rx_for: "Para",
+  rx_captured_on: "Fecha de la receta",
+  rx_photo: "Foto de la receta",
+  rx_photo_on_file: "Guardada con el pedido",
+  rx_record_id: "Nº de registro",
   rx_glossary_title: "Cómo leer tu receta",
   rx_gloss_sph:
     "SPH (esfera): cuánta graduación necesita el ojo. Negativo = miopía, positivo = hipermetropía o vista cansada.",
@@ -344,6 +354,11 @@ const en: EmailCopy = {
   rx_source_manual: "Entered manually",
   rx_source_ocr: "Uploaded photo (read by OCR)",
   rx_confirmed: "reviewed and confirmed by the customer before paying",
+  rx_for: "For",
+  rx_captured_on: "Prescription date",
+  rx_photo: "Prescription photo",
+  rx_photo_on_file: "Stored with the order",
+  rx_record_id: "Record no.",
   rx_glossary_title: "How to read your prescription",
   rx_gloss_sph:
     "SPH (sphere): how much correction the eye needs. Negative = short-sighted, positive = long-sighted or reading vision.",

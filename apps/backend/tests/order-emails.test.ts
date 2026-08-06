@@ -80,6 +80,9 @@ const prescriptions: Record<string, PrescriptionForEmail> = {
     seg_height: 22,
     source: "ocr",
     verified_by_user: true,
+    created_at: "2026-08-04T10:30:00.000Z",
+    has_file: true,
+    id: "rx_01",
   },
 };
 
@@ -173,6 +176,48 @@ describe("order confirmation emails", () => {
           expect(mail.text).toContain("SPH +1.25");
           expect(mail.text).toContain("AXIS 170");
           expect(mail.text).toContain("ADD +2.00");
+        }
+      });
+
+      it("says which glasses each prescription belongs to", () => {
+        // An order can carry two different prescriptions, or one shared by two
+        // pairs — an unlabelled block leaves the lab guessing.
+        const forLabel = locale === "es" ? "Para" : "For";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(forLabel);
+            expect(part).toContain("Flexure 2043");
+          }
+        }
+      });
+
+      it("records when the prescription was captured and that a photo is on file", () => {
+        const date = locale === "es" ? "Fecha de la receta" : "Prescription date";
+        const photo = locale === "es" ? "Foto de la receta" : "Prescription photo";
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).toContain(date);
+            expect(part).toContain(photo);
+          }
+        }
+      });
+
+      it("gives the record id to the store only", () => {
+        // It is the lookup key for a health record: useful in the owner's inbox,
+        // wrong in a copy that gets forwarded around.
+        expect(admin.html).toContain("rx_01");
+        expect(admin.text).toContain("rx_01");
+        expect(customer.html).not.toContain("rx_01");
+        expect(customer.text).not.toContain("rx_01");
+      });
+
+      it("never leaks the uploaded prescription file key", () => {
+        // The R2 bucket is private; the emails may say a photo exists, never where.
+        for (const mail of [customer, admin]) {
+          for (const part of [mail.html, mail.text]) {
+            expect(part).not.toContain("prescriptions/");
+            expect(part).not.toContain(".r2.");
+          }
         }
       });
     });

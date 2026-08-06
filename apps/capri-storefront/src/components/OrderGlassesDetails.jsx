@@ -42,7 +42,7 @@ const plain = (v) => (v == null || v === "" ? "—" : String(v));
  * before we cut anything. Saying so is what lets them spot a misread later.
  */
 function PrescriptionBlock({ rx }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const L = (k) => t(`orders.${k}`);
   const [openHelp, setOpenHelp] = useState(false);
 
@@ -112,6 +112,14 @@ function PrescriptionBlock({ rx }) {
       {rx.seg_height != null && (
         <Row label={t("lens.height")} value={`${rx.seg_height} mm`} />
       )}
+      {/* Same closing rows as the order emails, so both records read alike. */}
+      {rx.created_at && (
+        <Row
+          label={L("rxCapturedOn")}
+          value={new Date(rx.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es")}
+        />
+      )}
+      {rx.has_file && <Row label={L("rxPhoto")} value={L("rxPhotoOnFile")} />}
 
       <button
         type="button"
