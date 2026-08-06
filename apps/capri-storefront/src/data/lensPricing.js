@@ -20,18 +20,16 @@ export const FRAME_ONLY = { id: "frame-only", rx: false, label: { es: "Solo mont
 export const MATERIALS = [
   { id: "cr39",  maxAbs: 2,  label: { es: "CR-39 (Resina)", en: "CR-39 (Resin)" },     desc: { es: "Estándar, económico.",       en: "Standard, budget." } },
   { id: "poly",  maxAbs: 3,  label: { es: "Policarbonato",  en: "Polycarbonate" },      desc: { es: "Resistente a impactos. Niños/deporte.", en: "Impact-resistant. Kids/sport." } },
-  { id: "1.56",  maxAbs: 3,  label: { es: "Índice 1.56",    en: "Index 1.56" },         desc: { es: "Más delgado que CR-39.",     en: "Thinner than CR-39." } },
-  { id: "1.61",  maxAbs: 4,  label: { es: "Índice 1.61",    en: "Index 1.61" },         desc: { es: "Delgado.",                   en: "Thin." } },
   { id: "1.67",  maxAbs: 6,  label: { es: "Índice 1.67",    en: "Index 1.67" },         desc: { es: "Muy delgado.",               en: "Very thin." } },
   { id: "1.74",  maxAbs: 99, label: { es: "Índice 1.74",    en: "Index 1.74" },         desc: { es: "Ultra delgado. Alta graduación.", en: "Ultra-thin. High Rx." } },
 ];
 
 // Matriz base: BASE[designId][materialId] = precio del lente (USD).
 export const BASE = {
-  "sv":        { cr39: 60,  poly: 90,  "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150 },
-  "bifocal":   { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 },
-  "prog-mid":  { cr39: 180, poly: 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230 },
-  "prog-high": { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 },
+  "sv":        { cr39: 24,  poly: 30,  "1.67": 52,  "1.74": 95 },
+  "bifocal":   { cr39: 47,  poly: 55,  "1.67": 160, "1.74": 180 },
+  "prog-mid":  { cr39: 75,  poly: 75,  "1.67": 131, "1.74": 145 },
+  "prog-high": { cr39: 101, poly: 101, "1.67": 135, "1.74": 135 },
 };
 
 // Fotocromáticos y Transitions (adicional al lente). price por categoría

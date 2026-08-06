@@ -21,18 +21,16 @@ const DESIGNS = [
 const MATERIALS = [
   { code: "cr39", max_abs: 2, label_es: "CR-39 (Resina)", label_en: "CR-39 (Resin)", desc_es: "Estándar, económico.", desc_en: "Standard, budget.", sort: 0 },
   { code: "poly", max_abs: 3, label_es: "Policarbonato", label_en: "Polycarbonate", desc_es: "Resistente a impactos. Niños/deporte.", desc_en: "Impact-resistant. Kids/sport.", sort: 1 },
-  { code: "1.56", max_abs: 3, label_es: "Índice 1.56", label_en: "Index 1.56", desc_es: "Más delgado que CR-39.", desc_en: "Thinner than CR-39.", sort: 2 },
-  { code: "1.61", max_abs: 4, label_es: "Índice 1.61", label_en: "Index 1.61", desc_es: "Delgado.", desc_en: "Thin.", sort: 3 },
   { code: "1.67", max_abs: 6, label_es: "Índice 1.67", label_en: "Index 1.67", desc_es: "Muy delgado.", desc_en: "Very thin.", sort: 4 },
   { code: "1.74", max_abs: 99, label_es: "Índice 1.74", label_en: "Index 1.74", desc_es: "Ultra delgado. Alta graduación.", desc_en: "Ultra-thin. High Rx.", sort: 5 },
 ];
 
 // BASE[design][material] in USD → cents.
 const BASE_USD: Record<string, Record<string, number>> = {
-  "sv": { cr39: 60, poly: 90, "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150 },
-  "bifocal": { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 },
-  "prog-mid": { cr39: 180, poly: 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230 },
-  "prog-high": { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 },
+  "sv": { cr39: 24, poly: 30, "1.67": 52, "1.74": 95 },
+  "bifocal": { cr39: 47, poly: 55, "1.67": 160, "1.74": 180 },
+  "prog-mid": { cr39: 75, poly: 75, "1.67": 131, "1.74": 145 },
+  "prog-high": { cr39: 101, poly: 101, "1.67": 135, "1.74": 135 },
 };
 
 const c = (usd: number | null): number | null => (usd == null ? null : usd * 100);
