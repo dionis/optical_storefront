@@ -2324,3 +2324,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .zlx-pop-head-actions { display: inline-flex; align-items: center; gap: 2px; }
 .zlx-pop-help { background: none; border: none; cursor: pointer; color: var(--cuba-blue); padding: 4px; display: inline-flex; }
 .zlx-pop-help:hover { color: var(--cuba-red); }
+
+/* PDP móvil: botones (Añadir receta / Añadir montura) entre la imagen y las
+   variaciones (swatches). Solo en responsive; el escritorio queda igual. */
+@media (max-width: 760px) {
+  .pdp-info { display: flex; flex-direction: column; }
+  .pdp-brand { order: 0; }
+  .pdp-title { order: 1; }
+  .pdp-price { order: 2; }
+  .pdp-actions { order: 3; }
+  .pdp-color-row { order: 4; }
+  .frame-id { order: 5; }
+  .pdp-meta { order: 6; }
+  .pdp-tryon-btn { order: 7; }
+  .specs { order: 8; }
+}
