@@ -2295,3 +2295,32 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .mo-support-actions .btn { width: 100%; }
   .checkout-done-actions .btn { width: 100%; }
 }
+
+
+/* ── Receta v4: selectores con lista desplegable completa (acceso rápido) ── */
+.zlx-stepper { position: relative; }
+.zlx-stepper-val { width: 100%; border-left: 0; border-right: 0; background: #fff; cursor: pointer; }
+.zlx-stepper-val:hover { background: var(--blue-soft); }
+.zlx-stepper-list { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 40; margin: 4px 0 0; padding: 4px; width: 96px; max-height: 190px; overflow-y: auto; overflow-x: hidden; list-style: none; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); scrollbar-width: thin; }
+.zlx-stepper-list li { margin: 0; }
+.zlx-stepper-optitem { width: 100%; text-align: center; padding: 8px 6px; border: none; background: none; border-radius: 8px; font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; cursor: pointer; }
+.zlx-stepper-optitem:hover { background: var(--blue-soft); }
+.zlx-stepper-optitem.on { background: var(--cuba-blue); color: #fff; }
+/* 'Esfera' encima del dial */
+.zlx-dial-lbl-top { margin: 0 0 4px; }
+/* Popup de receta sin barra de desplazamiento visible (ni lateral) */
+.zlx-pop { scrollbar-width: none; overflow-x: hidden; }
+.zlx-pop::-webkit-scrollbar { display: none; }
+.zlx-pop-body { overflow-x: hidden; }
+/* Gama del progresivo (acordeón dentro del mismo botón) */
+.zlx-gama { display: flex; gap: 8px; margin: 0 0 12px; }
+.zlx-gama-opt { flex: 1; padding: 9px 8px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; font-weight: 700; font-size: 12.5px; line-height: 1.2; color: var(--ink-soft); cursor: pointer; text-align: center; }
+.zlx-gama-opt.on { border-color: var(--cuba-red); background: var(--red-soft); color: var(--ink); }
+/* Ayuda de altura: botón (i) a la derecha */
+.zlx-height-note { display: flex; align-items: center; gap: 6px; }
+.zlx-height-note .zlx-height-i { margin-left: auto; }
+
+/* Un solo botón de ayuda en el encabezado del popup */
+.zlx-pop-head-actions { display: inline-flex; align-items: center; gap: 2px; }
+.zlx-pop-help { background: none; border: none; cursor: pointer; color: var(--cuba-blue); padding: 4px; display: inline-flex; }
+.zlx-pop-help:hover { color: var(--cuba-red); }
