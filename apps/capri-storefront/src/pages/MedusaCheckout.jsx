@@ -58,11 +58,21 @@ export default function MedusaCheckout() {
   const [order, setOrder] = useState(null);
   // Líneas cuyo precio cambió al revalidar el carrito al entrar al checkout.
   const [repriced, setRepriced] = useState([]);
+  // Estado real del Payment Element de Stripe: hasta ahora se montaba a ciegas,
+  // así que si el iframe de Stripe no llegaba a cargar (bloqueador de anuncios,
+  // ahorro de datos, red móvil lenta) el cliente veía una caja en blanco, sin
+  // forma de elegir el método ni teclear la tarjeta, y el único aviso llegaba al
+  // pulsar «Pagar» como un error crudo de Stripe ("elements should have a
+  // mounted Payment Element"). Ahora el estado se sigue y se cuenta.
+  const [payState, setPayState] = useState("idle"); // idle | loading | ready | error
+  const [payLoadErr, setPayLoadErr] = useState("");
+  const [payNonce, setPayNonce] = useState(0); // reintentar = volver a montar
 
   const stripeRef = useRef(null);
   const elementsRef = useRef(null);
   const payElRef = useRef(null);
   const payMountRef = useRef(null); // instancia montada del Payment Element
+  const paySecRef = useRef(null); // sección de pago (para traerla a la vista)
   const addrRef = useRef(null);
 
   // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
@@ -208,21 +218,61 @@ export default function MedusaCheckout() {
   // Monta (y re-monta) el Payment Element de Stripe. Si el cliente marca que la
   // tarjeta es del paciente, autorellenamos los datos de facturación con los
   // suyos (defaultValues.billingDetails); si lo desmarca, Stripe los pide.
+  //
+  // Montar no es lo mismo que estar listo: `mount()` sólo inserta el iframe de
+  // Stripe, y el formulario vive DENTRO de ese iframe. Si nunca carga, el hueco
+  // queda en blanco. Por eso escuchamos `ready`/`loaderror` y ponemos un plazo
+  // máximo: sin esto el fallo era invisible hasta pulsar «Pagar».
   useEffect(() => {
     if (step !== "pay" || !elementsRef.current || !payElRef.current) return;
     const elements = elementsRef.current;
     if (payMountRef.current) { try { payMountRef.current.destroy(); } catch { /* noop */ } payMountRef.current = null; }
+    setPayState("loading");
+    setPayLoadErr("");
     // `fields.billingDetails.email: "never"` evita que Stripe muestre el campo de
     // email de Link, que es el que dispara la verificación fallida (401). El email
     // ya lo capturamos en los datos del paciente.
     const opts = { fields: { billingDetails: { email: "never" } } };
     if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
-    const el = elements.create("payment", opts);
-    el.mount(payElRef.current);
-    payMountRef.current = el;
-    return () => { try { el.destroy(); } catch { /* noop */ } payMountRef.current = null; };
+    let el;
+    try {
+      el = elements.create("payment", opts);
+      // `ready` sólo llega cuando el formulario ya se pintó dentro del iframe;
+      // es la única señal fiable de que el cliente puede teclear la tarjeta.
+      el.on("ready", () => setPayState("ready"));
+      el.on("loaderror", (ev) => {
+        setPayLoadErr((ev && ev.error && ev.error.message) || "");
+        setPayState("error");
+      });
+      el.mount(payElRef.current);
+      payMountRef.current = el;
+    } catch (e) {
+      // `create()`/`mount()` pueden lanzar (p. ej. datos de facturación por
+      // defecto inválidos). Antes esta excepción escapaba del efecto y dejaba la
+      // pantalla muda.
+      setPayLoadErr(e?.message || String(e));
+      setPayState("error");
+      return;
+    }
+    // Red móvil lenta o iframe bloqueado: `loaderror` no siempre llega, así que
+    // a los 15 s damos el intento por fallido y ofrecemos reintentar. Si el
+    // formulario aparece más tarde, `ready` devuelve el estado a «listo».
+    const timer = setTimeout(() => setPayState((s) => (s === "loading" ? "error" : s)), 15000);
+    return () => {
+      clearTimeout(timer);
+      try { el.destroy(); } catch { /* noop */ }
+      payMountRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, cardMatches]);
+  }, [step, cardMatches, payNonce]);
+
+  // En móvil el paso de pago aparece por debajo del resumen del pedido, que es
+  // largo: sin esto el cliente se queda mirando los totales y no ve que ya hay
+  // un formulario de tarjeta más abajo.
+  useEffect(() => {
+    if (step !== "pay" || !paySecRef.current) return;
+    try { paySecRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* noop */ }
+  }, [step]);
 
   const pay = async () => {
     setErr(""); setBusy(true);
@@ -232,6 +282,11 @@ export default function MedusaCheckout() {
       // missing we bail before touching the card.
       const cartId = (cart && cart.id) || null;
       if (!cartId) { setErr(L("failed")); setBusy(false); return; }
+
+      // Sin formulario montado, `confirmPayment` responde con un error interno de
+      // Stripe en inglés que no le dice nada al cliente. Se corta antes y se le
+      // explica qué pasa y qué hacer.
+      if (payState !== "ready" || !payMountRef.current) { setErr(L("payNotReady")); setBusy(false); return; }
 
       // Al ocultar el email del Element con `fields.billingDetails.email: "never"`
       // (ver el useEffect de montaje), Stripe EXIGE recibirlo aquí; si no, avisa
@@ -420,7 +475,7 @@ export default function MedusaCheckout() {
           )}
 
           {step === "pay" && (
-            <div className="co-form">
+            <div className="co-form" ref={paySecRef}>
               <div className="co-h">💳 {L("payment")}</div>
               {/* Si la tarjeta es del paciente, autorellenamos los datos de
                   facturación de Stripe con los del paciente. Al cambiar, el
@@ -429,9 +484,26 @@ export default function MedusaCheckout() {
                 <input type="checkbox" checked={cardMatches} onChange={(e) => setCardMatches(e.target.checked)} />
                 <span>{L("cardMatches")}</span>
               </label>
-              <div ref={payElRef} style={{ margin: "12px 0" }} />
+              {/* El contenedor se pinta SIEMPRE: es el destino de `mount()`, así
+                  que ocultarlo mientras carga dejaría a Stripe sin dónde montar. */}
+              <div ref={payElRef} className="co-pay-el" />
+              {payState === "loading" && (
+                <div className="co-pay-note" role="status">
+                  <span className="btn-spin" aria-hidden="true" /> {L("payLoading")}
+                </div>
+              )}
+              {payState === "error" && (
+                <div className="co-pay-err" role="alert">
+                  <b>{L("payLoadErrTitle")}</b>
+                  <p>{L("payLoadErrBody")}</p>
+                  {payLoadErr && <small className="muted">{payLoadErr}</small>}
+                  <button type="button" className="btn btn-outline" onClick={() => setPayNonce((n) => n + 1)}>
+                    {L("payRetry")}
+                  </button>
+                </div>
+              )}
               <p className="muted small">{L("testCard")}</p>
-              <button className="btn btn-primary big" disabled={busy} onClick={pay}>
+              <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
               </button>
             </div>
