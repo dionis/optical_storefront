@@ -841,7 +841,6 @@ export default function LensProcess() {
         {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{t("lens.transitions")}: {L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
         {ar && !frameOnly && <li><span>{t("lens.treatment")}: {L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
       </ul>
-      {rxSet && rxDetails}
     </>
   );
 
@@ -1106,7 +1105,7 @@ export default function LensProcess() {
                           )}
                           {/* Botón "Material del lente": pasa al material dentro del MISMO popup */}
                           <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select"
-                                  onClick={() => (rxDirty ? setConfirmRx(true) : setPop("mat"))}>
+                                  onClick={() => setPop("mat")}>
                             <IconMaterial className="zlx-ic" /> {t("lens.material")} <Ic name="down" className="zlx-step-chev" />
                           </button>
                         </div>
@@ -1245,28 +1244,8 @@ export default function LensProcess() {
         </ZlxInfoPop>
       )}
 
-      {/* ── Confirmación de la receta antes de pasar a materiales (si se modificó) ── */}
-      {confirmRx && (
-        <div className="zlx-review-overlay" role="dialog" aria-modal="true" aria-label={t("lens.rx.confirm")}>
-          <div className="zlx-review-card">
-            <div className="zlx-review-head">
-              <b><IconReceta className="zlx-ic" /> {t("lens.rx.confirm")}</b>
-              <button type="button" className="zlx-pop-close" onClick={() => setConfirmRx(false)} aria-label={closeLabel}><Ic name="close" /></button>
-            </div>
-            <p className="zlx-review-sub">{t("lens.rx.confirmSub")}</p>
-            <div className="zlx-review-body zlx-rxconfirm-body">{rxDetails}</div>
-            <div className="zlx-rxconfirm-actions">
-              <button type="button" className="btn btn-outline zlx-rxconfirm-edit" onClick={() => setConfirmRx(false)}>
-                <Ic name="edit" /> {t("lens.edit")}
-              </button>
-              <button type="button" className="btn btn-primary zlx-rxconfirm-go" data-sfx="success"
-                      onClick={() => { setConfirmRx(false); setRxDirty(false); setPop("mat"); }}>
-                <Ic name="check" /> {t("lens.rx.confirmGo")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmación por paso de la receta eliminada: la receta se confirma una
+          sola vez en la revisión final antes de comprar. */}
 
       {/* ── Cargando OCR: overlay con loader y mensajes para que el sitio no
           parezca congelado mientras se lee la foto de la receta ── */}
