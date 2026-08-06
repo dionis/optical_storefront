@@ -603,6 +603,17 @@ button { font-family: inherit; cursor: pointer; }
 .co-check input { width: 17px; height: 17px; accent-color: var(--blue); flex-shrink: 0; }
 .co-cardmatch { margin: 4px 0 8px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: #f7f9fc; }
 
+/* Payment Element de Stripe. El formulario vive dentro de un iframe de Stripe:
+   si no carga, el hueco es literalmente de altura 0 y la pantalla parece no
+   tener pago. El min-height reserva el sitio y el aviso de al lado explica. */
+.co-pay-el { margin: 12px 0; min-height: 4px; }
+.co-pay-note { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 10px 0; }
+.co-pay-err { border: 1.5px solid #e5534b; background: #fdf2f1; border-radius: 10px; padding: 10px 12px; margin: 4px 0 10px; }
+.co-pay-err b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+.co-pay-err p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; }
+.co-pay-err small { display: block; font-size: 11.5px; margin-bottom: 8px; word-break: break-word; }
+.co-pay-err .btn { width: 100%; }
+
 /* Inline spinner inside busy buttons (anti double-click feedback). */
 .btn-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: btn-spin-rot .6s linear infinite; }
 @keyframes btn-spin-rot { to { transform: rotate(360deg); } }
