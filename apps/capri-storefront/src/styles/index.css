@@ -2391,3 +2391,22 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .zlx-fab.zlx-fab-cta.pulse { animation: none; }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   "Resumen del pedido" con más presencia: borde azul, ligero
+   tinte superior, sombra azulada marcada y cabecera subrayada,
+   para que destaque junto a la montura sin robar protagonismo.
+   ────────────────────────────────────────────────────────────── */
+.zlx-summary {
+  border: 2px solid var(--cuba-blue) !important;
+  background: linear-gradient(180deg, #f4f8ff 0%, #ffffff 20%) !important;
+  box-shadow: 0 16px 40px rgba(37, 99, 235, .18), 0 4px 14px rgba(15, 25, 45, .08) !important;
+}
+.zlx-summary-h {
+  font-size: 19px !important;
+  color: var(--ink) !important;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(37, 99, 235, .14);
+}
+.zlx-summary-total { border-top-width: 2px !important; }
+.zlx-summary-total b { font-size: 22px; }
