@@ -504,12 +504,9 @@ export default function LensProcess() {
     if (product?.attributes?.age === "Niños") return MATERIALS.find((m) => m.id === "poly");
     return MATERIALS.find((m) => maxAbs <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
   }, [maxAbs, product?.attributes?.age, MATERIALS]);
-  // Sólo mostramos materiales APTOS para la graduación (los no aptos se quitan de
-  // la lista, no se tachan). La idea: dar la opción más barata pero con calidad.
-  const suitableMats = useMemo(() => {
-    const ok = MATERIALS.filter((m) => maxAbs <= m.maxAbs);
-    return ok.length ? ok : [MATERIALS[MATERIALS.length - 1]];
-  }, [maxAbs, MATERIALS]);
+  // Mostramos TODOS los materiales para que el cliente pueda elegir cualquiera;
+  // el recomendado según su graduación se resalta con ★ (y el banner de arriba).
+  const suitableMats = useMemo(() => MATERIALS, [MATERIALS]);
   // Si la graduación sube y el material elegido deja de ser apto, se deselecciona
   // (evita quedar con un material que ya no aparece en la lista).
   useEffect(() => {
