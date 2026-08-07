@@ -924,7 +924,7 @@ export default function LensProcess() {
           <div className="zlx-fabs">
             {/* Sin la altura el paso NO está completo: marcarlo con el visto verde
                 hacía creer que la receta estaba lista y el pago bloqueado sin motivo. */}
-            <button type="button" className={`zlx-fab ${designId && !heightMissing ? "on" : ""} ${heightMissing ? "warn" : ""} ${pop === "rx" ? "open" : ""}`}
+            <button type="button" className={`zlx-fab zlx-fab-cta ${designId ? "chosen" : "pulse"} ${designId && !heightMissing ? "on" : ""} ${heightMissing ? "warn" : ""} ${pop === "rx" ? "open" : ""}`}
                     onClick={() => { if (pop === "rx") { setPop(null); return; } setPop("rx"); if (heightMissing) setSeekHeight(true); }}>
               <IconReceta className="zlx-ic" />
               <span className="zlx-fab-txt">
@@ -934,27 +934,34 @@ export default function LensProcess() {
               {designId && (heightMissing ? <Ic name="info" className="zlx-fab-ok warn" /> : <Ic name="check" className="zlx-fab-ok" />)}
             </button>
 
-            <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
-                    disabled={!designId || frameOnly}
-                    onClick={() => setPop(pop === "mat" ? null : "mat")}>
-              <IconMaterial className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.material")}</b>
-                <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
-              </span>
-              {matId && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
+            {/* Los pasos "Material" y "Tratamientos" NO se muestran hasta que el
+                cliente elige un tipo de lente (receta). Antes salían en gris y
+                confundían; ahora aparecen solo cuando ya hay algo seleccionado. */}
+            {designId && !frameOnly && (
+              <>
+                <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
+                        disabled={frameOnly}
+                        onClick={() => setPop(pop === "mat" ? null : "mat")}>
+                  <IconMaterial className="zlx-ic" />
+                  <span className="zlx-fab-txt">
+                    <b>{t("lens.material")}</b>
+                    <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
+                  </span>
+                  {matId && <Ic name="check" className="zlx-fab-ok" />}
+                </button>
 
-            <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
-                    disabled={!designId || frameOnly || !matId}
-                    onClick={() => setPop(pop === "treat" ? null : "treat")}>
-              <IconTratamiento className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.treatBtn")}</b>
-                <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
-              </span>
-              {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
+                <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
+                        disabled={frameOnly || !matId}
+                        onClick={() => setPop(pop === "treat" ? null : "treat")}>
+                  <IconTratamiento className="zlx-ic" />
+                  <span className="zlx-fab-txt">
+                    <b>{t("lens.treatBtn")}</b>
+                    <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
+                  </span>
+                  {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
+                </button>
+              </>
+            )}
           </div>
 
           {/* ── live summary, always visible beside the frame (req 8, 10) ── */}
