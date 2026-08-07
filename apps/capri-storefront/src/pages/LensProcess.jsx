@@ -39,7 +39,7 @@ const PROG_GROUP = { id: "prog", group: true, cat: "prog", label: { es: "Progres
 const SHOW_TRANSITIONS = false;
 // Blue-light AR variants get the screen icon + blue-light diagram; the rest are
 // general anti-reflective coatings whose headline benefit is night-driving glare.
-const isBlueAr = (id) => id === "ar-blue-protect" || id === "blue-uv-445";
+const isBlueAr = (id) => id === "ar-blue" || id === "ar-blue-protect" || id === "blue-uv-445";
 const arIconOf = (id) => (isBlueAr(id) ? IconAzul : IconAr);
 
 // Diagram keys (into LensGraphics.DIAGRAMS) per selected option.
@@ -370,7 +370,7 @@ export default function LensProcess() {
   const [params] = useSearchParams();
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { DESIGNS, MATERIALS, BASE, PHOTO, AR } = useLensCatalog();
+  const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
   const NON_PROG_DESIGNS = DESIGNS.filter((d) => d.cat !== "prog");
   const PROG_GAMAS = DESIGNS.filter((d) => d.cat === "prog");
   const { productBySlug, products, loading } = useCatalog();
@@ -495,9 +495,19 @@ export default function LensProcess() {
 
   // precios efectivos (override-aware). pv bump re-render on admin edits.
   const basePrice = (dId, mId) => lensBasePrice(dId, mId, (BASE[dId] || {})[mId] ?? 0);
-  const photoPriceOf = (p) => (p.price[cat] == null ? null : lensPhotoPrice(p.id, cat, p.price[cat]));
+  // Precio del tratamiento por (diseño × material) desde TREAT; si falta esa celda
+  // (backend viejo), se cae al precio por categoría / plano de la opción.
+  const treatCell = (code) => (TREAT && TREAT[designId] && TREAT[designId][matId] ? TREAT[designId][matId][code] : undefined);
+  const photoPriceOf = (p) => {
+    const t = treatCell("photo");
+    const base = t != null ? t : (p.price ? p.price[cat] : null);
+    return base == null ? null : lensPhotoPrice(p.id, cat, base);
+  };
   const arList = design && !frameOnly ? (AR[arGroupFor(design)] || []) : [];
-  const arPriceOf = (a) => lensARPrice(a.id, a.price);
+  const arPriceOf = (a) => {
+    const t = treatCell(a.id);
+    return lensARPrice(a.id, t != null ? t : (a.price ?? 0));
+  };
 
   const material = matId ? (MATERIALS.find((m) => m.id === matId) || null) : null;
   const photo = photoId ? PHOTO.find((p) => p.id === photoId) : null;
@@ -534,7 +544,7 @@ export default function LensProcess() {
     if (!frameOnly && ar) x += arPriceOf(ar);
     return Math.round(x * 100) / 100;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.price, designId, matId, photoId, arId, frameOnly, material, photo, ar, pv, BASE, PHOTO, AR]);
+  }, [product?.price, designId, matId, photoId, arId, frameOnly, material, photo, ar, pv, BASE, PHOTO, AR, TREAT]);
 
   // Total mostrado: siempre el cálculo cliente (instantáneo y consistente con el
   // desglose). `serverTotal` se sigue consultando para validación, pero NO se usa

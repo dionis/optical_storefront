@@ -44,19 +44,42 @@ export const PHOTO = [
   { id: "trans-x-brown",colors: ["brown"],                label: { es: "Transitions Xtractive Brown (RAM)", en: "Transitions Xtractive Brown (RAM)" }, price: { sv: 130, bifocal: 130, prog: 130 } },
 ];
 
-// Antirreflejos (adicional). Grupo por categoría: sv vs bifprog.
-export const AR = {
-  sv: [
-    { id: "ar-green-basic",  label: { es: "AR Green Básico", en: "AR Green Basic" }, price: 60 },
-    { id: "ar-green-plus",   label: { es: "AR Green Plus",   en: "AR Green Plus" },  price: 90 },
-    { id: "ar-blue-protect", label: { es: "AR Blue Protect", en: "AR Blue Protect" },price: 90 },
-  ],
-  bifprog: [
-    { id: "adequate",    label: { es: "Adequate",    en: "Adequate" },    price: 50 },
-    { id: "crystal",     label: { es: "Crystal",     en: "Crystal" },     price: 80 },
-    { id: "flawless",    label: { es: "Flawless",    en: "Flawless" },    price: 120 },
-    { id: "blue-uv-445", label: { es: "Blue UV 445", en: "Blue UV 445" }, price: 120 },
-  ],
+// Antirreflejos: 2 opciones (AR Green / AR Blue), iguales para todos los diseños.
+// El precio real depende del material y sale de TREAT (matriz por diseño×material).
+export const AR_OPTIONS = [
+  { id: "ar-green", label: { es: "AR Green", en: "AR Green" }, price: 20 },
+  { id: "ar-blue",  label: { es: "AR Blue",  en: "AR Blue" },  price: 35 },
+];
+export const AR = { sv: AR_OPTIONS, bifprog: AR_OPTIONS };
+
+// Precio de tratamiento por (diseño × material) en USD — coincide con la lista
+// RUBILENT (AR Green / AR Blue / Fotocromático). Respaldo de vista; el backend
+// (lens_treatment_price) es la fuente de verdad para el cobro.
+export const TREAT = {
+  "sv": {
+    "cr39": { "ar-green": 20, "ar-blue": 35, "photo": 42 },
+    "poly": { "ar-green": 20, "ar-blue": 35, "photo": 46 },
+    "1.67": { "ar-green": 35, "ar-blue": 42, "photo": 76 },
+    "1.74": { "ar-green": 35, "ar-blue": 45, "photo": 80 },
+  },
+  "bifocal": {
+    "cr39": { "ar-green": 36, "ar-blue": 72, "photo": 85 },
+    "poly": { "ar-green": 36, "ar-blue": 72, "photo": 85 },
+    "1.67": { "ar-green": 36, "ar-blue": 72, "photo": 85 },
+    "1.74": { "ar-green": 36, "ar-blue": 72, "photo": 85 },
+  },
+  "prog-mid": {
+    "cr39": { "ar-green": 36, "ar-blue": 72, "photo": 44 },
+    "poly": { "ar-green": 36, "ar-blue": 72, "photo": 55 },
+    "1.67": { "ar-green": 36, "ar-blue": 72, "photo": 68 },
+    "1.74": { "ar-green": 36, "ar-blue": 72, "photo": 68 },
+  },
+  "prog-high": {
+    "cr39": { "ar-green": 36, "ar-blue": 72, "photo": 45 },
+    "poly": { "ar-green": 36, "ar-blue": 72, "photo": 45 },
+    "1.67": { "ar-green": 36, "ar-blue": 72, "photo": 73 },
+    "1.74": { "ar-green": 36, "ar-blue": 72, "photo": 73 },
+  },
 };
 
 // Colores disponibles (para mostrar swatches).
