@@ -145,6 +145,27 @@ interface EmailCopy {
   cancel_admin_title: string;
   cancel_admin_intro: string;
   cancel_money: string;
+  // ── Why the cancellation was allowed, and who asked for it ──
+  cancel_reason: string;
+  cancel_reason_late_delivery: string;
+  cancel_reason_not_needed: string;
+  cancel_reason_wrong_item: string;
+  cancel_reason_other: string;
+  cancel_note: string;
+  cancel_note_none: string;
+  cancel_requested_by: string;
+  cancel_requested_at: string;
+  cancel_policy: string;
+  cancel_policy_line: string;
+  // ── Shipped orders: authorized by policy, but Medusa cannot cancel them ──
+  cancel_pending_subject: string;
+  cancel_pending_title: string;
+  cancel_pending_body: string;
+  cancel_pending_money: string;
+  cancel_admin_pending_subject: string;
+  cancel_admin_pending_title: string;
+  cancel_admin_pending_intro: string;
+  cancel_admin_action: string;
 }
 
 const es: EmailCopy = {
@@ -290,6 +311,31 @@ const es: EmailCopy = {
   cancel_admin_intro:
     "El cliente canceló este pedido desde la página de seguimiento. Medusa ya lo marcó como cancelado y procesó el reembolso que correspondiera.",
   cancel_money: "Dinero",
+  cancel_reason: "Motivo",
+  cancel_reason_late_delivery: "La entrega se demoró",
+  cancel_reason_not_needed: "Ya no lo necesito",
+  cancel_reason_wrong_item: "No es lo que pedí",
+  cancel_reason_other: "Otro motivo",
+  cancel_note: "Nota del cliente",
+  cancel_note_none: "Sin nota.",
+  cancel_requested_by: "Cancelado por",
+  cancel_requested_at: "Fecha de la cancelación",
+  cancel_policy: "Condiciones cumplidas",
+  cancel_policy_line:
+    "Pasaron los {{lab_days}} días hábiles de confección y el pedido se envió el {{shipped}}, hace más de {{hours}} horas.",
+  cancel_pending_subject: "Recibimos la cancelación del pedido #{{display_id}}",
+  cancel_pending_title: "Cancelación en curso",
+  cancel_pending_body:
+    "Registramos tu cancelación. Como el pedido ya salió de nuestro taller, el reembolso lo tramita una persona de nuestro equipo: te escribimos en cuanto esté hecho. Si el paquete llega igualmente, no lo aceptes o guárdalo sin abrir y te decimos cómo devolverlo.",
+  cancel_pending_money:
+    "Todavía no movimos el dinero. Al confirmar la devolución te reembolsamos {{amount}} al mismo método de pago con el que compraste.",
+  cancel_admin_pending_subject:
+    "ACCIÓN: pedido #{{display_id}} cancelado por el cliente (ya enviado)",
+  cancel_admin_pending_title: "Cancelación del cliente — requiere gestión",
+  cancel_admin_pending_intro:
+    "El cliente canceló este pedido desde la página de seguimiento y cumplía las condiciones de la tienda. El pedido YA ESTÁ ENVIADO, así que Medusa no puede cancelarlo automáticamente.",
+  cancel_admin_action:
+    "Hay que gestionarlo a mano: recuperar el paquete o registrar la devolución y emitir el reembolso desde el panel.",
 };
 
 const en: EmailCopy = {
@@ -431,6 +477,31 @@ const en: EmailCopy = {
   cancel_admin_intro:
     "The customer canceled this order from the tracking page. Medusa has already marked it canceled and processed any refund that was due.",
   cancel_money: "Money",
+  cancel_reason: "Reason",
+  cancel_reason_late_delivery: "Delivery took too long",
+  cancel_reason_not_needed: "I no longer need it",
+  cancel_reason_wrong_item: "It is not what I ordered",
+  cancel_reason_other: "Another reason",
+  cancel_note: "Customer note",
+  cancel_note_none: "No note.",
+  cancel_requested_by: "Canceled by",
+  cancel_requested_at: "Cancellation date",
+  cancel_policy: "Conditions met",
+  cancel_policy_line:
+    "The {{lab_days}} business days of lab work have passed and the order shipped on {{shipped}}, more than {{hours}} hours ago.",
+  cancel_pending_subject: "We received the cancellation for order #{{display_id}}",
+  cancel_pending_title: "Cancellation in progress",
+  cancel_pending_body:
+    "We have recorded your cancellation. Because the order already left our workshop, a member of our team handles the refund by hand — we will write as soon as it is done. If the parcel still arrives, refuse it or keep it unopened and we will tell you how to send it back.",
+  cancel_pending_money:
+    "We have not moved the money yet. Once the return is confirmed we will refund {{amount}} to the payment method you used.",
+  cancel_admin_pending_subject:
+    "ACTION: order #{{display_id}} canceled by the customer (already shipped)",
+  cancel_admin_pending_title: "Customer cancellation — needs handling",
+  cancel_admin_pending_intro:
+    "The customer canceled this order from the tracking page and met the store's conditions. The order HAS ALREADY SHIPPED, so Medusa cannot cancel it automatically.",
+  cancel_admin_action:
+    "This needs handling by hand: recover the parcel or record the return, then issue the refund from the admin.",
 };
 
 const DICTIONARY: Record<EmailLocale, EmailCopy> = { es, en };

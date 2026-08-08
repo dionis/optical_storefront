@@ -69,6 +69,9 @@ async function call(path, { method = "GET", body, token } = {}) {
     // was refused), so the UI can show its own translated copy instead of the
     // server's Spanish-only message.
     if (payload && payload.reason) err.reason = payload.reason;
+    // Both cancellation clocks, when the refusal was about timing — the page
+    // needs the numbers to say "not yet, and here is until when".
+    if (payload && payload.window) err.window = payload.window;
     throw err;
   }
   return payload;
@@ -121,15 +124,21 @@ export async function fetchMyOrders() {
  * The refund is entirely the backend's business — it decides whether the card
  * gets refunded, the authorization hold released, or nothing at all, and returns
  * which of those happened as `refund_outcome` so the confirmation can say the
- * true thing rather than a generic "we'll be in touch".
+ * true thing rather than a generic "we'll be in touch". It also returns `status`
+ * (`canceled` when Medusa closed it outright, `pending_return` when the parcel
+ * was already on the road and a person has to finish it), which the two
+ * confirmations must not blur together.
+ *
+ * `reason` is one of the enumerated keys the dialog offers; `note` is the
+ * shopper's own words and may be empty. Both travel to the store owner.
  */
-export function cancelOrder({ orderId, locale }) {
+export function cancelOrder({ orderId, locale, reason, note }) {
   const session = getSession();
   if (!session) throw new Error("no-session");
   return call(`/store/my-orders/${encodeURIComponent(orderId)}/cancel`, {
     method: "POST",
     token: session.token,
-    body: { locale },
+    body: { locale, reason, note },
   });
 }
 

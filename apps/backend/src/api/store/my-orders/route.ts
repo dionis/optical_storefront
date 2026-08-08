@@ -85,6 +85,12 @@ const ORDER_FIELDS = [
   // add-to-cart time and is empty for anything added before it was populated.
   "items.variant.product.thumbnail",
   "shipping_address.*",
+  // Ship dates: the self-cancellation policy opens a day after the order left
+  // the store, and `fulfillment_status` alone cannot say when that was.
+  "fulfillments.created_at",
+  "fulfillments.packed_at",
+  "fulfillments.shipped_at",
+  "fulfillments.canceled_at",
 ];
 
 /**
@@ -324,8 +330,15 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
         payment_status: order["payment_status"] as string,
         fulfillment_status: order["fulfillment_status"] as string,
         status: order["status"] as string,
+        created_at: order["created_at"] as string,
         metadata: order["metadata"] as Record<string, unknown>,
         items: rawItems,
+        fulfillments: (order["fulfillments"] ?? []) as {
+          created_at?: string | null;
+          packed_at?: string | null;
+          shipped_at?: string | null;
+          canceled_at?: string | null;
+        }[],
       };
       const progress = deriveOrderProgress(orderLike);
       const cancel = cancelEligibility(orderLike);
@@ -357,6 +370,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
         cancel_blocked_by: cancel.blocked_by,
         refund_outcome: cancel.refund_outcome,
         lab_started: cancel.lab_started,
+        // Both policy clocks, in numbers and ISO instants. The page words them
+        // in the shopper's language — a "you can cancel from the 14th" that only
+        // the server can phrase would be Spanish-only.
+        cancel_window: cancel.window,
         // Surfaced so the shopper can see a courier reference when the owner
         // records one; absent for every order until then.
         tracking_number:

@@ -502,7 +502,6 @@ export default function MedusaCheckout() {
                   </button>
                 </div>
               )}
-              <p className="muted small">{L("testCard")}</p>
               <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
               </button>

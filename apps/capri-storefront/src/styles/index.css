@@ -2283,6 +2283,20 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .mo-cancel-warn { color: #9a3412; font-weight: 600; }
 .mo-cancel-money { color: #4b5563; }
 .mo-cancel .mo-support-actions { margin-top: 6px; }
+.mo-cancel-reason { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.mo-cancel-reason-h { font-size: 13px; font-weight: 600; color: #374151; }
+.mo-cancel-reason textarea { width: 100%; padding: 8px 10px; font: inherit; font-size: 13.5px; border: 1px solid #e4b4ae; border-radius: 8px; resize: vertical; background: #fff; }
+
+/* El plazo de cancelación: informativo, no una alarma — por eso es neutro y no
+   comparte el rojo del panel de confirmación. */
+.mo-cancel-policy { margin-top: 16px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; }
+.mo-cancel-policy-h { font-size: 13px; font-weight: 700; color: #111827; }
+.mo-cancel-policy ul { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.mo-cancel-policy li { font-size: 13px; line-height: 1.55; color: #4b5563; }
+.mo-cancel-policy li.done { color: #15803d; }
+.mo-cancel-policy-from { margin: 10px 0 0; font-size: 13px; font-weight: 600; color: #111827; }
+.mo-cancel-policy-help { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: #6b7280; }
+.mo-cancel .mo-cancel-policy { background: #fff; border-color: #f3c8c2; }
 .btn-danger { background: #b42318; border-color: #b42318; color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #912018; border-color: #912018; }
 .btn-ghost-danger { background: #fff; border-color: #e4b4ae; color: #b42318; }

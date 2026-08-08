@@ -167,41 +167,74 @@ describe("customer cancellation eligibility", () => {
 
   const rxItem = { metadata: { prescription_id: "rx_1" } };
 
-  it("allows cancelling a paid order that has not been fulfilled", () => {
-    const e = mod.cancelEligibility({
-      status: "pending",
-      payment_status: "captured",
-      fulfillment_status: "not_fulfilled",
-    });
+  // The store's rule is a remedy for a late order, not a change of mind: the lab
+  // gets its ten business days and the courier gets a day before the shopper may
+  // pull the plug. The full arithmetic is pinned in order-cancel-policy.test.ts;
+  // what matters here is that the two gates exist and name themselves.
+  const PLACED = "2026-03-02T09:00:00.000Z";
+  const AFTER_BOTH = new Date("2026-03-20T09:00:00.000Z");
+
+  it("refuses a fresh paid order — the lab still has its ten business days", () => {
+    const e = mod.cancelEligibility(
+      {
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: "not_fulfilled",
+        created_at: PLACED,
+      },
+      new Date("2026-03-04T09:00:00.000Z")
+    );
+    expect(e.cancelable).toBe(false);
+    expect(e.blocked_by).toBe("lab_window");
+  });
+
+  it("refuses an order still sitting in the shop after the lab window closed", () => {
+    const e = mod.cancelEligibility(
+      {
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: "not_fulfilled",
+        created_at: PLACED,
+      },
+      AFTER_BOTH
+    );
+    expect(e.cancelable).toBe(false);
+    expect(e.blocked_by).toBe("not_shipped");
+  });
+
+  it("allows cancelling once the lab window closed and the parcel has been out a day", () => {
+    const e = mod.cancelEligibility(
+      {
+        status: "pending",
+        payment_status: "captured",
+        fulfillment_status: "shipped",
+        created_at: PLACED,
+        fulfillments: [{ shipped_at: "2026-03-17T09:00:00.000Z", canceled_at: null }],
+      },
+      AFTER_BOTH
+    );
     expect(e.cancelable).toBe(true);
     expect(e.blocked_by).toBeNull();
   });
 
-  it("refuses once anything has been fulfilled — that is a return, not a cancellation", () => {
-    for (const fulfillment of [
-      "fulfilled",
-      "partially_fulfilled",
-      "shipped",
-      "partially_shipped",
-      "delivered",
-    ]) {
-      const e = mod.cancelEligibility({
+  it("treats a canceled fulfillment as nothing shipped", () => {
+    // A recalled shipment puts the order back in the shop, so the courier clock
+    // has not started — the shopper is not yet owed the button.
+    const e = mod.cancelEligibility(
+      {
         status: "pending",
         payment_status: "captured",
-        fulfillment_status: fulfillment,
-      });
-      expect(e.cancelable).toBe(false);
-      expect(e.blocked_by).toBe("fulfilled");
-    }
-  });
-
-  it("treats a canceled fulfillment as nothing shipped", () => {
-    const e = mod.cancelEligibility({
-      status: "pending",
-      payment_status: "captured",
-      fulfillment_status: "canceled",
-    });
-    expect(e.cancelable).toBe(true);
+        fulfillment_status: "canceled",
+        created_at: PLACED,
+        fulfillments: [
+          { shipped_at: "2026-03-17T09:00:00.000Z", canceled_at: "2026-03-18T09:00:00.000Z" },
+        ],
+      },
+      AFTER_BOTH
+    );
+    expect(e.cancelable).toBe(false);
+    expect(e.blocked_by).toBe("not_shipped");
+    expect(e.window.shipped_at).toBeNull();
   });
 
   it("refuses an order that is already canceled or completed", () => {

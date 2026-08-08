@@ -65,6 +65,7 @@ export const ORDER_BOARD_FIELDS = [
   "customer.*",
   // Fulfillment records: which one to ship, which one to mark delivered.
   "fulfillments.id",
+  "fulfillments.created_at",
   "fulfillments.packed_at",
   "fulfillments.shipped_at",
   "fulfillments.delivered_at",
@@ -143,6 +144,7 @@ interface RawAddress {
 
 export interface RawFulfillment {
   id?: string;
+  created_at?: string | null;
   packed_at?: string | null;
   shipped_at?: string | null;
   delivered_at?: string | null;
@@ -261,10 +263,14 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     payment_status: order["payment_status"] as string,
     fulfillment_status: order["fulfillment_status"] as string,
     status: order["status"] as string,
+    created_at: order["created_at"] as string,
     metadata,
     items: rawItems,
+    fulfillments,
   };
   const progress = deriveOrderProgress(orderLike);
+  // `cancelable` here means "the customer may cancel this themselves" — the same
+  // policy the tracking page enforces, so the owner sees the same answer.
   const cancel = cancelEligibility(orderLike);
 
   const shippingAddress = projectAddress(order["shipping_address"] as RawAddress);

@@ -38,6 +38,81 @@ const MONEY_COPY = {
   nothing: "orders.cancelMoneyNothing",
 };
 
+/** Why the shopper says they are cancelling — mirrors CANCEL_REASONS server-side. */
+const CANCEL_REASONS = ["late_delivery", "not_needed", "wrong_item", "other"];
+
+/**
+ * Refusals that are about *timing* rather than state. These are the ones the
+ * shopper can do something about — wait — so they get the full explanation with
+ * dates instead of a bare "you can't".
+ */
+const TIMING_REASONS = new Set(["lab_window", "not_shipped", "shipping_window"]);
+
+/**
+ * The store's cancellation policy, with both clocks where this order stands.
+ *
+ * The backend sends numbers and ISO instants, never sentences, so the wording
+ * and the date format follow the language the shopper picked — a page that
+ * explained the wait in Spanish to someone reading English would be the one
+ * string on screen ignoring the toggle.
+ */
+function CancelPolicy({ window: w }) {
+  const { t, lang } = useLang();
+  const L = (k) => t(`orders.${k}`);
+  if (!w) return null;
+
+  const when = (iso) =>
+    iso
+      ? new Date(iso).toLocaleString(lang === "en" ? "en-US" : "es", {
+          dateStyle: "long",
+          timeStyle: "short",
+        })
+      : "—";
+
+  const labLine = w.lab_done
+    ? t("orders.cancelWhyLabDone", { days: w.lab_business_days })
+    : t("orders.cancelWhyLab", {
+        days: w.lab_business_days,
+        remaining: w.lab_days_remaining,
+        date: when(w.lab_ready_at),
+      });
+
+  const shipLine = !w.shipped_at
+    ? t("orders.cancelWhyNotShipped", { hours: w.shipping_grace_hours })
+    : w.shipping_done
+      ? t("orders.cancelWhyShippedDone", {
+          hours: w.shipping_grace_hours,
+          date: when(w.shipped_at),
+        })
+      : t("orders.cancelWhyShipping", {
+          date: when(w.shipped_at),
+          hours: w.shipping_hours_remaining,
+          until: when(w.shipping_ready_at),
+        });
+
+  return (
+    <div className="mo-cancel-policy">
+      <div className="mo-cancel-policy-h">{L("cancelWhyTitle")}</div>
+      <ul>
+        <li className={w.lab_done ? "done" : ""}>
+          <span aria-hidden="true">{w.lab_done ? "✓" : "⏳"}</span> {labLine}
+        </li>
+        <li className={w.shipping_done ? "done" : ""}>
+          <span aria-hidden="true">{w.shipping_done ? "✓" : "⏳"}</span> {shipLine}
+        </li>
+      </ul>
+      {/* Only worth saying once the ship date is known — until then there is no
+          instant to name, and inventing one would be a promise we cannot keep. */}
+      {w.eligible_at && !(w.lab_done && w.shipping_done) && (
+        <p className="mo-cancel-policy-from">
+          {t("orders.cancelWhyFrom", { date: when(w.eligible_at) })}
+        </p>
+      )}
+      <p className="mo-cancel-policy-help">{L("cancelWhyHelp")}</p>
+    </div>
+  );
+}
+
 /** Support form shown inline under one order. */
 function SupportForm({ order, onDone }) {
   const { t, lang } = useLang();
@@ -102,25 +177,44 @@ function SupportForm({ order, onDone }) {
   );
 }
 
-/** Confirmation step for cancelling. Deliberately not a window.confirm(). */
+/**
+ * Confirmation step for cancelling. Deliberately not a window.confirm().
+ *
+ * The reason is asked for here rather than inferred: it is what the store owner
+ * reads in the cancellation email, and "the customer cancelled" without a why is
+ * a mail nobody can act on. It is a fixed list — free text belongs in the
+ * support thread, which is a conversation, not a form field.
+ */
 function CancelPanel({ order, onCancelled, onDismiss }) {
   const { t, lang } = useLang();
   const L = (k) => t(`orders.${k}`);
+  const [reason, setReason] = useState(CANCEL_REASONS[0]);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [blockedWindow, setBlockedWindow] = useState(null);
 
   const confirm = async () => {
     setBusy(true);
     setErr("");
+    setBlockedWindow(null);
     try {
-      await cancelOrder({ orderId: order.id, locale: lang });
-      onCancelled();
+      const result = await cancelOrder({
+        orderId: order.id,
+        locale: lang,
+        reason,
+        note: note.trim(),
+      });
+      onCancelled(result?.status === "pending_return" ? "pending_return" : "canceled");
     } catch (e) {
       // The backend answers 409 with a `reason` when the order moved on since
-      // the list was fetched — say which, rather than a generic failure.
+      // the list was fetched — say which, rather than a generic failure. When
+      // the refusal is about timing it also sends both clocks, so the shopper
+      // gets the same explanation the card shows instead of a dead end.
       const key = e.reason ? `orders.cancelBlocked.${e.reason}` : "";
       const specific = key ? t(key) : "";
       setErr(specific && specific !== key ? specific : e.message || L("cancelError"));
+      if (e.window && TIMING_REASONS.has(e.reason)) setBlockedWindow(e.window);
       setBusy(false);
     }
   };
@@ -130,10 +224,37 @@ function CancelPanel({ order, onCancelled, onDismiss }) {
       <div className="mo-cancel-h">{L("cancelTitle")}</div>
       <p className="mo-cancel-body">{L("cancelBody")}</p>
       {order.lab_started && <p className="mo-cancel-warn">⚠️ {L("cancelWarnLab")}</p>}
+
+      <div className="mo-cancel-reason">
+        <div className="mo-cancel-reason-h">{L("cancelReasonTitle")}</div>
+        <div className="mo-reasons">
+          {CANCEL_REASONS.map((r) => (
+            <label key={r} className={`mo-reason ${reason === r ? "sel" : ""}`}>
+              <input
+                type="radio"
+                name={`cancel-reason-${order.id}`}
+                checked={reason === r}
+                onChange={() => setReason(r)}
+              />
+              <span>{L(`cancelReason.${r}`)}</span>
+            </label>
+          ))}
+        </div>
+        <textarea
+          rows={2}
+          maxLength={500}
+          aria-label={L("cancelNoteLabel")}
+          placeholder={L("cancelNotePlaceholder")}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
+
       <p className="mo-cancel-money">
         {t(MONEY_COPY[order.refund_outcome] || MONEY_COPY.nothing)}
       </p>
       {err && <div className="auth-err">{err}</div>}
+      {blockedWindow && <CancelPolicy window={blockedWindow} />}
       <div className="mo-support-actions">
         <button type="button" className="btn btn-outline" onClick={onDismiss} disabled={busy}>
           {L("cancelKeep")}
@@ -168,7 +289,9 @@ function OrderCard({ order, onChanged }) {
   const [sent, setSent] = useState(false);
   const [openDetails, setOpenDetails] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
+  // null while nothing happened, then "canceled" or "pending_return" — the two
+  // land in very different places and must not share a confirmation.
+  const [cancelled, setCancelled] = useState(null);
 
   const date = order.created_at
     ? new Date(order.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es")
@@ -276,14 +399,16 @@ function OrderCard({ order, onChanged }) {
       )}
 
       {cancelled ? (
-        <div className="mo-sent">✅ {L("cancelDone")}</div>
+        <div className="mo-sent">
+          ✅ {cancelled === "pending_return" ? L("cancelPendingDone") : L("cancelDone")}
+        </div>
       ) : confirmingCancel ? (
         <CancelPanel
           order={order}
           onDismiss={() => setConfirmingCancel(false)}
-          onCancelled={() => {
+          onCancelled={(status) => {
             setConfirmingCancel(false);
-            setCancelled(true);
+            setCancelled(status);
             // Refetch so the timeline and the buttons reflect the new state
             // rather than this component's local memory of it.
             onChanged();
@@ -300,19 +425,27 @@ function OrderCard({ order, onChanged }) {
           }}
         />
       ) : (
-        <div className="mo-actions">
-          <button className="btn btn-outline mo-support-open" onClick={() => setOpenSupport(true)}>
-            {L("supportOpen")}
-          </button>
-          {order.cancelable && (
-            <button
-              className="btn btn-ghost-danger"
-              onClick={() => setConfirmingCancel(true)}
-            >
-              {L("cancelOrder")}
-            </button>
+        <>
+          {/* Why the cancel button is not here yet. Hiding it without a word is
+              what sends people to the support form, which is the thing this
+              page exists to spare them. */}
+          {!order.cancelable && TIMING_REASONS.has(order.cancel_blocked_by) && (
+            <CancelPolicy window={order.cancel_window} />
           )}
-        </div>
+          <div className="mo-actions">
+            <button className="btn btn-outline mo-support-open" onClick={() => setOpenSupport(true)}>
+              {L("supportOpen")}
+            </button>
+            {order.cancelable && (
+              <button
+                className="btn btn-ghost-danger"
+                onClick={() => setConfirmingCancel(true)}
+              >
+                {L("cancelOrder")}
+              </button>
+            )}
+          </div>
+        </>
       )}
     </article>
   );
