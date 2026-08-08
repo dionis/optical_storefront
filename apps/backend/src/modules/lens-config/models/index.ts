@@ -90,8 +90,22 @@ export const LensArOption = model.define("lens_ar_option", {
   code: model.text().unique(),
   label_es: model.text(),
   label_en: model.text(),
-  ar_group: model.text(), // "sv" | "bifprog"
+  ar_group: model.text(), // "sv" | "bifprog" | "all"
   price_cents: model.number().default(0),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
+});
+
+/**
+ * Per (design × material) price of a treatment add-on. Needed because AR and
+ * photochromic prices vary by material (and by design gama), which the flat
+ * lens_ar_option / per-category lens_photo_option columns cannot express.
+ * `treatment_code` ∈ { "ar-green" | "ar-blue" | "photo" }. USD cents.
+ */
+export const LensTreatmentPrice = model.define("lens_treatment_price", {
+  id: model.id().primaryKey(),
+  design_code: model.text(),
+  material_code: model.text(),
+  treatment_code: model.text(),
+  price_cents: model.number().default(0),
 });

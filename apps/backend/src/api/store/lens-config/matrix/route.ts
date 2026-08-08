@@ -17,13 +17,18 @@ export async function GET(
 ): Promise<void> {
   const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
 
-  const [designs, materials, base_prices, photos, ars] = await Promise.all([
+  // lens_treatment_price puede no existir todavía (antes de su migración); si la
+  // consulta falla, devolvemos [] para que el storefront use su tabla de respaldo.
+  const treatmentPrices = pg("lens_treatment_price").whereNull("deleted_at").catch(() => []);
+
+  const [designs, materials, base_prices, photos, ars, treatment_prices] = await Promise.all([
     pg("lens_design").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_material").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_base_price").whereNull("deleted_at"),
     pg("lens_photo_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_ar_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
+    treatmentPrices,
   ]);
 
-  res.json({ designs, materials, base_prices, photos, ars });
+  res.json({ designs, materials, base_prices, photos, ars, treatment_prices });
 }

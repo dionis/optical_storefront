@@ -59,33 +59,62 @@ export async function computeLensBreakdown(
     lens_base_cents = n((cell as { price_cents?: number } | undefined)?.price_cents);
   }
 
+  // Precio del tratamiento por (diseño × material) desde lens_treatment_price.
+  // Si esa tabla aún no existe o no tiene la celda, se cae al modelo antiguo.
+  const treatmentCell = async (treatment_code: string): Promise<number | null> => {
+    if (!selection.material_code) return null;
+    const rows = await pg("lens_treatment_price")
+      .whereNull("deleted_at")
+      .where({
+        design_code: selection.design_code,
+        material_code: selection.material_code,
+        treatment_code,
+      })
+      .catch(() => [] as unknown[]);
+    const cell = (rows as { price_cents?: number }[])[0];
+    return cell ? n(cell.price_cents) : null;
+  };
+
   let photo_cents = 0;
   if (selection.photo_code) {
-    const [photo] = await pg("lens_photo_option")
-      .whereNull("deleted_at")
-      .where({ code: selection.photo_code, is_active: true });
-    if (photo) {
-      const p = photo as {
-        price_sv_cents: number | null;
-        price_bifocal_cents: number | null;
-        price_prog_cents: number | null;
-      };
-      const byCat: Record<string, number | null | undefined> = {
-        sv: p.price_sv_cents,
-        bifocal: p.price_bifocal_cents,
-        prog: p.price_prog_cents,
-      };
-      const v = byCat[category];
-      photo_cents = v == null ? 0 : n(v); // null (N/A for this design) → not charged
+    const fromTreat = await treatmentCell("photo");
+    if (fromTreat != null) {
+      photo_cents = fromTreat;
+    } else {
+      const [photo] = await pg("lens_photo_option")
+        .whereNull("deleted_at")
+        .where({ code: selection.photo_code, is_active: true });
+      if (photo) {
+        const p = photo as {
+          price_sv_cents: number | null;
+          price_bifocal_cents: number | null;
+          price_prog_cents: number | null;
+        };
+        const byCat: Record<string, number | null | undefined> = {
+          sv: p.price_sv_cents,
+          bifocal: p.price_bifocal_cents,
+          prog: p.price_prog_cents,
+        };
+        const v = byCat[category];
+        photo_cents = v == null ? 0 : n(v); // null (N/A for this design) → not charged
+      }
     }
   }
 
   let ar_cents = 0;
   if (selection.ar_code) {
-    const [ar] = await pg("lens_ar_option")
-      .whereNull("deleted_at")
-      .where({ code: selection.ar_code, is_active: true });
-    ar_cents = n((ar as { price_cents?: number } | undefined)?.price_cents);
+    const fromTreat =
+      selection.ar_code === "ar-green" || selection.ar_code === "ar-blue"
+        ? await treatmentCell(selection.ar_code)
+        : null;
+    if (fromTreat != null) {
+      ar_cents = fromTreat;
+    } else {
+      const [ar] = await pg("lens_ar_option")
+        .whereNull("deleted_at")
+        .where({ code: selection.ar_code, is_active: true });
+      ar_cents = n((ar as { price_cents?: number } | undefined)?.price_cents);
+    }
   }
 
   return {

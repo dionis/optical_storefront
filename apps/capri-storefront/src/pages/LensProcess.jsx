@@ -35,9 +35,11 @@ const DESIGN_ICON = {
 const designIcon = (id) => (id === "frame-only" ? IconMontura : DESIGN_ICON[id] || IconSencilla);
 // Progresivo se muestra como UN solo botón; la gama (Media/Alta) se elige dentro.
 const PROG_GROUP = { id: "prog", group: true, cat: "prog", label: { es: "Progresivo", en: "Progressive" } };
+// Transitions: ocultos por ahora; se podrán configurar a futuro (poner en true).
+const SHOW_TRANSITIONS = false;
 // Blue-light AR variants get the screen icon + blue-light diagram; the rest are
 // general anti-reflective coatings whose headline benefit is night-driving glare.
-const isBlueAr = (id) => id === "ar-blue-protect" || id === "blue-uv-445";
+const isBlueAr = (id) => id === "ar-blue" || id === "ar-blue-protect" || id === "blue-uv-445";
 const arIconOf = (id) => (isBlueAr(id) ? IconAzul : IconAr);
 
 // Diagram keys (into LensGraphics.DIAGRAMS) per selected option.
@@ -368,7 +370,7 @@ export default function LensProcess() {
   const [params] = useSearchParams();
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { DESIGNS, MATERIALS, BASE, PHOTO, AR } = useLensCatalog();
+  const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
   const NON_PROG_DESIGNS = DESIGNS.filter((d) => d.cat !== "prog");
   const PROG_GAMAS = DESIGNS.filter((d) => d.cat === "prog");
   const { productBySlug, products, loading } = useCatalog();
@@ -399,6 +401,8 @@ export default function LensProcess() {
   const [reviewing, setReviewing] = useState("idle");
   // "flechita" que revela los Transitions dentro del popup de tratamientos.
   const [showTrans, setShowTrans] = useState(false);
+  // Sub-paso del popup de tratamientos: primero antirreflejo ("ar"), luego foto ("photo").
+  const [treatStep, setTreatStep] = useState("ar");
   // Confirmación de la receta antes de pasar a materiales (si se modificó algo).
   const [confirmRx, setConfirmRx] = useState(false);
   const [rxDirty, setRxDirty] = useState(false); // ¿se tocó algún valor de la receta?
@@ -486,11 +490,24 @@ export default function LensProcess() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rx.add]);
 
+  // Cada vez que se abre el popup de tratamientos, empezar por el antirreflejo.
+  useEffect(() => { if (pop === "treat") setTreatStep("ar"); }, [pop]);
+
   // precios efectivos (override-aware). pv bump re-render on admin edits.
   const basePrice = (dId, mId) => lensBasePrice(dId, mId, (BASE[dId] || {})[mId] ?? 0);
-  const photoPriceOf = (p) => (p.price[cat] == null ? null : lensPhotoPrice(p.id, cat, p.price[cat]));
+  // Precio del tratamiento por (diseño × material) desde TREAT; si falta esa celda
+  // (backend viejo), se cae al precio por categoría / plano de la opción.
+  const treatCell = (code) => (TREAT && TREAT[designId] && TREAT[designId][matId] ? TREAT[designId][matId][code] : undefined);
+  const photoPriceOf = (p) => {
+    const t = treatCell("photo");
+    const base = t != null ? t : (p.price ? p.price[cat] : null);
+    return base == null ? null : lensPhotoPrice(p.id, cat, base);
+  };
   const arList = design && !frameOnly ? (AR[arGroupFor(design)] || []) : [];
-  const arPriceOf = (a) => lensARPrice(a.id, a.price);
+  const arPriceOf = (a) => {
+    const t = treatCell(a.id);
+    return lensARPrice(a.id, t != null ? t : (a.price ?? 0));
+  };
 
   const material = matId ? (MATERIALS.find((m) => m.id === matId) || null) : null;
   const photo = photoId ? PHOTO.find((p) => p.id === photoId) : null;
@@ -527,7 +544,7 @@ export default function LensProcess() {
     if (!frameOnly && ar) x += arPriceOf(ar);
     return Math.round(x * 100) / 100;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.price, designId, matId, photoId, arId, frameOnly, material, photo, ar, pv, BASE, PHOTO, AR]);
+  }, [product?.price, designId, matId, photoId, arId, frameOnly, material, photo, ar, pv, BASE, PHOTO, AR, TREAT]);
 
   // Total mostrado: siempre el cálculo cliente (instantáneo y consistente con el
   // desglose). `serverTotal` se sigue consultando para validación, pero NO se usa
@@ -924,7 +941,7 @@ export default function LensProcess() {
           <div className="zlx-fabs">
             {/* Sin la altura el paso NO está completo: marcarlo con el visto verde
                 hacía creer que la receta estaba lista y el pago bloqueado sin motivo. */}
-            <button type="button" className={`zlx-fab ${designId && !heightMissing ? "on" : ""} ${heightMissing ? "warn" : ""} ${pop === "rx" ? "open" : ""}`}
+            <button type="button" className={`zlx-fab zlx-fab-cta ${designId ? "chosen" : "pulse"} ${designId && !heightMissing ? "on" : ""} ${heightMissing ? "warn" : ""} ${pop === "rx" ? "open" : ""}`}
                     onClick={() => { if (pop === "rx") { setPop(null); return; } setPop("rx"); if (heightMissing) setSeekHeight(true); }}>
               <IconReceta className="zlx-ic" />
               <span className="zlx-fab-txt">
@@ -934,27 +951,34 @@ export default function LensProcess() {
               {designId && (heightMissing ? <Ic name="info" className="zlx-fab-ok warn" /> : <Ic name="check" className="zlx-fab-ok" />)}
             </button>
 
-            <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
-                    disabled={!designId || frameOnly}
-                    onClick={() => setPop(pop === "mat" ? null : "mat")}>
-              <IconMaterial className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.material")}</b>
-                <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
-              </span>
-              {matId && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
+            {/* Los pasos "Material" y "Tratamientos" NO se muestran hasta que el
+                cliente elige un tipo de lente (receta). Antes salían en gris y
+                confundían; ahora aparecen solo cuando ya hay algo seleccionado. */}
+            {designId && !frameOnly && (
+              <>
+                <button type="button" className={`zlx-fab ${matId ? "on" : ""} ${pop === "mat" ? "open" : ""}`}
+                        disabled={frameOnly}
+                        onClick={() => setPop(pop === "mat" ? null : "mat")}>
+                  <IconMaterial className="zlx-ic" />
+                  <span className="zlx-fab-txt">
+                    <b>{t("lens.material")}</b>
+                    <small>{frameOnly ? "—" : material ? L(material.label, lang) : t("lens.pickHint")}</small>
+                  </span>
+                  {matId && <Ic name="check" className="zlx-fab-ok" />}
+                </button>
 
-            <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
-                    disabled={!designId || frameOnly || !matId}
-                    onClick={() => setPop(pop === "treat" ? null : "treat")}>
-              <IconTratamiento className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.treatBtn")}</b>
-                <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
-              </span>
-              {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
+                <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""} ${pop === "treat" ? "open" : ""}`}
+                        disabled={frameOnly || !matId}
+                        onClick={() => setPop(pop === "treat" ? null : "treat")}>
+                  <IconTratamiento className="zlx-ic" />
+                  <span className="zlx-fab-txt">
+                    <b>{t("lens.treatBtn")}</b>
+                    <small>{frameOnly ? "—" : (photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
+                  </span>
+                  {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
+                </button>
+              </>
+            )}
           </div>
 
           {/* ── live summary, always visible beside the frame (req 8, 10) ── */}
@@ -1066,7 +1090,7 @@ export default function LensProcess() {
                           <DIcon className="zlx-use-ic" active={sel} />
                           <span className="zlx-use-txt">
                             <b>{L(d.label, lang)}{sel && !isFO && ocr.status === "done" && ocrFields.size > 0 && <em className="zlx-use-sugg">{t("lens.suggested")}</em>}</b>
-                            <small>{isFO ? t("lens.included") : `${t("lens.fromPrice")} ${money(fromMin)}`}</small>
+                            <small>{isFO ? t("lens.included") : t("lens.rxFree")}</small>
                           </span>
                           {sel && <Ic name="check" className="zlx-use-check" />}
                           <span className={`zlx-use-chev ${sel ? "up" : ""}`} aria-hidden="true"><Ic name="down" /></span>
@@ -1104,7 +1128,7 @@ export default function LensProcess() {
                             {[{ eye: "od", label: t("lens.right") }, { eye: "os", label: t("lens.left") }].map(({ eye, label }) => (
                               <div key={eye} className="zlx-rx-eye">
                                 <div className="zlx-rx-eye-h">{label}</div>
-                                <ZlxDial value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sphS")} flag={ocrClass(`${eye}_sph`)} />
+                                <ZlxStepper value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sphS")} flag={ocrClass(`${eye}_sph`)} />
                                 <div className="zlx-rx-fields">
                                   <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cylS")} flag={ocrClass(`${eye}_cyl`)} />
                                   <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axisS")} flag={ocrClass(`${eye}_axis`)} />
@@ -1125,9 +1149,11 @@ export default function LensProcess() {
                             ) : (
                               <ZlxStepper value={rx.pd} options={PD} onChange={setF("pd")} label={t("lens.pdS")} withEmpty flag={ocrClass("pd")} />
                             )}
-                            {/* ADD siempre visible: en Visión Sencilla es el disparador del
-                                auto-cambio a multifocal; en multifocal es obligatorio. */}
-                            <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addS")} withEmpty flag={ocrClass("add")} />
+                            {/* ADD (adición) SOLO en multifocales: la Visión Sencilla no
+                                tiene adición, así que el campo no aparece. */}
+                            {isMulti && (
+                              <ZlxStepper value={rx.add} options={ADD} onChange={setF("add")} label={t("lens.addS")} withEmpty flag={ocrClass("add")} />
+                            )}
                             {/* ALTURA de montaje: obligatoria en multifocales (bifocal/progresivo) */}
                             {isMulti && (
                               <div ref={heightRef} className={`zlx-height-field ${seekHeight ? "seek" : ""}`}>
@@ -1146,7 +1172,7 @@ export default function LensProcess() {
                               receta (ventana única) y de ahí pasa a materiales. */}
                           <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select"
                                   onClick={() => setConfirmRx(true)}>
-                            <IconMaterial className="zlx-ic" /> {t("lens.material")} <Ic name="down" className="zlx-step-chev" />
+                            <IconReceta className="zlx-ic" /> {t("lens.rx.confirmBtn")} <Ic name="check" className="zlx-step-chev" />
                           </button>
                         </div>
                       )}
@@ -1160,7 +1186,7 @@ export default function LensProcess() {
       {/* ── MATERIAL: paso dentro del MISMO popup (botón atrás), recomendado
              resaltado, lo NO apto en rojo con el porqué, ayuda tras un botón (i) ── */}
       {pop === "mat" && !frameOnly && design && (
-        <ZlxPop title={t("lens.material")} icon={<IconMaterial className="zlx-ic" />}
+        <ZlxPop title={t("lens.chooseMaterial")} icon={<IconMaterial className="zlx-ic" />}
                 onClose={() => setPop(null)} onBack={() => setPop("rx")} closeLabel={closeLabel} backLabel={t("lens.back")}
                 onHelp={() => openInfo(t("lens.material"), null, materialDiagKeys())} helpLabel={t("lens.help")}
                 className="zlx-pop-mat">
@@ -1194,61 +1220,75 @@ export default function LensProcess() {
 
       {/* ── TREATMENTS popover: photochromic + AR with education (req 3, 5) ── */}
       {pop === "treat" && !frameOnly && design && (
-        <ZlxPop title={t("lens.treatBtn")} icon={<IconTratamiento className="zlx-ic" />} onClose={() => setPop(null)} onBack={() => setPop("mat")} closeLabel={closeLabel} backLabel={t("lens.back")} className="zlx-pop-treat">
-          <h4 className="zlx-pop-q">{t("lens.photo")} <span className="lp-opt">{t("lens.optional")}</span></h4>
-          <div className="zlx-choices zlx-treat-list">
-            <button type="button" className={`zlx-choice ${!photoId ? "sel" : ""}`} onClick={() => setPhotoId(null)}>
-              <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
-              <span className="zlx-choice-price">{t("lens.included")}</span>
-            </button>
-            {/* Fotocromáticos: una familia, con sus bolitas de color */}
-            {fotoGroups.map(renderPhotoFamily)}
-          </div>
-          {transGroups.length > 0 && (
+        <ZlxPop title={t("lens.treatBtn")} icon={<IconTratamiento className="zlx-ic" />} onClose={() => setPop(null)}
+                onBack={treatStep === "photo" ? () => setTreatStep("ar") : () => setPop("mat")}
+                closeLabel={closeLabel} backLabel={t("lens.back")} className="zlx-pop-treat">
+          {treatStep === "ar" ? (
             <>
-              {/* flechita para ir a Transitions */}
-              <button type="button" className={`zlx-treat-more ${showTrans ? "open" : ""}`}
-                      aria-expanded={showTrans} onClick={() => setShowTrans((s) => !s)}>
-                <span>{t("lens.ph.trans")}</span>
-                <Ic name={showTrans ? "up" : "down"} className="zlx-treat-more-chev" />
+              {/* PASO 1 — Antirreflejo primero */}
+              <h4 className="zlx-pop-q">{t("lens.ar")} <span className="lp-opt">{t("lens.optional")}</span></h4>
+              <div className="zlx-choices zlx-treat-list">
+                <button type="button" className={`zlx-choice ${!arId ? "sel" : ""}`} onClick={() => setArId(null)}>
+                  <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
+                  <span className="zlx-choice-price">{t("lens.included")}</span>
+                </button>
+                {arList.map((a) => {
+                  const AIcon = arIconOf(a.id);
+                  // antirreflejos: cada uno en UNA sola línea con su globito (i)
+                  return (
+                    <div key={a.id} className={`zlx-choice-row ${arId === a.id ? "sel" : ""}`}>
+                      <button type="button" className={`zlx-choice ${arId === a.id ? "sel" : ""}`} onClick={() => setArId(a.id)}>
+                        <span className="zlx-choice-main">
+                          <AIcon className="zlx-choice-ic" active={arId === a.id} />
+                          <span className="zlx-choice-title">{L(a.label, lang)}</span>
+                        </span>
+                        <span className="zlx-choice-price">+ {money(arPriceOf(a))}</span>
+                      </button>
+                      <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                              onClick={() => openInfo(L(a.label, lang), arEdu(a.id, lang), arDiagKeys(a.id))}>
+                        <Ic name="info" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Botón para pasar al fotocromático (paso 2) */}
+              <button type="button" className="btn btn-primary zlx-pop-done zlx-step-next" data-sfx="select" onClick={() => setTreatStep("photo")}>
+                {t("lens.treat.next")} <Ic name="down" className="zlx-step-chev" />
               </button>
-              {showTrans && (
-                <div className="zlx-choices zlx-treat-list">
-                  {transGroups.map(renderPhotoFamily)}
-                </div>
+            </>
+          ) : (
+            <>
+              {/* PASO 2 — Fotocromático (Transitions ocultos por ahora) */}
+              <h4 className="zlx-pop-q">{t("lens.photo")} <span className="lp-opt">{t("lens.optional")}</span></h4>
+              <div className="zlx-choices zlx-treat-list">
+                <button type="button" className={`zlx-choice ${!photoId ? "sel" : ""}`} onClick={() => setPhotoId(null)}>
+                  <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
+                  <span className="zlx-choice-price">{t("lens.included")}</span>
+                </button>
+                {/* Fotocromáticos: una familia, con sus bolitas de color */}
+                {fotoGroups.map(renderPhotoFamily)}
+              </div>
+              {/* Transitions: se configurarán a futuro (ocultos por ahora con SHOW_TRANSITIONS) */}
+              {SHOW_TRANSITIONS && transGroups.length > 0 && (
+                <>
+                  <button type="button" className={`zlx-treat-more ${showTrans ? "open" : ""}`}
+                          aria-expanded={showTrans} onClick={() => setShowTrans((s) => !s)}>
+                    <span>{t("lens.ph.trans")}</span>
+                    <Ic name={showTrans ? "up" : "down"} className="zlx-treat-more-chev" />
+                  </button>
+                  {showTrans && (
+                    <div className="zlx-choices zlx-treat-list">
+                      {transGroups.map(renderPhotoFamily)}
+                    </div>
+                  )}
+                </>
               )}
+              <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="success" onClick={() => setPop(null)}>
+                <Ic name="check" /> {t("lens.done")}
+              </button>
             </>
           )}
-
-          <h4 className="zlx-pop-q">{t("lens.ar")} <span className="lp-opt">{t("lens.optional")}</span></h4>
-          <div className="zlx-choices zlx-treat-list">
-            <button type="button" className={`zlx-choice ${!arId ? "sel" : ""}`} onClick={() => setArId(null)}>
-              <span className="zlx-choice-main"><span className="zlx-choice-title">{t("lens.none")}</span></span>
-              <span className="zlx-choice-price">{t("lens.included")}</span>
-            </button>
-            {arList.map((a) => {
-              const AIcon = arIconOf(a.id);
-              // antirreflejos: cada uno en UNA sola línea con su globito (i)
-              return (
-                <div key={a.id} className={`zlx-choice-row ${arId === a.id ? "sel" : ""}`}>
-                  <button type="button" className={`zlx-choice ${arId === a.id ? "sel" : ""}`} onClick={() => setArId(a.id)}>
-                    <span className="zlx-choice-main">
-                      <AIcon className="zlx-choice-ic" active={arId === a.id} />
-                      <span className="zlx-choice-title">{L(a.label, lang)}</span>
-                    </span>
-                    <span className="zlx-choice-price">+ {money(arPriceOf(a))}</span>
-                  </button>
-                  <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
-                          onClick={() => openInfo(L(a.label, lang), arEdu(a.id, lang), arDiagKeys(a.id))}>
-                    <Ic name="info" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <button type="button" className="btn btn-primary zlx-pop-done" onClick={() => setPop(null)}>
-            <Ic name="check" /> {t("lens.done")}
-          </button>
         </ZlxPop>
       )}
 

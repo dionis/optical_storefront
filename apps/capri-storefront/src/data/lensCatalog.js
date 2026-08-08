@@ -14,10 +14,10 @@
 // from POST /store/lens-config/quote, never from this data.
 import { useEffect, useState } from "react";
 import { medusa, USE_MEDUSA } from "./medusa.js";
-import { DESIGNS, MATERIALS, BASE, PHOTO, AR } from "./lensPricing.js";
+import { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } from "./lensPricing.js";
 
 /** The bundled 2026 list — first paint, offline, and fallback. */
-export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, PHOTO, AR };
+export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT };
 
 // The module stores integer USD cents; the storefront works in decimal dollars.
 const dollars = (v) => (v == null ? null : Number(v) / 100);
@@ -46,12 +46,27 @@ export function adaptLensMatrix(payload) {
 
   const ar = { sv: [], bifprog: [] };
   for (const a of ars) {
-    if (!ar[a.ar_group]) ar[a.ar_group] = [];
-    ar[a.ar_group].push({
+    const opt = {
       id: a.code,
       label: { es: a.label_es, en: a.label_en },
       price: dollars(a.price_cents) ?? 0,
-    });
+    };
+    // ar_group "all" (AR Green / AR Blue nuevos) aplica a todos los diseños.
+    if (a.ar_group === "all") { ar.sv.push(opt); ar.bifprog.push(opt); }
+    else { if (!ar[a.ar_group]) ar[a.ar_group] = []; ar[a.ar_group].push(opt); }
+  }
+
+  // Matriz de tratamientos por (diseño × material). Si el backend aún no la
+  // envía (antes de su migración), se usa la tabla de respaldo TREAT.
+  const tps = payload?.treatment_prices || [];
+  let treat = null;
+  if (tps.length) {
+    treat = {};
+    for (const t of tps) {
+      if (!treat[t.design_code]) treat[t.design_code] = {};
+      if (!treat[t.design_code][t.material_code]) treat[t.design_code][t.material_code] = {};
+      treat[t.design_code][t.material_code][t.treatment_code] = dollars(t.price_cents) ?? 0;
+    }
   }
 
   return {
@@ -80,6 +95,7 @@ export function adaptLensMatrix(payload) {
       },
     })),
     AR: ar,
+    TREAT: treat || TREAT,
   };
 }
 

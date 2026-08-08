@@ -7,6 +7,7 @@ import {
   LensBasePrice,
   LensPhotoOption,
   LensArOption,
+  LensTreatmentPrice,
 } from "./models/index";
 import type { LensConfig, UsageType } from "@eyewear/shared";
 
@@ -43,6 +44,7 @@ export default class LensConfigModuleService extends MedusaService({
   LensBasePrice,
   LensPhotoOption,
   LensArOption,
+  LensTreatmentPrice,
 }) {
   /** The full editable 2026 price list ("matriz") for the wizard. Active rows only. */
   async getMatrix(): Promise<{
