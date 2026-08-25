@@ -1,0 +1,54 @@
+[project]
+name = "eyewear-vision-measure"
+version = "1.0.0"
+description = "Multimodal optical-measurement endpoint for the eyewear try-on (services/api/vision_api.py)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "pydantic>=2.7.2",
+    "requests>=2.32.3",
+    "pillow>=10.4.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "mypy>=1.11.0",
+    "ruff>=0.6.0",
+]
+# Local deterministic try-on composite (imageEngine: "local") cuts the glasses out of
+# their reference photo before overlaying them on the patient photo. Without this
+# extra the compositor falls back to a plain luminance-based crop — worse, but the
+# service still runs. Same extra/versions as apps/scraper's "tryon" extra; install
+# whichever this process actually needs.
+tryon = [
+    "rembg[cpu]>=2.0.57",
+    "numpy<2.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["services"]
+
+# vision_api.py resolves its own repo root at runtime (sys.path insert) and needs no
+# install step — same as the source project's root pyproject.toml. Without this, `uv
+# run`/`uv sync` try to build and install "services" as a wheel on every run.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

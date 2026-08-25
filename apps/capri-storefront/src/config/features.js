@@ -21,14 +21,12 @@ function flag(value, fallback) {
   return fallback;
 }
 
-// Virtual try-on (camera + three.js 3D frames). Enabled by default; set
+// Virtual try-on (camera + 3D frame overlay, TryOn3D.jsx). Enabled by default; set
 // VITE_ENABLE_TRY_ON=false to hide the buttons on the product card and the PDP.
 //
-// This flag alone only stops the component from rendering: the dynamic import
-// stays in the module graph, so Rollup still emits the ~560 kB three.js chunk
-// (nobody downloads it, but it ships). Dropping it from the build takes the
-// `disable-try-on` plugin in vite.config.js, which swaps TryOn.jsx for a stub
-// when the flag is off. Both read the flag the same way — keep them in sync.
+// TryOn3D.jsx is just an iframe onto apps/vto-web — no three.js in this bundle, so
+// unlike the old React-native probador there is no extra chunk to strip when the flag
+// is off; hiding the button is enough.
 // Default OFF por decisión de producto (probador desactivado en todo el sitio).
 // Para reactivarlo en desarrollo: VITE_ENABLE_TRY_ON=true en tu .env.
 export const TRY_ON_ENABLED = flag(env.VITE_ENABLE_TRY_ON, false);

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#07090e">
+  <!-- The tab title is text the operator reads, so it translates like any other. -->
+  <title data-i18n="report.pageTitle">Informe de medición · TRY ON RUBILENS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body class="report-body">
+  <div class="report-page">
+    <header class="report-header">
+      <div class="brand">
+        <span class="brand-accent">TRY ON</span>
+        <span class="brand-text">RUBILENS</span>
+      </div>
+      <div class="report-actions">
+        <div class="lang-switch" role="group" aria-label="Language / Idioma">
+          <button type="button" class="lang-btn" id="lang-es" data-lang="es">ES</button>
+          <button type="button" class="lang-btn" id="lang-en" data-lang="en">EN</button>
+        </div>
+        <!-- Two presentations of the same stored run. The detailed one is for auditing;
+             the card is for handing over. Neither recomputes anything. -->
+        <div class="report-views" role="group" data-i18n-aria-label="report.viewGroup">
+          <button type="button" class="report-view-btn active" data-view="detail"
+                  data-i18n="report.viewDetail">Detallado</button>
+          <button type="button" class="report-view-btn" data-view="card"
+                  data-i18n="report.viewCard">Ficha de óptica</button>
+        </div>
+
+        <button type="button" class="btn btn-secondary report-btn" id="btn-report-refresh"
+                data-i18n="report.refresh">Actualizar</button>
+        <button type="button" class="btn btn-secondary report-btn" id="btn-report-print"
+                data-i18n="report.print">Imprimir</button>
+        <button type="button" class="btn btn-export report-btn" id="btn-report-json"
+                data-i18n="report.downloadJson">Descargar JSON</button>
+      </div>
+    </header>
+
+    <!-- Where the run came from, so a printed page is never anonymous -->
+    <div class="report-meta" id="report-meta"></div>
+
+    <!-- The optician's card: same run, laid out to be handed over or printed -->
+    <div class="report-card-view" id="report-card"></div>
+
+    <main class="report-main" id="report-detail">
+      <section class="report-col report-col-image" id="report-tryon"></section>
+      <section class="report-col report-col-data">
+        <div id="report-results"></div>
+
+        <!-- Everything the local pipeline measured at the instant of the capture. It was
+             already stored with every run and shown nowhere: on a report consulted months
+             later it is what lets a figure be judged instead of believed. -->
+        <details class="report-context" id="report-context-box" open>
+          <summary data-i18n="report.ctxTitle">Contexto de captura medido localmente</summary>
+          <div id="report-context"></div>
+        </details>
+      </section>
+    </main>
+
+    <p class="report-foot" data-i18n="report.foot">
+      Medidas propuestas por un modelo de IA. No sustituyen la verificación de un optometrista.
+    </p>
+  </div>
+
+  <script type="module" src="/src/report.ts"></script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "id": "up327",
+  "sku": "UP 327",
+  "model_name": "UP 327",
+  "brand": {
+    "name": "Four You",
+    "slug": "4u"
+  },
+  "selected_because": "Injected plastic cat-eye with two-tone layering — tests non-convex silhouette and a colour split that is not a material split.",
+  "source": {
+    "supplier": "caprioptics.com",
+    "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+    "catalog_file": "apps/capri-storefront/public/catalog.json",
+    "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+    "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+  },
+  "catalog_attributes_raw": {
+    "shape": "Ojo de gato",
+    "material": [
+      "Inyección",
+      "Plástica"
+    ],
+    "gender": "Señoras",
+    "age": "Adulto",
+    "eye_size": "54-56 mm",
+    "bridge_size": "16-17 mm",
+    "temple_length": "145-150 mm",
+    "style": "Full frame",
+    "b_measurement": "41-50 mm"
+  },
+  "classification": {
+    "lens_shape": "cat_eye",
+    "lens_shape_raw": "Ojo de gato",
+    "rim_type": "full_rim",
+    "rim_type_raw": "Full frame",
+    "materials": [
+      {
+        "raw": "Inyección",
+        "en": "injected_plastic"
+      },
+      {
+        "raw": "Plástica",
+        "en": "plastic"
+      }
+    ],
+    "gender": "women",
+    "age_group": "adult"
+  },
+  "measurements_mm": {
+    "confidence": "supplier_published",
+    "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+    "lens_width_a": {
+      "raw": "54-56 mm",
+      "min": 54,
+      "max": 56,
+      "nominal": 55,
+      "open_ended": false
+    },
+    "bridge_dbl": {
+      "raw": "16-17 mm",
+      "min": 16,
+      "max": 17,
+      "nominal": 16.5,
+      "open_ended": false
+    },
+    "temple_length": {
+      "raw": "145-150 mm",
+      "min": 145,
+      "max": 150,
+      "nominal": 147.5,
+      "open_ended": false
+    },
+    "lens_height_b": {
+      "raw": "41-50 mm",
+      "min": 41,
+      "max": 50,
+      "nominal": 45.5,
+      "open_ended": false,
+      "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+    },
+    "derived_total_front_width": {
+      "nominal": 126.5,
+      "min": 124,
+      "max": 129,
+      "formula": "2 * lens_width_a + bridge_dbl",
+      "confidence": "estimated",
+      "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+    }
+  },
+  "observed_construction": {
+    "confidence": "observed_in_photos",
+    "rim": "full rim, injected plastic, upswept outer corners, thicker at the brow",
+    "bridge": "single bridge, moulded into the front",
+    "nose_pads": "none visible — moulded saddle bridge",
+    "hardware": "metal barrel hinge, no decorative rivets",
+    "markings": "'UP327 Capri' printed inside left temple",
+    "colour_construction": "Two-tone by layered plastic, not by paint: an outer shell over a second colour that shows through on the inner rim and temples. The split lands in the same place on every colourway."
+  },
+  "geometry_hints_3d": {
+    "confidence": "heuristic",
+    "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "symmetry_plane": "x = 0 (bilateral)",
+    "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+    "rim_thickness_mm": 7.5,
+    "front_thickness_mm": 5.5,
+    "temple_max_width_mm": 9,
+    "temple_thickness_mm": 4,
+    "base_curve": 4,
+    "pantoscopic_tilt_deg": 8,
+    "face_form_wrap_deg": 5,
+    "hinge": "metal barrel hinge",
+    "nose_pad_type": "integrated saddle bridge"
+  },
+  "reference_images": {
+    "directory": "images/up327/",
+    "count": 3,
+    "distinct_view_types": [
+      "three_quarter"
+    ],
+    "multi_view_usable": false,
+    "note": "All photos share the same camera angle: they differ in colour only, so they give no parallax. Treat this as a single-view reconstruction problem with several texture references.",
+    "items": [
+      {
+        "file": "images/up327/black-tan.jpg",
+        "colorway": "Black Tan",
+        "is_primary": true,
+        "source_url": "https://caprioptics.com/wp-content/uploads/UP327%20Black%20Tan-scaled.jpg",
+        "width_px": 2560,
+        "height_px": 1092,
+        "aspect_ratio": 2.34,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/up327/blue-burgundy.jpg",
+        "colorway": "Blue Burgundy",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/UP327%20Blue%20Burgundy-scaled.jpg",
+        "width_px": 2560,
+        "height_px": 1058,
+        "aspect_ratio": 2.42,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/up327/burgundy-black.jpg",
+        "colorway": "Burgundy Black",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/UP327%20Burgundy%20Black.jpg",
+        "width_px": 2532,
+        "height_px": 1107,
+        "aspect_ratio": 2.29,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+    "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+    "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+    "The supplier gives a size range, not the size of the photographed unit.",
+    "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+  ]
+}

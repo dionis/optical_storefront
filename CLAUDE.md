@@ -50,8 +50,16 @@ eyewear-store/
 ## Commands
 
 ```bash
-# Start all services
+# Start all services (backend + storefront + vto-web; vision-measure is Python,
+# started separately — see dev:backend below)
 pnpm dev
+
+# Start just the storefront + the try-on app together
+pnpm dev:frontend
+
+# Start just the Medusa backend + the vision-measure AI service together
+# (uv resolves/installs apps/vision-measure's own .venv on first run — no setup step)
+pnpm dev:backend
 
 # Lint / typecheck
 pnpm lint
@@ -82,6 +90,17 @@ python -m scraper sync [--full] [--collection SLUG] [--dry-run]
 - **Notificación a varios administradores**: `store_setting.admin_notification_emails` (lista separada por comas, editable en el dashboard) con respaldo en `STORE_ADMIN_NOTIFICATION_EMAILS`. `resolveStoreSettings` la devuelve ya deduplicada e incluyendo al dueño — itera **esa** lista, no `owner_notification_email`, o se manda dos veces. El subscriber envía un correo por destinatario para que no se vean las direcciones entre ellos.
 - **Deploy split**: storefront (Vercel) deploys from `develop`; backend (Coolify) deploys from `main`. Work lands on `develop`; backend changes go live only after a `develop`→`main` merge.
 - **Tax note**: per-line tax exemption by prescription is **not** expressible in Medusa v2 — the tax layer only sees `product_id`/`product_type_id`, never line metadata (`get-item-tax-lines` `normalizeLineItemsForTax`). Requires modeling prescription lenses as a tax-exempt product type. No custom tax provider can read `prescription_id`.
+
+## Try-on (3D probador)
+
+Portado desde un proyecto hermano (`3d_framework_glass_try-on/web_tryon` + `services/{api,vision_measure}`), en reemplazo del probador procedural anterior (React + Three.js in-tree, calibrado con cámara real pero limitado a geometría genérica). Dos piezas nuevas:
+
+- **`apps/vto-web/`** — la app de try-on en sí (Vite + TypeScript vanilla + Three.js + MediaPipe FaceLandmarker). Tracking facial en vivo, overlay 3D de gafas, calibración con tarjeta de crédito (85.6mm) para milímetros reales, medidas ópticas (DIP, alturas), evaluación de par GLB+ficha JSON, y el panel "Opción 2 — Medición con IA" (2 fotos → proveedor multimodal). No es un componente React: corre como página propia y se embebe por `<iframe>`, nunca montada directamente en el árbol de React (IDs de DOM y CSS globales, colisionarían). Catálogo de SKUs con modelo 3D real: solo `sample-frame` (`public/models/sample-frame.glb`, ejemplo genérico, sin medidas publicadas) — el resto de las 550 monturas reales cae en el mesh procedural de respaldo hasta que se generen sus `.glb` (pipeline GPU aparte, ver más abajo). `?sku=`/`?lang=` en la URL seleccionan estado inicial; emite `postMessage({source:'eyewear-vto', event:'ready', sku})` al padre cuando termina de arrancar.
+- **`apps/vision-measure/`** — microservicio FastAPI que da servicio a la "Opción 2" de IA: sin GPU, sin estado, llama a OpenAI/Anthropic/Gemini/Qwen/Mistral/xAI/OpenRouter por HTTPS. `.env` propio en esa carpeta (nunca en la raíz ni en `apps/backend/.env`), ver su `README.md` para el contrato completo de rutas.
+- **`TryOn3D.jsx`** (`apps/capri-storefront/src/components/`) — el lanzador: abre `vto-web` en un `<iframe allow="camera *">` a pantalla completa. Sustituye a `TryOn.jsx` (que se queda en disco, sin usar — no se borró código calibrado por si hace falta rescatar algo, pero ya no está enganchado en `ProductDetail.jsx` ni `ProductCard.jsx`). Mismo flag que antes: `VITE_ENABLE_TRY_ON` en `src/config/features.js` (default `false`, decisión de producto).
+- **Pipeline de generación 3D deliberadamente fuera de este repo**: `services/inference/` en el proyecto origen (Hunyuan3D/SF3D/TRELLIS, GPU CUDA, ~141MB+ antes de pesos, repo git anidado) es una herramienta de autoría offline para producir `.glb` nuevos a partir de fotos — no cabe en el presupuesto de infra (Hetzner CX22, ver abajo) y no es algo que este backend opere. Se corre aparte, a mano, cuando toca generar un modelo nuevo; el resultado (`.glb` + ficha JSON a juego) se copia a `apps/vto-web/public/models/` y se declara como SKU en `apps/vto-web/index.html`. `3d-samples/` en la raíz de este repo son los datos de referencia (7 monturas reales, fotos + descriptor) ya preparados como entrada de ese pipeline — todavía no generaron ningún `.glb`.
+- **Hosting en producción**: `vto-web` se compila e inyecta en `apps/capri-storefront/public/tryon-3d/` como parte del mismo build de Vercel (ver `buildCommand` en `vercel.json`), así que sirve mismo origen bajo `/tryon-3d/` — sin proyecto ni dominio Vercel aparte. `vision-measure` se despliega como contenedor propio junto al backend en el mismo host de Coolify (ver servicio `vision-measure` en `infra/docker-compose.prod.yml`); coste variable por llamada a IA, no fijo como el resto de la infra — vigilar contra el presupuesto.
+- **Dev**: `pnpm dev` levanta `vto-web` en paralelo (puerto 3000, tiene `package.json` como cualquier app del workspace) junto a backend y storefront; `vision-measure` es Python (`uv`, igual que `apps/scraper`) y se arranca aparte — a mano (`cd apps/vision-measure && uv run python services/api/vision_api.py`) o junto al backend con `pnpm dev:backend`.
 
 ## Environment variables
 

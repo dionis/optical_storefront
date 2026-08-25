@@ -1,0 +1,218 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "id": "fx114",
+  "sku": "FX114",
+  "model_name": "FX114",
+  "brand": {
+    "name": "Flexure",
+    "slug": "flexure"
+  },
+  "selected_because": "Semi-rimless (nylor): metal upper rim and a nylon cord holding the lens underneath — the lens edge is the visible silhouette, not the frame.",
+  "source": {
+    "supplier": "caprioptics.com",
+    "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+    "catalog_file": "apps/capri-storefront/public/catalog.json",
+    "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+    "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+  },
+  "catalog_attributes_raw": {
+    "shape": "Cuadrado",
+    "material": [
+      "Memoria",
+      "Metal"
+    ],
+    "gender": "Unisexo",
+    "age": "Adulto",
+    "eye_size": "51-53 mm",
+    "bridge_size": "18-19 mm",
+    "temple_length": "135-140 mm",
+    "style": "Semi Rimless",
+    "b_measurement": "31-40 mm"
+  },
+  "classification": {
+    "lens_shape": "square",
+    "lens_shape_raw": "Cuadrado",
+    "rim_type": "semi_rimless",
+    "rim_type_raw": "Semi Rimless",
+    "materials": [
+      {
+        "raw": "Memoria",
+        "en": "memory_metal"
+      },
+      {
+        "raw": "Metal",
+        "en": "metal"
+      }
+    ],
+    "gender": "unisex",
+    "age_group": "adult"
+  },
+  "measurements_mm": {
+    "confidence": "supplier_published",
+    "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+    "lens_width_a": {
+      "raw": "51-53 mm",
+      "min": 51,
+      "max": 53,
+      "nominal": 52,
+      "open_ended": false
+    },
+    "bridge_dbl": {
+      "raw": "18-19 mm",
+      "min": 18,
+      "max": 19,
+      "nominal": 18.5,
+      "open_ended": false
+    },
+    "temple_length": {
+      "raw": "135-140 mm",
+      "min": 135,
+      "max": 140,
+      "nominal": 137.5,
+      "open_ended": false
+    },
+    "lens_height_b": {
+      "raw": "31-40 mm",
+      "min": 31,
+      "max": 40,
+      "nominal": 35.5,
+      "open_ended": false,
+      "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+    },
+    "derived_total_front_width": {
+      "nominal": 122.5,
+      "min": 120,
+      "max": 125,
+      "formula": "2 * lens_width_a + bridge_dbl",
+      "confidence": "estimated",
+      "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+    }
+  },
+  "observed_construction": {
+    "confidence": "observed_in_photos",
+    "rim": "upper half only, metal; lower half is a thin nylon cord running in a groove in the lens edge",
+    "bridge": "single straight metal bridge",
+    "nose_pads": "adjustable pads on arms",
+    "hardware": "flat metal temples with plastic tips",
+    "markings": "'FX114 Capri' printed inside left temple"
+  },
+  "geometry_hints_3d": {
+    "confidence": "heuristic",
+    "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "symmetry_plane": "x = 0 (bilateral)",
+    "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+    "upper_rim_thickness_mm": 2.2,
+    "nylon_cord_diameter_mm": 0.6,
+    "temple_width_mm": 3,
+    "temple_thickness_mm": 1.6,
+    "base_curve": 4,
+    "pantoscopic_tilt_deg": 8,
+    "face_form_wrap_deg": 5,
+    "hinge": "screw hinge, flat metal end piece",
+    "nose_pad_type": "adjustable pads on arms",
+    "modelling_note": "The lower lens outline must be modelled from the lens, not from frame geometry; the cord sits in a groove cut into the lens edge."
+  },
+  "reference_images": {
+    "directory": "images/fx114/",
+    "count": 3,
+    "distinct_view_types": [
+      "three_quarter"
+    ],
+    "multi_view_usable": false,
+    "note": "All photos share the same camera angle: they differ in colour only, so they give no parallax. Treat this as a single-view reconstruction problem with several texture references.",
+    "items": [
+      {
+        "file": "images/fx114/black.jpg",
+        "colorway": "Black",
+        "is_primary": true,
+        "source_url": "https://caprioptics.com/wp-content/uploads/FX%20114%20Black.jpg",
+        "width_px": 1846,
+        "height_px": 671,
+        "aspect_ratio": 2.75,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/fx114/blue.jpg",
+        "colorway": "Blue",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/FX-114-Blue-1.jpg",
+        "width_px": 1835,
+        "height_px": 672,
+        "aspect_ratio": 2.73,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/fx114/gunmetal.jpg",
+        "colorway": "Gunmetal",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/FX-114-Gunmetal-2.jpg",
+        "width_px": 1785,
+        "height_px": 689,
+        "aspect_ratio": 2.59,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+    "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+    "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+    "The supplier gives a size range, not the size of the photographed unit.",
+    "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+  ]
+}

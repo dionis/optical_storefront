@@ -1,12 +1,13 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
-// Carga diferida: el probador arrastra three.js y no debe pesar en la PDP.
-const TryOn = lazy(() => import("../components/TryOn.jsx"));
+// Probador 3D: iframe hacia apps/vto-web, no un módulo de este bundle — no hay
+// three.js que cargar diferido aquí (ver TryOn3D.jsx).
+import TryOn from "../components/TryOn3D.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -197,9 +198,7 @@ export default function ProductDetail() {
       )}
 
       {TRY_ON_ENABLED && tryOn && (
-        <Suspense fallback={null}>
-          <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
-        </Suspense>
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
       )}
     </div>
   );

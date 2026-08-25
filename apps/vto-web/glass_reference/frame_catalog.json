@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-17T22:00:00.000Z",
+  "purpose": "Per-SKU reference specs for the frames offered in the VTO. Kept separate from glass_reference.json, which is the supplier record for the single catalogued model (DC186).",
+  "provenance_warning": "The four entries below are DEMO frames. Only the values declared in the storefront UI are recorded here (model name, total front width, shape and materials). Every dimension the UI does not declare is left null on purpose: inventing it would put a fabricated number in front of an optician. In particular lens_height_b is null for all of them, so any fitting height computed for these SKUs falls back to a stand-in B and must be shown as provisional.",
+  "frames": [
+    {
+      "sku": "classic-aviator",
+      "model_name": "Classic Aviator",
+      "brand": { "name": "Demo", "slug": "demo" },
+      "classification": {
+        "lens_shape": "aviator",
+        "lens_shape_raw": "Aviador",
+        "rim_type": "full_rim",
+        "materials": [{ "raw": "Metal dorado", "en": "gold metal" }]
+      },
+      "measurements_mm": {
+        "confidence": "declared_in_ui",
+        "note": "Only the total front width is declared by the storefront card. A and DBL cannot be split from it without one of the two.",
+        "lens_width_a": null,
+        "bridge_dbl": null,
+        "temple_length": null,
+        "lens_height_b": null,
+        "derived_total_front_width": { "nominal": 142, "min": null, "max": null }
+      }
+    },
+    {
+      "sku": "retro-wayfarer",
+      "model_name": "Retro Wayfarer",
+      "brand": { "name": "Demo", "slug": "demo" },
+      "classification": {
+        "lens_shape": "wayfarer",
+        "lens_shape_raw": "Wayfarer",
+        "rim_type": "full_rim",
+        "materials": [{ "raw": "Acetato negro", "en": "black acetate" }]
+      },
+      "measurements_mm": {
+        "confidence": "declared_in_ui",
+        "note": "Only the total front width is declared by the storefront card.",
+        "lens_width_a": null,
+        "bridge_dbl": null,
+        "temple_length": null,
+        "lens_height_b": null,
+        "derived_total_front_width": { "nominal": 138, "min": null, "max": null }
+      }
+    },
+    {
+      "sku": "vintage-round",
+      "model_name": "Vintage Round",
+      "brand": { "name": "Demo", "slug": "demo" },
+      "classification": {
+        "lens_shape": "round",
+        "lens_shape_raw": "Redondo",
+        "rim_type": "full_rim",
+        "materials": [{ "raw": "Carey", "en": "tortoise shell" }]
+      },
+      "measurements_mm": {
+        "confidence": "declared_in_ui",
+        "note": "Only the total front width is declared by the storefront card.",
+        "lens_width_a": null,
+        "bridge_dbl": null,
+        "temple_length": null,
+        "lens_height_b": null,
+        "derived_total_front_width": { "nominal": 135, "min": null, "max": null }
+      }
+    },
+    {
+      "sku": "bold-square",
+      "model_name": "Bold Square",
+      "brand": { "name": "Demo", "slug": "demo" },
+      "classification": {
+        "lens_shape": "square",
+        "lens_shape_raw": "Cuadrado",
+        "rim_type": "full_rim",
+        "materials": [{ "raw": "Miel translúcido", "en": "honey translucent" }]
+      },
+      "measurements_mm": {
+        "confidence": "declared_in_ui",
+        "note": "Only the total front width is declared by the storefront card. No GLB ships for this SKU, so the VTO renders the procedural fallback frame.",
+        "lens_width_a": null,
+        "bridge_dbl": null,
+        "temple_length": null,
+        "lens_height_b": null,
+        "derived_total_front_width": { "nominal": 145, "min": null, "max": null }
+      }
+    }
+  ]
+}

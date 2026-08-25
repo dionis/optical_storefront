@@ -1,0 +1,173 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "id": "sl906",
+  "sku": "SL906",
+  "model_name": "SL906",
+  "brand": {
+    "name": "Simplylite",
+    "slug": "simply-lite"
+  },
+  "selected_because": "Three-piece rimless titanium — no rim at all, lenses drilled and bolted. Also the only frame here whose photo already ships two camera views.",
+  "source": {
+    "supplier": "caprioptics.com",
+    "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+    "catalog_file": "apps/capri-storefront/public/catalog.json",
+    "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+    "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+  },
+  "catalog_attributes_raw": {
+    "shape": "Ronda modificada",
+    "material": [
+      "Metal",
+      "Titanio"
+    ],
+    "gender": "Unisexo",
+    "age": "Adulto",
+    "eye_size": "48-50 mm",
+    "bridge_size": "18-19 mm",
+    "temple_length": "135-140 mm",
+    "style": "3-Piece Rimless",
+    "b_measurement": "41-50 mm"
+  },
+  "classification": {
+    "lens_shape": "modified_round",
+    "lens_shape_raw": "Ronda modificada",
+    "rim_type": "rimless_3_piece",
+    "rim_type_raw": "3-Piece Rimless",
+    "materials": [
+      {
+        "raw": "Metal",
+        "en": "metal"
+      },
+      {
+        "raw": "Titanio",
+        "en": "titanium"
+      }
+    ],
+    "gender": "unisex",
+    "age_group": "adult"
+  },
+  "measurements_mm": {
+    "confidence": "supplier_published",
+    "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+    "lens_width_a": {
+      "raw": "48-50 mm",
+      "min": 48,
+      "max": 50,
+      "nominal": 49,
+      "open_ended": false
+    },
+    "bridge_dbl": {
+      "raw": "18-19 mm",
+      "min": 18,
+      "max": 19,
+      "nominal": 18.5,
+      "open_ended": false
+    },
+    "temple_length": {
+      "raw": "135-140 mm",
+      "min": 135,
+      "max": 140,
+      "nominal": 137.5,
+      "open_ended": false
+    },
+    "lens_height_b": {
+      "raw": "41-50 mm",
+      "min": 41,
+      "max": 50,
+      "nominal": 45.5,
+      "open_ended": false,
+      "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+    },
+    "derived_total_front_width": {
+      "nominal": 116.5,
+      "min": 114,
+      "max": 119,
+      "formula": "2 * lens_width_a + bridge_dbl",
+      "confidence": "estimated",
+      "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+    }
+  },
+  "observed_construction": {
+    "confidence": "observed_in_photos",
+    "rim": "none — rimless, lens edge is the silhouette",
+    "bridge": "metal bridge bolted through the lenses",
+    "nose_pads": "clear pads on short arms off the bridge",
+    "hardware": "flat temples with a black overlay panel, black plastic tips",
+    "markings": "none legible"
+  },
+  "geometry_hints_3d": {
+    "confidence": "heuristic",
+    "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "symmetry_plane": "x = 0 (bilateral)",
+    "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+    "lens_mount": "drilled, two holes per lens (bridge side and temple side)",
+    "bridge_wire_diameter_mm": 1.8,
+    "temple_width_mm": 2.5,
+    "temple_thickness_mm": 1.2,
+    "base_curve": 4,
+    "pantoscopic_tilt_deg": 8,
+    "face_form_wrap_deg": 5,
+    "hinge": "screw hinge on the temple-side mount",
+    "nose_pad_type": "pads on arms",
+    "modelling_note": "Frame and lens cannot be separated here: without the lens there is no closed silhouette. Model the lens as part of the asset."
+  },
+  "reference_images": {
+    "directory": "images/sl906/",
+    "count": 1,
+    "distinct_view_types": [
+      "three_quarter",
+      "front"
+    ],
+    "multi_view_usable": true,
+    "note": "More than one camera angle exists for this model.",
+    "items": [
+      {
+        "file": "images/sl906/gold-black.jpg",
+        "colorway": "Gold Black",
+        "is_primary": true,
+        "source_url": "https://caprioptics.com/wp-content/uploads/SL906%20Gold%20Black.jpg",
+        "width_px": 2026,
+        "height_px": 1386,
+        "aspect_ratio": 1.46,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "two_shots_stacked",
+          "shots": 2,
+          "verified": true,
+          "detected_by": "opened and looked at",
+          "note": "One JPEG holding two separate shots stacked vertically: three-quarter on top, near straight-on front below. Split it before feeding a single-view pipeline; the lower shot is the better one for measuring proportions."
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          },
+          {
+            "type": "front",
+            "yaw_deg_estimate": 0,
+            "pitch_deg_estimate": 0,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+    "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+    "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+    "The supplier gives a size range, not the size of the photographed unit.",
+    "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+  ]
+}

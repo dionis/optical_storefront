@@ -8,8 +8,10 @@ version: "3.9"
 #   postgres   512 MB
 #   redis      128 MB
 #   meilisearch 512 MB
+#   vision-measure 256 MB (plain FastAPI; no GPU, no local model — bump only if the
+#                          optional "tryon" extra, rembg+onnxruntime, gets installed)
 #   backup cron 64 MB
-# Total headroom: ~2 GB for OS + Coolify
+# Total headroom: ~1.75 GB for OS + Coolify
 
 services:
   postgres:
@@ -133,6 +135,33 @@ services:
           memory: 256m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Try-on "AI option 2": multimodal optical measurement. No database, no GPU, no
+  # dependency on the rest of the stack — safe to restart independently of backend.
+  vision-measure:
+    image: ${VISION_MEASURE_IMAGE}
+    restart: always
+    environment:
+      VISION_API_HOST: 0.0.0.0
+      VISION_API_PORT: 8008
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      QWEN_API_KEY: ${QWEN_API_KEY}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    ports:
+      - "8008:8008"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -1,0 +1,3897 @@
+/* Core Settings & Reset */
+:root {
+  --font-main: 'Inter', sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+  
+  --bg-dark: #07090e;
+  /* Opaque enough to keep clinical figures legible over a brightly lit camera feed */
+  --bg-panel: rgba(11, 16, 28, 0.86);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(0, 240, 255, 0.25);
+  
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  
+  --color-primary: #00f0ff;
+  --color-primary-glow: rgba(0, 240, 255, 0.4);
+  --color-secondary: #8b5cf6;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+  font-family: var(--font-main);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: flex-end; /* Push sidebar to the right */
+}
+
+/* Video & 3D Canvas Layout */
+#webcam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror camera feed */
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0; /* Handled programmatically, or overlaid by ThreeJS directly */
+}
+
+/* Frozen still, layered exactly over the live feed */
+#freeze-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Match the mirrored feed */
+  z-index: 0;
+  pointer-events: none;
+}
+
+#freeze-canvas.hidden {
+  display: none;
+}
+
+/* Set from main.ts when `cover` would crop the camera frame beyond recognition, which
+   is what happens with a landscape phone sensor in an upright viewport. Letterboxing is
+   the lesser evil: the whole field of view stays visible and at a natural size. */
+body.feed-contain #webcam,
+body.feed-contain #freeze-canvas {
+  object-fit: contain;
+  /* Top-aligned, not centred: centred, the letterboxed band sits behind the bottom
+     sheet and hides most of the face. Mirrors ViewTransform's offsetY. */
+  object-position: center top;
+}
+
+#vto-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+#hud-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Glassmorphism Styling Utilities */
+.glass-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Header UI Panel */
+.header-panel {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 424px; /* Stop before the sidebar */
+  height: 72px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.brand {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 1.5px;
+}
+
+.brand-accent {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-text {
+  color: var(--text-primary);
+  font-weight: 300;
+  margin-left: 2px;
+}
+
+/* Status Badges */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Badge States */
+.status-loading {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning);
+}
+.status-loading .status-dot {
+  background-color: var(--color-warning);
+  animation: pulse 1.5s infinite;
+}
+
+.status-detecting {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+}
+.status-detecting .status-dot {
+  background-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.status-lost {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+.status-lost .status-dot {
+  background-color: var(--color-error);
+  animation: flash 1s infinite alternate;
+}
+
+/* Sidebar Layout */
+.sidebar {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  width: 388px;
+  max-height: calc(100vh - 48px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  pointer-events: auto; /* Enable scrolling and mouse events throughout sidebar */
+  scroll-behavior: smooth;
+}
+
+/* Custom Sleek Scrollbar for Sidebar */
+.sidebar::-webkit-scrollbar {
+  width: 9px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 9999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--color-primary), #10b981);
+  border-radius: 9999px;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+.section-panel {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex-shrink: 0; /* Prevent panel squishing inside scroll container */
+}
+
+.section-title {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  border-left: 3px solid var(--color-primary);
+  padding-left: 10px;
+}
+
+/* SKU Lists */
+.sku-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Scrollbar styling */
+.sku-list::-webkit-scrollbar {
+  width: 6px;
+}
+.sku-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+.sku-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.sku-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sku-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.25s ease;
+}
+
+.sku-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.sku-card.active {
+  background: rgba(0, 240, 255, 0.06);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 16px var(--border-glow);
+}
+
+.sku-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sku-name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.sku-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.sku-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+/* Control Group Sliders */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.value-display {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Range Input Customization */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Firefox needs its own pseudo-elements or the control falls back to the OS widget */
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  cursor: pointer;
+}
+
+/* Action Buttons */
+.btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: white;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.45);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.btn-secondary:hover {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+/* Stats Panel */
+.stats-panel {
+  margin-top: auto; /* Push stats panel to the bottom */
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-primary);
+}
+
+/* Interactive On-Screen Visual Guide */
+.on-screen-guide {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 188px); /* Center relative to space left by sidebar */
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  pointer-events: none;
+  opacity: 0.8;
+  transition: opacity 0.5s ease;
+}
+
+.on-screen-guide.fade-out {
+  opacity: 0;
+}
+
+.guide-circle {
+  width: 260px;
+  height: 340px;
+  border: 2px dashed rgba(0, 240, 255, 0.35);
+  border-radius: 50% / 40% 40% 60% 60%; /* Face oval shape */
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.05);
+  position: relative;
+}
+
+.guide-circle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: rgba(0, 240, 255, 0.15); /* Eye level alignment guide */
+}
+
+.guide-text {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--color-primary);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.5px;
+}
+
+/* Animations */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Optical Prescription & Measurements Section */
+.optical-panel {
+  gap: 14px;
+}
+
+.panel-header-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.badge-title {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  padding: 2px 8px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.optical-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.optical-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.optical-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: all 0.2s ease;
+}
+
+.optical-card:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.optical-card.main-pd {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(139, 92, 246, 0.25));
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  align-items: center;
+  padding: 12px;
+}
+
+.optical-card.main-pd .opt-value {
+  font-size: 1.35rem;
+  color: #93c5fd;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+.opt-label {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+}
+
+.opt-red {
+  color: #f87171;
+}
+
+.opt-yellow {
+  color: #fbbf24;
+}
+
+.opt-cyan {
+  color: #38bdf8;
+}
+
+.opt-value {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.opt-value-sub {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #38bdf8;
+}
+
+.btn-export {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  font-size: 0.88rem;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-export:hover {
+  background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-hud-toggle {
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--color-primary);
+  border: 1px solid var(--border-glow);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+  font-size: 0.85rem;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  transition: all 0.25s ease;
+}
+
+.btn-hud-toggle:hover {
+  background: rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-hud-toggle.active {
+  background: var(--color-primary);
+  color: #07090e;
+  font-weight: 700;
+  box-shadow: 0 0 18px var(--color-primary-glow);
+}
+
+.toggle-group {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.toggle-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* Pose Warning Banner */
+.pose-warning {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(225, 29, 72, 0.9);
+  backdrop-filter: blur(12px);
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 30px;
+  border: 1px solid rgba(244, 63, 94, 0.8);
+  box-shadow: 0 0 24px rgba(225, 29, 72, 0.5);
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 10;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: pulseWarning 1.8s infinite;
+}
+
+.pose-warning.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -12px);
+}
+
+@keyframes pulseWarning {
+  0%, 100% { box-shadow: 0 0 16px rgba(225, 29, 72, 0.4); }
+  50% { box-shadow: 0 0 28px rgba(225, 29, 72, 0.8); }
+}
+
+.tag-ref {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.reference-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.ref-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ref-label {
+  color: var(--text-muted);
+}
+
+.ref-val {
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* Which 3D frame the scene is showing */
+.model-source {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.model-source:empty { display: none; }
+
+.model-source.src-generated {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+.model-source.src-default {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: var(--text-secondary);
+}
+/* An operator-supplied file is a third provenance, distinct from both the generated
+   model and the procedural default, and it must never be mistaken for either. */
+.model-source.src-uploaded {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+  word-break: break-word;
+}
+
+.model-source.src-error {
+  background: rgba(225, 29, 72, 0.13);
+  border-color: rgba(225, 29, 72, 0.4);
+  color: #fda4af;
+  word-break: break-word;
+}
+
+/* Language switch */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lang-switch {
+  display: flex;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lang-btn {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 6px 11px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.lang-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lang-btn.active {
+  background: rgba(0, 240, 255, 0.16);
+  color: var(--color-primary);
+}
+
+.lang-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Capture distance readout */
+.distance-card .opt-value {
+  color: #38bdf8;
+}
+.distance-card.dist-warn .opt-value {
+  color: #fbbf24;
+}
+.distance-card.dist-warn {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.opt-subnote {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Card calibration controls */
+.card-calib-panel {
+  margin-top: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(16, 185, 129, 0.07);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+}
+
+.card-calib-panel.hidden {
+  display: none;
+}
+
+.card-calib-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.card-calib-steps strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.card-calib-verdict {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: none;
+}
+.card-calib-verdict.ok {
+  display: block;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+.card-calib-verdict.bad {
+  display: block;
+  background: rgba(225, 29, 72, 0.14);
+  border: 1px solid rgba(225, 29, 72, 0.45);
+  color: #fda4af;
+}
+
+.card-calib-readout {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.card-calib-readout strong {
+  font-size: 0.82rem;
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* Clamped estimate, not a reading */
+.opt-provisional {
+  color: #94a3b8 !important;
+  text-shadow: none !important;
+  font-style: italic;
+}
+
+/* Laterality legend under the optical grid */
+.optical-legend {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  border-left: 2px solid rgba(0, 240, 255, 0.35);
+  padding-left: 8px;
+}
+
+.optical-legend strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Bottom fade telling the user the sidebar continues below the fold */
+.sidebar-fade {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: 388px;
+  height: 48px;
+  z-index: 11;
+  pointer-events: none;
+  border-radius: 0 0 16px 16px;
+  background: linear-gradient(180deg, rgba(7, 9, 14, 0) 0%, rgba(7, 9, 14, 0.85) 85%);
+}
+
+@media (max-width: 1024px) {
+  .sidebar-fade {
+    display: none;
+  }
+}
+
+.ref-missing {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.ref-warning {
+  margin-top: 4px;
+  padding: 9px 11px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  color: #fbbf24;
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+.ref-notice {
+  padding: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.title-ref {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #10b981 !important;
+}
+
+/* Tablet band only. Below 900px the phone sheet layout takes over (see the end of the
+   file), which would otherwise fight this row arrangement. */
+@media (min-width: 901px) and (max-width: 1024px) and (min-height: 501px) {
+  .header-panel {
+    right: 24px;
+    top: 16px;
+  }
+  .sidebar {
+    position: absolute;
+    top: auto;
+    bottom: 24px;
+    left: 24px;
+    right: 24px;
+    width: auto;
+    flex-direction: row;
+  }
+  .section-panel {
+    flex: 1;
+    height: 220px;
+    overflow-y: auto;
+  }
+  /* Inside a fixed-height flex column the list is squeezed to nothing by its siblings.
+     A floor keeps the frames reachable instead of collapsing them to 0px. */
+  .sku-list {
+    min-height: 96px;
+  }
+  .stats-panel {
+    display: none;
+  }
+  .on-screen-guide {
+    left: 50%;
+  }
+}
+
+/* ==========================================================================
+   PHONE LAYOUT — portrait first
+   ==========================================================================
+   The desktop view puts every panel in one tall right-hand column. On a phone that
+   column has nowhere to go: the previous breakpoint laid the panels out in a row of
+   220px boxes, which clipped the optical figures and dropped the live stats entirely.
+
+   Here the panels move into a bottom sheet with three heights (folded / half / full)
+   and a tab strip. Every section stays in the document and stays reachable — the tabs
+   choose which one the sheet shows, they never remove one — and the two readings that
+   must never disappear, PD and FPS, ride on the sheet handle itself, visible at every
+   height. The camera keeps the whole screen behind it.
+
+   Above 900px none of this applies: `.sheet` is transparent to layout, so the desktop
+   arrangement is exactly what it was.
+   -------------------------------------------------------------------------- */
+
+/* The wrapper must not exist as a box on desktop, or the absolutely positioned sidebar
+   inside it would gain a parent it never had. */
+.sheet {
+  display: contents;
+}
+
+.sheet-grip,
+.sheet-tabs {
+  display: none;
+}
+
+@media (max-width: 900px), (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --grip-h: 46px;
+    --tabs-h: 50px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+    /* Folded: only the handle and the tab strip remain on screen */
+    --sheet-peek: calc(var(--grip-h) + var(--tabs-h) + var(--safe-b));
+    --sheet-h: 52dvh;
+  }
+
+  /* dvh follows the browser chrome as it slides away; the percentage fallback keeps
+     older engines full-height. */
+  html,
+  body {
+    height: 100%;
+    height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  #app {
+    height: 100%;
+    display: block; /* the flex row that parked the sidebar on the right is meaningless here */
+  }
+
+  body[data-sheet="peek"] { --sheet-h: var(--sheet-peek); }
+  body[data-sheet="half"] { --sheet-h: 52dvh; }
+  body[data-sheet="full"] { --sheet-h: 90dvh; }
+
+  /* ---------- Top bar ---------- */
+  .header-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    min-height: 56px;
+    padding: calc(8px + var(--safe-t)) 14px 8px;
+    border-radius: 0 0 18px 18px;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    gap: 10px;
+  }
+
+  .brand {
+    font-size: 0.96rem;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .header-right {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  /* The status line is the one header item allowed to give up room: it already
+     ellipsizes, whereas a clipped ES/EN switch loses a control outright. */
+  .status-badge {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .lang-switch {
+    flex-shrink: 0;
+  }
+
+  .status-text {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lang-btn {
+    padding: 7px 10px;
+    font-size: 0.68rem;
+  }
+
+  /* ---------- Camera area ---------- */
+  .pose-warning {
+    /* Measured by trackHeaderHeight(): the header carries a second row of readouts on a
+       narrow screen, so a hardcoded offset would tuck the banner underneath it. */
+    top: calc(var(--header-h, 64px) + 8px);
+    left: 12px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+    justify-content: center;
+    padding: 9px 14px;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    text-align: center;
+    border-radius: 14px;
+  }
+
+  .pose-warning.hidden {
+    transform: translateY(-12px);
+  }
+
+  /* Centred in the strip of camera left visible above the sheet, not in the viewport */
+  .on-screen-guide {
+    left: 50%;
+    top: calc((100dvh - var(--sheet-h)) / 2 + 12px);
+    gap: 10px;
+    transition: top 0.28s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.5s ease;
+  }
+
+  .guide-circle {
+    width: min(58vw, 220px);
+    height: min(76vw, 290px);
+  }
+
+  .guide-text {
+    font-size: 0.82rem;
+    text-align: center;
+    padding: 0 24px;
+  }
+
+  /* ---------- Bottom sheet ---------- */
+  .sheet {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    height: var(--sheet-h);
+    max-height: 90dvh;
+    background: rgba(7, 9, 14, 0.93);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -16px 44px rgba(0, 0, 0, 0.6);
+    transition: height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* While a finger is on the handle the height follows it directly */
+  body[data-sheet-dragging="true"] .sheet,
+  body[data-sheet-dragging="true"] .on-screen-guide {
+    transition: none;
+  }
+
+  .sheet-grip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    height: var(--grip-h);
+    padding: 0 18px;
+    flex-shrink: 0;
+    cursor: grab;
+    touch-action: none; /* the drag belongs to the sheet, not to the page scroller */
+    position: relative;
+  }
+
+  .sheet-grip:active {
+    cursor: grabbing;
+  }
+
+  .grip-bar {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  /* PD and FPS live on the handle so folding the sheet never hides them */
+  .grip-live {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-left: auto;
+    margin-top: 6px;
+  }
+
+  .grip-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .grip-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .grip-value {
+    font-family: var(--font-heading);
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  /* ---------- Tab strip ---------- */
+  .sheet-tabs {
+    display: flex;
+    gap: 6px;
+    height: var(--tabs-h);
+    padding: 0 12px 8px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sheet-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sheet-tab {
+    flex: 1 1 0;
+    min-width: 74px;
+    min-height: 42px;
+    padding: 0 10px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .sheet-tab.active {
+    background: rgba(0, 240, 255, 0.14);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  /* ---------- Sheet body: the original sidebar, unpinned ---------- */
+  .sidebar {
+    position: static;
+    inset: auto;
+    width: auto;
+    max-height: none;
+    flex: 1 1 auto;
+    gap: 12px;
+    padding: 0 14px calc(16px + var(--safe-b));
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar::-webkit-scrollbar {
+    width: 0;
+  }
+
+  /* One section at a time — chosen by the tabs, never dropped from the document.
+     With no tab set (JavaScript disabled) every section stays visible and scrollable. */
+  body[data-tab="frames"] .sidebar > :not([data-mtab="frames"]),
+  body[data-tab="measure"] .sidebar > :not([data-mtab="measure"]),
+  body[data-tab="specs"] .sidebar > :not([data-mtab="specs"]),
+  body[data-tab="adjust"] .sidebar > :not([data-mtab="adjust"]),
+  body[data-tab="ai"] .sidebar > :not([data-mtab="ai"]) {
+    display: none;
+  }
+
+  /* Duplicated by the handle readouts, which are visible at every sheet height */
+  .stats-panel {
+    display: none !important;
+  }
+
+  .section-panel {
+    padding: 16px 14px;
+    gap: 14px;
+    border-radius: 14px;
+  }
+
+  .section-title {
+    font-size: 1.02rem;
+  }
+
+  /* ---------- Frame carousel ---------- */
+  /* A vertical list would push the rest of the section below the fold; swiping through
+     the frames keeps every card, tag and millimetre figure on one screen. */
+  .sku-list {
+    flex-direction: row;
+    max-height: none;
+    gap: 10px;
+    padding: 2px 0 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .sku-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sku-card {
+    flex: 0 0 min(72%, 260px);
+    scroll-snap-align: start;
+    padding: 14px;
+  }
+
+  .sku-card:hover {
+    transform: none; /* a hover lift reads as a glitch under a finger */
+  }
+
+  /* ---------- Touch targets ---------- */
+  .btn {
+    min-height: 48px;
+    padding: 13px;
+    font-size: 0.9rem;
+  }
+
+  .btn:hover,
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-export:hover,
+  .btn-hud-toggle:hover {
+    transform: none;
+  }
+
+  input[type="range"] {
+    height: 30px;
+    background: transparent;
+    touch-action: pan-x;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 26px;
+    height: 26px;
+    margin-top: -10px;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+  }
+
+  .toggle-group {
+    min-height: 44px;
+    font-size: 0.88rem;
+  }
+
+  .toggle-group input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* ---------- Readouts ---------- */
+  .optical-card {
+    padding: 10px 12px;
+  }
+
+  .optical-card.main-pd .opt-value {
+    font-size: 1.5rem;
+  }
+
+  .opt-label {
+    font-size: 0.63rem;
+    letter-spacing: 0.5px;
+  }
+
+  .opt-value {
+    font-size: 1.05rem;
+  }
+
+  .card-calib-panel {
+    padding: 12px 10px;
+  }
+
+  /* This slider labels itself with a bare label + value rather than the .control-header
+     pair the other sliders use, so it never picked up their type scale and lands at the
+     browser default. At 390px that reads as a heading. Scoped to the phone layout: the
+     desktop panel is left exactly as it was. */
+  .card-calib-panel .control-group label,
+  .card-calib-panel .control-value {
+    font-size: 0.82rem;
+    line-height: 1.3;
+  }
+
+  .card-calib-panel .control-group {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .card-calib-panel .control-value {
+    color: var(--color-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .sidebar-fade {
+    display: none;
+  }
+}
+
+/* Very narrow handsets: paired readouts stop fitting side by side */
+@media (max-width: 359px) {
+  .optical-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sheet-tab {
+    font-size: 0.74rem;
+    min-width: 66px;
+  }
+
+  .brand {
+    font-size: 0.88rem;
+  }
+
+  .status-text {
+    max-width: 30vw;
+  }
+
+  .guide-circle {
+    width: min(54vw, 175px);
+    height: min(68vw, 225px);
+  }
+}
+
+/* Phone held sideways: the sheet would eat the whole frame, so the folded and half
+   heights stay low and the panels use the extra width. */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --grip-h: 38px;
+    --tabs-h: 46px;
+  }
+
+  body[data-sheet="half"] { --sheet-h: 52dvh; }
+  body[data-sheet="full"] { --sheet-h: 88dvh; }
+
+  .header-panel {
+    min-height: 48px;
+  }
+
+  /* Sized against the height, not the width: sideways it is the short axis that has to
+     hold the whole oval between the top bar and the sheet. */
+  .on-screen-guide {
+    top: calc((100dvh - var(--sheet-h)) / 2 + 14px);
+  }
+
+  .guide-circle {
+    width: min(24vh, 105px);
+    height: min(32vh, 140px);
+  }
+
+  .guide-text {
+    font-size: 0.76rem;
+  }
+
+  .sku-card {
+    flex: 0 0 min(46%, 240px);
+  }
+}
+
+
+/* =====================================================================
+   Option 2 — AI measurement panel and its report
+   Built on the same tokens as the rest of the sidebar. The report block
+   deliberately echoes the printed optician card: a facial measurement
+   table, the frame identity, and the notes underneath.
+   ===================================================================== */
+
+.ai-panel .badge-title.title-ai {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(0, 240, 255, 0.2));
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  color: #ddd6fe;
+}
+
+.ai-intro {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin-top: -8px;
+}
+
+.ai-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+}
+
+.ai-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.ai-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: #06080f;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* Image slots. Both hold a preview once filled; the frame slot also accepts a drop. */
+.ai-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 116px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.25);
+  text-align: center;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.ai-drop-clickable {
+  cursor: pointer;
+}
+
+.ai-drop.drag-over {
+  border-color: var(--color-primary);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.ai-drop.has-image {
+  border-style: solid;
+  border-color: rgba(0, 240, 255, 0.35);
+  min-height: 0;
+  padding: 0;
+}
+
+.ai-drop.has-image .ai-drop-hint {
+  display: none;
+}
+
+.ai-drop-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ai-thumb {
+  display: block;
+  width: 100%;
+  max-height: 210px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.ai-thumb.hidden {
+  display: none;
+}
+
+.ai-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-btn {
+  flex: 1;
+  padding: 10px;
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* File inputs are driven by their labels, but must stay focusable for keyboards */
+.ai-file,
+.file-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ai-quality {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.ai-quality.ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+}
+
+.ai-quality.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+/* Engine controls */
+.ai-select,
+.ai-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  outline: none;
+  user-select: text;
+}
+
+.ai-select:focus,
+.ai-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.15);
+}
+
+.ai-select option {
+  background: #0b101c;
+  color: var(--text-primary);
+}
+
+.ai-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ai-check input {
+  accent-color: var(--color-primary);
+}
+
+.ai-hint {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.ai-hint .ai-ok {
+  color: #6ee7b7;
+}
+
+/* Run status */
+.ai-status {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.ai-status-busy {
+  border-color: rgba(0, 240, 255, 0.4);
+  color: var(--color-primary);
+  animation: ai-pulse 1.4s ease-in-out infinite;
+}
+
+.ai-status-ok {
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.ai-status-error {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---- Report ---- */
+.ai-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-results:empty {
+  display: none;
+}
+
+.ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-light);
+  user-select: text;
+}
+
+.ai-result-failed {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.ai-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-badge {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.ai-badge-a {
+  background: rgba(0, 240, 255, 0.18);
+  color: var(--color-primary);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+}
+
+.ai-badge-b {
+  background: rgba(139, 92, 246, 0.22);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+}
+
+.ai-engine {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.ai-latency {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.ai-sub {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 6px;
+}
+
+.ai-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.8rem;
+}
+
+.ai-row:last-child {
+  border-bottom: none;
+}
+
+.ai-row-label {
+  color: var(--text-secondary);
+}
+
+.ai-row-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-row-flagged .ai-row-value {
+  color: var(--color-warning);
+}
+
+.ai-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  color: #1a1200;
+  font-size: 0.62rem;
+  font-weight: 800;
+  cursor: help;
+}
+
+.ai-null {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Provenance of each figure: the difference between a measurement and a guess */
+.ai-conf {
+  font-size: 0.62rem;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: help;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+}
+
+.ai-conf-high {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+
+.ai-conf-medium {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+.ai-conf-low {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.ai-identity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.ai-id-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.74rem;
+}
+
+.ai-id-item span {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 0.62rem;
+}
+
+.ai-fit {
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-fit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-fit-title {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.ai-score {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 2px 10px;
+  border-radius: 8px;
+}
+
+.ai-score.good { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+.ai-score.fair { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.ai-score.poor { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+
+.ai-verdict {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.ai-listblock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-listtitle {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.ai-listblock ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ai-listblock li {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.ai-list-issues li { color: #fcd34d; }
+.ai-list-recs li { color: #6ee7b7; }
+.ai-list-notes li { color: var(--text-secondary); }
+
+.ai-warnings {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #fcd34d;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #fca5a5;
+  word-break: break-word;
+}
+
+.ai-usage {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.ai-raw-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.ai-raw {
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.ai-raw.hidden,
+#btn-ai-export.hidden {
+  display: none;
+}
+
+/* ---- The composed try-on picture ---- */
+.ai-tryon:empty {
+  display: none;
+}
+
+.ai-tryon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(0, 240, 255, 0.28);
+}
+
+.ai-tryon-card.ai-tryon-failed {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.ai-tryon-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-tryon-head .ai-sub {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* A deterministic composite and a generated image are not interchangeable evidence,
+   so they never share a colour. */
+.ai-badge-local {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+.ai-badge-gen {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.ai-tryon-img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.ai-tryon-geo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-tryon-geo span {
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+#input-ai-image-model:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =====================================================================
+   Header readout chips  ·  capture distance and scale in force
+   Second view of two figures that already live in the sidebar. They are
+   what every millimetre in the report depends on, so they stay on screen
+   whatever panel is open — and on a phone, whatever the sheet is showing.
+   ===================================================================== */
+
+.header-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hchip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.hchip:hover {
+  border-color: var(--color-primary);
+  background: rgba(0, 240, 255, 0.1);
+}
+
+.hchip:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.hchip-label {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.hchip-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The chip states mirror the panels exactly: green is a reading inside its band, amber
+   is one outside it, neutral is "no measurement yet". */
+/* The scale chip states the calculator's own verdict, which is a sentence — not a
+   number. Ellipsing it to one line would throw away the reason a calibration was
+   rejected, which is the useful half of the message. */
+#hchip-scale {
+  max-width: 320px;
+}
+
+#hchip-scale .hchip-value {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.2;
+}
+
+.hchip-ok {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.hchip-ok .hchip-value {
+  color: #6ee7b7;
+}
+
+.hchip-bad {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.hchip-bad .hchip-value {
+  color: #fcd34d;
+}
+
+/* =====================================================================
+   Foldable sidebar sections
+   ===================================================================== */
+
+.section-head {
+  position: relative;
+  padding-right: 32px;
+  min-height: 24px;
+}
+
+.section-fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.section-fold:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: rgba(0, 240, 255, 0.12);
+}
+
+.section-fold:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Folded: the heading stays, everything else in the section goes. The section keeps its
+   place in the column, so nothing is lost — only put away. */
+.section-panel[data-collapsed="true"] > *:not(.section-head) {
+  display: none;
+}
+
+.section-panel[data-collapsed="true"] {
+  gap: 0;
+  padding-bottom: 16px;
+}
+
+/* ---------- Phone: the chips get their own full-width row ---------- */
+@media (max-width: 900px), (max-height: 500px) and (pointer: coarse) {
+  .header-panel {
+    flex-wrap: wrap;
+  }
+
+  /* Full width and last in the flow, so it reads as a row of its own under the brand
+     and the controls instead of squeezing them out. */
+  .header-chips {
+    order: 3;
+    flex-basis: 100%;
+    gap: 6px;
+  }
+
+  /* The distance reading is short and fixed; the scale verdict takes what is left */
+  .hchip {
+    flex: 0 1 auto;
+    max-width: none;
+    padding: 4px 8px;
+  }
+
+  #hchip-scale {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .hchip-label {
+    font-size: 0.52rem;
+  }
+
+  .hchip-value {
+    font-size: 0.72rem;
+  }
+}
+
+
+/* =====================================================================
+   Operator-supplied GLB
+   Third route to a frame, next to the Gradio export and the file watcher.
+   ===================================================================== */
+
+.glb-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.glb-upload.drag-over {
+  border-color: var(--color-secondary);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.glb-pick {
+  padding: 10px;
+  font-size: 0.85rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Name of the file in force, with the only way back to the served model */
+.glb-loaded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.glb-loaded.hidden {
+  display: none;
+}
+
+.glb-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.74rem;
+  color: #c4b5fd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.glb-remove,
+.ref-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.glb-remove:hover,
+.ref-remove:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.glb-remove:focus-visible,
+.ref-remove:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.glb-hint {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+
+/* =====================================================================
+   Operator-supplied reference sheet, inside FRAME REFERENCE DATA
+   ===================================================================== */
+
+.ref-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.ref-upload.drag-over {
+  border-color: var(--color-primary);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.ref-pick {
+  padding: 10px;
+  font-size: 0.85rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ref-loaded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+}
+
+.ref-loaded.hidden {
+  display: none;
+}
+
+.ref-file {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.74rem;
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+/* Outcome of the last import. It carries the coverage answer, which is the part that
+   decides whether the panel changed at all, so it must be readable in full. */
+.ref-upload-msg {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.ref-upload-msg:empty {
+  display: none;
+}
+
+.ref-upload-msg.ok { color: #6ee7b7; }
+.ref-upload-msg.warn { color: #fcd34d; }
+.ref-upload-msg.bad { color: #fca5a5; }
+
+/* Provenance line at the top of the specs list */
+.ref-origin {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--color-primary);
+}
+
+/* Model field + live catalogue refresh */
+.ai-model-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.ai-model-row .ai-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ai-refresh {
+  flex: 0 0 auto;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.ai-refresh:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: rgba(0, 240, 255, 0.12);
+}
+
+.ai-refresh:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Verdict on the model currently typed: it either exists for this key or it does not */
+.ai-hint.ai-ok { color: #6ee7b7; }
+.ai-hint.ai-bad { color: #fca5a5; }
+
+/* =====================================================================
+   Standalone report page (report.html)
+   Same tokens and the same result markup as the panel, laid out for
+   reading and printing instead of for a 400px column.
+   ===================================================================== */
+
+.report-body {
+  overflow: auto;
+  background: var(--bg-dark);
+}
+
+.report-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-btn {
+  width: auto;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+}
+
+/* Provenance strip: a printed page must never be anonymous */
+.report-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+}
+
+.report-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-meta-item span {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.report-meta-item strong {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-meta.report-empty {
+  display: block;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  border-style: dashed;
+}
+
+.report-main {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.report-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The picture stays in view while the figures scroll beside it */
+.report-col-image {
+  position: sticky;
+  top: 20px;
+}
+
+.report-col-image:empty {
+  display: none;
+}
+
+.report-foot {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+@media (max-width: 860px) {
+  .report-main {
+    grid-template-columns: 1fr;
+  }
+  .report-col-image {
+    position: static;
+  }
+}
+
+/* Print: ink on paper, no dark background, nothing interactive */
+@media print {
+  .report-body {
+    background: #ffffff;
+    color: #111827;
+  }
+  .report-actions,
+  .ai-raw-toggle,
+  .ai-raw,
+  #btn-report-save-image {
+    display: none !important;
+  }
+  .report-page {
+    max-width: none;
+    padding: 0;
+  }
+  .report-main {
+    grid-template-columns: 1fr;
+  }
+  .ai-result,
+  .report-meta {
+    break-inside: avoid;
+    background: #ffffff;
+    border-color: #d1d5db;
+  }
+  .ai-row-label,
+  .ai-row-value,
+  .report-meta-item strong,
+  .ai-verdict,
+  .ai-listblock li {
+    color: #111827;
+  }
+  .ai-tryon-img {
+    max-height: 320px;
+  }
+}
+
+/* =====================================================================
+   Cancelling a run, and what it cost
+   ===================================================================== */
+
+.btn-cancel {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.btn-cancel:hover {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fee2e2;
+}
+
+.btn-cancel.hidden,
+#btn-ai-run.hidden {
+  display: none;
+}
+
+/* Session running total */
+.ai-session-cost {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+}
+
+.ai-session-cost:not(.visible) {
+  display: none;
+}
+
+/* Per-call breakdown, folded away by default: it is an audit trail, not a headline */
+.ai-cost {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ai-cost > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  list-style: none;
+}
+
+.ai-cost > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-cost > summary::before {
+  content: '▸';
+  font-size: 0.7rem;
+}
+
+.ai-cost[open] > summary::before {
+  content: '▾';
+}
+
+.ai-cost > summary strong {
+  margin-left: auto;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-cost-tokens {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.ai-cost-body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-cost-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-cost-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.73rem;
+}
+
+.ai-cost-row:last-child {
+  border-bottom: none;
+}
+
+.ai-cost-row span:first-child {
+  color: var(--text-secondary);
+}
+
+.ai-cost-row span:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ai-cost-rates,
+.ai-cost-note {
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* Profile view: visually separate from the frontal composite, because it is a different
+   kind of thing — extrapolated, not measured. */
+.ai-tryon-profile {
+  margin-top: 12px;
+  border-color: rgba(139, 92, 246, 0.35);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.ai-tryon-profile .ai-sub {
+  color: #c4b5fd;
+  border-bottom-color: rgba(139, 92, 246, 0.25);
+}
+
+/* ---- Evaluación del par GLB + ficha JSON ---- */
+.eval-result { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.eval-result:empty { margin-top: 0; }
+
+.eval-verdict {
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 3px solid currentColor;
+}
+.eval-usable   { color: #10b981; background: rgba(16, 185, 129, 0.12); }
+.eval-suspect  { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.eval-unusable { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+
+/* Both filenames, always visible: a mis-paired evaluation is confident and wrong. */
+.eval-pair {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  opacity: 0.75;
+  word-break: break-all;
+}
+.eval-note   { font-size: 0.7rem; opacity: 0.7; line-height: 1.35; }
+.eval-warn   { font-size: 0.7rem; color: #f59e0b; line-height: 1.35; }
+.eval-error  { font-size: 0.72rem; color: #ef4444; line-height: 1.35; }
+.eval-caveat {
+  font-size: 0.68rem;
+  opacity: 0.65;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 5px;
+  line-height: 1.35;
+}
+
+.eval-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+.eval-table th {
+  text-align: left;
+  font-weight: 600;
+  opacity: 0.6;
+  padding: 3px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.eval-table td { padding: 3px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.eval-table td:nth-child(2) { font-family: ui-monospace, monospace; text-align: right; }
+.eval-table td:nth-child(3) { font-family: ui-monospace, monospace; font-size: 0.66rem; }
+
+.eval-row.eval-ok td:nth-child(3)             { color: #10b981; }
+.eval-row.eval-out-of-range td:nth-child(3)   { color: #ef4444; }
+.eval-row.eval-not-independent td:nth-child(3){ color: #f59e0b; }
+.eval-row.eval-no-data td,
+.eval-row.eval-not-measured td                { opacity: 0.45; }
+
+/* An image that was dropped for space is not an error: amber, not red. */
+.ai-notice {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #fcd34d;
+}
+
+/* =====================================================================
+   Fitting height for progressives — the number a varifocal turns on,
+   so it gets its own block above the facial table instead of being one
+   row among nine.
+   ===================================================================== */
+
+.ai-prog {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-prog-good {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.ai-prog-bad {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ai-prog-unknown {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.ai-prog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-prog-title {
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.ai-prog-verdict {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ai-prog-good .ai-prog-verdict { color: #6ee7b7; }
+.ai-prog-bad .ai-prog-verdict { color: #fca5a5; }
+.ai-prog-unknown .ai-prog-verdict { color: #fcd34d; }
+
+.ai-prog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.ai-prog-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-prog-grid span {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.ai-prog-grid strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* Free-text instructions for the model */
+.ai-textarea {
+  resize: vertical;
+  min-height: 62px;
+  line-height: 1.45;
+  font-family: var(--font-main);
+}
+
+.ai-textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+/* The optician's note can be a paragraph: it gets the full width of the strip */
+.report-meta-wide {
+  grid-column: 1 / -1;
+}
+
+.report-meta-wide strong {
+  font-weight: 400;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow: visible;
+}
+
+/* =====================================================================
+   Capri protocol block — first in the card when a model number was given
+   ===================================================================== */
+
+.ai-capri {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: rgba(0, 240, 255, 0.06);
+}
+
+.ai-capri-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.ai-capri-title {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--color-primary);
+}
+
+.ai-capri-id {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/* The three fitting heights lead: they are what the model number was entered for */
+.ai-capri-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.ai-capri-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.ai-capri-grid span {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.ai-capri-grid strong {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+}
+
+.ai-capri .ai-sub {
+  margin-top: 2px;
+}
+
+/* Capture context on the report page */
+.report-context {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px 14px;
+}
+
+.report-context > summary {
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.report-context > div {
+  padding-top: 10px;
+}
+
+/* The provenance note behind a confidence badge, written out rather than hidden in a
+   tooltip. A tooltip is nothing at all on paper. */
+.ai-row-note {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  padding: 0 0 6px 0;
+  margin-top: -2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@media print {
+  /* Anything collapsed prints as its summary alone, which loses the whole point of a
+     record meant to be consulted later. Force every disclosure open on paper. */
+  details > *:not(summary) {
+    display: block !important;
+  }
+
+  .report-context,
+  .ai-cost {
+    break-inside: avoid;
+    background: #ffffff;
+    border-color: #d1d5db;
+  }
+
+  .report-context > summary,
+  .ai-cost > summary {
+    color: #111827;
+  }
+
+  .ai-row-note,
+  .ai-cost-row span,
+  .ai-cost-note,
+  .ai-cost-rates {
+    color: #374151;
+  }
+}
+
+/* =====================================================================
+   Second presentation: the optician's card
+   Laid out after the practice's own printed sheet — two photographs with
+   the two figures a fitting turns on called out large, the frame's
+   identity, and the notes. Same stored run as the detailed view.
+   ===================================================================== */
+
+.report-views {
+  display: flex;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.report-view-btn {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.report-view-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.report-view-btn.active {
+  background: rgba(0, 240, 255, 0.16);
+  color: var(--color-primary);
+}
+
+/* One view at a time. Both stay in the document, so switching keeps the scroll. */
+.report-card-view { display: none; }
+body[data-report-view="card"] .report-card-view { display: block; }
+body[data-report-view="card"] .report-main,
+body[data-report-view="card"] .report-meta { display: none; }
+
+/* ---------------------------------------------------------------------------
+   The optician's sheet.
+
+   This is the practice's own printed document, not app chrome, so it does NOT
+   inherit the dark console theme: every colour here is stated outright, which is
+   also what makes what you see on screen match what comes out of the printer.
+   Palette taken from the sheet the client supplied: navy #0d2c5f over white,
+   with amber reserved for the clinical criterion line.
+   --------------------------------------------------------------------------- */
+.optician-card {
+  --oc-navy: #0d2c5f;
+  --oc-navy-mid: #1c4a8f;
+  --oc-navy-soft: #16386e;
+  --oc-ink: #1f2b3d;
+  --oc-label: #5b6b82;
+  --oc-line: #d8e1ee;
+  --oc-tint: #eef3f9;
+  --oc-amber: #f5b301;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--oc-line);
+  box-shadow: 0 10px 34px rgba(13, 44, 95, 0.16);
+  color: var(--oc-ink);
+}
+
+/* -- header ---------------------------------------------------------------- */
+.oc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: linear-gradient(100deg, var(--oc-navy) 0%, #1e4f96 100%);
+}
+
+.oc-head-title h2 {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  color: #ffffff;
+}
+
+.oc-head-title p {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: #b9d1ef;
+}
+
+/* The practice's mark sits on white, the way a letterhead does */
+.oc-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.oc-logo-mark {
+  display: flex;
+  align-items: center;
+}
+
+.oc-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.oc-logo-text strong {
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--oc-navy);
+}
+
+.oc-logo-text em {
+  font-style: normal;
+  font-size: 0.55rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--oc-navy-mid);
+}
+
+/* -- the two photographs --------------------------------------------------- */
+.oc-photos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.oc-photo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--oc-navy-soft);
+}
+
+/* The view label, as a chip above its photograph */
+.oc-tab {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  font-family: var(--font-heading);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #ffffff;
+}
+
+.oc-photo-wrap {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a1f42;
+}
+
+.oc-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.oc-nophoto {
+  padding: 46px 16px;
+  text-align: center;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #b9d1ef;
+}
+
+/* Pupil crosshairs and plumb lines, placed from the measured landmarks */
+.oc-pupil,
+.oc-plumb {
+  position: absolute;
+  pointer-events: none;
+}
+
+.oc-pupil {
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.85);
+}
+
+.oc-plumb {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.65);
+}
+
+/* The headline figure, over the foot of its photograph */
+.oc-callout {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  width: min(84%, 320px);
+  padding: 8px 12px 10px;
+  border-radius: 9px;
+  background: rgba(13, 44, 95, 0.94);
+  border: 1px solid rgba(90, 169, 230, 0.55);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.oc-callout span {
+  display: block;
+  font-size: 0.6rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #b9d1ef;
+}
+
+.oc-callout strong {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-heading);
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.oc-callout em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 0.6rem;
+  line-height: 1.4;
+  color: #cfe1f5;
+}
+
+/* The corridor callout carries three lines, not one, so it needs the room */
+.oc-callout-corridor {
+  width: min(90%, 340px);
+  bottom: 8px;
+  padding-bottom: 9px;
+}
+
+/* The clinical criterion, called out in amber exactly as the sheet does */
+.oc-callout i {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 0.6rem;
+  line-height: 1.35;
+  color: var(--oc-amber);
+}
+
+/* -- the two lower panels -------------------------------------------------- */
+/* Two stacks, as the supplied sheet groups them: the frame with its own three published
+   dimensions on the left, what the measurement means and the caveats on the right.
+   `align-items: start` so a short column stays short instead of stretching its panels. */
+.oc-lower {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.oc-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.oc-panel {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid var(--oc-line);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Every section is titled by a navy bar with its icon, as on the sheet */
+.oc-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--oc-navy-soft);
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #ffffff;
+}
+
+.oc-ico {
+  display: inline-flex;
+  align-items: center;
+  color: currentColor;
+}
+
+.oc-body {
+  padding: 10px 12px 12px;
+}
+
+.oc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--oc-line);
+  font-size: 0.79rem;
+}
+
+.oc-row:last-of-type { border-bottom: none; }
+.oc-row span { color: var(--oc-label); }
+
+.oc-row strong {
+  font-weight: 700;
+  color: var(--oc-navy);
+  text-align: right;
+}
+
+.oc-fine {
+  margin-top: 6px;
+  font-size: 0.64rem;
+  color: var(--oc-label);
+}
+
+/* Specs on the left, the frame itself on the right, as the supplier sheet lays it out.
+   The photograph collapses below the specs when the panel gets narrow rather than
+   squeezing the numbers, which are the part that has to stay readable. */
+.oc-frame-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.oc-frame-specs { min-width: 0; }
+
+.oc-frame-figure {
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--oc-tint);
+  border: 1px solid var(--oc-line);
+}
+
+.oc-frame-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 900px) {
+  .oc-frame-body { grid-template-columns: 1fr; }
+  .oc-frame-figure { max-width: 260px; }
+}
+
+/* -- the measurement reference diagram ------------------------------------- */
+/* The note only appears when A and the marked size disagree, so it has to read as an
+   explanation rather than as a warning: nothing is wrong, the two just measure
+   differently. */
+.oc-fine-note {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--oc-navy-mid);
+  border-radius: 0 6px 6px 0;
+  background: var(--oc-tint);
+  line-height: 1.45;
+  color: var(--oc-ink);
+}
+
+.oc-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The labels are pinned to the two levels the diagram measures between, so the words
+   line up with the lines they name instead of stacking beside the drawing. */
+.oc-ref-figure {
+  position: relative;
+  padding: 10px 10px 10px 92px;
+  border-radius: 8px;
+  background: var(--oc-tint);
+}
+
+.oc-ref-svg {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.oc-ref-label {
+  position: absolute;
+  left: 8px;
+  width: 80px;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  font-weight: 600;
+  text-align: right;
+  color: var(--oc-navy);
+}
+
+/* Percentages track the two dashed rules in the drawing (y = 30 and y = 74 of 96) */
+.oc-ref-label-top { top: calc(10px + 31% - 0.8em); }
+.oc-ref-label-bottom { top: calc(10px + 77% - 0.8em); }
+
+.oc-ref-caption {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--oc-ink);
+}
+
+.oc-ref-formula {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--oc-line);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--oc-navy);
+}
+
+/* -- the three published dimensions ---------------------------------------- */
+.oc-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.oc-strip-cell {
+  border-radius: 10px;
+  border: 1px solid var(--oc-line);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.oc-strip-head {
+  display: block;
+  padding: 6px 8px;
+  background: var(--oc-navy-soft);
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+
+.oc-strip-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 12px;
+  background: var(--oc-tint);
+}
+
+.oc-strip-ico {
+  width: 60px;
+  height: 26px;
+  /* currentColor rather than a baked-in hex, so the three diagrams follow the number
+     they belong to. Still an explicit token: this sheet declares every colour. */
+  color: var(--oc-navy-mid);
+}
+
+.oc-strip-body strong {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--oc-navy);
+}
+
+/* -- notes ----------------------------------------------------------------- */
+.oc-notes ul {
+  margin: 0;
+  padding-left: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.oc-notes li {
+  font-size: 0.77rem;
+  line-height: 1.5;
+  color: var(--oc-ink);
+}
+
+.oc-notes li::marker { color: var(--oc-navy-mid); }
+
+/* -- footer ---------------------------------------------------------------- */
+.oc-foot {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--oc-line);
+  background: #ffffff;
+}
+
+.oc-foot-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--oc-navy-mid);
+}
+
+.oc-foot-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--oc-label);
+}
+
+.oc-foot-item strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--oc-navy);
+}
+
+.oc-foot-logo {
+  margin-left: auto;
+}
+
+.oc-foot-logo .oc-logo {
+  padding: 0;
+}
+
+@media (max-width: 780px) {
+  .oc-photos,
+  .oc-lower {
+    grid-template-columns: 1fr;
+  }
+
+  .oc-callout strong { font-size: 1.5rem; }
+  .oc-foot-logo { margin-left: 0; }
+}
+
+@media (max-width: 620px) {
+  .oc-strip { grid-template-columns: 1fr; }
+}
+
+/* On paper the sheet is already what it should be; all this does is stop the
+   browser dropping the filled backgrounds it drops by default. */
+@media print {
+  .report-views { display: none !important; }
+
+  .optician-card {
+    box-shadow: none;
+    border: none;
+    padding: 0;
+  }
+
+  .optician-card,
+  .optician-card * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .oc-photos,
+  .oc-lower,
+  .oc-strip,
+  .oc-panel,
+  .oc-photo-panel,
+  .oc-strip-cell,
+  .oc-notes,
+  .oc-foot {
+    break-inside: avoid;
+  }
+}
+
+/* The inputs were wrong: not a doubtful figure, a report about the wrong subject */
+.ai-input-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.ai-input-alert .ai-hint { color: #fca5a5; font-weight: 400; }
+
+.ai-quality.bad {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+/* The face thumbnail can be shown either way round. Presentation only: what travels to
+   the provider is always the unmirrored capture. */
+.ai-thumb.mirrored {
+  transform: scaleX(-1);
+}
+
+.ai-mirror-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-mirror-btn {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.ai-mirror-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.ai-mirror-btn.active {
+  background: rgba(0, 240, 255, 0.14);
+  border-color: rgba(0, 240, 255, 0.4);
+  color: var(--color-primary);
+}
+
+.ai-mirror-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ---- Alturas ópticas de la ficha, junto a la lectura de MediaPipe ---- */
+.optical-heights {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 3px solid rgba(99, 102, 241, 0.6);
+  padding-left: 8px;
+}
+.heights-title { font-weight: 700; font-size: 0.78rem; letter-spacing: 0.03em; }
+.heights-note  { font-size: 0.66rem; opacity: 0.6; line-height: 1.35; }
+.heights-warn  { font-size: 0.68rem; color: #f59e0b; line-height: 1.35; }
+
+/* The other reading. Given its own colour so it never reads as one more spec-sheet row. */
+.heights-mediapipe {
+  font-size: 0.7rem;
+  color: #6366f1;
+  line-height: 1.35;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 5px;
+}
+
+.heights-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+.heights-table th {
+  text-align: left;
+  font-weight: 600;
+  opacity: 0.6;
+  padding: 3px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.heights-table td { padding: 3px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.heights-table td:nth-child(3),
+.heights-table td:nth-child(4) { font-family: ui-monospace, monospace; text-align: right; }
+.heights-formula { font-family: ui-monospace, monospace; opacity: 0.55; font-size: 0.66rem; }
+
+.heights-brow td   { font-weight: 600; }
+.heights-srcrow td { font-size: 0.62rem; opacity: 0.55; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.heights-shallow   { color: #f59e0b; font-weight: 600; }
+
+/* The Capri protocol ran and established nothing. Stated, not hidden. */
+.ai-capri-empty {
+  border-color: rgba(245, 179, 1, 0.35);
+}
+
+.ai-null-block {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(245, 179, 1, 0.1);
+  border: 1px solid rgba(245, 179, 1, 0.3);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #f5b301;
+}
+
+/* Whether the supplier page was actually read. Stated next to the numbers it justifies. */
+.ai-retrieval {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.ai-retrieval strong { font-weight: 600; }
+
+.ai-retrieval-mark {
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+.ai-retrieval-ok {
+  background: rgba(46, 204, 113, 0.1);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+}
+
+.ai-retrieval-bad {
+  background: rgba(245, 179, 1, 0.1);
+  border: 1px solid rgba(245, 179, 1, 0.3);
+  color: #f5b301;
+}

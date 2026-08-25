@@ -1,14 +1,12 @@
-import { useState, lazy, Suspense } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { useReviewSummary } from "./ReviewSummaryContext.jsx";
-
-// El probador arrastra three.js (~560 kB). Se carga sólo al abrirlo, no en
-// cada listado de producto.
-const TryOn = lazy(() => import("./TryOn.jsx"));
+// Probador 3D: iframe hacia apps/vto-web, sin three.js en este bundle (ver TryOn3D.jsx).
+import TryOn from "./TryOn3D.jsx";
 
 // Requisito 11 (tarjetas estilo Amazon):
 //  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).
@@ -76,9 +74,7 @@ export default function ProductCard({ product }) {
         )}
       </div>
       {TRY_ON_ENABLED && tryOn && (
-        <Suspense fallback={null}>
-          <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
-        </Suspense>
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
       )}
 
       <div className="card-body">

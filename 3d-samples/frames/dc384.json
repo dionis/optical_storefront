@@ -1,0 +1,217 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "id": "dc384",
+  "sku": "DC384",
+  "model_name": "DC384",
+  "brand": {
+    "name": "Di Caprio",
+    "slug": "di-caprio"
+  },
+  "selected_because": "Thick acetate full-rim rectangle — the baseline case: large flat surfaces, visible bevel, chunky temples.",
+  "source": {
+    "supplier": "caprioptics.com",
+    "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+    "catalog_file": "apps/capri-storefront/public/catalog.json",
+    "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+    "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+  },
+  "catalog_attributes_raw": {
+    "shape": "Rectángulo",
+    "material": [
+      "Acetato",
+      "Plástica"
+    ],
+    "gender": "Unisexo",
+    "age": "Adulto",
+    "eye_size": "48-50 mm",
+    "bridge_size": "20-22 mm",
+    "temple_length": "145-150 mm",
+    "style": "Full frame",
+    "b_measurement": "31-40 mm"
+  },
+  "classification": {
+    "lens_shape": "rectangle",
+    "lens_shape_raw": "Rectángulo",
+    "rim_type": "full_rim",
+    "rim_type_raw": "Full frame",
+    "materials": [
+      {
+        "raw": "Acetato",
+        "en": "acetate"
+      },
+      {
+        "raw": "Plástica",
+        "en": "plastic"
+      }
+    ],
+    "gender": "unisex",
+    "age_group": "adult"
+  },
+  "measurements_mm": {
+    "confidence": "supplier_published",
+    "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+    "lens_width_a": {
+      "raw": "48-50 mm",
+      "min": 48,
+      "max": 50,
+      "nominal": 49,
+      "open_ended": false
+    },
+    "bridge_dbl": {
+      "raw": "20-22 mm",
+      "min": 20,
+      "max": 22,
+      "nominal": 21,
+      "open_ended": false
+    },
+    "temple_length": {
+      "raw": "145-150 mm",
+      "min": 145,
+      "max": 150,
+      "nominal": 147.5,
+      "open_ended": false
+    },
+    "lens_height_b": {
+      "raw": "31-40 mm",
+      "min": 31,
+      "max": 40,
+      "nominal": 35.5,
+      "open_ended": false,
+      "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+    },
+    "derived_total_front_width": {
+      "nominal": 119,
+      "min": 116,
+      "max": 122,
+      "formula": "2 * lens_width_a + bridge_dbl",
+      "confidence": "estimated",
+      "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+    }
+  },
+  "observed_construction": {
+    "confidence": "observed_in_photos",
+    "rim": "full rim, thick glossy acetate, visible inner bevel groove",
+    "bridge": "single straight bridge",
+    "nose_pads": "separate clear plastic pads on short metal arms",
+    "hardware": "two silver rivets on each end piece, metal barrel hinge",
+    "markings": "'DC384 Capri' printed inside left temple, 'Frame China' inside right"
+  },
+  "geometry_hints_3d": {
+    "confidence": "heuristic",
+    "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "symmetry_plane": "x = 0 (bilateral)",
+    "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+    "rim_thickness_mm": 6.5,
+    "front_thickness_mm": 5,
+    "temple_max_width_mm": 9,
+    "temple_thickness_mm": 4.5,
+    "base_curve": 4,
+    "pantoscopic_tilt_deg": 8,
+    "face_form_wrap_deg": 5,
+    "hinge": "metal barrel hinge, riveted",
+    "nose_pad_type": "plastic pads on arms"
+  },
+  "reference_images": {
+    "directory": "images/dc384/",
+    "count": 3,
+    "distinct_view_types": [
+      "three_quarter"
+    ],
+    "multi_view_usable": false,
+    "note": "All photos share the same camera angle: they differ in colour only, so they give no parallax. Treat this as a single-view reconstruction problem with several texture references.",
+    "items": [
+      {
+        "file": "images/dc384/black.jpg",
+        "colorway": "Black",
+        "is_primary": true,
+        "source_url": "https://caprioptics.com/wp-content/uploads/DC384%20Black.jpg",
+        "width_px": 2293,
+        "height_px": 914,
+        "aspect_ratio": 2.51,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/dc384/crystal.jpg",
+        "colorway": "Crystal",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/DC384%20Crystal.jpg",
+        "width_px": 2280,
+        "height_px": 933,
+        "aspect_ratio": 2.44,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/dc384/light-brown.jpg",
+        "colorway": "Light Brown",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/DC384%20Light%20Brown.jpg",
+        "width_px": 2289,
+        "height_px": 881,
+        "aspect_ratio": 2.6,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+    "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+    "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+    "The supplier gives a size range, not the size of the photographed unit.",
+    "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+  ]
+}

@@ -4,6 +4,8 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
+    "dev:frontend": "pnpm --parallel --filter capri-storefront --filter eyewear-vto-web dev",
+    "dev:backend": "concurrently -n backend,vision-measure -c blue,magenta \"pnpm --filter @eyewear/backend dev\" \"cd apps/vision-measure && uv run python services/api/vision_api.py\"",
     "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
@@ -12,6 +14,7 @@
     "reindex": "pnpm --filter backend reindex"
   },
   "devDependencies": {
+    "concurrently": "^9.0.1",
     "typescript": "^5.5.4"
   },
   "engines": {

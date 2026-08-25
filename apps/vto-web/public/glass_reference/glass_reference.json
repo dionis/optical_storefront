@@ -1,0 +1,218 @@
+{
+    "schema_version": "1.1",
+    "generated_at": "2026-08-10T21:11:46.944Z",
+    "id": "dc186",
+    "sku": "DC186",
+    "model_name": "DC186",
+    "brand": {
+        "name": "Di Caprio",
+        "slug": "di-caprio"
+    },
+    "selected_because": "Combo build: acetate round front with thin gold metal temples — two materials, two very different cross-sections in one model.",
+    "source": {
+        "supplier": "caprioptics.com",
+        "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+        "catalog_file": "apps/capri-storefront/public/catalog.json",
+        "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+        "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+    },
+    "catalog_attributes_raw": {
+        "shape": "Redondo",
+        "material": [
+            "Acetato",
+            "Plástica"
+        ],
+        "gender": "Señoras",
+        "age": "Adulto",
+        "eye_size": "48-50 mm",
+        "bridge_size": "18-19 mm",
+        "temple_length": "135-140 mm",
+        "style": "Combo",
+        "b_measurement": "41-50 mm"
+    },
+    "classification": {
+        "lens_shape": "round",
+        "lens_shape_raw": "Redondo",
+        "rim_type": "full_rim",
+        "rim_type_raw": "Combo",
+        "rim_type_note": "Supplier 'Combo' describes mixed-material construction, not rim type; rim type read from the photo.",
+        "materials": [
+            {
+                "raw": "Acetato",
+                "en": "acetate"
+            },
+            {
+                "raw": "Plástica",
+                "en": "plastic"
+            }
+        ],
+        "gender": "women",
+        "age_group": "adult"
+    },
+    "measurements_mm": {
+        "confidence": "supplier_published",
+        "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+        "lens_width_a": {
+            "raw": "48-50 mm",
+            "min": 48,
+            "max": 50,
+            "nominal": 49,
+            "open_ended": false
+        },
+        "bridge_dbl": {
+            "raw": "18-19 mm",
+            "min": 18,
+            "max": 19,
+            "nominal": 18.5,
+            "open_ended": false
+        },
+        "temple_length": {
+            "raw": "135-140 mm",
+            "min": 135,
+            "max": 140,
+            "nominal": 137.5,
+            "open_ended": false
+        },
+        "lens_height_b": {
+            "raw": "41-50 mm",
+            "min": 41,
+            "max": 50,
+            "nominal": 45.5,
+            "open_ended": false,
+            "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+        },
+        "derived_total_front_width": {
+            "nominal": 116.5,
+            "min": 114,
+            "max": 119,
+            "formula": "2 * lens_width_a + bridge_dbl",
+            "confidence": "estimated",
+            "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+        }
+    },
+    "observed_construction": {
+        "confidence": "observed_in_photos",
+        "rim": "full rim, glossy acetate, round",
+        "bridge": "single bridge with a shallow keyhole profile",
+        "nose_pads": "none clearly visible from this angle",
+        "hardware": "metal end pieces and hinges, thin wire temples with acetate tips",
+        "markings": "'DC186 Capri' printed inside left temple"
+    },
+    "geometry_hints_3d": {
+        "confidence": "heuristic",
+        "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+        "units": "mm",
+        "up_axis": "Y",
+        "forward_axis": "-Z",
+        "symmetry_plane": "x = 0 (bilateral)",
+        "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+        "rim_thickness_mm": 4.5,
+        "front_thickness_mm": 4,
+        "temple_wire_diameter_mm": 1.8,
+        "temple_tip_width_mm": 6,
+        "base_curve": 4,
+        "pantoscopic_tilt_deg": 8,
+        "face_form_wrap_deg": 5,
+        "hinge": "metal barrel hinge on the end piece",
+        "nose_pad_type": "unknown from these views"
+    },
+    "reference_images": {
+        "directory": "images/dc186/",
+        "count": 3,
+        "distinct_view_types": [
+            "three_quarter"
+        ],
+        "multi_view_usable": false,
+        "note": "All photos share the same camera angle: they differ in colour only, so they give no parallax. Treat this as a single-view reconstruction problem with several texture references.",
+        "items": [
+            {
+                "file": "images/dc186/black-gold.jpg",
+                "colorway": "Black Gold",
+                "is_primary": true,
+                "source_url": "https://caprioptics.com/wp-content/uploads/DC186%20Black%20Gold.jpg",
+                "width_px": 2063,
+                "height_px": 840,
+                "aspect_ratio": 2.46,
+                "background": "uniform white studio background",
+                "has_alpha": false,
+                "camera_calibration": "unknown — focal length, distance and sensor are not published",
+                "view_layout": {
+                    "layout": "single_shot",
+                    "shots": 1,
+                    "verified": true,
+                    "detected_by": "opened and looked at"
+                },
+                "views": [
+                    {
+                        "type": "three_quarter",
+                        "yaw_deg_estimate": -35,
+                        "pitch_deg_estimate": 15,
+                        "temples": "open",
+                        "confidence": "estimated_by_eye"
+                    }
+                ]
+            },
+            {
+                "file": "images/dc186/crystal-blue.jpg",
+                "colorway": "Crystal Blue",
+                "is_primary": false,
+                "source_url": "https://caprioptics.com/wp-content/uploads/DC186%20Crystal%20Blue.jpg",
+                "width_px": 2044,
+                "height_px": 850,
+                "aspect_ratio": 2.4,
+                "background": "uniform white studio background",
+                "has_alpha": false,
+                "camera_calibration": "unknown — focal length, distance and sensor are not published",
+                "view_layout": {
+                    "layout": "single_shot",
+                    "shots": 1,
+                    "verified": true,
+                    "detected_by": "opened and looked at"
+                },
+                "views": [
+                    {
+                        "type": "three_quarter",
+                        "yaw_deg_estimate": -35,
+                        "pitch_deg_estimate": 15,
+                        "temples": "open",
+                        "confidence": "estimated_by_eye"
+                    }
+                ]
+            },
+            {
+                "file": "images/dc186/crystal-gold.jpg",
+                "colorway": "Crystal Gold",
+                "is_primary": false,
+                "source_url": "https://caprioptics.com/wp-content/uploads/DC186%20Crystal%20Gold.jpg",
+                "width_px": 2012,
+                "height_px": 842,
+                "aspect_ratio": 2.39,
+                "background": "uniform white studio background",
+                "has_alpha": false,
+                "camera_calibration": "unknown — focal length, distance and sensor are not published",
+                "view_layout": {
+                    "layout": "single_shot",
+                    "shots": 1,
+                    "verified": true,
+                    "detected_by": "opened and looked at"
+                },
+                "views": [
+                    {
+                        "type": "three_quarter",
+                        "yaw_deg_estimate": -35,
+                        "pitch_deg_estimate": 15,
+                        "temples": "open",
+                        "confidence": "estimated_by_eye"
+                    }
+                ]
+            }
+        ]
+    },
+    "limitations": [
+        "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+        "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+        "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+        "The supplier gives a size range, not the size of the photographed unit.",
+        "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+    ]
+}

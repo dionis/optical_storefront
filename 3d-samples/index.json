@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "purpose": "Reference dataset for 3D eyewear asset generation. Seven real frames from the supplier catalog, every published photo of each plus a full descriptor.",
+  "source_catalog": "apps/capri-storefront/public/catalog.json",
+  "total_images": 18,
+  "conventions": {
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "origin": "Midpoint of the bridge on the front face of the frame",
+    "confidence_levels": {
+      "supplier_published": "Copied from the supplier catalog.",
+      "observed_in_photos": "Read off the reference photos by eye.",
+      "estimated": "Computed from supplier data by a stated formula.",
+      "heuristic": "Typical value for this construction type. Not measured. Do not treat as spec."
+    }
+  },
+  "image_note": "One photo per colourway is everything the supplier has. All of a model's photos share the same three-quarter angle (SL906 is the exception: its single JPEG holds a three-quarter and a front shot), so extra colourways give texture variation, not parallax.",
+  "frames": [
+    {
+      "id": "dc384",
+      "sku": "DC384",
+      "brand": "Di Caprio",
+      "json": "frames/dc384.json",
+      "images_dir": "images/dc384/",
+      "image_count": 3,
+      "colorways": [
+        "Black",
+        "Crystal",
+        "Light Brown"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "rectangle",
+      "rim_type": "full_rim",
+      "materials": [
+        "acetate",
+        "plastic"
+      ],
+      "selected_because": "Thick acetate full-rim rectangle — the baseline case: large flat surfaces, visible bevel, chunky temples."
+    },
+    {
+      "id": "up327",
+      "sku": "UP 327",
+      "brand": "Four You",
+      "json": "frames/up327.json",
+      "images_dir": "images/up327/",
+      "image_count": 3,
+      "colorways": [
+        "Black Tan",
+        "Blue Burgundy",
+        "Burgundy Black"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "cat_eye",
+      "rim_type": "full_rim",
+      "materials": [
+        "injected_plastic",
+        "plastic"
+      ],
+      "selected_because": "Injected plastic cat-eye with two-tone layering — tests non-convex silhouette and a colour split that is not a material split."
+    },
+    {
+      "id": "dc186",
+      "sku": "DC186",
+      "brand": "Di Caprio",
+      "json": "frames/dc186.json",
+      "images_dir": "images/dc186/",
+      "image_count": 3,
+      "colorways": [
+        "Black Gold",
+        "Crystal Blue",
+        "Crystal Gold"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "round",
+      "rim_type": "full_rim",
+      "materials": [
+        "acetate",
+        "plastic"
+      ],
+      "selected_because": "Combo build: acetate round front with thin gold metal temples — two materials, two very different cross-sections in one model."
+    },
+    {
+      "id": "pt98",
+      "sku": "PT 98",
+      "brand": "Peachtree",
+      "json": "frames/pt98.json",
+      "images_dir": "images/pt98/",
+      "image_count": 2,
+      "colorways": [
+        "Gold",
+        "Gunmetal"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "aviator",
+      "rim_type": "full_rim",
+      "materials": [
+        "metal",
+        "stainless_steel"
+      ],
+      "selected_because": "Wire-rim aviator with a brow bar — thin tubular geometry and a double bridge, the hardest silhouette to reconstruct from a single photo."
+    },
+    {
+      "id": "fx114",
+      "sku": "FX114",
+      "brand": "Flexure",
+      "json": "frames/fx114.json",
+      "images_dir": "images/fx114/",
+      "image_count": 3,
+      "colorways": [
+        "Black",
+        "Blue",
+        "Gunmetal"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "square",
+      "rim_type": "semi_rimless",
+      "materials": [
+        "memory_metal",
+        "metal"
+      ],
+      "selected_because": "Semi-rimless (nylor): metal upper rim and a nylon cord holding the lens underneath — the lens edge is the visible silhouette, not the frame."
+    },
+    {
+      "id": "sl906",
+      "sku": "SL906",
+      "brand": "Simplylite",
+      "json": "frames/sl906.json",
+      "images_dir": "images/sl906/",
+      "image_count": 1,
+      "colorways": [
+        "Gold Black"
+      ],
+      "distinct_view_types": [
+        "three_quarter",
+        "front"
+      ],
+      "lens_shape": "modified_round",
+      "rim_type": "rimless_3_piece",
+      "materials": [
+        "metal",
+        "titanium"
+      ],
+      "selected_because": "Three-piece rimless titanium — no rim at all, lenses drilled and bolted. Also the only frame here whose photo already ships two camera views."
+    },
+    {
+      "id": "dc391",
+      "sku": "DC391",
+      "brand": "Di Caprio",
+      "json": "frames/dc391.json",
+      "images_dir": "images/dc391/",
+      "image_count": 3,
+      "colorways": [
+        "Black Gold",
+        "Gold",
+        "Gunmetal"
+      ],
+      "distinct_view_types": [
+        "three_quarter"
+      ],
+      "lens_shape": "square",
+      "rim_type": "full_rim",
+      "materials": [
+        "metal"
+      ],
+      "selected_because": "Metal navigator with a brow bar and plastic temples — square wire rim, two-tone anodising, mixed materials at the end piece."
+    }
+  ]
+}

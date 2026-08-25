@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#07090e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title data-i18n="app.pageTitle">TRY ON RUBILENS - Virtual Eyewear Try-On</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Camera feed -->
+    <video id="webcam" autoplay playsinline muted></video>
+
+    <!-- Still of the last frame, shown while the operator marks the calibration card.
+         Pausing a MediaStream is not reliable, so the frame is snapshotted instead. -->
+    <canvas id="freeze-canvas" class="hidden"></canvas>
+
+    <!-- Canvas for Three.js 3D glasses -->
+    <canvas id="vto-canvas"></canvas>
+    
+    <!-- Canvas Overlay for 2D Optical Measurements HUD -->
+    <canvas id="hud-canvas"></canvas>
+
+    <!-- Floating Warning Banner for Non-Frontal Face Pose -->
+    <div id="pose-warning" class="pose-warning hidden">
+      <span class="warning-icon">⚠️</span>
+      <span id="pose-warning-text" class="warning-text">Non-Frontal Face Pose - Align straight ahead for accurate measurement</span>
+    </div>
+
+    <!-- Floating UI Header -->
+    <header class="glass-panel header-panel">
+      <div class="brand">
+        <span class="brand-accent">TRY ON</span>
+        <span class="brand-text">RUBILENS</span>
+      </div>
+      <div class="header-right">
+        <!-- Mirrors of the two capture-quality readouts that also live in the sidebar.
+             Every millimetre in the report is scale-dependent, so these two are the
+             figures that decide whether a reading is worth anything: they must be
+             legible without opening a panel, on desktop and on a phone alike. The
+             originals stay exactly where they were; these are a second view of the
+             same state, and clicking one jumps to its full panel. -->
+        <div class="header-chips" id="header-chips">
+          <button type="button" class="hchip" id="hchip-distance"
+                  data-tab="measure" data-el="distance-card"
+                  data-i18n-aria-label="hchip.gotoDistance">
+            <span class="hchip-label" data-i18n="hchip.distance">Distancia</span>
+            <span class="hchip-value" id="hchip-distance-value">— cm</span>
+          </button>
+          <button type="button" class="hchip" id="hchip-scale"
+                  data-tab="frames" data-el="btn-toggle-card-calib"
+                  data-i18n-aria-label="hchip.gotoScale">
+            <span class="hchip-label" data-i18n="hchip.scale">Escala</span>
+            <span class="hchip-value" id="hchip-scale-value">—</span>
+          </button>
+        </div>
+
+        <div class="lang-switch" role="group" aria-label="Language / Idioma">
+          <button type="button" class="lang-btn" id="lang-es" data-lang="es">ES</button>
+          <button type="button" class="lang-btn" id="lang-en" data-lang="en">EN</button>
+        </div>
+        <div id="tracking-status" class="status-badge status-loading">
+          <span class="status-dot"></span>
+          <span class="status-text" data-i18n="status.loadingCamera">Cargando cámara…</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Sheet wrapper. `display: contents` on desktop, so the sidebar below keeps its
+         original absolute placement; a bottom sheet on a phone. -->
+    <div class="sheet" id="vto-sheet">
+      <!-- Mobile-only handle: drag to resize, tap to fold. Carries the live readouts so
+           PD and FPS stay visible even with the sheet folded away. -->
+      <div class="sheet-grip" id="sheet-grip" role="button" tabindex="0"
+           aria-controls="vto-sheet" aria-expanded="true" data-i18n-aria-label="sheet.collapse">
+        <span class="grip-bar" aria-hidden="true"></span>
+        <div class="grip-live">
+          <span class="grip-stat">
+            <span class="grip-label" data-i18n="stats.pd">DIP</span>
+            <span class="grip-value" id="m-val-pd">—</span>
+          </span>
+          <span class="grip-stat">
+            <span class="grip-label" data-i18n="stats.fps">FPS</span>
+            <span class="grip-value" id="m-val-fps">0</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Mobile-only section switcher. Every section stays in the document; the tabs
+           only choose which one the sheet shows, so nothing is dropped on a small screen. -->
+      <nav class="sheet-tabs" id="sheet-tabs" role="tablist">
+        <button type="button" class="sheet-tab active" role="tab" data-tab="frames" data-i18n="sheet.tabFrames">Monturas</button>
+        <button type="button" class="sheet-tab" role="tab" data-tab="measure" data-i18n="sheet.tabMeasure">Medidas</button>
+        <button type="button" class="sheet-tab" role="tab" data-tab="specs" data-i18n="sheet.tabSpecs">Ficha</button>
+        <button type="button" class="sheet-tab" role="tab" data-tab="ai" data-i18n="sheet.tabAi">IA</button>
+        <button type="button" class="sheet-tab" role="tab" data-tab="adjust" data-i18n="sheet.tabAdjust">Ajustes</button>
+      </nav>
+
+    <!-- Main Sidebar -->
+    <aside class="sidebar">
+      <!-- Product Catalog Section -->
+      <section class="glass-panel section-panel" data-mtab="frames">
+        <h2 class="section-title" data-i18n="catalog.title">Colección de monturas</h2>
+        <div class="sku-list" id="sku-list">
+          <div class="sku-card active" data-sku="classic-aviator" data-width="142">
+            <div class="sku-info">
+              <span class="sku-name">Classic Aviator</span>
+              <span class="sku-meta">Gold Metal · 142mm</span>
+            </div>
+            <div class="sku-tag">PREMIUM</div>
+          </div>
+          <div class="sku-card" data-sku="retro-wayfarer" data-width="138">
+            <div class="sku-info">
+              <span class="sku-name">Retro Wayfarer</span>
+              <span class="sku-meta">Black Acetate · 138mm</span>
+            </div>
+          </div>
+          <div class="sku-card" data-sku="vintage-round" data-width="135">
+            <div class="sku-info">
+              <span class="sku-name">Vintage Round</span>
+              <span class="sku-meta">Tortoise Shell · 135mm</span>
+            </div>
+          </div>
+          <div class="sku-card" data-sku="bold-square" data-width="145">
+            <div class="sku-info">
+              <span class="sku-name">Bold Square</span>
+              <span class="sku-meta">Honey Translucent · 145mm</span>
+            </div>
+            <div class="sku-tag">NEW</div>
+          </div>
+          <!-- The one real, non-procedural GLB shipped so far (glb_file_example/ in the
+               source project). Not tied to any real catalog SKU — no measurements were
+               published for it, so none are declared here either. -->
+          <div class="sku-card" data-sku="sample-frame" data-width="140">
+            <div class="sku-info">
+              <span class="sku-name">Sample Frame (real GLB)</span>
+              <span class="sku-meta">Generated sample · width unverified</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="btn-reload-sku" data-i18n="catalog.reload" style="margin-top: 4px; padding: 10px; font-size: 0.85rem;">
+          🔄 Recargar montura activa
+        </button>
+
+        <!-- Which frame the scene is actually showing, and why -->
+        <div class="model-source" id="model-source"></div>
+
+        <!-- Third way to put a frame on the face, next to the Gradio export and the
+             file watcher: the operator hands over a GLB straight from disk. It becomes
+             the model for the SKU selected above, for this session. -->
+        <div class="glb-upload" id="glb-upload">
+          <label class="btn btn-secondary glb-pick" for="input-glb-file" data-i18n="catalog.uploadGlb">
+            Cargar archivo GLB del usuario
+          </label>
+          <input type="file" id="input-glb-file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" class="file-hidden">
+
+          <div class="glb-loaded hidden" id="glb-loaded">
+            <span class="glb-name" id="glb-name"></span>
+            <button type="button" class="glb-remove" id="btn-glb-remove"
+                    data-i18n-aria-label="catalog.removeGlb">✕</button>
+          </div>
+
+          <p class="glb-hint" data-i18n="catalog.glbHint">
+            Arrastra aqui un .glb, o pulsa para elegirlo.
+          </p>
+        </div>
+
+        <!-- The other half of the pair: the frame's descriptor. Kept next to the GLB
+             because the two are only useful together — the JSON is the spec sheet the
+             model is checked against, and neither half evaluates anything alone. -->
+        <div class="glb-upload" id="descriptor-upload">
+          <label class="btn btn-secondary glb-pick" for="input-descriptor-json"
+                 data-i18n="descriptor.upload">
+            Cargar ficha JSON de la montura
+          </label>
+          <input type="file" id="input-descriptor-json" accept=".json,application/json"
+                 class="file-hidden">
+
+          <div class="glb-loaded hidden" id="descriptor-loaded">
+            <span class="glb-name" id="descriptor-name"></span>
+            <button type="button" class="glb-remove" id="btn-descriptor-remove"
+                    data-i18n-aria-label="descriptor.remove">✕</button>
+          </div>
+
+          <p class="glb-hint" data-i18n="descriptor.hint">
+            Arrastra aqui la ficha .json de la montura, o pulsa para elegirla.
+          </p>
+
+          <button class="btn btn-secondary hidden" id="btn-evaluate-pair"
+                  data-i18n="descriptor.evaluate">Evaluar par</button>
+
+          <!-- Heights derived from the spec sheet, shown NEXT TO the MediaPipe reading
+               rather than instead of it: the two disagree, and that is what the optician
+               needs to see. Hidden behind a toggle because it is a second opinion, not
+               the primary readout. -->
+          <button class="btn btn-secondary hidden" id="btn-toggle-heights"
+                  data-i18n="heights.show">Ver alturas ópticas de la ficha</button>
+
+          <div class="optical-heights hidden" id="optical-heights"></div>
+
+          <div class="eval-result" id="eval-result"></div>
+        </div>
+
+        <button class="btn btn-secondary" id="btn-toggle-card-calib" style="margin-top: 8px; padding: 10px; font-size: 0.85rem; background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #10b981;">
+          💳 Calibración con tarjeta (85,6 mm)
+        </button>
+
+        <!-- Shown only while calibrating: the operator matches this to a real card -->
+        <div class="card-calib-panel hidden" id="card-calib-panel">
+          <ol class="card-calib-steps">
+            <li data-i18n="card.step1" data-i18n-html></li>
+            <li data-i18n="card.step2" data-i18n-html></li>
+            <li data-i18n="card.step3" data-i18n-html></li>
+          </ol>
+
+          <button class="btn btn-secondary" id="btn-card-freeze" data-i18n="card.freeze">⏸ Congelar imagen</button>
+
+          <div class="control-group">
+            <label for="slider-card-size" data-i18n="card.measuredWidth">Ancho medido de la tarjeta</label>
+            <span class="control-value" id="val-card-size">— px</span>
+          </div>
+          <input type="range" id="slider-card-size" min="60" max="620" step="1" value="160" />
+
+          <div class="card-calib-readout">
+            <span data-i18n="card.spans">85,60 mm abarcan</span>
+            <strong id="val-card-scale">—</strong>
+          </div>
+          <div class="card-calib-readout">
+            <span data-i18n="card.impliedPd">DIP que implica</span>
+            <strong id="val-card-pd">—</strong>
+          </div>
+
+          <p class="card-calib-verdict" id="card-calib-verdict"></p>
+
+          <button class="btn btn-secondary" id="btn-card-reset" data-i18n="card.reset">Reiniciar marcado</button>
+        </div>
+      </section>
+
+      <!-- Glass Reference Comparison Section -->
+      <section class="glass-panel section-panel reference-panel" id="reference-panel" data-mtab="specs">
+        <div class="panel-header-banner">
+          <span class="badge-title title-ref" data-i18n="ref.badge">DATOS DE REFERENCIA DE LA MONTURA</span>
+          <h2 class="section-title" style="margin-top: 4px;" data-i18n="ref.title">Especificaciones</h2>
+        </div>
+        <div id="reference-card" class="reference-card">
+          <!-- Populated dynamically via ReferenceChecker -->
+          <div class="ref-notice" data-i18n="ref.loading">Cargando especificaciones…</div>
+        </div>
+
+        <!-- The operator's own reference sheet, in the same shape as the files under
+             glass_reference/. Records here override the bundled ones for their SKU. -->
+        <div class="ref-upload" id="ref-upload">
+          <label class="btn btn-secondary ref-pick" for="input-ref-json" data-i18n="ref.upload">
+            Cargar JSON de referencia
+          </label>
+          <input type="file" id="input-ref-json" accept=".json,application/json" class="file-hidden">
+
+          <div class="ref-loaded hidden" id="ref-loaded">
+            <span class="ref-file" id="ref-file-name"></span>
+            <button type="button" class="ref-remove" id="btn-ref-remove"
+                    data-i18n-aria-label="ref.removeUpload">✕</button>
+          </div>
+
+          <p class="ref-upload-msg" id="ref-upload-msg"></p>
+
+          <p class="glb-hint" data-i18n="ref.uploadHint">
+            Arrastra aqui un .json, o pulsa para elegirlo.
+          </p>
+        </div>
+      </section>
+
+      <!-- Optical Prescription Measurements Section -->
+      <section class="glass-panel section-panel optical-panel" data-mtab="measure">
+        <div class="panel-header-banner">
+          <span class="badge-title" data-i18n="opt.badge">VISTA FRONTAL</span>
+          <h2 class="section-title" style="margin-top: 4px;" data-i18n="opt.title">Medidas ópticas</h2>
+        </div>
+
+        <div class="optical-grid">
+          <!-- PD Total -->
+          <div class="optical-card main-pd">
+            <span class="opt-label" data-i18n="opt.pdTotal">DIP TOTAL</span>
+            <span class="opt-value" id="opt-pd-total">65 mm</span>
+          </div>
+
+          <!-- PD DER & PD IZQ -->
+          <div class="optical-row">
+            <div class="optical-card">
+              <span class="opt-label opt-red" data-i18n="opt.pdRight">DIP DERECHA (OD)</span>
+              <span class="opt-value" id="opt-pd-der">32 mm</span>
+            </div>
+            <div class="optical-card">
+              <span class="opt-label opt-red" data-i18n="opt.pdLeft">DIP IZQUIERDA (OS)</span>
+              <span class="opt-value" id="opt-pd-izq">33 mm</span>
+            </div>
+          </div>
+
+          <!-- Altura Der & Altura Izq -->
+          <div class="optical-row">
+            <div class="optical-card">
+              <span class="opt-label opt-yellow" data-i18n="opt.heightRight">ALTURA DERECHA (OD)</span>
+              <span class="opt-value" id="opt-alt-der">25 mm</span>
+            </div>
+            <div class="optical-card">
+              <span class="opt-label opt-yellow" data-i18n="opt.heightLeft">ALTURA IZQUIERDA (OS)</span>
+              <span class="opt-value" id="opt-alt-izq">26 mm</span>
+            </div>
+          </div>
+
+          <!-- Capture geometry: every millimetre figure above depends on it -->
+          <div class="optical-card distance-card" id="distance-card">
+            <span class="opt-label" data-i18n="opt.distance">DISTANCIA A CÁMARA</span>
+            <span class="opt-value" id="opt-distance">— cm</span>
+            <span class="opt-subnote" id="opt-distance-note" data-i18n="opt.distanceWaiting">Esperando rostro…</span>
+          </div>
+
+          <!-- Laterality legend: the video feed is mirrored, so screen side is not patient side -->
+          <p class="optical-legend" data-i18n="opt.legend" data-i18n-html></p>
+
+          <!-- Ear & Facial Ergonomics Status -->
+          <div class="optical-card ear-fit-card">
+            <span class="opt-label opt-cyan" data-i18n="opt.faceEarFit">AJUSTE FACIAL Y DE OREJAS</span>
+            <span class="opt-value-sub" id="opt-ear-status">—</span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <button class="btn btn-hud-toggle" id="btn-toggle-hud">
+          📐 Mostrar medidas sobre el rostro
+        </button>
+        <button class="btn btn-export" id="btn-download-json" data-i18n="opt.downloadJson">
+          📄 Descargar prescripción JSON
+        </button>
+      </section>
+
+      <!-- ================================================================
+           OPTION 2 — AI measurement from two photographs.
+           Independent of the live 3D try-on above: a correct frontal photo plus a
+           photo of the frame the patient chose are sent to a multimodal model, which
+           proposes the dispensing measurements.
+           ================================================================ -->
+      <section class="glass-panel section-panel ai-panel" id="ai-panel" data-mtab="ai">
+        <div class="panel-header-banner">
+          <span class="badge-title title-ai" data-i18n="ai.badge">OPCION 2 - MEDICION CON IA</span>
+          <h2 class="section-title" style="margin-top: 4px;" data-i18n="ai.title">Medicion multimodal</h2>
+        </div>
+        <p class="ai-intro" data-i18n="ai.intro">Combina la foto frontal con la imagen de una montura real.</p>
+
+        <!-- Step 1: the frontal photograph -->
+        <div class="ai-step">
+          <span class="ai-step-title">
+            <span class="ai-step-n">1</span>
+            <span data-i18n="ai.step1">Foto frontal del paciente</span>
+          </span>
+          <div class="ai-drop" id="ai-face-drop">
+            <img id="ai-face-preview" class="ai-thumb hidden" alt="">
+            <span class="ai-drop-hint" data-i18n="ai.faceHint">Encuadra el rostro de frente y captura</span>
+          </div>
+          <div class="ai-btn-row">
+            <button type="button" class="btn btn-secondary ai-btn" id="btn-ai-capture" data-i18n="ai.capture">Capturar foto frontal</button>
+            <label class="btn btn-secondary ai-btn" for="input-ai-face" data-i18n="ai.uploadFace">Subir foto</label>
+            <input type="file" id="input-ai-face" accept="image/*" class="ai-file">
+          </div>
+          <!-- The live feed is mirrored (a person expects a mirror); the capture is NOT,
+               because an unmirrored frontal photo is the standard orientation and the one
+               the model reads laterality from. Showing the thumbnail mirrored by default
+               removes the flip the operator sees at the moment of capture, and the note
+               below says plainly which one is actually sent. -->
+          <div class="ai-mirror-row">
+            <button type="button" class="ai-mirror-btn" id="btn-ai-mirror"
+                    aria-pressed="true" data-i18n="ai.mirrorToggle">Ver en espejo</button>
+            <span class="ai-hint" id="ai-mirror-note"></span>
+          </div>
+
+          <div class="ai-quality" id="ai-capture-quality" data-i18n="ai.qualityPending">Sin captura todavia.</div>
+        </div>
+
+        <!-- Step 2: the frame the patient chose -->
+        <div class="ai-step">
+          <span class="ai-step-title">
+            <span class="ai-step-n">2</span>
+            <span data-i18n="ai.step2">Imagen del espejuelo</span>
+          </span>
+          <label class="ai-drop ai-drop-clickable" id="ai-glasses-drop" for="input-ai-glasses">
+            <img id="ai-glasses-preview" class="ai-thumb hidden" alt="">
+            <span class="ai-drop-hint" data-i18n="ai.glassesHint">Arrastra o pulsa para subir la montura</span>
+          </label>
+          <input type="file" id="input-ai-glasses" accept="image/*" class="ai-file">
+        </div>
+
+        <!-- Step 3: engine, credentials and which proposal to run -->
+        <div class="ai-step">
+          <span class="ai-step-title">
+            <span class="ai-step-n">3</span>
+            <span data-i18n="ai.step3">Motor de IA</span>
+          </span>
+
+          <!-- Entering a Capri model number switches on the Capri fitting protocol.
+               The identifier is passed through exactly as typed: nothing here checks it
+               against a list. The model looks it up and reports what it finds, or
+               reports the dimensions as not detected. -->
+          <!-- Heads the printed card. Stays in this browser: a patient's name has no
+               bearing on any measurement, so it is never sent to a provider. -->
+          <!-- Heads the printed sheet, like a letterhead. Unlike the patient's name this
+               IS remembered: the practice does not change between fittings. Still local. -->
+          <div class="control-group">
+            <label for="input-ai-practice" data-i18n="ai.practiceLabel">Nombre de la óptica</label>
+            <input type="text" id="input-ai-practice" class="ai-input"
+                   autocomplete="off" data-i18n-placeholder="ai.practicePlaceholder">
+            <p class="ai-hint" data-i18n="ai.practiceHint"></p>
+          </div>
+
+          <div class="control-group">
+            <label for="input-ai-patient" data-i18n="ai.patientLabel">Paciente</label>
+            <input type="text" id="input-ai-patient" class="ai-input"
+                   autocomplete="off" data-i18n-placeholder="ai.patientPlaceholder">
+            <p class="ai-hint" data-i18n="ai.patientHint"></p>
+          </div>
+
+          <div class="control-group">
+            <label for="input-ai-frame-id" data-i18n="ai.frameIdLabel">Identificador de la montura</label>
+            <input type="text" id="input-ai-frame-id" class="ai-input"
+                   spellcheck="false" autocomplete="off" data-i18n-placeholder="ai.frameIdPlaceholder">
+            <p class="ai-hint" id="ai-frame-hint" data-i18n="ai.frameIdHint"></p>
+          </div>
+
+          <div class="control-group">
+            <label for="select-ai-provider" data-i18n="ai.provider">Proveedor</label>
+            <select id="select-ai-provider" class="ai-select"></select>
+          </div>
+
+          <div class="control-group">
+            <label for="input-ai-model" data-i18n="ai.model">Modelo</label>
+            <!-- The refresh button asks the vendor which models this key can call.
+                 Hardcoded defaults go stale without warning, and the only symptom is a
+                 404 in the middle of a fitting. -->
+            <div class="ai-model-row">
+              <input type="text" id="input-ai-model" class="ai-input" list="ai-model-list" spellcheck="false" autocomplete="off">
+              <button type="button" class="ai-refresh" id="btn-ai-models"
+                      data-i18n-aria-label="ai.listModels">&#8635;</button>
+            </div>
+            <datalist id="ai-model-list"></datalist>
+            <p class="ai-hint" id="ai-model-hint"></p>
+          </div>
+
+          <div class="control-group">
+            <label for="input-ai-key" data-i18n="ai.apiKey">Clave de API</label>
+            <input type="password" id="input-ai-key" class="ai-input" autocomplete="off" spellcheck="false">
+            <label class="ai-check">
+              <input type="checkbox" id="check-ai-remember">
+              <span data-i18n="ai.remember">Recordar en este navegador</span>
+            </label>
+            <p class="ai-hint" id="ai-key-hint"></p>
+          </div>
+
+          <div class="control-group">
+            <label for="select-ai-strategy" data-i18n="ai.strategy">Propuesta de medicion</label>
+            <select id="select-ai-strategy" class="ai-select"></select>
+            <p class="ai-hint" id="ai-strategy-note"></p>
+          </div>
+
+          <!-- Which engine composes the picture of the patient wearing the frame.
+               Independent of the measurement engine: most measurement models return
+               text only. -->
+          <div class="control-group">
+            <label for="select-ai-image-engine" data-i18n="ai.imageEngine">Imagen del paciente con la montura</label>
+            <select id="select-ai-image-engine" class="ai-select"></select>
+            <input type="text" id="input-ai-image-model" class="ai-input" spellcheck="false" autocomplete="off">
+            <p class="ai-hint" id="ai-image-note"></p>
+            <!-- Which engines can and cannot alter the patient's face -->
+            <p class="ai-hint" id="ai-alter-warning"></p>
+
+            <!-- A second image-model call, so it is opt-in and never implied -->
+            <label class="ai-check">
+              <input type="checkbox" id="check-ai-profile">
+              <span data-i18n="ai.profileOption">Anadir vista de perfil</span>
+            </label>
+            <p class="ai-hint" id="ai-profile-hint"></p>
+          </div>
+
+          <!-- What the optician knows and the photographs cannot show. Appended to the
+               system prompt AFTER everything else and explicitly ranked below it, so a
+               note here cannot switch off the schema or the no-inventing rule. -->
+          <div class="control-group">
+            <label for="input-ai-extra" data-i18n="ai.extraLabel">Instrucciones adicionales</label>
+            <textarea id="input-ai-extra" class="ai-input ai-textarea" rows="3"
+                      spellcheck="false" data-i18n-placeholder="ai.extraPlaceholder"></textarea>
+            <p class="ai-hint" id="ai-extra-hint"></p>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="btn-ai-run" disabled data-i18n="ai.run">Analizar y proponer medidas</button>
+        <!-- Takes the run button's place while a request is in flight, so the control
+             under the pointer is always the one that does something useful. -->
+        <button type="button" class="btn btn-cancel hidden" id="btn-ai-cancel" data-i18n="ai.cancel">Cancelar peticion</button>
+        <div class="ai-session-cost" id="ai-session-cost"></div>
+        <div class="ai-status ai-status-idle" id="ai-status" data-i18n="ai.connecting">Conectando con el servicio...</div>
+
+        <!-- The composed try-on picture, above the figures it was built from -->
+        <div class="ai-tryon" id="ai-tryon"></div>
+
+        <div class="ai-results" id="ai-results"></div>
+        <!-- The panel is a narrow column beside a live camera. The full report opens in
+             its own tab, reads the run from localStorage, and survives a reload of this
+             page — which is how a completed analysis got lost once. -->
+        <button type="button" class="btn btn-secondary hidden" id="btn-ai-open-report" data-i18n="ai.openReport">Abrir informe en otra pestana</button>
+        <button type="button" class="btn btn-export hidden" id="btn-ai-export" data-i18n="ai.export">Descargar informe IA (JSON)</button>
+      </section>
+
+      <!-- Real-Time Calibration Section -->
+      <section class="glass-panel section-panel" data-mtab="adjust">
+        <h2 class="section-title" data-i18n="adj.title">Calibración en tiempo real</h2>
+
+        <div class="control-group">
+          <div class="control-header">
+            <label for="slider-scale" data-i18n="adj.frameScale">Escala de la montura</label>
+            <span class="value-display" id="val-scale">1.00x</span>
+          </div>
+          <input type="range" id="slider-scale" min="0.7" max="1.3" step="0.01" value="1.00">
+        </div>
+
+        <div class="control-group">
+          <div class="control-header">
+            <label for="slider-y-offset" data-i18n="adj.yOffset">Desplazamiento vertical (Y)</label>
+            <span class="value-display" id="val-y-offset">0mm</span>
+          </div>
+          <input type="range" id="slider-y-offset" min="-50" max="50" step="1" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-header">
+            <label for="slider-z-offset" data-i18n="adj.zOffset">Desplazamiento en profundidad (Z)</label>
+            <span class="value-display" id="val-z-offset">0mm</span>
+          </div>
+          <input type="range" id="slider-z-offset" min="-50" max="50" step="1" value="0">
+        </div>
+
+        <div class="control-group">
+          <div class="control-header">
+            <label for="slider-temple-width" data-i18n="adj.templeWidth">Apertura / ancho de varillas</label>
+            <span class="value-display" id="val-temple-width">1.00x</span>
+          </div>
+          <input type="range" id="slider-temple-width" min="0.8" max="1.5" step="0.02" value="1.00">
+        </div>
+
+        <div class="control-group toggle-group">
+          <label for="check-flip-z" data-i18n="adj.flipZ">Corregir varillas (giro 180°)</label>
+          <input type="checkbox" id="check-flip-z">
+        </div>
+
+        <button class="btn btn-primary" id="btn-reset" data-i18n="adj.reset">Restablecer ajustes</button>
+      </section>
+
+      <!-- Analytics / Stats Overlay -->
+      <section class="glass-panel stats-panel" data-mtab="measure">
+        <div class="stat-item">
+          <span class="stat-label" data-i18n="stats.pd">DIP</span>
+          <span class="stat-value" id="val-pd" data-i18n="stats.calculating">Calculando…</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label" data-i18n="stats.fps">FPS</span>
+          <span class="stat-value" id="val-fps">0</span>
+        </div>
+      </section>
+    </aside>
+    </div>
+
+    <!-- Scroll affordance: the sidebar is taller than the viewport on most screens -->
+    <div class="sidebar-fade" aria-hidden="true"></div>
+
+    <!-- Interactive On-Screen Visual Guide -->
+    <div class="on-screen-guide" id="face-guide">
+      <div class="guide-circle"></div>
+      <div class="guide-text" data-i18n="guide.centerFace">Centra tu rostro en el óvalo</div>
+    </div>
+  </div>
+
+  <!-- Vite Entry Point -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

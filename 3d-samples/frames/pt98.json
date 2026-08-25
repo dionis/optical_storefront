@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-08-10T21:11:46.944Z",
+  "id": "pt98",
+  "sku": "PT 98",
+  "model_name": "PT 98",
+  "brand": {
+    "name": "Peachtree",
+    "slug": "peachtree"
+  },
+  "selected_because": "Wire-rim aviator with a brow bar — thin tubular geometry and a double bridge, the hardest silhouette to reconstruct from a single photo.",
+  "source": {
+    "supplier": "caprioptics.com",
+    "supplier_type": "WooCommerce B2B catalog, ingested by apps/scraper",
+    "catalog_file": "apps/capri-storefront/public/catalog.json",
+    "image_policy": "Every photo the supplier publishes for this model is downloaded — one per colourway. The extra URLs on a product page (-300x123, -1024x419, …) are WordPress thumbnail resizes of the same shot and are skipped.",
+    "rights_note": "Supplier product photography. Internal prototyping only — not cleared for redistribution."
+  },
+  "catalog_attributes_raw": {
+    "shape": "Aviador",
+    "material": [
+      "Metal",
+      "Acero inoxidable"
+    ],
+    "gender": "Hombres",
+    "age": "Adulto",
+    "eye_size": "54-56 mm",
+    "bridge_size": "16-17 mm",
+    "temple_length": "145-150 mm",
+    "style": "Full frame",
+    "b_measurement": "41-50 mm"
+  },
+  "classification": {
+    "lens_shape": "aviator",
+    "lens_shape_raw": "Aviador",
+    "rim_type": "full_rim",
+    "rim_type_raw": "Full frame",
+    "materials": [
+      {
+        "raw": "Metal",
+        "en": "metal"
+      },
+      {
+        "raw": "Acero inoxidable",
+        "en": "stainless_steel"
+      }
+    ],
+    "gender": "men",
+    "age_group": "adult"
+  },
+  "measurements_mm": {
+    "confidence": "supplier_published",
+    "note": "The supplier publishes a range per model because one model number covers several sizes. The photographed unit is one size inside that range and its exact size is not stated. Use `nominal` as the modelling target and the range as tolerance.",
+    "lens_width_a": {
+      "raw": "54-56 mm",
+      "min": 54,
+      "max": 56,
+      "nominal": 55,
+      "open_ended": false
+    },
+    "bridge_dbl": {
+      "raw": "16-17 mm",
+      "min": 16,
+      "max": 17,
+      "nominal": 16.5,
+      "open_ended": false
+    },
+    "temple_length": {
+      "raw": "145-150 mm",
+      "min": 145,
+      "max": 150,
+      "nominal": 147.5,
+      "open_ended": false
+    },
+    "lens_height_b": {
+      "raw": "41-50 mm",
+      "min": 41,
+      "max": 50,
+      "nominal": 45.5,
+      "open_ended": false,
+      "note": "Published as a coarse bucket (e.g. 41-50 mm), so it is a weak constraint."
+    },
+    "derived_total_front_width": {
+      "nominal": 126.5,
+      "min": 124,
+      "max": 129,
+      "formula": "2 * lens_width_a + bridge_dbl",
+      "confidence": "estimated",
+      "note": "Excludes end-piece overhang; real total width typically runs 2-6 mm larger."
+    }
+  },
+  "observed_construction": {
+    "confidence": "observed_in_photos",
+    "rim": "full rim, thin metal wire, teardrop aviator",
+    "bridge": "double: lower saddle bridge plus a straight upper brow bar",
+    "nose_pads": "adjustable clear pads on metal pad arms",
+    "hardware": "wire temples with tortoise plastic tips, screw hinges",
+    "markings": "'PT98 Capri' printed inside left temple"
+  },
+  "geometry_hints_3d": {
+    "confidence": "heuristic",
+    "basis": "Typical values for this construction (material + rim type) plus what is visible in the reference photos. Not measured.",
+    "units": "mm",
+    "up_axis": "Y",
+    "forward_axis": "-Z",
+    "symmetry_plane": "x = 0 (bilateral)",
+    "recommended_origin": "Midpoint of the bridge on the front face of the frame",
+    "rim_wire_diameter_mm": 1.6,
+    "brow_bar_diameter_mm": 1.4,
+    "temple_wire_diameter_mm": 1.4,
+    "temple_tip_width_mm": 5,
+    "base_curve": 6,
+    "pantoscopic_tilt_deg": 10,
+    "face_form_wrap_deg": 8,
+    "hinge": "screw hinge on metal end piece",
+    "nose_pad_type": "adjustable pads on arms"
+  },
+  "reference_images": {
+    "directory": "images/pt98/",
+    "count": 2,
+    "distinct_view_types": [
+      "three_quarter"
+    ],
+    "multi_view_usable": false,
+    "note": "All photos share the same camera angle: they differ in colour only, so they give no parallax. Treat this as a single-view reconstruction problem with several texture references.",
+    "items": [
+      {
+        "file": "images/pt98/gold.jpg",
+        "colorway": "Gold",
+        "is_primary": true,
+        "source_url": "https://caprioptics.com/wp-content/uploads/PT%2098%20Gold.jpg",
+        "width_px": 2242,
+        "height_px": 954,
+        "aspect_ratio": 2.35,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      },
+      {
+        "file": "images/pt98/gunmetal.jpg",
+        "colorway": "Gunmetal",
+        "is_primary": false,
+        "source_url": "https://caprioptics.com/wp-content/uploads/PT%2098%20Gunmetal.jpg",
+        "width_px": 2225,
+        "height_px": 907,
+        "aspect_ratio": 2.45,
+        "background": "uniform white studio background",
+        "has_alpha": false,
+        "camera_calibration": "unknown — focal length, distance and sensor are not published",
+        "view_layout": {
+          "layout": "single_shot",
+          "shots": 1,
+          "verified": true,
+          "detected_by": "opened and looked at"
+        },
+        "views": [
+          {
+            "type": "three_quarter",
+            "yaw_deg_estimate": -35,
+            "pitch_deg_estimate": 15,
+            "temples": "open",
+            "confidence": "estimated_by_eye"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Multiple photos per model, but one per colourway and all from the same three-quarter angle — different finishes of the same geometry, not different viewpoints. There is no stereo baseline for photogrammetry.",
+    "Camera intrinsics are unknown and the view is perspective, so pixel distances cannot be converted to millimetres directly. Scale the finished model from `measurements_mm` instead.",
+    "The rear of the frame, the inner temple surfaces and the hinge interior are never visible.",
+    "The supplier gives a size range, not the size of the photographed unit.",
+    "`geometry_hints_3d` are construction defaults, not measurements of this frame."
+  ]
+}
