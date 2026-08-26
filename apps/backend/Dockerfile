@@ -48,19 +48,46 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/apps/backend/.medusa/server ./apps/backend/.medusa/server
 
+# ---------------------------------------------------------------------------
+# vision-measure (Python/FastAPI) — bundled into this image as a second
+# process rather than its own Coolify app, so the try-on's "AI option 2"
+# doesn't cost a second app/domain/CORS allowlist to run. Reached only via
+# src/api/vision-measure/proxy.ts on http://127.0.0.1:8008 (see
+# docker-entrypoint.sh); never exposed on its own.
+#
+# Alpine ships no Python. Astral's own install script picks the correct
+# (musl) build for it, which trusting a `COPY --from=ghcr.io/astral-sh/uv:*`
+# image tag to be musl-linked cannot guarantee.
+#
+# PYTHONUTF8 matters here specifically: Alpine has no locale data, so without
+# it a message containing a plain "→" (services/vision_measure/measure.py's
+# own error annotations) crashes the request with UnicodeEncodeError instead
+# of returning the friendly error the panel expects.
+# ---------------------------------------------------------------------------
+RUN apk add --no-cache python3 curl && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+ENV PYTHONUTF8=1
+
+COPY apps/vision-measure/pyproject.toml apps/vision-measure/uv.lock /app/vision-measure/
+WORKDIR /app/vision-measure
+# --no-install-project mirrors [tool.uv] package = false in that pyproject.toml
+# — vision_api.py resolves its own repo root at runtime and needs no install
+# step for "services" itself, only its third-party dependencies.
+RUN uv sync --frozen --no-install-project --no-dev
+COPY apps/vision-measure/services /app/vision-measure/services
+WORKDIR /app
+
+COPY apps/backend/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # `medusa start` derives everything from the working directory —
 # @medusajs/cli does `path.resolve(".")` and looks for medusa-config, src/**
 # and public/admin under it. Started anywhere else it dies with
 # "Cannot find module '<cwd>/medusa-config'", because this image ships the
-# compiled output only, never the sources.
+# compiled output only, never the sources. docker-entrypoint.sh does its own
+# `cd` before starting Medusa for exactly this reason.
 WORKDIR /app/apps/backend/.medusa/server
 
 EXPOSE 9000
-# The `cd` is deliberate rather than relying on WORKDIR alone: an orchestrator
-# that sets its own working_dir (Coolify writes the compose file for us) would
-# otherwise silently move the process out of the build output folder.
-# Intenta correr las migraciones pendientes al arrancar (para aplicar cambios de
-# datos como la matriz de precios sin pasos manuales), pero de forma NO bloqueante:
-# si `db:migrate` falla por cualquier motivo, se registra y el backend arranca
-# igual, para que un problema de migración NUNCA tumbe el deploy.
-CMD ["sh", "-c", "cd /app/apps/backend/.medusa/server; /app/apps/backend/node_modules/.bin/medusa db:migrate || echo '[deploy] db:migrate fallo; arrancando de todos modos'; exec /app/apps/backend/node_modules/.bin/medusa start -H 0.0.0.0"]
+CMD ["/app/docker-entrypoint.sh"]

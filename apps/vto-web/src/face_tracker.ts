@@ -89,10 +89,19 @@ export class FaceTracker {
     // CROPPING the sensor, throwing away the sides of the field of view and magnifying
     // what is left. The frame is then presented with `contain` on a phone, which shows
     // the whole field at the same relative size the desktop shows it.
+    //
+    // 1920x1080 (same 16:9 as the old 1280x720 — `verticalScaleMode: 'auto-aspect'` in
+    // fitting_config.ts reads whatever the camera actually hands over, so this needs no
+    // calibration change): the still captured for the AI panel is drawn 1:1 from this
+    // same stream (captureFace() in vision_measure_panel.ts), so asking for more here is
+    // what makes that photo as sharp as the live feed the customer is looking at,
+    // instead of a visibly softer downgrade from it. `ideal`, not `min`/`exact`, so a
+    // camera or device that cannot do 1080p just falls back to its best — nothing breaks
+    // on weaker hardware, it only asks for more where it is available.
     const constraints = {
       video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         facingMode: "user"
       },
       audio: false

@@ -609,18 +609,26 @@ class VTOApp {
     if (lang === 'es' || lang === 'en') setLang(lang as Lang);
 
     const requestedSku = params.get('sku');
-    const card = requestedSku
-      ? document.querySelector(`.sku-card[data-sku="${CSS.escape(requestedSku)}"]`)
-      : null;
-    if (!card) return this.activeSKU;
+    if (!requestedSku) return this.activeSKU;
 
-    document.querySelectorAll('.sku-card').forEach((c) => c.classList.remove('active'));
-    card.classList.add('active');
-    const widthAttr = card.getAttribute('data-width');
-    const nameElem = card.querySelector('.sku-name');
-    this.activeSKU = requestedSku!;
-    if (widthAttr) this.activeSKUWidth = parseFloat(widthAttr);
-    if (nameElem) this.activeSKUName = nameElem.textContent || requestedSku!;
+    // The storefront's SKU is the real product identifier (and what the Capri
+    // protocol looks up) whether or not a matching 3D card exists here yet — a
+    // real catalog product almost never does today, and that must not erase its
+    // identity down to whichever demo SKU happens to be the default. A missing
+    // card just means loadGLBModel() falls back to the procedural mesh, exactly
+    // as it already does for any SKU with no generated .glb.
+    this.activeSKU = requestedSku;
+    this.activeSKUName = requestedSku;
+
+    const card = document.querySelector(`.sku-card[data-sku="${CSS.escape(requestedSku)}"]`);
+    if (card) {
+      document.querySelectorAll('.sku-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+      const widthAttr = card.getAttribute('data-width');
+      const nameElem = card.querySelector('.sku-name');
+      if (widthAttr) this.activeSKUWidth = parseFloat(widthAttr);
+      if (nameElem) this.activeSKUName = nameElem.textContent || requestedSku;
+    }
     return this.activeSKU;
   }
 

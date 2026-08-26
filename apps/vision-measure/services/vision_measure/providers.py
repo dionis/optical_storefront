@@ -271,7 +271,13 @@ def _post_json(
                 code="timeout",
             ) from exc
         except requests.RequestException as exc:
-            last = ProviderError(f"{label}: fallo de red ({exc}).")
+            # DNS failures, refused/reset connections, TLS errors — none of it is
+            # something a retry a few seconds later cannot fix, and none of it is
+            # something the customer looking at the panel could ever act on. Coded so
+            # the panel shows the same "try again, or tell the site owner" message it
+            # already shows for a vendor outage, instead of this exception's own text
+            # (which, for a DNS failure, is a full NameResolutionError repr).
+            last = ProviderError(f"{label}: fallo de red ({exc}).", code="network-error")
             if attempt >= MAX_RETRIES:
                 raise last from exc
         else:

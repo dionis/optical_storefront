@@ -3327,12 +3327,21 @@ body[data-report-view="card"] .report-meta { display: none; }
   border-radius: 8px;
   overflow: hidden;
   background: #0a1f42;
+  /* Fixed, portrait-ish ratio on purpose: the raw capture is framed however far the
+     patient was sitting from the camera, and this card exists to show frame-and-face
+     detail, not the room behind them. object-fit below does the actual zooming in;
+     this is what gives it a box to zoom into instead of showing the photo at whatever
+     shape it arrived in. */
+  aspect-ratio: 3 / 4;
 }
 
 .oc-photo {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  /* object-position is set inline per-image (vision_report_view.ts): centred on the
+     true pupil midpoint when it is known, a sensible fixed default otherwise. */
 }
 
 .oc-nophoto {
@@ -3363,7 +3372,10 @@ body[data-report-view="card"] .report-meta { display: none; }
   top: 0;
   bottom: 0;
   width: 0;
-  border-left: 1px dashed rgba(255, 255, 255, 0.65);
+  border-left: 1.5px dashed rgba(255, 255, 255, 0.95);
+  /* Same idea as .oc-pupil's box-shadow: a dark halo so the line stays legible over a
+     light patch of the photo instead of just disappearing into it. */
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
 }
 
 /* The headline figure, over the foot of its photograph */

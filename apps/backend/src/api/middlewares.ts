@@ -167,6 +167,14 @@ function reviewPhotosUpload(
 export default defineMiddlewares({
   routes: [
     {
+      // Two photos travel here as base64 data URLs (JSON, not multipart) — the
+      // client caps each at 1568px/JPEG q0.9, but that still runs well past
+      // Medusa's default JSON body limit for a single request.
+      matcher: "/vision-measure",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "10mb" },
+    },
+    {
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering

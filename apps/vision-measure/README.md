@@ -15,6 +15,13 @@ que el equipo corre aparte, a mano, cuando toca generar un `.glb` nuevo.
 
 No tiene estado ni base de datos propia. No requiere GPU.
 
+**En producción esta carpeta no se despliega como su propia app de Coolify.** Su código
+se copia dentro de la imagen de `apps/backend` y corre como un segundo proceso en el
+mismo contenedor (`apps/backend/docker-entrypoint.sh`), para no sumar una app/dominio/CORS
+más al panel de Coolify. Medusa lo alcanza solo por `http://127.0.0.1:8008`, nunca
+expuesto al exterior — ver `apps/backend/src/api/vision-measure/proxy.ts`. Esta carpeta
+sigue siendo el código fuente real (y el sitio para correrlo suelto en desarrollo).
+
 ## Dónde vive cada cosa
 
 ```
@@ -70,14 +77,20 @@ Contrato completo de request/response en `apps/vto-web/src/vision_measure_client
 
 ## Cómo lo alcanza el resto del proyecto
 
-- **Desarrollo**: `apps/vto-web` (Vite) proxyea `/api/*` a `http://127.0.0.1:8008` — ver
-  `VISION_API_URL` en `apps/vto-web/vite.config.ts`. El navegador solo habla con su
-  propio origen; ninguna clave de API cruza a un tercer origen.
-- **Producción**: se despliega como contenedor aparte junto al backend de Medusa en el
-  mismo host de Coolify (ver el servicio `vision-measure` en
-  `infra/docker-compose.prod.yml`). El storefront (Vercel) y `apps/vto-web` le pegan a
-  su URL pública vía un rewrite; el CORS del servicio es intencionalmente abierto
-  (`allow_origins=["*"]`) porque no maneja cookies ni sesión — el único secreto que ve
+- **Desarrollo**: `apps/vto-web` (Vite) proxyea `/api/*` a `http://127.0.0.1:8008`
+  directo — ver `VISION_API_URL` en `apps/vto-web/vite.config.ts`. `pnpm dev:backend`
+  ya levanta este proceso junto al backend de Medusa (dos procesos separados en el
+  host, tal como en producción son dos procesos separados dentro del mismo contenedor).
+- **Producción**: el código de esta carpeta se copia dentro de la imagen de
+  `apps/backend` y corre como segundo proceso en ese mismo contenedor — no tiene URL
+  pública propia. `apps/backend/src/api/vision-measure/{route.ts,providers,models,health}`
+  son rutas Medusa que reciben la petición y la reenvían a `http://127.0.0.1:8008`
+  (ver `proxy.ts`). El storefront/`vto-web` en Vercel llegan ahí a través del mismo
+  rewrite `/medusa/:path*` que ya usa el resto del sitio para hablar con el backend —
+  `VITE_VISION_API_BASE=/medusa/vision-measure` en el build de producción de `vto-web`
+  (ver `vercel.json`). Ningún CORS ni dominio nuevo que mantener.
+- El CORS abierto del propio FastAPI (`allow_origins=["*"]`) sigue ahí por si alguna vez
+  se corre suelto (como en dev): no maneja cookies ni sesión, el único secreto que ve
   llega en el cuerpo de la petición, nunca en query string ni en la URL.
 
 ## Variables de entorno

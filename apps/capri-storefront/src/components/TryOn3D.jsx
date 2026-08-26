@@ -24,6 +24,11 @@ export default function TryOn3D({ product, colorIdx = 0, onClose }) {
 
   const params = new URLSearchParams({ lang, sku: product.sku || "" });
   if (color?.name) params.set("color", color.name);
+  // Pre-fills the AI panel's "Imagen del espejuelo" from this exact photo, so the
+  // customer never has to find or upload a picture of the frame they are already
+  // wearing on screen. Fetched server-side by vto-web (see fetchProxiedImage) — the
+  // supplier's image host sends no CORS headers, so the browser can't read it directly.
+  if (color?.image) params.set("glassesImageUrl", color.image);
   const src = `${TRYON3D_BASE.replace(/\/$/, "")}/index.html?${params.toString()}`;
 
   return createPortal(

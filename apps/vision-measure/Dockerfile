@@ -5,6 +5,10 @@
 
 FROM python:3.12-slim AS base
 WORKDIR /app
+# Without it, a plain "→" in services/vision_measure/measure.py's own error
+# annotations can crash the request with UnicodeEncodeError if this image's base
+# ever changes locale defaults — cheap to pin explicitly rather than rely on it.
+ENV PYTHONUTF8=1
 
 # libgl/libglib are pulled in transitively by rembg's optional onnxruntime image
 # preprocessing path; harmless and small if the "tryon" extra is never installed.

@@ -2,16 +2,23 @@ version: "3.9"
 
 # Production compose for a single Hetzner CX22 VPS (4 GB RAM) managed by Coolify.
 # SSL and domain routing are handled by Coolify (Traefik) — no reverse proxy here.
+#
+# NOTE: backend and storefront are actually deployed as standalone Coolify
+# Applications (each with its own Dockerfile build), not via this file — see
+# apps/backend/Dockerfile and apps/capri-storefront/vercel.json. This compose
+# file documents the intended memory budget and is usable for a local
+# prod-like `docker compose up`, but is not what drives the real deploy.
+#
 # Memory limits sized to stay within 4 GB total:
-#   backend   512 MB
+#   backend   512 MB (now also runs vision-measure as a second process inside
+#                     the same container — see apps/backend/docker-entrypoint.sh
+#                     — rather than as its own app/domain)
 #   storefront 256 MB
 #   postgres   512 MB
 #   redis      128 MB
 #   meilisearch 512 MB
-#   vision-measure 256 MB (plain FastAPI; no GPU, no local model — bump only if the
-#                          optional "tryon" extra, rembg+onnxruntime, gets installed)
 #   backup cron 64 MB
-# Total headroom: ~1.75 GB for OS + Coolify
+# Total headroom: ~2 GB for OS + Coolify
 
 services:
   postgres:
@@ -99,7 +106,19 @@ services:
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      # Also read by the bundled vision-measure process (apps/vision-measure) for
+      # its "Anthropic (Claude)" provider — one key, two consumers, since both
+      # run in this same container. All of the vars below are exclusively for
+      # vision-measure's other providers and are optional: without one, the
+      # try-on's AI panel just asks the operator to type that provider's key by
+      # hand for the session.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      QWEN_API_KEY: ${QWEN_API_KEY}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      XAI_API_KEY: ${XAI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
     ports:
       - "9000:9000"
@@ -139,32 +158,10 @@ services:
       timeout: 10s
       retries: 5
 
-  # Try-on "AI option 2": multimodal optical measurement. No database, no GPU, no
-  # dependency on the rest of the stack — safe to restart independently of backend.
-  vision-measure:
-    image: ${VISION_MEASURE_IMAGE}
-    restart: always
-    environment:
-      VISION_API_HOST: 0.0.0.0
-      VISION_API_PORT: 8008
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      QWEN_API_KEY: ${QWEN_API_KEY}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
-      XAI_API_KEY: ${XAI_API_KEY}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-    ports:
-      - "8008:8008"
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8008/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # vision-measure ("AI option 2" of the try-on) no longer has its own service
+  # block: it runs bundled inside `backend`'s container as a second process
+  # (apps/backend/docker-entrypoint.sh), reachable only at 127.0.0.1:8008 from
+  # inside that same container. See apps/backend/src/api/vision-measure/.
 
   # Nightly pg_dump → R2 backup, retains 14 days
   backup:

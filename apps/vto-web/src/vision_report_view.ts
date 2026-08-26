@@ -144,31 +144,73 @@ function renderRaw(result: MeasureResult): string {
  * listed because they are usually the reason a bill is larger than expected.
  */
 /**
- * The message for a failure, in the operator's language when we can manage it.
- *
- * The service answers in Spanish because something has to be written in the log; a code
- * beside it lets this pick the localised wording instead. Anything without a code falls
- * back to the server's own sentence, which is better than a generic apology.
+ * The message for a failure, translated and safe to show to whoever is running the
+ * try-on right now — which, with VITE_ENABLE_TRY_ON on, can be an anonymous customer,
+ * not just the optician who set the service up. So every coded branch here is a plain,
+ * generic sentence pointing at the site administrator, never an env var name, a vendor
+ * status code, or a config knob nobody browsing the store could act on. Anything
+ * without a code falls back to the server's own sentence, which is better than a
+ * generic apology when the server already said something useful.
  */
-export function failureMessage(
-  error?: string,
-  errorCode?: string,
-  envKeys?: string[]
-): string {
-  // A wall-clock number the operator can do nothing with is not an error message. Say
-  // what actually happened and what the fast way out is. Plain text, like every other
-  // branch here: both callers escape what this returns before inserting it.
-  if (errorCode === 'timeout') {
-    return `${t('ai.timeoutTitle')} ${t('ai.timeoutBody')}`;
+/** Must match .oc-photo-wrap's `aspect-ratio` in style.css (width / height). */
+const OC_PHOTO_ASPECT = 3 / 4;
+
+/**
+ * Maps a normalized (0..1) point on the full source image to its position within a
+ * container that `object-fit: cover` has cropped it into, anchored at `object-position`
+ * (also 0..1 fractions, matching CSS's own convention).
+ *
+ * `object-fit: cover` scales the image so it fully fills whichever dimension is the
+ * tighter fit and crops the other — a plain percentage of the source image is only
+ * ever correct again if this crop is undone the same way the browser applied it.
+ * Returns null when the point falls outside the visible crop entirely: with the crop
+ * centred on the pupil midpoint this should not happen for a pupil itself, but a
+ * mark that COULD end up off-frame is worth dropping rather than clamping into a
+ * wrong-looking position at the edge.
+ */
+function mapCoverPoint(
+  px: number,
+  py: number,
+  imageAspect: number,
+  containerAspect: number,
+  posX: number,
+  posY: number
+): { left: number; top: number } | null {
+  let x = px;
+  let y = py;
+
+  if (imageAspect >= containerAspect) {
+    // The image is relatively wider than the box: height fills it, width is cropped.
+    const visibleFraction = containerAspect / imageAspect;
+    const start = posX * (1 - visibleFraction);
+    x = (px - start) / visibleFraction;
+  } else {
+    // The image is relatively taller than the box: width fills it, height is cropped.
+    const visibleFraction = imageAspect / containerAspect;
+    const start = posY * (1 - visibleFraction);
+    y = (py - start) / visibleFraction;
   }
 
-  if (errorCode === 'missing-api-key') {
-    const detail = envKeys?.length
-      ? ` ${t('ai.keyMissingEnv', { env: envKeys.join(' / ') })}`
-      : '';
-    return `${t('ai.keyMissingBoth')}${detail}`;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+  return { left: x * 100, top: y * 100 };
+}
+
+export function failureMessage(error?: string, errorCode?: string): string {
+  switch (errorCode) {
+    case 'timeout':
+      return `${t('ai.timeoutTitle')} ${t('ai.timeoutBody')}`;
+    case 'missing-api-key':
+      return t('ai.keyMissingBoth');
+    case 'quota-exceeded':
+      return t('ai.quotaExceeded');
+    case 'provider-unavailable':
+    case 'network-error':
+      // Same message as a vendor outage: from where a customer stands, "the service
+      // can't be reached" and "the vendor is down" call for the exact same action.
+      return t('ai.providerUnavailable');
+    default:
+      return error || t('ai.unknownError');
   }
-  return error || t('ai.unknownError');
 }
 
 export function renderCostHtml(cost?: CostBreakdown): string {
@@ -361,25 +403,56 @@ export function renderOpticianCardHtml(run: {
   const sizeDiffers =
     lensWidth != null && nominal != null && Math.abs(lensWidth - nominal) >= 0.5;
 
-  // Pupil crosshairs, from the landmarks the local pipeline measured. The composite was
-  // built from that same capture, so normalized coordinates land where the pupils are.
-  const lm = (run.context as any)?.landmarksNormalized;
-  const marks = ['rightPupil', 'leftPupil']
+  // Pupil crosshairs, from the landmarks the local pipeline measured against the RAW
+  // capture. Only render_local_overlay's composite is guaranteed to share that exact
+  // framing (it pastes the frame onto the same photo the landmarks came from, at the
+  // same aspect ratio) — an AI-generated frontal is a reinterpretation that can crop or
+  // reframe however the model chose to, so the same coordinates would land who-knows-
+  // where on it. Drawing a confident line in the wrong place is worse than drawing none.
+  const isLocalFrontal = run.tryOn?.method === 'local-overlay';
+  const lm = isLocalFrontal ? (run.context as any)?.landmarksNormalized : null;
+  const capture = (run.context as any)?.capture;
+  const pupils: Array<{ x: number; y: number }> = ['rightPupil', 'leftPupil']
     .map((key) => lm?.[key])
-    .filter((p) => p && typeof p.x === 'number' && typeof p.y === 'number')
+    .filter((p) => p && typeof p.x === 'number' && typeof p.y === 'number');
+
+  // Zooms the displayed crop in on the face rather than the frame's geometric centre —
+  // matters because the raw capture is framed however far the patient happened to be
+  // sitting from the camera, and a card meant to show frame-and-face detail should not
+  // inherit that by accident. Centred on the true pupil midpoint when it is known (the
+  // local composite); a fixed, slightly-above-centre default otherwise, which is where a
+  // head normally sits in a portrait-oriented photo.
+  const posX = pupils.length === 2 ? (pupils[0].x + pupils[1].x) / 2 : 0.5;
+  const posY = pupils.length === 2 ? (pupils[0].y + pupils[1].y) / 2 : 0.38;
+  const facePosition = `${(posX * 100).toFixed(1)}% ${(posY * 100).toFixed(1)}%`;
+
+  // .oc-photo now crops with `object-fit: cover` into a fixed box (see style.css), so a
+  // point's normalized position on the FULL source image is no longer its position on
+  // screen — the crop has to be undone the same way the browser applies it, or the
+  // marks land wherever they would have BEFORE zooming in, ignoring it entirely.
+  const imageAspect =
+    capture?.imageWidthPx > 0 && capture?.imageHeightPx > 0
+      ? capture.imageWidthPx / capture.imageHeightPx
+      : null;
+  const marks = (imageAspect && pupils.length === 2
+    ? pupils
+        .map((p) => mapCoverPoint(p.x, p.y, imageAspect, OC_PHOTO_ASPECT, posX, posY))
+        .filter((m): m is { left: number; top: number } => m !== null)
+    : []
+  )
     .map(
-      (p) =>
-        `<span class="oc-pupil" style="left:${(p.x * 100).toFixed(2)}%;top:${(p.y * 100).toFixed(2)}%"></span>
-         <span class="oc-plumb" style="left:${(p.x * 100).toFixed(2)}%"></span>`
+      (m) =>
+        `<span class="oc-pupil" style="left:${m.left.toFixed(2)}%;top:${m.top.toFixed(2)}%"></span>
+         <span class="oc-plumb" style="left:${m.left.toFixed(2)}%"></span>`
     )
     .join('');
 
   const frontal = run.tryOn?.imageDataUrl
-    ? `<img class="oc-photo" src="${run.tryOn.imageDataUrl}" alt="${t('card.front')}">${marks}`
+    ? `<img class="oc-photo" src="${run.tryOn.imageDataUrl}" alt="${t('card.front')}" style="object-position:${facePosition}">${marks}`
     : `<div class="oc-nophoto">${t('card.noPhoto')}</div>`;
 
   const lateral = run.tryOnProfile?.imageDataUrl
-    ? `<img class="oc-photo" src="${run.tryOnProfile.imageDataUrl}" alt="${t('card.side')}">`
+    ? `<img class="oc-photo" src="${run.tryOnProfile.imageDataUrl}" alt="${t('card.side')}" style="object-position:50% 38%">`
     : `<div class="oc-nophoto">${t('card.noProfile')}</div>`;
 
   // The frame beside its own dimensions. This is what lets a reader confirm the numbers
@@ -981,7 +1054,7 @@ export function renderResultCard(result: MeasureResult, opts: RenderOptions = {}
       <article class="ai-result ai-result-failed">
         ${head}
         <div class="ai-error">${escapeHtml(
-          failureMessage(result.error, result.errorCode, result.envKeys)
+          failureMessage(result.error, result.errorCode)
         )}</div>
         ${renderCostHtml(result.cost)}
         ${renderRaw(result)}
@@ -1078,7 +1151,7 @@ function renderMissingImage(view: TryOnResult): string {
     return `<div class="ai-notice">${t('ai.imageDropped')}</div>`;
   }
   return `<div class="ai-error">${escapeHtml(
-    failureMessage(view.error, view.errorCode, view.envKeys)
+    failureMessage(view.error, view.errorCode)
   )}</div>`;
 }
 

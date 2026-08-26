@@ -24,6 +24,7 @@ import {
 import {
   fetchModelCatalog,
   fetchProviderCatalog,
+  fetchProxiedImage,
   missingServiceFeatures,
   fileToScaledDataURL,
   dataUrlToThumbnail,
@@ -334,6 +335,8 @@ export class VisionMeasurePanel {
     }
 
     this.restorePrefs();
+    this.applyActiveFrameId();
+    void this.applyActiveFrameImage();
     this.paintMirrorState();
     this.onProviderChange();
     this.onStrategyChange();
@@ -349,6 +352,54 @@ export class VisionMeasurePanel {
     } catch {
       return {};
     }
+  }
+
+  /**
+   * Pre-fills the Capri identifier from whichever frame is actually on screen, so a
+   * customer trying on a real product never has to find or type this field to get the
+   * right measurements. Runs after {@link restorePrefs} and wins over it: a remembered
+   * value from a previous product tried in this same browser is exactly the kind of
+   * stale identifier this replaces.
+   *
+   * Only for identifiers that look like a real catalogue code (letters then digits,
+   * e.g. "DC384") — the bundled demo SKUs ("classic-aviator", "sample-frame") are not
+   * Capri codes, and activating the protocol with one would just waste a lookup that
+   * can only come back "not detected".
+   *
+   * The colour (`?color=` from TryOn3D.jsx, already in English off the supplier's own
+   * catalogue — "Black", "Light Blue") is appended the same way an operator would type
+   * it by hand ("DC210 Black Green Red", per capri_prompt.py's own example): the
+   * technical table on a Capri product page has one row per colour variant, and without
+   * it the model has no way to tell which row is this one.
+   */
+  private applyActiveFrameId(): void {
+    if (!this.frameIdInput) return;
+    const sku = this.host.getActiveFrame().sku || '';
+    if (!/^[a-z]{1,6}\d/i.test(sku)) return;
+    const color = new URLSearchParams(location.search).get('color');
+    this.frameIdInput.value = color ? `${sku.toUpperCase()} ${color}` : sku.toUpperCase();
+  }
+
+  /**
+   * Pre-fills "Imagen del espejuelo" from the storefront's own catalog photo of the
+   * frame the customer is actually trying on (`?glassesImageUrl=` from TryOn3D.jsx), so
+   * they never have to find or upload a picture of a frame they are already wearing on
+   * screen. Best-effort: a failed fetch (network, disallowed host, oversized image)
+   * just leaves the drop zone empty for a manual upload, exactly as if the URL had
+   * never been given — it never blocks the rest of the panel.
+   */
+  private async applyActiveFrameImage(): Promise<void> {
+    if (this.glassesImage) return;
+    const url = new URLSearchParams(location.search).get('glassesImageUrl');
+    if (!url) return;
+    try {
+      this.glassesImage = await fetchProxiedImage(url);
+    } catch (error: any) {
+      console.warn('[VTO] No se pudo precargar la imagen de la montura:', error?.message ?? error);
+      return;
+    }
+    this.showPreview(this.glassesPreview, this.glassesImage);
+    this.updateRunState();
   }
 
   private restorePrefs(): void {

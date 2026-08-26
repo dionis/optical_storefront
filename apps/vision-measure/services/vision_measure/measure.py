@@ -274,6 +274,26 @@ def _annotate_provider_error(exc: ProviderError, spec: ProviderSpec, model: str)
         "los que tu clave puede usar ahora mismo."
     )
 
+def _provider_error_code(exc: ProviderError) -> Optional[str]:
+    """
+    Machine-readable reason for a provider-side failure.
+
+    The panel uses this to show a generic, translated, non-technical message instead of
+    relaying vendor text a customer cannot act on either way — "your account hit its
+    rate limit" and "the vendor is overloaded" are both just "try again later, or tell
+    the site owner" from where a shopper is standing. Falls back to whatever code the
+    exception already carries (e.g. "timeout", set where the request never got a
+    response at all).
+    """
+    if exc.code:
+        return exc.code
+    if exc.status == 429:
+        return "quota-exceeded"
+    if exc.status in (500, 502, 503, 504):
+        return "provider-unavailable"
+    return None
+
+
 def new_request_id() -> str:
     """
     Short id tying one HTTP request to every line it produces.
@@ -389,7 +409,7 @@ def run_measurement(
             envelope["cost"] = estimate_cost(spec.id, chosen_model, exc.usage)
         return fail(
             _annotate_provider_error(exc, spec, chosen_model),
-            code=getattr(exc, "code", "") or None,
+            code=_provider_error_code(exc),
         )
     except Exception as exc:  # a vendor SDK-less HTTP path can still surprise us
         return fail(f"Fallo inesperado llamando a {spec.label}: {exc}")
@@ -589,6 +609,18 @@ def run_try_on(
             "error": str(exc),
             "errorCode": exc.code,
             "envKeys": exc.env_keys,
+        }
+    except ProviderError as exc:
+        # ProviderError is itself a RuntimeError; caught first so its status (quota,
+        # congestion, timeout) turns into the same machine-readable codes run_measurement
+        # produces, instead of falling into the generic branch below with none at all.
+        return {
+            "ok": False,
+            "method": engine,
+            "view": view,
+            "provider": engine,
+            "error": str(exc),
+            "errorCode": _provider_error_code(exc),
         }
     except (ValueError, RuntimeError) as exc:
         return {"ok": False, "method": engine, "provider": engine, "error": str(exc)}

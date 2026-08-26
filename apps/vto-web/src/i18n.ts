@@ -250,8 +250,10 @@ const ES: Dict = {
   'ai.capriNoBrowsing': 'Causa habitual: el modelo no tiene acceso a internet en esta petición, así que no puede abrir caprioptics.com. El protocolo lo trata como «no detectado» a propósito: antes un nulo que un milímetro inventado, porque A y B alimentan todas las alturas de montaje.',
   'ai.retrievalUnsupported': 'Este proveedor no puede abrir páginas web',
   'ai.retrievalUnsupportedHint': 'Hoy solo Gemini puede consultar la ficha del proveedor durante la medición. Con los demás, las medidas publicadas volverán siempre como NO DETECTADO: elige Gemini para la búsqueda por identificador, o introduce las medidas de la montura a mano.',
-  'ai.timeoutTitle': 'El modelo tardó más de lo permitido',
-  'ai.timeoutBody': 'No es un fallo de la aplicación ni de tus fotos: un modelo de razonamiento pesado sobre dos imágenes grandes puede pasar de varios minutos, y más aún si además tiene que buscar la ficha del proveedor. Lo más rápido es repetir con una variante ligera del mismo proveedor (Flash en Gemini, Mini en OpenAI); si necesitas el modelo grande, el administrador puede ampliar el margen con VISION_REQUEST_TIMEOUT_S y VISION_BROWSING_TIMEOUT_S.',
+  'ai.timeoutTitle': 'El análisis tardó más de lo permitido.',
+  'ai.timeoutBody': 'No es un fallo de tus fotos. Inténtalo de nuevo en unos minutos; si sigue sin funcionar, contacta con el administrador del sitio.',
+  'ai.quotaExceeded': 'El servicio de medición con IA alcanzó su límite de uso por ahora. Inténtalo de nuevo en unos minutos; si el problema continúa, contacta con el administrador del sitio.',
+  'ai.providerUnavailable': 'El servicio de medición con IA no está respondiendo en este momento. Inténtalo de nuevo en unos minutos; si el problema continúa, contacta con el administrador del sitio.',
   'ai.retrievalElsewhere': 'Lo que sí consultó:',
   'ai.retrievalOk': 'Ficha del proveedor leída por el modelo',
   'ai.retrievalNone': 'El modelo NO abrió la ficha del proveedor',
@@ -419,8 +421,10 @@ const ES: Dict = {
 
   // Key configuration
   'ai.keyMissingWithEnv': 'Debe definir las llaves de uso de este modelo de IA o contactar con el Administrador. También puede definirla en el archivo .env como {env}.',
-  'ai.keyMissingBoth': 'Debe definir las llaves de uso de este modelo de IA o contactar con el Administrador.',
-  'ai.keyMissingEnv': 'Ni el campo del panel ni el fichero .env del servidor tienen una clave ({env}).',
+  // Mostrado cuando falla un análisis por falta de clave — a diferencia de las otras
+  // claves de esta sección (avisos al operador mientras configura el panel), este texto
+  // puede verlo un cliente anónimo, así que no nombra variables de entorno ni archivos.
+  'ai.keyMissingBoth': 'Este servicio no está disponible en este momento. Por favor, contacta con el administrador del sitio.',
   'ai.keyConfigured': '🔑 El servidor ya tiene una clave configurada ({env}). Deja el campo vacío para usarla.',
   'ai.keyMissing': 'Sin clave en el servidor. Introdúcela aquí o define {env} en el fichero .env de la raíz.',
   'ai.keyFromServer': 'Vacío = usar {env} del servidor',
@@ -720,8 +724,10 @@ const EN: Dict = {
   'ai.capriNoBrowsing': 'Usual cause: the model has no internet access on this request, so it cannot open caprioptics.com. The protocol treats that as "not detected" on purpose: a null beats an invented millimetre, because A and B drive every fitting height.',
   'ai.retrievalUnsupported': 'This provider cannot open web pages',
   'ai.retrievalUnsupportedHint': 'Today only Gemini can consult the supplier page during a measurement. With the others, published dimensions will always come back NOT DETECTED: choose Gemini for identifier lookup, or enter the frame dimensions by hand.',
-  'ai.timeoutTitle': 'The model took longer than allowed',
-  'ai.timeoutBody': 'This is not a fault in the application or in your photographs: a heavy reasoning model over two large images can take several minutes, more still when it also has to look up the supplier page. The quickest way out is to repeat with a light variant of the same provider (Flash on Gemini, Mini on OpenAI); if you need the large model, an administrator can widen the margin with VISION_REQUEST_TIMEOUT_S and VISION_BROWSING_TIMEOUT_S.',
+  'ai.timeoutTitle': 'The analysis took longer than allowed.',
+  'ai.timeoutBody': "This isn't a fault in your photographs. Please try again in a few minutes; if it keeps happening, contact the site administrator.",
+  'ai.quotaExceeded': "The AI measurement service has hit its usage limit for now. Please try again in a few minutes; if the problem continues, contact the site administrator.",
+  'ai.providerUnavailable': "The AI measurement service isn't responding right now. Please try again in a few minutes; if the problem continues, contact the site administrator.",
   'ai.retrievalElsewhere': 'What it did consult:',
   'ai.retrievalOk': 'Supplier page read by the model',
   'ai.retrievalNone': 'The model did NOT open the supplier page',
@@ -886,8 +892,10 @@ const EN: Dict = {
     'Proposal B needs a capture taken through the camera with the face detected. Capture again or switch to proposal A.',
 
   'ai.keyMissingWithEnv': 'You must set the keys for this AI model or contact your administrator. It can also be defined in the .env file as {env}.',
-  'ai.keyMissingBoth': 'You must set the API keys for this AI model, or contact your Administrator.',
-  'ai.keyMissingEnv': 'Neither the panel field nor the server .env file holds a key ({env}).',
+  // Shown when an analysis fails for lack of a key — unlike the other keys in this
+  // section (operator-facing hints while setting up the panel), an anonymous customer
+  // can see this one, so it never names an env var or a file.
+  'ai.keyMissingBoth': "This service isn't available right now. Please contact the site administrator.",
   'ai.keyConfigured': '🔑 The server already has a key configured ({env}). Leave this field empty to use it.',
   'ai.keyMissing': 'No key on the server. Enter one here, or set {env} in the root .env file.',
   'ai.keyFromServer': 'Empty = use the server’s {env}',

@@ -13,12 +13,17 @@ Routes
     GET  /api/vision-measure/providers
     POST /api/vision-measure          -> medidas + imagen del paciente con la montura
     POST /api/vision-measure/models   -> catalogo de modelos vivo del proveedor
+    GET  /api/vision-measure/image-proxy -> descarga server-side una foto del proveedor
 """
 
+import base64
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
+
+import requests  # noqa: E402
 
 # Same sys.path convention the rest of the repository uses for direct script execution.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -116,6 +121,59 @@ def health() -> Dict[str, Any]:
         "providers": len(providers),
         "providersWithServerKey": [p["id"] for p in providers if p["hasServerKey"]],
     }
+
+
+# Hosts this process will fetch on the caller's behalf. Allowlisted on purpose: an
+# unrestricted "fetch whatever URL I give you" endpoint is an SSRF vector, a way to make
+# this server reach addresses it otherwise could not. Today it is only ever the
+# supplier's own product-photo host.
+_IMAGE_PROXY_ALLOWED_HOSTS = {
+    h.strip().lower()
+    for h in os.environ.get("VISION_IMAGE_PROXY_ALLOWED_HOSTS", "caprioptics.com").split(",")
+    if h.strip()
+}
+_IMAGE_PROXY_MAX_BYTES = 8 * 1024 * 1024
+
+
+@app.get("/api/vision-measure/image-proxy")
+def image_proxy(url: str) -> JSONResponse:
+    """
+    Downloads a product photo server-side and hands it back as a data URL.
+
+    Exists so the try-on's AI panel can pre-fill "Imagen del espejuelo" from the
+    storefront's own catalogue photo instead of asking the customer to find and upload
+    one themselves: the supplier's image host sends no CORS headers, so the browser has
+    no way to read those bytes itself to build the data URL the measurement request
+    needs. A server has no such restriction — but see the allowlist above for why it is
+    not simply "fetch anything".
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() not in _IMAGE_PROXY_ALLOWED_HOSTS:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "Host no permitido."})
+
+    try:
+        upstream = requests.get(url, timeout=10)
+    except requests.RequestException as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"ok": False, "error": f"No se pudo descargar la imagen: {exc}"},
+        )
+
+    if upstream.status_code != 200:
+        return JSONResponse(
+            status_code=502,
+            content={"ok": False, "error": f"El proveedor respondió {upstream.status_code}."},
+        )
+
+    content_type = upstream.headers.get("content-type", "")
+    if not content_type.startswith("image/"):
+        return JSONResponse(status_code=415, content={"ok": False, "error": "La URL no es una imagen."})
+
+    if len(upstream.content) > _IMAGE_PROXY_MAX_BYTES:
+        return JSONResponse(status_code=413, content={"ok": False, "error": "Imagen demasiado grande."})
+
+    data_url = f"data:{content_type};base64,{base64.b64encode(upstream.content).decode()}"
+    return JSONResponse(status_code=200, content={"ok": True, "dataUrl": data_url})
 
 
 @app.get("/api/vision-measure/providers")

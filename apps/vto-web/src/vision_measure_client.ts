@@ -275,6 +275,21 @@ export async function fetchProviderCatalog(lang: string): Promise<ProviderCatalo
 }
 
 /**
+ * Downloads a product photo through the server (see the Python route for why: the
+ * supplier's image host sends no CORS headers, so the browser cannot read those bytes
+ * itself). Used to pre-fill "Imagen del espejuelo" from the storefront's own catalog
+ * photo instead of asking the customer to find and upload one.
+ */
+export async function fetchProxiedImage(url: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/vision-measure/image-proxy?url=${encodeURIComponent(url)}`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.ok) {
+    throw new Error(body?.error || `No se pudo cargar la imagen (HTTP ${res.status}).`);
+  }
+  return body.dataUrl as string;
+}
+
+/**
  * Runs a measurement. `signal` lets the panel stop waiting.
  *
  * Aborting closes the browser's side of the connection; it does NOT un-spend tokens the
