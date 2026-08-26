@@ -125,11 +125,30 @@ def health() -> Dict[str, Any]:
 
 # Hosts this process will fetch on the caller's behalf. Allowlisted on purpose: an
 # unrestricted "fetch whatever URL I give you" endpoint is an SSRF vector, a way to make
-# this server reach addresses it otherwise could not. Today it is only ever the
-# supplier's own product-photo host.
+# this server reach addresses it otherwise could not.
+def _default_image_proxy_hosts() -> str:
+    """
+    Baseline allowlist: the supplier's own raw photo host (caprioptics.com — still what
+    some local/dev catalog data hotlinks directly), plus whatever host R2_PUBLIC_URL /
+    R2_ENDPOINT already point at. That is the same bucket the rest of the project
+    already trusts for product images (Supabase Storage today) — running in the same
+    container as the backend (see apps/backend/docker-entrypoint.sh), this process
+    inherits those env vars for free, so the allowlist tracks wherever the images
+    actually live instead of a hostname guessed and hardcoded here.
+    """
+    hosts = ["caprioptics.com"]
+    for env_key in ("R2_PUBLIC_URL", "R2_ENDPOINT"):
+        host = urlparse(os.environ.get(env_key, "")).hostname
+        if host:
+            hosts.append(host)
+    return ",".join(hosts)
+
+
 _IMAGE_PROXY_ALLOWED_HOSTS = {
     h.strip().lower()
-    for h in os.environ.get("VISION_IMAGE_PROXY_ALLOWED_HOSTS", "caprioptics.com").split(",")
+    for h in os.environ.get(
+        "VISION_IMAGE_PROXY_ALLOWED_HOSTS", _default_image_proxy_hosts()
+    ).split(",")
     if h.strip()
 }
 _IMAGE_PROXY_MAX_BYTES = 8 * 1024 * 1024
