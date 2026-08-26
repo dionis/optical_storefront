@@ -32,6 +32,14 @@ export default function ProductDetail() {
   // or React sees a different hook count between renders and crashes.
   const review = useReviewSummary(slug);
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
+  // React Router reuses this same component instance across two URLs that match the
+  // same route (/producto/:slug -> /producto/:slug), so `tryOn` survives a navigation
+  // to a DIFFERENT product instead of resetting with it. Left open, the still-mounted
+  // <TryOn3D> re-renders with the new product's data and its iframe's `src` changes
+  // mid-flight — the previous product's try-on session torn down while still starting
+  // up, not closed, which is what showed up as "DOMException: the document is not
+  // fully active" and the whole thing appearing to restart under a different SKU.
+  useEffect(() => { setTryOn(false); }, [slug]);
 
   // Add the frame at its base price via the server cart (no local total).
   const addFrame = async (variantId) => {
