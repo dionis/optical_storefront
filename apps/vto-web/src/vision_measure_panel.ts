@@ -392,14 +392,26 @@ export class VisionMeasurePanel {
     if (this.glassesImage) return;
     const url = new URLSearchParams(location.search).get('glassesImageUrl');
     if (!url) return;
-    try {
-      this.glassesImage = await fetchProxiedImage(url);
-    } catch (error: any) {
-      console.warn('[VTO] No se pudo precargar la imagen de la montura:', error?.message ?? error);
-      return;
+
+    // Retried once: this is usually the very first request this browser tab makes to
+    // the backend, and a backend container that just restarted (a fresh deploy) can be
+    // slow to answer its first request while it finishes booting. One retry after a
+    // short pause costs little and turns "cold start" into a non-issue instead of a
+    // silently empty drop zone the customer has to notice and fix by hand.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        this.glassesImage = await fetchProxiedImage(url);
+        this.showPreview(this.glassesPreview, this.glassesImage);
+        this.updateRunState();
+        return;
+      } catch (error: any) {
+        console.warn(
+          `[VTO] No se pudo precargar la imagen de la montura (intento ${attempt + 1}/2):`,
+          error?.message ?? error
+        );
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
     }
-    this.showPreview(this.glassesPreview, this.glassesImage);
-    this.updateRunState();
   }
 
   private restorePrefs(): void {

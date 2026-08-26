@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { setTryOnOpen } from "../lib/buildVersion.js";
 
 // Replaces the procedural try-on (TryOn.jsx, kept on disk but no longer wired in) with
 // the ported eyewear-vto-web app (apps/vto-web), run in an iframe rather than merged
@@ -21,6 +23,17 @@ const TRYON3D_BASE = import.meta.env.PROD
 export default function TryOn3D({ product, colorIdx = 0, onClose }) {
   const { t, lang } = useLang();
   const color = product.colors?.[colorIdx] || product.colors?.[0];
+
+  // Tells the stale-build auto-reload (buildVersion.js) not to fire while this is
+  // open — a reload of the parent page mid-session (camera permission pending, a
+  // model loading, a capture in progress) is exactly the kind of interruption that
+  // mechanism already knows to avoid during checkout. Without this, whoever opened
+  // the try-on right after a fresh deploy saw it flash and disappear: the version
+  // check fired, found a mismatch, and reloaded the whole page out from under them.
+  useEffect(() => {
+    setTryOnOpen(true);
+    return () => setTryOnOpen(false);
+  }, []);
 
   const params = new URLSearchParams({ lang, sku: product.sku || "" });
   if (color?.name) params.set("color", color.name);

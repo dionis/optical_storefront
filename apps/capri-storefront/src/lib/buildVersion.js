@@ -30,10 +30,21 @@ function pendingOrderExists() {
   try { return Boolean(localStorage.getItem("oer_pending_order")); } catch { return false; }
 }
 
+// The try-on runs the whole session inside an <iframe> (TryOn3D.jsx) — camera
+// permission, model loading, an in-progress capture — none of which survives a
+// reload of the PARENT page any better than a payment in flight would. Tracked as a
+// count rather than a boolean since ProductCard and ProductDetail can each mount
+// their own instance.
+let tryOnOpenCount = 0;
+export function setTryOnOpen(open) {
+  tryOnOpenCount = Math.max(0, tryOnOpenCount + (open ? 1 : -1));
+}
+
 /** Is it safe to throw away this tab's JS right now? */
 function safeToReload(pathname) {
   if (reloading || CURRENT === "dev") return false;
   if (pendingOrderExists()) return false;
+  if (tryOnOpenCount > 0) return false;
   return !UNSAFE_PATHS.some((re) => re.test(pathname));
 }
 
