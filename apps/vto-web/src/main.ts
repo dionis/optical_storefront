@@ -31,6 +31,26 @@ const BUILD_STAMP = '2026-08-25-depth-coherent';
 /** The three heights the phone sheet settles on. */
 type SheetState = 'peek' | 'half' | 'full';
 
+/** How long model loading may run before it is reported as failed rather than hung. */
+const MODEL_LOAD_TIMEOUT_MS = 20000;
+
+/** Rejects with `message` if `promise` has not settled within `ms` — never hangs silently. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 class VTOApp {
   private sceneManager: SceneManager;
   private faceTracker: FaceTracker;
@@ -653,7 +673,15 @@ class VTOApp {
       // `?delegate=cpu` forces the CPU path from the start, so the GPU driver can be
       // ruled in or out in one load instead of waiting for the fallback to trip.
       const forced = new URLSearchParams(location.search).get('delegate');
-      await this.faceTracker.initialize(forced === 'cpu' ? 'CPU' : 'GPU');
+      // The WASM runtime and model file are same-origin now (see face_tracker.ts), so
+      // this should never take long — but "Cargando modelos" hanging forever with no
+      // error at all, which is what an unbounded await gave a customer on a bad network
+      // connection, is worse than a clear failure they can retry from.
+      await withTimeout(
+        this.faceTracker.initialize(forced === 'cpu' ? 'CPU' : 'GPU'),
+        MODEL_LOAD_TIMEOUT_MS,
+        t('status.modelTimeout')
+      );
 
       this.updateStatus('loading', t('status.loadingFrame'));
       await this.loadSKU(initialSku);

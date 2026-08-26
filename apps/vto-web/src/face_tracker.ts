@@ -24,10 +24,16 @@ export class FaceTracker {
   public async initialize(delegate: TrackerDelegate = 'GPU'): Promise<void> {
     console.log(`Loading MediaPipe Face Landmarker (${delegate})...`);
 
-    // Resolve vision fileset resolver using Google CDN
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-    );
+    // Both the WASM runtime and the model file are served from this app's own origin
+    // (apps/vto-web/public/mediapipe/, same convention as public/draco/ for the GLB
+    // decoder) rather than jsdelivr and storage.googleapis.com. The model file in
+    // particular measured 10+ seconds to fetch from Google's bucket on an ordinary
+    // connection, and timed out outright on a slower one — "Cargando modelos" hanging
+    // indefinitely on a customer's network was that fetch, not a bug in this app.
+    // import.meta.env.BASE_URL carries the "/" (dev) vs "/tryon-3d/" (prod) prefix, so
+    // this resolves correctly in both without hardcoding either.
+    const base = (import.meta as any).env.BASE_URL;
+    const vision = await FilesetResolver.forVisionTasks(`${base}mediapipe/wasm`);
 
     // A landmarker already running holds GPU resources and a WASM heap of its own; the
     // replacement must not inherit either.
@@ -37,7 +43,7 @@ export class FaceTracker {
     // Create the landmarker instance
     this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        modelAssetPath: `${base}mediapipe/face_landmarker.task`,
         delegate
       },
       runningMode: "VIDEO",

@@ -19,6 +19,7 @@ const ES: Dict = {
   // Status
   'status.loadingCamera': 'Cargando cámara…',
   'status.loadingModels': 'Cargando modelos…',
+  'status.modelTimeout': 'La carga de los modelos de seguimiento facial tardó demasiado. Comprueba tu conexión y vuelve a intentarlo.',
   'status.loadingFrame': 'Cargando montura…',
   'status.startingCamera': 'Iniciando cámara…',
   'status.searchingFace': 'Buscando rostro…',
@@ -504,6 +505,7 @@ const EN: Dict = {
 
   'status.loadingCamera': 'Loading camera…',
   'status.loadingModels': 'Loading models…',
+  'status.modelTimeout': 'Loading the face-tracking models took too long. Check your connection and try again.',
   'status.loadingFrame': 'Loading frame…',
   'status.startingCamera': 'Starting camera…',
   'status.searchingFace': 'Searching for face…',
