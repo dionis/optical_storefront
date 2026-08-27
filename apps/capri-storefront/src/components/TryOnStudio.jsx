@@ -14,25 +14,23 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // ANCHO DE LENTE — gafas de frente: dos lentes + puente + patillas
 function IconLensWidth(props) {
   return (
-    <svg viewBox="0 0 72 36" fill="none" stroke="currentColor" strokeWidth="2.2"
+    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <rect x="6" y="8" width="24" height="21" rx="8" />
-      <rect x="42" y="8" width="24" height="21" rx="8" />
-      <path d="M30 13 q6 -5 12 0" />
-      <path d="M6 12 L1 8" />
-      <path d="M66 12 L71 8" />
+      <rect x="7" y="10" width="27" height="22" rx="9" />
+      <rect x="42" y="10" width="27" height="22" rx="9" />
+      <path d="M34 16 c3 -3 5 -3 8 0" />
+      <path d="M7 16 L1 12" />
+      <path d="M69 16 L75 12" />
     </svg>
   );
 }
 
-// PUENTE — zona central: bordes internos de las lentes + puente nasal
+// PUENTE — bordes internos de ambas lentes + puente nasal (trazo continuo)
 function IconBridge(props) {
   return (
-    <svg viewBox="0 0 72 36" fill="none" stroke="currentColor" strokeWidth="2.2"
+    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M12 29 Q12 10 28 10" />
-      <path d="M60 29 Q60 10 44 10" />
-      <path d="M28 10 Q36 4 44 10" />
+      <path d="M12 33 C12 15 20 13 29 13 C33 13 34 9 38 9 C42 9 43 13 47 13 C56 13 64 15 64 33" />
     </svg>
   );
 }
@@ -40,10 +38,10 @@ function IconBridge(props) {
 // LARGO DE VARILLA — patilla de perfil: bisagra + brazo + curva tras la oreja
 function IconTemple(props) {
   return (
-    <svg viewBox="0 0 72 36" fill="none" stroke="currentColor" strokeWidth="2.2"
+    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <circle cx="9" cy="14" r="3" />
-      <path d="M13 14 L52 14 Q65 14 62 30" />
+      <circle cx="11" cy="17" r="3.4" />
+      <path d="M15 17 L55 17 C68 17 70 22 66 36" />
     </svg>
   );
 }
@@ -91,17 +89,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     if (!s) return null;
     return /^[\d.,\s]+$/.test(s) ? `${s} mm` : s;
   };
-  const bare = (v) => (v == null ? null : String(v).replace(/mm/gi, "").trim() || null);
-
   const eye = a.eye_size, bridge = a.bridge_size, temple = a.temple_length;
   const eyeD = fmt(eye), bridgeD = fmt(bridge), templeD = fmt(temple);
-
-  // Código compacto "50□19-145" (numérico) o join legible cuando hay rangos.
-  const be = bare(eye), bb = bare(bridge), bt = bare(temple);
-  const hasRange = [be, bb, bt].some((x) => x && x.includes("-"));
-  const measuresCode = be && bb && bt
-    ? (hasRange ? `${be} · ${bb} · ${bt} mm` : `${be}□${bb}-${bt}`)
-    : null;
 
   const materials = Array.isArray(a.material) ? a.material : (a.material ? [a.material] : []);
   const materialText = materials.length
@@ -122,8 +111,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     { key: "color", label: t("fs.color"), node: color?.name || na },
     materialText && { key: "material", label: t("fs.material"), node: materialText },
     shapeText && { key: "shape", label: t("fs.shape"), node: shapeText },
-    measuresCode && { key: "measures", label: t("fs.measures"),
-      node: (<>{measuresCode}<span className="fs-key"> ({t("fs.lensWidth")} · {t("fs.bridge")} · {t("fs.temple")})</span></>) },
   ].filter(Boolean);
 
   return createPortal(
