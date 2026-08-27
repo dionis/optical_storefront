@@ -2488,7 +2488,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   gap: 9px; padding: 16px 8px; border-left: 1px solid var(--fs-line);
 }
 .fs-mcell:first-child { border-left: 0; }
-.fs-mic { width: 58px; height: auto; color: var(--fs-navy); }
+.fs-mic { height: 42px; width: auto; max-width: 100%; color: var(--fs-navy); }
 .fs-mval { font-size: 17px; font-weight: 800; color: var(--fs-navy); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 
 @media (max-width: 820px) {
@@ -2497,7 +2497,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 @media (max-width: 420px) {
   .fs-photo { aspect-ratio: 2.4 / 1; }
-  .fs-mic { width: 46px; }
+  .fs-mic { height: 34px; }
   .fs-mval { font-size: 15px; }
   .fs-mhead span { font-size: 9.5px; padding: 8px 4px; }
 }

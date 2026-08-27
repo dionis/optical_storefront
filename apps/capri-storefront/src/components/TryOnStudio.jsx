@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 
 // Interfaz de CLIENTE del probador (producción).
 //
@@ -9,42 +10,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // medidas con iconografía óptica (ancho de lente · puente · largo de varilla).
 // El respaldo TryOn.jsx (motor 3D + calibración) queda intacto (ver README).
 
-/* ── Iconografía óptica profesional (line-art, hereda color con currentColor) ── */
-
-// ANCHO DE LENTE — gafas de frente: dos lentes + puente + patillas
-function IconLensWidth(props) {
-  return (
-    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
-         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <rect x="7" y="10" width="27" height="22" rx="9" />
-      <rect x="42" y="10" width="27" height="22" rx="9" />
-      <path d="M34 16 c3 -3 5 -3 8 0" />
-      <path d="M7 16 L1 12" />
-      <path d="M69 16 L75 12" />
-    </svg>
-  );
-}
-
-// PUENTE — bordes internos de ambas lentes + puente nasal (trazo continuo)
-function IconBridge(props) {
-  return (
-    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
-         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M12 33 C12 15 20 13 29 13 C33 13 34 9 38 9 C42 9 43 13 47 13 C56 13 64 15 64 33" />
-    </svg>
-  );
-}
-
-// LARGO DE VARILLA — patilla de perfil: bisagra + brazo + curva tras la oreja
-function IconTemple(props) {
-  return (
-    <svg viewBox="0 0 76 40" fill="none" stroke="currentColor" strokeWidth="2.4"
-         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <circle cx="11" cy="17" r="3.4" />
-      <path d="M15 17 L55 17 C68 17 70 22 66 36" />
-    </svg>
-  );
-}
+/* Iconos de medida (gafas / puente / varilla + flecha de cota) vectorizados de
+   los originales del cliente: ver ./measureIcons.jsx */
 
 export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const { t, tv } = useLang();
@@ -135,7 +102,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
 
         {/* Derecha: ficha profesional del marco ("Información de la montura") */}
         <aside className="fs-card">
-          <div className="fs-hd"><IconLensWidth className="fs-hd-ic" />{t("fs.frameInfo")}</div>
+          <div className="fs-hd"><IconGlasses className="fs-hd-ic" />{t("fs.frameInfo")}</div>
 
           <div className="fs-photo">
             {color?.image
