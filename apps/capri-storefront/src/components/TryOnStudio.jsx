@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
+import MeasureReport from "./MeasureReport.jsx";
+import { runMeasurement, pickMeasurement, frameImageDataUrl } from "../data/visionMeasure.js";
 
 // Interfaz de CLIENTE del probador (producción).
 //
@@ -162,6 +164,36 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   function retake(which) {
     if (which === "front") { setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
+  }
+
+  // ── Medición óptica (IA): manda las fotos + el marco al servicio vision-measure ──
+  const [card, setCard] = useState("no");          // "yes" con tarjeta de referencia
+  const [mState, setMState] = useState("idle");    // idle | loading | error | result
+  const [mData, setMData] = useState(null);
+  const [mError, setMError] = useState(null);
+  const [mCode, setMCode] = useState(null);
+  const [showMeasure, setShowMeasure] = useState(false);
+
+  async function doMeasure() {
+    if (!frontImg || !sideImg) return;
+    setShowMeasure(true); setMState("loading"); setMError(null); setMCode(null);
+    try {
+      const c = colors[ci] || colors[0] || null;
+      const glasses = c?.image ? await frameImageDataUrl(c.image) : null;
+      const resp = await runMeasurement({
+        faceImage: frontImg, sideImage: sideImg, glassesImage: glasses,
+        frameId: product?.sku || product?.name || null, lang,
+        withReferenceCard: card === "yes",
+      });
+      const picked = pickMeasurement(resp);
+      if (!picked.ok && picked.pd == null && !picked.frontImage) {
+        setMCode(picked.errorCode); setMError(picked.error); setMState("error");
+      } else {
+        setMData(picked); setMState("result");
+      }
+    } catch (e) {
+      setMCode(e?.code || null); setMError(e?.message || null); setMState("error");
+    }
   }
 
   // ── Datos de la ficha (derecha) ──
@@ -326,6 +358,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
           </div>
         </aside>
       </div>
+
+      {frontImg && sideImg && (
+        <div className="vm-actionbar">
+          <div className="vm-ask">
+            <span className="vm-ask-q">{t("vm.card")}</span>
+            <div className="vm-seg" role="group">
+              <button type="button" className={card === "yes" ? "on" : ""} onClick={() => setCard("yes")}>{t("vm.cardYes")}</button>
+              <button type="button" className={card === "no" ? "on" : ""} onClick={() => setCard("no")}>{t("vm.cardNo")}</button>
+            </div>
+          </div>
+          <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
+        </div>
+      )}
+
+      {showMeasure && (
+        <MeasureReport
+          phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
+          error={mError} errorCode={mCode} onRetry={doMeasure} onClose={() => setShowMeasure(false)}
+        />
+      )}
     </div>,
     document.body
   );
