@@ -5,9 +5,8 @@ import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
-// Probador 3D: iframe hacia apps/vto-web, no un módulo de este bundle — no hay
-// three.js que cargar diferido aquí (ver TryOn3D.jsx).
-import TryOn from "../components/TryOn3D.jsx";
+// Probador: el switch elige la interfaz (prod / dev-respaldo / legacy). Ver TryOnSwitch.jsx.
+import TryOn from "../components/TryOnSwitch.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";

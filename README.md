@@ -210,3 +210,65 @@ endpoint is provided. See [SECURITY.md](SECURITY.md) for details.
 7. Production — prod compose, Coolify deploy, backups, full scraper, smoke tests
 
 See [CLAUDE.md](CLAUDE.md) for full conventions and contributor guidelines.
+
+
+---
+
+## Probador (try-on): interfaces dev / prod / legacy y cómo conmutar
+
+El probador virtual tiene **tres interfaces** y **ninguna se elimina**. Los puntos
+de entrada (`ProductCard.jsx`, `pages/ProductDetail.jsx`) importan un **selector**
+—`components/TryOnSwitch.jsx`— que decide cuál se monta. Todas comparten la misma
+firma de props (`product`, `colorIdx`, `onClose`), así que conmutar es transparente.
+
+| Clave (`tryonUi`) | Componente | Rol |
+|---|---|---|
+| `prod` | `components/TryOnStudio.jsx` | **Nueva UI de cliente** (producción). Nace de `TryOn.jsx`: reutiliza el MISMO motor (cámara + MediaPipe + three.js) pasando `studio`, que oculta la calibración y aplica el estilo de tienda (clase `.tryon-studio`). |
+| `dev` | `components/TryOn.jsx` | **Respaldo / desarrollo.** Motor procedural + **panel de calibración** (con `?tryonDebug=1`). No se toca salvo petición expresa. |
+| `legacy` | `components/TryOn3D.jsx` → `apps/vto-web` | Iframe al probador `apps/vto-web` (lo que ve el cliente **hoy**). Se conserva para comparar. |
+
+### Cómo se elige la interfaz (precedencia: URL → env → default)
+
+1. **Por URL, sin recompilar** (ideal para probar en el sitio ya desplegado):
+   - `…/catalogo?tryonUi=prod`   → nueva UI de cliente
+   - `…/catalogo?tryonUi=dev`    → respaldo (añade `&tryonDebug=1` para ver la calibración)
+   - `…/catalogo?tryonUi=legacy` → iframe vto-web
+2. **Por variable de entorno** (fija el default del build): en `.env` / Vercel
+   ```
+   VITE_TRYON_UI=prod        # prod | dev | legacy
+   ```
+3. **Default del código:** `legacy` (constante `DEFAULT_UI` en `TryOnSwitch.jsx`).
+   Se deja en `legacy` a propósito para **mantener exactamente lo que el cliente ve
+   hoy** hasta validar la nueva. **Para que el cliente vea la nueva UI en la tienda
+   desplegada:** poner `VITE_TRYON_UI=prod` en Vercel (recomendado) **o** cambiar
+   `DEFAULT_UI` a `"prod"` en `TryOnSwitch.jsx`.
+
+> El flag global `VITE_ENABLE_TRY_ON` sigue mandando por encima de todo: si es
+> `false`, no hay probador en ninguna interfaz.
+
+### Relación entre las dos interfaces del motor procedural
+
+`TryOnStudio.jsx` **no duplica** el motor: renderiza `<TryOn studio />`. Por eso
+cualquier mejora del motor (geometría en `tryon/frameGeometry.js`, oclusión en
+`tryon/faceOccluder.js`, o el bucle de `TryOn.jsx`) beneficia a la vez al respaldo
+y a la UI de cliente. La única diferencia es la presentación: `studio` oculta el
+panel de calibración y habilita la clase de estilo `.tryon-studio`.
+
+### Actualizar el respaldo
+
+El respaldo (`TryOn.jsx`) **no se modifica** por defecto. Si hay que actualizarlo,
+se hace bajo petición explícita; como la UI de cliente comparte su motor, conviene
+verificar las dos tras cualquier cambio del motor.
+
+### Correr `apps/vto-web` (interfaz `legacy`) en local
+
+En producción se sirve mismo-origen en `/tryon-3d` (ver `vercel.json`). En local,
+`TryOn3D.jsx` apunta a `VITE_TRYON3D_URL` (o `http://localhost:3000`): levanta el
+dev server de `apps/vto-web` y expón esa URL para probar `?tryonUi=legacy`.
+
+### Verificación recomendada tras un cambio
+
+1. `npx vite build` (build limpio).
+2. Abrir el probador y probar `?tryonUi=prod`, `?tryonUi=dev&tryonDebug=1`,
+   `?tryonUi=legacy` — confirmar cámara, seguimiento y cierre en cada una.
+3. Solo entonces fijar el default de producción (`VITE_TRYON_UI=prod`).

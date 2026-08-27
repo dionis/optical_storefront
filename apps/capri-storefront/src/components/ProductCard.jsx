@@ -5,8 +5,8 @@ import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { useReviewSummary } from "./ReviewSummaryContext.jsx";
-// Probador 3D: iframe hacia apps/vto-web, sin three.js en este bundle (ver TryOn3D.jsx).
-import TryOn from "./TryOn3D.jsx";
+// Probador: el switch elige la interfaz (prod / dev-respaldo / legacy). Ver TryOnSwitch.jsx.
+import TryOn from "./TryOnSwitch.jsx";
 
 // Requisito 11 (tarjetas estilo Amazon):
 //  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).

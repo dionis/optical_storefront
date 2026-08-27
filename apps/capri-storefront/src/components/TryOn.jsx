@@ -37,7 +37,12 @@ const TEMPLE_LATERAL_RATIO = 1.08;
 const DEBUG = (typeof window !== "undefined" && /[?&]tryonDebug=1/.test(window.location.search))
   || (typeof import.meta !== "undefined" && import.meta.env?.DEV);
 
-export default function TryOn({ product, colorIdx = 0, onClose }) {
+// `studio` = interfaz de CLIENTE (producción): reutiliza EXACTAMENTE este motor
+// (cámara + MediaPipe + three.js), pero oculta el panel de calibración y añade
+// una clase para el estilo de tienda. Sin `studio` es la interfaz de DESARROLLO
+// (respaldo, con calibración vía ?tryonDebug=1). Así la UI nueva "nace de esta"
+// sin duplicar el motor. Ver TryOnStudio.jsx y TryOnSwitch.jsx.
+export default function TryOn({ product, colorIdx = 0, onClose, studio = false }) {
   const { t } = useLang();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -432,7 +437,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
   };
 
   return createPortal(
-    <div className="tryon" role="dialog" aria-modal="true">
+    <div className={`tryon ${studio ? "tryon-studio" : ""}`} role="dialog" aria-modal="true">
       <div className="tryon-bar">
         <span className="tryon-title">👓 {t("tryon.title")} · {product.name}</span>
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
@@ -468,7 +473,7 @@ export default function TryOn({ product, colorIdx = 0, onClose }) {
           <input type="range" min="-0.15" max="0.15" step="0.005" value={yOff} onChange={(e) => setYOff(parseFloat(e.target.value))} />
         </label>
       </div>
-      {DEBUG && (
+      {DEBUG && !studio && (
         <div className="tryon-tune">
           <div className="tryon-tune-row">
             <strong>{t("tryon.tune.title")}</strong>
