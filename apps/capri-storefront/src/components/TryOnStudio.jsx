@@ -16,6 +16,7 @@ import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIco
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.6";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const HOLD_FRAMES = 26; // ~0.9 s sosteniendo la pose antes de capturar
+const CAPDBG = typeof location !== "undefined" && location.search.includes("capdbg");
 
 /* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
 
@@ -105,8 +106,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     let res;
     try { res = lm.detectForVideo(v, performance.now()); } catch { return; }
     const L = res?.faceLandmarks?.[0];
-    loop._n = (loop._n || 0) + 1;
-    if (loop._n % 15 === 0) console.log("CAPDBG", L ? "faceW " + Math.abs(L[454].x - L[234].x).toFixed(3) + " r " + ((L[1].x - L[234].x) / ((L[454].x - L[234].x) || 1e-6)).toFixed(3) : "noface", "ph", ph);
+    if (CAPDBG) { loop._n = (loop._n || 0) + 1; if (loop._n % 15 === 0) console.log("CAPDBG", L ? "faceW " + Math.abs(L[454].x - L[234].x).toFixed(3) + " r " + ((L[1].x - L[234].x) / ((L[454].x - L[234].x) || 1e-6)).toFixed(3) : "noface", "ph", ph); }
     if (!L) { holdRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
 
     const R = L[234], Lf = L[454], nose = L[1];   // laterales del rostro + punta de nariz
