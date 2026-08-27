@@ -2489,7 +2489,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 .fs-mcell:first-child { border-left: 0; }
 .fs-mic { height: 42px; width: auto; max-width: 100%; color: var(--fs-navy); }
-.fs-mval { font-size: 17px; font-weight: 800; color: var(--fs-navy); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.fs-mval { font-size: 15px; font-weight: 800; color: var(--fs-navy); font-variant-numeric: tabular-nums; letter-spacing: 0; white-space: nowrap; }
 
 @media (max-width: 820px) {
   .tryon-studio-grid { grid-template-columns: 1fr; grid-template-rows: minmax(200px, 42vh) 1fr; }
