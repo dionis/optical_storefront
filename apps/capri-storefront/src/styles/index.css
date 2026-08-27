@@ -114,7 +114,11 @@ button { font-family: inherit; cursor: pointer; }
 .card:hover .card-media img { transform: scale(1.10) rotate(-1.5deg); }
 .heart { position: absolute; top: 12px; right: 12px; border: none; background: #fff; width: 34px; height: 34px; border-radius: 50%; box-shadow: var(--shadow); font-size: 16px; color: #444; z-index: 2; }
 .heart.on { color: var(--red); }
-.ar-pill { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: var(--blue); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 6px; align-items: center; opacity: 0; transition: .2s; white-space: nowrap; }
+/* Centrado SIN transform: la regla de `prefers-reduced-motion` fuerza
+   `transform: none !important` en todos los <button>, y eso rompía el
+   translateX(-50%) dejando la pastilla corrida y cortada. left/right + margin
+   auto la centran igual y es inmune a esa regla. */
+.ar-pill { position: absolute; bottom: 12px; left: 0; right: 0; margin-inline: auto; width: max-content; max-width: calc(100% - 20px); background: var(--blue); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; box-shadow: var(--shadow); display: flex; gap: 6px; align-items: center; justify-content: center; opacity: 0; transition: .2s; white-space: nowrap; }
 .card-media:hover .ar-pill { opacity: 1; }
 .card-body { padding: 14px 14px 16px; }
 .card-row { display: flex; align-items: baseline; gap: 8px; }
