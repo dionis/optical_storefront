@@ -2443,7 +2443,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   --fs-line: #e7eaf0; --fs-cell: #ffffff; --fs-photo: #eef1f6;
   display: flex; flex-direction: column; min-width: 0; align-self: start; margin: 14px;
   background: var(--fs-cell); color: var(--fs-ink);
-  border: 1px solid var(--fs-line); border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--fs-line); border-radius: 16px; overflow: hidden; overflow-y: auto; max-height: calc(100% - 28px);
   box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 18px 40px -16px rgba(16,24,40,.28);
 }
 .fs-hd {
