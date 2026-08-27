@@ -113,10 +113,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     const r = (nose.x - R.x) / denom;             // 0.5 ≈ de frente; lejos de 0.5 ≈ girado
     const centered = r > 0.40 && r < 0.60;
     const turned = r < 0.37 || r > 0.63;
+    loop._n = (loop._n || 0) + 1;
+    if (loop._n % 15 === 0) console.log("CAPDBG faceW", faceW.toFixed(3), "r", r.toFixed(3), "ph", ph);
 
     let ok = false, msg = "";
     if (ph === "front") {
-      if (faceW < 0.16) msg = t("cap.closer");
+      if (faceW < 0.10) msg = t("cap.closer");
       else if (!centered) msg = t("cap.lookFront");
       else { ok = true; msg = t("cap.hold"); }
     } else {
