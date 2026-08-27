@@ -2453,8 +2453,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 .fs-hd-ic { width: 24px; height: auto; color: #fff; flex: 0 0 auto; }
 
-.fs-top { display: flex; gap: 14px; padding: 16px; align-items: flex-start; }
-.fs-specs { margin: 0; flex: 1 1 auto; min-width: 0; display: grid; gap: 9px; }
+.fs-info { padding: 16px; }
+.fs-specs { margin: 0; display: grid; gap: 9px; }
 .fs-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline; font-size: 14px; }
 .fs-row dt { margin: 0; color: var(--fs-navy); font-weight: 800; white-space: nowrap; }
 .fs-row dt::after { content: ":"; }
@@ -2463,11 +2463,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .fs-key { display: block; color: var(--fs-muted); font-weight: 500; font-size: 11.5px; margin-top: 2px; }
 
 .fs-photo {
-  flex: 0 0 42%; max-width: 190px; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden;
-  background: var(--fs-photo); border: 1px solid var(--fs-line);
+  width: 100%; aspect-ratio: 2.6 / 1; overflow: hidden;
+  background: var(--fs-photo); border-bottom: 1px solid var(--fs-line);
   display: flex; align-items: center; justify-content: center;
 }
-.fs-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fs-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 .fs-photo-ph { font-size: 40px; opacity: .5; }
 
 .fs-swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px; }
@@ -2496,8 +2496,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .fs-card { margin: 12px; overflow-y: auto; }
 }
 @media (max-width: 420px) {
-  .fs-top { flex-direction: column-reverse; }
-  .fs-photo { flex-basis: auto; max-width: none; width: 100%; aspect-ratio: 16 / 9; }
+  .fs-photo { aspect-ratio: 2.4 / 1; }
   .fs-mic { width: 46px; }
   .fs-mval { font-size: 15px; }
   .fs-mhead span { font-size: 9.5px; padding: 8px 4px; }

@@ -137,7 +137,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         <aside className="fs-card">
           <div className="fs-hd"><IconLensWidth className="fs-hd-ic" />{t("fs.frameInfo")}</div>
 
-          <div className="fs-top">
+          <div className="fs-photo">
+            {color?.image
+              ? <img src={color.image} alt={`${product.name} ${color?.name || ""}`}
+                     onError={(e) => { e.currentTarget.style.opacity = 0.2; }} />
+              : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+          </div>
+
+          <div className="fs-info">
             <dl className="fs-specs">
               {specRows.map((r) => (
                 <div className="fs-row" key={r.key}>
@@ -146,12 +153,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
                 </div>
               ))}
             </dl>
-            <div className="fs-photo">
-              {color?.image
-                ? <img src={color.image} alt={`${product.name} ${color?.name || ""}`}
-                       onError={(e) => { e.currentTarget.style.opacity = 0.2; }} />
-                : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-            </div>
           </div>
 
           {colors.length > 1 && (
