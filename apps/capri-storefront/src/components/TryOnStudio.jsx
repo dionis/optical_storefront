@@ -111,12 +111,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     const faceW = Math.abs(Lf.x - R.x);
     const denom = (Lf.x - R.x) || 1e-6;
     const r = (nose.x - R.x) / denom;             // 0.5 ≈ de frente; lejos de 0.5 ≈ girado
-    const centered = r > 0.42 && r < 0.58;
-    const turned = r < 0.34 || r > 0.66;
+    const centered = r > 0.40 && r < 0.60;
+    const turned = r < 0.37 || r > 0.63;
 
     let ok = false, msg = "";
     if (ph === "front") {
-      if (faceW < 0.32) msg = t("cap.closer");
+      if (faceW < 0.16) msg = t("cap.closer");
       else if (!centered) msg = t("cap.lookFront");
       else { ok = true; msg = t("cap.hold"); }
     } else {
