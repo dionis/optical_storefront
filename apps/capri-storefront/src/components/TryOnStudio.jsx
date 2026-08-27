@@ -1,70 +1,179 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 
 // Interfaz de CLIENTE del probador (producción).
 //
-// Espejo (cámara) a la izquierda — NO dibuja el marco sobre la cara — y a la
-// derecha la ficha profesional del marco: cabecera, datos + foto y una tira de
-// medidas con iconografía óptica (ancho de lente · puente · largo de varilla).
-// El respaldo TryOn.jsx (motor 3D + calibración) queda intacto (ver README).
+// IZQUIERDA: captura guiada AUTOMÁTICA en dos pasos — (1) foto frontal cuando el
+// cliente está de frente y cerca; (2) foto lateral cuando gira la cabeza y se le
+// ven las orejas (para ver el encaje de las patillas). El cliente no pulsa nada;
+// además hay un botón para subir cada foto manualmente.
+// DERECHA: ficha profesional del marco (datos reales + foto + medidas + pie).
+// El respaldo TryOn.jsx (motor 3D) queda intacto (ver README).
 
-/* Iconos de medida (gafas / puente / varilla + flecha de cota) vectorizados de
-   los originales del cliente: ver ./measureIcons.jsx */
+// Motor de detección facial (mismo que usa el respaldo TryOn.jsx).
+const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.6";
+const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const HOLD_FRAMES = 26; // ~0.9 s sosteniendo la pose antes de capturar
+
+/* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
 
 export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const { t, tv, lang } = useLang();
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
   const [ci, setCi] = useState(colorIdx);
-  const [status, setStatus] = useState("starting"); // starting | ready | denied | nocam
   const [now, setNow] = useState(() => new Date());
 
-  const colors = product?.colors || [];
-  const color = colors[ci] || colors[0] || null;
-  const a = product?.attributes || {};
+  // Cámara + captura automática
+  const streamRef = useRef(null);
+  const videoRef = useRef(null);
+  const lmRef = useRef(null);
+  const rafRef = useRef(0);
+  const holdRef = useRef(0);
+  const phaseRef = useRef("front");
+  const [camStatus, setCamStatus] = useState("starting"); // starting | ready | denied | nocam
+  const [phase, setPhase] = useState("front");             // front | side | done
+  const [frontImg, setFrontImg] = useState(null);
+  const [sideImg, setSideImg] = useState(null);
+  const [guide, setGuide] = useState("");
+  const [count, setCount] = useState(0);
+  const frontInput = useRef(null);
+  const sideInput = useRef(null);
 
+  useEffect(() => { phaseRef.current = phase; holdRef.current = 0; setCount(0); }, [phase]);
+
+  // Reloj en vivo (pie de la ficha)
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Adjunta el stream al <video> activo (se remonta al cambiar de caja)
+  const attachVideo = useCallback((node) => {
+    videoRef.current = node;
+    if (node && streamRef.current) {
+      node.srcObject = streamRef.current;
+      node.play().catch(() => {});
+    }
+  }, []);
+
+  // Arranca cámara + FaceLandmarker
   useEffect(() => {
     let cancelled = false;
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setStatus("nocam"); return; }
+      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); return; }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: 1280, height: 720 }, audio: false,
         });
         if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
-        }
-        setStatus("ready");
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
+        setCamStatus("ready");
       } catch (e) {
-        const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
-        setStatus(denied ? "denied" : "nocam");
+        setCamStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
+        return;
       }
+      try {
+        const vision = await import(/* @vite-ignore */ MP);
+        const fileset = await vision.FilesetResolver.forVisionTasks(MP + "/wasm");
+        const lm = await vision.FaceLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: MODEL },
+          runningMode: "VIDEO", numFaces: 1,
+        });
+        if (cancelled) { lm.close?.(); return; }
+        lmRef.current = lm;
+        rafRef.current = requestAnimationFrame(loop);
+      } catch (e) { /* sin auto-captura: quedan las subidas manuales */ }
     }
     start();
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); };
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafRef.current);
+      lmRef.current?.close?.();
+      streamRef.current?.getTracks().forEach((tr) => tr.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reloj en vivo para el pie de la ficha (fecha y hora).
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // Bucle de detección + captura automática
+  function loop() {
+    rafRef.current = requestAnimationFrame(loop);
+    const v = videoRef.current, lm = lmRef.current;
+    const ph = phaseRef.current;
+    if (!v || !lm || ph === "done" || v.readyState < 2) return;
+    let res;
+    try { res = lm.detectForVideo(v, performance.now()); } catch { return; }
+    const L = res?.faceLandmarks?.[0];
+    if (!L) { holdRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
 
-  // Los valores del catálogo llegan como texto con unidad y a menudo en rango
-  // ("51-53 mm", "Más de 60 mm"). Sólo añadimos " mm" a números puros.
+    const R = L[234], Lf = L[454], nose = L[1];   // laterales del rostro + punta de nariz
+    const faceW = Math.abs(Lf.x - R.x);
+    const denom = (Lf.x - R.x) || 1e-6;
+    const r = (nose.x - R.x) / denom;             // 0.5 ≈ de frente; lejos de 0.5 ≈ girado
+    const centered = r > 0.42 && r < 0.58;
+    const turned = r < 0.34 || r > 0.66;
+
+    let ok = false, msg = "";
+    if (ph === "front") {
+      if (faceW < 0.32) msg = t("cap.closer");
+      else if (!centered) msg = t("cap.lookFront");
+      else { ok = true; msg = t("cap.hold"); }
+    } else {
+      if (!turned) msg = t("cap.turnLeft");
+      else { ok = true; msg = t("cap.hold"); }
+    }
+    setGuide(msg);
+    if (ok) {
+      holdRef.current += 1;
+      setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / 9)));
+      if (holdRef.current >= HOLD_FRAMES) { capture(ph); }
+    } else {
+      holdRef.current = 0; setCount(0);
+    }
+  }
+
+  function capture(ph) {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    const cw = v.videoWidth, ch = v.videoHeight;
+    const cn = document.createElement("canvas");
+    cn.width = cw; cn.height = ch;
+    const cx = cn.getContext("2d");
+    cx.translate(cw, 0); cx.scale(-1, 1);         // espejo, como se muestra en pantalla
+    cx.drawImage(v, 0, 0, cw, ch);
+    const url = cn.toDataURL("image/jpeg", 0.9);
+    holdRef.current = 0; setCount(0);
+    if (ph === "front") { setFrontImg(url); setPhase("side"); }
+    else { setSideImg(url); setPhase("done"); }
+  }
+
+  function onUpload(which, file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      if (which === "front") { setFrontImg(rd.result); if (phaseRef.current === "front") setPhase("side"); }
+      else { setSideImg(rd.result); if (phaseRef.current !== "done") setPhase("done"); }
+    };
+    rd.readAsDataURL(file);
+  }
+  function retake(which) {
+    if (which === "front") { setFrontImg(null); setPhase("front"); }
+    else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
+  }
+
+  // ── Datos de la ficha (derecha) ──
+  const colors = product?.colors || [];
+  const color = colors[ci] || colors[0] || null;
+  const a = product?.attributes || {};
+
   const fmt = (v) => {
     if (v == null || v === "") return null;
     const s = String(v).trim();
     if (!s) return null;
     return /^[\d.,\s]+$/.test(s) ? `${s} mm` : s;
   };
-  const eye = a.eye_size, bridge = a.bridge_size, temple = a.temple_length;
-  const eyeD = fmt(eye), bridgeD = fmt(bridge), templeD = fmt(temple);
+  const eyeD = fmt(a.eye_size), bridgeD = fmt(a.bridge_size), templeD = fmt(a.temple_length);
 
   const materials = Array.isArray(a.material) ? a.material : (a.material ? [a.material] : []);
   const materialText = materials.length
@@ -73,7 +182,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const shapeText = a.shape ? tv(a.shape) : null;
   const na = t("fs.na");
 
-  // Sello fecha/hora (localizado según el idioma activo).
   const locale = lang === "en" ? "en-US" : "es-ES";
   const dateStr = now.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
   const timeStr = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -83,7 +191,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     { key: "bridge", label: t("fs.bridge"), value: bridgeD, Icon: IconBridge },
     { key: "temple", label: t("fs.temple"), value: templeD, Icon: IconTemple },
   ];
-
   const specRows = [
     { key: "model", label: t("fs.model"),
       node: (<>{product.name}{product.brand ? <span className="fs-sub"> ({product.brand})</span> : null}</>) },
@@ -92,6 +199,50 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     shapeText && { key: "shape", label: t("fs.shape"), node: shapeText },
   ].filter(Boolean);
 
+  // ── Estado de cada caja de captura ──
+  const camMsg = camStatus === "starting" ? t("tryon.starting")
+    : camStatus === "denied" ? t("tryon.denied")
+    : camStatus === "nocam" ? t("tryon.noCam") : "";
+
+  // Caja de captura (frontal o lateral). Se llama como función (no como <Componente/>)
+  // para no remontar el <video> en cada render y perder la cámara.
+  function capBox({ which, num, title, img, active, waiting }) {
+    return (
+      <div className={`cap-box ${active ? "on" : ""}`}>
+        <div className="cap-head">
+          <span className="cap-title"><span className="cap-num">{num}</span>{title}</span>
+          <button type="button" className="cap-up"
+                  onClick={() => (which === "front" ? frontInput : sideInput).current?.click()}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+            {t(which === "front" ? "cap.upFront" : "cap.upSide")}
+          </button>
+        </div>
+        <div className="cap-media">
+          {img ? (
+            <>
+              <img src={img} alt={title} />
+              <span className="cap-badge cap-ok">✓ {t("cap.ready")}</span>
+              <button type="button" className="cap-retake" onClick={() => retake(which)}>{t("cap.retake")}</button>
+            </>
+          ) : active && camStatus === "ready" ? (
+            <>
+              <video ref={attachVideo} className="cap-video" playsInline muted />
+              <span className="cap-badge">● {t("cap.auto")}</span>
+              {count > 0 && <div className="cap-count">{count}</div>}
+              <div className="cap-guide">{guide || t(which === "front" ? "cap.lookFront" : "cap.turnLeft")}</div>
+            </>
+          ) : (
+            <div className="cap-ph">
+              {camStatus !== "ready" ? camMsg
+                : waiting ? t("cap.waitFront")
+                : which === "side" ? t("cap.sideHint") : ""}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return createPortal(
     <div className="tryon tryon-studio" role="dialog" aria-modal="true">
       <div className="tryon-bar">
@@ -99,17 +250,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
       </div>
 
+      <input ref={frontInput} type="file" accept="image/*" hidden
+             onChange={(e) => onUpload("front", e.target.files && e.target.files[0])} />
+      <input ref={sideInput} type="file" accept="image/*" hidden
+             onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
+
       <div className="tryon-studio-grid">
-        {/* Izquierda: espejo (cámara, sin dibujar el marco) */}
-        <div className="tryon-studio-cam">
-          <video ref={videoRef} className="tryon-video" playsInline muted />
-          {status !== "ready" && (
-            <div className="tryon-overlay-msg">
-              {status === "starting" && <p>📷 {t("tryon.starting")}</p>}
-              {status === "denied" && <p>🚫 {t("tryon.denied")}</p>}
-              {status === "nocam" && <p>😕 {t("tryon.noCam")}</p>}
-            </div>
-          )}
+        {/* Izquierda: captura guiada automática (frontal + lateral) */}
+        <div className="tryon-studio-cap">
+          {capBox({ which: "front", num: "1", title: t("cap.front"), img: frontImg, active: phase === "front", waiting: false })}
+          {capBox({ which: "side", num: "2", title: t("cap.side"), img: sideImg, active: phase === "side", waiting: phase === "front" })}
         </div>
 
         {/* Derecha: ficha profesional del marco ("Información de la montura") */}
@@ -125,10 +275,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
 
           <div className="fs-info">
             <dl className="fs-specs">
-              {specRows.map((r) => (
-                <div className="fs-row" key={r.key}>
-                  <dt>{r.label}</dt>
-                  <dd>{r.node}</dd>
+              {specRows.map((row) => (
+                <div className="fs-row" key={row.key}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.node}</dd>
                 </div>
               ))}
             </dl>
