@@ -43,11 +43,15 @@ function FrameDiagram({ eye, bridge, height, t }) {
       <line x1="192" y1="30" x2="192" y2="52" className="tsi-tick" />
       <text x="170" y="22" className="tsi-dim-txt" textAnchor="middle">{t("tryon.m.bridge")} {val(bridge)}</text>
 
-      {/* Cota ALTURA — a la derecha de la lente derecha */}
-      <line x1="316" y1="46" x2="316" y2="124" className="tsi-dim" markerStart="url(#tsiArrow)" markerEnd="url(#tsiArrow)" />
-      <line x1="300" y1="46" x2="322" y2="46" className="tsi-tick" />
-      <line x1="300" y1="124" x2="322" y2="124" className="tsi-tick" />
-      <text x="316" y="90" className="tsi-dim-txt" textAnchor="middle" transform="rotate(90 316 90)">{t("tryon.m.height")} {val(height)}</text>
+      {/* Cota ALTURA — sólo si el catálogo trae el dato */}
+      {height != null && height !== "" && (
+        <>
+          <line x1="316" y1="46" x2="316" y2="124" className="tsi-dim" markerStart="url(#tsiArrow)" markerEnd="url(#tsiArrow)" />
+          <line x1="300" y1="46" x2="322" y2="46" className="tsi-tick" />
+          <line x1="300" y1="124" x2="322" y2="124" className="tsi-tick" />
+          <text x="316" y="90" className="tsi-dim-txt" textAnchor="middle" transform="rotate(90 316 90)">{t("tryon.m.height")} {val(height)}</text>
+        </>
+      )}
     </svg>
   );
 }
@@ -87,17 +91,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); };
   }, []);
 
-  const mm = (v) => (v == null || v === "" ? null : `${v} mm`);
+  // Los valores del catálogo ya vienen como texto con unidad y a menudo como
+  // rango ("51-53 mm", "Más de 60 mm"). Sólo añadimos " mm" a números puros;
+  // así evitamos duplicar la unidad y respetamos los rangos tal cual.
+  const fmt = (v) => {
+    if (v == null || v === "") return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    return /^[\d.,\s]+$/.test(s) ? `${s} mm` : s;
+  };
   const eye = a.eye_size, bridge = a.bridge_size, temple = a.temple_length;
   const height = a.b_measurement ?? a.lens_height ?? null;
-  const shorthand = frameSize(a);
+  const eyeD = fmt(eye), bridgeD = fmt(bridge), templeD = fmt(temple), heightD = fmt(height);
+  // El código compacto "52□18-140" sólo es legible con números puros; si el
+  // catálogo trae rangos con unidad ("51-53 mm"), no lo mostramos.
+  const rawCode = frameSize(a);
+  const cleanCode = rawCode && /^\d+\s*□\s*\d+-\d+$/.test(rawCode) ? rawCode : null;
   const materials = Array.isArray(a.material) ? a.material : (a.material ? [a.material] : []);
 
   const measures = [
-    { key: "eye", label: t("tryon.m.eye"), value: mm(eye) },
-    { key: "bridge", label: t("tryon.m.bridge"), value: mm(bridge) },
-    { key: "temple", label: t("tryon.m.temple"), value: mm(temple) },
-    { key: "height", label: t("tryon.m.height"), value: mm(height) },
+    { key: "eye", label: t("tryon.m.eye"), value: eyeD },
+    { key: "bridge", label: t("tryon.m.bridge"), value: bridgeD },
+    { key: "temple", label: t("tryon.m.temple"), value: templeD },
+    { key: "height", label: t("tryon.m.height"), value: heightD },
   ].filter((m) => m.value);
 
   return createPortal(
@@ -145,13 +161,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
             </div>
           )}
 
-          {(measures.length > 0 || shorthand) && (
+          {(measures.length > 0 || cleanCode) && (
             <div className="tsi-block">
               <h4 className="tsi-h">
                 {t("tryon.studio.specsTitle")}
-                {shorthand && <span className="tsi-code">{shorthand}</span>}
+                {cleanCode && <span className="tsi-code">{cleanCode}</span>}
               </h4>
-              <FrameDiagram eye={eye} bridge={bridge} height={height} t={t} />
+              <FrameDiagram eye={eyeD} bridge={bridgeD} height={heightD} t={t} />
               {measures.length > 0 && (
                 <ul className="tsi-measures">
                   {measures.map((m) => (
