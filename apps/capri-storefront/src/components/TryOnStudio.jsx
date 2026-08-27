@@ -14,11 +14,12 @@ import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIco
    los originales del cliente: ver ./measureIcons.jsx */
 
 export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
-  const { t, tv } = useLang();
+  const { t, tv, lang } = useLang();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [ci, setCi] = useState(colorIdx);
   const [status, setStatus] = useState("starting"); // starting | ready | denied | nocam
+  const [now, setNow] = useState(() => new Date());
 
   const colors = product?.colors || [];
   const color = colors[ci] || colors[0] || null;
@@ -48,6 +49,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((tr) => tr.stop()); };
   }, []);
 
+  // Reloj en vivo para el pie de la ficha (fecha y hora).
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Los valores del catálogo llegan como texto con unidad y a menudo en rango
   // ("51-53 mm", "Más de 60 mm"). Sólo añadimos " mm" a números puros.
   const fmt = (v) => {
@@ -65,6 +72,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     : null;
   const shapeText = a.shape ? tv(a.shape) : null;
   const na = t("fs.na");
+
+  // Sello fecha/hora (localizado según el idioma activo).
+  const locale = lang === "en" ? "en-US" : "es-ES";
+  const dateStr = now.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
+  const timeStr = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const cells = [
     { key: "eye", label: t("fs.lensWidth"), value: eyeD, Icon: IconLensWidth },
@@ -144,6 +156,21 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Pie profesional: fecha, hora y logo RUBI_LENS */}
+          <div className="fs-foot">
+            <div className="fs-foot-meta">
+              <span className="fs-foot-date">
+                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
+                {dateStr}
+              </span>
+              <span className="fs-foot-time">
+                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
+                {timeStr}
+              </span>
+            </div>
+            <img src="/logo.svg" alt="RUBI_LENS" className="fs-foot-logo" />
           </div>
         </aside>
       </div>

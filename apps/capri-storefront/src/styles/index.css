@@ -2501,3 +2501,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .fs-mval { font-size: 15px; }
   .fs-mhead span { font-size: 9.5px; padding: 8px 4px; }
 }
+
+
+/* Pie de la ficha del marco: fecha, hora y logo RUBI_LENS */
+.fs-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 16px; border-top: 1px solid var(--fs-line, #e7eaf0); background: #fbfcff; }
+.fs-foot-meta { display: flex; flex-direction: column; gap: 3px; font-variant-numeric: tabular-nums; }
+.fs-foot-date, .fs-foot-time { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1; }
+.fs-foot-date { color: var(--fs-muted, #5b6472); font-weight: 600; }
+.fs-foot-time { color: var(--fs-ink, #1e2733); font-weight: 700; letter-spacing: .02em; }
+.fs-foot-ic { width: 13px; height: 13px; opacity: .7; flex: 0 0 auto; color: var(--fs-navy, #182a4e); }
+.fs-foot-logo { height: 22px; width: auto; max-width: 132px; display: block; opacity: .92; }
