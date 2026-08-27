@@ -23,7 +23,19 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
-  const [tryOn, setTryOn] = useState(false);
+  // React Router reuses this same component instance across two URLs that match the
+  // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
+  // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
+  // resetting with it. Closing it from a useEffect keyed on `slug` looked like the fix,
+  // but an effect runs AFTER the render that already has the new `product` — for that
+  // one render, <TryOn3D> is still mounted with the new product's data and its iframe's
+  // `src` changes mid-flight, one render before the effect closes it. Storing which
+  // slug the try-on was opened FOR and comparing it to the current slug closes it in
+  // the very same render the slug changes in, no effect and no gap. This is what
+  // showed up as "DOMException: the document is not fully active" and the whole try-on
+  // appearing to restart under a different SKU.
+  const [tryOnSlug, setTryOnSlug] = useState(null);
+  const tryOn = tryOnSlug === slug;
   const { addVariant, toggleFav, isFav, busy } = useCart();
   const { toast } = useFeedback();
   const { t, tv, lang } = useLang();
@@ -32,14 +44,6 @@ export default function ProductDetail() {
   // or React sees a different hook count between renders and crashes.
   const review = useReviewSummary(slug);
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
-  // React Router reuses this same component instance across two URLs that match the
-  // same route (/producto/:slug -> /producto/:slug), so `tryOn` survives a navigation
-  // to a DIFFERENT product instead of resetting with it. Left open, the still-mounted
-  // <TryOn3D> re-renders with the new product's data and its iframe's `src` changes
-  // mid-flight — the previous product's try-on session torn down while still starting
-  // up, not closed, which is what showed up as "DOMException: the document is not
-  // fully active" and the whole thing appearing to restart under a different SKU.
-  useEffect(() => { setTryOn(false); }, [slug]);
 
   // Add the frame at its base price via the server cart (no local total).
   const addFrame = async (variantId) => {
@@ -91,7 +95,7 @@ export default function ProductDetail() {
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
             {TRY_ON_ENABLED && (
-              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
             )}
           </div>
           <div className="pdp-thumbs">
@@ -150,7 +154,7 @@ export default function ProductDetail() {
             </button>
           </div>
           {TRY_ON_ENABLED && (
-            <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+            <button className="pdp-tryon-btn" onClick={() => setTryOnSlug(slug)}>📷 {t("tryon.cta")}</button>
           )}
 
           <table className="specs">
@@ -206,7 +210,7 @@ export default function ProductDetail() {
       )}
 
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)} />
       )}
     </div>
   );
