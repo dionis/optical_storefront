@@ -7,6 +7,7 @@
 import { MEDUSA_URL } from "./medusa.js";
 
 const API = `${MEDUSA_URL}/vision-measure`;
+const JOB_API = `${API}/job`;
 
 // La foto del marco vive en el host de imágenes del catálogo, que no manda cabeceras
 // CORS: el servidor la descarga por nosotros y la devuelve como data URL.
@@ -156,6 +157,123 @@ export async function runMeasurement({
     throw err;
   }
   return body;
+}
+
+// ── Medición + RENDER por IA de forma ASÍNCRONA (nunca cortar el flujo) ─────
+//
+// El render del rostro CON la montura puesta (estilo ficha del óptico) puede tardar
+// 1-4 min y el proxy de borde corta cualquier petición a los ~120 s. Por eso NO se
+// espera en una sola petición: se ARRANCA un trabajo en el backend y se pregunta el
+// estado cada pocos segundos (consultas baratas). Gemini genera el tiempo que necesite.
+function _sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(t);
+          reject(Object.assign(new Error("cancelado"), { name: "AbortError" }));
+        },
+        { once: true }
+      );
+    }
+  });
+}
+
+export async function runMeasurementJob({
+  faceImage,
+  sideImage = null,
+  glassesImage = null,
+  frameSpec = null,
+  lang = "es",
+  withReferenceCard = false,
+  render = true,
+  onProgress = null,
+  signal,
+}) {
+  const specHint = frameSpec
+    ? ` Montura seleccionada — ${[
+        frameSpec.name && `modelo ${frameSpec.name}`,
+        frameSpec.eye && `calibre ${frameSpec.eye}`,
+        frameSpec.bridge && `puente ${frameSpec.bridge}`,
+        frameSpec.temple && `varilla ${frameSpec.temple}`,
+      ].filter(Boolean).join(", ")}. Usa estas dimensiones como referencia del marco.`
+    : "";
+
+  const [faceSmall, sideSmall, glassesSmall] = await Promise.all([
+    shrink(faceImage),
+    shrink(sideImage, 800, 0.82),
+    shrink(glassesImage, 640, 0.82),
+  ]);
+
+  const payload = {
+    faceImage: faceSmall,
+    glassesImage: glassesSmall || TINY_PX,
+    sideImage: sideSmall || undefined,
+    provider: "gemini",
+    // Números con el modelo rápido; la IMAGEN con el modelo de imagen por defecto del
+    // backend (máxima calidad). Como es asíncrono, el tiempo del render no importa.
+    model: "gemini-flash-lite-latest",
+    strategy: "A",
+    lang,
+    renderTryOn: render,
+    renderProfile: render && Boolean(sideSmall),
+    imageEngine: render ? "gemini" : "local",
+    extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
+  };
+
+  // 1) Arrancar el trabajo (respuesta inmediata con el id).
+  let startBody;
+  try {
+    const r = await fetch(JOB_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    startBody = await r.json().catch(() => null);
+    if (!r.ok || !startBody?.jobId) {
+      throw new Error(startBody?.error || `No se pudo iniciar la medición (HTTP ${r.status}).`);
+    }
+  } catch (e) {
+    if (e?.name === "AbortError") throw Object.assign(new Error("cancelado"), { code: "aborted" });
+    throw new Error(e?.message || "No se pudo conectar con el servicio de medición.");
+  }
+  const jobId = startBody.jobId;
+
+  // 2) Preguntar el estado hasta que termine. El backend nunca corta; este bucle solo
+  //    tiene un tope de seguridad muy holgado por si el proceso se cae a mitad.
+  const started = Date.now();
+  const MAX_MS = 8 * 60 * 1000; // 8 min de seguridad
+  const STEP_MS = 3000;
+  let misses = 0;
+  for (;;) {
+    if (signal?.aborted) throw Object.assign(new Error("cancelado"), { code: "aborted" });
+    if (Date.now() - started > MAX_MS) {
+      throw new Error("La generación está tardando más de lo normal. Vuelve a intentarlo.");
+    }
+    await _sleep(STEP_MS, signal);
+
+    let poll = null;
+    try {
+      const r = await fetch(`${JOB_API}/${encodeURIComponent(jobId)}`, { signal });
+      poll = await r.json().catch(() => null);
+    } catch (e) {
+      if (e?.name === "AbortError") throw Object.assign(new Error("cancelado"), { code: "aborted" });
+      // Hipo de red al preguntar: reintenta unas cuantas veces antes de rendirse.
+      if (++misses > 20) throw new Error("Se perdió la conexión con el servicio de medición.");
+      continue;
+    }
+    misses = 0;
+    if (!poll) continue;
+    if (typeof onProgress === "function") {
+      onProgress({ status: poll.status, elapsedMs: Date.now() - started });
+    }
+    if (poll.status === "done") return poll.result;
+    if (poll.status === "error") throw new Error(poll.error || "La generación de la imagen falló.");
+    // status === "pending" → seguir preguntando.
+  }
 }
 
 // Extrae, de la respuesta, el primer resultado con medidas y los números clave.

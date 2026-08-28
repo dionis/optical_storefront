@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
-import { runMeasurement, pickMeasurement, frameImageDataUrl } from "../data/visionMeasure.js";
+import { runMeasurementJob, pickMeasurement, frameImageDataUrl } from "../data/visionMeasure.js";
 
 // Interfaz de CLIENTE del probador (producción).
 //
@@ -190,24 +190,32 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const [mData, setMData] = useState(null);
   const [mError, setMError] = useState(null);
   const [mCode, setMCode] = useState(null);
+  const [mProg, setMProg] = useState(0);           // ms transcurridos (para el cargador)
+  const mAbort = useRef(null);
 
   async function doMeasure() {
     if (!frontImg || !sideImg) return;
-    setMState("loading"); setMError(null); setMCode(null);
+    if (mAbort.current) mAbort.current.abort();
+    const ctrl = new AbortController();
+    mAbort.current = ctrl;
+    setMState("loading"); setMError(null); setMCode(null); setMProg(0);
     try {
-      // Enviamos las DOS fotos (frontal para la DIP, lateral para la altura de corredor)
-      // + la foto REAL de la montura seleccionada. runMeasurement las comprime antes de
-      // subirlas y NO pide render de IA, así la medición completa entra bajo el límite
-      // del gateway (sin 502). frameSpec añade las cotas del marco como texto de apoyo.
+      // Flujo ASÍNCRONO: se envían las DOS fotos (frontal→DIP, lateral→altura de
+      // corredor) + la foto REAL de la montura. El backend mide y luego Gemini GENERA
+      // el rostro con los espejuelos puestos; el navegador va preguntando el estado y
+      // NUNCA corta la generación. Las fotos se comprimen antes de subir.
       const at = product?.attributes || {};
       const glassesImage = color?.image ? await frameImageDataUrl(color.image) : null;
-      const resp = await runMeasurement({
+      const resp = await runMeasurementJob({
         faceImage: frontImg,
         sideImage: sideImg,
         glassesImage,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
-        lang, withReferenceCard: true,
+        lang, withReferenceCard: true, render: true,
+        signal: ctrl.signal,
+        onProgress: ({ elapsedMs }) => setMProg(elapsedMs),
       });
+      if (ctrl.signal.aborted) return;
       const picked = pickMeasurement(resp);
       if (!picked.ok && picked.pd == null && !picked.frontImage) {
         setMCode(picked.errorCode); setMError(picked.error); setMState("error");
@@ -215,9 +223,25 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         setMData(picked); setMState("result");
       }
     } catch (e) {
+      if (e?.code === "aborted" || e?.name === "AbortError") return;
       setMCode(e?.code || null); setMError(e?.message || null); setMState("error");
     }
   }
+
+  function closeReport() {
+    if (mAbort.current) { mAbort.current.abort(); mAbort.current = null; }
+    setMState("idle");
+  }
+
+  // Vista previa sin cámara: ?vmdemo=result | ?vmdemo=loading (solo para revisar el diseño).
+  useEffect(() => {
+    const p = typeof location !== "undefined" && new URLSearchParams(location.search).get("vmdemo");
+    if (!p) return;
+    if (p === "loading") { setMState("loading"); setMProg(37000); return; }
+    setMData({ pd: 63, pdRight: 31.5, pdLeft: 31.5, corridor: 22, progressive: 22, bifocal: null,
+      suitable: true, warnings: [], frontImage: null, profileImage: null });
+    setMState("result");
+  }, []);
 
   // (El envío a Gemini es manual: botón "Calcular mis medidas" cuando hay dos fotos.)
 
@@ -328,33 +352,34 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         <aside className="fs-card">
           <div className="fs-hd"><IconGlasses className="fs-hd-ic" />{t("fs.frameInfo")}</div>
 
-          <div className="fs-photo">
-            {color?.image
-              ? <img src={color.image} alt={`${product.name} ${color?.name || ""}`}
-                     onError={(e) => { e.currentTarget.style.opacity = 0.2; }} />
-              : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-          </div>
-
-          <div className="fs-info">
-            <dl className="fs-specs">
-              {specRows.map((row) => (
-                <div className="fs-row" key={row.key}>
-                  <dt>{row.label}</dt>
-                  <dd>{row.node}</dd>
+          <div className="fs-top">
+            <div className="fs-info">
+              <dl className="fs-specs">
+                {specRows.map((row) => (
+                  <div className="fs-row" key={row.key}>
+                    <dt>{row.label}</dt>
+                    <dd>{row.node}</dd>
+                  </div>
+                ))}
+              </dl>
+              {colors.length > 1 && (
+                <div className="fs-swatches" role="listbox" aria-label={product.name}>
+                  {colors.map((c, i) => (
+                    <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                            className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                            title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                  ))}
                 </div>
-              ))}
-            </dl>
-          </div>
-
-          {colors.length > 1 && (
-            <div className="fs-swatches" role="listbox" aria-label={product.name}>
-              {colors.map((c, i) => (
-                <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                        className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                        title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-              ))}
+              )}
             </div>
-          )}
+            <div className="fs-photo">
+              {color?.image
+                ? <img src={color.image} referrerPolicy="no-referrer"
+                       alt={`${product.name} ${color?.name || ""}`}
+                       onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+                : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+            </div>
+          </div>
 
           <div className="fs-measures">
             <div className="fs-mhead">
@@ -397,8 +422,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       {mState !== "idle" && (
         <MeasureReport
           phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
-          error={mError} errorCode={mCode} topOffset={headerH || 0}
-          onRetry={doMeasure} onClose={() => setMState("idle")}
+          error={mError} errorCode={mCode} topOffset={headerH || 0} progressMs={mProg}
+          product={product} color={color}
+          onRetry={doMeasure} onClose={closeReport}
         />
       )}
     </div>,
