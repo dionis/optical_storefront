@@ -40,6 +40,12 @@ const NOCARD_HINT =
   "No hay tarjeta de referencia en la foto. Estima la escala con proporciones faciales " +
   "estándar y marca la confianza como 'estimada' (cálculo aproximado).";
 
+// Marcador mínimo para glassesImage: el servicio lo exige, pero las dimensiones del
+// marco viajan como texto (frameSpec) y NO pedimos render, así que no procesamos una
+// foto grande de la montura (eso disparaba el tiempo y el 502).
+const TINY_PX =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 // Ejecuta la medición. faceImage y sideImage son data URLs de la cámara/subida.
 //
 // Rendimiento: usamos el modelo RÁPIDO (flash) y NO pedimos la imagen generada por IA
@@ -66,7 +72,7 @@ export async function runMeasurement({
 
   const payload = {
     faceImage,
-    glassesImage: glassesImage || faceImage,
+    glassesImage: glassesImage || TINY_PX,
     sideImage: sideImage || undefined,
     provider: "gemini",
     model: "gemini-2.5-flash",

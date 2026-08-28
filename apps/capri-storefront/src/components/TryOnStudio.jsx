@@ -195,11 +195,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     if (!frontImg || !sideImg) return;
     setMState("loading"); setMError(null); setMCode(null);
     try {
-      const c = colors[ci] || colors[0] || null;
-      const glasses = c?.image ? await frameImageDataUrl(c.image) : null;
+      // Envío liviano: solo la frontal + las dimensiones del marco como texto. La foto
+      // grande de la montura y la lateral no se mandan (disparaban el tiempo/502); la
+      // lateral se muestra en el reporte y se usará cuando el backend la consuma.
       const at = product?.attributes || {};
       const resp = await runMeasurement({
-        faceImage: frontImg, sideImage: sideImg, glassesImage: glasses,
+        faceImage: frontImg,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
         lang, withReferenceCard: true,
       });
