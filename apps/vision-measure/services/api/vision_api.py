@@ -219,7 +219,7 @@ def providers(lang: str = "es") -> Dict[str, Any]:
 # consultas baratas (< 1 s). Así el flujo de generación no se corta jamás.
 _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
-_JOBS_MAX = 200
+_JOBS_MAX = 60  # cada resultado guarda 1-2 imágenes grandes: acotado para no comer RAM
 _JOB_POOL = ThreadPoolExecutor(max_workers=4)
 
 
