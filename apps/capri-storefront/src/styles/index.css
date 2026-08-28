@@ -2658,3 +2658,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-warns { color: #7a5b12; background: #fbf3df; border: 1px solid #efd9a3; }
 .vm-aiprofile { color: #6b7280; }
 .vm-disc { color: #6b7280; border-top: 1px dashed #ececea; }
+
+
+/* Barra "Calcular mis medidas" — clara, coherente con la web */
+.tryon-studio .vm-actionbar { background: #fff; border-top: 1px solid #ececea; justify-content: flex-end; gap: 12px; }
+.vm-actionbar-ok { color: #2c7d3f; font-weight: 700; font-size: 13px; margin-right: auto; }
+.tryon-studio .vm-go { background: linear-gradient(180deg, #2f74ff, #0E5AD0);
+  box-shadow: 0 6px 18px -6px rgba(14,90,208,.55); }
+.tryon-studio .vm-go:hover { filter: brightness(1.05); }

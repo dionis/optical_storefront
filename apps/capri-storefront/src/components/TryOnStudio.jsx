@@ -17,7 +17,7 @@ import { runMeasurement, pickMeasurement, frameImageDataUrl } from "../data/visi
 // Motor de detección facial (mismo que usa el respaldo TryOn.jsx).
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.6";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-const HOLD_FRAMES = 26; // ~0.9 s sosteniendo la pose antes de capturar
+const HOLD_FRAMES = 90; // ~3 s sosteniendo la pose antes de capturar (más tiempo para colocarse)
 const CAPDBG = typeof location !== "undefined" && location.search.includes("capdbg");
 
 /* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
@@ -146,7 +146,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     setGuide(msg);
     if (ok) {
       holdRef.current += 1;
-      setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / 9)));
+      setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / (HOLD_FRAMES / 3))));
       if (holdRef.current >= HOLD_FRAMES) { capture(ph); }
     } else {
       holdRef.current = 0; setCount(0);
@@ -197,10 +197,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     try {
       const c = colors[ci] || colors[0] || null;
       const glasses = c?.image ? await frameImageDataUrl(c.image) : null;
+      const at = product?.attributes || {};
       const resp = await runMeasurement({
         faceImage: frontImg, sideImage: sideImg, glassesImage: glasses,
-        frameId: product?.sku || product?.name || null, lang,
-        withReferenceCard: true,
+        frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
+        lang, withReferenceCard: true,
       });
       const picked = pickMeasurement(resp);
       if (!picked.ok && picked.pd == null && !picked.frontImage) {
@@ -213,14 +214,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     }
   }
 
-  // Auto-envío a Gemini en cuanto están las dos fotos (una sola vez por par).
-  useEffect(() => {
-    if (frontImg && sideImg && !autoDoneRef.current) {
-      autoDoneRef.current = true;
-      doMeasure();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frontImg, sideImg]);
+  // (El envío a Gemini es manual: botón "Calcular mis medidas" cuando hay dos fotos.)
 
   // ── Datos de la ficha (derecha) ──
   const colors = product?.colors || [];
@@ -387,6 +381,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
           </div>
         </aside>
       </div>
+
+      {frontImg && sideImg && mState === "idle" && (
+        <div className="vm-actionbar">
+          <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
+          <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
+        </div>
+      )}
 
       {mState !== "idle" && (
         <MeasureReport

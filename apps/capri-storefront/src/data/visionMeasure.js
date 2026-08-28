@@ -41,41 +41,70 @@ const NOCARD_HINT =
   "estándar y marca la confianza como 'estimada' (cálculo aproximado).";
 
 // Ejecuta la medición. faceImage y sideImage son data URLs de la cámara/subida.
+//
+// Rendimiento: usamos el modelo RÁPIDO (flash) y NO pedimos la imagen generada por IA
+// (renderTryOn:false). Generar la foto con la montura tarda 30-60 s y hace que el
+// gateway corte con 502; medir solo tarda ~12 s. El reporte muestra las fotos REALES
+// del cliente con las cotas encima. La montura ya se ve puesta en el propio probador.
 export async function runMeasurement({
   faceImage,
   sideImage = null,
   glassesImage = null,
-  frameId = null,
+  frameSpec = null,
   lang = "es",
   withReferenceCard = false,
   signal,
 }) {
+  const specHint = frameSpec
+    ? ` Montura seleccionada — ${[
+        frameSpec.name && `modelo ${frameSpec.name}`,
+        frameSpec.eye && `calibre ${frameSpec.eye}`,
+        frameSpec.bridge && `puente ${frameSpec.bridge}`,
+        frameSpec.temple && `varilla ${frameSpec.temple}`,
+      ].filter(Boolean).join(", ")}. Usa estas dimensiones como referencia del marco.`
+    : "";
+
   const payload = {
     faceImage,
-    // El servicio exige glassesImage (mide también la montura). Si no la tenemos aún,
-    // reusamos la frontal; el frameId + protocolo Capri aportan las dimensiones reales.
     glassesImage: glassesImage || faceImage,
-    // Enviada para uso futuro (el backend la ignora hasta que consuma el perfil real).
     sideImage: sideImage || undefined,
     provider: "gemini",
+    model: "gemini-2.5-flash",
     strategy: "A",
     lang,
-    renderTryOn: true,
-    renderProfile: true,
-    imageEngine: "gemini",
-    extraInstructions: withReferenceCard ? CARD_HINT : NOCARD_HINT,
-    frameId: frameId || undefined,
+    renderTryOn: false,
+    renderProfile: false,
+    imageEngine: "local",
+    extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };
 
-  const r = await fetch(API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal,
-  });
+  // Corta si tarda demasiado (evita esperas eternas en la UI).
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 55000);
+  const merged = signal
+    ? (signal.addEventListener("abort", () => ctrl.abort()), ctrl.signal)
+    : ctrl.signal;
+  let r;
+  try {
+    r = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: merged,
+    });
+  } catch (e) {
+    clearTimeout(to);
+    const err = new Error(
+      e?.name === "AbortError"
+        ? "La medición tardó demasiado. Inténtalo de nuevo."
+        : "No se pudo conectar con el servicio de medición."
+    );
+    throw err;
+  }
+  clearTimeout(to);
   let body = null;
   try { body = await r.json(); }
-  catch { throw new Error(`Respuesta ilegible del servicio (HTTP ${r.status}).`); }
+  catch { throw new Error(`El servicio de medición no está disponible ahora (HTTP ${r.status}).`); }
   if (!r.ok && !Array.isArray(body?.results)) {
     const err = new Error(body?.error || body?.detail || `El servicio respondió ${r.status}.`);
     err.code = body?.results?.[0]?.errorCode;
