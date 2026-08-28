@@ -195,12 +195,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     if (!frontImg || !sideImg) return;
     setMState("loading"); setMError(null); setMCode(null);
     try {
-      // Envío liviano: solo la frontal + las dimensiones del marco como texto. La foto
-      // grande de la montura y la lateral no se mandan (disparaban el tiempo/502); la
-      // lateral se muestra en el reporte y se usará cuando el backend la consuma.
+      // Enviamos las DOS fotos (frontal para la DIP, lateral para la altura de corredor)
+      // + la foto REAL de la montura seleccionada. runMeasurement las comprime antes de
+      // subirlas y NO pide render de IA, así la medición completa entra bajo el límite
+      // del gateway (sin 502). frameSpec añade las cotas del marco como texto de apoyo.
       const at = product?.attributes || {};
+      const glassesImage = color?.image ? await frameImageDataUrl(color.image) : null;
       const resp = await runMeasurement({
         faceImage: frontImg,
+        sideImage: sideImg,
+        glassesImage,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
         lang, withReferenceCard: true,
       });

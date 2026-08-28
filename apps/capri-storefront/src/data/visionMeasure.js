@@ -46,12 +46,40 @@ const NOCARD_HINT =
 const TINY_PX =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
+// Reduce el peso de las fotos antes de enviarlas (Gemini submuestrea igual): baja a
+// máx. 800 px por el lado mayor y recomprime a JPEG. Menos bytes = menos latencia,
+// lo que mantiene la medición por debajo del límite del gateway (sin 502).
+async function shrink(dataUrl, max = 800, quality = 0.82) {
+  if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:image"))
+    return dataUrl || null;
+  if (typeof document === "undefined") return dataUrl;
+  try {
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error("img"));
+      im.src = dataUrl;
+    });
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    if (scale >= 1 && dataUrl.length < 120000) return dataUrl; // ya es liviana
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, 0, w, h);
+    return cv.toDataURL("image/jpeg", quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
 // Ejecuta la medición. faceImage y sideImage son data URLs de la cámara/subida.
 //
-// Rendimiento: usamos el modelo RÁPIDO (flash) y NO pedimos la imagen generada por IA
-// (renderTryOn:false). Generar la foto con la montura tarda 30-60 s y hace que el
-// gateway corte con 502; medir solo tarda ~12 s. El reporte muestra las fotos REALES
-// del cliente con las cotas encima. La montura ya se ve puesta en el propio probador.
+// Rendimiento: usamos el modelo RÁPIDO (gemini-3-flash) y NO pedimos la imagen generada
+// por IA (renderTryOn:false). Generar la foto con la montura tarda 30-60 s y hacía que el
+// gateway cortara con 502; medir con las dos fotos + la montura tarda ~30-35 s. El reporte
+// muestra las fotos REALES del cliente con las cotas encima (PD en la frontal, altura de
+// corredor en la lateral). La montura ya se ve puesta en el propio probador.
 export async function runMeasurement({
   faceImage,
   sideImage = null,
@@ -70,12 +98,21 @@ export async function runMeasurement({
       ].filter(Boolean).join(", ")}. Usa estas dimensiones como referencia del marco.`
     : "";
 
+  // Comprimimos las fotos antes de enviarlas: baja los bytes y el tiempo de respuesta.
+  const [faceSmall, sideSmall, glassesSmall] = await Promise.all([
+    shrink(faceImage),
+    shrink(sideImage, 800, 0.82),
+    shrink(glassesImage, 640, 0.82),
+  ]);
+
   const payload = {
-    faceImage,
-    glassesImage: glassesImage || TINY_PX,
-    sideImage: sideImage || undefined,
+    faceImage: faceSmall,
+    // La foto REAL de la montura (reducida) evita que Gemini la vea "en negro" y
+    // permite medir el marco; el render de IA sigue apagado (ahí estaba el 502).
+    glassesImage: glassesSmall || TINY_PX,
+    sideImage: sideSmall || undefined,
     provider: "gemini",
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     strategy: "A",
     lang,
     renderTryOn: false,
@@ -86,7 +123,7 @@ export async function runMeasurement({
 
   // Corta si tarda demasiado (evita esperas eternas en la UI).
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 55000);
+  const to = setTimeout(() => ctrl.abort(), 75000);
   const merged = signal
     ? (signal.addEventListener("abort", () => ctrl.abort()), ctrl.signal)
     : ctrl.signal;
