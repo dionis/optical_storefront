@@ -75,9 +75,9 @@ async function shrink(dataUrl, max = 800, quality = 0.82) {
 
 // Ejecuta la medición. faceImage y sideImage son data URLs de la cámara/subida.
 //
-// Rendimiento: usamos el modelo RÁPIDO (gemini-3-flash) y NO pedimos la imagen generada
+// Rendimiento: usamos el modelo RÁPIDO (gemini-flash-lite) y NO pedimos la imagen generada
 // por IA (renderTryOn:false). Generar la foto con la montura tarda 30-60 s y hacía que el
-// gateway cortara con 502; medir con las dos fotos + la montura tarda ~30-35 s. El reporte
+// gateway cortara con 502; medir con las dos fotos + la montura tarda ~12 s. El reporte
 // muestra las fotos REALES del cliente con las cotas encima (PD en la frontal, altura de
 // corredor en la lateral). La montura ya se ve puesta en el propio probador.
 export async function runMeasurement({
@@ -112,7 +112,9 @@ export async function runMeasurement({
     glassesImage: glassesSmall || TINY_PX,
     sideImage: sideSmall || undefined,
     provider: "gemini",
-    model: "gemini-3-flash-preview",
+    // Modelo rápido y estable para medición: ~12 s típico devolviendo DIP + altura de
+    // corredor completas (vs. ~40-60 s de flash/flash-preview). Sin render de IA.
+    model: "gemini-flash-lite-latest",
     strategy: "A",
     lang,
     renderTryOn: false,
@@ -123,7 +125,7 @@ export async function runMeasurement({
 
   // Corta si tarda demasiado (evita esperas eternas en la UI).
   const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 75000);
+  const to = setTimeout(() => ctrl.abort(), 90000);
   const merged = signal
     ? (signal.addEventListener("abort", () => ctrl.abort()), ctrl.signal)
     : ctrl.signal;
