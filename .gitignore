@@ -80,3 +80,4 @@ apps/scraper/scripts/.shape_truth.json
 .playwright-mcp/
 _to_delete/ 
 change.patch
+__commitmsg.txt 

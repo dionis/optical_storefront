@@ -1,6 +1,0 @@
-fix(tryon): send both photos + real frame image to gemini-3-flash, downscale payload
-
-- Restaura foto lateral (altura de corredor) y foto real de la montura (evita "sin gafas")
-- Modelo gemini-3-flash-preview (medidas completas), sin render de IA
-- Comprime fotos a 800/640px antes de subir; margen de aborto a 75s
-- Resuelve el 502 y devuelve PD + altura de corredor reales
