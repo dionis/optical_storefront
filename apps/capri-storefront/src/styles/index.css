@@ -2714,7 +2714,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vmr-logo { display: block; flex: 0 0 auto; }
 
 .vmr-photos, .vmr-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
-.vmr-info { padding-top: 0; }
+.vmr-info { padding-top: 0; align-items: start; }
 
 .vmr-panel { position: relative; }
 .vmr-tag { position: absolute; top: 10px; left: 10px; z-index: 3; background: var(--navy); color: #fff;
@@ -2789,6 +2789,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 520px) {
   .vmr-titlebar { flex-direction: column; align-items: flex-start; gap: 12px; }
   .vmr-frameinfo { grid-template-columns: 1fr; }
+  .vmr-dims { gap: 7px; }
+  .vmr-dcell { padding: 8px 3px; }
+  .vmr-dhead { font-size: 9px; letter-spacing: .3px; }
+  .vmr-dval { font-size: 12.5px; }
 }
 
 /* ── Pantalla de carga educativa (infografías + animaciones) ── */
