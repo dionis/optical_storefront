@@ -7,7 +7,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 
 const mm = (v) => (v == null || Number.isNaN(v) ? "—" : `${Math.round(v * 10) / 10} mm`);
 
-export default function MeasureReport({ phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose }) {
+export default function MeasureReport({ phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose, topOffset = 0 }) {
   const { t } = useLang();
 
   const body = () => {
@@ -79,7 +79,7 @@ export default function MeasureReport({ phase, data, frontFallback, sideFallback
   };
 
   return createPortal(
-    <div className="vm-overlay" role="dialog" aria-modal="true">
+    <div className="vm-overlay" role="dialog" aria-modal="true" style={{ top: topOffset || 0 }}>
       <div className="vm-bar">
         <span className="vm-title">📐 {t("vm.title")}</span>
         <button className="vm-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>

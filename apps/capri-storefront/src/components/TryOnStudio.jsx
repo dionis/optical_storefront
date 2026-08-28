@@ -26,6 +26,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const { t, tv, lang } = useLang();
   const [ci, setCi] = useState(colorIdx);
   const [now, setNow] = useState(() => new Date());
+  const [headerH, setHeaderH] = useState(0);
+  const autoDoneRef = useRef(false);
 
   // Cámara + captura automática
   const streamRef = useRef(null);
@@ -49,6 +51,20 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Deja ver el menú superior de la web: el probador arranca bajo el header sticky
+  // y bloquea el scroll del fondo mientras está abierto.
+  useEffect(() => {
+    const measure = () => {
+      const h = document.querySelector(".header");
+      setHeaderH(h ? Math.round(h.getBoundingClientRect().height) : 0);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const prevOv = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("resize", measure); document.body.style.overflow = prevOv; };
   }, []);
 
   // Adjunta el stream al <video> activo (se remonta al cambiar de caja)
@@ -162,28 +178,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     rd.readAsDataURL(file);
   }
   function retake(which) {
+    autoDoneRef.current = false;
+    setMState("idle"); setMData(null);
     if (which === "front") { setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
   }
 
-  // ── Medición óptica (IA): manda las fotos + el marco al servicio vision-measure ──
-  const [card, setCard] = useState("no");          // "yes" con tarjeta de referencia
+  // ── Medición óptica (IA): al tener las dos fotos se manda SOLO a Gemini ──
+  // La referencia de escala (tarjeta ID-1 pegada al rostro) va SIEMPRE, invisible.
   const [mState, setMState] = useState("idle");    // idle | loading | error | result
   const [mData, setMData] = useState(null);
   const [mError, setMError] = useState(null);
   const [mCode, setMCode] = useState(null);
-  const [showMeasure, setShowMeasure] = useState(false);
 
   async function doMeasure() {
     if (!frontImg || !sideImg) return;
-    setShowMeasure(true); setMState("loading"); setMError(null); setMCode(null);
+    setMState("loading"); setMError(null); setMCode(null);
     try {
       const c = colors[ci] || colors[0] || null;
       const glasses = c?.image ? await frameImageDataUrl(c.image) : null;
       const resp = await runMeasurement({
         faceImage: frontImg, sideImage: sideImg, glassesImage: glasses,
         frameId: product?.sku || product?.name || null, lang,
-        withReferenceCard: card === "yes",
+        withReferenceCard: true,
       });
       const picked = pickMeasurement(resp);
       if (!picked.ok && picked.pd == null && !picked.frontImage) {
@@ -195,6 +212,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       setMCode(e?.code || null); setMError(e?.message || null); setMState("error");
     }
   }
+
+  // Auto-envío a Gemini en cuanto están las dos fotos (una sola vez por par).
+  useEffect(() => {
+    if (frontImg && sideImg && !autoDoneRef.current) {
+      autoDoneRef.current = true;
+      doMeasure();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontImg, sideImg]);
 
   // ── Datos de la ficha (derecha) ──
   const colors = product?.colors || [];
@@ -256,7 +282,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
             <>
               <img src={img} alt={title} />
               <span className="cap-badge cap-ok">✓ {t("cap.ready")}</span>
-              <button type="button" className="cap-retake" onClick={() => retake(which)}>{t("cap.retake")}</button>
+              <button type="button" className="cap-retake" onClick={() => retake(which)}
+                      title={t("cap.retake")} aria-label={t("cap.retake")}>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+                <span>{t("cap.retake")}</span>
+              </button>
             </>
           ) : active && camStatus === "ready" ? (
             <>
@@ -278,9 +308,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   }
 
   return createPortal(
-    <div className="tryon tryon-studio" role="dialog" aria-modal="true">
+    <div className="tryon tryon-studio" role="dialog" aria-modal="true" style={{ top: headerH || 0 }}>
       <div className="tryon-bar">
-        <span className="tryon-title">👓 {t("tryon.title")} · {product.name}</span>
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
       </div>
 
@@ -359,23 +388,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         </aside>
       </div>
 
-      {frontImg && sideImg && (
-        <div className="vm-actionbar">
-          <div className="vm-ask">
-            <span className="vm-ask-q">{t("vm.card")}</span>
-            <div className="vm-seg" role="group">
-              <button type="button" className={card === "yes" ? "on" : ""} onClick={() => setCard("yes")}>{t("vm.cardYes")}</button>
-              <button type="button" className={card === "no" ? "on" : ""} onClick={() => setCard("no")}>{t("vm.cardNo")}</button>
-            </div>
-          </div>
-          <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
-        </div>
-      )}
-
-      {showMeasure && (
+      {mState !== "idle" && (
         <MeasureReport
           phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
-          error={mError} errorCode={mCode} onRetry={doMeasure} onClose={() => setShowMeasure(false)}
+          error={mError} errorCode={mCode} topOffset={headerH || 0}
+          onRetry={doMeasure} onClose={() => setMState("idle")}
         />
       )}
     </div>,
