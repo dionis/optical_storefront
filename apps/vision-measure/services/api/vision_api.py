@@ -19,6 +19,9 @@ Routes
 import base64
 import os
 import sys
+import threading
+import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -208,30 +211,35 @@ def providers(lang: str = "es") -> Dict[str, Any]:
     }
 
 
-@app.post("/api/vision-measure")
-def measure(request: MeasureRequest) -> JSONResponse:
-    """
-    Runs the requested strategy (or both) and returns the results in request order.
+# ── Trabajos asíncronos para el render largo (NUNCA cortar el flujo) ────────
+# El render por IA (paciente con la montura puesta) puede tardar 1-4 min, pero el
+# proxy de borde (Vercel) delante de este servicio corta CUALQUIER petición HTTP a
+# los ~120 s. Solución: el navegador ARRANCA un trabajo aquí, este proceso genera en
+# segundo plano el tiempo que Gemini necesite, y el navegador pregunta el estado con
+# consultas baratas (< 1 s). Así el flujo de generación no se corta jamás.
+_JOBS: Dict[str, Dict[str, Any]] = {}
+_JOBS_LOCK = threading.Lock()
+_JOBS_MAX = 200
+_JOB_POOL = ThreadPoolExecutor(max_workers=4)
 
-    A provider-side failure is reported inside the envelope with HTTP 200: in an A/B
-    run one side failing must not hide the side that worked.
+
+def _validate_measure(request: "MeasureRequest") -> Optional[Dict[str, Any]]:
+    """422 si falta alguna de las dos imágenes obligatorias; None si todo bien."""
+    if not (request.faceImage or "").strip():
+        return {"ok": False, "error": "Falta la foto frontal del paciente."}
+    if not (request.glassesImage or "").strip():
+        return {"ok": False, "error": "Falta la imagen de la montura."}
+    return None
+
+
+def _build_measure_payload(request: "MeasureRequest") -> Dict[str, Any]:
+    """
+    Ejecuta medición (+ render opcional) y devuelve el sobre completo. Núcleo compartido
+    por la ruta síncrona /api/vision-measure y la ruta de trabajos asíncronos.
     """
     strategy = (request.strategy or "B").strip().upper()
 
-    if not (request.faceImage or "").strip():
-        return JSONResponse(
-            status_code=422,
-            content={"ok": False, "error": "Falta la foto frontal del paciente."},
-        )
-    if not (request.glassesImage or "").strip():
-        return JSONResponse(
-            status_code=422,
-            content={"ok": False, "error": "Falta la imagen de la montura."},
-        )
-
-    # One id per HTTP request, shared by every proposal inside it and stamped on every
-    # log line. Nothing is carried over from the previous request — this makes that
-    # checkable in the log rather than something the operator has to take on trust.
+    # One id per run, shared by every proposal inside it and stamped on every log line.
     request_id = new_request_id()
 
     common = {
@@ -256,8 +264,6 @@ def measure(request: MeasureRequest) -> JSONResponse:
         "ok": any(r.get("ok") for r in results),
         "requestId": request_id,
         "results": results,
-        # What this request cost, across every proposal it ran. A failed proposal still
-        # burned tokens, so it counts here too.
         "cost": summarize([r["cost"] for r in results if r.get("cost")]),
     }
 
@@ -280,9 +286,6 @@ def measure(request: MeasureRequest) -> JSONResponse:
             "api_key": request.imageApiKey or request.apiKey,
             "frame_total_width_mm": measured_width,
         }
-        # The frontal composite and the side view are independent calls, so they wait
-        # together rather than one after the other. With two image models at ~20 s each
-        # that is the difference between 20 and 40 seconds of the operator's time.
         views = ["front"] + (["profile"] if request.renderProfile else [])
         # Both views read the same two photographs at the same limits, so they are
         # decoded and re-encoded once for the pair rather than once per view.
@@ -298,7 +301,97 @@ def measure(request: MeasureRequest) -> JSONResponse:
         if request.renderProfile:
             payload["tryOnProfile"] = rendered[1]
 
-    return JSONResponse(status_code=200, content=payload)
+    return payload
+
+
+@app.post("/api/vision-measure")
+def measure(request: MeasureRequest) -> JSONResponse:
+    """
+    Runs the requested strategy (or both) and returns the results in request order.
+
+    A provider-side failure is reported inside the envelope with HTTP 200: in an A/B
+    run one side failing must not hide the side that worked.
+    """
+    err = _validate_measure(request)
+    if err is not None:
+        return JSONResponse(status_code=422, content=err)
+    return JSONResponse(status_code=200, content=_build_measure_payload(request))
+
+
+def _run_job(job_id: str, request: MeasureRequest) -> None:
+    """Corre la medición+render en segundo plano y guarda el resultado en el store."""
+    try:
+        payload = _build_measure_payload(request)
+        with _JOBS_LOCK:
+            job = _JOBS.get(job_id)
+            if job is not None:
+                job["status"] = "done"
+                job["result"] = payload
+                job["finishedAt"] = time.time()
+    except Exception as exc:  # noqa: BLE001 - reportamos cualquier fallo al cliente
+        with _JOBS_LOCK:
+            job = _JOBS.get(job_id)
+            if job is not None:
+                job["status"] = "error"
+                job["error"] = f"{type(exc).__name__}: {exc}"
+                job["finishedAt"] = time.time()
+
+
+@app.post("/api/vision-measure/job")
+def start_measure_job(request: MeasureRequest) -> JSONResponse:
+    """
+    Arranca un trabajo de medición+render y responde AL INSTANTE con su id. El cliente
+    consulta el estado en GET /api/vision-measure/job/{id}. Pensado para el render por
+    IA, que puede exceder el límite de tiempo del proxy de borde: nunca se corta.
+    """
+    err = _validate_measure(request)
+    if err is not None:
+        return JSONResponse(status_code=422, content=err)
+
+    job_id = uuid.uuid4().hex[:16]
+    with _JOBS_LOCK:
+        # Poda: si el store crece demasiado, descarta los más viejos (memoria acotada).
+        if len(_JOBS) >= _JOBS_MAX:
+            for key, _ in sorted(_JOBS.items(), key=lambda kv: kv[1].get("createdAt", 0))[
+                : len(_JOBS) - _JOBS_MAX + 1
+            ]:
+                _JOBS.pop(key, None)
+        _JOBS[job_id] = {"status": "pending", "createdAt": time.time()}
+
+    _JOB_POOL.submit(_run_job, job_id, request)
+    return JSONResponse(
+        status_code=200, content={"ok": True, "jobId": job_id, "status": "pending"}
+    )
+
+
+@app.get("/api/vision-measure/job/{job_id}")
+def get_measure_job(job_id: str) -> JSONResponse:
+    """Estado de un trabajo. Cuando termina, trae el sobre completo en `result`."""
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "status": "unknown",
+                    "error": "Trabajo no encontrado o expirado.",
+                },
+            )
+        status = job.get("status")
+        if status == "done":
+            return JSONResponse(
+                status_code=200,
+                content={"ok": True, "status": "done", "result": job.get("result")},
+            )
+        if status == "error":
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "status": "error", "error": job.get("error")},
+            )
+        return JSONResponse(
+            status_code=200, content={"ok": True, "status": status or "pending"}
+        )
 
 
 

@@ -175,6 +175,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "10mb" },
     },
     {
+      // The async job route carries the same two base64 photos as the sync route,
+      // so it needs the same raised JSON body limit.
+      matcher: "/vision-measure/job",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "10mb" },
+    },
+    {
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering
