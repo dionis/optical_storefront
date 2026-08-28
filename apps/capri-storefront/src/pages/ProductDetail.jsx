@@ -5,9 +5,8 @@ import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
-// Probador 3D: iframe hacia apps/vto-web, no un módulo de este bundle — no hay
-// three.js que cargar diferido aquí (ver TryOn3D.jsx).
-import TryOn from "../components/TryOn3D.jsx";
+// Probador: el switch elige la interfaz (prod / dev-respaldo / legacy). Ver TryOnSwitch.jsx.
+import TryOn from "../components/TryOnSwitch.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -23,7 +22,19 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
-  const [tryOn, setTryOn] = useState(false);
+  // React Router reuses this same component instance across two URLs that match the
+  // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
+  // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
+  // resetting with it. Closing it from a useEffect keyed on `slug` looked like the fix,
+  // but an effect runs AFTER the render that already has the new `product` — for that
+  // one render, <TryOn3D> is still mounted with the new product's data and its iframe's
+  // `src` changes mid-flight, one render before the effect closes it. Storing which
+  // slug the try-on was opened FOR and comparing it to the current slug closes it in
+  // the very same render the slug changes in, no effect and no gap. This is what
+  // showed up as "DOMException: the document is not fully active" and the whole try-on
+  // appearing to restart under a different SKU.
+  const [tryOnSlug, setTryOnSlug] = useState(null);
+  const tryOn = tryOnSlug === slug;
   const { addVariant, toggleFav, isFav, busy } = useCart();
   const { toast } = useFeedback();
   const { t, tv, lang } = useLang();
@@ -83,7 +94,7 @@ export default function ProductDetail() {
             <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
                  onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
             {TRY_ON_ENABLED && (
-              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOn(true); }}>◈ {t("card.ar")}</button>
+              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
             )}
           </div>
           <div className="pdp-thumbs">
@@ -142,7 +153,7 @@ export default function ProductDetail() {
             </button>
           </div>
           {TRY_ON_ENABLED && (
-            <button className="pdp-tryon-btn" onClick={() => setTryOn(true)}>📷 {t("tryon.cta")}</button>
+            <button className="pdp-tryon-btn" onClick={() => setTryOnSlug(slug)}>📷 {t("tryon.cta")}</button>
           )}
 
           <table className="specs">
@@ -198,7 +209,7 @@ export default function ProductDetail() {
       )}
 
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)} />
       )}
     </div>
   );

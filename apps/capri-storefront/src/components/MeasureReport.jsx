@@ -1,0 +1,91 @@
+import { createPortal } from "react-dom";
+import { useLang } from "../i18n/LanguageContext.jsx";
+
+// Reporte de medición óptica (estilo "ficha del óptico"): dos vistas — frontal con la
+// DIP y lateral con la altura de corredor — más una tira de datos para el laboratorio.
+// Es puramente presentacional; el ciclo de la llamada vive en TryOnStudio.
+
+const mm = (v) => (v == null || Number.isNaN(v) ? "—" : `${Math.round(v * 10) / 10} mm`);
+
+export default function MeasureReport({ phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose, topOffset = 0 }) {
+  const { t } = useLang();
+
+  const body = () => {
+    if (phase === "loading") {
+      return (
+        <div className="vm-state">
+          <div className="vm-spinner" aria-hidden="true" />
+          <p>{t("vm.calcing")}</p>
+        </div>
+      );
+    }
+    if (phase === "error") {
+      const msg = errorCode === "missing-api-key" ? t("vm.noKey") : (error || t("vm.failed"));
+      return (
+        <div className="vm-state">
+          <div className="vm-err-ic" aria-hidden="true">⚠️</div>
+          <p className="vm-err">{msg}</p>
+          <button className="vm-btn" onClick={onRetry}>{t("vm.retry")}</button>
+        </div>
+      );
+    }
+    // result
+    const front = data?.frontImage || frontFallback;
+    const side = data?.profileImage || sideFallback;
+    const suit = data?.suitable;
+    return (
+      <>
+        <div className="vm-views">
+          <figure className="vm-view">
+            <figcaption className="vm-vlabel">{t("vm.front")}</figcaption>
+            {front ? <img src={front} alt={t("vm.front")} /> : <div className="vm-noimg">📷</div>}
+            <div className="vm-badge">
+              <span className="vm-blab">{t("vm.pd")}</span>
+              <span className="vm-bval">{mm(data?.pd)}</span>
+              {(data?.pdRight != null || data?.pdLeft != null) && (
+                <span className="vm-bsub">OD {mm(data?.pdRight)} · OS {mm(data?.pdLeft)}</span>
+              )}
+            </div>
+          </figure>
+
+          <figure className="vm-view">
+            <figcaption className="vm-vlabel">{t("vm.side")}</figcaption>
+            {side ? <img src={side} alt={t("vm.side")} /> : <div className="vm-noimg">📷</div>}
+            <div className="vm-badge">
+              <span className="vm-blab">{t("vm.corridor")}</span>
+              <span className="vm-bval">{mm(data?.corridor)}</span>
+              <span className="vm-bsub vm-note">{t("vm.corridorNote")}</span>
+            </div>
+          </figure>
+        </div>
+
+        <div className="vm-facts">
+          <div className="vm-fact"><span>{t("vm.progressive")}</span><b>{mm(data?.progressive ?? data?.corridor)}</b></div>
+          <div className="vm-fact"><span>{t("vm.bifocal")}</span><b>{mm(data?.bifocal)}</b></div>
+          {suit != null && (
+            <div className={`vm-suit ${suit ? "ok" : "no"}`}>
+              {suit ? "✓ " + t("vm.suitOk") : "✕ " + t("vm.suitNo")}
+            </div>
+          )}
+        </div>
+
+        {Array.isArray(data?.warnings) && data.warnings.length > 0 && (
+          <ul className="vm-warns">{data.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+        )}
+        {!side && <p className="vm-aiprofile">{t("vm.aiProfileNote")}</p>}
+        <p className="vm-disc">{t("vm.disclaimer")}</p>
+      </>
+    );
+  };
+
+  return createPortal(
+    <div className="vm-overlay" role="dialog" aria-modal="true" style={{ top: topOffset || 0 }}>
+      <div className="vm-bar">
+        <span className="vm-title">📐 {t("vm.title")}</span>
+        <button className="vm-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
+      </div>
+      <div className="vm-body">{body()}</div>
+    </div>,
+    document.body
+  );
+}

@@ -78,3 +78,6 @@ apps/scraper/scripts/.shape_truth.json
 # Artefactos de sesion del MCP de Playwright — snapshots de accesibilidad
 # generados en cada navegacion; no aportan nada al repo
 .playwright-mcp/
+_to_delete/ 
+change.patch
+__commitmsg.txt 
