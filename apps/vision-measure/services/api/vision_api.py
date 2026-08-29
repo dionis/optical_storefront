@@ -85,6 +85,7 @@ class MeasureRequest(BaseModel):
     """One measurement run. Images arrive as data URLs from the browser canvas."""
 
     faceImage: str = Field(..., description="Foto frontal del paciente (data URL)")
+    sideImage: Optional[str] = Field(None, description="Foto lateral/perfil del paciente (data URL)")
     glassesImage: str = Field(..., description="Foto de la montura (data URL)")
     provider: str = Field("openai", description="Identificador del proveedor multimodal")
     model: Optional[str] = Field(None, description="Modelo concreto; vacío usa el de por defecto")
@@ -277,25 +278,36 @@ def _build_measure_payload(request: "MeasureRequest") -> Dict[str, Any]:
                 measured_width = width
                 break
 
-        common_render = {
+        # Cada vista usa SU foto real: la frontal para el frente y la LATERAL para el
+        # perfil (antes el perfil se inventaba a partir de la frontal — de ahí que se
+        # perdiera el entorno y a veces no saliera la montura). El montaje solo AÑADE la
+        # montura sobre la foto; no regenera la escena (ver prompts en compositor.py).
+        glasses = request.glassesImage
+        side_src = request.sideImage or request.faceImage
+        front_prepared = prepare_render_images(request.faceImage, glasses)
+        side_prepared = (
+            prepare_render_images(side_src, glasses) if request.renderProfile else None
+        )
+        base_render = {
             "engine": request.imageEngine,
-            "face_image": request.faceImage,
-            "glasses_image": request.glassesImage,
+            "glasses_image": glasses,
             "context": request.context,
             "model": request.imageModel,
             "api_key": request.imageApiKey or request.apiKey,
             "frame_total_width_mm": measured_width,
         }
-        views = ["front"] + (["profile"] if request.renderProfile else [])
-        # Both views read the same two photographs at the same limits, so they are
-        # decoded and re-encoded once for the pair rather than once per view.
-        common_render["prepared"] = prepare_render_images(
-            request.faceImage, request.glassesImage
-        )
-        with ThreadPoolExecutor(max_workers=len(views)) as pool:
-            rendered = list(
-                pool.map(lambda v: run_try_on(**common_render, view=v), views)
+
+        def _render_view(view: str) -> Dict[str, Any]:
+            return run_try_on(
+                **base_render,
+                face_image=(request.faceImage if view == "front" else side_src),
+                prepared=(front_prepared if view == "front" else side_prepared),
+                view=view,
             )
+
+        views = ["front"] + (["profile"] if request.renderProfile else [])
+        with ThreadPoolExecutor(max_workers=len(views)) as pool:
+            rendered = list(pool.map(_render_view, views))
 
         payload["tryOn"] = rendered[0]
         if request.renderProfile:
