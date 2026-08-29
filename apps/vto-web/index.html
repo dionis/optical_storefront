@@ -503,6 +503,19 @@
         <div class="ai-session-cost" id="ai-session-cost"></div>
         <div class="ai-status ai-status-idle" id="ai-status" data-i18n="ai.connecting">Conectando con el servicio...</div>
 
+        <!-- Offered from the second retryable failure onward (see
+             providers.SLOW_NOTICE_AFTER_ATTEMPT). Lets the operator stop watching the
+             screen instead of forcing them to; the measurement keeps retrying either way. -->
+        <div class="ai-slow-notice hidden" id="ai-slow-notice">
+          <p class="ai-hint" data-i18n="ai.slowNotice.body">Esto está tardando más de lo normal: el proveedor de IA está saturado. Si quieres, te avisamos en cuanto el resultado esté listo.</p>
+          <div class="control-group">
+            <input type="email" id="input-ai-notify-email" class="ai-input" data-i18n-placeholder="ai.slowNotice.emailPlaceholder" autocomplete="off">
+            <input type="tel" id="input-ai-notify-whatsapp" class="ai-input" data-i18n-placeholder="ai.slowNotice.whatsappPlaceholder" autocomplete="off">
+            <button type="button" class="btn btn-secondary" id="btn-ai-notify-submit" data-i18n="ai.slowNotice.submit">Avisarme cuando esté listo</button>
+          </div>
+          <p class="ai-hint" id="ai-notify-msg"></p>
+        </div>
+
         <!-- The composed try-on picture, above the figures it was built from -->
         <div class="ai-tryon" id="ai-tryon"></div>
 

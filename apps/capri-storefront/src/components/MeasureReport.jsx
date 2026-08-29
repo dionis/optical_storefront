@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -7,15 +8,68 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 
 const mm = (v) => (v == null || Number.isNaN(v) ? "—" : `${Math.round(v * 10) / 10} mm`);
 
-export default function MeasureReport({ phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose, topOffset = 0 }) {
+// Formulario de "avísame cuando esté listo", ofrecido durante `phase === "loading"`
+// una vez que el servicio lleva varios reintentos contra un proveedor saturado (ver
+// TryOnStudio: mProgress.slow). Guarda su propio email/whatsapp tecleados — el envío
+// real y el resto del ciclo de vida del trabajo siguen viviendo en TryOnStudio.
+function SlowNoticeForm({ t, pending, error, onSubmit }) {
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  return (
+    <form
+      className="vm-slow"
+      onSubmit={(e) => { e.preventDefault(); onSubmit(email.trim(), whatsapp.trim()); }}
+    >
+      <p className="vm-slow-msg">{t("vm.slowBody")}</p>
+      <input
+        type="email" className="vm-slow-input" autoComplete="off"
+        placeholder={t("vm.slowEmailPh")} value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        type="tel" className="vm-slow-input" autoComplete="off"
+        placeholder={t("vm.slowWhatsappPh")} value={whatsapp}
+        onChange={(e) => setWhatsapp(e.target.value)}
+      />
+      <button type="submit" className="vm-btn" disabled={pending}>
+        {pending ? t("vm.slowSending") : t("vm.slowSubmit")}
+      </button>
+      {error && <p className="vm-err">{error}</p>}
+    </form>
+  );
+}
+
+export default function MeasureReport({
+  phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose, topOffset = 0,
+  slow = false, notifyState = "idle", notifyError = null, onNotifySubmit,
+}) {
   const { t } = useLang();
 
   const body = () => {
     if (phase === "loading") {
+      // Guardado el contacto, no queda nada más que este cliente tenga que hacer: el
+      // trabajo sigue en el servidor y avisa por su cuenta, así que la confirmación
+      // reemplaza al spinner en vez de convivir con él.
+      if (notifyState === "armed") {
+        return (
+          <div className="vm-state">
+            <div className="vm-ok-ic" aria-hidden="true">✓</div>
+            <p>{t("vm.slowArmed")}</p>
+          </div>
+        );
+      }
       return (
         <div className="vm-state">
           <div className="vm-spinner" aria-hidden="true" />
           <p>{t("vm.calcing")}</p>
+          {slow && (
+            <SlowNoticeForm
+              t={t}
+              pending={notifyState === "pending"}
+              error={notifyState === "error" ? (notifyError || t("vm.slowError")) : null}
+              onSubmit={onNotifySubmit}
+            />
+          )}
         </div>
       );
     }

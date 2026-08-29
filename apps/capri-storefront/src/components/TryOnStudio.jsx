@@ -3,7 +3,14 @@ import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
-import { runMeasurementJob, pickMeasurement, frameImageDataUrl } from "../data/visionMeasure.js";
+import {
+  startMeasurementJob,
+  pollMeasurementJob,
+  armMeasurementNotification,
+  pickMeasurement,
+  frameImageDataUrl,
+} from "../data/visionMeasure.js";
+import { getMeasureJob, setMeasureJob, clearMeasureJob } from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
 //
@@ -191,7 +198,49 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   const [mError, setMError] = useState(null);
   const [mCode, setMCode] = useState(null);
   const [mProg, setMProg] = useState(0);           // ms transcurridos (para el cargador)
+  // Progreso de reintento reportado por el servicio mientras Gemini está saturado (ver
+  // providers.py); { attempt, maxAttempts, slow, ... } o null entre reintentos.
+  const [mProgress, setMProgress] = useState(null);
+  // idle | pending | armed | error — el aviso por correo/WhatsApp ofrecido una vez que
+  // mProgress.slow es cierto (desde el 2º-3º intento fallido, no hay que esperar a que
+  // el cliente se rinda para ofrecerle no seguir mirando la pantalla).
+  const [notifyState, setNotifyState] = useState("idle");
+  const [notifyError, setNotifyError] = useState(null);
   const mAbort = useRef(null);
+  // El jobId del trabajo en curso, para que el formulario de aviso (fuera del flujo
+  // async de doMeasure) sepa a qué trabajo armar el contacto.
+  const jobIdRef = useRef(null);
+
+  // Aplica el resultado (o el fallo) de un trabajo terminado — compartido entre el
+  // arranque en frío (doMeasure) y la reanudación tras un remount (más abajo), para
+  // que las dos rutas terminen exactamente igual.
+  function settleMeasurement(promise, signal) {
+    promise
+      .then((resp) => {
+        clearMeasureJob(product);
+        if (signal.aborted) return;
+        const picked = pickMeasurement(resp);
+        if (!picked.ok && picked.pd == null && !picked.frontImage) {
+          setMCode(picked.errorCode); setMError(picked.error); setMState("error");
+        } else {
+          setMData(picked); setMState("result");
+        }
+      })
+      .catch((e) => {
+        clearMeasureJob(product);
+        if (e?.code === "aborted" || e?.name === "AbortError") return;
+        setMCode(e?.code || null); setMError(e?.message || null); setMState("error");
+      });
+  }
+
+  // Progreso de un sondeo: cuenta los ms para el cargador, publica el intento actual
+  // (para decidir si mostrar el aviso) y refleja si un contacto ya quedó guardado —
+  // por si otra pestaña, o una reanudación anterior, ya lo armó.
+  function onMeasureProgress({ elapsedMs, progress, notifyArmed }) {
+    setMProg(elapsedMs);
+    setMProgress(progress || null);
+    if (notifyArmed) setNotifyState("armed");
+  }
 
   async function doMeasure() {
     if (!frontImg || !sideImg) return;
@@ -199,6 +248,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     const ctrl = new AbortController();
     mAbort.current = ctrl;
     setMState("loading"); setMError(null); setMCode(null); setMProg(0);
+    setMProgress(null); setNotifyState("idle"); setNotifyError(null);
     try {
       // Flujo ASÍNCRONO: se envían las DOS fotos (frontal→DIP, lateral→altura de
       // corredor) + la foto REAL de la montura. El backend mide y luego Gemini GENERA
@@ -206,30 +256,73 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       // NUNCA corta la generación. Las fotos se comprimen antes de subir.
       const at = product?.attributes || {};
       const glassesImage = color?.image ? await frameImageDataUrl(color.image) : null;
-      const resp = await runMeasurementJob({
+      const jobId = await startMeasurementJob({
         faceImage: frontImg,
         sideImage: sideImg,
         glassesImage,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
         lang, withReferenceCard: true, render: true,
         signal: ctrl.signal,
-        onProgress: ({ elapsedMs }) => setMProg(elapsedMs),
       });
-      if (ctrl.signal.aborted) return;
-      const picked = pickMeasurement(resp);
-      if (!picked.ok && picked.pd == null && !picked.frontImage) {
-        setMCode(picked.errorCode); setMError(picked.error); setMState("error");
-      } else {
-        setMData(picked); setMState("result");
-      }
+      jobIdRef.current = jobId;
+      // Guardado ANTES de esperar: si este componente se remonta a mitad de la espera
+      // (ver tryOnState.js), el trabajo sigue vivo en el servidor y la instancia nueva
+      // puede reconectarse a él en vez de mandar al cliente de vuelta a las fotos.
+      setMeasureJob(product, { jobId, frontImg, sideImg });
+      settleMeasurement(pollMeasurementJob(jobId, { onProgress: onMeasureProgress, signal: ctrl.signal }), ctrl.signal);
     } catch (e) {
       if (e?.code === "aborted" || e?.name === "AbortError") return;
       setMCode(e?.code || null); setMError(e?.message || null); setMState("error");
     }
   }
 
+  // Reconecta con un trabajo que ya estaba corriendo cuando este componente se montó
+  // — el caso que antes se veía como "me mandó de vuelta a la pantalla de fotos": el
+  // trabajo en el servidor nunca se enteró de que el navegador lo dejó de ver un
+  // instante, solo el estado de React se había perdido.
+  useEffect(() => {
+    const pending = getMeasureJob(product);
+    if (!pending) return;
+    const ctrl = new AbortController();
+    mAbort.current = ctrl;
+    jobIdRef.current = pending.jobId;
+    if (pending.frontImg) setFrontImg(pending.frontImg);
+    if (pending.sideImg) setSideImg(pending.sideImg);
+    setPhase("done");
+    setMState("loading"); setMError(null); setMCode(null); setMProg(0);
+    setMProgress(null); setNotifyState("idle"); setNotifyError(null);
+    settleMeasurement(
+      pollMeasurementJob(pending.jobId, { onProgress: onMeasureProgress, signal: ctrl.signal }),
+      ctrl.signal
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guarda el contacto contra el trabajo en curso y deja de sondear en primer plano:
+  // el trabajo sigue corriendo en el servidor pase lo que pase con este componente, así
+  // que no hay nada más que este cliente tenga que seguir haciendo una vez guardado.
+  async function handleNotifySubmit(email, whatsapp) {
+    const jobId = jobIdRef.current;
+    if (!jobId) return;
+    if (!email && !whatsapp) {
+      setNotifyState("error"); setNotifyError(t("vm.slowNeedContact"));
+      return;
+    }
+    setNotifyState("pending"); setNotifyError(null);
+    const result = await armMeasurementNotification(jobId, { email, whatsapp }, lang);
+    if (!result.ok) {
+      setNotifyState("error"); setNotifyError(result.error || t("vm.slowError"));
+      return;
+    }
+    setNotifyState("armed");
+    mAbort.current?.abort();
+  }
+
   function closeReport() {
     if (mAbort.current) { mAbort.current.abort(); mAbort.current = null; }
+    clearMeasureJob(product);
+    jobIdRef.current = null;
+    setMProgress(null); setNotifyState("idle"); setNotifyError(null);
     setMState("idle");
   }
 
@@ -423,6 +516,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         <MeasureReport
           phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
           error={mError} errorCode={mCode} topOffset={headerH || 0} progressMs={mProg}
+          slow={Boolean(mProgress?.slow)} notifyState={notifyState} notifyError={notifyError}
+          onNotifySubmit={handleNotifySubmit}
           product={product} color={color}
           onRetry={doMeasure} onClose={closeReport}
         />

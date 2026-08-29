@@ -18,7 +18,7 @@ import os
 import random
 import re
 import time
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import requests
 
@@ -32,6 +32,29 @@ def _env_seconds(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if 10 <= value <= 900 else default
+
+
+def _env_int(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        value = int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if lo <= value <= hi else default
+
+
+def _env_float(name: str, default: float, lo: float, hi: float) -> float:
+    try:
+        value = float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if lo <= value <= hi else default
+
+
+# Reports how one retry wait is going, so a caller polling a background job can show
+# "intento 5/7, reintentando en 16s" instead of one frozen line. Never required: every
+# call site defaults it to None, and a broken sink must never take the measurement down
+# with it (see the try/except around every invocation below).
+RetryCallback = Optional[Callable[[Dict[str, Any]], None]]
 
 
 # Two budgets, because the two shapes of request are not the same job. An ordinary
@@ -89,8 +112,24 @@ ANTHROPIC_OUTPUT_TOKENS = 8000
 # side lasts seconds; failing the whole fitting over it is a waste of a good capture.
 # 429 is in here too: it is usually a per-minute rate limit, which clears by waiting.
 RETRYABLE_STATUSES = {408, 425, 429, 500, 502, 503, 504}
-MAX_RETRIES = 3
-RETRY_BASE_DELAY_S = 3.0
+
+# Google's own troubleshooting guide recommends exponential backoff starting around
+# 1-2s with jitter, and its SDKs cap the per-wait delay at ~60s -- but a real Gemini
+# capacity spike (their own words) runs "30 seconds to a few minutes", not the ~15-30s
+# total this used to budget for three retries. That mismatch, not the backoff formula,
+# is why three escalating attempts kept coming back empty: the loop gave up before a
+# typical spike even cleared. Tunable without a redeploy because "how long congestion
+# usually lasts" is an operational fact, not something to hardcode once and forget.
+MAX_RETRIES = _env_int("VISION_MAX_RETRIES", 6, 0, 10)
+RETRY_BASE_DELAY_S = _env_float("VISION_RETRY_BASE_DELAY_S", 2.0, 0.5, 30.0)
+RETRY_MAX_DELAY_S = _env_float("VISION_RETRY_MAX_DELAY_S", 60.0, 5.0, 180.0)
+
+# Offered early on purpose: the second attempt already means the first one hit a
+# retryable error, and there is no way to tell from here whether the provider clears in
+# 5 more seconds or grinds through the rest of the (now much longer) retry budget. The
+# operator should not have to guess which one is happening before being offered a way to
+# stop watching -- the choice costs nothing, since arming it never blocks the retries.
+SLOW_NOTICE_AFTER_ATTEMPT = 2
 
 # Overload hits preview and top-end models hardest — they have the least spare capacity.
 # Suggested when a call keeps failing, and only SUGGESTED: silently swapping the model
@@ -160,6 +199,7 @@ def call_multimodal(
     user: str,
     images: Sequence[ImagePayload],
     browse_urls: Sequence[str] = (),
+    on_retry: RetryCallback = None,
 ) -> Dict[str, Any]:
     """
     Sends one multimodal turn and returns
@@ -169,6 +209,10 @@ def call_multimodal(
     `url_context` on its ordinary endpoint; OpenAI is diverted to /responses with web
     search on. Every other provider ignores them and `urlRetrieval` comes back empty,
     which is the honest answer for a model that never had the option.
+
+    `on_retry`, when given, is called on every transient-failure wait so a caller
+    polling a background job can show live progress ("intento 5/7...") instead of one
+    frozen status line. See `RetryCallback` above.
     """
     started = time.time()
     retrieval: List[Dict[str, Any]] = []
@@ -181,7 +225,7 @@ def call_multimodal(
         if browse_urls and supports_browsing(spec):
             try:
                 text, usage, retrieval = _call_openai_responses(
-                    spec, model, api_key, system, user, images, browse_urls
+                    spec, model, api_key, system, user, images, browse_urls, on_retry=on_retry
                 )
                 return {
                     "text": text,
@@ -197,12 +241,16 @@ def call_multimodal(
                     f"se mide sin búsqueda web"
                 )
 
-        text, usage = _call_openai_compatible(spec, model, api_key, system, user, images)
+        text, usage = _call_openai_compatible(
+            spec, model, api_key, system, user, images, on_retry=on_retry
+        )
     elif spec.adapter == "anthropic":
-        text, usage = _call_anthropic(spec, model, api_key, system, user, images)
+        text, usage = _call_anthropic(
+            spec, model, api_key, system, user, images, on_retry=on_retry
+        )
     elif spec.adapter == "gemini":
         text, usage, retrieval = _call_gemini(
-            spec, model, api_key, system, user, images, browse_urls
+            spec, model, api_key, system, user, images, browse_urls, on_retry=on_retry
         )
     else:  # unreachable through the registry, kept so a bad edit fails loudly
         raise ProviderError(f"Adaptador desconocido: {spec.adapter}")
@@ -228,10 +276,11 @@ def _retry_delay(attempt: int, response) -> float:
         header = response.headers.get("Retry-After") if response.headers else None
         if header:
             try:
-                return max(0.5, min(30.0, float(header)))
+                return max(0.5, min(RETRY_MAX_DELAY_S, float(header)))
             except (TypeError, ValueError):
                 pass
-    return RETRY_BASE_DELAY_S * (2 ** attempt) * (0.7 + random.random() * 0.6)
+    raw = RETRY_BASE_DELAY_S * (2 ** attempt) * (0.7 + random.random() * 0.6)
+    return min(RETRY_MAX_DELAY_S, raw)
 
 
 def _post_json(
@@ -240,6 +289,7 @@ def _post_json(
     payload: Dict[str, Any],
     label: str,
     timeout_s: Optional[int] = None,
+    on_retry: RetryCallback = None,
 ) -> Dict[str, Any]:
     """
     Posts, retrying the failures that are worth retrying.
@@ -299,10 +349,25 @@ def _post_json(
 
         delay = _retry_delay(attempt, response)
         status = response.status_code if response is not None else "sin respuesta"
+        next_attempt = attempt + 2  # 1-based number of the try about to happen
         print(
             f"[VISION] {label}: {status} transitorio, reintento "
             f"{attempt + 1}/{MAX_RETRIES} en {delay:.1f}s"
         )
+        if on_retry:
+            try:
+                on_retry(
+                    {
+                        "label": label,
+                        "status": status,
+                        "attempt": next_attempt,
+                        "maxAttempts": MAX_RETRIES + 1,
+                        "delaySeconds": round(delay, 1),
+                        "slow": next_attempt > SLOW_NOTICE_AFTER_ATTEMPT,
+                    }
+                )
+            except Exception:
+                pass  # a broken progress sink must never fail the measurement itself
         time.sleep(delay)
 
     raise last if last else ProviderError(f"{label}: petición rechazada.")
@@ -484,6 +549,7 @@ def _post_with_param_fallbacks(
     spec_id: str = "",
     model: str = "",
     timeout_s: Optional[int] = None,
+    on_retry: RetryCallback = None,
 ) -> Dict[str, Any]:
     """
     Posts, correcting the parameter the vendor actually complained about.
@@ -515,7 +581,7 @@ def _post_with_param_fallbacks(
     # One round per optional parameter, plus the initial full attempt and a safety margin
     for _ in range(len(optional_params) + 2):
         try:
-            return _post_json(url, headers, attempt, label, timeout_s)
+            return _post_json(url, headers, attempt, label, timeout_s, on_retry=on_retry)
         except ProviderError as exc:
             if exc.status != 400:
                 raise
@@ -565,6 +631,7 @@ def _call_openai_compatible(
     system: str,
     user: str,
     images: Sequence[ImagePayload],
+    on_retry: RetryCallback = None,
 ) -> Tuple[str, Dict[str, Any]]:
     content: List[Dict[str, Any]] = [{"type": "text", "text": user}]
     for media_type, b64 in images:
@@ -608,6 +675,7 @@ def _call_openai_compatible(
         optional_params=("max_tokens", "response_format", "temperature", "reasoning_effort"),
         spec_id=spec.id,
         model=model,
+        on_retry=on_retry,
     )
 
     choices = data.get("choices") or []
@@ -673,6 +741,7 @@ def _call_openai_responses(
     user: str,
     images: Sequence[ImagePayload],
     browse_urls: Sequence[str] = (),
+    on_retry: RetryCallback = None,
 ) -> Tuple[str, Dict[str, Any], List[Dict[str, Any]]]:
     """
     Calls POST /responses with web search on, so the model can read the supplier page.
@@ -748,6 +817,7 @@ def _call_openai_responses(
         spec_id=spec.id,
         model=model,
         timeout_s=BROWSING_TIMEOUT_S,
+        on_retry=on_retry,
     )
 
     text, retrieval = _read_responses_output(data, spec.label)
@@ -851,6 +921,7 @@ def _call_anthropic(
     system: str,
     user: str,
     images: Sequence[ImagePayload],
+    on_retry: RetryCallback = None,
 ) -> Tuple[str, Dict[str, Any]]:
     content: List[Dict[str, Any]] = [{"type": "text", "text": user}]
     for media_type, b64 in images:
@@ -875,7 +946,9 @@ def _call_anthropic(
         **spec.extra_headers,
     }
 
-    data = _post_json(f"{spec.base_url}/messages", headers, payload, spec.label)
+    data = _post_json(
+        f"{spec.base_url}/messages", headers, payload, spec.label, on_retry=on_retry
+    )
 
     blocks = data.get("content") or []
     text = "".join(
@@ -906,6 +979,7 @@ def _post_gemini_with_fallbacks(
     payload: Dict[str, Any],
     label: str,
     timeout_s: Optional[int] = None,
+    on_retry: RetryCallback = None,
 ) -> Dict[str, Any]:
     """
     Posts to generateContent, giving up the newer knobs one at a time.
@@ -954,7 +1028,7 @@ def _post_gemini_with_fallbacks(
 
     for _ in range(len(steps) + 1):
         try:
-            return _post_json(url, headers, payload, label, timeout_s)
+            return _post_json(url, headers, payload, label, timeout_s, on_retry=on_retry)
         except ProviderError as exc:
             if exc.status != 400:
                 raise
@@ -1014,6 +1088,7 @@ def _call_gemini(
     user: str,
     images: Sequence[ImagePayload],
     browse_urls: Sequence[str] = (),
+    on_retry: RetryCallback = None,
 ) -> Tuple[str, Dict[str, Any], List[Dict[str, Any]]]:
     parts: List[Dict[str, Any]] = [{"text": user}]
     for media_type, b64 in images:
@@ -1055,6 +1130,7 @@ def _call_gemini(
     data = _post_gemini_with_fallbacks(
         url, headers, payload, spec.label,
         timeout_s=BROWSING_TIMEOUT_S if browse_urls else None,
+        on_retry=on_retry,
     )
 
     candidates = data.get("candidates") or []

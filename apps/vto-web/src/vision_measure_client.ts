@@ -242,6 +242,29 @@ export interface MeasureResponse {
   tryOnProfile?: TryOnResult;
 }
 
+/** One retry wait the service is going through right now, for a live progress readout. */
+export interface MeasureJobProgress {
+  label: string;
+  status: number | string;
+  /** 1-based number of the attempt about to happen. */
+  attempt: number;
+  maxAttempts: number;
+  delaySeconds: number;
+  /** Past providers.SLOW_NOTICE_AFTER_ATTEMPT — worth offering the "notify me" form. */
+  slow: boolean;
+}
+
+export interface MeasureJobStatus {
+  ok: boolean;
+  status: 'pending' | 'done' | 'error' | 'unknown';
+  result?: MeasureResponse;
+  error?: string;
+  progress?: MeasureJobProgress | null;
+  /** Whether a contact was already saved for this job (survives a poll after arming it). */
+  notifyArmed?: boolean;
+  notifyDelivered?: boolean | null;
+}
+
 export interface MeasureRequest {
   faceImage: string;
   glassesImage: string;
@@ -327,6 +350,65 @@ export async function requestMeasurement(
     requestId: body?.requestId as string | undefined,
     tryOnProfile: body?.tryOnProfile as TryOnResult | undefined,
   };
+}
+
+/**
+ * Starts a measurement as a background job and returns at once with its id.
+ *
+ * Used instead of `requestMeasurement` for the main run: only a job the panel can POLL
+ * gives it something to show WHILE waiting (retry progress, the "notify me" offer) —
+ * a single blocking fetch cannot report anything until it resolves.
+ */
+export async function startMeasureJob(
+  payload: MeasureRequest
+): Promise<{ ok: boolean; jobId?: string; error?: string }> {
+  const res = await fetch(`${API_BASE}/vision-measure/job`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.ok || !body?.jobId) {
+    return { ok: false, error: body?.error || body?.detail || `El servicio respondió ${res.status}.` };
+  }
+  return { ok: true, jobId: body.jobId as string };
+}
+
+/** One read of a job's status. `signal` lets a poll loop stop waiting mid-request. */
+export async function pollMeasureJob(jobId: string, signal?: AbortSignal): Promise<MeasureJobStatus> {
+  const res = await fetch(`${API_BASE}/vision-measure/job/${encodeURIComponent(jobId)}`, { signal });
+  const body = await res.json().catch(() => null);
+  if (!body) {
+    return { ok: false, status: 'unknown', error: `Respuesta ilegible del servicio (HTTP ${res.status}).` };
+  }
+  return body as MeasureJobStatus;
+}
+
+/**
+ * Arms (or, if the job already finished, immediately triggers) the email/WhatsApp
+ * delivery for a slow-running job. Delivery itself happens server-side — the vision-
+ * measure process composes the message and hands it to the Medusa backend, which
+ * already has Resend/Twilio configured — so this call only has to succeed once.
+ */
+export async function armJobNotification(
+  jobId: string,
+  contact: { email?: string; whatsapp?: string },
+  lang: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/vision-measure/job/${encodeURIComponent(jobId)}/notify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: contact.email || undefined,
+      whatsapp: contact.whatsapp || undefined,
+      lang,
+    }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body?.ok) {
+    return { ok: false, error: body?.error || `El servicio respondió ${res.status}.` };
+  }
+  return { ok: true };
 }
 
 /**
@@ -450,6 +532,8 @@ export const REQUIRED_SERVICE_FEATURES = [
   'extra-instructions',
   'capri-protocol',
   'input-validation',
+  'retry-progress',
+  'slow-run-notify',
 ] as const;
 
 /** Behaviours the frontend expects that the running service does not report. */

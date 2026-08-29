@@ -7,6 +7,9 @@ import { TRY_ON_ENABLED } from "../config/features.js";
 import { useReviewSummary } from "./ReviewSummaryContext.jsx";
 // Probador: el switch elige la interfaz (prod / dev-respaldo / legacy). Ver TryOnSwitch.jsx.
 import TryOn from "./TryOnSwitch.jsx";
+// Abrir/cerrar vive fuera de este componente: sobrevive al remount que sufre esta
+// card cuando el catálogo pasa de seed a Medusa a mitad de sesión (ver tryOnState.js).
+import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
 
 // Requisito 11 (tarjetas estilo Amazon):
 //  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).
@@ -15,7 +18,8 @@ import TryOn from "./TryOnSwitch.jsx";
 //  - Clic en el espejuelo = abrir el marco (PDP), donde también arranca el flujo.
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
-  const [tryOn, setTryOn] = useState(false);
+  const tryOnOpenKey = useTryOnOpenKey();
+  const tryOn = tryOnOpenKey !== null && tryOnOpenKey === productTryOnKey(product);
   const [added, setAdded] = useState(false);
   const { t, tv } = useLang();
   const { toggleFav, isFav, addVariant, busy } = useCart();
@@ -68,13 +72,13 @@ export default function ProductCard({ product }) {
         </button>
 
         {TRY_ON_ENABLED && (
-          <button type="button" className="ar-pill" onClick={() => setTryOn(true)}>
+          <button type="button" className="ar-pill" onClick={() => openTryOn(product)}>
             <span aria-hidden>◈</span> {t("card.ar")}
           </button>
         )}
       </div>
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={() => setTryOn(false)} />
+        <TryOn product={product} colorIdx={active} onClose={closeTryOn} />
       )}
 
       <div className="card-body">
