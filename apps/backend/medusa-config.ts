@@ -36,6 +36,17 @@ const hasTwilioCredentials = Boolean(
     process.env.TWILIO_FROM_NUMBER
 );
 
+// WhatsApp via Twilio: same account, but a WhatsApp-enabled sender is a SEPARATE
+// number/config from the SMS one above (Twilio's sandbox number, or an approved
+// Business sender). Reuses the same TwilioNotificationService class — Twilio's
+// Messages API takes SMS and WhatsApp through the same endpoint, distinguished only
+// by the `whatsapp:` prefix the caller puts on `to`/`from` (see the notify route).
+const hasTwilioWhatsAppCredentials = Boolean(
+  process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    process.env.TWILIO_WHATSAPP_FROM_NUMBER
+);
+
 if (!hasResendCredentials) {
   console.warn(
     "[notification] Resend credentials missing — emails will be logged, not sent. " +
@@ -46,6 +57,13 @@ if (!hasTwilioCredentials) {
   console.warn(
     "[notification] Twilio credentials missing — SMS will be logged, not sent. " +
       "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER to deliver SMS."
+  );
+}
+if (!hasTwilioWhatsAppCredentials) {
+  console.warn(
+    "[notification] Twilio WhatsApp sender missing — WhatsApp messages will be logged, not sent. " +
+      "Set TWILIO_WHATSAPP_FROM_NUMBER (e.g. whatsapp:+14155238886) alongside the " +
+      "existing Twilio SMS credentials to deliver WhatsApp."
   );
 }
 
@@ -79,9 +97,23 @@ if (hasTwilioCredentials) {
   });
 }
 
+if (hasTwilioWhatsAppCredentials) {
+  notificationProviders.push({
+    resolve: "./src/modules/notification-twilio",
+    id: "twilio-whatsapp",
+    options: {
+      channels: ["whatsapp"],
+      account_sid: process.env.TWILIO_ACCOUNT_SID,
+      auth_token: process.env.TWILIO_AUTH_TOKEN,
+      from: process.env.TWILIO_WHATSAPP_FROM_NUMBER,
+    },
+  });
+}
+
 const fallbackChannels: string[] = [];
 if (!hasResendCredentials) fallbackChannels.push("email");
 if (!hasTwilioCredentials) fallbackChannels.push("sms");
+if (!hasTwilioWhatsAppCredentials) fallbackChannels.push("whatsapp");
 if (fallbackChannels.length) {
   notificationProviders.push({
     resolve: "@medusajs/medusa/notification-local",

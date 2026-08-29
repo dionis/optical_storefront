@@ -18,12 +18,13 @@ Routes
 
 import base64
 import os
+import re
 import sys
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests  # noqa: E402
@@ -232,10 +233,17 @@ def _validate_measure(request: "MeasureRequest") -> Optional[Dict[str, Any]]:
     return None
 
 
-def _build_measure_payload(request: "MeasureRequest") -> Dict[str, Any]:
+def _build_measure_payload(
+    request: "MeasureRequest",
+    on_retry: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Dict[str, Any]:
     """
     Ejecuta medición (+ render opcional) y devuelve el sobre completo. Núcleo compartido
     por la ruta síncrona /api/vision-measure y la ruta de trabajos asíncronos.
+
+    `on_retry`, cuando se pasa, recibe cada espera de reintento transitorio (ver
+    `providers.RetryCallback`); el runner del trabajo asíncrono lo usa para publicar el
+    progreso que consulta el panel mientras espera.
     """
     strategy = (request.strategy or "B").strip().upper()
 
@@ -256,9 +264,15 @@ def _build_measure_payload(request: "MeasureRequest") -> Dict[str, Any]:
     }
 
     if strategy in ("AB", "BOTH", "COMPARE"):
-        results: List[Dict[str, Any]] = run_comparison(**common, strategies=["A", "B"])
+        results: List[Dict[str, Any]] = run_comparison(
+            **common, strategies=["A", "B"], on_retry=on_retry
+        )
     else:
-        results = [run_measurement(strategy=strategy, include_raw=request.includeRaw, **common)]
+        results = [
+            run_measurement(
+                strategy=strategy, include_raw=request.includeRaw, on_retry=on_retry, **common
+            )
+        ]
 
     payload: Dict[str, Any] = {
         "ok": any(r.get("ok") for r in results),
@@ -318,15 +332,28 @@ def measure(request: MeasureRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=_build_measure_payload(request))
 
 
+def _job_progress_sink(job_id: str) -> Callable[[Dict[str, Any]], None]:
+    """Closure that publishes retry progress into the job store, under its lock."""
+
+    def sink(info: Dict[str, Any]) -> None:
+        with _JOBS_LOCK:
+            job = _JOBS.get(job_id)
+            if job is not None:
+                job["progress"] = {**info, "updatedAt": time.time()}
+
+    return sink
+
+
 def _run_job(job_id: str, request: MeasureRequest) -> None:
     """Corre la medición+render en segundo plano y guarda el resultado en el store."""
     try:
-        payload = _build_measure_payload(request)
+        payload = _build_measure_payload(request, on_retry=_job_progress_sink(job_id))
         with _JOBS_LOCK:
             job = _JOBS.get(job_id)
             if job is not None:
                 job["status"] = "done"
                 job["result"] = payload
+                job["progress"] = None
                 job["finishedAt"] = time.time()
     except Exception as exc:  # noqa: BLE001 - reportamos cualquier fallo al cliente
         with _JOBS_LOCK:
@@ -334,7 +361,148 @@ def _run_job(job_id: str, request: MeasureRequest) -> None:
             if job is not None:
                 job["status"] = "error"
                 job["error"] = f"{type(exc).__name__}: {exc}"
+                job["progress"] = None
                 job["finishedAt"] = time.time()
+
+    # Si el operador armó un aviso mientras esperaba, este es el momento de entregarlo —
+    # tanto si el trabajo terminó bien como si agotó los reintentos.
+    _maybe_deliver_notification(job_id)
+
+
+# ── Aviso por correo/WhatsApp cuando la espera se alarga ────────────────────────
+# Este proceso no envía nada él mismo (es "sin estado" a propósito, ver CLAUDE.md):
+# compone el texto y se lo pasa al backend de Medusa, que ya tiene Resend y Twilio
+# configurados para las notificaciones de pedidos. El contacto que el operador teclea
+# aquí vive solo en memoria, junto al trabajo (se pierde si el proceso se reinicia,
+# igual que el resto de `_JOBS`) — no es un dato de cliente persistido.
+_MEDUSA_BACKEND_URL = os.environ.get("MEDUSA_BACKEND_URL", "http://127.0.0.1:9000").rstrip("/")
+_VISION_INTERNAL_SECRET = os.environ.get("VISION_INTERNAL_SECRET", "")
+
+
+def _looks_like_email(value: str) -> bool:
+    return "@" in value and "." in value.split("@")[-1]
+
+
+def _looks_like_phone(value: str) -> bool:
+    return len(re.sub(r"[^\d]", "", value)) >= 8
+
+
+def _summarize_for_notification(
+    status: Optional[str], result: Optional[Dict[str, Any]], error: Optional[str], lang: str
+) -> Tuple[str, str]:
+    """Construye {asunto, texto} a partir del sobre de medición, en es o en."""
+    is_es = (lang or "es").strip().lower() != "en"
+
+    def failure() -> Tuple[str, str]:
+        detail = error or "desconocido" if is_es else error or "unknown"
+        subject = "No se pudo completar tu medición" if is_es else "Your measurement could not be completed"
+        text = (
+            f"Lo sentimos, la medición no pudo completarse. Detalle: {detail}"
+            if is_es
+            else f"Sorry, the measurement could not be completed. Detail: {detail}"
+        )
+        return subject, text
+
+    if status != "done" or not result:
+        return failure()
+
+    results = result.get("results") or []
+    ok_result = next((r for r in results if r.get("ok")), None)
+    if not ok_result:
+        error = (results[0].get("error") if results else None) or error
+        return failure()
+
+    measurements = ok_result.get("measurements") or {}
+    facial = measurements.get("facial") or {}
+    frame = measurements.get("frame") or {}
+
+    lines: List[str] = []
+
+    def add(label_es: str, label_en: str, value: Any, unit: str = "") -> None:
+        if value is None:
+            return
+        lines.append(f"{label_es if is_es else label_en}: {value}{unit}")
+
+    add("DIP total", "Total PD", facial.get("pdTotalMM"), " mm")
+    add("Ancho frontal total", "Total front width", frame.get("totalFrontWidthMM"), " mm")
+    add("Puente (DBL)", "Bridge (DBL)", frame.get("bridgeMM"), " mm")
+    add("Longitud de varilla", "Temple length", frame.get("templeLengthMM"), " mm")
+
+    provider_line = (
+        f"Proveedor: {ok_result.get('providerLabel')} / {ok_result.get('model')}"
+        if is_es
+        else f"Provider: {ok_result.get('providerLabel')} / {ok_result.get('model')}"
+    )
+    subject = "Tu medición ya está lista" if is_es else "Your measurement is ready"
+    body = "\n".join(
+        [
+            "Tu medición de RUBILENS ya está lista:" if is_es else "Your RUBILENS measurement is ready:",
+            "",
+            *(lines or (["(sin valores numéricos en esta propuesta)"] if is_es else ["(no numeric values in this proposal)"])),
+            "",
+            provider_line,
+        ]
+    )
+    return subject, body
+
+
+def _send_notification(
+    email: Optional[str], whatsapp: Optional[str], subject: str, text: str, job_id: str
+) -> bool:
+    """
+    Pide al backend de Medusa que entregue el aviso. Nunca lanza: una entrega fallida
+    queda en el log, no tumba el trabajo que ya terminó.
+    """
+    if not email and not whatsapp:
+        return False
+
+    headers = {"Content-Type": "application/json"}
+    if _VISION_INTERNAL_SECRET:
+        headers["x-vision-internal-key"] = _VISION_INTERNAL_SECRET
+
+    try:
+        resp = requests.post(
+            f"{_MEDUSA_BACKEND_URL}/vision-measure/notify",
+            json={
+                "email": email or None,
+                "whatsapp": whatsapp or None,
+                "subject": subject,
+                "text": text,
+                "requestId": job_id,
+            },
+            headers=headers,
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            print(f"[VISION] aviso {job_id}: el backend respondió {resp.status_code}: {resp.text[:300]}")
+            return False
+        return True
+    except requests.RequestException as exc:
+        print(f"[VISION] aviso {job_id}: no se pudo contactar al backend de Medusa ({exc})")
+        return False
+
+
+def _maybe_deliver_notification(job_id: str) -> None:
+    """Entrega el aviso armado para este trabajo, si lo hay y aún no se envió."""
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return
+        notify = job.get("notify")
+        status = job.get("status")
+        if not notify or job.get("notifySent") or status not in ("done", "error"):
+            return
+        result = job.get("result")
+        error = job.get("error")
+
+    subject, text = _summarize_for_notification(status, result, error, notify.get("lang") or "es")
+    delivered = _send_notification(notify.get("email"), notify.get("whatsapp"), subject, text, job_id)
+
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is not None:
+            job["notifySent"] = True
+            job["notifyDelivered"] = delivered
 
 
 @app.post("/api/vision-measure/job")
@@ -356,12 +524,75 @@ def start_measure_job(request: MeasureRequest) -> JSONResponse:
                 : len(_JOBS) - _JOBS_MAX + 1
             ]:
                 _JOBS.pop(key, None)
-        _JOBS[job_id] = {"status": "pending", "createdAt": time.time()}
+        _JOBS[job_id] = {
+            "status": "pending",
+            "createdAt": time.time(),
+            "progress": None,
+            "notify": None,
+            "notifySent": None,
+        }
 
     _JOB_POOL.submit(_run_job, job_id, request)
     return JSONResponse(
         status_code=200, content={"ok": True, "jobId": job_id, "status": "pending"}
     )
+
+
+class JobNotifyRequest(BaseModel):
+    """Contacto donde avisar cuando un trabajo lento por fin termine."""
+
+    email: Optional[str] = Field(None, description="Correo del destinatario")
+    whatsapp: Optional[str] = Field(None, description="Número de WhatsApp, con o sin '+'")
+    lang: str = Field("es", description="Idioma del mensaje de aviso: 'es' o 'en'")
+
+
+@app.post("/api/vision-measure/job/{job_id}/notify")
+def set_job_notify(job_id: str, request: JobNotifyRequest) -> JSONResponse:
+    """
+    Arma el aviso por correo/WhatsApp para un trabajo que se está alargando.
+
+    Pensado para el momento (desde el segundo intento fallido, ver
+    `providers.SLOW_NOTICE_AFTER_ATTEMPT`) en que el panel ofrece guardar un contacto en
+    vez de seguir esperando en pantalla. Si el trabajo YA terminó cuando llega esta
+    petición — el operador tardó en escribir el correo — entrega de inmediato en vez de
+    esperar un 'terminado' que ya pasó.
+    """
+    email = (request.email or "").strip()
+    whatsapp = (request.whatsapp or "").strip()
+
+    if email and not _looks_like_email(email):
+        return JSONResponse(status_code=422, content={"ok": False, "error": "Correo no válido."})
+    if whatsapp and not _looks_like_phone(whatsapp):
+        return JSONResponse(
+            status_code=422, content={"ok": False, "error": "Número de WhatsApp no válido."}
+        )
+    if not email and not whatsapp:
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "error": "Indica un correo o un número de WhatsApp."},
+        )
+
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return JSONResponse(
+                status_code=404,
+                content={"ok": False, "error": "Trabajo no encontrado o expirado."},
+            )
+        job["notify"] = {
+            "email": email or None,
+            "whatsapp": whatsapp or None,
+            "lang": (request.lang or "es").strip().lower(),
+        }
+        job["notifySent"] = False
+        already_finished = job.get("status") in ("done", "error")
+
+    # El trabajo puede haber terminado MIENTRAS el operador escribía el contacto: entregar
+    # ya mismo en vez de esperar una transición de estado que no va a volver a ocurrir.
+    if already_finished:
+        _JOB_POOL.submit(_maybe_deliver_notification, job_id)
+
+    return JSONResponse(status_code=200, content={"ok": True})
 
 
 @app.get("/api/vision-measure/job/{job_id}")
@@ -379,18 +610,28 @@ def get_measure_job(job_id: str) -> JSONResponse:
                 },
             )
         status = job.get("status")
+        notify_common = {
+            "notifyArmed": bool(job.get("notify")),
+            "notifyDelivered": job.get("notifyDelivered"),
+        }
         if status == "done":
             return JSONResponse(
                 status_code=200,
-                content={"ok": True, "status": "done", "result": job.get("result")},
+                content={"ok": True, "status": "done", "result": job.get("result"), **notify_common},
             )
         if status == "error":
             return JSONResponse(
                 status_code=200,
-                content={"ok": False, "status": "error", "error": job.get("error")},
+                content={"ok": False, "status": "error", "error": job.get("error"), **notify_common},
             )
         return JSONResponse(
-            status_code=200, content={"ok": True, "status": status or "pending"}
+            status_code=200,
+            content={
+                "ok": True,
+                "status": status or "pending",
+                "progress": job.get("progress"),
+                **notify_common,
+            },
         )
 
 

@@ -1768,6 +1768,25 @@ input[type="range"]::-moz-range-thumb {
   color: #fca5a5;
 }
 
+/* Offered once a run's retries go past the point that used to just fail outright */
+.ai-slow-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.ai-slow-notice.hidden {
+  display: none;
+}
+
+.ai-slow-notice .control-group {
+  gap: 6px;
+}
+
 @keyframes ai-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

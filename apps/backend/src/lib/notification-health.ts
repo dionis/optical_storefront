@@ -28,6 +28,7 @@ export interface ChannelHealth {
 export interface NotificationHealth {
   email: ChannelHealth;
   sms: ChannelHealth;
+  whatsapp: ChannelHealth;
 }
 
 function check(provider: string, vars: Record<string, string | undefined>): ChannelHealth {
@@ -51,6 +52,11 @@ export function notificationHealth(env: NodeJS.ProcessEnv = process.env): Notifi
       TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
       TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
       TWILIO_FROM_NUMBER: env.TWILIO_FROM_NUMBER,
+    }),
+    whatsapp: check("twilio-whatsapp", {
+      TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
+      TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
+      TWILIO_WHATSAPP_FROM_NUMBER: env.TWILIO_WHATSAPP_FROM_NUMBER,
     }),
   };
 }

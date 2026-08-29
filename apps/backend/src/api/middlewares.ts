@@ -4,6 +4,7 @@ import multer from "multer";
 import { ocrRateLimit } from "./store/prescriptions/ocr/rate-limit";
 import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
+import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -180,6 +181,14 @@ export default defineMiddlewares({
       matcher: "/vision-measure/job",
       method: ["POST"],
       bodyParser: { sizeLimit: "10mb" },
+    },
+    {
+      // Called BY vision-measure (see that folder's notify/route.ts), never by the
+      // browser. Unauthenticated by design, so the rate limit is the backstop against
+      // it turning into a spam relay on top of the shared-secret check inside the route.
+      matcher: "/vision-measure/notify",
+      method: ["POST"],
+      middlewares: [visionNotifyRateLimit],
     },
     {
       matcher: "/store/prescriptions/ocr",

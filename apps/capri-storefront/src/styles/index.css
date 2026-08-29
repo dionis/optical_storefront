@@ -2598,6 +2598,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-err-ic { font-size: 34px; }
 .vm-btn, .vm-go.vm-btn { background: linear-gradient(180deg, #3a6ff0, #2952c8); color: #fff; border: 0;
   border-radius: 10px; padding: 10px 18px; font-weight: 700; cursor: pointer; }
+.vm-btn:disabled { opacity: .6; cursor: default; }
+.vm-ok-ic { font-size: 34px; color: #4ade80; }
+
+/* Aviso "avísame cuando esté listo" ofrecido durante la espera (ver TryOnStudio) */
+.vm-slow { display: flex; flex-direction: column; gap: 10px; align-items: stretch;
+  width: 100%; max-width: 320px; margin-top: 6px; padding: 14px 16px; border-radius: 12px;
+  background: rgba(58, 111, 240, .1); border: 1px solid rgba(58, 111, 240, .35); }
+.vm-slow-msg { margin: 0; font-size: 12.5px; line-height: 1.5; color: #b9c8e4; text-align: center; }
+.vm-slow-input { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #22314f;
+  background: #0f1729; color: #e8edf6; font-size: 13px; font-family: inherit; box-sizing: border-box; }
+.vm-slow-input:focus { outline: none; border-color: #3a6ff0; }
+.vm-slow .vm-err { font-size: 12px; margin: 0; text-align: center; max-width: none; }
 
 .vm-views { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 1040px; margin: 0 auto; }
 @media (max-width: 760px) { .vm-views { grid-template-columns: 1fr; } }
@@ -2670,6 +2682,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-spinner { border-color: #ececea; border-top-color: #0E5AD0; }
 .vm-err { color: #b4231f; }
 .vm-btn { background: #0E5AD0; }
+.vm-ok-ic { color: #1a9d5c; }
+.vm-slow { background: rgba(14, 90, 208, .06); border-color: rgba(14, 90, 208, .25); }
+.vm-slow-msg { color: #4b5563; }
+.vm-slow-input { background: #fff; border-color: #d8dbe0; color: #17191f; }
+.vm-slow-input:focus { border-color: #0E5AD0; box-shadow: 0 0 0 2px rgba(14,90,208,.15); }
 .vm-view { border: 1px solid #ececea; background: #0e1520; }
 .vm-fact { background: #fff; border: 1px solid #ececea; }
 .vm-fact span { color: #6b7280; }

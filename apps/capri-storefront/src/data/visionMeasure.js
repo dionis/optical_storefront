@@ -181,7 +181,11 @@ function _sleep(ms, signal) {
   });
 }
 
-export async function runMeasurementJob({
+// Arranca el trabajo y devuelve solo el id — respuesta inmediata, nada de sondeo aquí.
+// Separado de `pollMeasurementJob` para que quien llama pueda GUARDAR el id (ver
+// tryOnState.js: setMeasureJob) antes de ponerse a esperar, y así un remount a mitad
+// de la espera pueda reconectarse al mismo trabajo en vez de perderlo.
+export async function startMeasurementJob({
   faceImage,
   sideImage = null,
   glassesImage = null,
@@ -189,7 +193,6 @@ export async function runMeasurementJob({
   lang = "es",
   withReferenceCard = false,
   render = true,
-  onProgress = null,
   signal,
 }) {
   const specHint = frameSpec
@@ -223,7 +226,6 @@ export async function runMeasurementJob({
     extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };
 
-  // 1) Arrancar el trabajo (respuesta inmediata con el id).
   let startBody;
   try {
     const r = await fetch(JOB_API, {
@@ -240,10 +242,15 @@ export async function runMeasurementJob({
     if (e?.name === "AbortError") throw Object.assign(new Error("cancelado"), { code: "aborted" });
     throw new Error(e?.message || "No se pudo conectar con el servicio de medición.");
   }
-  const jobId = startBody.jobId;
+  return startBody.jobId;
+}
 
-  // 2) Preguntar el estado hasta que termine. El backend nunca corta; este bucle solo
-  //    tiene un tope de seguridad muy holgado por si el proceso se cae a mitad.
+// Pregunta el estado de un trabajo ya arrancado hasta que termine. El backend nunca
+// corta la generación; este bucle solo tiene un tope de seguridad muy holgado por si
+// el proceso se cae a mitad. Recibe un jobId suelto (no todo el payload) justamente
+// para poder reanudar la espera de un trabajo que ya estaba corriendo — al reabrir
+// tras un remount, o simplemente porque el llamador quiere separar arranque de espera.
+export async function pollMeasurementJob(jobId, { onProgress = null, signal } = {}) {
   const started = Date.now();
   const MAX_MS = 8 * 60 * 1000; // 8 min de seguridad
   const STEP_MS = 3000;
@@ -268,11 +275,47 @@ export async function runMeasurementJob({
     misses = 0;
     if (!poll) continue;
     if (typeof onProgress === "function") {
-      onProgress({ status: poll.status, elapsedMs: Date.now() - started });
+      // `progress` trae {attempt, maxAttempts, slow, ...} mientras el servicio está
+      // reintentando contra un proveedor saturado (ver providers.py); `notifyArmed` dice
+      // si ya se guardó un contacto para avisar cuando termine — ver armMeasurementNotification.
+      onProgress({
+        status: poll.status,
+        elapsedMs: Date.now() - started,
+        progress: poll.progress || null,
+        notifyArmed: Boolean(poll.notifyArmed),
+      });
     }
     if (poll.status === "done") return poll.result;
     if (poll.status === "error") throw new Error(poll.error || "La generación de la imagen falló.");
     // status === "pending" → seguir preguntando.
+  }
+}
+
+// Conveniencia: arranca y espera en un solo llamado, para quien no necesite guardar
+// el jobId a mitad de camino.
+export async function runMeasurementJob(params) {
+  const jobId = await startMeasurementJob(params);
+  return pollMeasurementJob(jobId, { onProgress: params.onProgress, signal: params.signal });
+}
+
+// Guarda un contacto para avisar por correo/WhatsApp cuando el trabajo termine, en vez
+// de obligar al cliente a seguir mirando la pantalla. La entrega ocurre en el servidor
+// (vision-measure compone el mensaje y se lo pasa al backend de Medusa, que ya tiene
+// Resend/Twilio configurados) — una vez guardado, cerrar esta pestaña no la cancela.
+export async function armMeasurementNotification(jobId, { email, whatsapp } = {}, lang = "es") {
+  try {
+    const r = await fetch(`${JOB_API}/${encodeURIComponent(jobId)}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email || undefined, whatsapp: whatsapp || undefined, lang }),
+    });
+    const b = await r.json().catch(() => null);
+    if (!r.ok || !b?.ok) {
+      return { ok: false, error: b?.error || `El servicio respondió ${r.status}.` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message || "No se pudo guardar el aviso." };
   }
 }
 

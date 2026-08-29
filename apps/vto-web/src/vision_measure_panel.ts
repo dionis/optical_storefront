@@ -28,9 +28,13 @@ import {
   missingServiceFeatures,
   fileToScaledDataURL,
   dataUrlToThumbnail,
-  requestMeasurement,
+  startMeasureJob,
+  pollMeasureJob,
+  armJobNotification,
   CostSummary,
   ImageEngineInfo,
+  MeasureJobProgress,
+  MeasureResponse,
   MeasureResult,
   ProviderCatalog,
   ProviderInfo,
@@ -140,6 +144,11 @@ export class VisionMeasurePanel {
   private exportButton: HTMLButtonElement | null = null;
   private resultsBox: HTMLElement | null = null;
   private statusBox: HTMLElement | null = null;
+  private slowNoticeBox: HTMLElement | null = null;
+  private slowNoticeEmail: HTMLInputElement | null = null;
+  private slowNoticeWhatsapp: HTMLInputElement | null = null;
+  private slowNoticeSubmit: HTMLButtonElement | null = null;
+  private slowNoticeMsg: HTMLElement | null = null;
 
   /**
    * Whether the face THUMBNAIL is shown flipped. Presentation only — the image that
@@ -155,6 +164,18 @@ export class VisionMeasurePanel {
   private elapsedTimer: number | null = null;
   /** Lets the operator abandon a run in flight. */
   private inFlight: AbortController | null = null;
+  /** The background job currently being polled, so the notify form knows what to arm. */
+  private currentJobId: string | null = null;
+  /** Latest retry wait reported by the service, or null between waits. */
+  private currentProgress: MeasureJobProgress | null = null;
+  /** Whether a contact was already saved for the run in flight — do not ask twice. */
+  private notifyArmedForJob = false;
+  /**
+   * Set right before aborting the foreground poll because the operator chose to be
+   * notified instead of watching — distinguishes that from an outright cancel in the
+   * `run()` catch block, since both surface as the same AbortError.
+   */
+  private detachedForBackground = false;
   /** Running token spend for this browser session, across every run. */
   private sessionCost = { totalCost: 0, totalTokens: 0, calls: 0, unpriced: 0 };
 
@@ -188,6 +209,11 @@ export class VisionMeasurePanel {
     this.exportButton = document.getElementById('btn-ai-export') as HTMLButtonElement;
     this.resultsBox = document.getElementById('ai-results');
     this.statusBox = document.getElementById('ai-status');
+    this.slowNoticeBox = document.getElementById('ai-slow-notice');
+    this.slowNoticeEmail = document.getElementById('input-ai-notify-email') as HTMLInputElement;
+    this.slowNoticeWhatsapp = document.getElementById('input-ai-notify-whatsapp') as HTMLInputElement;
+    this.slowNoticeSubmit = document.getElementById('btn-ai-notify-submit') as HTMLButtonElement;
+    this.slowNoticeMsg = document.getElementById('ai-notify-msg');
 
     this.wireEvents();
     // A run from a previous session is still readable: offer the report straight away
@@ -288,6 +314,7 @@ export class VisionMeasurePanel {
 
     this.runButton?.addEventListener('click', () => void this.run());
     document.getElementById('btn-ai-cancel')?.addEventListener('click', () => this.cancelRun());
+    this.slowNoticeSubmit?.addEventListener('click', () => void this.submitSlowNotice());
     this.exportButton?.addEventListener('click', () => this.exportReport());
     document.getElementById('btn-ai-open-report')?.addEventListener('click', () => {
       window.open(reportUrl(), 'rubilens-report');
@@ -917,6 +944,75 @@ export class VisionMeasurePanel {
     this.setStatus('idle', 'ai.cancelling');
   }
 
+  // ---------------------------------------------------------- slow-run notice
+
+  /** Shows the "notify me instead of waiting" offer, unless a contact is already armed. */
+  private showSlowNotice(): void {
+    if (this.notifyArmedForJob) return;
+    this.slowNoticeBox?.classList.remove('hidden');
+  }
+
+  private hideSlowNotice(): void {
+    this.slowNoticeBox?.classList.add('hidden');
+    this.notifyArmedForJob = false;
+    if (this.slowNoticeMsg) this.slowNoticeMsg.textContent = '';
+    if (this.slowNoticeEmail) this.slowNoticeEmail.value = '';
+    if (this.slowNoticeWhatsapp) this.slowNoticeWhatsapp.value = '';
+  }
+
+  /** A contact was saved (by this tab, or by an earlier poll finding one already armed). */
+  private showSlowNoticeArmed(): void {
+    this.notifyArmedForJob = true;
+    this.slowNoticeBox?.classList.remove('hidden');
+    if (this.slowNoticeMsg) {
+      this.slowNoticeMsg.textContent = t('ai.slowNotice.armed');
+      this.slowNoticeMsg.className = 'ai-hint ai-ok';
+    }
+  }
+
+  /**
+   * Saves the operator's contact against the job in flight, then detaches this tab from
+   * it entirely.
+   *
+   * Delivery happens server-side once the job finishes, win or lose — the job itself
+   * keeps retrying on the backend regardless of whether any browser is still polling
+   * it, so there is nothing left for THIS tab to usefully keep doing once a contact is
+   * saved. Aborting `inFlight` stops the poll loop and frees the run button, which is
+   * the entire point of offering this instead of asking the operator to keep watching
+   * the screen: closing the tab afterwards does not cancel the delivery either.
+   */
+  private async submitSlowNotice(): Promise<void> {
+    if (!this.currentJobId) return;
+
+    const email = this.slowNoticeEmail?.value.trim() || '';
+    const whatsapp = this.slowNoticeWhatsapp?.value.trim() || '';
+    if (!email && !whatsapp) {
+      if (this.slowNoticeMsg) {
+        this.slowNoticeMsg.textContent = t('ai.slowNotice.needContact');
+        this.slowNoticeMsg.className = 'ai-hint ai-bad';
+      }
+      return;
+    }
+
+    if (this.slowNoticeSubmit) this.slowNoticeSubmit.disabled = true;
+    const result = await armJobNotification(this.currentJobId, { email, whatsapp }, getLang());
+    if (this.slowNoticeSubmit) this.slowNoticeSubmit.disabled = false;
+
+    if (!result.ok) {
+      if (this.slowNoticeMsg) {
+        this.slowNoticeMsg.textContent = result.error || t('ai.slowNotice.error');
+        this.slowNoticeMsg.className = 'ai-hint ai-bad';
+      }
+      return;
+    }
+    this.showSlowNoticeArmed();
+
+    // The job runs to completion on the server no matter what this tab does next, so
+    // stop polling and hand the run button back — the operator asked to stop watching.
+    this.detachedForBackground = true;
+    this.inFlight?.abort();
+  }
+
   /** Adds a finished request to the session running total, and repaints the readout. */
   private recordCost(cost?: CostSummary): void {
     if (cost) {
@@ -974,6 +1070,7 @@ export class VisionMeasurePanel {
     if (this.resultsBox) this.resultsBox.innerHTML = '';
     if (this.tryOnBox) this.tryOnBox.innerHTML = '';
     this.exportButton?.classList.add('hidden');
+    this.hideSlowNotice();
   }
 
   /**
@@ -1089,11 +1186,14 @@ export class VisionMeasurePanel {
 
     this.running = true;
     this.inFlight = new AbortController();
+    this.currentProgress = null;
+    this.notifyArmedForJob = false;
+    this.detachedForBackground = false;
     this.updateRunState();
     this.startElapsed();
 
     try {
-      const response = await requestMeasurement({
+      const start = await startMeasureJob({
         faceImage: this.faceImage,
         glassesImage: this.glassesImage,
         provider,
@@ -1108,62 +1208,133 @@ export class VisionMeasurePanel {
         renderProfile: this.profileCheck?.checked ?? false,
         extraInstructions: this.extraInput?.value.trim() || undefined,
         frameId: this.frameIdInput?.value.trim() || undefined,
-      }, this.inFlight.signal);
-
-      const results = response.results;
-      this.lastResults = results;
-      this.lastTryOn = response.tryOn ?? null;
-      this.lastProfile = response.tryOnProfile ?? null;
-      this.renderTryOn(response.tryOn ?? null);
-      this.renderResults(results);
-
-      // Stored before anything else can go wrong with the DOM: from here on the run
-      // survives a reload, and the report page in another tab can pick it up. Awaited
-      // because building the frame thumbnail is asynchronous, and letting the rest of
-      // this method run first would put the "open report" button on screen before the
-      // report it opens actually exists.
-      await this.persistRun(results, this.lastTryOn);
-
-      // Counted before the verdict: a proposal that failed still spent tokens.
-      this.recordCost(response.cost);
-
-      // Stamped by the service, one per HTTP request. Shown so the operator can tie what
-      // is on screen to a line in the log — the difference between trusting that runs do
-      // not mix and being able to check it.
-      const requestId = response.requestId ?? results[0]?.requestId;
-      if (requestId) console.log(`[VTO] Petición de medición ${requestId}`);
-
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === 0) {
-        // "Revisa el detalle del error" is not help when the detail is off-screen below.
-        // With a single failed proposal its message IS the detail, so show it here.
-        const firstError = results.find((r) => !r.ok)?.error;
-        if (results.length === 1 && firstError) {
-          this.setStatusVerbatim('error', firstError);
-        } else {
-          this.setStatus('error', 'ai.allFailed');
-        }
-      } else {
-        this.setStatus('ok', 'ai.done', { n: okCount });
+      });
+      if (!start.ok || !start.jobId) {
+        throw new Error(start.error || 'No se pudo iniciar el trabajo de medición.');
       }
+      this.currentJobId = start.jobId;
 
-      // The results are appended below a long form; on a laptop they start off-screen.
-      // Bring them into view rather than leaving the operator to discover the scroll.
-      this.resultsBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      // Polled instead of a single blocking fetch: only polling gives the panel
+      // something to show WHILE waiting (retry progress, the "notify me" offer below),
+      // and running the whole thing in a background job means a request-timing-out
+      // proxy in front of this service can never cut the measurement itself short.
+      const response = await this.pollJobUntilDone(start.jobId, this.inFlight.signal);
+      await this.applyMeasureResponse(response);
     } catch (error: any) {
-      // An abort is the operator's own decision, not a fault to report as one.
+      // An abort is the operator's own decision, not a fault to report as one — and
+      // detaching for a background delivery (see submitSlowNotice) is a DIFFERENT
+      // decision from cancelling outright, so it gets its own status line instead of
+      // "cancelled", which would wrongly read as the run being thrown away.
       if (error?.name === 'AbortError') {
-        this.setStatus('idle', 'ai.cancelled');
+        this.setStatus(this.detachedForBackground ? 'ok' : 'idle', this.detachedForBackground ? 'ai.slowNotice.backgrounded' : 'ai.cancelled');
       } else {
         this.setStatusVerbatim('error', error?.message ?? String(error));
       }
     } finally {
       this.inFlight = null;
+      this.currentJobId = null;
+      this.currentProgress = null;
       this.stopElapsed();
+      // Left on screen (with its "guardado" note) when detaching for a background
+      // delivery — hiding it here would wipe the confirmation the operator just saw.
+      // discardPreviousRun() clears it for real at the start of the next capture.
+      if (!this.detachedForBackground) this.hideSlowNotice();
+      this.detachedForBackground = false;
       this.running = false;
       this.updateRunState();
       this.savePrefs();
     }
+  }
+
+  /** Polls a background job until it finishes, updating the live progress readout. */
+  private async pollJobUntilDone(jobId: string, signal: AbortSignal): Promise<MeasureResponse> {
+    const POLL_MS = 1500;
+    for (;;) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      const status = await pollMeasureJob(jobId, signal);
+      if (status.status === 'done' && status.result) {
+        return status.result;
+      }
+      if (status.status === 'error') {
+        throw new Error(status.error || 'El servicio no pudo completar la medición.');
+      }
+      if (status.status === 'unknown') {
+        throw new Error(status.error || 'El trabajo de medición no existe o expiró.');
+      }
+
+      this.currentProgress = status.progress ?? null;
+      if (status.notifyArmed) {
+        this.showSlowNoticeArmed();
+      } else if (this.currentProgress?.slow) {
+        this.showSlowNotice();
+      }
+
+      await this.sleep(POLL_MS, signal);
+    }
+  }
+
+  /** A delay that rejects with AbortError instead of resolving once `signal` fires. */
+  private sleep(ms: number, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const timer = window.setTimeout(resolve, ms);
+      signal.addEventListener(
+        'abort',
+        () => {
+          window.clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true }
+      );
+    });
+  }
+
+  /** Renders a finished measurement response — shared by the job-polling path above. */
+  private async applyMeasureResponse(response: MeasureResponse): Promise<void> {
+    const results = response.results;
+    this.lastResults = results;
+    this.lastTryOn = response.tryOn ?? null;
+    this.lastProfile = response.tryOnProfile ?? null;
+    this.renderTryOn(response.tryOn ?? null);
+    this.renderResults(results);
+
+    // Stored before anything else can go wrong with the DOM: from here on the run
+    // survives a reload, and the report page in another tab can pick it up. Awaited
+    // because building the frame thumbnail is asynchronous, and letting the rest of
+    // this method run first would put the "open report" button on screen before the
+    // report it opens actually exists.
+    await this.persistRun(results, this.lastTryOn);
+
+    // Counted before the verdict: a proposal that failed still spent tokens.
+    this.recordCost(response.cost);
+
+    // Stamped by the service, one per HTTP request. Shown so the operator can tie what
+    // is on screen to a line in the log — the difference between trusting that runs do
+    // not mix and being able to check it.
+    const requestId = response.requestId ?? results[0]?.requestId;
+    if (requestId) console.log(`[VTO] Petición de medición ${requestId}`);
+
+    const okCount = results.filter((r) => r.ok).length;
+    if (okCount === 0) {
+      // "Revisa el detalle del error" is not help when the detail is off-screen below.
+      // With a single failed proposal its message IS the detail, so show it here.
+      const firstError = results.find((r) => !r.ok)?.error;
+      if (results.length === 1 && firstError) {
+        this.setStatusVerbatim('error', firstError);
+      } else {
+        this.setStatus('error', 'ai.allFailed');
+      }
+    } else {
+      this.setStatus('ok', 'ai.done', { n: okCount });
+    }
+
+    // The results are appended below a long form; on a laptop they start off-screen.
+    // Bring them into view rather than leaving the operator to discover the scroll.
+    this.resultsBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   /**
@@ -1173,13 +1344,23 @@ export class VisionMeasurePanel {
    * the whole time. A run was lost exactly that way: the operator read the stillness as
    * a hang, reloaded, and the answer arrived on the server with nobody left to receive
    * it. So the seconds tick, and the warning about reloading is on screen while it
-   * matters.
+   * matters. When the service reports a retry wait it takes over this same line
+   * ('ai.analysingRetry' instead of 'ai.analysingFor') rather than fighting it with a
+   * second timer, and gives up that slot again as soon as `currentProgress` clears.
    */
   private startElapsed(): void {
     const started = Date.now();
     const paint = () => {
       const seconds = Math.round((Date.now() - started) / 1000);
-      this.setStatus('busy', 'ai.analysingFor', { s: String(seconds) });
+      if (this.currentProgress) {
+        this.setStatus('busy', 'ai.analysingRetry', {
+          s: String(seconds),
+          attempt: String(this.currentProgress.attempt),
+          max: String(this.currentProgress.maxAttempts),
+        });
+      } else {
+        this.setStatus('busy', 'ai.analysingFor', { s: String(seconds) });
+      }
     };
     paint();
     this.stopElapsed();

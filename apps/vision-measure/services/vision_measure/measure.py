@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from services.vision_measure.compositor import render_ai_tryon, render_local_overlay
 from services.vision_measure.config import (
@@ -320,6 +320,7 @@ def run_measurement(
     extra_instructions: Optional[str] = None,
     frame_id: Optional[str] = None,
     prepared: Optional[Tuple[Tuple[str, str], Tuple[str, str]]] = None,
+    on_retry: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """
     Runs one strategy against one provider and returns a result envelope.
@@ -400,6 +401,7 @@ def run_measurement(
             prompt["user"],
             images=[face, glasses],
             browse_urls=prompt.get("browseUrls") or (),
+            on_retry=on_retry,
         )
     except ProviderError as exc:
         # The call reached the model and spent tokens even though it produced nothing
@@ -459,6 +461,7 @@ def run_comparison(
     request_id: Optional[str] = None,
     extra_instructions: Optional[str] = None,
     frame_id: Optional[str] = None,
+    on_retry: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Runs several strategies over the same capture so their numbers can be compared.
@@ -506,6 +509,7 @@ def run_comparison(
                 extra_instructions=extra_instructions,
                 frame_id=frame_id,
                 prepared=prepared,
+                on_retry=on_retry,
             )
             for strategy in chosen
         ]

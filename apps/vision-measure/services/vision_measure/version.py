@@ -52,6 +52,8 @@ FEATURES: List[str] = [
     "congestion-diagnosis",  # 503 capacity and 429 quota are told apart, out loud
     "browse-urls-in-user-turn",  # the tool reads the request, not the instructions
     "capri-page-layout",  # the prompt describes how the supplier page is laid out
+    "retry-progress",  # background jobs report live attempt/backoff progress
+    "slow-run-notify",  # past SLOW_NOTICE_AFTER_ATTEMPT, arm an email/WhatsApp delivery
 ]
 
 

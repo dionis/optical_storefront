@@ -208,9 +208,9 @@ operador que configuró el servicio.
 | `errorCode` | Cuándo ocurre | Se reintenta solo | Mensaje al usuario |
 |---|---|---|---|
 | `missing-api-key` | Ni el panel ni el entorno tienen clave para ese proveedor | No | "Este servicio no está disponible en este momento. Contacta con el administrador." |
-| `quota-exceeded` | El proveedor respondió 429 (límite de la cuenta, no saturación general) | Sí — 3 veces con backoff | "Alcanzó su límite de uso. Intenta de nuevo en unos minutos." |
-| `provider-unavailable` | El proveedor respondió 500/502/503/504 tras agotar los reintentos | Sí — 3 veces con backoff | Mismo mensaje que `quota-exceeded` (desde el cliente, da igual cuál de las dos fue) |
-| `network-error` | Fallo de DNS/conexión (`requests.RequestException`) tras agotar los reintentos | Sí — 3 veces con backoff | Mismo mensaje que `provider-unavailable` |
+| `quota-exceeded` | El proveedor respondió 429 (límite de la cuenta, no saturación general) | Sí — ver "Reintentos y backoff" | "Alcanzó su límite de uso. Intenta de nuevo en unos minutos." |
+| `provider-unavailable` | El proveedor respondió 500/502/503/504 tras agotar los reintentos | Sí — ver "Reintentos y backoff" | Mismo mensaje que `quota-exceeded` (desde el cliente, da igual cuál de las dos fue) |
+| `network-error` | Fallo de DNS/conexión (`requests.RequestException`) tras agotar los reintentos | Sí — ver "Reintentos y backoff" | Mismo mensaje que `provider-unavailable` |
 | `timeout` | La petición agotó el tiempo límite sin respuesta | **No** — ver nota abajo | "El análisis tardó más de lo permitido. Inténtalo de nuevo." |
 
 **El timeout no se reintenta a propósito**: la petición ya gastó todo el
@@ -227,13 +227,51 @@ separado — no hay chequeo automático para este archivo).
 
 ## Reintentos y backoff
 
-`providers.py: _post_json()` — hasta `MAX_RETRIES = 3` intentos adicionales
-para los status en `RETRYABLE_STATUSES = {408, 425, 429, 500, 502, 503, 504}`
-y para fallos de red. Espera entre intentos: la cabecera `Retry-After` del
+`providers.py: _post_json()` — hasta `MAX_RETRIES` intentos adicionales para
+los status en `RETRYABLE_STATUSES = {408, 425, 429, 500, 502, 503, 504}` y
+para fallos de red. Espera entre intentos: la cabecera `Retry-After` del
 proveedor si la manda, si no, `RETRY_BASE_DELAY_S * 2^intento` con jitter
-aleatorio (para que una flota de clientes reintentando no convierta un pico de
-carga en una caída total). Un 4xx que no sea 408/425/429 **no se reintenta** —
-es un problema de la petición, no algo que vaya a arreglarse solo.
+aleatorio, con un techo de `RETRY_MAX_DELAY_S` (para que una flota de clientes
+reintentando no convierta un pico de carga en una caída total). Un 4xx que no
+sea 408/425/429 **no se reintenta** — es un problema de la petición, no algo
+que vaya a arreglarse solo.
+
+Los tres son tunables por entorno (`VISION_MAX_RETRIES`,
+`VISION_RETRY_BASE_DELAY_S`, `VISION_RETRY_MAX_DELAY_S`; ver
+`apps/vision-measure/.env.example`) — por defecto 6 reintentos, arrancando en
+2s y con techo en 60s, siguiendo la guía de Google para 429/503 en esta misma
+API. El valor anterior (3 reintentos arrancando en 3s) daba por perdida la
+petición en ~15-30s, mucho antes de que un pico de saturación real (Google
+mismo lo describe como "30 segundos a varios minutos") terminara — de ahí que
+tres intentos escalando el tiempo casi nunca lograran respuesta.
+
+### Avisar por correo/WhatsApp en vez de esperar
+
+Desde el segundo intento fallido (`SLOW_NOTICE_AFTER_ATTEMPT = 2` en
+`providers.py`) el panel ofrece guardar un contacto en vez de seguir mirando
+la pantalla. El umbral es deliberadamente bajo: en el segundo intento no hay
+forma de saber si el proveedor se recupera en 5 segundos más o si va a agotar
+todo el presupuesto de reintentos (ahora mucho más largo, ver arriba), así que
+se ofrece la salida de inmediato en vez de forzar a esperar para verlo. Esto
+exige que la medición corra como trabajo de fondo, así que
+`vision_measure_panel.ts: run()` ya no llama a `POST /vision-measure` directo:
+arranca un trabajo (`POST /vision-measure/job`) y lo consulta
+(`GET /vision-measure/job/:id`), que ahora también trae `progress` (intento
+actual, espera, y si ya pasó el umbral) mientras el trabajo sigue `pending`.
+
+`POST /vision-measure/job/:id/notify` guarda el contacto **en memoria, junto
+al trabajo** (nada persistido — vision-measure sigue siendo "sin estado"). En
+cuanto se guarda con éxito, el panel se DESENGANCHA del sondeo — dejar de
+mirar la pantalla es justamente el punto — y libera el botón "Analizar" para
+que el operador pueda hacer otra cosa; el trabajo en sí sigue corriendo en el
+servidor exactamente igual, ajeno a si algún navegador lo sigue consultando.
+Cuando el trabajo por fin termina (bien o mal), el propio proceso compone un
+resumen y se lo pasa a `POST /vision-measure/notify` en el backend de Medusa,
+que ya tiene Resend (email) y Twilio (SMS) configurados — WhatsApp reutiliza
+el mismo proveedor de Twilio con un remitente `whatsapp:+...` distinto
+(`TWILIO_WHATSAPP_FROM_NUMBER`), gateado por `VISION_INTERNAL_SECRET` en ambos
+`.env`. La entrega ocurre en el servidor, así que cerrar la pestaña (o el
+navegador) después de guardar el contacto no la cancela.
 
 ## Coste
 
