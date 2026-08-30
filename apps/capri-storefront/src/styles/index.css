@@ -2868,3 +2868,24 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 560px) {
   .zlx-tryon-btn { font-size: 13px; padding: 9px 15px; bottom: 8px; }
 }
+
+
+/* ── Selector "¿Para quién son?" en la barra de acción del probador ──
+   Permite medir para uno mismo o como referencia para un familiar/amigo (nombre
+   opcional). Se guarda junto con la medición. Responsive: en móvil ocupa una fila. */
+.tryon-studio .vm-actionbar { flex-wrap: wrap; }
+.vm-who { display: flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap; }
+.vm-who-q { font-size: 12.5px; font-weight: 700; color: #17191f; }
+.vm-who-opts { display: inline-flex; background: #eef1f6; border: 1px solid #e2e6ee;
+  border-radius: 999px; padding: 2px; }
+.vm-who-opt { border: 0; background: transparent; color: #4b5566; font-weight: 700;
+  font-size: 12.5px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  transition: background .15s ease, color .15s ease; }
+.vm-who-opt.on { background: #0E5AD0; color: #fff; }
+.vm-who-name { border: 1px solid #d7dce6; border-radius: 8px; padding: 7px 10px;
+  font-size: 13px; min-width: 150px; color: #17191f; background: #fff; }
+.vm-who-name:focus { outline: 2px solid rgba(14, 90, 208, .35); border-color: #0E5AD0; }
+@media (max-width: 620px) {
+  .vm-who { width: 100%; }
+  .vm-who-name { flex: 1 1 auto; min-width: 0; }
+}

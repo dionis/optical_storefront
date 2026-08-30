@@ -206,6 +206,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   // el cliente se rinda para ofrecerle no seguir mirando la pantalla).
   const [notifyState, setNotifyState] = useState("idle");
   const [notifyError, setNotifyError] = useState(null);
+  // ¿Para quién son los espejuelos? "me" = para el propio cliente; "other" = referencia
+  // para un familiar/amigo (con nombre opcional). Se guarda junto con la medición.
+  const [forWhom, setForWhom] = useState("me");    // "me" | "other"
+  const [otherName, setOtherName] = useState("");
   const mAbort = useRef(null);
   // El jobId del trabajo en curso, para que el formulario de aviso (fuera del flujo
   // async de doMeasure) sepa a qué trabajo armar el contacto.
@@ -507,6 +511,24 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
 
       {frontImg && sideImg && mState === "idle" && (
         <div className="vm-actionbar">
+          {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
+              referencia para un familiar/amigo. Se guarda junto con la medición. */}
+          <div className="vm-who">
+            <span className="vm-who-q">{t("vm.who.title")}</span>
+            <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
+              <button type="button" role="radio" aria-checked={forWhom === "me"}
+                      className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
+                      onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
+              <button type="button" role="radio" aria-checked={forWhom === "other"}
+                      className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
+                      onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
+            </div>
+            {forWhom === "other" && (
+              <input className="vm-who-name" type="text" value={otherName} maxLength={60}
+                     onChange={(e) => setOtherName(e.target.value)}
+                     placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
+            )}
+          </div>
           <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
           <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
         </div>
