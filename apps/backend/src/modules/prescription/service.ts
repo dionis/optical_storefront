@@ -47,6 +47,8 @@ export default class PrescriptionModuleService extends MedusaService({
       verified_by_user: rx.verified_by_user,
       file_url: rx.file_url,
       tryon_image_url: rx.tryon_image_url ?? null,
+      patient_for: rx.patient_for ?? null,
+      patient_name: rx.patient_name ?? null,
       customer_id,
     });
     return { id: (record as { id: string }).id };
@@ -80,6 +82,8 @@ export default class PrescriptionModuleService extends MedusaService({
       verified_by_user: (record["verified_by_user"] as boolean) ?? false,
       file_url: (record["file_url"] as string | null) ?? null,
       tryon_image_url: (record["tryon_image_url"] as string | null) ?? null,
+      patient_for: (record["patient_for"] as "me" | "other" | null) ?? null,
+      patient_name: (record["patient_name"] as string | null) ?? null,
       created_at: record["created_at"] as string | undefined,
       updated_at: record["updated_at"] as string | undefined,
     };

@@ -144,6 +144,9 @@ interface ProjectedRx {
    */
   rx_image: string | null;
   tryon_image: string | null;
+  /** Para quién son los espejuelos: "me" | "other" (+ nombre) — desde el probador. */
+  patient_for: string | null;
+  patient_name: string | null;
 }
 
 function projectItem(
@@ -274,6 +277,8 @@ async function loadPrescriptions(
         has_file: Boolean(rx.file_url),
         rx_image: rxImage,
         tryon_image: tryonImage,
+        patient_for: rx.patient_for ?? null,
+        patient_name: rx.patient_name ?? null,
       });
     }
   } catch (error) {

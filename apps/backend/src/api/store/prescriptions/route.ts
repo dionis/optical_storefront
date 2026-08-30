@@ -118,6 +118,13 @@ export async function POST(
       verified_by_user: verifiedByUser,
       file_url: rx.file_url ?? null,
       tryon_image_url: tryonImageKey,
+      // Para quién son (elegido en el probador). Solo se guarda el nombre cuando es
+      // "other"; se recorta a 120 caracteres.
+      patient_for: rx.patient_for === "me" || rx.patient_for === "other" ? rx.patient_for : null,
+      patient_name:
+        rx.patient_for === "other" && typeof rx.patient_name === "string"
+          ? rx.patient_name.trim().slice(0, 120) || null
+          : null,
       customer_id: null,
     })
     .returning("id");

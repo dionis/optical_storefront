@@ -29,6 +29,10 @@ export const PrescriptionRecord = model.define("prescription", {
   file_url: model.text().nullable(),
   /** R2 object key of the AI try-on render (face with frame) — null when unused */
   tryon_image_url: model.text().nullable(),
+  /** Who the glasses are for: "me" | "other" (chosen in the try-on studio) */
+  patient_for: model.text().nullable(),
+  /** Name of the other person when patient_for = "other" — optional */
+  patient_name: model.text().nullable(),
   /** Customer ID (Medusa customer) — nullable for guest checkout */
   customer_id: model.text().nullable(),
 });
