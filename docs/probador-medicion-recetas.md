@@ -169,3 +169,43 @@ Principios:
 - Responsive de la receta: foto de la armadura protagonista, pasos como iconos.
 - Guardado de la imagen del probador y de la receta subida ligadas a la orden;
   visibles por el cliente (`my-orders`) y el admin.
+
+
+## 9. Mejoras posteriores (ronda 2)
+
+Cuatro frentes de mejora, todos desplegados:
+
+1. **Precisión / confianza de la medición.** `opticalMeasure.js` ahora calcula la
+   calidad de cada toma (resolución del iris, inclinación *roll*, giro *yaw*,
+   simetría del iris) y devuelve `quality { level, score, estErrorMm, reasons }`.
+   El resultado muestra una banda de confianza (verde/ámbar/rojo); si es baja, un
+   botón para repetir las fotos (mejor dato en origen). El panel de dimensiones
+   muestra la confianza y el margen ± mm.
+
+2. **Conversión — compartir la prueba.** Botón "Compartir" en el resultado: en
+   móvil usa `navigator.share` con la imagen (WhatsApp, etc.); en escritorio
+   descarga la imagen y abre WhatsApp con un mensaje. (El CTA del probador en la
+   ficha de producto y en las tarjetas ya existía.)
+
+3. **Correo a la tienda — señal de prueba virtual.** El correo de la tienda añade
+   una fila "Prueba virtual: incluida — verla en el panel" (solo copia de tienda,
+   como el nº de registro). **No** se envía enlace firmado por correo (es un token
+   portador); el dueño la ve autenticado en el panel (widget del §7.11).
+
+4. **Rendimiento + métricas.** `index.html` precalienta la conexión al CDN de
+   MediaPipe y al host del modelo (`preconnect`/`dns-prefetch`) para que el estudio
+   abra más rápido — el probador ya está en chunks *lazy* y usa el modelo `flash`.
+   `order-board` añade un flag `has_tryon` por orden (consulta por lote de
+   `tryon_image_url`, solo la señal) y el panel muestra un badge 📷 "Usó el
+   probador virtual" para ver adopción/conversión de un vistazo.
+
+### Ideas para seguir mejorando (backlog)
+- Calibrar la medición contra medidas reales de óptico (5–10 casos) y ajustar
+  umbrales de calidad / `ANCHOR_BRIDGE_FROM_TOP`.
+- Chequeo de calidad de foto ANTES de calcular (bloquear/avisar si la toma es mala).
+- Recuperación: si el cliente midió y no compró, enviarle su imagen por correo/WhatsApp
+  (usar la infra de aviso existente).
+- Aviso de encaje: comparar ancho de cara vs A/DBL para sugerir si la montura le queda
+  ancha/estrecha.
+- Persistir el nivel de confianza con la receta (columna) para mostrárselo al óptico.
+- Métrica de conversión probador→compra en el panel de analítica (además del badge).
