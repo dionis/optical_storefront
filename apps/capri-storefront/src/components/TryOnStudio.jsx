@@ -289,6 +289,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (mine.bifocal != null) picked.bifocal = mine.bifocal;
     if (mine.suitable != null) picked.suitable = mine.suitable;
     if (mine.minRequired != null) picked.minRequired = mine.minRequired;
+    if (mine.quality) picked.quality = mine.quality;
     picked.measuredBy = "device";
     return picked;
   }
@@ -604,6 +605,20 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             <div className="vm-rbadge"><span>{t("vm.corridor")}</span><b>{mmv(mData?.corridor)}</b></div>
           </figure>
         </div>
+        {mData?.quality && (
+          <div className={`vm-conf vm-conf-${mData.quality.level}`}>
+            <span className="vm-conf-dot" aria-hidden="true" />
+            <span className="vm-conf-tx">
+              <b>{t(`vm.conf.${mData.quality.level}`)}</b>
+              {mData.quality.estErrorMm != null && (
+                <small>{t("vm.conf.pm")} ±{mData.quality.estErrorMm} mm</small>
+              )}
+            </span>
+            {mData.quality.level === "low" && (
+              <button type="button" className="vm-conf-btn" onClick={remeasure}>{t("vm.remeasure")}</button>
+            )}
+          </div>
+        )}
         <div className="vm-result-actions">
           <button type="button" className="vm-remeasure" onClick={remeasure}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
@@ -627,10 +642,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   function dimsPanel() {
     const sub = (mData?.pdRight != null || mData?.pdLeft != null)
       ? `OD ${mmv(mData?.pdRight)} · OS ${mmv(mData?.pdLeft)}` : null;
+    const q = mData?.quality;
     const rows = [
-      { k: t("vm.pd"), v: mmv(mData?.pd), sub },
+      { k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `${sub ? sub + " · " : ""}±${q.estErrorMm} mm` : sub },
       { k: t("vm.corridor"), v: mmv(mData?.corridor) },
       { k: `${t("fs.lensWidth")} · ${t("fs.bridge")}`, v: `${eyeD || "—"} · ${bridgeD || "—"}` },
+      ...(q ? [{ k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`) }] : []),
     ];
     return (
       <aside className="vm-dims" aria-label={t("vm.dims.title")}>

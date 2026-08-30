@@ -153,6 +153,34 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
     if (bifocal != null) bifocal = Math.min(35, Math.max(5, bifocal));
   }
 
+  // ── Calidad / confianza de la medición ──────────────────────────────────
+  // Una foto no es un pupilómetro; qué tan fiable es la medida depende de:
+  //   · resolución del iris (px): más grande = escala más precisa;
+  //   · inclinación de la cabeza (roll): la línea inter-iris debe ir horizontal;
+  //   · giro (yaw): la nariz debe quedar centrada entre los iris (si no, el PD
+  //     se acorta por perspectiva);
+  //   · simetría del iris: iris muy distintos = ángulo o detección dudosa.
+  // Con eso damos un nivel (high/medium/low) y un error estimado del PD en mm,
+  // para que el cliente repita la toma si sale baja y el óptico sepa el margen.
+  const pdPx = dist(irisA, irisB) || 1;
+  const irisAsym = Math.abs(diamA - diamB) / irisPx;                 // 0 ideal
+  const rollRaw = Math.abs(Math.atan2(irisB.y - irisA.y, irisB.x - irisA.x) * 180 / Math.PI);
+  const rollTilt = Math.min(rollRaw, Math.abs(180 - rollRaw));       // 0 = horizontal
+  const irisMidX = (irisA.x + irisB.x) / 2;
+  const yawOff = Math.abs(P(1).x - irisMidX) / pdPx;                 // 0 ideal
+
+  let score = 1;
+  const reasons = [];
+  if (irisPx < 28) { score -= irisPx < 18 ? 0.4 : 0.18; reasons.push("far"); }
+  if (rollTilt > 8) { score -= rollTilt > 14 ? 0.3 : 0.15; reasons.push("tilt"); }
+  if (yawOff > 0.06) { score -= yawOff > 0.11 ? 0.35 : 0.18; reasons.push("angle"); }
+  if (irisAsym > 0.15 && !reasons.includes("angle")) { score -= 0.15; reasons.push("angle"); }
+  score = Math.max(0, Math.min(1, score));
+  const level = score >= 0.8 ? "high" : score >= 0.55 ? "medium" : "low";
+  // Error estimado del PD (mm): jitter de ~2 px en las pupilas + penalización por
+  // baja calidad. Heurístico y conservador, no una garantía metrológica.
+  const estErrorMm = round1(mmPerPx * 2 + (1 - score) * 2.2);
+
   return {
     ok: true,
     pdTotal: round1(pdTotal),
@@ -166,5 +194,7 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
     // "suitable" para progresivos: ≥ 18 mm (corredor estándar).
     suitable: corridor == null ? null : corridor >= 18,
     minRequired: 18,
+    // Calidad de la medición.
+    quality: { level, score: Math.round(score * 100) / 100, estErrorMm, reasons },
   };
 }

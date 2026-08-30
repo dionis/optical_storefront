@@ -3060,3 +3060,23 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   transition: transform .15s ease, box-shadow .15s ease; }
 .mo-rx-img:hover img { transform: translateY(-2px); box-shadow: 0 12px 24px -12px rgba(16,24,40,.5); }
 .mo-rx-img span { font-size: 11.5px; font-weight: 700; color: #5b6472; }
+
+
+/* ═══ Confianza de la medición (banda en el resultado del probador) ═══════════
+   Verde = alta, ámbar = media, rojo = baja (con botón para repetir la toma). */
+.vm-conf { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid transparent; }
+.vm-conf-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.vm-conf-tx { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.vm-conf-tx b { font-size: 13px; font-weight: 800; }
+.vm-conf-tx small { font-size: 11.5px; opacity: .85; }
+.vm-conf-btn { margin-left: auto; flex: 0 0 auto; border: 0; border-radius: 9px;
+  padding: 8px 12px; font-weight: 800; font-size: 12.5px; cursor: pointer;
+  background: #b4231f; color: #fff; }
+.vm-conf-btn:hover { filter: brightness(1.06); }
+.vm-conf-high { background: rgba(26,157,92,.12); color: #157a49; border-color: rgba(26,157,92,.35); }
+.vm-conf-high .vm-conf-dot { background: #1a9d5c; }
+.vm-conf-medium { background: rgba(180,120,20,.12); color: #8a5b12; border-color: rgba(180,120,20,.35); }
+.vm-conf-medium .vm-conf-dot { background: #d19412; }
+.vm-conf-low { background: rgba(200,60,50,.12); color: #b4231f; border-color: rgba(200,60,50,.4); }
+.vm-conf-low .vm-conf-dot { background: #d2463c; }
