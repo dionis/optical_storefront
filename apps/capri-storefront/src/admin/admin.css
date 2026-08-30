@@ -319,3 +319,20 @@
 .lens-tbl .adm-price-input { width: 82px; }
 .lens-ar-group { border: 1px solid #eef1f5; border-radius: 12px; padding: 10px 12px; }
 .lens-ar-h { font-size: 12px; font-weight: 700; color: #5c6470; margin-bottom: 4px; }
+
+
+/* Visor de receta + imágenes (prueba virtual y receta subida) en el detalle del pedido */
+.ord-detail-grid li.ord-li { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.ord-li-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ord-rxbtn { align-self: flex-start; background: #eef4ff; color: #0E5AD0; border: 1px solid #cfe0ff;
+  border-radius: 8px; padding: 5px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ord-rxbtn:hover { background: #e0ecff; }
+.ord-rxnote { font-size: 12px; margin: 2px 0 0; }
+.ord-rxview { background: #f6f8fc; border: 1px solid #e6ebf2; border-radius: 10px; padding: 8px 10px; margin: 2px 0 4px; }
+.ord-rxvals { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: #3a424e; }
+.ord-rxvals b { color: #1e2733; }
+.ord-rximgs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.ord-rximgs a { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; color: #5c6470; }
+.ord-rximgs img { width: 84px; height: 108px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e6ee; background: #fff; box-shadow: 0 6px 16px -10px rgba(16,24,40,.4); }
+.ord-rximgs a:hover img { box-shadow: 0 12px 24px -12px rgba(16,24,40,.5); }
+.ord-rximgs span { font-size: 11px; font-weight: 700; }
