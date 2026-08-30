@@ -13,7 +13,10 @@ import {
   pickMeasurement,
   frameImageDataUrl,
 } from "../data/visionMeasure.js";
-import { getMeasureJob, setMeasureJob, clearMeasureJob } from "../data/tryOnState.js";
+import {
+  getMeasureJob, setMeasureJob, clearMeasureJob,
+  saveMeasureResult, getMeasureResult, clearMeasureResult,
+} from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
 //
@@ -29,6 +32,42 @@ const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.6";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const HOLD_FRAMES = 90; // ~3 s sosteniendo la pose antes de capturar (más tiempo para colocarse)
 const CAPDBG = typeof location !== "undefined" && location.search.includes("capdbg");
+
+/* Sonido de obturador de cámara (WebAudio, sin assets externos). Al capturar cada
+   foto el cliente oye el "clic" de la cámara — como en una óptica real — para que
+   sepa que la toma se realizó. kind="shutter": foto frontal (clic + cierre mecánico);
+   kind="click": foto lateral (clic nítido de cierre, señal de que ya se tomaron las
+   medidas). Falla en silencio si el navegador bloquea el audio. */
+function playShutter(kind) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const sr = ctx.sampleRate;
+    const now = ctx.currentTime;
+    const burst = (start, dur, freq, q, gain, type) => {
+      const buf = ctx.createBuffer(1, Math.max(1, Math.floor(sr * dur)), sr);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) {
+        const p = i / d.length;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - p, 3);
+      }
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const flt = ctx.createBiquadFilter();
+      flt.type = type || "bandpass"; flt.frequency.value = freq; flt.Q.value = q;
+      const g = ctx.createGain(); g.gain.value = gain;
+      src.connect(flt).connect(g).connect(ctx.destination);
+      src.start(now + start);
+    };
+    // Clic de apertura, nítido y agudo.
+    burst(0, 0.05, 3200, 1.1, 0.32, "bandpass");
+    if (kind === "shutter") {
+      // Cierre mecánico del espejo, más grave, tras ~85 ms (obturador tipo réflex).
+      burst(0.085, 0.12, 1100, 0.7, 0.34, "lowpass");
+    }
+    setTimeout(() => ctx.close?.(), 700);
+  } catch { /* audio no disponible: silencio */ }
+}
 
 /* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
 
@@ -174,22 +213,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     cx.drawImage(v, 0, 0, cw, ch);
     const url = cn.toDataURL("image/jpeg", 0.9);
     holdRef.current = 0; setCount(0);
-    if (ph === "front") { setFrontImg(url); setPhase("side"); }
-    else { setSideImg(url); setPhase("done"); }
+    // Sonido de cámara: obturador completo en la 1ª foto, clic nítido de cierre en la
+    // 2ª (señal de que ya se tomaron las dos tomas para las medidas).
+    if (ph === "front") { setFrontImg(url); setPhase("side"); playShutter("shutter"); }
+    else { setSideImg(url); setPhase("done"); playShutter("click"); }
   }
 
   function onUpload(which, file) {
     if (!file) return;
     const rd = new FileReader();
     rd.onload = () => {
-      if (which === "front") { setFrontImg(rd.result); if (phaseRef.current === "front") setPhase("side"); }
-      else { setSideImg(rd.result); if (phaseRef.current !== "done") setPhase("done"); }
+      if (which === "front") { setFrontImg(rd.result); if (phaseRef.current === "front") setPhase("side"); playShutter("shutter"); }
+      else { setSideImg(rd.result); if (phaseRef.current !== "done") setPhase("done"); playShutter("click"); }
     };
     rd.readAsDataURL(file);
   }
   function retake(which) {
     autoDoneRef.current = false;
     setMState("idle"); setMData(null);
+    // Se va a rehacer la toma: la generación guardada ya no aplica.
+    clearMeasureResult(product);
     if (which === "front") { setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
   }
@@ -261,6 +304,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
           setMCode(picked.errorCode); setMError(picked.error); setMState("error");
         } else {
           setMData(picked); setMState("result");
+          // Persistimos la generación (imágenes + números) para que salir/reabrir el
+          // estudio NO obligue a re-generar: al reabrir se restaura tal cual.
+          try { saveMeasureResult(product, { data: picked, frontImg, sideImg }); } catch { /* cuota: se ignora */ }
         }
       })
       .catch((e) => {
@@ -340,6 +386,34 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restaura la ÚLTIMA generación guardada (imágenes + números) al reabrir el estudio.
+  // El cliente cerró la pantalla y volvió: en vez de re-generar (segundos/minutos +
+  // otra petición a Gemini), mostramos el resultado tal cual quedó. Si hay un trabajo
+  // aún en curso, manda la reconexión de arriba y NO restauramos un resultado viejo.
+  useEffect(() => {
+    if (getMeasureJob(product)) return;
+    const saved = getMeasureResult(product);
+    if (!saved || !saved.data) return;
+    if (saved.frontImg) setFrontImg(saved.frontImg);
+    if (saved.sideImg) setSideImg(saved.sideImg);
+    setPhase("done");
+    setMData(saved.data);
+    setMState("result");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // En RESPONSIVE la barra de "Calcular medidas" queda por debajo del pliegue: en
+  // cuanto están las dos fotos la traemos a la vista para que el cliente no se pierda
+  // y sepa exactamente qué pulsar a continuación.
+  const actionbarRef = useRef(null);
+  useEffect(() => {
+    if (frontImg && sideImg && mState === "idle" && typeof window !== "undefined" && window.innerWidth <= 900) {
+      requestAnimationFrame(() =>
+        actionbarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      );
+    }
+  }, [frontImg, sideImg, mState]);
 
   // Guarda el contacto contra el trabajo en curso y deja de sondear en primer plano:
   // el trabajo sigue corriendo en el servidor pase lo que pase con este componente, así
@@ -467,7 +541,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   }
 
   return createPortal(
-    <div className="tryon tryon-studio" role="dialog" aria-modal="true" style={{ top: headerH || 0 }}>
+    <div className={`tryon tryon-studio ${mState !== "idle" ? "tryon-busy" : ""}`}
+         role="dialog" aria-modal="true" style={{ top: headerH || 0 }}>
       <div className="tryon-bar">
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
       </div>
@@ -549,7 +624,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       </div>
 
       {frontImg && sideImg && mState === "idle" && (
-        <div className="vm-actionbar">
+        <div className="vm-actionbar" ref={actionbarRef}>
           {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
               referencia para un familiar/amigo. Se guarda junto con la medición. */}
           <div className="vm-who">

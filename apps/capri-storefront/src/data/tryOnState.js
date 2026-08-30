@@ -66,3 +66,64 @@ export function getMeasureJob(product) {
 export function clearMeasureJob(product) {
   measureJobs.delete(productTryOnKey(product));
 }
+
+
+// ── Resultado GENERADO ya terminado, persistido, por producto ───────────────
+//
+// El trabajo en curso (arriba) sobrevive a un remount, pero el RESULTADO final
+// (las imágenes con los espejuelos puestos + los números) vivía solo en el estado
+// de React de TryOnStudio: al CERRAR el estudio el componente se desmonta y esa
+// generación — que costó segundos/minutos y una petición a Gemini — se perdía, y
+// reabrir obligaba a rehacerla. Lo guardamos en localStorage para que reabrir el
+// mismo producto restaure la última generación al instante, sin volver a generar.
+//
+// Las imágenes son data URLs (base64) y pesan; localStorage ronda los ~5 MB por
+// origen, así que guardamos como mucho MAX_RESULTS entradas (las más recientes) y,
+// si el navegador rechaza por cuota, vamos descartando la más vieja y reintentando.
+const RESULTS_LS_KEY = "rubi.tryon.results.v1";
+const MAX_RESULTS = 4;
+
+function readResults() {
+  try {
+    const raw = localStorage.getItem(RESULTS_LS_KEY);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch { return {}; }
+}
+
+function writeResults(map) {
+  // Ordena por recencia y va recortando hasta que quepa (o se rinde en silencio).
+  let entries = Object.entries(map).sort((a, b) => (b[1]?.savedAt || 0) - (a[1]?.savedAt || 0));
+  if (entries.length > MAX_RESULTS) entries = entries.slice(0, MAX_RESULTS);
+  while (entries.length) {
+    try {
+      localStorage.setItem(RESULTS_LS_KEY, JSON.stringify(Object.fromEntries(entries)));
+      return true;
+    } catch {
+      entries.pop(); // descarta la más vieja y reintenta
+    }
+  }
+  try { localStorage.removeItem(RESULTS_LS_KEY); } catch { /* nada */ }
+  return false;
+}
+
+export function saveMeasureResult(product, payload) {
+  const key = productTryOnKey(product);
+  if (!key || !payload) return;
+  const map = readResults();
+  map[key] = { ...payload, savedAt: Date.now() };
+  writeResults(map);
+}
+
+export function getMeasureResult(product) {
+  const key = productTryOnKey(product);
+  if (!key) return null;
+  const map = readResults();
+  return map[key] || null;
+}
+
+export function clearMeasureResult(product) {
+  const key = productTryOnKey(product);
+  if (!key) return;
+  const map = readResults();
+  if (map[key]) { delete map[key]; writeResults(map); }
+}
