@@ -446,6 +446,39 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     setMState("idle");
   }
 
+  // Compartir la prueba (rostro con los espejuelos). En móvil usa el compartir
+  // nativo con la imagen (WhatsApp, etc.); si no está disponible, descarga la
+  // imagen y abre WhatsApp con un mensaje para adjuntarla. Enganche de conversión:
+  // el cliente enseña la prueba y decide con quien quiera.
+  async function shareResult() {
+    const src = mData?.frontImage || frontImg;
+    const text = t("vm.shareText");
+    const title = "Óptica El Rancho";
+    const url = typeof location !== "undefined" ? location.href : "";
+    try {
+      if (src && typeof navigator !== "undefined" && navigator.canShare) {
+        const blob = await (await fetch(src)).blob();
+        const file = new File([blob], "prueba-espejuelos.jpg", { type: blob.type || "image/jpeg" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], text, title });
+          return;
+        }
+      }
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ text, title, url });
+        return;
+      }
+    } catch { return; /* el usuario canceló el diálogo de compartir */ }
+    // Fallback (escritorio sin compartir nativo): descarga + WhatsApp con texto.
+    try {
+      if (src) {
+        const a = document.createElement("a");
+        a.href = src; a.download = "prueba-espejuelos.jpg"; a.click();
+      }
+    } catch { /* descarga no disponible */ }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text + (url ? " " + url : ""))}`, "_blank", "noopener");
+  }
+
   // "Medir de nuevo" desde la vista de resultado: descarta la generación guardada y
   // vuelve a la captura desde cero.
   function remeasure() {
@@ -623,6 +656,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           <button type="button" className="vm-remeasure" onClick={remeasure}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
             {t("vm.remeasure")}
+          </button>
+          <button type="button" className="vm-share" onClick={shareResult} title={t("vm.share")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
+            {t("vm.share")}
           </button>
           {addedState === "added" ? (
             <span className="vm-added">✓ {t("vm.added")}</span>

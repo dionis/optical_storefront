@@ -3080,3 +3080,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-conf-medium .vm-conf-dot { background: #d19412; }
 .vm-conf-low { background: rgba(200,60,50,.12); color: #b4231f; border-color: rgba(200,60,50,.4); }
 .vm-conf-low .vm-conf-dot { background: #d2463c; }
+
+
+/* Botón "Compartir la prueba" (resultado del probador) — verde WhatsApp suave */
+.vm-share { display: inline-flex; align-items: center; gap: 7px; background: #e9f8ef; color: #128c4b;
+  border: 1px solid #bce7cd; border-radius: 12px; padding: 12px 15px; font-weight: 700; font-size: 13.5px;
+  cursor: pointer; transition: background .15s ease; }
+.vm-share:hover { background: #d9f2e3; }
