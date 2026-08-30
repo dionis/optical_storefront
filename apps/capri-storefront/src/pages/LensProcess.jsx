@@ -389,6 +389,25 @@ export default function LensProcess() {
   // Probador abierto desde el espejuelo de esta página.
   const [tryOnOpen, setTryOnOpen] = useState(false);
 
+  // "Añadir receta" desde el probador: pre-rellena las medidas de encaje (DIP + altura
+  // de montaje) en la receta, para que queden GUARDADAS al continuar la compra. El
+  // probador ya persiste la imagen generada por producto (localStorage) y muestra su
+  // propia confirmación; aquí solo integramos los números en el flujo de la receta.
+  const applyTryOnMeasurement = (m) => {
+    if (!m) return;
+    const oneDp = (v) => (v == null || v === "" ? "" : String(Math.round(Number(v) * 10) / 10));
+    const hasDual = m.pdRight != null && m.pdLeft != null;
+    setRx((r) => ({
+      ...r,
+      pd: hasDual ? r.pd : (oneDp(m.pd) || r.pd),
+      pd_od: hasDual ? (oneDp(m.pdRight) || r.pd_od) : r.pd_od,
+      pd_os: hasDual ? (oneDp(m.pdLeft) || r.pd_os) : r.pd_os,
+      seg_height: oneDp(m.segHeight ?? m.corridor) || r.seg_height,
+    }));
+    if (hasDual) setPdMode("dual");
+    setRxDirty(true);
+  };
+
   const [designId, setDesignId] = useState(null); // "sv" | "bifocal" | ... | "frame-only"
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null);   // null = ninguno
@@ -904,7 +923,8 @@ export default function LensProcess() {
 
       {/* Probador (se muestra en portal a pantalla completa; cierra sin salir de la receta). */}
       {TRY_ON_ENABLED && tryOnOpen && (
-        <TryOn product={product} colorIdx={colorIdx} onClose={() => setTryOnOpen(false)} />
+        <TryOn product={product} colorIdx={colorIdx} onClose={() => setTryOnOpen(false)}
+               onAddPrescription={applyTryOnMeasurement} />
       )}
 
       <div className="zlx-stage">

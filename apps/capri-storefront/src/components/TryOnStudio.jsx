@@ -71,8 +71,10 @@ function playShutter(kind) {
 
 /* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
 
-export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
+export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPrescription }) {
   const { t, tv, lang } = useLang();
+  // Confirmación tras "Añadir receta" ("idle" | "added").
+  const [addedState, setAddedState] = useState("idle");
   const [ci, setCi] = useState(colorIdx);
   const [now, setNow] = useState(() => new Date());
   const [headerH, setHeaderH] = useState(0);
@@ -443,6 +445,46 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     setMState("idle");
   }
 
+  // "Medir de nuevo" desde la vista de resultado: descarta la generación guardada y
+  // vuelve a la captura desde cero.
+  function remeasure() {
+    if (mAbort.current) { mAbort.current.abort(); mAbort.current = null; }
+    clearMeasureJob(product);
+    clearMeasureResult(product);
+    jobIdRef.current = null;
+    setMData(null); setMState("idle"); setAddedState("idle");
+    setFrontImg(null); setSideImg(null); setPhase("front");
+  }
+
+  // "Añadir receta": entrega al flujo de compra las medidas de encaje (DIP + altura)
+  // + la imagen generada + para quién es. La página de la receta (LensProcess) las
+  // pre-rellena en la receta y sigue al checkout; los datos quedan guardados con el
+  // producto (localStorage) para no perderlos si el cliente sale. El envío por
+  // correo a la tienda y al cliente es una etapa aparte (backend).
+  function addPrescription() {
+    const payload = {
+      productId: product?.id, productSku: product?.sku, productName: product?.name,
+      colorName: color?.name, colorIndex: ci,
+      forWhom, otherName: forWhom === "other" ? (otherName || "").trim() : "",
+      pd: mData?.pd ?? null, pdRight: mData?.pdRight ?? null, pdLeft: mData?.pdLeft ?? null,
+      corridor: mData?.corridor ?? null, segHeight: mData?.corridor ?? null,
+      bifocal: mData?.bifocal ?? null, suitable: mData?.suitable ?? null,
+      frame: {
+        A: a?.eye_size ?? null, DBL: a?.bridge_size ?? null,
+        B: a?.b_measurement ?? null, temple: a?.temple_length ?? null,
+      },
+      frontImage: mData?.frontImage || frontImg || null,
+      profileImage: mData?.profileImage || sideImg || null,
+      measuredBy: mData?.measuredBy || "device",
+      savedAt: Date.now(),
+    };
+    // Persistimos también la última "receta de medidas" por producto, por si el
+    // callback no está disponible (probador abierto fuera de la página de receta).
+    try { saveMeasureResult(product, { data: mData, frontImg, sideImg, prescription: payload }); } catch { /* cuota */ }
+    setAddedState("added");
+    if (typeof onAddPrescription === "function") onAddPrescription(payload);
+  }
+
   // Vista previa sin cámara: ?vmdemo=result | ?vmdemo=loading (solo para revisar el diseño).
   useEffect(() => {
     const p = typeof location !== "undefined" && new URLSearchParams(location.search).get("vmdemo");
@@ -540,8 +582,74 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     );
   }
 
+  // Formato de milímetros para los números medidos (DIP, altura de corredor).
+  const mmv = (v) => (v == null || Number.isNaN(Number(v)) ? "—" : `${Math.round(Number(v) * 10) / 10} mm`);
+
+  // Resultado DENTRO de la misma ventana del estudio (reemplaza la columna de captura):
+  // las dos imágenes con los espejuelos puestos + "Añadir receta" / "Medir de nuevo".
+  function resultViews() {
+    const front = mData?.frontImage || frontImg;
+    const side = mData?.profileImage || sideImg;
+    return (
+      <div className="vm-result">
+        <div className="vm-result-imgs">
+          <figure className="vm-rfig">
+            <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
+            {front ? <img src={front} alt={t("vm.front")} /> : <div className="vm-noimg">📷</div>}
+            <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
+          </figure>
+          <figure className="vm-rfig">
+            <figcaption className="vm-rlabel">{t("vm.side")}</figcaption>
+            {side ? <img src={side} alt={t("vm.side")} /> : <div className="vm-noimg">📷</div>}
+            <div className="vm-rbadge"><span>{t("vm.corridor")}</span><b>{mmv(mData?.corridor)}</b></div>
+          </figure>
+        </div>
+        <div className="vm-result-actions">
+          <button type="button" className="vm-remeasure" onClick={remeasure}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+            {t("vm.remeasure")}
+          </button>
+          {addedState === "added" ? (
+            <span className="vm-added">✓ {t("vm.added")}</span>
+          ) : (
+            <button type="button" className="vm-addrx" onClick={addPrescription}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5v14" /></svg>
+              {t("lens.step.rx")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Panel de dimensiones en la esquina inferior derecha del estudio (DIP, altura de
+  // corredor y medidas del marco A · Puente).
+  function dimsPanel() {
+    const sub = (mData?.pdRight != null || mData?.pdLeft != null)
+      ? `OD ${mmv(mData?.pdRight)} · OS ${mmv(mData?.pdLeft)}` : null;
+    const rows = [
+      { k: t("vm.pd"), v: mmv(mData?.pd), sub },
+      { k: t("vm.corridor"), v: mmv(mData?.corridor) },
+      { k: `${t("fs.lensWidth")} · ${t("fs.bridge")}`, v: `${eyeD || "—"} · ${bridgeD || "—"}` },
+    ];
+    return (
+      <aside className="vm-dims" aria-label={t("vm.dims.title")}>
+        <div className="vm-dims-h">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>
+          {t("vm.dims.title")}
+        </div>
+        {rows.map((r, i) => (
+          <div className="vm-dims-row" key={i}>
+            <span className="vm-dims-k">{r.k}</span>
+            <span className="vm-dims-v">{r.v}{r.sub && <em>{r.sub}</em>}</span>
+          </div>
+        ))}
+      </aside>
+    );
+  }
+
   return createPortal(
-    <div className={`tryon tryon-studio ${mState !== "idle" ? "tryon-busy" : ""}`}
+    <div className={`tryon tryon-studio ${(mState === "loading" || mState === "error") ? "tryon-busy" : ""} ${mState === "result" ? "tryon-result" : ""}`}
          role="dialog" aria-modal="true" style={{ top: headerH || 0 }}>
       <div className="tryon-bar">
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
@@ -553,10 +661,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
              onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
 
       <div className="tryon-studio-grid">
-        {/* Izquierda: captura guiada automática (frontal + lateral) */}
+        {/* Izquierda: captura guiada (frontal + lateral) o, ya con el resultado, las
+            imágenes con los espejuelos puestos — todo en la MISMA ventana. */}
         <div className="tryon-studio-cap">
-          {capBox({ which: "front", num: "1", title: t("cap.front"), img: frontImg, active: phase === "front", waiting: false })}
-          {capBox({ which: "side", num: "2", title: t("cap.side"), img: sideImg, active: phase === "side", waiting: phase === "front" })}
+          {mState === "result" ? resultViews() : (
+            <>
+              {capBox({ which: "front", num: "1", title: t("cap.front"), img: frontImg, active: phase === "front", waiting: false })}
+              {capBox({ which: "side", num: "2", title: t("cap.side"), img: sideImg, active: phase === "side", waiting: phase === "front" })}
+            </>
+          )}
         </div>
 
         {/* Derecha: ficha profesional del marco ("Información de la montura") */}
@@ -648,7 +761,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
         </div>
       )}
 
-      {mState !== "idle" && (
+      {/* Dimensiones calculadas en la esquina inferior derecha del estudio. */}
+      {mState === "result" && dimsPanel()}
+
+      {/* Carga y error se muestran como capa translúcida SOBRE el estudio (que queda
+          desenfocado detrás); el RESULTADO ya vive dentro de la ventana (arriba). */}
+      {(mState === "loading" || mState === "error") && (
         <MeasureReport
           phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
           error={mError} errorCode={mCode} topOffset={headerH || 0} progressMs={mProg}
