@@ -76,6 +76,13 @@ function PrescriptionBlock({ rx }) {
         {rx.verified_by_user && ` ${L("rxConfirmed")}`}
       </p>
 
+      {/* ¿Para quién son? (elegido en el probador). */}
+      {rx.patient_for === "other" ? (
+        <Row label={L("patientForLabel")} value={rx.patient_name || L("patientOther")} />
+      ) : rx.patient_for === "me" ? (
+        <Row label={L("patientForLabel")} value={L("patientMe")} />
+      ) : null}
+
       <div className="mo-rx-scroll">
         <table className="mo-rx-table">
           <thead>
@@ -119,7 +126,26 @@ function PrescriptionBlock({ rx }) {
           value={new Date(rx.created_at).toLocaleDateString(lang === "en" ? "en-US" : "es")}
         />
       )}
-      {rx.has_file && <Row label={L("rxPhoto")} value={L("rxPhotoOnFile")} />}
+      {/* Imágenes guardadas con el pedido: la prueba virtual (rostro con los
+          espejuelos) y la receta subida. Llegan como enlaces firmados de corta
+          duración desde /store/my-orders; se abren en una pestaña al tocarlas. */}
+      {(rx.tryon_image || rx.rx_image) && (
+        <div className="mo-rx-imgs">
+          {rx.tryon_image && (
+            <a className="mo-rx-img" href={rx.tryon_image} target="_blank" rel="noopener noreferrer">
+              <img src={rx.tryon_image} alt={L("tryonPhoto")} loading="lazy" />
+              <span>{L("tryonPhoto")}</span>
+            </a>
+          )}
+          {rx.rx_image && (
+            <a className="mo-rx-img" href={rx.rx_image} target="_blank" rel="noopener noreferrer">
+              <img src={rx.rx_image} alt={L("rxPhoto")} loading="lazy" />
+              <span>{L("rxPhoto")}</span>
+            </a>
+          )}
+        </div>
+      )}
+      {rx.has_file && !rx.rx_image && <Row label={L("rxPhoto")} value={L("rxPhotoOnFile")} />}
 
       <button
         type="button"

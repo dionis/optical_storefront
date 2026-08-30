@@ -44,6 +44,14 @@ export interface Prescription {
    * private bucket as `file_url`; exposed only through presigned URLs.
    */
   tryon_image_url?: string | null;
+  /**
+   * Who the glasses are for: "me" (the shopper) or "other" (a relative/friend the
+   * shopper measured as a reference). Chosen in the try-on studio. Null/omitted for
+   * prescriptions entered outside the studio.
+   */
+  patient_for?: "me" | "other" | null;
+  /** Name of the other person when `patient_for === "other"` — optional, free text. */
+  patient_name?: string | null;
   created_at?: string;
   updated_at?: string;
 }

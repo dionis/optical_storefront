@@ -391,6 +391,10 @@ export default function LensProcess() {
   // Imagen generada por el probador (rostro con los espejuelos), para adjuntarla a la
   // receta/orden al finalizar la compra (se sube a R2 en el backend, sin correo).
   const [tryOnImage, setTryOnImage] = useState(null);
+  // ¿Para quién son? (elegido en el probador): "me" | "other" (+ nombre). Se guarda
+  // con la receta al comprar.
+  const [patientFor, setPatientFor] = useState(null);
+  const [patientName, setPatientName] = useState("");
 
   // "Añadir receta" desde el probador: pre-rellena las medidas de encaje (DIP + altura
   // de montaje) en la receta, para que queden GUARDADAS al continuar la compra. El
@@ -410,6 +414,10 @@ export default function LensProcess() {
     }));
     if (hasDual) setPdMode("dual");
     if (m.frontImage) setTryOnImage(m.frontImage);
+    if (m.forWhom === "me" || m.forWhom === "other") {
+      setPatientFor(m.forWhom);
+      setPatientName(m.forWhom === "other" ? (m.otherName || "") : "");
+    }
     setRxDirty(true);
   };
 
@@ -729,6 +737,9 @@ export default function LensProcess() {
           source: fromOcr ? "ocr" : "manual",
           verified_by_user: true,
           file_url: fromOcr ? ocr.fileUrl : null,
+          // ¿Para quién son? (del probador): se guarda con la receta.
+          patient_for: patientFor,
+          patient_name: patientFor === "other" ? (patientName || null) : null,
         };
         prescriptionId = await createPrescription(rxPayload, {
           // Imagen del probador (rostro con espejuelos), si el cliente la generó:
