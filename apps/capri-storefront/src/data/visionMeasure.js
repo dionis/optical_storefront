@@ -223,6 +223,9 @@ export async function startMeasurementJob({
     renderTryOn: render,
     renderProfile: render && Boolean(sideSmall),
     imageEngine: render ? "gemini" : "local",
+    // Modelo de imagen RÁPIDO para el montaje (el pro tardaba demasiado). La calidad del
+    // montaje es suficiente y las medidas no dependen de esta imagen.
+    imageModel: render ? "gemini-2.5-flash-image" : undefined,
     extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };
 
