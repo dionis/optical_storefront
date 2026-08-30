@@ -27,6 +27,8 @@ export const PrescriptionRecord = model.define("prescription", {
   verified_by_user: model.boolean().default(false),
   /** R2 object key of uploaded prescription image/PDF — null for manual entry */
   file_url: model.text().nullable(),
+  /** R2 object key of the AI try-on render (face with frame) — null when unused */
+  tryon_image_url: model.text().nullable(),
   /** Customer ID (Medusa customer) — nullable for guest checkout */
   customer_id: model.text().nullable(),
 });

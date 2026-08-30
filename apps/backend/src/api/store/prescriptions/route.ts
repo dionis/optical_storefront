@@ -1,9 +1,46 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
+import { randomUUID } from "crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
+import { createStorageClient, prescriptionBucket, storageConfigured } from "../../../lib/s3";
 import type { Prescription } from "@eyewear/shared";
+
+/**
+ * Uploads the AI try-on render (a `data:` URL from the virtual try-on studio) to
+ * the private prescription bucket and returns its R2 key, or null when there is
+ * nothing to store or storage is not configured. Best-effort: a storage hiccup
+ * must never fail the prescription write — the numbers are what the lab needs.
+ */
+async function uploadTryonImage(dataUrl: unknown): Promise<string | null> {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:") || !storageConfigured()) {
+    return null;
+  }
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/.exec(dataUrl);
+  if (!match) return null;
+  const mediaType = match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  // Guard against an oversized payload slipping past the body limit.
+  if (!buffer.length || buffer.length > 8 * 1024 * 1024) return null;
+  const ext = mediaType.split("/")[1] || "jpg";
+  const objectKey = `tryon/${randomUUID()}.${ext}`;
+  try {
+    await createStorageClient().send(
+      new PutObjectCommand({
+        Bucket: prescriptionBucket(),
+        Key: objectKey,
+        Body: buffer,
+        ContentType: mediaType,
+        // No ACL — private bucket, read back only via presigned URLs.
+      })
+    );
+    return objectKey;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * POST /store/prescriptions
@@ -24,6 +61,8 @@ export async function POST(
     prescription?: Prescription;
     usage_type?: string;
     eye_size?: number;
+    /** AI try-on render as a base64 `data:` URL (saved with the order, not emailed). */
+    tryon_image?: string;
   };
 
   const rx = body.prescription;
@@ -59,6 +98,11 @@ export async function POST(
   const num = (v: unknown): number | null =>
     v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
 
+  // Save the AI try-on render (if any) to the private bucket first, so the row
+  // carries its key. Best-effort — a failed upload leaves tryon_image_url null
+  // without failing the prescription.
+  const tryonImageKey = await uploadTryonImage(body.tryon_image);
+
   const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
   const [row] = await pg("prescription")
     .insert({
@@ -73,6 +117,7 @@ export async function POST(
       source,
       verified_by_user: verifiedByUser,
       file_url: rx.file_url ?? null,
+      tryon_image_url: tryonImageKey,
       customer_id: null,
     })
     .returning("id");

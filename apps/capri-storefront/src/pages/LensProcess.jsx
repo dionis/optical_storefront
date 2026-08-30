@@ -388,11 +388,15 @@ export default function LensProcess() {
 
   // Probador abierto desde el espejuelo de esta página.
   const [tryOnOpen, setTryOnOpen] = useState(false);
+  // Imagen generada por el probador (rostro con los espejuelos), para adjuntarla a la
+  // receta/orden al finalizar la compra (se sube a R2 en el backend, sin correo).
+  const [tryOnImage, setTryOnImage] = useState(null);
 
   // "Añadir receta" desde el probador: pre-rellena las medidas de encaje (DIP + altura
   // de montaje) en la receta, para que queden GUARDADAS al continuar la compra. El
   // probador ya persiste la imagen generada por producto (localStorage) y muestra su
-  // propia confirmación; aquí solo integramos los números en el flujo de la receta.
+  // propia confirmación; aquí integramos los números en el flujo de la receta y
+  // guardamos la imagen para adjuntarla a la orden al comprar.
   const applyTryOnMeasurement = (m) => {
     if (!m) return;
     const oneDp = (v) => (v == null || v === "" ? "" : String(Math.round(Number(v) * 10) / 10));
@@ -405,6 +409,7 @@ export default function LensProcess() {
       seg_height: oneDp(m.segHeight ?? m.corridor) || r.seg_height,
     }));
     if (hasDual) setPdMode("dual");
+    if (m.frontImage) setTryOnImage(m.frontImage);
     setRxDirty(true);
   };
 
@@ -725,7 +730,11 @@ export default function LensProcess() {
           verified_by_user: true,
           file_url: fromOcr ? ocr.fileUrl : null,
         };
-        prescriptionId = await createPrescription(rxPayload);
+        prescriptionId = await createPrescription(rxPayload, {
+          // Imagen del probador (rostro con espejuelos), si el cliente la generó:
+          // el backend la sube a R2 y la guarda ligada a la orden (sin correo).
+          tryon_image: tryOnImage,
+        });
       }
       // Server prices the frame+lens; the client never sends a total.
       await addConfiguredFrame(color.variantId, {

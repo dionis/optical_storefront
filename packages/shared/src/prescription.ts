@@ -38,6 +38,12 @@ export interface Prescription {
   verified_by_user: boolean;
   /** R2 object key of the uploaded prescription image/PDF — null for manual entry */
   file_url: string | null;
+  /**
+   * R2 object key of the AI try-on render (customer's face with the frame) saved
+   * from the virtual try-on studio — null when the shopper did not use it. Same
+   * private bucket as `file_url`; exposed only through presigned URLs.
+   */
+  tryon_image_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }

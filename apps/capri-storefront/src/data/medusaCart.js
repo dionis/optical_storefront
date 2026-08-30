@@ -75,15 +75,59 @@ export async function getCart() {
 }
 
 /**
+ * Reduce una data URL de imagen a un tamaño razonable (JPEG) para subirla junto
+ * a la receta: mantiene el objeto de R2 pequeño y evita cuerpos JSON enormes.
+ * Falla en silencio devolviendo la original si algo no está disponible.
+ */
+function downscaleDataUrl(dataUrl, maxPx = 900, quality = 0.82) {
+  return new Promise((resolve) => {
+    try {
+      if (typeof document === "undefined" || typeof Image === "undefined") { resolve(dataUrl); return; }
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxPx / Math.max(img.width || 1, img.height || 1));
+          const w = Math.max(1, Math.round((img.width || 1) * scale));
+          const h = Math.max(1, Math.round((img.height || 1) * scale));
+          const cv = document.createElement("canvas");
+          cv.width = w; cv.height = h;
+          cv.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(cv.toDataURL("image/jpeg", quality));
+        } catch { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch { resolve(dataUrl); }
+  });
+}
+
+/**
  * Persist a prescription as a health record (PHI) server-side. Returns its id; the
  * raw Rx values never touch the cart, order metadata, or localStorage.
+ *
+ * `ctx.tryon_image` (la imagen del probador) es OPCIONAL y de mejor esfuerzo: si
+ * el backend aún no acepta el campo (o el cuerpo es muy grande), reintentamos sin
+ * la imagen para que la compra NUNCA se rompa por esto — la imagen se guardará en
+ * cuanto el backend esté desplegado.
  */
 export async function createPrescription(prescription, ctx = {}) {
-  const res = await medusa.client.fetch("/store/prescriptions", {
-    method: "POST",
-    body: { prescription, usage_type: ctx.usage_type, eye_size: ctx.eye_size },
-  });
-  return res.prescription_id || null;
+  const base = { prescription, usage_type: ctx.usage_type, eye_size: ctx.eye_size };
+  let tryonImage = null;
+  if (ctx.tryon_image) {
+    try { tryonImage = await downscaleDataUrl(ctx.tryon_image); }
+    catch { tryonImage = ctx.tryon_image; }
+  }
+  const post = (body) => medusa.client.fetch("/store/prescriptions", { method: "POST", body });
+  try {
+    const res = await post(tryonImage ? { ...base, tryon_image: tryonImage } : base);
+    return res.prescription_id || null;
+  } catch (e) {
+    // Si el fallo fue por incluir la imagen (backend viejo / cuerpo grande),
+    // reintenta sin ella: la receta y la compra deben completarse igual.
+    if (!tryonImage) throw e;
+    const res = await post(base);
+    return res.prescription_id || null;
+  }
 }
 
 /**
