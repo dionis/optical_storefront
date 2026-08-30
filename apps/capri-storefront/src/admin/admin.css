@@ -336,3 +336,7 @@
 .ord-rximgs img { width: 84px; height: 108px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e6ee; background: #fff; box-shadow: 0 6px 16px -10px rgba(16,24,40,.4); }
 .ord-rximgs a:hover img { box-shadow: 0 12px 24px -12px rgba(16,24,40,.5); }
 .ord-rximgs span { font-size: 11px; font-weight: 700; }
+
+
+/* Badge: la orden usó el probador virtual (adopción/conversión de un vistazo) */
+.ord-tryon { font-size: 11px; margin-left: 6px; white-space: nowrap; cursor: help; }

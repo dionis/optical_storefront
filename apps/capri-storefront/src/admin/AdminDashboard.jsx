@@ -1005,6 +1005,7 @@ function Orders() {
                     <td>
                       <b>{orderLabel(o)}</b>
                       {o.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>👓</span>}
+                      {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}>📷</span>}
                     </td>
                     <td>{shortDate(o.created_at, lang)}</td>
                     <td><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span></td>

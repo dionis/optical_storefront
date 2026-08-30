@@ -13,6 +13,8 @@
  * has no reason to render them.
  */
 import type { MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { getOrdersListWorkflow } from "@medusajs/medusa/core-flows";
 import {
   ORDER_STAGES,
@@ -21,6 +23,38 @@ import {
   stageIndex,
   type OrderStage,
 } from "./order-status";
+
+/**
+ * Marca `has_tryon` en cada orden: una consulta por lote pregunta cuáles de las
+ * recetas referenciadas tienen imagen de probador guardada (solo la señal, nunca
+ * la imagen ni su clave). Mejor esfuerzo — si la consulta falla, las órdenes se
+ * quedan con has_tryon=false y el panel simplemente no muestra el badge.
+ */
+async function markTryon(scope: MedusaContainer, orders: BoardOrder[]): Promise<void> {
+  const pids = new Set<string>();
+  for (const o of orders) {
+    for (const it of o.items ?? []) {
+      if (it.prescription_id) pids.add(String(it.prescription_id));
+    }
+  }
+  if (!pids.size) return;
+  try {
+    const pg = scope.resolve(ContainerRegistrationKeys.PG_CONNECTION) as Knex;
+    const rows = (await pg("prescription")
+      .select("id")
+      .whereIn("id", [...pids])
+      .whereNotNull("tryon_image_url")
+      .whereNull("deleted_at")) as Array<{ id: string }>;
+    const withTryon = new Set(rows.map((r) => String(r.id)));
+    for (const o of orders) {
+      o.has_tryon = (o.items ?? []).some(
+        (it) => it.prescription_id && withTryon.has(String(it.prescription_id))
+      );
+    }
+  } catch {
+    /* best-effort: sin badge */
+  }
+}
 
 /**
  * Fields to select. The long tail of relations is NOT optional: order totals are
@@ -304,6 +338,10 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     terminal: progress.terminal,
     paid: progress.paid,
     has_prescription: progress.has_prescription,
+    // ¿Alguna línea llevó una prueba virtual guardada? Solo la señal (no la imagen).
+    // Se rellena en fetchBoardOrders/fetchBoardOrder con una consulta por lote; false
+    // por defecto para que la proyección sea autónoma.
+    has_tryon: false,
     // Raw manual note, so the panel can show the owner whether the lab step was
     // pinned by hand or merely inferred.
     lab_stage: (metadata["lab_stage"] as string) ?? null,
@@ -414,6 +452,8 @@ export async function fetchBoardOrders(
   >[];
 
   const projected = rawOrders.map(projectBoardOrder);
+  // Señal de prueba virtual por orden (una consulta por lote para toda la página).
+  await markTryon(scope, projected);
 
   const q = String(params.q ?? "").trim().toLowerCase();
   const filtered = projected.filter((row) => {
@@ -450,7 +490,10 @@ export async function fetchBoardOrder(
     string,
     unknown
   >[];
-  return rows[0] ? projectBoardOrder(rows[0]) : null;
+  if (!rows[0]) return null;
+  const order = projectBoardOrder(rows[0]);
+  await markTryon(scope, [order]);
+  return order;
 }
 
 /** Type guard so a hand-typed query string can't smuggle in an unknown stage. */
