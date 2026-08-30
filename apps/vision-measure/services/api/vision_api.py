@@ -312,12 +312,20 @@ def _build_measure_payload(
         }
 
         def _render_view(view: str) -> Dict[str, Any]:
-            return run_try_on(
-                **base_render,
-                face_image=(request.faceImage if view == "front" else side_src),
-                prepared=(front_prepared if view == "front" else side_prepared),
-                view=view,
-            )
+            # Cada vista es INDEPENDIENTE: si una falla o se agota (Gemini saturado,
+            # timeout), devolvemos {image: None} en vez de propagar la excepción, para
+            # que la OTRA vista igual salga y el trabajo TERMINE. El frontend cae a la
+            # foto capturada cuando una imagen viene vacía. Antes, un fallo en una vista
+            # tumbaba toda la generación ("no termina" / "solo sale una").
+            try:
+                return run_try_on(
+                    **base_render,
+                    face_image=(request.faceImage if view == "front" else side_src),
+                    prepared=(front_prepared if view == "front" else side_prepared),
+                    view=view,
+                )
+            except Exception as exc:  # noqa: BLE001 — best-effort por vista, a propósito
+                return {"image": None, "view": view, "error": str(exc)}
 
         views = ["front"] + (["profile"] if request.renderProfile else [])
         with ThreadPoolExecutor(max_workers=len(views)) as pool:
