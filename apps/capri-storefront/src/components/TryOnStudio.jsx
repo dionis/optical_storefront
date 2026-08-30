@@ -3,6 +3,9 @@ import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
+// Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
+// marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
+import { measureFromFrontal } from "../data/opticalMeasure.js";
 import {
   startMeasurementJob,
   pollMeasurementJob,
@@ -215,6 +218,36 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
   // async de doMeasure) sepa a qué trabajo armar el contacto.
   const jobIdRef = useRef(null);
 
+  // Medición propia (MediaPipe) calculada en el navegador desde la foto frontal. Se
+  // guarda aquí para fusionarla con el resultado del trabajo (settleMeasurement) y así
+  // los NÚMEROS salen de nuestro cálculo, no de la IA. Falla en silencio → cae a la IA.
+  const ourMeasureRef = useRef(null);
+  async function computeOurMeasurement(frontDataUrl) {
+    const at = product?.attributes || {};
+    try {
+      const m = await measureFromFrontal(frontDataUrl, {
+        eye: at.eye_size, bridge: at.bridge_size, b: at.b_measurement,
+      });
+      ourMeasureRef.current = m && m.ok ? m : null;
+    } catch {
+      ourMeasureRef.current = null;
+    }
+  }
+  // Sobrescribe los números del sobre con los NUESTROS cuando están disponibles.
+  function applyOurNumbers(picked) {
+    const mine = ourMeasureRef.current;
+    if (!picked || !mine) return picked;
+    if (mine.pdTotal != null) picked.pd = mine.pdTotal;
+    if (mine.pdRight != null) picked.pdRight = mine.pdRight;
+    if (mine.pdLeft != null) picked.pdLeft = mine.pdLeft;
+    if (mine.corridor != null) { picked.corridor = mine.corridor; picked.progressive = mine.corridor; }
+    if (mine.bifocal != null) picked.bifocal = mine.bifocal;
+    if (mine.suitable != null) picked.suitable = mine.suitable;
+    if (mine.minRequired != null) picked.minRequired = mine.minRequired;
+    picked.measuredBy = "device";
+    return picked;
+  }
+
   // Aplica el resultado (o el fallo) de un trabajo terminado — compartido entre el
   // arranque en frío (doMeasure) y la reanudación tras un remount (más abajo), para
   // que las dos rutas terminen exactamente igual.
@@ -223,7 +256,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       .then((resp) => {
         clearMeasureJob(product);
         if (signal.aborted) return;
-        const picked = pickMeasurement(resp);
+        const picked = applyOurNumbers(pickMeasurement(resp));
         if (!picked.ok && picked.pd == null && !picked.frontImage) {
           setMCode(picked.errorCode); setMError(picked.error); setMState("error");
         } else {
@@ -259,7 +292,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
       // el rostro con los espejuelos puestos; el navegador va preguntando el estado y
       // NUNCA corta la generación. Las fotos se comprimen antes de subir.
       const at = product?.attributes || {};
-      const glassesImage = color?.image ? await frameImageDataUrl(color.image) : null;
+      // En paralelo: descargamos la foto del marco Y calculamos NUESTRAS medidas
+      // (MediaPipe) desde la frontal, para tenerlas listas antes de que termine el
+      // trabajo. Los números saldrán de aquí; la IA solo monta las gafas.
+      const [glassesImage] = await Promise.all([
+        color?.image ? frameImageDataUrl(color.image) : Promise.resolve(null),
+        computeOurMeasurement(frontImg),
+      ]);
       const jobId = await startMeasurementJob({
         faceImage: frontImg,
         sideImage: sideImg,
@@ -290,7 +329,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose }) {
     const ctrl = new AbortController();
     mAbort.current = ctrl;
     jobIdRef.current = pending.jobId;
-    if (pending.frontImg) setFrontImg(pending.frontImg);
+    if (pending.frontImg) { setFrontImg(pending.frontImg); computeOurMeasurement(pending.frontImg); }
     if (pending.sideImg) setSideImg(pending.sideImg);
     setPhase("done");
     setMState("loading"); setMError(null); setMCode(null); setMProg(0);
