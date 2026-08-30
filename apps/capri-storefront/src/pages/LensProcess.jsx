@@ -20,6 +20,11 @@ import {
   DIAGRAMS,
 } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
+// Probador (try-on): mismo componente que en la ficha de producto. Se abre desde el
+// espejuelo de esta página de receta (imagen 1) para que el cliente pueda probárselo
+// y tomar sus medidas sin salir del flujo de compra.
+import TryOn from "../components/TryOnSwitch.jsx";
+import { TRY_ON_ENABLED } from "../config/features.js";
 
 // ── LensGraphics wiring ─────────────────────────────────────────────────────
 // Map each catalog option to its LensGraphics icon and to the educational
@@ -380,6 +385,9 @@ export default function LensProcess() {
   const [colorIdx, setColorIdx] = useState(Number(params.get("color") || 0));
   const navigate = useNavigate();
   const { addConfiguredFrame } = useCart();
+
+  // Probador abierto desde el espejuelo de esta página.
+  const [tryOnOpen, setTryOnOpen] = useState(false);
 
   const [designId, setDesignId] = useState(null); // "sv" | "bifocal" | ... | "frame-only"
   const [matId, setMatId] = useState(null);
@@ -894,6 +902,11 @@ export default function LensProcess() {
         <Link to={`/producto/${product.slug}`} className="back">← {t("lens.back")} {product.name}</Link>
       </div>
 
+      {/* Probador (se muestra en portal a pantalla completa; cierra sin salir de la receta). */}
+      {TRY_ON_ENABLED && tryOnOpen && (
+        <TryOn product={product} colorIdx={colorIdx} onClose={() => setTryOnOpen(false)} />
+      )}
+
       <div className="zlx-stage">
         {/* ── floating frame with action buttons ON the image (req 1, 2) ── */}
         {/* IZQUIERDA: el espejuelo grande, protagonista */}
@@ -902,6 +915,13 @@ export default function LensProcess() {
             <div className="zlx-float-inner">
               <img className="zlx-float-img" src={color.image} alt={`${product.name} · ${color.name}`}
                    onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+              {/* Botón PROBAR sobre el espejuelo: abre el probador (cámara + medidas). */}
+              {TRY_ON_ENABLED && (
+                <button type="button" className="zlx-tryon-btn" onClick={() => setTryOnOpen(true)}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                  {t("tryon.cta")}
+                </button>
+              )}
             </div>
             {/* nombre + colección + material, todo en una sola línea (imagen 1) */}
             <div className="zlx-float-head">
