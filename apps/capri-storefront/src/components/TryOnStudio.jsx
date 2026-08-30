@@ -290,6 +290,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (mine.suitable != null) picked.suitable = mine.suitable;
     if (mine.minRequired != null) picked.minRequired = mine.minRequired;
     if (mine.quality) picked.quality = mine.quality;
+    if (mine.fit) picked.fit = mine.fit;
     picked.measuredBy = "device";
     return picked;
   }
@@ -650,6 +651,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             {mData.quality.level === "low" && (
               <button type="button" className="vm-conf-btn" onClick={remeasure}>{t("vm.remeasure")}</button>
             )}
+          </div>
+        )}
+        {mData?.fit && (
+          <div className={`vm-fit vm-fit-${mData.fit.level}`}>
+            <span className="vm-fit-ic" aria-hidden="true">{mData.fit.level === "good" ? "✓" : "↔"}</span>
+            <span>{t(`vm.fit.${mData.fit.level}`)}</span>
           </div>
         )}
         <div className="vm-result-actions">

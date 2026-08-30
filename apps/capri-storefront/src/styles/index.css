@@ -3087,3 +3087,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   border: 1px solid #bce7cd; border-radius: 12px; padding: 12px 15px; font-weight: 700; font-size: 13.5px;
   cursor: pointer; transition: background .15s ease; }
 .vm-share:hover { background: #d9f2e3; }
+
+
+/* Aviso de encaje montura↔rostro (resultado del probador) — orientativo */
+.vm-fit { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 12px;
+  font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+.vm-fit-ic { flex: 0 0 auto; font-weight: 900; }
+.vm-fit-good { background: rgba(26,157,92,.12); color: #157a49; border-color: rgba(26,157,92,.35); }
+.vm-fit-wide, .vm-fit-narrow { background: rgba(180,120,20,.12); color: #8a5b12; border-color: rgba(180,120,20,.35); }

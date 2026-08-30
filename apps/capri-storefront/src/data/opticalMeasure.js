@@ -43,6 +43,7 @@ const IRIS_R_CENTER = 473, IRIS_R_R = 474, IRIS_R_L = 476; // ojo en el otro
 const CANTHUS_INNER_A = 133, CANTHUS_INNER_B = 362;        // cantos internos
 const NOSE_SADDLE = 6;                                     // caballete (asiento)
 const LID_LOWER_A = 145, LID_LOWER_B = 374;                // párpados inferiores
+const FACE_SIDE_R = 234, FACE_SIDE_L = 454;                // contorno lateral del rostro (ancho)
 
 let _lmPromise = null;
 async function getLandmarker() {
@@ -181,6 +182,24 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
   // baja calidad. Heurístico y conservador, no una garantía metrológica.
   const estErrorMm = round1(mmPerPx * 2 + (1 - score) * 2.2);
 
+  // ── Aviso de encaje (montura vs. ancho del rostro) ──────────────────────
+  // El ancho frontal de la montura ≈ 2·A (calibre) + DBL (puente). Lo comparamos
+  // con el ancho del rostro (contorno lateral) para avisar si la montura le queda
+  // ANCHA o ESTRECHA. Es orientativo (no sustituye al óptico), y solo si hay A y DBL.
+  let fit = null;
+  if (A != null && DBL != null) {
+    const faceWidthMM = dist(P(FACE_SIDE_R), P(FACE_SIDE_L)) * mmPerPx;
+    const frameFrontMM = 2 * A + DBL;
+    const diff = frameFrontMM - faceWidthMM;   // + = montura más ancha que la cara
+    const fitLevel = diff > 8 ? "wide" : diff < -6 ? "narrow" : "good";
+    fit = {
+      level: fitLevel,
+      faceWidthMM: round1(faceWidthMM),
+      frameFrontMM: round1(frameFrontMM),
+      diffMM: round1(diff),
+    };
+  }
+
   return {
     ok: true,
     pdTotal: round1(pdTotal),
@@ -196,5 +215,7 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
     minRequired: 18,
     // Calidad de la medición.
     quality: { level, score: Math.round(score * 100) / 100, estErrorMm, reasons },
+    // Aviso de encaje montura↔rostro (orientativo).
+    fit,
   };
 }
