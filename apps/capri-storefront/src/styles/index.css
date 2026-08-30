@@ -2889,3 +2889,41 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .vm-who { width: 100%; }
   .vm-who-name { flex: 1 1 auto; min-width: 0; }
 }
+
+
+/* == Acción secundaria "Probar con cámara" (ficha del espejuelo, LensProcess) ==
+   Diseñada como pie de la tarjeta del marco: NO tapa el producto. Misma
+   gramática visual que la tarjeta primaria "Añadir receta" (chip de icono +
+   título + subtítulo + chevron) en estilo secundario azul suave, jerarquía
+   clara. Reemplaza al antiguo boton flotante .zlx-tryon-btn. Responsive +
+   bilingue (t("tryon.cta") / t("lens.tryon.sub")). */
+.zlx-tryon-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
+  text-align: left; cursor: pointer;
+  background: linear-gradient(180deg, #f5f9ff, #eaf2ff);
+  border: 1px solid #d7e6ff; border-radius: 16px; padding: 12px 14px;
+  color: #0E5AD0; box-shadow: 0 1px 0 rgba(14, 90, 208, .04);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+.zlx-tryon-card:hover {
+  transform: translateY(-1px); border-color: #b9d5ff;
+  background: linear-gradient(180deg, #eff6ff, #e2eeff);
+  box-shadow: 0 10px 24px -12px rgba(14, 90, 208, .45);
+}
+.zlx-tryon-card:active { transform: translateY(0); }
+.zlx-tryon-card:focus-visible { outline: 2px solid #2f74ff; outline-offset: 2px; }
+.zlx-tryon-ic {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px; color: #fff;
+  background: linear-gradient(180deg, #2f74ff, #0E5AD0);
+  box-shadow: 0 6px 14px -6px rgba(14, 90, 208, .6);
+}
+.zlx-tryon-tx { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.zlx-tryon-tx b { font-size: 14px; font-weight: 800; color: #123; }
+.zlx-tryon-tx small { font-size: 12px; color: #5b6b86; margin-top: 2px; }
+.zlx-tryon-chev { flex: 0 0 auto; margin-left: auto; color: #0E5AD0; opacity: .7; }
+.zlx-tryon-card:hover .zlx-tryon-chev { opacity: 1; transform: translateX(2px); transition: transform .15s ease; }
+@media (max-width: 560px) {
+  .zlx-tryon-card { margin-top: 12px; padding: 11px 12px; gap: 10px; }
+  .zlx-tryon-ic { width: 36px; height: 36px; border-radius: 11px; }
+}
