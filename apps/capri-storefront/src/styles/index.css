@@ -3032,3 +3032,37 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   -webkit-backdrop-filter: blur(12px) saturate(1.05); backdrop-filter: blur(12px) saturate(1.05); }
 .vm-overlay .vm-body { background: transparent; }
 .tryon-busy .tryon-studio-grid { filter: blur(2px); transition: filter .25s ease; }
+
+
+/* ═══ Receta en RESPONSIVE: la foto de la armadura manda; los pasos como iconos ═══
+   Antes en móvil los botones de paso (cards grandes con título + subtítulo) robaban
+   protagonismo y la foto salía pequeña. Ahora: foto más alta y llamativa, miniaturas
+   de color más grandes, y los pasos convertidos en una fila compacta de ICONOS
+   (icono + título corto, sin subtítulo — el detalle sigue en el resumen y el popover). */
+@media (max-width: 939px) {
+  .zlx-float { padding: 16px; }
+  /* Foto de la montura protagonista */
+  .zlx-float-img { max-height: 56vh; min-height: 300px; }
+  /* Miniaturas de color más llamativas */
+  .zlx-float-color { width: 92px; height: 70px; }
+
+  /* Pasos: fila de iconos compactos en vez de cards grandes */
+  .zlx-fabs { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .zlx-fab { position: relative; flex: 1 1 0; min-width: 96px;
+    flex-direction: column; align-items: center; text-align: center;
+    gap: 6px; padding: 11px 8px; }
+  .zlx-fab .zlx-ic { width: 27px; height: 27px; }
+  .zlx-fab-txt { flex: 0 0 auto; align-items: center; width: 100%; }
+  .zlx-fab-txt b { font-size: 12.5px; line-height: 1.15; }
+  .zlx-fab-txt small { display: none; }
+  .zlx-fab .zlx-fab-ok { position: absolute; top: 6px; right: 6px; margin: 0; }
+
+  /* Probar con cámara: compacto (icono + título), sin robar altura */
+  .zlx-tryon-card { margin-top: 12px; padding: 10px 12px; }
+  .zlx-tryon-tx small { display: none; }
+  .zlx-tryon-chev { display: none; }
+}
+@media (max-width: 380px) {
+  /* En pantallas muy estrechas, dos iconos por fila para que no se aprieten */
+  .zlx-fab { flex: 1 1 42%; }
+}
