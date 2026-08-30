@@ -3095,3 +3095,42 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-fit-ic { flex: 0 0 auto; font-weight: 900; }
 .vm-fit-good { background: rgba(26,157,92,.12); color: #157a49; border-color: rgba(26,157,92,.35); }
 .vm-fit-wide, .vm-fit-narrow { background: rgba(180,120,20,.12); color: #8a5b12; border-color: rgba(180,120,20,.35); }
+
+
+/* ═══ Tarjeta de catálogo: acciones como ICONOS en la esquina, foto limpia ═══════
+   Antes "Comprar" y "Probador AR" salían como barras grandes que tapaban la foto.
+   Ahora van como iconos pequeños arriba a la derecha (junto al favorito), y la
+   foto del espejuelo queda lo más limpia y grande posible. */
+.card-actions { position: absolute; top: 10px; right: 10px; z-index: 3;
+  display: flex; flex-direction: column; gap: 8px; }
+.card-ic { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #eef1f6;
+  background: rgba(255,255,255,.96); box-shadow: 0 4px 12px -4px rgba(15,40,90,.28);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  color: #475569; padding: 0; font-size: 17px; line-height: 1;
+  transition: transform .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease; }
+.card-ic:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -6px rgba(15,40,90,.4); }
+.card-ic svg { width: 18px; height: 18px; }
+.card-ic-fav.on { color: var(--red); }
+.card-ic-buy { color: var(--red); }
+.card-ic-buy:hover { background: var(--red); color: #fff; }
+.card-ic-ar { color: var(--blue); }
+.card-ic-ar:hover { background: var(--blue); color: #fff; }
+/* Foto protagonista: menos padding, imagen más grande */
+.card-media { padding: 14px; }
+.card-media img { max-height: 232px; }
+@media (max-width: 640px) {
+  .card-ic { width: 34px; height: 34px; font-size: 16px; }
+  .card-ic svg { width: 17px; height: 17px; }
+  .card-media img { max-height: 210px; }
+}
+
+
+/* Resultado del probador en MÓVIL: mantener las DOS vistas lado a lado (frontal +
+   lateral) para que se vean ambas de un vistazo — antes se apilaban y, al hacer
+   scroll, solo se veía una. Se ven más pequeñas pero completas. */
+@media (max-width: 560px) {
+  .vm-result-imgs { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vm-rfig .vm-rbadge { padding: 6px 8px; }
+  .vm-rbadge b { font-size: 16px; }
+  .vm-rlabel { font-size: 9.5px; padding: 3px 7px; }
+}
