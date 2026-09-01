@@ -681,30 +681,40 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     );
   }
 
-  // Panel de dimensiones en la esquina inferior derecha del estudio (DIP, altura de
-  // corredor y medidas del marco A · Puente).
+  // Panel de dimensiones (esquina inferior derecha): mismo lenguaje visual que la
+  // ficha "Información de la montura" — encabezado azul marino + iconos por medida.
   function dimsPanel() {
     const sub = (mData?.pdRight != null || mData?.pdLeft != null)
       ? `OD ${mmv(mData?.pdRight)} · OS ${mmv(mData?.pdLeft)}` : null;
     const q = mData?.quality;
+    const svg = (d) => (
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+    );
+    const icPd = svg(<><circle cx="12" cy="12" r="3" /><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /></>);
+    const icCorr = svg(<><path d="M12 3v18" /><path d="M8 6l4-3 4 3" /><path d="M8 18l4 3 4-3" /></>);
+    const icFrame = svg(<><circle cx="6" cy="14" r="4" /><circle cx="18" cy="14" r="4" /><path d="M10 14a2 2 0 0 1 4 0M2.5 11l3-2.5M21.5 11l-3-2.5" /></>);
+    const icConf = svg(<><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>);
     const rows = [
-      { k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `${sub ? sub + " · " : ""}±${q.estErrorMm} mm` : sub },
-      { k: t("vm.corridor"), v: mmv(mData?.corridor) },
-      { k: `${t("fs.lensWidth")} · ${t("fs.bridge")}`, v: `${eyeD || "—"} · ${bridgeD || "—"}` },
-      ...(q ? [{ k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`) }] : []),
+      { ic: icPd, k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `${sub ? sub + " · " : ""}±${q.estErrorMm} mm` : sub },
+      { ic: icCorr, k: t("vm.corridor"), v: mmv(mData?.corridor) },
+      { ic: icFrame, k: `${t("fs.lensWidth")} · ${t("fs.bridge")}`, v: `${eyeD || "—"} · ${bridgeD || "—"}` },
+      ...(q ? [{ ic: icConf, k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`) }] : []),
     ];
     return (
       <aside className="vm-dims" aria-label={t("vm.dims.title")}>
         <div className="vm-dims-h">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>
           {t("vm.dims.title")}
         </div>
-        {rows.map((r, i) => (
-          <div className="vm-dims-row" key={i}>
-            <span className="vm-dims-k">{r.k}</span>
-            <span className="vm-dims-v">{r.v}{r.sub && <em>{r.sub}</em>}</span>
-          </div>
-        ))}
+        <div className="vm-dims-body">
+          {rows.map((r, i) => (
+            <div className="vm-dims-row" key={i}>
+              <span className="vm-dims-ic" aria-hidden="true">{r.ic}</span>
+              <span className="vm-dims-k">{r.k}</span>
+              <span className="vm-dims-v">{r.v}{r.sub && <em>{r.sub}</em>}</span>
+            </div>
+          ))}
+        </div>
       </aside>
     );
   }

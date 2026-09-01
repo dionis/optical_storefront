@@ -3134,3 +3134,33 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .vm-rbadge b { font-size: 16px; }
   .vm-rlabel { font-size: 9.5px; padding: 3px 7px; }
 }
+
+
+/* ═══ Ajuste a pantalla: el estudio NUNCA genera barra de desplazamiento (#img1) ═══
+   El estudio es una columna flex; la rejilla llena el alto disponible bajo la barra
+   y, en modo resultado (escritorio), las fotos se ajustan al alto sin overflow. */
+.tryon.tryon-studio { display: flex; flex-direction: column; }
+.tryon.tryon-studio .tryon-studio-grid { flex: 1 1 auto; min-height: 0; }
+@media (min-width: 821px) {
+  .tryon-result .tryon-studio-cap { overflow: hidden; }
+  .tryon-result .vm-result { height: 100%; min-height: 0; }
+  .tryon-result .vm-result-imgs { flex: 1 1 auto; min-height: 0; }
+  .tryon-result .vm-rfig { aspect-ratio: auto; height: 100%; min-height: 0; }
+  .tryon-result .vm-rfig img { height: 100%; object-fit: cover; }
+}
+
+/* ═══ "Medidas calculadas": mismo lenguaje visual que la ficha de la montura (#img2) ═══
+   Encabezado azul marino + iconos por medida — patrón .fs-card (azul + iconos). */
+.vm-dims { padding: 0; overflow: hidden; width: min(300px, calc(100% - 32px)); border-color: #dfe4ee; }
+.vm-dims-h { margin: 0; padding: 11px 14px; gap: 9px; font-size: 12px; color: #fff;
+  background: linear-gradient(180deg, #26456f, #182a4e); }
+.vm-dims-body { padding: 6px 14px 10px; }
+.vm-dims-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 11px; padding: 9px 0; border-top: 1px solid #eef1f6; }
+.vm-dims-ic { display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+  color: #182a4e; background: #eef2f8; border: 1px solid #e0e6f0; }
+.vm-dims-ic svg { width: 17px; height: 17px; }
+.vm-dims-k { font-size: 11.5px; color: #5b6472; font-weight: 600; line-height: 1.25; text-align: left; }
+.vm-dims-v { font-size: 15px; font-weight: 800; color: #182a4e; text-align: right; font-variant-numeric: tabular-nums; }
+.vm-dims-v em { display: block; font-style: normal; font-size: 10px; color: #7c8698; font-weight: 600; margin-top: 1px; }
