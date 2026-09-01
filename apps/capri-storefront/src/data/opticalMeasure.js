@@ -41,6 +41,7 @@ const ANCHOR_BRIDGE_FROM_TOP = 0.5;
 const IRIS_L_CENTER = 468, IRIS_L_R = 469, IRIS_L_L = 471; // ojo en un lado
 const IRIS_R_CENTER = 473, IRIS_R_R = 474, IRIS_R_L = 476; // ojo en el otro
 const CANTHUS_INNER_A = 133, CANTHUS_INNER_B = 362;        // cantos internos
+const NOSE_BRIDGE = [168, 6, 197, 195];                    // cresta nasal = línea media sagital
 const NOSE_SADDLE = 6;                                     // caballete (asiento)
 const LID_LOWER_A = 145, LID_LOWER_B = 374;                // párpados inferiores
 const FACE_SIDE_R = 234, FACE_SIDE_L = 454;                // contorno lateral del rostro (ancho)
@@ -125,13 +126,32 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
   if (!irisPx || irisPx < 2) return { ok: false, error: "no-iris" };
   const mmPerPx = HVID_MM / irisPx;
 
-  // Línea media sagital ≈ punto medio de los cantos internos.
-  const midX = (P(CANTHUS_INNER_A).x + P(CANTHUS_INNER_B).x) / 2;
+  // ── Eje horizontal del rostro + línea media sagital (corrige inclinación) ──
+  // El PD se mide sobre el EJE que une los dos iris (no sobre la X de la imagen),
+  // así una cabeza ligeramente ladeada (roll) NO descuadra el reparto OD/OS.
+  // La línea media se toma de la CRESTA NASAL (más estable y correcta que el
+  // punto medio de los cantos internos), mezclada con los cantos para robustez.
+  const irisMid = { x: (irisA.x + irisB.x) / 2, y: (irisA.y + irisB.y) / 2 };
+  const axLen = Math.hypot(irisB.x - irisA.x, irisB.y - irisA.y) || 1;
+  const ux = (irisB.x - irisA.x) / axLen, uy = (irisB.y - irisA.y) / axLen;
+  // Proyección (con signo) de un punto sobre el eje inter-iris, respecto al centro.
+  const projAxis = (p) => (p.x - irisMid.x) * ux + (p.y - irisMid.y) * uy;
 
-  // PD.
-  const pdTotal = dist(irisA, irisB) * mmPerPx;
-  const pdRight = Math.abs(irisA.x - midX) * mmPerPx;
-  const pdLeft = Math.abs(irisB.x - midX) * mmPerPx;
+  const bridgeProj = NOSE_BRIDGE.map((i) => projAxis(P(i))).sort((a, b) => a - b);
+  const bridgeMid = bridgeProj[Math.floor(bridgeProj.length / 2)]; // mediana (robusta)
+  const canthiMid = projAxis({
+    x: (P(CANTHUS_INNER_A).x + P(CANTHUS_INNER_B).x) / 2,
+    y: (P(CANTHUS_INNER_A).y + P(CANTHUS_INNER_B).y) / 2,
+  });
+  // 2/3 cresta nasal + 1/3 cantos: la nariz manda, los cantos amortiguan ruido.
+  const midOff = (bridgeMid * 2 + canthiMid) / 3;
+
+  // PD. El binocular es la longitud del eje inter-iris; el monocular es la
+  // distancia (sobre ese mismo eje) de cada iris a la línea media. Por
+  // construcción, pdRight + pdLeft ≡ pdTotal (reparto consistente).
+  const pdTotal = axLen * mmPerPx;
+  let pdRight = Math.abs(projAxis(irisA) - midOff) * mmPerPx;
+  let pdLeft = Math.abs(projAxis(irisB) - midOff) * mmPerPx;
 
   // Alturas (necesitan B). A/DBL se devuelven como referencia aunque no se usen aquí.
   const A = midMM(frame.eye);
@@ -169,6 +189,11 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
   const rollTilt = Math.min(rollRaw, Math.abs(180 - rollRaw));       // 0 = horizontal
   const irisMidX = (irisA.x + irisB.x) / 2;
   const yawOff = Math.abs(P(1).x - irisMidX) / pdPx;                 // 0 ideal
+
+  // Con la cabeza girada (yaw) la perspectiva descuadra el reparto OD/OS y NO es
+  // fiable: se conserva el PD binocular (más robusto) pero se ocultan los
+  // monoculares para no dar un número engañoso al óptico.
+  if (yawOff > 0.10) { pdRight = null; pdLeft = null; }
 
   let score = 1;
   const reasons = [];
