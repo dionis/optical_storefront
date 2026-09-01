@@ -3164,3 +3164,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .vm-dims-k { font-size: 11.5px; color: #5b6472; font-weight: 600; line-height: 1.25; text-align: left; }
 .vm-dims-v { font-size: 15px; font-weight: 800; color: #182a4e; text-align: right; font-variant-numeric: tabular-nums; }
 .vm-dims-v em { display: block; font-style: normal; font-size: 10px; color: #7c8698; font-weight: 600; margin-top: 1px; }
+
+/* ═══ Resultado en MÓVIL: la CARA con protagonismo (#face) ═══
+   Antes iban las dos fotos en fila -> se veían diminutas y recortadas (solo los
+   ojos). Ahora va UNA por fila, a todo el ancho y con su alto natural, así se ve
+   el rostro completo sin recorte; se hace scroll para ver la segunda vista. */
+@media (max-width: 560px) {
+  .tryon-result .tryon-studio-cap { overflow-y: auto; }
+  .vm-result-imgs { grid-template-columns: 1fr; gap: 12px; }
+  .tryon-result .vm-rfig { aspect-ratio: auto; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: auto; object-fit: contain; display: block; }
+}
