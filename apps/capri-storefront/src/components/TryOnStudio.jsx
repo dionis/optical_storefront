@@ -71,10 +71,31 @@ function playShutter(kind) {
 
 /* Iconos de medida vectorizados de los originales del cliente: ver ./measureIcons.jsx */
 
+// Iconos de "ampliar" (lupa) y "descargar" para las fotos del resultado.
+const IC_ZOOM = (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M11 8v6M8 11h6" /></svg>
+);
+const IC_DOWN = (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
+);
+
+// Nombre de archivo al descargar: "frontal/lateral-<modelo> <serie> <color>.ext".
+function fileExtFromDataUrl(src) {
+  const m = /^data:image\/(png|jpe?g|webp)/i.exec(src || "");
+  if (!m) return "png";
+  const t = m[1].toLowerCase();
+  return t === "jpeg" ? "jpg" : t;
+}
+function cleanFilePart(s) {
+  return String(s || "").replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, " ").trim();
+}
+
 export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPrescription }) {
   const { t, tv, lang } = useLang();
   // Confirmación tras "Añadir receta" ("idle" | "added").
   const [addedState, setAddedState] = useState("idle");
+  // Imagen del resultado ampliada (lightbox): { src, which } | null.
+  const [zoom, setZoom] = useState(null);
   const [ci, setCi] = useState(colorIdx);
   const [now, setNow] = useState(() => new Date());
   const [headerH, setHeaderH] = useState(0);
@@ -480,6 +501,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     window.open(`https://wa.me/?text=${encodeURIComponent(text + (url ? " " + url : ""))}`, "_blank", "noopener");
   }
 
+  // Nombre del archivo de la foto generada: "frontal|lateral-<modelo> <serie> <color>".
+  function resultFileName(which, src) {
+    const base = [product?.name, product?.brand, color?.name].map(cleanFilePart).filter(Boolean).join(" ");
+    const prefix = which === "side" ? "lateral" : "frontal";
+    return `${prefix}${base ? "-" + base : ""}.${fileExtFromDataUrl(src)}`;
+  }
+
+  // Descarga la imagen del resultado (data URL) con el nombre profesional.
+  function downloadResult(src, which) {
+    if (!src) return;
+    try {
+      const a = document.createElement("a");
+      a.href = src;
+      a.download = resultFileName(which, src);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch { /* descarga no disponible en este navegador */ }
+  }
+
   // "Medir de nuevo" desde la vista de resultado: descarta la generación guardada y
   // vuelve a la captura desde cero.
   function remeasure() {
@@ -630,12 +671,34 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         <div className="vm-result-imgs">
           <figure className="vm-rfig">
             <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
-            {front ? <img src={front} alt={t("vm.front")} /> : <div className="vm-noimg">📷</div>}
+            {front ? (
+              <>
+                <img className="vm-rimg" src={front} alt={t("vm.front")}
+                     onClick={() => setZoom({ src: front, which: "front" })} />
+                <div className="vm-rtools">
+                  <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
+                          onClick={() => setZoom({ src: front, which: "front" })}>{IC_ZOOM}</button>
+                  <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
+                          onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
+                </div>
+              </>
+            ) : <div className="vm-noimg">📷</div>}
             <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
           </figure>
           <figure className="vm-rfig">
             <figcaption className="vm-rlabel">{t("vm.side")}</figcaption>
-            {side ? <img src={side} alt={t("vm.side")} /> : <div className="vm-noimg">📷</div>}
+            {side ? (
+              <>
+                <img className="vm-rimg" src={side} alt={t("vm.side")}
+                     onClick={() => setZoom({ src: side, which: "side" })} />
+                <div className="vm-rtools">
+                  <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
+                          onClick={() => setZoom({ src: side, which: "side" })}>{IC_ZOOM}</button>
+                  <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
+                          onClick={() => downloadResult(side, "side")}>{IC_DOWN}</button>
+                </div>
+              </>
+            ) : <div className="vm-noimg">📷</div>}
             <div className="vm-rbadge"><span>{t("vm.corridor")}</span><b>{mmv(mData?.corridor)}</b></div>
           </figure>
         </div>
@@ -834,6 +897,22 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
       {/* Dimensiones calculadas en la esquina inferior derecha del estudio. */}
       {mState === "result" && dimsPanel()}
+
+      {/* Lightbox: foto del resultado ampliada, con opción de descargar. */}
+      {zoom && (
+        <div className="vm-zoom" role="dialog" aria-modal="true" onClick={() => setZoom(null)}>
+          <div className="vm-zoom-bar" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="vm-zoom-dl"
+                    onClick={() => downloadResult(zoom.src, zoom.which)}>
+              {IC_DOWN}<span>{t("vm.download")}</span>
+            </button>
+            <button type="button" className="vm-zoom-x" aria-label={t("tryon.close")}
+                    onClick={() => setZoom(null)}>×</button>
+          </div>
+          <img className="vm-zoom-img" src={zoom.src} alt=""
+               onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
 
       {/* Carga y error se muestran como capa translúcida SOBRE el estudio (que queda
           desenfocado detrás); el RESULTADO ya vive dentro de la ventana (arriba). */}
