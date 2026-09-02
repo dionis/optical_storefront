@@ -1,0 +1,61 @@
+/* ============================================================================
+   RUBI_LENS · Design tokens (fundamento del sistema visual premium)
+   ----------------------------------------------------------------------------
+   Fuente ÚNICA de verdad para color, tipografía, espaciado, radios, sombras y
+   movimiento. Los valores replican los actuales para NO cambiar el render hoy;
+   a partir de aquí, los componentes se migran a consumir estas variables para
+   lograr consistencia (ver docs/auditoria-plan-mejoras-premium.md, §6).
+   No introduce reglas sobre selectores existentes: solo define variables.
+   ============================================================================ */
+:root {
+  /* ── Marca / óptica ─────────────────────────────────────────────────────── */
+  --rl-navy: #182a4e;        /* autoridad clínica / cabeceras */
+  --rl-navy-2: #26456f;      /* degradado superior de cabeceras */
+  --rl-accent: #0e5ad0;      /* acción primaria */
+  --rl-accent-2: #2f74ff;    /* degradado de acción */
+
+  /* ── Neutros ────────────────────────────────────────────────────────────── */
+  --rl-bg: #f7f6f3;          /* fondo cálido */
+  --rl-surface: #ffffff;     /* tarjetas */
+  --rl-ink: #17191f;         /* tinta principal */
+  --rl-muted: #5b6472;       /* texto secundario */
+  --rl-line: #e7eaf0;        /* separadores / bordes */
+
+  /* ── Estados (AA sobre superficie clara) ────────────────────────────────── */
+  --rl-success: #1a9d5c;
+  --rl-warning: #b7791f;
+  --rl-danger: #d64545;
+
+  /* ── Tipografía ─────────────────────────────────────────────────────────── */
+  --rl-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --rl-font-serif: "Georgia", "Times New Roman", serif; /* titulares de producto */
+  --rl-text-xs: 12px;
+  --rl-text-sm: 14px;
+  --rl-text-md: 16px;
+  --rl-text-lg: 20px;
+  --rl-text-xl: 28px;
+  --rl-text-2xl: 40px;
+
+  /* ── Espaciado (escala 4) ───────────────────────────────────────────────── */
+  --rl-space-1: 4px;
+  --rl-space-2: 8px;
+  --rl-space-3: 12px;
+  --rl-space-4: 16px;
+  --rl-space-5: 24px;
+  --rl-space-6: 32px;
+  --rl-space-7: 48px;
+
+  /* ── Radios ─────────────────────────────────────────────────────────────── */
+  --rl-radius-sm: 10px;
+  --rl-radius-md: 14px;
+  --rl-radius-lg: 16px;
+
+  /* ── Sombras (2 niveles) ────────────────────────────────────────────────── */
+  --rl-shadow-1: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 20px -14px rgba(16, 24, 40, .28);
+  --rl-shadow-2: 0 18px 40px -16px rgba(16, 24, 40, .28);
+
+  /* ── Movimiento ─────────────────────────────────────────────────────────── */
+  --rl-ease: cubic-bezier(.2, .7, .3, 1);
+  --rl-dur-fast: 150ms;
+  --rl-dur: 220ms;
+}

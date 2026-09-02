@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import { purgeStaleStorage } from "./lib/storageVersion.js";
+import "./styles/tokens.css";
 import "./styles/index.css";
 
 // Antes de renderizar: si el formato de algún dato guardado cambió en un deploy,
