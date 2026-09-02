@@ -3237,3 +3237,20 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .tryon-result .tryon-studio-grid { grid-template-rows: auto auto; min-height: 0; }
   .tryon-result .tryon-studio-cap { overflow: visible; min-height: 0; }
 }
+
+/* ═══ MÓVIL — RESULTADO DEFINITIVO (autoritativo, gana sobre los ajustes previos) ═══
+   Layout pedido: las DOS fotos una al lado de la otra (2 columnas), completas, y
+   el panel "Medidas calculadas" a lo ancho DEBAJO. Sin solapamientos: cada vista
+   es una celda del grid y el resto baja en el flujo. */
+@media (max-width: 560px) {
+  .tryon-result.tryon-studio { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .tryon-result .tryon-studio-grid { grid-template-columns: 1fr; grid-template-rows: auto auto; min-height: 0; }
+  .tryon-result .tryon-studio-cap { display: block; overflow: visible; min-height: 0; padding: 10px; }
+  .tryon-result .vm-result { display: flex; flex-direction: column; gap: 10px; height: auto; min-height: 0; }
+  .tryon-result .vm-result-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-height: 0; }
+  .tryon-result .vm-rfig { aspect-ratio: 3 / 4; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vm-dims-inflow { display: block; margin-top: 2px; }
+  .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
+    box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
+}
