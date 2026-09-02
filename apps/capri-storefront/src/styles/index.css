@@ -3254,3 +3254,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
     box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
 }
+
+/* ═══ Medidas calculadas SIEMPRE en el flujo (una sola vez, sin tarjeta flotante) ═══
+   Antes se renderizaba una tarjeta absoluta que en móvil se solapaba con la ficha
+   de la montura y tapaba el botón "Añadir receta". Ahora se muestran en el flujo,
+   debajo de las fotos, en escritorio y móvil — sin solapamientos. */
+.vm-dims-inflow { display: block; flex: 0 0 auto; margin-top: 4px; }
+.vm-dims-inflow .vm-dims {
+  position: static; display: block; width: auto;
+  box-shadow: 0 10px 26px -16px rgba(16, 24, 40, .4);
+}

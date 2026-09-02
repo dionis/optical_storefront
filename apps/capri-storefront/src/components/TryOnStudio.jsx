@@ -1021,8 +1021,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         </div>
       )}
 
-      {/* Dimensiones calculadas en la esquina inferior derecha del estudio. */}
-      {mState === "result" && dimsPanel()}
+      {/* (Las medidas calculadas se muestran EN EL FLUJO dentro de resultViews,
+          debajo de las fotos — ver .vm-dims-inflow. Ya no hay tarjeta flotante
+          para evitar solapamientos.) */}
 
       {/* Lightbox: foto del resultado ampliada, con opción de descargar. */}
       {zoom && (
