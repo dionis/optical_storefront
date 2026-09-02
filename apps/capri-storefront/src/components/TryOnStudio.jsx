@@ -116,6 +116,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const [count, setCount] = useState(0);
   const frontInput = useRef(null);
   const sideInput = useRef(null);
+  // Detección de espejuelos en la captura (para pedir que se los quiten).
+  const gsCanvasRef = useRef(null);
+  const gsTickRef = useRef(0);
+  const gsHitsRef = useRef(0);
 
   useEffect(() => { phaseRef.current = phase; holdRef.current = 0; setCount(0); }, [phase]);
 
@@ -187,6 +191,65 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ¿El cliente lleva espejuelos? Heurística por imagen: densidad de bordes +
+  // reflejos en la zona de los ojos comparada con las mejillas. Con persistencia
+  // (varios frames) para evitar falsos positivos puntuales. La SUBIDA MANUAL de la
+  // foto NO pasa por aquí, así que siempre hay una vía para continuar.
+  function wearingGlasses(v, L) {
+    gsTickRef.current = (gsTickRef.current + 1) % 5;
+    if (gsTickRef.current === 0) {
+      const s = glassesScore(v, L);
+      gsHitsRef.current = Math.max(0, Math.min(6, gsHitsRef.current + (s > 1.0 ? 1 : -1)));
+    }
+    return gsHitsRef.current >= 3;
+  }
+
+  function glassesScore(v, L) {
+    try {
+      const vw = v.videoWidth, vh = v.videoHeight;
+      if (!vw || !vh) return 0;
+      const cw = 256, ch = Math.round(cw * vh / vw) || 1;
+      let cn = gsCanvasRef.current;
+      if (!cn) { cn = document.createElement("canvas"); gsCanvasRef.current = cn; }
+      cn.width = cw; cn.height = ch;
+      const cx = cn.getContext("2d", { willReadFrequently: true });
+      cx.drawImage(v, 0, 0, cw, ch);
+      const d = cx.getImageData(0, 0, cw, ch).data;
+      const lum = (x, y) => {
+        x = x < 0 ? 0 : x >= cw ? cw - 1 : x;
+        y = y < 0 ? 0 : y >= ch ? ch - 1 : y;
+        const i = (y * cw + x) * 4;
+        return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      };
+      const box = (x0, y0, x1, y1) => {
+        x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+        if (x1 <= x0 + 2 || y1 <= y0 + 2) return { e: 0, bright: 0 };
+        let sum = 0, n = 0, bright = 0;
+        for (let y = y0 + 1; y < y1 - 1; y += 2) {
+          for (let x = x0 + 1; x < x1 - 1; x += 2) {
+            sum += Math.abs(lum(x + 1, y) - lum(x - 1, y)) + Math.abs(lum(x, y + 1) - lum(x, y - 1));
+            if (lum(x, y) > 245) bright++;
+            n++;
+          }
+        }
+        return n ? { e: sum / n, bright: bright / n } : { e: 0, bright: 0 };
+      };
+      const P = (i) => ({ x: L[i].x * cw, y: L[i].y * ch });
+      const oL = P(33), oR = P(263), bTop = P(168), lidL = P(145), lidR = P(374);
+      const eyeX0 = Math.min(oL.x, oR.x) - cw * 0.03;
+      const eyeX1 = Math.max(oL.x, oR.x) + cw * 0.03;
+      const eyeY0 = Math.min(oL.y, oR.y, bTop.y) - ch * 0.02;
+      const eyeY1 = Math.max(lidL.y, lidR.y) + ch * 0.03;
+      const eye = box(eyeX0, eyeY0, eyeX1, eyeY1);
+      const cheekY0 = eyeY1 + ch * 0.02;
+      const cheek = box(eyeX0, cheekY0, eyeX1, cheekY0 + (eyeY1 - eyeY0) * 0.9);
+      const ratio = eye.e / (cheek.e + 1e-3);
+      const s = Math.max(0, (ratio - 1.7) / 1.3) + Math.max(0, (eye.bright - 0.008) * 9);
+      if (CAPDBG) console.log("[glasses] ratio", ratio.toFixed(2), "bright", eye.bright.toFixed(3), "s", s.toFixed(2));
+      return s;
+    } catch { return 0; }
+  }
+
   // Bucle de detección + captura automática
   function loop() {
     rafRef.current = requestAnimationFrame(loop);
@@ -210,6 +273,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (ph === "front") {
       if (faceW < 0.09) msg = t("cap.closer");
       else if (!centered) msg = t("cap.lookFront");
+      else if (wearingGlasses(v, L)) { msg = t("cap.glasses"); }
       else { ok = true; msg = t("cap.hold"); }
     } else {
       if (!turned) msg = t("cap.turnLeft");
