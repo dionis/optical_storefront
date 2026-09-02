@@ -78,7 +78,7 @@ OPTICA-TIENDA/
 
 | # | Hallazgo | Severidad | Recomendación |
 |---|----------|-----------|---------------|
-| F1 | `index.css` monolítico (~3.200 líneas) con reglas **duplicadas** por parches sucesivos (varios bloques `@media (max-width:560px)` para el mismo selector, reglas muertas de `.zlx-tryon-*`). | Alta | Migrar a CSS por módulos o a tokens + utilidades; eliminar reglas muertas; un único bloque responsive por componente. |
+| F1 | `index.css` monolítico (~3.260 líneas) con reglas **duplicadas** por parches sucesivos: varios bloques `@media (max-width:560px)` para el mismo selector del probador que se sobrescriben entre sí (deuda real). Nota: `.zlx-tryon-*` **SÍ está en uso** (`LensProcess.jsx`, botón "Probar con cámara") — no eliminar. | Alta | Consolidar los bloques responsive del probador en uno solo por componente; migrar a tokens + utilidades. Verificar SIEMPRE el uso real (grep en JSX) antes de borrar cualquier selector. |
 | F2 | Componentes gigantes: `LensProcess.jsx` (1.394), `AdminDashboard.jsx` (1.021), `TryOnStudio.jsx` (995), `charts.jsx` (1.239). | Alta | Extraer subcomponentes y hooks (`useMeasureJob`, `useCamera`, `useResultPersistence`) para bajar cada archivo a <400 líneas. |
 | F3 | `translations.js` (2.087) es un único objeto plano es/en. | Media | Partir por dominio (`catalog`, `tryon`, `checkout`) y validar claves faltantes es↔en en CI. |
 | F4 | Lógica de dominio mezclada con UI (medición, formato, descarga dentro de `TryOnStudio`). | Media | Mover `composeWithMeasures`, `resultFileName`, `glassesScore` a `data/` como utilidades puras y testeables. |
@@ -88,7 +88,7 @@ OPTICA-TIENDA/
 
 | # | Hallazgo | Severidad | Recomendación |
 |---|----------|-----------|---------------|
-| P1 | MediaPipe + modelo se cargan desde CDN; ya hay preconexión, pero el bundle inicial no está medido. | Media | `vite build --report` / `rollup-plugin-visualizer`; `React.lazy` para el probador y el admin (no penalizar el catálogo). |
+| P1 | Bundle inicial. ✅ **Hecho**: el probador ya era `lazy`; ahora también las rutas secundarias (admin, checkout, receta, cuenta, pedidos, estuche) → chunks separados (AdminPage ~63 kB JS + 18 kB CSS, LensProcess ~40 kB, Checkout ~12 kB fuera del bundle inicial). | Media | Siguiente: `rollup-plugin-visualizer` para medir y afinar vendor chunks. |
 | P2 | Imágenes del catálogo sin estrategia explícita de tamaños/formatos. | Media | `srcset`/`sizes`, `loading="lazy"`, y AVIF/WebP donde el origen lo permita. |
 | P3 | Persistencia de resultados en `localStorage` con downscale — bien resuelto, pero la cuota sigue siendo frágil. | Baja | Migrar a IndexedDB para históricos de medición (más espacio, sin bloquear el hilo). |
 | P4 | Recalcular medición y componer imágenes en el hilo principal. | Media | Mover composición/medición pesada a un Web Worker; el canvas de rótulos puede ir en `OffscreenCanvas`. |
@@ -211,10 +211,11 @@ sube la percepción de calidad inmediatamente.
 ### Fase 0 — Estabilización (en curso)
 - [x] Corregir solapamientos y visibilidad de medidas en móvil.
 - [x] Anti-cache del HTML.
-- [ ] Limpieza de CSS muerto/duplicado (QA-05).
+- [ ] Consolidar los bloques `@media` duplicados del probador (QA-05). (Nota: `.zlx-tryon-*` NO es muerto.)
 
 ### Fase 1 — Base de calidad (1–2 semanas)
-- [ ] `styles/tokens.css` + refactor de botones/inputs/cards a tokens.
+- [x] `styles/tokens.css` creado (base del sistema de diseño). Pendiente: migrar botones/inputs/cards a tokens.
+- [x] Rutas secundarias con `React.lazy` (bundle inicial más liviano).
 - [ ] Extraer hooks del probador (`useCamera`, `useMeasureJob`).
 - [ ] Vitest para utilidades de medición y formato; CI que valide claves i18n.
 - [ ] Focus-trap + a11y del probador.
@@ -265,6 +266,8 @@ sube la percepción de calidad inmediatamente.
 | 2026-09-02 | `0620927` | Detección de espejuelos en la captura. |
 | 2026-09-02 | `fa30124` | Móvil: dos fotos lado a lado + medidas debajo. |
 | 2026-09-02 | `946b2e0` | Medidas una sola vez en el flujo (fin de solapamientos; vuelve "Añadir receta"). |
+| 2026-09-02 | `8cc1ccc` | Documento de auditoría + plan + base de design tokens (`tokens.css`). |
+| 2026-09-02 | (este) | Rutas secundarias con `React.lazy` (admin/checkout/receta/cuenta/pedidos fuera del bundle inicial). |
 
 ---
 
