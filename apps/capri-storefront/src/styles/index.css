@@ -3208,3 +3208,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .tryon.tryon-studio { overscroll-behavior: contain; }
 .tryon-studio-cap { overscroll-behavior: contain; }
 .tryon-result .tryon-studio-cap { overscroll-behavior: contain; }
+
+/* ═══ Fotos del resultado en MÓVIL: marco 4:3 + imagen completa (#face2) ═══
+   La cámara captura en apaisado; con height:auto la foto quedaba como una franja
+   fina detrás de las etiquetas. Con un marco 4:3 (la misma orientación) y contain,
+   la foto entra COMPLETA y ambas vistas se ven perfectamente. */
+@media (max-width: 560px) {
+  .tryon-result .vm-rfig { aspect-ratio: 4 / 3; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: 100%; object-fit: contain; display: block; }
+}
