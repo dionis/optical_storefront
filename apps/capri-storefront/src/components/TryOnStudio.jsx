@@ -734,6 +734,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             </button>
           )}
         </div>
+        {/* En MÓVIL las medidas calculadas se muestran aquí, debajo de las fotos
+            (en escritorio van en la tarjeta flotante de la esquina). */}
+        <div className="vm-dims-inflow">{dimsPanel()}</div>
       </div>
     );
   }

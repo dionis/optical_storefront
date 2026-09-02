@@ -3217,3 +3217,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .tryon-result .vm-rfig { aspect-ratio: 4 / 3; height: auto; min-height: 0; }
   .tryon-result .vm-rfig img { width: 100%; height: 100%; object-fit: contain; display: block; }
 }
+
+/* ═══ Medidas calculadas visibles en MÓVIL (debajo de las fotos) ═══
+   En escritorio van en la tarjeta flotante de la esquina; en móvil esa tarjeta
+   se oculta, así que aquí mostramos las mismas medidas dentro del flujo para que
+   SIEMPRE se vean (DIP, altura de corredor, ancho de lente · puente, confianza). */
+.vm-dims-inflow { display: none; }
+@media (max-width: 560px) {
+  .vm-dims-inflow { display: block; margin-top: 2px; }
+  .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
+    box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
+}
