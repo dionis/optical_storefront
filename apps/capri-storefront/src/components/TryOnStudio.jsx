@@ -716,12 +716,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             )}
           </div>
         )}
-        {mData?.fit && (
-          <div className={`vm-fit vm-fit-${mData.fit.level}`}>
-            <span className="vm-fit-ic" aria-hidden="true">{mData.fit.level === "good" ? "✓" : "↔"}</span>
-            <span>{t(`vm.fit.${mData.fit.level}`)}</span>
-          </div>
-        )}
         <div className="vm-result-actions">
           <button type="button" className="vm-remeasure" onClick={remeasure}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
