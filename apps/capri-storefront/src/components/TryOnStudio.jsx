@@ -508,13 +508,78 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return `${prefix}${base ? "-" + base : ""}.${fileExtFromDataUrl(src)}`;
   }
 
-  // Descarga la imagen del resultado (data URL) con el nombre profesional.
-  function downloadResult(src, which) {
+  // Dibuja las medidas SOBRE la foto (para descargarla ya rotulada, no como una
+  // imagen suelta). Si algo falla (imagen remota sin CORS…) devuelve la original.
+  async function composeWithMeasures(src) {
+    if (!src) return src;
+    try {
+      const img = await new Promise((res, rej) => {
+        const im = new Image();
+        im.crossOrigin = "anonymous";
+        im.onload = () => res(im);
+        im.onerror = rej;
+        im.src = src;
+      });
+      const W = img.naturalWidth || img.width;
+      const H = img.naturalHeight || img.height;
+      if (!W || !H) return src;
+      const cn = document.createElement("canvas");
+      cn.width = W; cn.height = H;
+      const cx = cn.getContext("2d");
+      cx.drawImage(img, 0, 0, W, H);
+
+      const lines = [
+        `DIP: ${mmv(mData?.pd)}`,
+        (mData?.pdRight != null || mData?.pdLeft != null)
+          ? `OD ${mmv(mData?.pdRight)}   ·   OS ${mmv(mData?.pdLeft)}` : null,
+        `Altura de corredor: ${mmv(mData?.corridor)}`,
+        `Lente · Puente: ${eyeD || "—"} · ${bridgeD || "—"}`,
+      ].filter(Boolean);
+
+      const s = W / 1000;                                   // escala tipográfica
+      const pad = Math.round(28 * s);
+      const lh = Math.round(40 * s);
+      const headH = Math.round(96 * s);
+      const panelH = headH + lines.length * lh + pad;
+      const gy = Math.max(0, H - panelH);
+
+      const grad = cx.createLinearGradient(0, gy, 0, H);
+      grad.addColorStop(0, "rgba(9,18,40,0)");
+      grad.addColorStop(0.28, "rgba(9,18,40,0.86)");
+      grad.addColorStop(1, "rgba(6,12,26,0.96)");
+      cx.fillStyle = grad;
+      cx.fillRect(0, gy, W, H - gy);
+
+      cx.textBaseline = "alphabetic";
+      cx.fillStyle = "#ffffff";
+      cx.font = `800 ${Math.round(38 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
+      cx.fillText("Óptica El Rancho", pad, gy + Math.round(50 * s));
+      cx.fillStyle = "rgba(200,215,240,0.92)";
+      cx.font = `600 ${Math.round(26 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
+      const sub = [product?.name, product?.brand, color?.name].filter(Boolean).join("   ·   ");
+      if (sub) cx.fillText(sub, pad, gy + Math.round(86 * s));
+
+      cx.font = `700 ${Math.round(30 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
+      let ly = gy + headH + Math.round(28 * s);
+      for (const ln of lines) {
+        cx.fillStyle = "#ffffff";
+        cx.fillText(ln, pad, ly);
+        ly += lh;
+      }
+      return cn.toDataURL("image/jpeg", 0.92);
+    } catch {
+      return src;
+    }
+  }
+
+  // Descarga la foto del resultado YA con las medidas rotuladas + nombre profesional.
+  async function downloadResult(src, which) {
     if (!src) return;
+    const out = await composeWithMeasures(src);
     try {
       const a = document.createElement("a");
-      a.href = src;
-      a.download = resultFileName(which, src);
+      a.href = out;
+      a.download = resultFileName(which, out);
       document.body.appendChild(a);
       a.click();
       a.remove();

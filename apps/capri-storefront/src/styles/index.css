@@ -3228,3 +3228,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
     box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
 }
+
+/* ═══ MÓVIL: el resultado se desplaza como pagina normal (fotos → medidas → ficha) ═══
+   Antes las fotos quedaban encerradas en una ventanita con scroll propio y las
+   medidas quedaban escondidas. Ahora todo el resultado baja en un solo scroll. */
+@media (max-width: 560px) {
+  .tryon-result.tryon-studio { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .tryon-result .tryon-studio-grid { grid-template-rows: auto auto; min-height: 0; }
+  .tryon-result .tryon-studio-cap { overflow: visible; min-height: 0; }
+}
