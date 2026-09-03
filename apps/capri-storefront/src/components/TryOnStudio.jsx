@@ -5,7 +5,7 @@ import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIco
 import MeasureReport from "./MeasureReport.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
-import { measureFromFrontal } from "../data/opticalMeasure.js";
+import { measureFromFrontal, pdFromLandmarks } from "../data/opticalMeasure.js";
 import {
   startMeasurementJob,
   pollMeasurementJob,
@@ -90,6 +90,14 @@ function cleanFilePart(s) {
   return String(s || "").replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, " ").trim();
 }
 
+// Mediana (robusta a valores atípicos) de una lista de números.
+function median(nums) {
+  const a = nums.filter((n) => typeof n === "number" && !Number.isNaN(n)).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
 export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPrescription }) {
   const { t, tv, lang } = useLang();
   // Confirmación tras "Añadir receta" ("idle" | "added").
@@ -120,8 +128,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const gsCanvasRef = useRef(null);
   const gsTickRef = useRef(0);
   const gsHitsRef = useRef(0);
+  // Muestras de PD acumuladas durante el "no te muevas" (para promediar el PD y
+  // que salga estable, no dependiente de un solo fotograma con ruido).
+  const pdSamplesRef = useRef([]);
+  const capturedPdRef = useRef(null);   // { pd, pdRight, pdLeft } mediana de la toma
 
-  useEffect(() => { phaseRef.current = phase; holdRef.current = 0; setCount(0); }, [phase]);
+  useEffect(() => {
+    phaseRef.current = phase; holdRef.current = 0; setCount(0);
+    if (phase === "front") pdSamplesRef.current = [];   // nueva toma: reinicia muestras de PD
+  }, [phase]);
 
   // Reloj en vivo (pie de la ficha)
   useEffect(() => {
@@ -281,6 +296,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     }
     setGuide(msg);
     if (ok) {
+      // Mientras la pose frontal es buena, acumulamos medidas de PD de CADA
+      // fotograma; al capturar se toma la MEDIANA (estable, sin ruido de un solo
+      // frame). Solo tomas dentro de un rango humano razonable.
+      if (ph === "front") {
+        const sp = pdFromLandmarks(L, v.videoWidth, v.videoHeight);
+        if (sp && sp.pdTotal > 45 && sp.pdTotal < 82) {
+          pdSamplesRef.current.push(sp);
+          if (pdSamplesRef.current.length > 150) pdSamplesRef.current.shift();
+        }
+      }
       holdRef.current += 1;
       setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / (HOLD_FRAMES / 3))));
       if (holdRef.current >= HOLD_FRAMES) { capture(ph); }
@@ -302,16 +327,36 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     holdRef.current = 0; setCount(0);
     // Sonido de cámara: obturador completo en la 1ª foto, clic nítido de cierre en la
     // 2ª (señal de que ya se tomaron las dos tomas para las medidas).
-    if (ph === "front") { setFrontImg(url); setPhase("side"); playShutter("shutter"); }
-    else { setSideImg(url); setPhase("done"); playShutter("click"); }
+    if (ph === "front") {
+      // PD ESTABLE: mediana de todas las muestras acumuladas durante el "no te
+      // muevas" (no un solo fotograma). El reparto OD/OS solo si la mayoría de
+      // las muestras lo dieron válido (pose frontal); si no, se deja al binocular.
+      const S = pdSamplesRef.current;
+      if (S.length >= 5) {
+        const rights = S.map((s) => s.pdRight).filter((x) => x != null);
+        const lefts = S.map((s) => s.pdLeft).filter((x) => x != null);
+        capturedPdRef.current = {
+          pd: median(S.map((s) => s.pdTotal)),
+          pdRight: rights.length > S.length * 0.5 ? median(rights) : null,
+          pdLeft: lefts.length > S.length * 0.5 ? median(lefts) : null,
+        };
+      } else {
+        capturedPdRef.current = null;
+      }
+      setFrontImg(url); setPhase("side"); playShutter("shutter");
+    } else { setSideImg(url); setPhase("done"); playShutter("click"); }
   }
 
   function onUpload(which, file) {
     if (!file) return;
     const rd = new FileReader();
     rd.onload = () => {
-      if (which === "front") { setFrontImg(rd.result); if (phaseRef.current === "front") setPhase("side"); playShutter("shutter"); }
-      else { setSideImg(rd.result); if (phaseRef.current !== "done") setPhase("done"); playShutter("click"); }
+      if (which === "front") {
+        // Foto SUBIDA: no hay muestras de cámara; se usa la medición robusta de un
+        // solo fotograma (escala de iris mejorada). Limpiamos el promedio de cámara.
+        capturedPdRef.current = null; pdSamplesRef.current = [];
+        setFrontImg(rd.result); if (phaseRef.current === "front") setPhase("side"); playShutter("shutter");
+      } else { setSideImg(rd.result); if (phaseRef.current !== "done") setPhase("done"); playShutter("click"); }
     };
     rd.readAsDataURL(file);
   }
@@ -320,7 +365,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     setMState("idle"); setMData(null);
     // Se va a rehacer la toma: la generación guardada ya no aplica.
     clearMeasureResult(product);
-    if (which === "front") { setFrontImg(null); setPhase("front"); }
+    if (which === "front") { capturedPdRef.current = null; pdSamplesRef.current = []; setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
   }
 
@@ -365,18 +410,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   }
   // Sobrescribe los números del sobre con los NUESTROS cuando están disponibles.
   function applyOurNumbers(picked) {
+    if (!picked) return picked;
     const mine = ourMeasureRef.current;
-    if (!picked || !mine) return picked;
-    if (mine.pdTotal != null) picked.pd = mine.pdTotal;
-    if (mine.pdRight != null) picked.pdRight = mine.pdRight;
-    if (mine.pdLeft != null) picked.pdLeft = mine.pdLeft;
-    if (mine.corridor != null) { picked.corridor = mine.corridor; picked.progressive = mine.corridor; }
-    if (mine.bifocal != null) picked.bifocal = mine.bifocal;
-    if (mine.suitable != null) picked.suitable = mine.suitable;
-    if (mine.minRequired != null) picked.minRequired = mine.minRequired;
-    if (mine.quality) picked.quality = mine.quality;
-    if (mine.fit) picked.fit = mine.fit;
-    picked.measuredBy = "device";
+    if (mine) {
+      if (mine.pdTotal != null) picked.pd = mine.pdTotal;
+      if (mine.pdRight != null) picked.pdRight = mine.pdRight;
+      if (mine.pdLeft != null) picked.pdLeft = mine.pdLeft;
+      if (mine.corridor != null) { picked.corridor = mine.corridor; picked.progressive = mine.corridor; }
+      if (mine.bifocal != null) picked.bifocal = mine.bifocal;
+      if (mine.suitable != null) picked.suitable = mine.suitable;
+      if (mine.minRequired != null) picked.minRequired = mine.minRequired;
+      if (mine.quality) picked.quality = mine.quality;
+      if (mine.fit) picked.fit = mine.fit;
+      picked.measuredBy = "device";
+    }
+    // Si la foto se TOMÓ con la cámara, el PD promedio (mediana de muchos
+    // fotogramas) es más fiable que el de un solo frame: manda ese.
+    const cap = capturedPdRef.current;
+    if (cap && cap.pd != null) {
+      picked.pd = Math.round(cap.pd * 10) / 10;
+      if (cap.pdRight != null) picked.pdRight = Math.round(cap.pdRight * 10) / 10;
+      if (cap.pdLeft != null) picked.pdLeft = Math.round(cap.pdLeft * 10) / 10;
+      picked.measuredBy = "device";
+    }
     return picked;
   }
 
@@ -657,6 +713,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     clearMeasureJob(product);
     clearMeasureResult(product);
     jobIdRef.current = null;
+    capturedPdRef.current = null; pdSamplesRef.current = [];
     setMData(null); setMState("idle"); setAddedState("idle");
     setFrontImg(null); setSideImg(null); setPhase("front");
   }

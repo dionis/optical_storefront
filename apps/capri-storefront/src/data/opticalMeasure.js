@@ -87,6 +87,63 @@ export function midMM(range) {
 }
 
 /**
+ * PD (binocular + monocular OD/OS) a partir de landmarks YA detectados.
+ * Función PURA y síncrona: la usan measureFromFrontal (una foto) y el bucle de
+ * captura (muchos fotogramas, para promediar). Devuelve null si no hay iris.
+ *
+ * Robustez de la ESCALA (clave para que el PD salga bien):
+ *  - El iris es la "regla" (HVID 11.7 mm horizontal). Con la cabeza girada, el
+ *    iris del ojo que gira se ACORTA y falsea la escala; por eso NO se promedia
+ *    a ciegas: si los dos iris difieren >8 % (hay giro) se usa el MAYOR (el menos
+ *    escorzado, más cercano al diámetro real); si concuerdan, se promedia.
+ *  - El PD se mide sobre el eje que une los iris (corrige inclinación/roll) y la
+ *    línea media sale de la cresta nasal (más fiable que el punto medio de ojos).
+ *  - Con giro (yaw) alto, el reparto OD/OS no es fiable → se devuelve null en los
+ *    monoculares (el binocular, más robusto, se conserva).
+ *
+ * @returns {null | {pdTotal,pdRight,pdLeft,mmPerPx,irisPx,roll,yaw,irisAsym,irisA,irisB}}
+ */
+export function pdFromLandmarks(L, W, H) {
+  if (!L || L.length < 478) return null;
+  const P = (i) => ({ x: L[i].x * W, y: L[i].y * H });
+  const irisA = P(IRIS_L_CENTER), irisB = P(IRIS_R_CENTER);
+  const diamA = dist(P(IRIS_L_R), P(IRIS_L_L));
+  const diamB = dist(P(IRIS_R_R), P(IRIS_R_L));
+  if (!(diamA > 1) || !(diamB > 1)) return null;
+
+  const dHi = Math.max(diamA, diamB), dLo = Math.min(diamA, diamB);
+  const irisAsym = (dHi - dLo) / dHi;                 // 0 = frontal perfecto
+  const irisPx = irisAsym > 0.08 ? dHi : (diamA + diamB) / 2;
+  const mmPerPx = HVID_MM / irisPx;
+
+  const irisMid = { x: (irisA.x + irisB.x) / 2, y: (irisA.y + irisB.y) / 2 };
+  const axLen = Math.hypot(irisB.x - irisA.x, irisB.y - irisA.y) || 1;
+  const ux = (irisB.x - irisA.x) / axLen, uy = (irisB.y - irisA.y) / axLen;
+  const proj = (p) => (p.x - irisMid.x) * ux + (p.y - irisMid.y) * uy;
+
+  const bproj = NOSE_BRIDGE.map((i) => proj(P(i))).sort((a, b) => a - b);
+  const bridgeMid = bproj[Math.floor(bproj.length / 2)];
+  const canthiMid = proj({
+    x: (P(CANTHUS_INNER_A).x + P(CANTHUS_INNER_B).x) / 2,
+    y: (P(CANTHUS_INNER_A).y + P(CANTHUS_INNER_B).y) / 2,
+  });
+  const midOff = (bridgeMid * 2 + canthiMid) / 3;
+
+  const pdTotal = axLen * mmPerPx;
+  let pdRight = Math.abs(proj(irisA) - midOff) * mmPerPx;
+  let pdLeft = Math.abs(proj(irisB) - midOff) * mmPerPx;
+
+  const rollRaw = Math.abs(Math.atan2(irisB.y - irisA.y, irisB.x - irisA.x) * 180 / Math.PI);
+  const roll = Math.min(rollRaw, Math.abs(180 - rollRaw));
+  // Señal de giro combinada: nariz descentrada + asimetría de iris (más fiable).
+  const yawNose = Math.abs(P(1).x - irisMid.x) / axLen;
+  const yaw = Math.max(yawNose, irisAsym);
+  if (yaw > 0.10) { pdRight = null; pdLeft = null; }
+
+  return { pdTotal, pdRight, pdLeft, mmPerPx, irisPx, roll, yaw, irisAsym, irisA, irisB };
+}
+
+/**
  * Mide PD y alturas desde la foto FRONTAL.
  *
  * @param {string} frontDataUrl  data URL de la foto frontal.
@@ -118,40 +175,12 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
 
   const P = (i) => ({ x: L[i].x * W, y: L[i].y * H });
 
-  // Escala: diámetro del iris (media de ambos ojos) → mm por píxel.
-  const irisA = P(IRIS_L_CENTER), irisB = P(IRIS_R_CENTER);
-  const diamA = dist(P(IRIS_L_R), P(IRIS_L_L));
-  const diamB = dist(P(IRIS_R_R), P(IRIS_R_L));
-  const irisPx = (diamA + diamB) / 2;
-  if (!irisPx || irisPx < 2) return { ok: false, error: "no-iris" };
-  const mmPerPx = HVID_MM / irisPx;
-
-  // ── Eje horizontal del rostro + línea media sagital (corrige inclinación) ──
-  // El PD se mide sobre el EJE que une los dos iris (no sobre la X de la imagen),
-  // así una cabeza ligeramente ladeada (roll) NO descuadra el reparto OD/OS.
-  // La línea media se toma de la CRESTA NASAL (más estable y correcta que el
-  // punto medio de los cantos internos), mezclada con los cantos para robustez.
-  const irisMid = { x: (irisA.x + irisB.x) / 2, y: (irisA.y + irisB.y) / 2 };
-  const axLen = Math.hypot(irisB.x - irisA.x, irisB.y - irisA.y) || 1;
-  const ux = (irisB.x - irisA.x) / axLen, uy = (irisB.y - irisA.y) / axLen;
-  // Proyección (con signo) de un punto sobre el eje inter-iris, respecto al centro.
-  const projAxis = (p) => (p.x - irisMid.x) * ux + (p.y - irisMid.y) * uy;
-
-  const bridgeProj = NOSE_BRIDGE.map((i) => projAxis(P(i))).sort((a, b) => a - b);
-  const bridgeMid = bridgeProj[Math.floor(bridgeProj.length / 2)]; // mediana (robusta)
-  const canthiMid = projAxis({
-    x: (P(CANTHUS_INNER_A).x + P(CANTHUS_INNER_B).x) / 2,
-    y: (P(CANTHUS_INNER_A).y + P(CANTHUS_INNER_B).y) / 2,
-  });
-  // 2/3 cresta nasal + 1/3 cantos: la nariz manda, los cantos amortiguan ruido.
-  const midOff = (bridgeMid * 2 + canthiMid) / 3;
-
-  // PD. El binocular es la longitud del eje inter-iris; el monocular es la
-  // distancia (sobre ese mismo eje) de cada iris a la línea media. Por
-  // construcción, pdRight + pdLeft ≡ pdTotal (reparto consistente).
-  const pdTotal = axLen * mmPerPx;
-  let pdRight = Math.abs(projAxis(irisA) - midOff) * mmPerPx;
-  let pdLeft = Math.abs(projAxis(irisB) - midOff) * mmPerPx;
+  // PD + escala robusta (misma lógica que usa el bucle de captura para promediar).
+  const pd = pdFromLandmarks(L, W, H);
+  if (!pd) return { ok: false, error: "no-iris" };
+  const { irisA, irisB, irisPx, mmPerPx } = pd;
+  const pdTotal = pd.pdTotal;
+  let pdRight = pd.pdRight, pdLeft = pd.pdLeft;
 
   // Alturas (necesitan B). A/DBL se devuelven como referencia aunque no se usen aquí.
   const A = midMM(frame.eye);
@@ -183,24 +212,16 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
   //   · simetría del iris: iris muy distintos = ángulo o detección dudosa.
   // Con eso damos un nivel (high/medium/low) y un error estimado del PD en mm,
   // para que el cliente repita la toma si sale baja y el óptico sepa el margen.
-  const pdPx = dist(irisA, irisB) || 1;
-  const irisAsym = Math.abs(diamA - diamB) / irisPx;                 // 0 ideal
-  const rollRaw = Math.abs(Math.atan2(irisB.y - irisA.y, irisB.x - irisA.x) * 180 / Math.PI);
-  const rollTilt = Math.min(rollRaw, Math.abs(180 - rollRaw));       // 0 = horizontal
-  const irisMidX = (irisA.x + irisB.x) / 2;
-  const yawOff = Math.abs(P(1).x - irisMidX) / pdPx;                 // 0 ideal
-
-  // Con la cabeza girada (yaw) la perspectiva descuadra el reparto OD/OS y NO es
-  // fiable: se conserva el PD binocular (más robusto) pero se ocultan los
-  // monoculares para no dar un número engañoso al óptico.
-  if (yawOff > 0.10) { pdRight = null; pdLeft = null; }
+  // Señales de pose ya calculadas de forma robusta en pdFromLandmarks (el reparto
+  // OD/OS ya se anuló allí si el giro es alto).
+  const irisAsym = pd.irisAsym, rollTilt = pd.roll, yawOff = pd.yaw;
 
   let score = 1;
   const reasons = [];
   if (irisPx < 28) { score -= irisPx < 18 ? 0.4 : 0.18; reasons.push("far"); }
   if (rollTilt > 8) { score -= rollTilt > 14 ? 0.3 : 0.15; reasons.push("tilt"); }
   if (yawOff > 0.06) { score -= yawOff > 0.11 ? 0.35 : 0.18; reasons.push("angle"); }
-  if (irisAsym > 0.15 && !reasons.includes("angle")) { score -= 0.15; reasons.push("angle"); }
+  if (irisAsym > 0.12 && !reasons.includes("angle")) { score -= 0.15; reasons.push("angle"); }
   score = Math.max(0, Math.min(1, score));
   const level = score >= 0.8 ? "high" : score >= 0.55 ? "medium" : "low";
   // Error estimado del PD (mm): jitter de ~2 px en las pupilas + penalización por
