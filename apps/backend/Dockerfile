@@ -78,6 +78,42 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY apps/vision-measure/services /app/vision-measure/services
 WORKDIR /app
 
+# ---------------------------------------------------------------------------
+# Generated frame media CLI (`python -m scraper media …`) — AN ON-DEMAND TOOL,
+# NOT A PROCESS.
+#
+# Nothing starts it: docker-entrypoint.sh does not mention it and it costs zero
+# memory at rest. It is here so the owner can open a terminal on this container
+# (Coolify → Terminal, or `docker exec`) and generate media on the server when
+# they decide to, which is the only way this is meant to be triggered for now.
+# Deliberately NOT wired to CI or a schedule — a run spends money per request.
+#
+# Same "one container, several tools" decision CLAUDE.md already makes for
+# vision-measure, and for the same reason: a €4/mo box does not get a second
+# Coolify app for something that idles.
+#
+# Reuses the python3 + uv installed above for vision-measure. Note this project
+# declares requires-python >=3.12 (vision-measure only asks for >=3.10); if the
+# base image's Alpine ships an older python3, uv fetches a managed interpreter
+# rather than failing.
+#
+# Base dependencies only — the `tryon` extra (rembg + onnxruntime, ~300 MB plus
+# a ~175 MB model) is for background removal during a catalog sync and has no
+# part in media generation.
+# ---------------------------------------------------------------------------
+COPY apps/scraper/pyproject.toml apps/scraper/uv.lock /app/scraper/
+WORKDIR /app/scraper
+RUN uv sync --frozen --no-dev
+# The package itself, so `python -m scraper` resolves from anywhere. (Unlike
+# vision-measure, which sets `package = false` and is run by file path.)
+COPY apps/scraper/scraper /app/scraper/scraper
+COPY apps/scraper/pricing.yaml /app/scraper/pricing.yaml
+# The pilot cohort lives with its backend consumer and selection.py reaches for
+# it at ../../backend/src/lib/ — relative to the scraper package, which is why
+# the layout under /app mirrors the repo's apps/ directory.
+COPY apps/backend/src/lib/frame-media-pilot.json /app/backend/src/lib/frame-media-pilot.json
+WORKDIR /app
+
 COPY apps/backend/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 

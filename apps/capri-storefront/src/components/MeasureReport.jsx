@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
@@ -39,6 +39,33 @@ function SlowNoticeForm({ t, pending, error, onSubmit }) {
   );
 }
 
+// Carrusel COMERCIAL mostrado mientras se calcula: en vez de una espera "muerta", el
+// cliente ve mensajes rotativos que lo retienen y venden la óptica (garantía, envío,
+// AR, calidad, etc.). Cambia cada ~4 s con un fundido. Los textos vienen del i18n
+// (vm.ad1..vm.adN) para quedar 100% bilingües; se auto-ajusta a cuántos existan.
+function CommercialCarousel({ t }) {
+  const ads = ["vm.ad1", "vm.ad2", "vm.ad3", "vm.ad4", "vm.ad5", "vm.ad6"]
+    .map((k) => t(k)).filter((s) => s && !s.startsWith("vm.ad"));
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (ads.length < 2) return;
+    const id = setInterval(() => setI((n) => (n + 1) % ads.length), 4200);
+    return () => clearInterval(id);
+  }, [ads.length]);
+  if (!ads.length) return null;
+  return (
+    <div className="vm-ads" aria-live="polite">
+      <div className="vm-ad" key={i}>
+        <span className="vm-ad-star" aria-hidden="true">✦</span>
+        <span>{ads[i % ads.length]}</span>
+      </div>
+      <div className="vm-ad-dots" aria-hidden="true">
+        {ads.map((_, n) => <span key={n} className={n === (i % ads.length) ? "on" : ""} />)}
+      </div>
+    </div>
+  );
+}
+
 export default function MeasureReport({
   phase, data, frontFallback, sideFallback, error, errorCode, onRetry, onClose, topOffset = 0,
   slow = false, notifyState = "idle", notifyError = null, onNotifySubmit,
@@ -59,9 +86,11 @@ export default function MeasureReport({
         );
       }
       return (
-        <div className="vm-state">
+        <div className="vm-state vm-loading">
           <div className="vm-spinner" aria-hidden="true" />
-          <p>{t("vm.calcing")}</p>
+          <p className="vm-calcing">{t("vm.calcing")}</p>
+          <CommercialCarousel t={t} />
+          <p className="vm-load-note">{t("vm.loadBusy")}</p>
           {slow && (
             <SlowNoticeForm
               t={t}

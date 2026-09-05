@@ -3,6 +3,7 @@ import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusaj
 import multer from "multer";
 import { ocrRateLimit } from "./store/prescriptions/ocr/rate-limit";
 import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
+import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
 
@@ -240,5 +241,6 @@ export default defineMiddlewares({
       middlewares: [orderAccessRateLimit],
     },
     ...ocrSettingsMiddlewares,
+    ...frameMediaMiddlewares,
   ],
 });

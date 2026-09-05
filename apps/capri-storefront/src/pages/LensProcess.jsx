@@ -20,6 +20,11 @@ import {
   DIAGRAMS,
 } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
+// Probador (try-on): mismo componente que en la ficha de producto. Se abre desde el
+// espejuelo de esta página de receta (imagen 1) para que el cliente pueda probárselo
+// y tomar sus medidas sin salir del flujo de compra.
+import TryOn from "../components/TryOnSwitch.jsx";
+import { TRY_ON_ENABLED } from "../config/features.js";
 
 // ── LensGraphics wiring ─────────────────────────────────────────────────────
 // Map each catalog option to its LensGraphics icon and to the educational
@@ -381,6 +386,41 @@ export default function LensProcess() {
   const navigate = useNavigate();
   const { addConfiguredFrame } = useCart();
 
+  // Probador abierto desde el espejuelo de esta página.
+  const [tryOnOpen, setTryOnOpen] = useState(false);
+  // Imagen generada por el probador (rostro con los espejuelos), para adjuntarla a la
+  // receta/orden al finalizar la compra (se sube a R2 en el backend, sin correo).
+  const [tryOnImage, setTryOnImage] = useState(null);
+  // ¿Para quién son? (elegido en el probador): "me" | "other" (+ nombre). Se guarda
+  // con la receta al comprar.
+  const [patientFor, setPatientFor] = useState(null);
+  const [patientName, setPatientName] = useState("");
+
+  // "Añadir receta" desde el probador: pre-rellena las medidas de encaje (DIP + altura
+  // de montaje) en la receta, para que queden GUARDADAS al continuar la compra. El
+  // probador ya persiste la imagen generada por producto (localStorage) y muestra su
+  // propia confirmación; aquí integramos los números en el flujo de la receta y
+  // guardamos la imagen para adjuntarla a la orden al comprar.
+  const applyTryOnMeasurement = (m) => {
+    if (!m) return;
+    const oneDp = (v) => (v == null || v === "" ? "" : String(Math.round(Number(v) * 10) / 10));
+    const hasDual = m.pdRight != null && m.pdLeft != null;
+    setRx((r) => ({
+      ...r,
+      pd: hasDual ? r.pd : (oneDp(m.pd) || r.pd),
+      pd_od: hasDual ? (oneDp(m.pdRight) || r.pd_od) : r.pd_od,
+      pd_os: hasDual ? (oneDp(m.pdLeft) || r.pd_os) : r.pd_os,
+      seg_height: oneDp(m.segHeight ?? m.corridor) || r.seg_height,
+    }));
+    if (hasDual) setPdMode("dual");
+    if (m.frontImage) setTryOnImage(m.frontImage);
+    if (m.forWhom === "me" || m.forWhom === "other") {
+      setPatientFor(m.forWhom);
+      setPatientName(m.forWhom === "other" ? (m.otherName || "") : "");
+    }
+    setRxDirty(true);
+  };
+
   const [designId, setDesignId] = useState(null); // "sv" | "bifocal" | ... | "frame-only"
   const [matId, setMatId] = useState(null);
   const [photoId, setPhotoId] = useState(null);   // null = ninguno
@@ -697,8 +737,15 @@ export default function LensProcess() {
           source: fromOcr ? "ocr" : "manual",
           verified_by_user: true,
           file_url: fromOcr ? ocr.fileUrl : null,
+          // ¿Para quién son? (del probador): se guarda con la receta.
+          patient_for: patientFor,
+          patient_name: patientFor === "other" ? (patientName || null) : null,
         };
-        prescriptionId = await createPrescription(rxPayload);
+        prescriptionId = await createPrescription(rxPayload, {
+          // Imagen del probador (rostro con espejuelos), si el cliente la generó:
+          // el backend la sube a R2 y la guarda ligada a la orden (sin correo).
+          tryon_image: tryOnImage,
+        });
       }
       // Server prices the frame+lens; the client never sends a total.
       await addConfiguredFrame(color.variantId, {
@@ -894,6 +941,12 @@ export default function LensProcess() {
         <Link to={`/producto/${product.slug}`} className="back">← {t("lens.back")} {product.name}</Link>
       </div>
 
+      {/* Probador (se muestra en portal a pantalla completa; cierra sin salir de la receta). */}
+      {TRY_ON_ENABLED && tryOnOpen && (
+        <TryOn product={product} colorIdx={colorIdx} onClose={() => setTryOnOpen(false)}
+               onAddPrescription={applyTryOnMeasurement} />
+      )}
+
       <div className="zlx-stage">
         {/* ── floating frame with action buttons ON the image (req 1, 2) ── */}
         {/* IZQUIERDA: el espejuelo grande, protagonista */}
@@ -932,6 +985,21 @@ export default function LensProcess() {
                   </button>
                 ))}
               </div>
+            )}
+            {/* Acción secundaria: probar con cámara. Va como PIE de la ficha del
+                espejuelo (no tapa el producto). Misma gramática visual que la tarjeta
+                "Añadir receta" pero en estilo secundario, para una jerarquía clara. */}
+            {TRY_ON_ENABLED && (
+              <button type="button" className="zlx-tryon-card" onClick={() => setTryOnOpen(true)}>
+                <span className="zlx-tryon-ic" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                </span>
+                <span className="zlx-tryon-tx">
+                  <b>{t("tryon.cta")}</b>
+                  <small>{t("lens.tryon.sub")}</small>
+                </span>
+                <svg className="zlx-tryon-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
             )}
           </div>
         </div>

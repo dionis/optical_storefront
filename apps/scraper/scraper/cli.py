@@ -8,6 +8,7 @@ import click
 from dotenv import load_dotenv
 
 from scraper.config import ConfigError, get_config
+from scraper.media.cli import media_group
 from scraper.sync import sync
 
 # Resolved from this file, not the working directory, so `python -m scraper` picks
@@ -53,3 +54,9 @@ def sync_cmd(full: bool, collection_slug: str | None, dry_run: bool) -> None:
 
 # Register 'sync' as the public command name
 cli.add_command(sync_cmd, name="sync")
+
+# `media` is the generated-media executor: 4 views, promo video, 3D work orders.
+# It lives here rather than in its own app so it reuses what the scraper already
+# solved — the WebP/R2 image pipeline, the Medusa admin client and its HTTP Basic
+# quirk, and this file's .env loading and UTF-8 stream fix.
+cli.add_command(media_group, name="media")

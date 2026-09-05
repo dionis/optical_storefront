@@ -1,4 +1,34 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component } from "react";
+
+// Red de seguridad: si el probador lanza un error en tiempo de ejecución, en vez de
+// tumbar toda la app (o devolver al usuario a la página sin avisar), lo atrapamos y
+// mostramos un aviso con un botón para cerrar/volver. Se reinicia al reabrir el probador.
+class TryOnBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { try { console.error("[TryOn] crash:", err, info); } catch { /* noop */ } }
+  render() {
+    if (this.state.err) {
+      return (
+        <div role="dialog" aria-modal="true" style={{
+          position: "fixed", inset: 0, zIndex: 5000, background: "#fff", color: "#17191f",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 14, padding: 24, textAlign: "center",
+        }}>
+          <div style={{ fontSize: 40 }} aria-hidden="true">😕</div>
+          <p style={{ maxWidth: 420, margin: 0, fontWeight: 600 }}>
+            {this.props.message || "El probador tuvo un problema. Vuelve a intentarlo."}
+          </p>
+          <button onClick={this.props.onClose} style={{
+            background: "linear-gradient(180deg,#2f74ff,#0E5AD0)", color: "#fff", border: 0,
+            borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer",
+          }}>{this.props.closeLabel || "Cerrar"}</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Switch de interfaz del probador (try-on) ────────────────────────────────
 //
@@ -30,7 +60,9 @@ const UIS = {
 };
 
 // Cambia esta línea (o pon VITE_TRYON_UI) el día que la nueva quede validada.
-const DEFAULT_UI = "legacy";
+// prod = TryOnStudio (cliente): captura guiada + medición + montaje con IA. Ya no se
+// carga el iframe 3D pesado (legacy) que ralentizaba la apertura del probador.
+const DEFAULT_UI = "prod";
 
 function resolveKey() {
   // 1) Override por URL (útil para probar en el sitio ya desplegado).
@@ -54,8 +86,10 @@ function resolveKey() {
 export default function TryOnSwitch(props) {
   const Ui = UIS[resolveKey()] || UIS[DEFAULT_UI];
   return (
-    <Suspense fallback={null}>
-      <Ui {...props} />
-    </Suspense>
+    <TryOnBoundary onClose={props.onClose}>
+      <Suspense fallback={null}>
+        <Ui {...props} />
+      </Suspense>
+    </TryOnBoundary>
   );
 }

@@ -54,28 +54,31 @@ export default function ProductCard({ product }) {
   return (
     <div className="card">
       <div className="card-media">
-        <button
-          className={`heart ${fav ? "on" : ""}`}
-          onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: color.variantId })}
-          aria-label={t("a11y.fav")}
-        >
-          {fav ? "♥" : "♡"}
-        </button>
+        {/* Acciones como iconos compactos en la esquina superior derecha, para
+            dejar la FOTO del espejuelo lo más limpia y grande posible. */}
+        <div className="card-actions">
+          <button
+            className={`card-ic card-ic-fav ${fav ? "on" : ""}`}
+            onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: color.variantId })}
+            aria-label={t("a11y.fav")} title={t("a11y.fav")}
+          >
+            {fav ? "♥" : "♡"}
+          </button>
+          <button type="button" className="card-ic card-ic-buy" onClick={buyNow}
+                  aria-label={t("card.buy")} title={t("card.buy")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+          </button>
+          {TRY_ON_ENABLED && (
+            <button type="button" className="card-ic card-ic-ar" onClick={() => openTryOn(product)}
+                    aria-label={t("card.ar")} title={t("card.ar")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+            </button>
+          )}
+        </div>
         <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
-
-        {/* Icono "Comprar" que aparece al hover: lleva al flujo completo. */}
-        <button type="button" className="buy-pill" onClick={buyNow} aria-label={t("card.buy")}>
-          <span aria-hidden>🛒</span> {t("card.buy")}
-        </button>
-
-        {TRY_ON_ENABLED && (
-          <button type="button" className="ar-pill" onClick={() => openTryOn(product)}>
-            <span aria-hidden>◈</span> {t("card.ar")}
-          </button>
-        )}
       </div>
       {TRY_ON_ENABLED && tryOn && (
         <TryOn product={product} colorIdx={active} onClose={closeTryOn} />

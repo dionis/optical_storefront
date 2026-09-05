@@ -118,6 +118,19 @@ export async function setOrderStage(id, stage, { trackingNumber = "", noNotifica
 }
 
 /**
+ * Un registro de receta con enlaces firmados de sus imágenes, para el panel.
+ *
+ * `/admin/prescriptions/:id` sirve la receta + `file_download_url` (foto subida) y
+ * `tryon_download_url` (render del probador), ambos presigned de corta duración.
+ * El dueño abre las imágenes desde aquí; los valores viajan solo dentro del panel
+ * autenticado.
+ */
+export async function fetchPrescription(id) {
+  if (!id) return null;
+  return adminFetch(`/admin/prescriptions/${encodeURIComponent(id)}`);
+}
+
+/**
  * Money, formatted for the language the owner picked.
  *
  * The locale is a parameter rather than a constant because number and currency

@@ -8,5 +8,19 @@
 infra
 docs
 .playwright-mcp
-apps/scraper
+# apps/scraper is NOT excluded wholesale any more: apps/backend/Dockerfile ships
+# `python -m scraper media` into the image as an on-demand tool. Excluding the
+# directory made the build fail on its COPY — and only at deploy time, since CI
+# never builds this image.
+#
+# The parts that must stay out are the ones that are big, machine-local or
+# irrelevant to the CLI. .venv alone is 524 MB.
+apps/scraper/.venv
+apps/scraper/tests
+apps/scraper/scripts
+apps/scraper/conftest.py
+# Local incremental-sync state. Baking one machine's cache into the image would
+# make the container think products it has never seen are already up to date.
+apps/scraper/state.db
+**/__pycache__
 apps/capri-storefront

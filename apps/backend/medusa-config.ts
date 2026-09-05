@@ -247,5 +247,8 @@ export default defineConfig({
     {
       resolve: "./src/modules/product-review",
     },
+    {
+      resolve: "./src/modules/frame-media",
+    },
   ],
 });

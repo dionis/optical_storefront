@@ -1,0 +1,1737 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-05T19:28:59.504Z",
+  "generated_by": "scripts/build-pilot-set.mjs",
+  "source_catalog": "apps/capri-storefront/public/catalog.json",
+  "purpose": "Fixed pilot cohort for the frame-media generation pipeline. Deliberately over-samples transparent, rimless, thin-metal and multi-tone frames — the cases where identity preservation fails — with ordinary frames kept as a control.",
+  "totals": {
+    "frames": 70,
+    "colorways": 152,
+    "views": 608,
+    "by_brand": {
+      "Di Caprio": {
+        "frames": 50,
+        "colorways": 122
+      },
+      "Simplylite": {
+        "frames": 20,
+        "colorways": 30
+      }
+    }
+  },
+  "tag_counts": {
+    "rimless": 9,
+    "thin-metal": 46,
+    "metallic": 42,
+    "multitone": 9,
+    "unusual-shape": 12,
+    "pale": 17,
+    "transparent": 15,
+    "rimless-3piece": 10
+  },
+  "frames": [
+    {
+      "sku": "DC 50",
+      "handle": "dc-50-di-caprio",
+      "seed_slug": "dc50",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Brown",
+        "Grey"
+      ],
+      "colorway_count": 3,
+      "shape": "Rectángulo",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC 72",
+      "handle": "dc-72-di-caprio",
+      "seed_slug": "dc72",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Red"
+      ],
+      "colorway_count": 1,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Metal"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 7,
+      "tags": [
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Óvalo modificado"
+    },
+    {
+      "sku": "DC 86",
+      "handle": "dc-86-di-caprio",
+      "seed_slug": "dc86",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Brown",
+        "Gunmetal"
+      ],
+      "colorway_count": 3,
+      "shape": "Rectángulo",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Rectángulo"
+    },
+    {
+      "sku": "DC102",
+      "handle": "dc102-di-caprio",
+      "seed_slug": "dc102",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Brown",
+        "Pink"
+      ],
+      "colorway_count": 2,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC121",
+      "handle": "dc121-di-caprio",
+      "seed_slug": "dc121",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Brown"
+      ],
+      "colorway_count": 2,
+      "shape": "Rectángulo",
+      "material": [
+        "Metal",
+        "Plástica",
+        "TR-90"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 7,
+      "tags": [
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:rimless+thin-metal"
+    },
+    {
+      "sku": "DC140",
+      "handle": "dc140-di-caprio",
+      "seed_slug": "dc140",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Brown",
+        "Tortoise"
+      ],
+      "colorway_count": 2,
+      "shape": "Aviador",
+      "material": [
+        "Plástica",
+        "Acero inoxidable",
+        "TR-90"
+      ],
+      "style": "Combo",
+      "difficulty": 5,
+      "tags": [
+        "multitone",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:shape=Aviador"
+    },
+    {
+      "sku": "DC158",
+      "handle": "dc158-di-caprio",
+      "seed_slug": "dc158",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Gold",
+        "Gunmetal"
+      ],
+      "colorway_count": 2,
+      "shape": "Aviador",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "metallic",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:metallic+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "DC179",
+      "handle": "dc179-di-caprio",
+      "seed_slug": "dc179",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Gold Black",
+        "Gold Burgundy",
+        "Silver Blue"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:pale+thin-metal"
+    },
+    {
+      "sku": "DC184",
+      "handle": "dc184-di-caprio",
+      "seed_slug": "dc184",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Blue Silver",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC186",
+      "handle": "dc186-di-caprio",
+      "seed_slug": "dc186",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Crystal Blue",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Redondo",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Combo",
+      "difficulty": 6,
+      "tags": [
+        "metallic",
+        "transparent",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:shape=Redondo"
+    },
+    {
+      "sku": "DC189",
+      "handle": "dc189-di-caprio",
+      "seed_slug": "dc189",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Gold",
+        "Silver Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Navegador",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 6,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:shape=Navegador"
+    },
+    {
+      "sku": "DC193",
+      "handle": "dc193-di-caprio",
+      "seed_slug": "dc193",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Blue Silver",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Navegador",
+      "material": [
+        "Plástica",
+        "TR-90"
+      ],
+      "style": "Combo",
+      "difficulty": 6,
+      "tags": [
+        "metallic",
+        "transparent",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:material=Plástica"
+    },
+    {
+      "sku": "DC197",
+      "handle": "dc197-di-caprio",
+      "seed_slug": "dc197",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Rose Gold"
+      ],
+      "colorway_count": 1,
+      "shape": "Geométrico",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "metallic",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:metallic+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "DC198",
+      "handle": "dc198-di-caprio",
+      "seed_slug": "dc198",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Silver Blue"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:pale+thin-metal"
+    },
+    {
+      "sku": "DC205",
+      "handle": "dc205-di-caprio",
+      "seed_slug": "dc205",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Burgundy Gold",
+        "Tan Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Ojo de gato",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal"
+    },
+    {
+      "sku": "DC210",
+      "handle": "dc210-di-caprio",
+      "seed_slug": "dc210",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Green Red",
+        "Burgundy Blue Red White",
+        "Crystal Black Grey",
+        "Tortoise Blue Red"
+      ],
+      "colorway_count": 4,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "multitone",
+        "transparent"
+      ],
+      "selected_because": "difficulty:multitone+transparent"
+    },
+    {
+      "sku": "DC211",
+      "handle": "dc211-di-caprio",
+      "seed_slug": "dc211",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Tortoise Gunmetal"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "multitone",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Ronda modificada"
+    },
+    {
+      "sku": "DC215",
+      "handle": "dc215-di-caprio",
+      "seed_slug": "dc215",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Champagne Gold",
+        "Crystal Gold"
+      ],
+      "colorway_count": 2,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Combo",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC216",
+      "handle": "dc216-di-caprio",
+      "seed_slug": "dc216",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Gunmetal Black"
+      ],
+      "colorway_count": 2,
+      "shape": "Geométrico",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "metallic",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:metallic+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "DC218",
+      "handle": "dc218-di-caprio",
+      "seed_slug": "dc218",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Silver Gold"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal"
+    },
+    {
+      "sku": "DC219",
+      "handle": "dc219-di-caprio",
+      "seed_slug": "dc219",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Green Red"
+      ],
+      "colorway_count": 1,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 1,
+      "tags": [
+        "multitone"
+      ],
+      "selected_because": "control:ordinary(d=1)"
+    },
+    {
+      "sku": "DC226",
+      "handle": "dc226-di-caprio",
+      "seed_slug": "dc226",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Black Gunmetal",
+        "Tortoise Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Metal"
+      ],
+      "style": "Combo",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "multitone",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+multitone+thin-metal"
+    },
+    {
+      "sku": "DC232",
+      "handle": "dc232-di-caprio",
+      "seed_slug": "dc232",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Brown Gold",
+        "Gunmetal Silver"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal"
+    },
+    {
+      "sku": "DC243",
+      "handle": "dc243-di-caprio",
+      "seed_slug": "dc243",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Antique Tortoise",
+        "Gold Tortoise",
+        "Silver Black"
+      ],
+      "colorway_count": 3,
+      "shape": null,
+      "material": [
+        "Metal"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "multitone",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:multitone+thin-metal"
+    },
+    {
+      "sku": "DC247",
+      "handle": "dc247-di-caprio",
+      "seed_slug": "dc247",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Crystal Gold",
+        "Grey"
+      ],
+      "colorway_count": 3,
+      "shape": null,
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC250",
+      "handle": "dc250-di-caprio",
+      "seed_slug": "dc250",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Blue Silver",
+        "Gold Tortoise"
+      ],
+      "colorway_count": 3,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Combo",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "multitone",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+multitone+thin-metal"
+    },
+    {
+      "sku": "DC329",
+      "handle": "dc329-di-caprio",
+      "seed_slug": "dc329",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Blue Black",
+        "Brown",
+        "Burgundy Black"
+      ],
+      "colorway_count": 3,
+      "shape": "Ojo de gato",
+      "material": [
+        "Metal"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 7,
+      "tags": [
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Ojo de gato"
+    },
+    {
+      "sku": "DC336",
+      "handle": "dc336-di-caprio",
+      "seed_slug": "dc336",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold"
+      ],
+      "colorway_count": 1,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 1,
+      "tags": [
+        "metallic"
+      ],
+      "selected_because": "control:ordinary(d=1)"
+    },
+    {
+      "sku": "DC345",
+      "handle": "dc345-di-caprio",
+      "seed_slug": "dc345",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Navy Gold",
+        "Tortoise Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal"
+      ],
+      "style": "Combo",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "multitone",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+multitone+thin-metal"
+    },
+    {
+      "sku": "DC350",
+      "handle": "dc350-di-caprio",
+      "seed_slug": "dc350",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Brown",
+        "Grey"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Combo",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC352",
+      "handle": "dc352-di-caprio",
+      "seed_slug": "dc352",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Champagne Gold",
+        "Clear Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC353",
+      "handle": "dc353-di-caprio",
+      "seed_slug": "dc353",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Gold Black",
+        "Gunmetal Blue",
+        "Silver Black"
+      ],
+      "colorway_count": 3,
+      "shape": "Navegador",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "pale",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:pale+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "DC361",
+      "handle": "dc361-di-caprio",
+      "seed_slug": "dc361",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Burgundy"
+      ],
+      "colorway_count": 2,
+      "shape": "Ojo de gato",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC362",
+      "handle": "dc362-di-caprio",
+      "seed_slug": "dc362",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Crystal Gold"
+      ],
+      "colorway_count": 2,
+      "shape": "Rectángulo",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC363",
+      "handle": "dc363-di-caprio",
+      "seed_slug": "dc363",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Red",
+        "Blonde Gunmetal",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC367",
+      "handle": "dc367-di-caprio",
+      "seed_slug": "dc367",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Burgundy"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC369",
+      "handle": "dc369-di-caprio",
+      "seed_slug": "dc369",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Burgundy",
+        "Tan"
+      ],
+      "colorway_count": 3,
+      "shape": "Geométrico",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "pale",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:shape=Geométrico"
+    },
+    {
+      "sku": "DC371",
+      "handle": "dc371-di-caprio",
+      "seed_slug": "dc371",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Champagne Gold",
+        "Clear Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC372",
+      "handle": "dc372-di-caprio",
+      "seed_slug": "dc372",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Red",
+        "Blue Red",
+        "Crystal Red Green"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Metal"
+      ],
+      "style": "Combo",
+      "difficulty": 7,
+      "tags": [
+        "multitone",
+        "thin-metal",
+        "transparent"
+      ],
+      "selected_because": "coverage:shape=Cuadrado"
+    },
+    {
+      "sku": "DC374",
+      "handle": "dc374-di-caprio",
+      "seed_slug": "dc374",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Burgundy",
+        "Gold Crystal",
+        "Gunmetal Black"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC375",
+      "handle": "dc375-di-caprio",
+      "seed_slug": "dc375",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Blue Gunmetal",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica",
+        "TR-90"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC376",
+      "handle": "dc376-di-caprio",
+      "seed_slug": "dc376",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Beige Gold",
+        "Burgundy Gold"
+      ],
+      "colorway_count": 2,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal"
+    },
+    {
+      "sku": "DC379",
+      "handle": "dc379-di-caprio",
+      "seed_slug": "dc379",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Burgundy"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC388",
+      "handle": "dc388-di-caprio",
+      "seed_slug": "dc388",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Blue",
+        "Grey"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 0,
+      "tags": [],
+      "selected_because": "control:ordinary(d=0)"
+    },
+    {
+      "sku": "DC390",
+      "handle": "dc390-di-caprio",
+      "seed_slug": "dc390",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Crystal Gold",
+        "Matt Black Gold",
+        "Shiny Black Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Inyección",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC393",
+      "handle": "dc393-di-caprio",
+      "seed_slug": "dc393",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Beige Gold",
+        "Black Gold",
+        "Burgundy Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal"
+    },
+    {
+      "sku": "DC400 CLIP",
+      "handle": "dc400-clip-di-caprio",
+      "seed_slug": "dc400clip",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Gold",
+        "Blue",
+        "Grey"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica",
+        "UItem"
+      ],
+      "style": "Combo",
+      "difficulty": 1,
+      "tags": [
+        "metallic"
+      ],
+      "selected_because": "control:ordinary(d=1)"
+    },
+    {
+      "sku": "DC404",
+      "handle": "dc404-di-caprio",
+      "seed_slug": "dc404",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black",
+        "Blue Silver",
+        "Crystal Gold"
+      ],
+      "colorway_count": 3,
+      "shape": "Cuadrado",
+      "material": [
+        "Acetato",
+        "Plástica"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "metallic",
+        "transparent"
+      ],
+      "selected_because": "difficulty:metallic+transparent"
+    },
+    {
+      "sku": "DC502",
+      "handle": "dc502-di-caprio",
+      "seed_slug": "dc502",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Gold",
+        "Silver"
+      ],
+      "colorway_count": 2,
+      "shape": "Navegador",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 5,
+      "tags": [
+        "pale",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:pale+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "DC509",
+      "handle": "dc509-di-caprio",
+      "seed_slug": "dc509",
+      "brand": "Di Caprio",
+      "brand_slug": "di-caprio",
+      "colorways": [
+        "Black Silver",
+        "Silver Gold"
+      ],
+      "colorway_count": 2,
+      "shape": "Navegador",
+      "material": [
+        "Metal",
+        "Acero inoxidable"
+      ],
+      "style": "Full frame",
+      "difficulty": 6,
+      "tags": [
+        "metallic",
+        "pale",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "difficulty:metallic+pale+thin-metal+unusual-shape"
+    },
+    {
+      "sku": "SL103",
+      "handle": "sl103-simply-lite",
+      "seed_slug": "sl103",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Burgundy",
+        "Pink"
+      ],
+      "colorway_count": 2,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Full frame",
+      "difficulty": 2,
+      "tags": [
+        "thin-metal"
+      ],
+      "selected_because": "control:ordinary(d=2)"
+    },
+    {
+      "sku": "SL105",
+      "handle": "sl105-simply-lite",
+      "seed_slug": "sl105",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Blue",
+        "Silver"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 9,
+      "tags": [
+        "pale",
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:material=Metal"
+    },
+    {
+      "sku": "SL106",
+      "handle": "sl106-simply-lite",
+      "seed_slug": "sl106",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Brown"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 7,
+      "tags": [
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:rimless+thin-metal"
+    },
+    {
+      "sku": "SL107",
+      "handle": "sl107-simply-lite",
+      "seed_slug": "sl107",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gunmetal",
+        "Silver"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 9,
+      "tags": [
+        "pale",
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:pale+rimless+thin-metal"
+    },
+    {
+      "sku": "SL108",
+      "handle": "sl108-simply-lite",
+      "seed_slug": "sl108",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gunmetal",
+        "Silver"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Full frame",
+      "difficulty": 4,
+      "tags": [
+        "pale",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:style=Full frame"
+    },
+    {
+      "sku": "SL110",
+      "handle": "sl110-simply-lite",
+      "seed_slug": "sl110",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Navy"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Full frame",
+      "difficulty": 2,
+      "tags": [
+        "thin-metal"
+      ],
+      "selected_because": "control:ordinary(d=2)"
+    },
+    {
+      "sku": "SL113",
+      "handle": "sl113-simply-lite",
+      "seed_slug": "sl113",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Gunmetal"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Full frame",
+      "difficulty": 3,
+      "tags": [
+        "metallic",
+        "thin-metal"
+      ],
+      "selected_because": "control:ordinary(d=3)"
+    },
+    {
+      "sku": "SL114",
+      "handle": "sl114-simply-lite",
+      "seed_slug": "sl114",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Gunmetal"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Full frame",
+      "difficulty": 3,
+      "tags": [
+        "metallic",
+        "thin-metal"
+      ],
+      "selected_because": "control:ordinary(d=3)"
+    },
+    {
+      "sku": "SL115",
+      "handle": "sl115-simply-lite",
+      "seed_slug": "sl115",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Rose Gold"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:gender=Señoras"
+    },
+    {
+      "sku": "SL116",
+      "handle": "sl116-simply-lite",
+      "seed_slug": "sl116",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Black",
+        "Gold"
+      ],
+      "colorway_count": 2,
+      "shape": null,
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "Semi Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless+thin-metal"
+    },
+    {
+      "sku": "SL701",
+      "handle": "sl701-simply-lite",
+      "seed_slug": "sl701",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Silver"
+      ],
+      "colorway_count": 1,
+      "shape": "Rectángulo",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 9,
+      "tags": [
+        "pale",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Rectángulo"
+    },
+    {
+      "sku": "SL702",
+      "handle": "sl702-simply-lite",
+      "seed_slug": "sl702",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gold"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Ronda modificada"
+    },
+    {
+      "sku": "SL705",
+      "handle": "sl705-simply-lite",
+      "seed_slug": "sl705",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gunmetal"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless-3piece+thin-metal"
+    },
+    {
+      "sku": "SL901",
+      "handle": "sl901-simply-lite",
+      "seed_slug": "sl901",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gold"
+      ],
+      "colorway_count": 1,
+      "shape": "Geométrico",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 9,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal",
+        "unusual-shape"
+      ],
+      "selected_because": "coverage:shape=Geométrico"
+    },
+    {
+      "sku": "SL902",
+      "handle": "sl902-simply-lite",
+      "seed_slug": "sl902",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Silver Blue"
+      ],
+      "colorway_count": 1,
+      "shape": "Óvalo modificado",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 9,
+      "tags": [
+        "pale",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Óvalo modificado"
+    },
+    {
+      "sku": "SL903",
+      "handle": "sl903-simply-lite",
+      "seed_slug": "sl903",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gunmetal"
+      ],
+      "colorway_count": 1,
+      "shape": "Cuadrado",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "coverage:shape=Cuadrado"
+    },
+    {
+      "sku": "SL904",
+      "handle": "sl904-simply-lite",
+      "seed_slug": "sl904",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gold Brown"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless-3piece+thin-metal"
+    },
+    {
+      "sku": "SL905",
+      "handle": "sl905-simply-lite",
+      "seed_slug": "sl905",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gunmetal Black"
+      ],
+      "colorway_count": 1,
+      "shape": "Rectángulo",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless-3piece+thin-metal"
+    },
+    {
+      "sku": "SL906",
+      "handle": "sl906-simply-lite",
+      "seed_slug": "sl906",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gold Black"
+      ],
+      "colorway_count": 1,
+      "shape": "Ronda modificada",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless-3piece+thin-metal"
+    },
+    {
+      "sku": "SL907",
+      "handle": "sl907-simply-lite",
+      "seed_slug": "sl907",
+      "brand": "Simplylite",
+      "brand_slug": "simply-lite",
+      "colorways": [
+        "Gold Gunmetal"
+      ],
+      "colorway_count": 1,
+      "shape": "Rectángulo",
+      "material": [
+        "Metal",
+        "Titanio"
+      ],
+      "style": "3-Piece Rimless",
+      "difficulty": 8,
+      "tags": [
+        "metallic",
+        "rimless-3piece",
+        "thin-metal"
+      ],
+      "selected_because": "difficulty:metallic+rimless-3piece+thin-metal"
+    }
+  ]
+}
