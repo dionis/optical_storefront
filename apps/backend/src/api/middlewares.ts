@@ -192,6 +192,14 @@ export default defineMiddlewares({
       middlewares: [visionNotifyRateLimit],
     },
     {
+      // The prescription write can carry the AI try-on render as a base64 `data:`
+      // URL (JSON, not multipart), which runs past Medusa's default JSON body
+      // limit. Exact path — the /ocr and /validate subroutes are separate entries.
+      matcher: "/store/prescriptions",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "8mb" },
+    },
+    {
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering

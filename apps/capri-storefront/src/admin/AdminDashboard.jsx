@@ -8,7 +8,7 @@ import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, p
 import {
   STAGES, STAGE_BY_KEY, TERMINALS, TERMINAL_BY_KEY,
   fetchOrders, setOrderStage, orderLabel, stageErrorText,
-  money as fmtMoney, shortDate,
+  money as fmtMoney, shortDate, fetchPrescription,
 } from "./adminOrders.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
@@ -669,6 +669,70 @@ function StageControl({ order, busy, onMove }) {
   );
 }
 
+// Visor bajo demanda de la receta de una línea: valores clave (para quién, DIP,
+// altura) + imágenes (prueba virtual y receta subida) desde /admin/prescriptions/:id.
+// Se carga solo al pulsar, para no pedir un enlace firmado por cada pedido listado.
+function RxImages({ prescriptionId }) {
+  const { t } = useLang();
+  const [state, setState] = useState("idle"); // idle | loading | done | error
+  const [data, setData] = useState(null);
+  const load = async () => {
+    if (state === "loading") return;
+    setState("loading");
+    try {
+      const res = await fetchPrescription(prescriptionId);
+      setData(res);
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  };
+  if (state === "idle") {
+    return <button type="button" className="ord-rxbtn" onClick={load}>{t("adm.ord.viewRx")}</button>;
+  }
+  if (state === "loading") {
+    return <p className="ord-rxnote muted">{t("adm.ord.rxLoading")}</p>;
+  }
+  if (state === "error") {
+    return <button type="button" className="ord-rxbtn" onClick={load}>{t("adm.ord.rxRetry")}</button>;
+  }
+  const rx = data?.prescription || {};
+  const tryon = data?.tryon_download_url;
+  const file = data?.file_download_url;
+  const mm = (v) => (v == null ? "—" : `${v} mm`);
+  const patient =
+    rx.patient_for === "other" ? (rx.patient_name || t("adm.ord.rxOther"))
+      : rx.patient_for === "me" ? t("adm.ord.rxMe") : null;
+  const pdText = rx.pd != null ? mm(rx.pd) : `OD ${mm(rx.pd_od)} · OS ${mm(rx.pd_os)}`;
+  return (
+    <div className="ord-rxview">
+      <div className="ord-rxvals">
+        {patient && <span><b>{t("adm.ord.rxFor")}:</b> {patient}</span>}
+        <span><b>{t("lens.pd")}:</b> {pdText}</span>
+        {rx.seg_height != null && <span><b>{t("adm.ord.rxHeight")}:</b> {mm(rx.seg_height)}</span>}
+      </div>
+      {(tryon || file) ? (
+        <div className="ord-rximgs">
+          {tryon && (
+            <a href={tryon} target="_blank" rel="noopener noreferrer">
+              <img src={tryon} alt={t("adm.ord.rxTryon")} loading="lazy" />
+              <span>{t("adm.ord.rxTryon")}</span>
+            </a>
+          )}
+          {file && (
+            <a href={file} target="_blank" rel="noopener noreferrer">
+              <img src={file} alt={t("adm.ord.rxPhotoImg")} loading="lazy" />
+              <span>{t("adm.ord.rxPhotoImg")}</span>
+            </a>
+          )}
+        </div>
+      ) : (
+        <p className="ord-rxnote muted">{t("adm.ord.rxNoImages")}</p>
+      )}
+    </div>
+  );
+}
+
 function OrderDetail({ order }) {
   const { t, lang } = useLang();
   const addr = order.shipping_address;
@@ -678,13 +742,18 @@ function OrderDetail({ order }) {
         <b>{t("adm.ord.itemsTitle")}</b>
         <ul>
           {order.items.map((it) => (
-            <li key={it.id}>
-              <span>
-                {it.quantity > 1 && <em className="ord-qty">{it.quantity}× </em>}
-                {it.title}
-                {it.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>{t("adm.ord.rx")}</span>}
-              </span>
-              <b>{fmtMoney(it.total, order.currency_code, lang)}</b>
+            <li key={it.id} className="ord-li">
+              <div className="ord-li-row">
+                <span>
+                  {it.quantity > 1 && <em className="ord-qty">{it.quantity}× </em>}
+                  {it.title}
+                  {it.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>{t("adm.ord.rx")}</span>}
+                </span>
+                <b>{fmtMoney(it.total, order.currency_code, lang)}</b>
+              </div>
+              {it.has_prescription && it.prescription_id && (
+                <RxImages prescriptionId={it.prescription_id} />
+              )}
             </li>
           ))}
         </ul>
@@ -936,6 +1005,7 @@ function Orders() {
                     <td>
                       <b>{orderLabel(o)}</b>
                       {o.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>👓</span>}
+                      {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}>📷</span>}
                     </td>
                     <td>{shortDate(o.created_at, lang)}</td>
                     <td><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span></td>

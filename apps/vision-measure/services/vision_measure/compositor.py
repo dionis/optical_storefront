@@ -65,7 +65,10 @@ INPUT_FIDELITY_MODELS = ("gpt-image-1", "gpt-image-1.5")
 # A portrait, not a square: "auto" was free to come back 1024x1024 and crop the face.
 OPENAI_IMAGE_SIZE = "1024x1536"
 GEMINI_IMAGE_ASPECT = "2:3"
-GEMINI_IMAGE_SIZE = "2K"
+# 1K en vez de 2K: 1/4 de píxeles ⇒ el render tarda mucho menos. Para un montaje de
+# gafas que se ve en móvil/reporte es más que suficiente; las MEDIDAS ya no dependen de
+# esta imagen (se calculan aparte con MediaPipe), así que aquí prima la velocidad.
+GEMINI_IMAGE_SIZE = "1K"
 
 RENDER_TIMEOUT_S = 240
 

@@ -133,6 +133,9 @@ export default async function orderPlacedSubscriber({
           // Only whether a photo exists — the R2 key itself is never emailed:
           // that bucket is private and reachable through presigned URLs only.
           has_file: Boolean(rx.file_url),
+          // Idem para el render del probador: solo la señal (la imagen se ve en el
+          // panel, autenticado). El enlace firmado no viaja por correo.
+          has_tryon: Boolean((rx as { tryon_image_url?: string | null }).tryon_image_url),
           id: pid,
         };
       } catch (error) {

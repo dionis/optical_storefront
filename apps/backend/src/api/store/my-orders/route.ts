@@ -7,6 +7,7 @@ import { readSessionToken, verifyToken } from "../../../lib/order-access";
 import { cancelEligibility, deriveOrderProgress, stageIndex } from "../../../lib/order-status";
 import { loadProductMetadata, rawFrameSpecs, type RawFrameSpecs } from "../../../lib/frame-specs";
 import { loadPrescriptionRecords } from "../../../lib/prescription-read";
+import { presignPrescriptionUrl } from "../../../lib/s3";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
 
@@ -134,6 +135,18 @@ interface ProjectedRx {
   created_at: string | null;
   /** Whether a photo of the original is on file — never the key to it. */
   has_file: boolean;
+  /**
+   * Short-lived presigned link to the shopper's OWN uploaded Rx photo, and to the
+   * AI try-on render they saved. Unlike the R2 key, a presigned URL is safe to
+   * hand to the very shopper who owns it: this route is gated by a signed session
+   * token that proves control of the order's email. Null when absent or storage
+   * is not configured. Never logged, never persisted (see lib/s3.ts).
+   */
+  rx_image: string | null;
+  tryon_image: string | null;
+  /** Para quién son los espejuelos: "me" | "other" (+ nombre) — desde el probador. */
+  patient_for: string | null;
+  patient_name: string | null;
 }
 
 function projectItem(
@@ -244,6 +257,13 @@ async function loadPrescriptions(
 
     for (const [id, record] of records) {
       const rx = rxService.recordToRx(record);
+      // Presign the shopper's own images so the tracking page can show them. The
+      // session token already proved they own this order's email; the link is
+      // short-lived and never leaves this response.
+      const [rxImage, tryonImage] = await Promise.all([
+        presignPrescriptionUrl(rx.file_url),
+        presignPrescriptionUrl(rx.tryon_image_url ?? null),
+      ]);
       out.set(id, {
         od: { ...rx.od },
         os: { ...rx.os },
@@ -255,6 +275,10 @@ async function loadPrescriptions(
         verified_by_user: rx.verified_by_user,
         created_at: rx.created_at ?? null,
         has_file: Boolean(rx.file_url),
+        rx_image: rxImage,
+        tryon_image: tryonImage,
+        patient_for: rx.patient_for ?? null,
+        patient_name: rx.patient_name ?? null,
       });
     }
   } catch (error) {

@@ -2847,3 +2847,420 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .vmr-load-hero { flex-direction: row; text-align: left; }
   .vmr-load-copy { text-align: left; }
 }
+
+
+.zlx-float-inner { position: relative; }
+
+
+/* ── Selector "¿Para quién son?" en la barra de acción del probador ──
+   Permite medir para uno mismo o como referencia para un familiar/amigo (nombre
+   opcional). Se guarda junto con la medición. Responsive: en móvil ocupa una fila. */
+.tryon-studio .vm-actionbar { flex-wrap: wrap; }
+.vm-who { display: flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap; }
+.vm-who-q { font-size: 12.5px; font-weight: 700; color: #17191f; }
+.vm-who-opts { display: inline-flex; background: #eef1f6; border: 1px solid #e2e6ee;
+  border-radius: 999px; padding: 2px; }
+.vm-who-opt { border: 0; background: transparent; color: #4b5566; font-weight: 700;
+  font-size: 12.5px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  transition: background .15s ease, color .15s ease; }
+.vm-who-opt.on { background: #0E5AD0; color: #fff; }
+.vm-who-name { border: 1px solid #d7dce6; border-radius: 8px; padding: 7px 10px;
+  font-size: 13px; min-width: 150px; color: #17191f; background: #fff; }
+.vm-who-name:focus { outline: 2px solid rgba(14, 90, 208, .35); border-color: #0E5AD0; }
+@media (max-width: 620px) {
+  .vm-who { width: 100%; }
+  .vm-who-name { flex: 1 1 auto; min-width: 0; }
+}
+
+
+/* == Acción secundaria "Probar con cámara" (ficha del espejuelo, LensProcess) ==
+   Diseñada como pie de la tarjeta del marco: NO tapa el producto. Misma
+   gramática visual que la tarjeta primaria "Añadir receta" (chip de icono +
+   título + subtítulo + chevron) en estilo secundario azul suave, jerarquía
+   clara. Reemplaza al antiguo boton flotante .zlx-tryon-btn. Responsive +
+   bilingue (t("tryon.cta") / t("lens.tryon.sub")). */
+.zlx-tryon-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
+  text-align: left; cursor: pointer;
+  background: linear-gradient(180deg, #f5f9ff, #eaf2ff);
+  border: 1px solid #d7e6ff; border-radius: 16px; padding: 12px 14px;
+  color: #0E5AD0; box-shadow: 0 1px 0 rgba(14, 90, 208, .04);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+.zlx-tryon-card:hover {
+  transform: translateY(-1px); border-color: #b9d5ff;
+  background: linear-gradient(180deg, #eff6ff, #e2eeff);
+  box-shadow: 0 10px 24px -12px rgba(14, 90, 208, .45);
+}
+.zlx-tryon-card:active { transform: translateY(0); }
+.zlx-tryon-card:focus-visible { outline: 2px solid #2f74ff; outline-offset: 2px; }
+.zlx-tryon-ic {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px; color: #fff;
+  background: linear-gradient(180deg, #2f74ff, #0E5AD0);
+  box-shadow: 0 6px 14px -6px rgba(14, 90, 208, .6);
+}
+.zlx-tryon-tx { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.zlx-tryon-tx b { font-size: 14px; font-weight: 800; color: #123; }
+.zlx-tryon-tx small { font-size: 12px; color: #5b6b86; margin-top: 2px; }
+.zlx-tryon-chev { flex: 0 0 auto; margin-left: auto; color: #0E5AD0; opacity: .7; }
+.zlx-tryon-card:hover .zlx-tryon-chev { opacity: 1; transform: translateX(2px); transition: transform .15s ease; }
+@media (max-width: 560px) {
+  .zlx-tryon-card { margin-top: 12px; padding: 11px 12px; gap: 10px; }
+  .zlx-tryon-ic { width: 36px; height: 36px; border-radius: 11px; }
+}
+
+
+/* ═══ Estudio de try-on: mejoras de espera + responsive (agosto 2026) ═══════════
+   1) Estado "ocupado": el reporte/carga va encima; el fondo no debe recibir clics.
+   2) Carrusel COMERCIAL durante el cálculo: en vez de una espera muerta, mensajes
+      rotativos que retienen y venden (garantía, envío, AR, etc.).
+   3) Responsive: en cuanto están las dos fotos, la barra "Calcular medidas" queda
+      SIEMPRE visible (sticky abajo) para que el cliente no se pierda. */
+.tryon-busy .tryon-studio-grid,
+.tryon-busy .vm-actionbar { pointer-events: none; }
+
+.vm-loading { gap: 18px; }
+.vm-calcing { font-size: 16px; font-weight: 800; color: #17191f; margin: 0; }
+.vm-load-note { font-size: 12.5px; color: #6b7280; margin: 0; max-width: 360px; line-height: 1.5; }
+
+.vm-ads { width: 100%; max-width: 460px; display: flex; flex-direction: column;
+  align-items: center; gap: 12px; }
+.vm-ad {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: linear-gradient(180deg, #f5f9ff, #eaf2ff);
+  border: 1px solid #d7e6ff; border-radius: 14px; padding: 14px 16px;
+  color: #14233b; font-size: 14px; font-weight: 600; line-height: 1.4; text-align: left;
+  box-shadow: 0 12px 26px -16px rgba(14,90,208,.5);
+  animation: vmAdIn .5s ease;
+}
+.vm-ad-star { flex: 0 0 auto; color: #0E5AD0; font-size: 15px; }
+@keyframes vmAdIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.vm-ad-dots { display: inline-flex; gap: 6px; }
+.vm-ad-dots span { width: 6px; height: 6px; border-radius: 50%; background: #cfd8e6;
+  transition: background .2s ease, transform .2s ease; }
+.vm-ad-dots span.on { background: #0E5AD0; transform: scale(1.3); }
+
+@media (max-width: 820px) {
+  .tryon.tryon-studio { display: flex; flex-direction: column; }
+  .tryon-studio .tryon-studio-grid { flex: 1 1 auto; min-height: 0; }
+  .tryon-studio .vm-actionbar {
+    position: sticky; bottom: 0; z-index: 6;
+    box-shadow: 0 -10px 26px -14px rgba(16,24,40,.5);
+  }
+  .tryon-studio .vm-actionbar .vm-who { width: 100%; margin-right: 0; order: -1; }
+  .tryon-studio .vm-actionbar .vm-actionbar-ok { display: none; }
+  .tryon-studio .vm-actionbar .vm-go {
+    flex: 1 1 100%; width: 100%; padding: 15px 20px; font-size: 15.5px; border-radius: 14px;
+  }
+}
+
+
+/* ═══ Resultado DENTRO de la misma ventana del estudio (#5) + dimensiones (#26) ═══
+   Al terminar la generación, la columna de captura se reemplaza por las dos imágenes
+   con los espejuelos puestos + "Añadir receta" / "Medir de nuevo". Las dimensiones
+   calculadas quedan en la esquina inferior derecha. La carga/error se muestran como
+   capa translúcida sobre el estudio desenfocado (#4). */
+.tryon-result .tryon-studio-cap { flex-direction: column; overflow-y: auto; }
+.vm-result { display: flex; flex-direction: column; gap: 12px; width: 100%; min-height: 0; }
+.vm-result-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; }
+.vm-rfig { position: relative; margin: 0; border-radius: 14px; overflow: hidden;
+  background: #000; border: 1px solid #22314f; aspect-ratio: 3 / 4; }
+.vm-rfig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vm-rfig .vm-noimg { width: 100%; height: 100%; display: flex; align-items: center;
+  justify-content: center; font-size: 40px; opacity: .4; color: #7f93b5; }
+.vm-rlabel { position: absolute; top: 10px; left: 10px; background: #16294d; color: #fff;
+  font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 6px; }
+.vm-rbadge { position: absolute; left: 10px; right: 10px; bottom: 10px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  background: linear-gradient(180deg, rgba(15,30,60,.9), rgba(9,18,40,.95));
+  border: 1px solid rgba(120,150,200,.25); border-radius: 10px; padding: 8px 12px;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.vm-rbadge span { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: #aebfe0; text-transform: uppercase; }
+.vm-rbadge b { font-size: 20px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
+.vm-result-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vm-addrx { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(180deg, #2f74ff, #0E5AD0); color: #fff; border: 0; border-radius: 12px;
+  padding: 13px 18px; font-weight: 800; font-size: 15px; cursor: pointer;
+  box-shadow: 0 8px 20px -8px rgba(14,90,208,.6); }
+.vm-addrx:hover { filter: brightness(1.05); }
+.vm-remeasure { display: inline-flex; align-items: center; gap: 7px; background: #eef1f6; color: #17191f;
+  border: 1px solid #d8dce6; border-radius: 12px; padding: 12px 15px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.vm-remeasure:hover { background: #e4e8f0; }
+.vm-added { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(26,157,92,.14); color: #1a9d5c; border: 1px solid rgba(26,157,92,.5);
+  border-radius: 12px; padding: 13px 18px; font-weight: 800; font-size: 15px; }
+@media (max-width: 560px) { .vm-result-imgs { grid-template-columns: 1fr; } }
+
+/* Dimensiones calculadas — esquina inferior derecha del estudio */
+.vm-dims { position: absolute; right: 16px; bottom: 16px; z-index: 7;
+  width: min(280px, calc(100% - 32px)); background: rgba(255,255,255,.97);
+  border: 1px solid #e2e6ee; border-radius: 14px; padding: 10px 12px;
+  box-shadow: 0 14px 34px -16px rgba(16,24,40,.45);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.vm-dims-h { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; color: #0E5AD0; margin-bottom: 6px; }
+.vm-dims-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 4px 0; border-top: 1px solid #eef1f6; }
+.vm-dims-row:first-of-type { border-top: 0; }
+.vm-dims-k { font-size: 11.5px; color: #5b6472; font-weight: 600; }
+.vm-dims-v { font-size: 14px; font-weight: 800; color: #17191f; font-variant-numeric: tabular-nums; text-align: right; }
+.vm-dims-v em { display: block; font-style: normal; font-size: 10.5px; color: #6b7280; font-weight: 600; margin-top: 1px; }
+@media (max-width: 560px) { .vm-dims { display: none; } }
+
+/* Carga/Error: capa translúcida sobre el estudio (desenfocado detrás) — misma ventana */
+.vm-overlay { background: rgba(244,246,250,.78);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05); backdrop-filter: blur(12px) saturate(1.05); }
+.vm-overlay .vm-body { background: transparent; }
+.tryon-busy .tryon-studio-grid { filter: blur(2px); transition: filter .25s ease; }
+
+
+/* ═══ Receta en RESPONSIVE: la foto de la armadura manda; los pasos como iconos ═══
+   Antes en móvil los botones de paso (cards grandes con título + subtítulo) robaban
+   protagonismo y la foto salía pequeña. Ahora: foto más alta y llamativa, miniaturas
+   de color más grandes, y los pasos convertidos en una fila compacta de ICONOS
+   (icono + título corto, sin subtítulo — el detalle sigue en el resumen y el popover). */
+@media (max-width: 939px) {
+  .zlx-float { padding: 16px; }
+  /* Foto de la montura protagonista */
+  .zlx-float-img { max-height: 56vh; min-height: 300px; }
+  /* Miniaturas de color más llamativas */
+  .zlx-float-color { width: 92px; height: 70px; }
+
+  /* Pasos: fila de iconos compactos en vez de cards grandes */
+  .zlx-fabs { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .zlx-fab { position: relative; flex: 1 1 0; min-width: 96px;
+    flex-direction: column; align-items: center; text-align: center;
+    gap: 6px; padding: 11px 8px; }
+  .zlx-fab .zlx-ic { width: 27px; height: 27px; }
+  .zlx-fab-txt { flex: 0 0 auto; align-items: center; width: 100%; }
+  .zlx-fab-txt b { font-size: 12.5px; line-height: 1.15; }
+  .zlx-fab-txt small { display: none; }
+  .zlx-fab .zlx-fab-ok { position: absolute; top: 6px; right: 6px; margin: 0; }
+
+  /* Probar con cámara: compacto (icono + título), sin robar altura */
+  .zlx-tryon-card { margin-top: 12px; padding: 10px 12px; }
+  .zlx-tryon-tx small { display: none; }
+  .zlx-tryon-chev { display: none; }
+}
+@media (max-width: 380px) {
+  /* En pantallas muy estrechas, dos iconos por fila para que no se aprieten */
+  .zlx-fab { flex: 1 1 42%; }
+}
+
+
+/* ═══ Mis pedidos: imágenes guardadas (prueba virtual + receta subida) ═══════════
+   Miniaturas dentro del bloque de receta; abren el enlace firmado en otra pestaña. */
+.mo-rx-imgs { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0 4px; }
+.mo-rx-img { display: inline-flex; flex-direction: column; align-items: center; gap: 6px;
+  text-decoration: none; color: inherit; }
+.mo-rx-img img { width: 92px; height: 118px; object-fit: cover; border-radius: 10px;
+  border: 1px solid #e2e6ee; background: #f4f6fa; box-shadow: 0 6px 16px -10px rgba(16,24,40,.4);
+  transition: transform .15s ease, box-shadow .15s ease; }
+.mo-rx-img:hover img { transform: translateY(-2px); box-shadow: 0 12px 24px -12px rgba(16,24,40,.5); }
+.mo-rx-img span { font-size: 11.5px; font-weight: 700; color: #5b6472; }
+
+
+/* ═══ Confianza de la medición (banda en el resultado del probador) ═══════════
+   Verde = alta, ámbar = media, rojo = baja (con botón para repetir la toma). */
+.vm-conf { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid transparent; }
+.vm-conf-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.vm-conf-tx { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.vm-conf-tx b { font-size: 13px; font-weight: 800; }
+.vm-conf-tx small { font-size: 11.5px; opacity: .85; }
+.vm-conf-btn { margin-left: auto; flex: 0 0 auto; border: 0; border-radius: 9px;
+  padding: 8px 12px; font-weight: 800; font-size: 12.5px; cursor: pointer;
+  background: #b4231f; color: #fff; }
+.vm-conf-btn:hover { filter: brightness(1.06); }
+.vm-conf-high { background: rgba(26,157,92,.12); color: #157a49; border-color: rgba(26,157,92,.35); }
+.vm-conf-high .vm-conf-dot { background: #1a9d5c; }
+.vm-conf-medium { background: rgba(180,120,20,.12); color: #8a5b12; border-color: rgba(180,120,20,.35); }
+.vm-conf-medium .vm-conf-dot { background: #d19412; }
+.vm-conf-low { background: rgba(200,60,50,.12); color: #b4231f; border-color: rgba(200,60,50,.4); }
+.vm-conf-low .vm-conf-dot { background: #d2463c; }
+
+
+/* Botón "Compartir la prueba" (resultado del probador) — verde WhatsApp suave */
+.vm-share { display: inline-flex; align-items: center; gap: 7px; background: #e9f8ef; color: #128c4b;
+  border: 1px solid #bce7cd; border-radius: 12px; padding: 12px 15px; font-weight: 700; font-size: 13.5px;
+  cursor: pointer; transition: background .15s ease; }
+.vm-share:hover { background: #d9f2e3; }
+
+
+/* Aviso de encaje montura↔rostro (resultado del probador) — orientativo */
+.vm-fit { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 12px;
+  font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+.vm-fit-ic { flex: 0 0 auto; font-weight: 900; }
+.vm-fit-good { background: rgba(26,157,92,.12); color: #157a49; border-color: rgba(26,157,92,.35); }
+.vm-fit-wide, .vm-fit-narrow { background: rgba(180,120,20,.12); color: #8a5b12; border-color: rgba(180,120,20,.35); }
+
+
+/* ═══ Tarjeta de catálogo: acciones como ICONOS en la esquina, foto limpia ═══════
+   Antes "Comprar" y "Probador AR" salían como barras grandes que tapaban la foto.
+   Ahora van como iconos pequeños arriba a la derecha (junto al favorito), y la
+   foto del espejuelo queda lo más limpia y grande posible. */
+.card-actions { position: absolute; top: 10px; right: 10px; z-index: 3;
+  display: flex; flex-direction: column; gap: 8px; }
+.card-ic { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #eef1f6;
+  background: rgba(255,255,255,.96); box-shadow: 0 4px 12px -4px rgba(15,40,90,.28);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  color: #475569; padding: 0; font-size: 17px; line-height: 1;
+  transition: transform .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease; }
+.card-ic:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -6px rgba(15,40,90,.4); }
+.card-ic svg { width: 18px; height: 18px; }
+.card-ic-fav.on { color: var(--red); }
+.card-ic-buy { color: var(--red); }
+.card-ic-buy:hover { background: var(--red); color: #fff; }
+.card-ic-ar { color: var(--blue); }
+.card-ic-ar:hover { background: var(--blue); color: #fff; }
+/* Foto protagonista: menos padding, imagen más grande */
+.card-media { padding: 14px; }
+.card-media img { max-height: 232px; }
+@media (max-width: 640px) {
+  .card-ic { width: 34px; height: 34px; font-size: 16px; }
+  .card-ic svg { width: 17px; height: 17px; }
+  .card-media img { max-height: 210px; }
+}
+
+
+/* Resultado del probador en MÓVIL: mantener las DOS vistas lado a lado (frontal +
+   lateral) para que se vean ambas de un vistazo — antes se apilaban y, al hacer
+   scroll, solo se veía una. Se ven más pequeñas pero completas. */
+@media (max-width: 560px) {
+  .vm-result-imgs { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vm-rfig .vm-rbadge { padding: 6px 8px; }
+  .vm-rbadge b { font-size: 16px; }
+  .vm-rlabel { font-size: 9.5px; padding: 3px 7px; }
+}
+
+
+/* ═══ Ajuste a pantalla: el estudio NUNCA genera barra de desplazamiento (#img1) ═══
+   El estudio es una columna flex; la rejilla llena el alto disponible bajo la barra
+   y, en modo resultado (escritorio), las fotos se ajustan al alto sin overflow. */
+.tryon.tryon-studio { display: flex; flex-direction: column; }
+.tryon.tryon-studio .tryon-studio-grid { flex: 1 1 auto; min-height: 0; }
+@media (min-width: 821px) {
+  .tryon-result .tryon-studio-cap { overflow: hidden; }
+  .tryon-result .vm-result { height: 100%; min-height: 0; }
+  .tryon-result .vm-result-imgs { flex: 1 1 auto; min-height: 0; }
+  .tryon-result .vm-rfig { aspect-ratio: auto; height: 100%; min-height: 0; }
+  .tryon-result .vm-rfig img { height: 100%; object-fit: cover; }
+}
+
+/* ═══ "Medidas calculadas": mismo lenguaje visual que la ficha de la montura (#img2) ═══
+   Encabezado azul marino + iconos por medida — patrón .fs-card (azul + iconos). */
+.vm-dims { padding: 0; overflow: hidden; width: min(300px, calc(100% - 32px)); border-color: #dfe4ee; }
+.vm-dims-h { margin: 0; padding: 11px 14px; gap: 9px; font-size: 12px; color: #fff;
+  background: linear-gradient(180deg, #26456f, #182a4e); }
+.vm-dims-body { padding: 6px 14px 10px; }
+.vm-dims-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 11px; padding: 9px 0; border-top: 1px solid #eef1f6; }
+.vm-dims-ic { display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+  color: #182a4e; background: #eef2f8; border: 1px solid #e0e6f0; }
+.vm-dims-ic svg { width: 17px; height: 17px; }
+.vm-dims-k { font-size: 11.5px; color: #5b6472; font-weight: 600; line-height: 1.25; text-align: left; }
+.vm-dims-v { font-size: 15px; font-weight: 800; color: #182a4e; text-align: right; font-variant-numeric: tabular-nums; }
+.vm-dims-v em { display: block; font-style: normal; font-size: 10px; color: #7c8698; font-weight: 600; margin-top: 1px; }
+
+/* ═══ Resultado en MÓVIL: la CARA con protagonismo (#face) ═══
+   Antes iban las dos fotos en fila -> se veían diminutas y recortadas (solo los
+   ojos). Ahora va UNA por fila, a todo el ancho y con su alto natural, así se ve
+   el rostro completo sin recorte; se hace scroll para ver la segunda vista. */
+@media (max-width: 560px) {
+  .tryon-result .tryon-studio-cap { overflow-y: auto; }
+  .vm-result-imgs { grid-template-columns: 1fr; gap: 12px; }
+  .tryon-result .vm-rfig { aspect-ratio: auto; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: auto; object-fit: contain; display: block; }
+}
+
+/* ═══ Fotos del resultado: ampliar (lightbox) + descargar ═══ */
+.vm-rfig .vm-rimg { cursor: zoom-in; }
+.vm-rtools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 6px; }
+.vm-rtool { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9px; border: 1px solid rgba(255,255,255,.35); background: rgba(9,18,40,.55); color: #fff;
+  cursor: pointer; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); transition: background .15s ease; }
+.vm-rtool:hover { background: rgba(14,90,208,.9); }
+.vm-rtool svg { width: 18px; height: 18px; }
+
+/* Lightbox de la foto ampliada */
+.vm-zoom { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(6,12,24,.92); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  overscroll-behavior: contain; }
+.vm-zoom-bar { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; }
+.vm-zoom-dl { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 11px;
+  padding: 11px 16px; font-weight: 800; font-size: 14px; cursor: pointer; color: #fff;
+  background: linear-gradient(180deg, #2f74ff, #0E5AD0); box-shadow: 0 8px 20px -8px rgba(14,90,208,.6); }
+.vm-zoom-dl:hover { filter: brightness(1.05); }
+.vm-zoom-dl svg { width: 18px; height: 18px; }
+.vm-zoom-x { width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3);
+  background: rgba(255,255,255,.12); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+.vm-zoom-x:hover { background: rgba(255,255,255,.22); }
+.vm-zoom-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px;
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); }
+
+/* ═══ Evitar que el scroll del resultado arrastre la web de fondo (móvil) ═══
+   Con la cabeza del scroll dentro del estudio, el gesto no se propaga a la página
+   de detrás, así el cliente no se pierde al desplazarse tras generar la imagen. */
+.tryon.tryon-studio { overscroll-behavior: contain; }
+.tryon-studio-cap { overscroll-behavior: contain; }
+.tryon-result .tryon-studio-cap { overscroll-behavior: contain; }
+
+/* ═══ Fotos del resultado en MÓVIL: marco 4:3 + imagen completa (#face2) ═══
+   La cámara captura en apaisado; con height:auto la foto quedaba como una franja
+   fina detrás de las etiquetas. Con un marco 4:3 (la misma orientación) y contain,
+   la foto entra COMPLETA y ambas vistas se ven perfectamente. */
+@media (max-width: 560px) {
+  .tryon-result .vm-rfig { aspect-ratio: 4 / 3; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: 100%; object-fit: contain; display: block; }
+}
+
+/* ═══ Medidas calculadas visibles en MÓVIL (debajo de las fotos) ═══
+   En escritorio van en la tarjeta flotante de la esquina; en móvil esa tarjeta
+   se oculta, así que aquí mostramos las mismas medidas dentro del flujo para que
+   SIEMPRE se vean (DIP, altura de corredor, ancho de lente · puente, confianza). */
+.vm-dims-inflow { display: none; }
+@media (max-width: 560px) {
+  .vm-dims-inflow { display: block; margin-top: 2px; }
+  .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
+    box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
+}
+
+/* ═══ MÓVIL: el resultado se desplaza como pagina normal (fotos → medidas → ficha) ═══
+   Antes las fotos quedaban encerradas en una ventanita con scroll propio y las
+   medidas quedaban escondidas. Ahora todo el resultado baja en un solo scroll. */
+@media (max-width: 560px) {
+  .tryon-result.tryon-studio { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .tryon-result .tryon-studio-grid { grid-template-rows: auto auto; min-height: 0; }
+  .tryon-result .tryon-studio-cap { overflow: visible; min-height: 0; }
+}
+
+/* ═══ MÓVIL — RESULTADO DEFINITIVO (autoritativo, gana sobre los ajustes previos) ═══
+   Layout pedido: las DOS fotos una al lado de la otra (2 columnas), completas, y
+   el panel "Medidas calculadas" a lo ancho DEBAJO. Sin solapamientos: cada vista
+   es una celda del grid y el resto baja en el flujo. */
+@media (max-width: 560px) {
+  .tryon-result.tryon-studio { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .tryon-result .tryon-studio-grid { grid-template-columns: 1fr; grid-template-rows: auto auto; min-height: 0; }
+  .tryon-result .tryon-studio-cap { display: block; overflow: visible; min-height: 0; padding: 10px; }
+  .tryon-result .vm-result { display: flex; flex-direction: column; gap: 10px; height: auto; min-height: 0; }
+  .tryon-result .vm-result-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-height: 0; }
+  .tryon-result .vm-rfig { aspect-ratio: 3 / 4; height: auto; min-height: 0; }
+  .tryon-result .vm-rfig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vm-dims-inflow { display: block; margin-top: 2px; }
+  .vm-dims-inflow .vm-dims { position: static; display: block; width: auto;
+    box-shadow: 0 10px 26px -16px rgba(16,24,40,.4); }
+}
+
+/* ═══ Medidas calculadas SIEMPRE en el flujo (una sola vez, sin tarjeta flotante) ═══
+   Antes se renderizaba una tarjeta absoluta que en móvil se solapaba con la ficha
+   de la montura y tapaba el botón "Añadir receta". Ahora se muestran en el flujo,
+   debajo de las fotos, en escritorio y móvil — sin solapamientos. */
+.vm-dims-inflow { display: block; flex: 0 0 auto; margin-top: 4px; }
+.vm-dims-inflow .vm-dims {
+  position: static; display: block; width: auto;
+  box-shadow: 0 10px 26px -16px rgba(16, 24, 40, .4);
+}

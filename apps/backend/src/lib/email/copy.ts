@@ -87,6 +87,8 @@ interface EmailCopy {
   rx_captured_on: string;
   rx_photo: string;
   rx_photo_on_file: string;
+  rx_tryon: string;
+  rx_tryon_included: string;
   rx_record_id: string;
   rx_missing_customer: string;
   rx_missing_store: string;
@@ -240,6 +242,8 @@ const es: EmailCopy = {
   rx_captured_on: "Fecha de la receta",
   rx_photo: "Foto de la receta",
   rx_photo_on_file: "Guardada con el pedido",
+  rx_tryon: "Prueba virtual",
+  rx_tryon_included: "Incluida — verla en el panel del pedido",
   rx_record_id: "Nº de registro",
   rx_missing_customer:
     "No pudimos incluir los valores de tu receta en este correo. Están guardados con el pedido: puedes verlos en el seguimiento o responder a este mensaje y te los enviamos.",
@@ -410,6 +414,8 @@ const en: EmailCopy = {
   rx_captured_on: "Prescription date",
   rx_photo: "Prescription photo",
   rx_photo_on_file: "Stored with the order",
+  rx_tryon: "Virtual try-on",
+  rx_tryon_included: "Included — view it in the order panel",
   rx_record_id: "Record no.",
   rx_missing_customer:
     "We couldn't include your prescription values in this email. They are stored with your order: check the tracking page, or reply to this message and we'll send them over.",

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { loadLive, startAutoRevalidate } from "./data/catalogStore.js";
 import { trackAccess } from "./admin/analytics.js";
@@ -7,19 +7,28 @@ import { checkBuildVersion } from "./lib/buildVersion.js";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
+// Rutas primarias (primera pintura): se cargan de inmediato.
 import Home from "./pages/Home.jsx";
 import Catalog from "./pages/Catalog.jsx";
 import ProductDetail from "./pages/ProductDetail.jsx";
-import CaseDetail from "./pages/CaseDetail.jsx";
-import LensProcess from "./pages/LensProcess.jsx";
-import AdminPage from "./pages/AdminPage.jsx";
-import AccountPage from "./pages/AccountPage.jsx";
-import MyOrders from "./pages/MyOrders.jsx";
-import MedusaCheckout from "./pages/MedusaCheckout.jsx";
+// Rutas secundarias: se cargan BAJO DEMANDA (code-splitting) para no pesar en el
+// bundle inicial del catálogo. El admin (charts + dashboard) es el mayor ahorro.
+const CaseDetail = lazy(() => import("./pages/CaseDetail.jsx"));
+const LensProcess = lazy(() => import("./pages/LensProcess.jsx"));
+const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
+const AccountPage = lazy(() => import("./pages/AccountPage.jsx"));
+const MyOrders = lazy(() => import("./pages/MyOrders.jsx"));
+const MedusaCheckout = lazy(() => import("./pages/MedusaCheckout.jsx"));
 import { CartProvider } from "./components/CartContext.jsx";
 import { FeedbackProvider } from "./components/Feedback.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
 import { ReviewSummaryProvider } from "./components/ReviewSummaryContext.jsx";
+
+// Fallback mientras carga una ruta bajo demanda: reserva alto para evitar saltos
+// de layout (CLS) y es invisible; los chunks vienen del mismo origen y cargan rápido.
+const RouteFallback = () => (
+  <div style={{ minHeight: "50vh" }} aria-busy="true" aria-live="polite" />
+);
 
 export default function App() {
   const { pathname } = useLocation();
@@ -37,7 +46,9 @@ export default function App() {
         <FeedbackProvider>
           <CartProvider>
             <ScrollToTop />
-            <Routes><Route path="/admin" element={<AdminPage />} /></Routes>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes><Route path="/admin" element={<AdminPage />} /></Routes>
+            </Suspense>
           </CartProvider>
         </FeedbackProvider>
       </LanguageProvider>
@@ -52,6 +63,7 @@ export default function App() {
           <ScrollToTop />
           <Header />
           <main className="site-main">
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/catalogo" element={<Catalog />} />
@@ -64,6 +76,7 @@ export default function App() {
               <Route path="/cuenta" element={<AccountPage />} />
               <Route path="/my-orders" element={<MyOrders />} />
             </Routes>
+            </Suspense>
           </main>
           <Footer />
           </ReviewSummaryProvider>

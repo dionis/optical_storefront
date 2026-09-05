@@ -370,6 +370,8 @@ export interface PrescriptionForEmail {
   created_at?: string | Date | null;
   /** A photo/PDF of the prescription is on file (private bucket, never linked). */
   has_file?: boolean;
+  /** An AI try-on render (face with the frame) is on file — same private bucket. */
+  has_tryon?: boolean;
   /** Record id. Printed in the STORE copy only, so the owner can open it. */
   id?: string | null;
 }
@@ -405,6 +407,12 @@ function rxMetaRows(
   }
   if (rx.has_file) {
     rows.push([t(locale, "rx_photo"), t(locale, "rx_photo_on_file")]);
+  }
+  // Prueba virtual: SOLO en la copia de la tienda (como el id). No adjuntamos ni
+  // enlazamos la imagen — el enlace firmado es un token portador que no debe viajar
+  // por correo (ver lib/s3.ts). El dueño la ve autenticado en el panel por el id.
+  if (withRecordId && rx.has_tryon) {
+    rows.push([t(locale, "rx_tryon"), t(locale, "rx_tryon_included")]);
   }
   if (withRecordId && rx.id) {
     rows.push([t(locale, "rx_record_id"), rx.id]);

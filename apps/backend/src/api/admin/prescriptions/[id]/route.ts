@@ -48,6 +48,10 @@ export async function GET(
   const fileDownloadUrl = await presignPrescriptionUrl(
     (record["file_url"] as string | null) ?? null
   );
+  // AI try-on render (face with frame) saved from the virtual try-on studio.
+  const tryonDownloadUrl = await presignPrescriptionUrl(
+    (record["tryon_image_url"] as string | null) ?? null
+  );
 
   // Audit log — log who accessed which prescription record
   console.info(
@@ -66,6 +70,8 @@ export async function GET(
     prescription: rxService.recordToRx(record),
     file_download_url: fileDownloadUrl,
     file_download_expires_in: fileDownloadUrl ? PRESCRIPTION_URL_TTL_SECONDS : null,
+    tryon_download_url: tryonDownloadUrl,
+    tryon_download_expires_in: tryonDownloadUrl ? PRESCRIPTION_URL_TTL_SECONDS : null,
   });
 }
 
@@ -94,25 +100,32 @@ export async function DELETE(
     return;
   }
 
-  // Delete R2 file if present
-  const fileUrl = record["file_url"] as string | null;
-  if (fileUrl && storageConfigured()) {
-    try {
-      const s3 = createStorageClient();
-      await s3.send(
-        new DeleteObjectCommand({
-          // MUST match the bucket the OCR route uploaded to. This used to read
-          // R2_BUCKET — the public assets bucket — so once a dedicated
-          // prescription bucket was configured, DeleteObject targeted a key that
-          // was never there. S3 answers 204 for a missing key, so the catch below
-          // never fired and the health data was silently retained forever.
-          Bucket: prescriptionBucket(),
-          Key: fileUrl,
-        })
-      );
-    } catch (r2Err) {
-      console.error("Failed to delete R2 prescription file:", r2Err);
-      // Continue with DB deletion regardless — don't block the user's deletion request
+  // Delete R2 files if present — both the uploaded Rx photo and the AI try-on
+  // render. Erasing the row without erasing the objects would leave health data
+  // in the bucket, which is exactly what "delete my health data" must not do.
+  const fileKeys = [
+    record["file_url"] as string | null,
+    record["tryon_image_url"] as string | null,
+  ].filter((k): k is string => Boolean(k));
+  if (fileKeys.length && storageConfigured()) {
+    const s3 = createStorageClient();
+    for (const key of fileKeys) {
+      try {
+        await s3.send(
+          new DeleteObjectCommand({
+            // MUST match the bucket the OCR / try-on upload wrote to. This used to
+            // read R2_BUCKET — the public assets bucket — so once a dedicated
+            // prescription bucket was configured, DeleteObject targeted a key that
+            // was never there. S3 answers 204 for a missing key, so the catch
+            // below never fired and the health data was silently retained forever.
+            Bucket: prescriptionBucket(),
+            Key: key,
+          })
+        );
+      } catch (r2Err) {
+        console.error("Failed to delete R2 prescription file:", r2Err);
+        // Continue with DB deletion regardless — don't block the user's request.
+      }
     }
   }
 
