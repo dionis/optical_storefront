@@ -108,6 +108,12 @@ class Config:
     anthropic_api_key: str = field(
         default_factory=lambda: _env("ANTHROPIC_API_KEY")
     )
+    # Generated media (4 views / promo video). Only `media generate` needs this;
+    # every other media subcommand works without it, so it is optional here and
+    # checked by `validate_media()` at the point where a missing key costs money.
+    gemini_api_key: str = field(
+        default_factory=lambda: _env_optional("GEMINI_API_KEY")
+    )
     rate_limit_seconds: float = field(
         default_factory=lambda: _env_float("SCRAPER_RATE_LIMIT", 1.0)
     )
@@ -201,6 +207,46 @@ class Config:
         # Echo the target so a run pointed at the wrong backend is obvious in the log.
         print(f"[config] Medusa target: {self.medusa_backend_url}")
         self._warn_optional()
+
+    def validate_media(self) -> None:
+        """Extra checks for `media generate`, which spends money per request.
+
+        Deliberately separate from `validate()`: the other media subcommands only
+        read state and must keep working on a machine with no Gemini key.
+
+        Every check here exists because failing LATE is what costs. A run that
+        discovers R2 is unconfigured on asset 40 has already paid for 40 images it
+        cannot store — the same reasoning that made `r2_configured` demand all three
+        credentials instead of just the endpoint.
+        """
+        problems: list[str] = []
+
+        if not self.gemini_api_key:
+            problems.append(
+                "GEMINI_API_KEY is empty — get one at https://aistudio.google.com/apikey. "
+                "Generation cannot run without it."
+            )
+
+        if not self.r2_configured:
+            missing = [
+                name
+                for name, value in (
+                    ("R2_ENDPOINT", self.r2_endpoint),
+                    ("R2_ACCESS_KEY_ID", self.r2_access_key_id),
+                    ("R2_SECRET_ACCESS_KEY", self.r2_secret_access_key),
+                )
+                if not value
+            ]
+            problems.append(
+                f"R2 is not configured ({', '.join(missing)}). Generated media has no "
+                "supplier URL to fall back on, so a run without storage would pay for "
+                "images and then throw them away."
+            )
+
+        if problems:
+            raise ConfigError(
+                "Cannot generate media:\n" + "\n".join(f"  • {p}" for p in problems)
+            )
 
     def _warn_optional(self) -> None:
         """Print (don't fail on) optional integrations that will be skipped."""
