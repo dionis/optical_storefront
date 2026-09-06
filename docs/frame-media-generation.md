@@ -1071,22 +1071,85 @@ Mínimo: `adm.tab.media`, `adm.media.progress`, `adm.media.spend`, `adm.media.ti
 backend: `budget_exceeded`, `tier_locked`, `already_done`, `no_source_image`,
 `provider_rejected`, `r2_unconfigured`, …). En `es` **y** en `en`.
 
-## A.10 Cómo probarlo sin backend
+## A.10 Encargo: mostrar las vistas y poder revisarlas
 
-El storefront arranca con el catálogo semilla (`catalogStore.js` pinta `SEED_PRODUCTS`
-antes de que resuelva la carga live), así que se puede desarrollar la galería sin generar
-un solo medio: añade a mano `views` y `video` a un producto de `src/data/products.js`
-apuntando a cualquier imagen pública, y verifica los cuatro casos:
+Hay **132 vistas reales ya generadas y subidas** (21 monturas, 33 colorways, las cuatro
+angulaciones en todas). Nada de esto se ve todavía en la tienda. El encargo tiene dos
+mitades y **las dos hacen falta**: sin la primera no hay nada que enseñar; sin la segunda
+no hay forma práctica de revisar 132 imágenes una por una.
 
-| Caso | Resultado esperado |
+### Mitad 1 — La galería en la ficha
+
+Lo de §A.2 y §A.3: segundo eje de botones sobre las miniaturas de color, sin tocar
+`active`. Ahí está el detalle a nivel de código.
+
+### Mitad 2 — Una página de revisión, solo en desarrollo
+
+Una ruta `/dev/medios` que liste **lo que existe** y permita entrar a verlo. Es la
+herramienta que convierte "genera 608 imágenes" en "revisa 608 imágenes", que es el
+cuello de botella real (§B.5 pide revisar a ojo antes de publicar).
+
+Datos ya preparados, no hay que derivarlos ni llamar a la API:
+
+```js
+import {
+  GENERATED_INDEX,     // [{ handle, sku, brand, colorways, viewCount, tags, reason }]
+  GENERATED_VIEWS,     // { handle: { colorway: { front, left, right, back } } }
+  withGeneratedViews,  // (product) => product con `views` inyectadas
+} from "../data/frameMediaSample.js";
+```
+
+Lo que la página debe dar:
+
+| | Por qué |
 |---|---|
-| Colorway sin `views` ni `video` | La ficha se ve **exactamente como hoy**. Sin fila de botones |
-| Colorway con 2 de 4 vistas | Dos botones + «Foto». Ninguno gris |
-| Cambio de color a uno sin vistas | Vuelve a la foto original; la fila desaparece |
-| Vídeo presente | No se descarga hasta pulsar; «play» no dispara el zoom |
+| Una fila por montura: SKU, marca, nº de colorways y de vistas | Saber qué hay sin abrir nada |
+| Las 4 vistas de un colorway, juntas y grandes | Un fallo de identidad se ve comparando ángulos, no de uno en uno |
+| La **foto original del proveedor al lado** | Es la única forma de juzgar si la vista generada es *esta* montura |
+| `reason` y `tags` del índice | `control:ordinary` y `rimless+thin-metal` dicen qué esperar de cada una |
+| Enlace a la ficha real (`/producto/<seedSlug>`) | Ver la galería de la mitad 1 en su sitio |
 
-Y siempre, antes de dar por terminado: `pnpm check:i18n` en verde y la ficha revisada en
-los dos idiomas.
+Sugerencia de orden: primero las que llevan `rimless` o `transparent` en `tags`, que es
+donde el modelo falla; los `control:ordinary` al final, como comprobación de cordura.
+
+**Que no se cuele a producción**: la ruta va detrás del mismo tipo de flag que el resto
+(`src/config/features.js`), apagada por defecto, y `frameMediaSample.js` no debe
+importarse desde ningún componente de la tienda.
+
+### Por qué el fixture guarda claves y no URLs
+
+Los valores son claves R2 (`products/dc-50-di-caprio/views/..._black_front.webp`),
+exactamente la forma que tendrá `variant.metadata.views`. Es a propósito: obliga a pasar
+todo por `resolveImage()` como el resto de imágenes. Si te lo saltas, verás el cuadro
+gris del 404 en vez de que funcione por accidente con una URL absoluta — y entonces el
+día que lleguen los datos reales fallaría.
+
+### Los cuatro casos que hay que verificar
+
+| Caso | Cómo provocarlo | Resultado esperado |
+|---|---|---|
+| Colorway sin vistas | Cualquier montura fuera de `GENERATED_HANDLES` | La ficha se ve **exactamente como hoy**. Sin fila de botones |
+| Vistas parciales | Borra un slot del fixture | Solo los botones que existen. Ninguno gris |
+| Cambio a un color sin vistas | Un colorway ausente del fixture | Vuelve a la foto original; la fila desaparece |
+| Vídeo | Todavía no hay ninguno generado (§D.4) | Cuando los haya: no se descarga hasta pulsar; «play» no dispara el zoom |
+
+Antes de darlo por terminado: `pnpm check:i18n` en verde y la ficha revisada en los dos
+idiomas.
+
+### Regenerar el fixture tras otra corrida
+
+```bash
+cd apps/scraper
+uv run python -m scraper media results --pilot --kind views --limit 200
+uv run python -m scraper media results --handle dc-50-di-caprio --urls
+```
+
+### Recordatorio incómodo pero necesario
+
+Las 132 están en `published = false` y **el storefront todavía no lee esa marca**.
+Mientras construyes esto estás enseñando medios que aún no han pasado revisión — que es
+justamente lo que la mitad 2 sirve para hacer. Cuando la Fase 4 conecte la metadata real,
+la galería debe pintar **solo lo publicado**: el fixture no distingue, la fuente real sí.
 
 ## A.11 Lista de comprobación final
 
