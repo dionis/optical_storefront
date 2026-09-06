@@ -211,12 +211,11 @@ export interface BoardQuery {
 /**
  * One page of the board, ordered the way the claim orders.
  *
- * Raw SQL rather than `listAndCountFrameMediaAssets`: that call returned a 500 from
- * the module service on every shape tried, including no filters at all, while the
- * plain `list` used elsewhere in this module worked — so the difference is in
- * `listAndCount`/`order`, and this read is simple enough not to be worth the
- * archaeology. It also keeps the board's ordering identical to the claim's by
- * construction instead of by coincidence, which is what makes "it is on Di Caprio"
+ * Raw SQL rather than `listAndCountFrameMediaAssets`. That call used to 500 —
+ * along with every other service call, because the module had no MikroORM
+ * connection (see frame-media-writes.ts for the `models/index.ts` story). That is
+ * fixed, but this stays: it keeps the board's ordering identical to the claim's by
+ * construction rather than by coincidence, which is what makes "it is on Di Caprio"
  * mean the same thing in the panel and in `media status`.
  */
 export async function listAssets(

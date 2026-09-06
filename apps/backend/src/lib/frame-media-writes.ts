@@ -3,20 +3,24 @@
  *
  * WHY RAW SQL RATHER THAN THE MODULE SERVICE
  * ------------------------------------------
- * Every write through the generated service answered 500 in production —
- * `updateFrameMediaAssets` and `updateFrameMediaBudgets`, on both tables, even
- * with a minimal payload — while `list` on the same models worked fine. The
- * container logs were not reachable to see the stack behind Medusa's generic
- * error, and these are single-row updates by primary key, so the service layer
- * was buying nothing here.
+ * Originally because every service call answered 500 in production with
+ * "Cannot read properties of undefined (reading 'fork')" — the module had no
+ * MikroORM connection because its models all lived in `models/index.ts`, and
+ * Medusa's `loadModels` skips any file named `index.*`. That is fixed (each model
+ * now has its own file), so the service would work again.
  *
- * The module already reads and claims through SQL (see frame-media-claim.ts,
- * where the claim genuinely needs `FOR UPDATE SKIP LOCKED`). Putting the writes
- * on the same mechanism leaves the module with one way of talking to its tables
- * instead of two, one of which does not work in this deployment.
+ * These stay on SQL anyway, deliberately:
  *
- * If the service ever needs to come back, the shapes here are deliberately plain
- * and the routes call nothing else.
+ *   - The module already claims through SQL, where `FOR UPDATE SKIP LOCKED` has
+ *     no CRUD equivalent, and reads its board the same way. One mechanism for the
+ *     whole module beats two.
+ *   - Every one of these is a single-row update by primary key. The service layer
+ *     was buying nothing.
+ *   - `applyReport` needs COALESCE-per-column semantics — "write what I sent,
+ *     leave the rest" — which is awkward to express through the generated update.
+ *
+ * The shapes here are plain on purpose, so going back to the service later is a
+ * mechanical change confined to this file.
  */
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { MedusaContainer } from "@medusajs/framework/types";
