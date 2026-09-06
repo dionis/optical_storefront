@@ -1144,12 +1144,23 @@ uv run python -m scraper media results --pilot --kind views --limit 200
 uv run python -m scraper media results --handle dc-50-di-caprio --urls
 ```
 
-### Recordatorio incómodo pero necesario
+### Sobre `published`: NO filtres por él
 
-Las 132 están en `published = false` y **el storefront todavía no lee esa marca**.
-Mientras construyes esto estás enseñando medios que aún no han pasado revisión — que es
-justamente lo que la mitad 2 sirve para hacer. Cuando la Fase 4 conecte la metadata real,
-la galería debe pintar **solo lo publicado**: el fixture no distingue, la fuente real sí.
+En la tabla, `status = 'done'` significa "el archivo existe" y `published` significa
+"alguien lo revisó". Hoy las 132 están en `done` y **ninguna** en `published`.
+
+**Decisión del dueño (septiembre 2026): se muestra todo lo generado, sin esperar
+revisión.** Así que la galería pinta cualquier vista que exista y **no** consulta
+`published`. El fixture no lo trae, y eso es correcto, no un descuido.
+
+`published` no desaparece: sigue registrando la decisión de revisión para el panel y para
+`media publish`. Simplemente ya no es una puerta para enseñar.
+
+Lo que esto implica, dicho una vez y sin dramatismo: estas vistas son **inventadas, no
+observadas** (`gemini_media.py` lo escribe en mayúsculas), así que una vista trasera que
+no se corresponda con la montura real puede llegar a un cliente. La mitad 2 de este
+encargo es lo que permite detectarlo y corregirlo rápido — razón de más para construirla,
+no menos.
 
 ## A.11 Lista de comprobación final
 
