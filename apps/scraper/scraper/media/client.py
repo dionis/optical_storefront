@@ -122,6 +122,28 @@ def board(config: Config, **params: Any) -> dict[str, Any]:
     return _request(config, "GET", _ADMIN_PREFIX, params=params)
 
 
+def publish(
+    config: Config,
+    handles: list[str] | None = None,
+    ids: list[str] | None = None,
+    kind: str | None = None,
+    published: bool = True,
+) -> dict[str, Any]:
+    """Mark reviewed assets as fit for the storefront.
+
+    Only `done` assets are eligible — there is no file behind a pending one. The
+    server refuses an empty selection: publishing everything is never implicit.
+    """
+    body: dict[str, Any] = {"published": published}
+    if handles:
+        body["handles"] = handles
+    if ids:
+        body["ids"] = ids
+    if kind:
+        body["kind"] = kind
+    return _request(config, "POST", f"{_ADMIN_PREFIX}/publish", json=body)
+
+
 def retry(
     config: Config,
     handles: list[str] | None = None,

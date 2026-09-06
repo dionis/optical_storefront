@@ -1456,47 +1456,44 @@ configurado o sin poder alcanzar Medusa **falla antes de la primera llamada**, n
 `R2_ENDPOINT` sin credenciales, y la razón es la misma: aquí un fallo tardío significa
 haber pagado por imágenes que no se pueden guardar.
 
-## C.7 Ejecución remota — terminal del servidor
+## C.7 Cómo se ejecuta
 
-**Decisión del dueño (septiembre 2026): esto NO se dispara desde GitHub Actions.**
-Solo a mano, en el servidor, por CLI, hasta que se determine otra cosa.
+**Decisión del dueño (septiembre 2026), y esta sección ha cambiado dos veces — así que
+lo que vale es esto:**
 
-Conviene registrar el camino descartado y por qué se descartó, porque era tentador: el
-scraper **no está desplegado en el CX22** —no tiene Dockerfile propio ni app de Coolify—
-y su sync diario corre en **GitHub Actions** (`scraper-sync.yml`), donde ya viven los
-secretos `R2_*` y `MEDUSA_*`. Un `workflow_dispatch` con `inputs` habría dado la interfaz
-de argumentos gratis. Se descarta igualmente: la generación gasta dinero por petición, y
-mientras no se decida lo contrario tiene que haber una persona delante, en el servidor.
-Nada en el repositorio la dispara — no hay workflow, ni cron, ni tarea programada.
+| | Dónde vive | Cómo se dispara |
+|---|---|---|
+| Sync de catálogo (`scraper sync`) | GitHub Actions | **Tarea planificada**, diaria 06:00 UTC. Sin cambios |
+| Generación de medios (`scraper media`) | El mismo scraper, desde un checkout | **Solo CLI, a mano.** Nada lo planifica |
 
-### Cómo llega el CLI al servidor
+El scraper **no se copia dentro de la imagen del backend**. Se intentó y se revirtió: el
+CLI de medios se ejecuta desde donde ya vive el scraper, no desde el contenedor de
+Coolify.
 
-Va **dentro de la imagen del backend**, como herramienta bajo demanda, no como proceso:
-`docker-entrypoint.sh` no lo menciona y no consume memoria en reposo. Es la misma
-decisión de "un contenedor, varias herramientas" que CLAUDE.md ya toma para
-`vision-measure`, y por la misma razón: una caja de €4/mes no gana una segunda app de
-Coolify para algo que está parado.
+### Dos caminos descartados, y por qué
 
-```
-apps/backend/Dockerfile
-  ├── uv + python3           (ya estaban, para vision-measure)
-  ├── /app/vision-measure/   proceso, arranca con el contenedor
-  └── /app/scraper/          HERRAMIENTA, no arranca nada
-```
+Conviene dejarlos escritos porque los dos eran razonables y se volverán a proponer:
 
-Dos detalles del build que costaron un fallo cada uno:
-
-- **`.dockerignore` excluía `apps/scraper` entero.** El `COPY` habría reventado el build,
-  y solo en el deploy: CI no construye esta imagen. Ahora se excluyen las partes
-  concretas (`.venv` son 524 MB, más `tests`, `scripts`, `state.db`).
-- **`state.db` se excluye explícitamente.** Hornear el caché incremental de una máquina
-  en la imagen haría que el contenedor creyera ya actualizados productos que no ha visto.
+1. **Un workflow `workflow_dispatch` de medios.** Tentador: los secretos `R2_*` y
+   `MEDUSA_*` ya están en GitHub y los `inputs` daban la interfaz de argumentos gratis.
+   Descartado — la generación gasta dinero por petición y, mientras no se decida otra
+   cosa, tiene que haber una persona delante. **El sync diario de catálogo sigue
+   planificado; lo que no se planifica es la generación.**
+2. **Meter el scraper en la imagen del backend** (como `vision-measure`). Descartado por
+   el dueño: el scraper se queda donde está. Además el intento reveló un fallo propio —
+   `apps/scraper` es un paquete hatchling, así que `uv sync` intentaba construir el wheel
+   antes de que las fuentes y el `README.md` estuvieran copiados, y el deploy falló con
+   `OSError: Readme file does not exist: README.md`. Si algún día se retoma, el patrón
+   correcto es de dos pasos: `--no-install-project` para las dependencias, copiar las
+   fuentes, y un segundo `uv sync` que instale el proyecto.
 
 ### Correrlo
 
+Desde cualquier máquina con el repositorio y `apps/scraper/.env` completo — la de
+desarrollo, o un servidor con un checkout:
+
 ```bash
-# Coolify → la app del backend → Terminal   (o `docker exec -it <contenedor> sh`)
-cd /app/scraper
+cd apps/scraper
 
 uv run python -m scraper media status                       # no gasta nada
 uv run python -m scraper media plan --pilot --kind views    # tampoco
@@ -1513,18 +1510,10 @@ Notas de operación:
   ```
 - **Una corrida a la vez, por costumbre.** Dos son *seguras* —el `claim` reparte trabajo
   distinto— pero comparten techo y cuota de Gemini, y duplican el riesgo de 429.
-- **El CX22 no sufre**: esto es I/O contra HTTPS. Lo único con CPU real es
-  `_optimize_image` a WebP, milisegundos por imagen.
-- **La variable de entorno la da Coolify**: `GEMINI_API_KEY` se añade a la app del
-  backend, junto a las `R2_*` que ese contenedor ya tiene.
-- **`--max-cost` sigue siendo obligatorio**, y ahora es la única barrera además del techo
-  del servidor: no hay un formulario que valide nada antes.
-
-### Si algún día se automatiza
-
-El diseño no lo impide: `--yes` existe para una terminal sin humano y `--max-cost` seguiría
-siendo obligatorio, así que ni un cron mal configurado podría gastar sin tope. Pero es una
-decisión de producto pendiente, y hasta que se tome **no hay nada que lo dispare**.
+- **No hace falta estar cerca del servidor.** El CLI habla con Medusa y con R2 por HTTPS;
+  lo único con CPU real es `_optimize_image` a WebP, milisegundos por imagen.
+- **`--max-cost` es obligatorio** y, sin un formulario que valide nada antes, es la única
+  barrera además del techo que el servidor aplica en cada `claim`.
 
 ## C.8 Lo que el CLI **no** hace
 
@@ -1546,64 +1535,74 @@ decisión de producto pendiente, y hasta que se tome **no hay nada que lo dispar
 Estado al escribir esto: **Fases 1 y 2 implementadas**; 3–8 pendientes. Lo de abajo es
 lo que hace falta para que el proceso corra de punta a punta en remoto.
 
-## D.1 Las tablas se crean solas al desplegar
+## D.1 Base de datos — HECHO
 
-`apps/backend/docker-entrypoint.sh:26` ya corre `medusa db:migrate` en **cada** arranque
-del contenedor, de forma no bloqueante. La migración `CreateFrameMedia1` viaja con el
-backend, así que **no hay ningún paso manual de base de datos**: se aplica cuando Coolify
-redespliega.
+Las dos tablas ya existen en producción (Supabase, PostgreSQL 17.6). Se aplicaron el
+2026-09-05 con las seis sentencias de `CreateFrameMedia1`, dentro de una transacción, tras
+un ensayo previo con `ROLLBACK`.
 
-No se debe correr `medusa db:migrate` desde una máquina de desarrollo contra la base de
-producción. No por la migración —es aditiva y toda con `IF NOT EXISTS`— sino porque ese
-comando aplica **todas** las migraciones pendientes del árbol de trabajo local, y un
-árbol atrasado respecto de `origin` tiene un radio de daño mucho mayor que las dos tablas
-que este cambio necesita.
+Comprobado después de aplicar:
 
-El SQL se ensayó contra la base real (PostgreSQL 17.6, Supabase) dentro de una
-transacción con `ROLLBACK`: las seis sentencias son válidas y no dejaron rastro.
+- `frame_media_asset` con 31 columnas y `frame_media_budget`.
+- Los cuatro índices: `identity_uq`, `claim_idx`, `handle_idx`, `spend_idx`.
+- **La garantía de unicidad muerde de verdad.** Se insertó un duplicado de
+  `(variant_sku, kind, slot)` y otro con `slot NULL` —el caso del vídeo, el que motiva el
+  `COALESCE(slot,'')`— y los dos fueron rechazados. Sin eso, una montura podría acumular
+  filas de vídeo duplicadas, cada una $0,80. La prueba se hizo en una transacción revertida:
+  la tabla quedó vacía.
+
+**No se corrió `medusa db:migrate`** desde la máquina de desarrollo: ese comando aplica
+*todas* las migraciones pendientes del árbol local, y un árbol atrasado respecto de
+`origin` tiene un radio de daño mucho mayor que estas dos tablas. Se aplicó solo esta
+migración, con su SQL exacto.
+
+Cuando el backend despliegue, su entrypoint correrá `medusa db:migrate` igual y volverá a
+pasar por `CreateFrameMedia1`: es idempotente (`IF NOT EXISTS` en todo), así que no hace
+nada y queda registrada como aplicada.
 
 ## D.2 Variables de entorno
 
-**En Coolify, sobre la app del backend** (la misma que sirve la API). Ese contenedor ya
-tiene las `R2_*` y las de Medusa; falta una sola:
+**En Coolify, sobre la app del backend** — solo la necesita el backend para nada de esto,
+así que en realidad no hay variable nueva del lado del servidor: las rutas
+`/admin/frame-media/*` no llaman a Gemini.
 
-| Variable | Para qué |
+**En `apps/scraper/.env`**, que es desde donde se ejecuta el CLI:
+
+| Variable | Estado |
 |---|---|
-| `GEMINI_API_KEY` | **Nueva.** Solo la necesita `generate`. https://aistudio.google.com/apikey |
+| `GEMINI_API_KEY` | Ya está. **Rotarla**: quedó expuesta en un log de deploy |
+| `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | **Faltan.** Sin ellas `generate` se niega a arrancar |
+| `MEDUSA_BACKEND_URL`, `MEDUSA_ADMIN_API_KEY` | Ya están |
 
-Opcionales: `GEMINI_IMAGE_MODEL`, `GEMINI_VIDEO_MODEL`, y las tarifas
-`GEMINI_IMAGE_USD_PER_1M_*` si Google cambia precios.
+Que falten las `R2_*` no es un descuido del CLI: una vista generada no tiene URL de
+proveedor a la que caer, así que una corrida sin almacenamiento pagaría imágenes para
+tirarlas. Ver `.env.example`.
 
-**No se añade nada a GitHub Actions**: el workflow de medios se descartó (§C.7).
-
-**Para correrlo desde una máquina de desarrollo** hace falta además que
-`apps/scraper/.env` tenga las `R2_*`. Hoy no las tiene —`GEMINI_API_KEY` sí— y sin R2 el
-comando se niega a arrancar, a propósito: una vista generada no tiene URL de proveedor a
-la que caer, así que una corrida sin almacenamiento pagaría imágenes para tirarlas.
-Ver `.env.example`.
+**En GitHub Actions no se añade nada.** El workflow de medios se descartó (§C.7); el sync
+de catálogo sigue igual que siempre.
 
 ## D.3 Orden de puesta en marcha
 
-1. **Merge `develop` → `main`.** El backend despliega desde `main`. En ese deploy pasan
-   tres cosas de golpe: la imagen incorpora el CLI (§C.7), el entrypoint corre
-   `db:migrate` y crea las tablas, y aparecen las rutas `/admin/frame-media/*`.
-2. **Añadir `GEMINI_API_KEY`** a la app del backend en Coolify y reiniciar.
-3. **Comprobar**, desde la terminal de Coolify sobre ese contenedor:
+1. **Desplegar el backend.** Los cambios de código están en `main`; falta que Coolify
+   construya bien (el deploy anterior falló por el bloque del scraper en el Dockerfile,
+   ya revertido). Ese deploy publica las rutas `/admin/frame-media/*`. Las tablas ya están.
+2. **Comprobar:**
    ```bash
-   cd /app/scraper && uv run python -m scraper media status
+   cd apps/scraper && uv run python -m scraper media status
    ```
    Mientras las rutas no estén desplegadas el CLI lo dice con esas palabras: un 404 aquí
    significa "falta el deploy", no "está roto".
+3. **Completar `apps/scraper/.env`** con las `R2_*`, y rotar `GEMINI_API_KEY`.
 4. **Ensayo sin gasto:**
    ```bash
    uv run python -m scraper media plan --pilot --kind views
    ```
    Debe imprimir 608 vistas y su costo estimado.
-5. **Calibración (Fase 0, ~$1).**
+5. **Calibración (Fase 0, ~$1):**
    ```bash
    uv run python -m scraper media generate        --handle sl107-simply-lite --handle dc-50-di-caprio        --kind views --max-cost 2
    ```
-   Revisar las 8 imágenes a ojo y leer el `cost.json` del recibo: ahí sale el costo
+   Revisar las 8 imágenes a ojo y leer el `cost.json` del recibo: ahí está el costo
    **medido** por imagen, que es lo que desbloquea el resto y decide `2K` frente a `1K`.
 6. **Nivel 1 (~$5):** `--pilot-brand simply-lite --kind views --max-cost 6`.
 7. **Nivel 2 (~$24):** `--pilot --kind views --max-cost 30 --yes` bajo `nohup`.
@@ -1611,16 +1610,6 @@ Ver `.env.example`.
 Entre el 6 y el 7 hay que subir de nivel, y solo se deja si las condiciones medidas se
 cumplen (§6, `frame-media-tier.ts`). Sin la pestaña del panel (Fase 3) eso es una llamada
 a `POST /admin/frame-media/tier`.
-
-### Lo que no se pudo verificar aquí
-
-- **La imagen no se construyó.** El demonio de Docker no estaba disponible, y CI tampoco
-  construye esta imagen (solo lint, tests y el disparo de Coolify). Lo que sí se comprobó:
-  que todas las fuentes de cada `COPY` sobreviven al `.dockerignore` — que es justo el
-  fallo que había. **El primer deploy es la primera construcción real.**
-- **La migración no se aplicó.** Se ensayó contra la base real (PostgreSQL 17.6, Supabase)
-  dentro de una transacción con `ROLLBACK`: las seis sentencias son válidas y no dejaron
-  rastro. Aplicarla desde una máquina de desarrollo se descartó — ver D.1.
 
 ## D.4 Lo que todavía no existe
 

@@ -271,6 +271,7 @@ dependencies = [
     { name = "pillow" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "tenacity" },
 ]
 
@@ -307,6 +308,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rembg", extras = ["cpu"], marker = "extra == 'tryon'", specifier = ">=2.0.57" },
+    { name = "requests", specifier = ">=2.32.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
     { name = "tenacity", specifier = ">=9.0.0" },
 ]

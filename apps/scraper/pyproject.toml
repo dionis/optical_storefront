@@ -16,6 +16,11 @@ dependencies = [
     "tenacity>=9.0.0",
     "anthropic>=0.39.0",
     "python-dotenv>=1.0.1",
+    # Direct dependency of the vendored gemini_media.py (scraper/media/), which is
+    # the only third-party import that module has. It resolved transitively before,
+    # which worked by luck: the day the parent package drops it, media generation
+    # breaks at import time.
+    "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]

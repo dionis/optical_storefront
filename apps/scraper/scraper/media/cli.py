@@ -42,9 +42,9 @@ def _handle_api_errors(fn):
             if err.status == 404:
                 raise click.ClickException(
                     "The backend has no frame-media routes yet.\n"
-                    "They ship with the backend deploy: merge develop → main and let "
-                    "Coolify redeploy (its entrypoint runs `medusa db:migrate`, which "
-                    "creates the tables too).\n"
+                    "They ship with the backend deploy: the routes are already in "
+                    "`main`, so a successful Coolify build is all that is missing. "
+                    "The database tables exist.\n"
                     f"Tried: {err}"
                 ) from err
             if err.status == 0:
@@ -367,3 +367,59 @@ def retry_cmd(
             "Fix the cause, then re-run with the panel's force option."
         )
     click.echo("They will be picked up by the next `media generate`.")
+
+
+@media_group.command("publish")
+@_selection_options
+@click.option(
+    "--unpublish", is_flag=True, help="Take assets back off the storefront instead."
+)
+@_handle_api_errors
+def publish_cmd(
+    pilot: bool,
+    pilot_brand: str | None,
+    handles: tuple[str, ...],
+    from_file_path: str | None,
+    all_frames: bool,
+    pending: bool,
+    kind: str,
+    slot_list: str | None,
+    unpublish: bool,
+) -> None:
+    """Mark reviewed assets as fit for the storefront. Spends nothing.
+
+    Generating and publishing are two different acts: these views are invented,
+    not observed, so a person looks at them before any customer does.
+    """
+    config = get_config()
+    config.validate()
+
+    try:
+        selected, description = resolve(
+            pilot=pilot, pilot_brand=pilot_brand, handles=handles,
+            from_file_path=from_file_path, all_frames=all_frames, pending=pending,
+        )
+    except SelectionError as err:
+        raise click.ClickException(str(err)) from err
+
+    if not selected:
+        raise click.ClickException(
+            "Publishing needs an explicit selection — --pending and --all are not "
+            "accepted here. Putting a model's invention in front of a customer is "
+            "never an implicit act."
+        )
+
+    result = api.publish(
+        config, handles=selected, kind=_kind(kind), published=not unpublish
+    )
+
+    verb = "Unpublished" if unpublish else "Published"
+    click.echo(f"{verb} {result.get('changed', 0)} asset(s) from {description}.")
+    if result.get("unchanged"):
+        click.echo(f"Already in that state: {result['unchanged']}.")
+    if not unpublish:
+        # Said out loud because "published" reads as "live", and it is not yet.
+        click.echo(
+            "Note: the storefront does not read this flag yet (phase 4 pending), "
+            "so nothing changes for a customer today."
+        )
