@@ -521,3 +521,53 @@ def results_cmd(
             "R2_PUBLIC_URL no está en apps/scraper/.env, así que arriba van claves "
             "R2 en vez de URLs. Añádela para poder abrirlas en el navegador."
         )
+
+
+@media_group.command("tier")
+@click.option("--set", "target", type=int, default=None, help="Move to this level.")
+@_handle_api_errors
+def tier_cmd(target: int | None) -> None:
+    """Show the spending ladder, or move a step.
+
+    Exists so changing level does not mean hand-writing an HTTP Basic call: the
+    admin key is a username with an EMPTY password, and a `curl -u "$KEY"` missing
+    its trailing colon silently turns into an interactive password prompt.
+    """
+    config = get_config()
+    config.validate()
+
+    if target is None:
+        state = api.get_tier(config)
+        tier, elig = state.get("tier", {}), state.get("eligibility", {})
+        click.echo(
+            f"Nivel {tier.get('level')} · máximo {tier.get('max_frames') or 'sin límite'} "
+            f"monturas · tope ${tier.get('monthly_ceiling_usd_views')} vistas / "
+            f"${tier.get('monthly_ceiling_usd_video')} vídeo"
+        )
+        nxt = elig.get("next")
+        if nxt is None:
+            click.echo("Es el último nivel.")
+            return
+        click.echo("")
+        click.echo(f"Para subir a {nxt}:")
+        for check in elig.get("checks", []):
+            mark = "✓" if check["passed"] else "✗"
+            value = check["value"]
+            shown = f"{value:.3f}" if isinstance(value, float) else value
+            click.echo(
+                f"  {mark} {check['key']}  medido={shown} "
+                f"umbral={check['threshold']} muestra={check['sample']}"
+            )
+        click.echo("")
+        if elig.get("eligible"):
+            click.echo(f"  → listo: `media tier --set {nxt}`")
+        else:
+            click.echo("  → todavía no")
+        return
+
+    state = api.set_tier(config, target)
+    tier = state.get("tier", {})
+    click.echo(
+        f"Nivel {tier.get('level')} · máximo {tier.get('max_frames') or 'sin límite'} "
+        f"monturas · tope ${tier.get('monthly_ceiling_usd_views')} vistas"
+    )

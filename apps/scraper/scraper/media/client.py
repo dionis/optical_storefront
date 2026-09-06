@@ -127,6 +127,21 @@ def release(config: Config, run_id: str) -> dict[str, Any]:
     return _request(config, "POST", f"{_ADMIN_PREFIX}/release", json={"run_id": run_id})
 
 
+def get_tier(config: Config) -> dict[str, Any]:
+    """Current ladder level plus every measured check for the next one."""
+    return _request(config, "GET", f"{_ADMIN_PREFIX}/tier")
+
+
+def set_tier(config: Config, tier: int) -> dict[str, Any]:
+    """Climb (or drop) the ladder.
+
+    Going up one step is refused unless the level's measured conditions hold, and
+    two steps at once is refused outright. Going down is always allowed: tightening
+    a budget should never require passing a test.
+    """
+    return _request(config, "POST", f"{_ADMIN_PREFIX}/tier", json={"tier": tier})
+
+
 def board(config: Config, **params: Any) -> dict[str, Any]:
     return _request(config, "GET", _ADMIN_PREFIX, params=params)
 
