@@ -19,9 +19,10 @@ import hashlib
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 
@@ -121,8 +122,18 @@ def _fingerprint(source: bytes, model_id: str) -> str:
     """
     digest = hashlib.sha256(source).hexdigest()
     return hashlib.sha256(
-        f"{digest}|{model_id}|pv{PROMPT_VERSION}".encode("utf-8")
+        f"{digest}|{model_id}|pv{PROMPT_VERSION}".encode()
     ).hexdigest()
+
+
+def _label(asset: dict[str, Any], kind: str) -> str:
+    """How one asset is named in the log: `handle colourway slot`."""
+    parts = [
+        asset["product_handle"],
+        asset.get("colorway") or "",
+        asset.get("slot") or kind,
+    ]
+    return " ".join(p for p in parts if p).strip()
 
 
 def _color_slug(colorway: str | None) -> str:
@@ -369,11 +380,9 @@ def _preview(
     assets = [a for a in board.get("assets", []) if not slots or a.get("slot") in slots]
 
     for asset in assets[: limit or len(assets)]:
-        label = (
-            f"{asset['product_handle']} {asset.get('colorway') or ''} "
-            f"{asset.get('slot') or kind}"
-        ).strip()
-        echo(f"[media]   [dry-run] would generate {label}")
+        # Same label helper as the real loop, so a rehearsal and the run it
+        # rehearses name the same asset the same way.
+        echo(f"[media]   [dry-run] would generate {_label(asset, kind)}")
         stats.skipped += 1
 
     if board.get("has_more"):
@@ -436,14 +445,13 @@ def _drain(
         prompt = batch_response.get("video_prompt")
 
         for asset in assets:
-            label = f"{asset['product_handle']} {asset.get('colorway') or ''} {asset.get('slot') or kind}".strip()
+            label = _label(asset, kind)
             processed += 1
 
-            if dry_run:
-                echo(f"[media]   [dry-run] would generate {label}")
-                stats.skipped += 1
-                continue
-
+            # No dry-run branch here on purpose: a rehearsal never reaches this
+            # loop at all. `run()` sends it to `_preview`, which reads the board
+            # instead of claiming — claiming during a rehearsal is what used to
+            # strand assets in `running` for twenty minutes.
             started = time.monotonic()
             with tempfile.TemporaryDirectory(prefix="frame-media-") as tmp:
                 workdir = Path(tmp)

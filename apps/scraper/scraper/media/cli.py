@@ -18,8 +18,8 @@ import click
 
 from scraper.config import ConfigError, get_config
 from scraper.media import client as api
-from scraper.media.client import MediaApiError
 from scraper.media import runner
+from scraper.media.client import MediaApiError
 from scraper.media.selection import SelectionError, resolve
 
 SLOTS = ["front", "left", "right", "back"]
