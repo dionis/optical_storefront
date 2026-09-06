@@ -15,6 +15,17 @@ import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
+// Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
+import { GENERATED_INDEX, GENERATED_VIEWS } from "../data/frameMediaSample.js";
+import { resolveImage } from "../data/imageUrl.js";
+
+// El catálogo NO trae un slug fiable, así que la unión con las vistas generadas se
+// hace por SKU normalizado (coincide en las 21 monturas del piloto).
+const SKU_TO_HANDLE = {};
+for (const f of GENERATED_INDEX) {
+  SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
+}
+const VIEW_ORDER = ["front", "left", "right", "back"];
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -22,6 +33,11 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
+  // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
+  // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
+  // montura o de color.
+  const [view, setView] = useState("front");
+  useEffect(() => { setView("front"); }, [slug, active]);
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -67,6 +83,16 @@ export default function ProductDetail() {
   }
 
   const color = product.colors[active];
+
+  // Vistas generadas (4 ángulos) de ESTE color, si existen para este SKU. Los
+  // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,
+  // cae a la imagen actual del color (nunca un recuadro roto). Sin vistas: ficha
+  // como hoy.
+  const genViews = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
+  const colorViews = genViews && color ? genViews[color.name] : null;
+  const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
+  const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
+
   const related = PRODUCTS.filter((p) => p.brand_slug === product.brand_slug && p.slug !== product.slug).slice(0, 4);
   const cases = recommendedCases(product.sku, 3);
 
@@ -87,15 +113,29 @@ export default function ProductDetail() {
 
       <div className="pdp-grid">
         <div className="pdp-gallery">
-          <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
-            <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
-                    aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
-            <img key={color.image} src={color.image} alt={`${product.name} ${color.name}`} className="fade-in"
-                 onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
-            {TRY_ON_ENABLED && (
-              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
+          <div className={`pdp-stage ${hasViews ? "has-views" : ""}`}>
+            {hasViews && (
+              <div className="pdp-views" role="tablist" aria-label={t("pdp.views")}>
+                {VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                  <button key={vw} type="button" role="tab" aria-selected={view === vw}
+                          className={`pdp-view ${view === vw ? "sel" : ""}`}
+                          onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
+                    <img src={resolveImage(colorViews[vw])} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                         onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                  </button>
+                ) : null)}
+              </div>
             )}
+            <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+              <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
+                      aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
+              <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
+                   onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+              {TRY_ON_ENABLED && (
+                <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
+              )}
+            </div>
           </div>
           <div className="pdp-thumbs">
             {product.colors.map((c, i) => (
