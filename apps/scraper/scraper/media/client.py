@@ -118,6 +118,15 @@ def report(config: Config, **fields: Any) -> dict[str, Any]:
     return _request(config, "POST", f"{_ADMIN_PREFIX}/report", json=fields)
 
 
+def release(config: Config, run_id: str) -> dict[str, Any]:
+    """Hand back whatever this run still holds. Idempotent, and safe to call twice.
+
+    Without it a run that stops for any reason leaves its batch in `running` until
+    the lease expires — the board then reports work in progress that nobody is doing.
+    """
+    return _request(config, "POST", f"{_ADMIN_PREFIX}/release", json={"run_id": run_id})
+
+
 def board(config: Config, **params: Any) -> dict[str, Any]:
     return _request(config, "GET", _ADMIN_PREFIX, params=params)
 

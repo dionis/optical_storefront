@@ -105,7 +105,21 @@ export const RetryFrameMediaSchema = z.object({
 });
 export type RetryFrameMediaSchema = z.infer<typeof RetryFrameMediaSchema>;
 
+/**
+ * A run handing back what it still holds, on any exit path. Nothing else is
+ * needed: `run_id` is the lease owner, and releasing is idempotent.
+ */
+export const ReleaseFrameMediaSchema = z.object({
+  run_id: z.string().min(6).max(64),
+});
+export type ReleaseFrameMediaSchema = z.infer<typeof ReleaseFrameMediaSchema>;
+
 export const frameMediaMiddlewares: MiddlewareRoute[] = [
+  {
+    matcher: "/admin/frame-media/release",
+    method: "POST",
+    middlewares: [validateAndTransformBody(ReleaseFrameMediaSchema)],
+  },
   {
     matcher: "/admin/frame-media/enqueue",
     method: "POST",

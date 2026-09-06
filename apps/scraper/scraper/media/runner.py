@@ -68,11 +68,49 @@ def new_run_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
-def _fetch_source(url: str, config: Config) -> bytes:
-    with httpx.Client(timeout=60, follow_redirects=True) as http:
-        response = http.get(url, headers={"User-Agent": config.user_agent})
-        response.raise_for_status()
-        return response.content
+def _fetch_source(reference: str, config: Config) -> bytes:
+    """Read the supplier photo this asset is generated from.
+
+    THE REFERENCE IS USUALLY A BARE R2 KEY, NOT A URL. The catalogue stores
+    `products/dc-50-di-caprio/dc-50-di-caprio_00.webp` — the bucket's public origin
+    is deployment config, not catalogue data, which is the same reason the
+    storefront funnels everything through `resolveImage()` in src/data/imageUrl.js.
+    Handing that string to httpx raises "Request URL is missing an 'http://' or
+    'https://' protocol", and every single asset fails on its first step.
+
+    So: a bare key is read straight out of the bucket with the S3 client the image
+    pipeline already uses. That is better than rebuilding a public URL — it needs no
+    R2_PUBLIC_URL and it works on a private bucket. Absolute URLs (anything scraped
+    before the R2 migration, or a dev run hotlinking the supplier) still go over HTTP.
+    """
+    if reference.startswith(("http://", "https://")):
+        with httpx.Client(timeout=60, follow_redirects=True) as http:
+            response = http.get(reference, headers={"User-Agent": config.user_agent})
+            response.raise_for_status()
+            return response.content
+
+    if not config.r2_configured:
+        raise RuntimeError(
+            f"{reference!r} is an R2 object key and R2 is not configured, so there is "
+            "nothing to read it from."
+        )
+
+    s3 = _get_s3_client(config)
+    obj = s3.get_object(Bucket=config.r2_bucket, Key=reference.lstrip("/"))
+    return obj["Body"].read()
+
+
+#: Extensions the source photo can plausibly carry. Anything else falls back to
+#: .png, which is what an unknown blob is safest announced as.
+_KNOWN_SUFFIXES = (".webp", ".jpg", ".jpeg", ".png", ".gif")
+
+
+def _source_suffix(reference: str) -> str:
+    lowered = reference.lower().split("?")[0]
+    for suffix in _KNOWN_SUFFIXES:
+        if lowered.endswith(suffix):
+            return suffix
+    return ".png"
 
 
 def _fingerprint(source: bytes, model_id: str) -> str:
@@ -148,8 +186,10 @@ def _generate_view(
     source_url = asset["source_image_url"]
     source = _fetch_source(source_url, config)
 
-    suffix = ".jpg" if source_url.lower().endswith((".jpg", ".jpeg")) else ".png"
-    source_path = workdir / f"src{suffix}"
+    # gemini_media guesses the mime type from the FILENAME (`mimetypes.guess_type`),
+    # so the suffix has to match the real bytes. The catalogue is WebP; writing those
+    # bytes to "src.png" would announce image/png and hand Gemini a mismatch.
+    source_path = workdir / f"src{_source_suffix(source_url)}"
     source_path.write_bytes(source)
 
     result = generate_views(
@@ -271,10 +311,90 @@ def run(
     dry_run: bool,
     echo: Callable[[str], None],
 ) -> RunStats:
-    """Claim, generate, report — until there is nothing left, or a brake trips."""
+    """Claim, generate, report — releasing whatever is still held on the way out.
+
+    A dry run never reaches the claim at all (see `_preview`): rehearsing must not
+    consume the queue, and it used to — it leased a batch and reported nothing, so
+    the assets sat in `running` for twenty minutes after a command that was supposed
+    to change nothing.
+    """
+    if dry_run:
+        return _preview(config, kind=kind, handles=handles, slots=slots,
+                        limit=limit, batch=batch, echo=echo)
+
     stats = RunStats(run_id=new_run_id())
     echo(f"[media] run {stats.run_id} · kind={kind} · max-cost=${max_cost:.2f}")
 
+    try:
+        _drain(config, stats, kind=kind, handles=handles, slots=slots,
+               max_cost=max_cost, limit=limit, batch=batch, echo=echo)
+    finally:
+        # Any exit — finished, Ctrl-C, or a crash — hands the batch back at once.
+        # The 20-minute lease still covers a hard kill; this covers everything else,
+        # so the board never shows work in progress that nobody is doing.
+        try:
+            freed = api.release(config, stats.run_id).get("released", 0)
+            if freed:
+                echo(f"[media] released {freed} unfinished asset(s) back to the queue.")
+        except Exception as err:  # noqa: BLE001 - never mask the original failure
+            echo(f"[media] WARNING: could not release the lease ({err}). "
+                 "It expires on its own in 20 minutes.")
+
+    return stats
+
+
+def _preview(
+    config: Config,
+    *,
+    kind: str,
+    handles: list[str] | None,
+    slots: list[str] | None,
+    limit: int | None,
+    batch: int,
+    echo: Callable[[str], None],
+) -> RunStats:
+    """Show what a real run would pick up, WITHOUT claiming anything.
+
+    Reads the board instead of the claim endpoint. The ordering matches the claim's
+    (`kind, product_handle, slot`), so the preview is the real queue order.
+    """
+    stats = RunStats(run_id="dry-run")
+    board = api.board(
+        config,
+        kind=kind,
+        status="pending,failed",
+        limit=min(limit or 200, 200),
+        **({"handle": ",".join(handles)} if handles else {}),
+    )
+    assets = [a for a in board.get("assets", []) if not slots or a.get("slot") in slots]
+
+    for asset in assets[: limit or len(assets)]:
+        label = (
+            f"{asset['product_handle']} {asset.get('colorway') or ''} "
+            f"{asset.get('slot') or kind}"
+        ).strip()
+        echo(f"[media]   [dry-run] would generate {label}")
+        stats.skipped += 1
+
+    if board.get("has_more"):
+        echo(f"[media]   … and more beyond the first {len(assets)}.")
+    stats.stopped_because = "dry_run"
+    return stats
+
+
+def _drain(
+    config: Config,
+    stats: RunStats,
+    *,
+    kind: str,
+    handles: list[str] | None,
+    slots: list[str] | None,
+    max_cost: float,
+    limit: int | None,
+    batch: int,
+    echo: Callable[[str], None],
+) -> None:
+    """The claim/generate/report loop. Raises nothing the caller must catch."""
     processed = 0
     consecutive_failures = 0
 

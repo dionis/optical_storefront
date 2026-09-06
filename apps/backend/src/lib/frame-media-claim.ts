@@ -198,3 +198,75 @@ export async function progressCounts(
   );
   return (rows ?? []) as Array<{ kind: string; status: string; count: number }>;
 }
+
+export interface BoardQuery {
+  kind?: string;
+  statuses?: string[];
+  handles?: string[];
+  published?: boolean;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * One page of the board, ordered the way the claim orders.
+ *
+ * Raw SQL rather than `listAndCountFrameMediaAssets`: that call returned a 500 from
+ * the module service on every shape tried, including no filters at all, while the
+ * plain `list` used elsewhere in this module worked — so the difference is in
+ * `listAndCount`/`order`, and this read is simple enough not to be worth the
+ * archaeology. It also keeps the board's ordering identical to the claim's by
+ * construction instead of by coincidence, which is what makes "it is on Di Caprio"
+ * mean the same thing in the panel and in `media status`.
+ */
+export async function listAssets(
+  container: MedusaContainer,
+  q: BoardQuery
+): Promise<{ assets: Record<string, unknown>[]; count: number }> {
+  const knex = container.resolve(ContainerRegistrationKeys.PG_CONNECTION);
+
+  const where: string[] = ["deleted_at IS NULL"];
+  const bindings: Record<string, unknown> = {
+    limit: Math.max(1, Math.min(q.limit, 200)),
+    offset: Math.max(0, q.offset),
+  };
+  if (q.kind) {
+    where.push("kind = :kind");
+    bindings.kind = q.kind;
+  }
+  if (q.statuses?.length) {
+    where.push("status = ANY(:statuses)");
+    bindings.statuses = q.statuses;
+  }
+  if (q.handles?.length) {
+    where.push("product_handle = ANY(:handles)");
+    bindings.handles = q.handles;
+  }
+  if (q.published !== undefined) {
+    where.push("published = :published");
+    bindings.published = q.published;
+  }
+  const predicate = where.join(" AND ");
+
+  const [page, total] = await Promise.all([
+    knex.raw(
+      `SELECT id, product_handle, variant_sku, colorway, kind, slot, status,
+              attempts, last_error_reason, output_key, cost_usd, published,
+              source_image_url, operation, finished_at, updated_at
+         FROM frame_media_asset
+        WHERE ${predicate}
+        ORDER BY kind, product_handle, slot
+        LIMIT :limit OFFSET :offset`,
+      bindings
+    ),
+    knex.raw(
+      `SELECT COUNT(*)::int AS count FROM frame_media_asset WHERE ${predicate}`,
+      bindings
+    ),
+  ]);
+
+  return {
+    assets: (page.rows ?? []) as Record<string, unknown>[],
+    count: Number(total.rows?.[0]?.count ?? 0),
+  };
+}

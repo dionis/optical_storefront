@@ -32,3 +32,14 @@ pytest tests/ -v
 ```
 
 Tests run against saved HTML fixtures (`tests/fixtures/`) — no live HTTP requests in CI.
+
+## Generated frame media (4 views · promo video)
+
+`python -m scraper media …` generates product packshots and promotional video
+through Gemini, and stores them the same way the image pipeline stores supplier
+photos. It spends money per request and is never scheduled: it runs by hand.
+
+**Operating guide:** [`scraper/media/README.md`](scraper/media/README.md) — how to
+set up a remote machine, run the first views and video, and read the failures.
+
+**Design and rationale:** [`docs/frame-media-generation.md`](../../docs/frame-media-generation.md).

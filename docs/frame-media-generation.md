@@ -1288,6 +1288,11 @@ después.
 
 # Apéndice C — El CLI de medios
 
+> **¿Solo quieres ejecutarlo?** La guía de operación —preparar una máquina remota,
+> generar las primeras vistas y el primer vídeo, y qué hacer cuando algo falla— está en
+> [`apps/scraper/scraper/media/README.md`](../apps/scraper/scraper/media/README.md).
+> Este apéndice es la referencia completa detrás de ella.
+
 Ejecutor del sistema. Corre **en el servidor remoto, a mano, cuando el dueño decide**.
 Subcomando del scraper: misma app, mismo `.env`, mismo `uv`.
 
