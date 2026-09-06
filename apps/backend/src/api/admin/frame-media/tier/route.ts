@@ -2,8 +2,7 @@ import {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http";
-import { FRAME_MEDIA_MODULE } from "../../../../modules/frame-media/index";
-import type FrameMediaModuleService from "../../../../modules/frame-media/service";
+import { upsertBudget } from "../../../../lib/frame-media-writes";
 import {
   FRAME_MEDIA_BUDGET_ID,
   resolveFrameMediaSettings,
@@ -61,17 +60,10 @@ export async function POST(
     }
   }
 
-  const svc = req.scope.resolve<FrameMediaModuleService>(FRAME_MEDIA_MODULE);
-  const existing = (await svc.listFrameMediaBudgets({
-    id: FRAME_MEDIA_BUDGET_ID,
-  })) as unknown as Record<string, unknown>[];
-
-  const data = { tier: target, updated_by: req.auth_context.actor_id };
-  if (existing?.length) {
-    await svc.updateFrameMediaBudgets({ id: FRAME_MEDIA_BUDGET_ID, ...data });
-  } else {
-    await svc.createFrameMediaBudgets({ id: FRAME_MEDIA_BUDGET_ID, ...data });
-  }
+  await upsertBudget(req.scope, FRAME_MEDIA_BUDGET_ID, {
+    tier: target,
+    updated_by: req.auth_context.actor_id,
+  });
 
   console.info(
     JSON.stringify({

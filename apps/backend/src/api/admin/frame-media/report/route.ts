@@ -2,8 +2,7 @@ import {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http";
-import { FRAME_MEDIA_MODULE } from "../../../../modules/frame-media/index";
-import type FrameMediaModuleService from "../../../../modules/frame-media/service";
+import { applyReport, getAsset } from "../../../../lib/frame-media-writes";
 import { isRetryable, MAX_ATTEMPTS } from "../../../../lib/frame-media";
 import type { ReportFrameMediaSchema } from "../middlewares";
 
@@ -14,8 +13,8 @@ import type { ReportFrameMediaSchema } from "../middlewares";
  * recomputed: the point of keeping `cost.json` is to reconcile against a bill
  * weeks later, and a figure this route derived itself could not do that.
  *
- * Sending `operation` alone (with status still unfinished) is legal and is how a
- * video run persists its Veo operation name BEFORE it starts polling — a Ctrl-C
+ * Sending `operation` alone (with status `awaiting_external`) is legal and is how
+ * a video run persists its Veo operation name BEFORE it starts polling — a Ctrl-C
  * three minutes in then resumes that operation instead of paying for another.
  */
 export async function POST(
@@ -23,12 +22,8 @@ export async function POST(
   res: MedusaResponse
 ): Promise<void> {
   const body = req.validatedBody;
-  const svc = req.scope.resolve<FrameMediaModuleService>(FRAME_MEDIA_MODULE);
 
-  const existing = (await svc.listFrameMediaAssets({ id: body.id })) as unknown as
-    | Record<string, unknown>[]
-    | undefined;
-  const current = existing?.[0];
+  const current = await getAsset(req.scope, body.id);
   if (!current) {
     res.status(404).json({ reason: "unknown_asset", message: "Asset not found." });
     return;
@@ -50,43 +45,33 @@ export async function POST(
   const failed = body.status === "failed";
 
   // A non-retryable reason (bad key, unknown model, no source photo) is burned
-  // straight to the attempt ceiling. Retrying it only buries the real cause
-  // behind three identical failures — the same contract gemini_media.py states
-  // when it refuses to retry a 403 or 404.
+  // straight to the attempt ceiling. Retrying it only buries the real cause behind
+  // three identical failures — the same contract gemini_media.py states when it
+  // refuses to retry a 403 or 404.
   const nextAttempts = failed
     ? isRetryable(body.reason)
       ? attempts + 1
       : MAX_ATTEMPTS
     : attempts;
 
-  const update: Record<string, unknown> = {
+  await applyReport(req.scope, {
     id: body.id,
     status: body.status,
     attempts: nextAttempts,
-    lease_until: null,
-    claimed_by: null,
-    finished_at: body.status === "awaiting_external" ? null : new Date(),
-    last_error_reason: failed ? (body.reason ?? "unknown") : null,
-    last_error_note: failed ? (body.note ?? null) : null,
-  };
-
-  for (const field of [
-    "output_key",
-    "output_bytes",
-    "output_mime",
-    "source_fingerprint",
-    "provider_model",
-    "operation",
-    "billing_unit",
-    "tokens_prompt",
-    "tokens_output",
-    "cost_usd",
-    "receipt",
-  ] as const) {
-    if (body[field] !== undefined) update[field] = body[field];
-  }
-
-  await svc.updateFrameMediaAssets(update);
+    output_key: body.output_key,
+    output_bytes: body.output_bytes,
+    output_mime: body.output_mime,
+    source_fingerprint: body.source_fingerprint,
+    provider_model: body.provider_model,
+    operation: body.operation,
+    billing_unit: body.billing_unit,
+    tokens_prompt: body.tokens_prompt,
+    tokens_output: body.tokens_output,
+    cost_usd: body.cost_usd,
+    receipt: body.receipt,
+    reason: body.reason,
+    note: body.note,
+  });
 
   if (body.cost_usd) {
     console.info(

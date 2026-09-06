@@ -2,8 +2,7 @@ import {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http";
-import { FRAME_MEDIA_MODULE } from "../../../../modules/frame-media/index";
-import type FrameMediaModuleService from "../../../../modules/frame-media/service";
+import { setPublished } from "../../../../lib/frame-media-writes";
 import type { PublishFrameMediaSchema } from "../middlewares";
 
 /**
@@ -38,34 +37,19 @@ export async function POST(
     return;
   }
 
-  const svc = req.scope.resolve<FrameMediaModuleService>(FRAME_MEDIA_MODULE);
-
-  const filters: Record<string, unknown> = { status: ["done"] };
-  if (body.ids?.length) filters.id = body.ids;
-  if (body.handles?.length) filters.product_handle = body.handles;
-  if (body.kind) filters.kind = body.kind;
-
-  const rows = (await svc.listFrameMediaAssets(filters, {
-    take: null,
-  })) as unknown as Record<string, unknown>[];
-
-  const changed = rows.filter((row) => Boolean(row["published"]) !== body.published);
-
-  if (changed.length) {
-    await svc.updateFrameMediaAssets(
-      changed.map((row) => ({
-        id: row["id"] as string,
-        published: body.published,
-      }))
-    );
-  }
+  const { changed, eligible } = await setPublished(req.scope, {
+    ids: body.ids,
+    handles: body.handles,
+    kind: body.kind,
+    published: body.published,
+  });
 
   // Audit: this is the decision that puts a model's invention in front of a
   // customer, so it carries a name and a timestamp like every spend does.
   console.info(
     JSON.stringify({
       event: body.published ? "frame_media.published" : "frame_media.unpublished",
-      count: changed.length,
+      count: changed,
       kind: body.kind ?? "any",
       handles: body.handles?.length ?? 0,
       admin_user_id: req.auth_context.actor_id,
@@ -75,10 +59,10 @@ export async function POST(
 
   res.json({
     published: body.published,
-    changed: changed.length,
+    changed,
     /** Matched but already in the requested state — asking twice is a no-op. */
-    unchanged: rows.length - changed.length,
+    unchanged: eligible - changed,
     /** Nothing outside `done` is eligible; a caller passing ids gets told. */
-    eligible: rows.length,
+    eligible,
   });
 }

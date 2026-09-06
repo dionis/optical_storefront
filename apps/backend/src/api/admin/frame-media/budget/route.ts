@@ -2,8 +2,7 @@ import {
   AuthenticatedMedusaRequest,
   MedusaResponse,
 } from "@medusajs/framework/http";
-import { FRAME_MEDIA_MODULE } from "../../../../modules/frame-media/index";
-import type FrameMediaModuleService from "../../../../modules/frame-media/service";
+import { upsertBudget } from "../../../../lib/frame-media-writes";
 import {
   FRAME_MEDIA_BUDGET_ID,
   resolveFrameMediaSettings,
@@ -41,29 +40,10 @@ export async function POST(
   res: MedusaResponse
 ): Promise<void> {
   const body = req.validatedBody;
-  const svc = req.scope.resolve<FrameMediaModuleService>(FRAME_MEDIA_MODULE);
-
-  const existing = (await svc.listFrameMediaBudgets({
-    id: FRAME_MEDIA_BUDGET_ID,
-  })) as unknown as Record<string, unknown>[];
-
-  // `model.json()` is typed as an object, but JSONB stores an array perfectly
-  // well and a bare list of handles is the honest shape here — wrapping it in
-  // `{ handles: [...] }` would only exist to satisfy the type. The cast is kept
-  // to this one line, and `resolveFrameMediaSettings` guards the read with
-  // `Array.isArray` so a hand-edited row cannot crash the resolver.
-  const { video_sku_list, ...rest } = body;
-  const data: Record<string, unknown> = {
-    ...rest,
-    ...(video_sku_list !== undefined ? { video_sku_list } : {}),
+  await upsertBudget(req.scope, FRAME_MEDIA_BUDGET_ID, {
+    ...body,
     updated_by: req.auth_context.actor_id,
-  };
-
-  if (existing?.length) {
-    await svc.updateFrameMediaBudgets({ id: FRAME_MEDIA_BUDGET_ID, ...data });
-  } else {
-    await svc.createFrameMediaBudgets({ id: FRAME_MEDIA_BUDGET_ID, ...data });
-  }
+  });
 
   console.info(
     JSON.stringify({
