@@ -3285,3 +3285,24 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .pdp-views { flex-direction: row; width: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .pdp-view { width: 66px; height: 66px; flex: 0 0 auto; aspect-ratio: auto; }
 }
+
+/* ═══ Galería de VISTAS del marco en la ficha de compra (LensProcess) ═══
+   Miniaturas de las 4 vistas (frontal/lateral/trasera) a la IZQUIERDA del visor
+   central. Eje independiente del color. Solo si la montura tiene vistas generadas.
+   Full responsive: en móvil pasan a fila con scroll debajo del visor. */
+.zlx-imgrow { display: flex; gap: 12px; align-items: stretch; }
+.zlx-imgrow .zlx-float-inner { flex: 1 1 auto; min-width: 0; }
+.zlx-views { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; width: 88px; }
+.zlx-view {
+  padding: 0; margin: 0; border: 1px solid #e2e6ee; border-radius: 12px; overflow: hidden;
+  background: #fff; cursor: pointer; aspect-ratio: 1 / 1;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.zlx-view img { width: 100%; height: 100%; object-fit: contain; display: block; padding: 5px; }
+.zlx-view:hover { border-color: #cfe0ff; }
+.zlx-view.on { border-color: #0e5ad0; box-shadow: 0 0 0 2px rgba(14, 90, 208, .2); }
+@media (max-width: 760px) {
+  .zlx-imgrow { flex-direction: column-reverse; }
+  .zlx-views { flex-direction: row; width: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .zlx-view { width: 64px; height: 64px; flex: 0 0 auto; aspect-ratio: auto; }
+}

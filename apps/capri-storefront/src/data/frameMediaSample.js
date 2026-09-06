@@ -349,3 +349,18 @@ export function withGeneratedViews(product) {
 
 /** Handles that have generated views, for "is there anything to show?" checks. */
 export const GENERATED_HANDLES = GENERATED_INDEX.map((f) => f.handle);
+
+// El catálogo no expone un slug fiable, pero SÍ el SKU: unión por SKU normalizado.
+const _SKU_TO_HANDLE = {};
+for (const f of GENERATED_INDEX) {
+  _SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
+}
+
+/**
+ * Vistas generadas de una montura por SKU (p.ej. "SL116" o "SL 116").
+ * @returns {null | { [colorway:string]: {front,left,right,back} }}  claves R2 → resolveImage()
+ */
+export function viewsBySku(sku) {
+  const h = _SKU_TO_HANDLE[String(sku || "").toLowerCase().replace(/\s+/g, "")];
+  return h ? GENERATED_VIEWS[h] : null;
+}
