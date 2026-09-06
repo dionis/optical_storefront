@@ -37,6 +37,12 @@ from scraper.media.gemini_media import generate_video, generate_views
 #: PROMPT_VERSION in apps/backend/src/lib/frame-media.ts.
 PROMPT_VERSION = 1
 
+#: How often the run prints a running subtotal. A full pilot is 608 assets over
+#: several hours, so "it is still going" is not enough: what an operator watching
+#: a log actually needs to know is how much has been spent so far and how much of
+#: the ceiling is left.
+PROGRESS_EVERY = 20
+
 #: Consecutive failures that stop the run. Same value, and the same reasoning, as
 #: `_MAX_CONSECUTIVE_FAILURES` in sync.py: a run of failures this long is an
 #: outage, not a blip, and grinding on only spends money against a broken API.
@@ -124,6 +130,23 @@ def _fingerprint(source: bytes, model_id: str) -> str:
     return hashlib.sha256(
         f"{digest}|{model_id}|pv{PROMPT_VERSION}".encode()
     ).hexdigest()
+
+
+def _subtotal(stats: RunStats, processed: int, max_cost: float) -> str:
+    """The running tally, printed every PROGRESS_EVERY assets.
+
+    Includes the average per asset because that is the number that turns a
+    half-finished run into a forecast: at $0.0388 each, the 608 views of the pilot
+    are ~$23.6, and if the average drifts the estimate in the plan is wrong.
+    """
+    billed = stats.done + stats.failed
+    average = stats.cost_usd / billed if billed else 0.0
+    return (
+        f"[media] ── subtotal ({processed} procesados): "
+        f"{stats.done} ok · {stats.failed} fallidos · "
+        f"${stats.cost_usd:.4f} gastados · ${average:.4f}/activo · "
+        f"${max(0.0, max_cost - stats.cost_usd):.2f} restantes del tope"
+    )
 
 
 def _label(asset: dict[str, Any], kind: str) -> str:
@@ -491,6 +514,8 @@ def _drain(
                         note=str(err)[:1000],
                     )
                     echo(f"[media]   {label} ✗ {reason} — {str(err)[:140]}")
+                    if processed % PROGRESS_EVERY == 0:
+                        echo(_subtotal(stats, processed, max_cost))
 
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         stats.stopped_because = "consecutive_failures"
@@ -498,7 +523,7 @@ def _drain(
                             f"[media] aborting: {consecutive_failures} failures in a row — "
                             "check the API key, the quota and the network path."
                         )
-                        return stats
+                        return
                     continue
 
             consecutive_failures = 0
@@ -511,9 +536,10 @@ def _drain(
                 f"${cost:.4f} (run total ${stats.cost_usd:.2f})"
             )
 
+            if processed % PROGRESS_EVERY == 0:
+                echo(_subtotal(stats, processed, max_cost))
+
             if stats.cost_usd >= max_cost:
                 stats.stopped_because = "max_cost"
                 echo(f"[media] reached --max-cost ${max_cost:.2f}; stopping.")
-                return stats
-
-    return stats
+                return

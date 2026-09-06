@@ -285,11 +285,24 @@ def generate_cmd(
         echo=click.echo,
     )
 
+    billed = stats.done + stats.failed
+    average = stats.cost_usd / billed if billed else 0.0
+
     click.echo("")
-    click.echo(
-        f"[media] done={stats.done} failed={stats.failed} skipped={stats.skipped} "
-        f"spent=${stats.cost_usd:.4f} stopped={stats.stopped_because}"
-    )
+    click.echo("─" * 62)
+    click.echo(f"  TOTAL DE LA CORRIDA {stats.run_id}")
+    click.echo(f"    generados      {stats.done}")
+    click.echo(f"    fallidos       {stats.failed}")
+    if stats.skipped:
+        click.echo(f"    omitidos       {stats.skipped}")
+    click.echo(f"    GASTADO        ${stats.cost_usd:.4f} USD")
+    if billed:
+        # A failed request was still billed, so the average is over both.
+        click.echo(f"    media          ${average:.4f} por activo ({billed} facturados)")
+    click.echo(f"    tope           ${max_cost:.2f}  ·  se detuvo por: {stats.stopped_because}")
+    click.echo("─" * 62)
+    if stats.done:
+        click.echo("Los archivos están en R2. Para verlos: `media results`.")
 
     if report_path:
         with open(report_path, "w", encoding="utf-8") as handle:
@@ -422,4 +435,89 @@ def publish_cmd(
         click.echo(
             "Note: the storefront does not read this flag yet (phase 4 pending), "
             "so nothing changes for a customer today."
+        )
+
+
+@media_group.command("results")
+@_selection_options
+@click.option("--limit", type=int, default=50, show_default=True, help="Rows to show.")
+@click.option("--urls", is_flag=True, help="Print only the public URLs, one per line.")
+@_handle_api_errors
+def results_cmd(
+    pilot: bool,
+    pilot_brand: str | None,
+    handles: tuple[str, ...],
+    from_file_path: str | None,
+    all_frames: bool,
+    pending: bool,
+    kind: str,
+    slot_list: str | None,
+    limit: int,
+    urls: bool,
+) -> None:
+    """Where the generated files landed, and what they cost.
+
+    Answers "did it actually upload, and where can I look at it": each row is one
+    asset with its R2 key, and with `R2_PUBLIC_URL` set, a URL you can open.
+    """
+    config = get_config()
+    config.validate()
+
+    try:
+        selected, description = resolve(
+            pilot=pilot, pilot_brand=pilot_brand, handles=handles,
+            from_file_path=from_file_path, all_frames=all_frames, pending=pending,
+        )
+    except SelectionError as err:
+        raise click.ClickException(str(err)) from err
+
+    board = api.board(
+        config,
+        kind=_kind(kind),
+        status="done",
+        limit=limit,
+        **({"handle": ",".join(selected)} if selected else {}),
+    )
+    assets = board.get("assets", [])
+    slots = _slots(slot_list)
+    if slots:
+        assets = [a for a in assets if a.get("slot") in slots]
+
+    public = (config.r2_public_url or "").rstrip("/")
+
+    if urls:
+        for a in assets:
+            if a.get("output_key"):
+                click.echo(f"{public}/{a['output_key']}" if public else a["output_key"])
+        return
+
+    if not assets:
+        click.echo(f"Nada generado todavía en {description}.")
+        click.echo("La tabla es `frame_media_asset`; estos serían los de status='done'.")
+        return
+
+    total = 0.0
+    click.echo(f"{description} · {board.get('count', len(assets))} activo(s) generados")
+    click.echo("")
+    for a in assets:
+        cost = float(a.get("cost_usd") or 0.0)
+        total += cost
+        marca = "publicado" if a.get("published") else "interno"
+        click.echo(
+            f"  {a['product_handle']:<24} {(a.get('colorway') or ''):<10} "
+            f"{(a.get('slot') or kind):<6} ${cost:.4f}  {marca}"
+        )
+        key = a.get("output_key")
+        if key:
+            click.echo(f"      {public + '/' + key if public else key}")
+
+    click.echo("")
+    click.echo(f"  mostrados {len(assets)} · ${total:.4f} USD")
+    if board.get("has_more"):
+        click.echo(f"  hay más: sube --limit (total {board.get('count')})")
+    if not public:
+        click.echo("")
+        click.echo(
+            "R2_PUBLIC_URL no está en apps/scraper/.env, así que arriba van claves "
+            "R2 en vez de URLs. Añádela para poder abrirlas en el navegador."
         )
