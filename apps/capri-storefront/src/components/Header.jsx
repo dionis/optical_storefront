@@ -56,7 +56,7 @@ export default function Header() {
         </button>
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
-          <img src="/logo.svg" alt="Óptica El Rancho — RUBI_LENS" className="logo-img" />
+          <img src="/logo.png" alt="RUBI LENS — Óptica y Salud Visual" className="logo-img" />
         </Link>
 
         <nav className="nav desktop-only">{links}</nav>
