@@ -3339,3 +3339,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .zlx-views { flex-direction: row; width: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .zlx-view { width: 64px; height: 64px; flex: 0 0 auto; aspect-ratio: auto; }
 }
+
+/* Vídeo comercial dentro del rail de vistas (ProductDetail).
+   Es un elemento más del rail, no una fila aparte: para el cliente es otra vista de
+   la misma montura. Como no se generan pósters, la miniatura es la foto del color
+   con un ▶ superpuesto — sin eso sería indistinguible de una vista fija. */
+.pdp-view-video { position: relative; }
+.pdp-view-play {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.55);
+  background: rgba(15,40,90,.28); border-radius: inherit; pointer-events: none;
+}
+/* El player trae sus propios controles, así que queda fuera del clic-para-zoom. */
+.pdp-video { width: 100%; max-height: 340px; object-fit: contain; border-radius: var(--radius); background: #000; }

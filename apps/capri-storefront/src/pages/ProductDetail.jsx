@@ -94,6 +94,15 @@ export default function ProductDetail() {
   const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
   const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
 
+  // Vídeo comercial de ESTE color, si existe. Llega por `variant.metadata.video`
+  // (mediaOf en medusaCatalog.js), no por el fixture: así aparece solo en cuanto se
+  // genera uno y se sincroniza, sin tocar código ni volver a desplegar.
+  const videoSrc = color && color.video ? color.video.src : null;
+  // Un vídeo puede existir sin las 4 vistas, así que el rail se muestra por
+  // cualquiera de las dos cosas.
+  const showRail = hasViews || !!videoSrc;
+  const showingVideo = view === "video" && !!videoSrc;
+
   const related = PRODUCTS.filter((p) => p.brand_slug === product.brand_slug && p.slug !== product.slug).slice(0, 4);
   const cases = recommendedCases(product.sku, 3);
 
@@ -114,10 +123,10 @@ export default function ProductDetail() {
 
       <div className="pdp-grid">
         <div className="pdp-gallery">
-          <div className={`pdp-stage ${hasViews ? "has-views" : ""}`}>
-            {hasViews && (
+          <div className={`pdp-stage ${showRail ? "has-views" : ""}`}>
+            {showRail && (
               <div className="pdp-views" role="tablist" aria-label={t("pdp.views")}>
-                {VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                {hasViews && VIEW_ORDER.map((vw) => colorViews[vw] ? (
                   <button key={vw} type="button" role="tab" aria-selected={view === vw}
                           className={`pdp-view ${view === vw ? "sel" : ""}`}
                           onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
@@ -125,14 +134,43 @@ export default function ProductDetail() {
                          onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
                   </button>
                 ) : null)}
+                {/* Un elemento más del rail, no una fila aparte: el vídeo es otra
+                    vista de la misma montura. Sin póster generado, la miniatura es la
+                    foto del color con un ▶ encima. */}
+                {videoSrc && (
+                  <button type="button" role="tab" aria-selected={view === "video"}
+                          className={`pdp-view pdp-view-video ${view === "video" ? "sel" : ""}`}
+                          onClick={() => setView("video")} title={t("pdp.view.video")}>
+                    <img src={color.image} alt={t("pdp.view.video")} loading="lazy" />
+                    <span className="pdp-view-play" aria-hidden>▶</span>
+                  </button>
+                )}
               </div>
             )}
             <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                       aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
-              <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
-                   onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+              {showingVideo ? (
+                <video
+                  key={videoSrc}
+                  className="fade-in pdp-video"
+                  src={videoSrc}
+                  /* Todavía no se generan pósters: la foto del color hace de cartel. */
+                  poster={(color.video && color.video.poster) || color.image}
+                  controls
+                  playsInline
+                  /* Un clip de 8 s son varios MB. Sin esto, cada visita a la ficha se
+                     los descarga aunque nadie le dé al play. */
+                  preload="none"
+                  /* El visor hace zoom al hacer clic; sin frenar la propagación,
+                     pulsar "play" dispararía el zoom en vez de reproducir. */
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
+                     onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+              )}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
               )}
