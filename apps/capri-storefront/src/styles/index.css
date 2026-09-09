@@ -171,15 +171,6 @@ button { font-family: inherit; cursor: pointer; }
 .fade-in { animation: fade .3s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none; } }
 .pdp-thumbs { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
-/* Second axis of the gallery: which media of the ACTIVE colour is shown. Sits above
-   .pdp-thumbs, which stays the colour selector. */
-.pdp-views { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-.pdp-view  { padding: 6px 12px; border-radius: 999px; border: 1px solid #dfe5f0;
-             background: #fff; font-size: .82rem; cursor: pointer; transition: all .15s; }
-.pdp-view:hover { border-color: #b9c6de; }
-.pdp-view.sel   { background: #0f285a; border-color: #0f285a; color: #fff; }
-/* The video keeps its own controls, so it stays out of the click-to-zoom behaviour. */
-.pdp-video { max-height: 340px; width: 100%; object-fit: contain; border-radius: var(--radius); }
 .pdp-thumb { width: 80px; height: 66px; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; padding: 8px; }
 .pdp-thumb.sel { border-color: var(--blue); }
 .pdp-thumb img { height: 100%; object-fit: contain; margin: 0 auto; }
@@ -3274,7 +3265,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   box-shadow: 0 10px 26px -16px rgba(16, 24, 40, .4);
 }
 
-<<<<<<< HEAD
 /* ── Revisión interna de medios generados (/dev/medios, tras flag) ───────────
    La tira pone la foto del proveedor primero y las vistas generadas a su lado:
    la pregunta "¿es la misma montura?" solo se responde comparando, nunca mirando
@@ -3308,7 +3298,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 /* The reference is marked so the eye never mistakes a guess for the real photo. */
 .mrev-shot.ref img { border-color: #0f285a; border-width: 2px; }
 .mrev-shot.ref figcaption { color: #0f285a; font-weight: 700; }
-=======
 /* ═══ Galería de VISTAS del producto (4 ángulos) — miniaturas a la izquierda ═══
    Eje independiente del color: las miniaturas de vista (frontal/lateral/trasera)
    solo cambian el visor central, no la selección de color. Solo aparece cuando la
@@ -3350,4 +3339,3 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .zlx-views { flex-direction: row; width: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .zlx-view { width: 64px; height: 64px; flex: 0 0 auto; aspect-ratio: auto; }
 }
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5

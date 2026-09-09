@@ -33,19 +33,11 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
-<<<<<<< HEAD
-  // Which media the main frame shows for the ACTIVE COLOUR. Second axis: `active`
-  // still means "which colourway", and it alone governs price, variantId and the
-  // prescription flow. Mixing the two is the one mistake here that breaks checkout
-  // rather than the layout.
-  const [view, setView] = useState("photo");
-=======
   // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
   const [view, setView] = useState("front");
   useEffect(() => { setView("front"); }, [slug, active]);
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -68,10 +60,6 @@ export default function ProductDetail() {
   const review = useReviewSummary(slug);
   useEffect(() => { if (product) try { trackView(); } catch {} }, [slug]);
 
-  // Media is generated per colourway, so a slot that exists for one may be missing
-  // on the next. Falling back to the photo on every colour (and product) change
-  // avoids showing an empty frame for a view that has no file.
-  useEffect(() => { setView("photo"); }, [active, slug]);
 
   // Add the frame at its base price via the server cart (no local total).
   const addFrame = async (variantId) => {
@@ -97,15 +85,6 @@ export default function ProductDetail() {
 
   const color = product.colors[active];
 
-<<<<<<< HEAD
-  // Generated media for THIS colourway. Everything is optional: a frame with
-  // nothing generated renders exactly as it did before any of this existed.
-  const VIEW_SLOTS = ["front", "left", "right", "back"];
-  const availableViews = VIEW_SLOTS.filter((s) => color.views && color.views[s]);
-  const hasVideo = Boolean(color.video && color.video.src);
-  const showingVideo = view === "video" && hasVideo;
-  const shown = view === "photo" ? color.image : (color.views || {})[view] || color.image;
-=======
   // Vistas generadas (4 ángulos) de ESTE color, si existen para este SKU. Los
   // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,
   // cae a la imagen actual del color (nunca un recuadro roto). Sin vistas: ficha
@@ -115,7 +94,6 @@ export default function ProductDetail() {
   const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
   const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
 
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5
   const related = PRODUCTS.filter((p) => p.brand_slug === product.brand_slug && p.slug !== product.slug).slice(0, 4);
   const cases = recommendedCases(product.sku, 3);
 
@@ -136,34 +114,6 @@ export default function ProductDetail() {
 
       <div className="pdp-grid">
         <div className="pdp-gallery">
-<<<<<<< HEAD
-          <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
-            <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
-                    onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
-                    aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
-            {showingVideo ? (
-              <video
-                key={color.video.src}
-                className="fade-in pdp-video"
-                src={color.video.src}
-                /* No poster is generated yet, so the supplier photo stands in. */
-                poster={color.video.poster || color.image}
-                controls
-                playsInline
-                /* An 8s clip is several MB: never download it unasked. */
-                preload="none"
-                /* The frame toggles zoom on click; the player must not trigger it. */
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              /* key = the shown URL, not color.image: it is what remounts the node
-                 and replays `fade-in`, so switching view animates instead of jumping. */
-              <img key={shown} src={shown} alt={`${product.name} ${color.name}`} className="fade-in"
-                   onError={(e)=>{e.currentTarget.style.opacity=0.3;}} />
-            )}
-            {TRY_ON_ENABLED && (
-              <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
-=======
           <div className={`pdp-stage ${hasViews ? "has-views" : ""}`}>
             {hasViews && (
               <div className="pdp-views" role="tablist" aria-label={t("pdp.views")}>
@@ -176,7 +126,6 @@ export default function ProductDetail() {
                   </button>
                 ) : null)}
               </div>
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5
             )}
             <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
@@ -189,30 +138,6 @@ export default function ProductDetail() {
               )}
             </div>
           </div>
-
-          {/* Second axis: which media of the active colour. Rendered only when there
-              is something to offer — an absent button says nothing, a disabled one
-              tells the customer they are missing out. */}
-          {(availableViews.length > 0 || hasVideo) && (
-            <div className="pdp-views" role="group" aria-label={t("pdp.media.group")}>
-              <button type="button" className={`pdp-view ${view === "photo" ? "sel" : ""}`}
-                      aria-pressed={view === "photo"} onClick={() => setView("photo")}>
-                {t("pdp.media.photo")}
-              </button>
-              {availableViews.map((slot) => (
-                <button key={slot} type="button" className={`pdp-view ${view === slot ? "sel" : ""}`}
-                        aria-pressed={view === slot} onClick={() => setView(slot)}>
-                  {t(`pdp.media.view.${slot}`)}
-                </button>
-              ))}
-              {hasVideo && (
-                <button type="button" className={`pdp-view ${view === "video" ? "sel" : ""}`}
-                        aria-pressed={view === "video"} onClick={() => setView("video")}>
-                  ▶ {t("pdp.media.video")}
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="pdp-thumbs">
             {product.colors.map((c, i) => (

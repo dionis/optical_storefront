@@ -426,7 +426,6 @@ export const T = {
     "empty.clear": "Limpiar filtros",
     "pdp.home": "Inicio",
     "pdp.color": "Color",
-<<<<<<< HEAD
     "pdp.media.group": "Vistas del producto",
     "pdp.media.photo": "Foto",
     "pdp.media.view.front": "Frente",
@@ -441,13 +440,11 @@ export const T = {
     "mrev.views": "vistas",
     "mrev.original": "Original",
     "mrev.openProduct": "Ver en la ficha →",
-=======
     "pdp.views": "Vistas",
     "pdp.view.front": "Frontal",
     "pdp.view.left": "Lateral izq.",
     "pdp.view.right": "Lateral der.",
     "pdp.view.back": "Trasera",
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5
     "pdp.selectLens": "Añadir receta →",
     "pdp.addFrame": "Añadir montura",
     "pdp.lensesFrom": "montura · lentes desde $6.95",
@@ -1460,7 +1457,6 @@ export const T = {
     "empty.clear": "Clear filters",
     "pdp.home": "Home",
     "pdp.color": "Color",
-<<<<<<< HEAD
     "pdp.media.group": "Product views",
     "pdp.media.photo": "Photo",
     "pdp.media.view.front": "Front",
@@ -1475,13 +1471,11 @@ export const T = {
     "mrev.views": "views",
     "mrev.original": "Original",
     "mrev.openProduct": "Open product page →",
-=======
     "pdp.views": "Views",
     "pdp.view.front": "Front",
     "pdp.view.left": "Left side",
     "pdp.view.right": "Right side",
     "pdp.view.back": "Back",
->>>>>>> b3538d644757a598ad18cd51edcb678854a4e5d5
     "pdp.selectLens": "Add prescription →",
     "pdp.addFrame": "Add frame",
     "pdp.lensesFrom": "frame · lenses from $6.95",
