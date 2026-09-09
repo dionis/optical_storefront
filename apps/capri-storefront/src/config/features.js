@@ -31,4 +31,9 @@ function flag(value, fallback) {
 // Para reactivarlo en desarrollo: VITE_ENABLE_TRY_ON=true en tu .env.
 export const TRY_ON_ENABLED = flag(env.VITE_ENABLE_TRY_ON, false);
 
-export default { TRY_ON_ENABLED };
+// Internal review page for AI-generated frame media (/dev/medios). OFF by default:
+// it shows media that has not been reviewed, alongside a warning saying so, and has
+// no place in front of a customer. Set VITE_ENABLE_MEDIA_REVIEW=true locally.
+export const MEDIA_REVIEW_ENABLED = flag(env.VITE_ENABLE_MEDIA_REVIEW, false);
+
+export default { TRY_ON_ENABLED, MEDIA_REVIEW_ENABLED };

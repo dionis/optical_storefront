@@ -12,7 +12,7 @@
 // existing filters.js + tv() (Spanish→English display) keep working unchanged.
 import { medusa } from "./medusa.js";
 import { hexFor } from "./products.js";
-import { resolveImage } from "./imageUrl.js";
+import { resolveImage, resolveMedia } from "./imageUrl.js";
 
 // English (scraper) → canonical Spanish (storefront) for nominal attributes.
 const SHAPE_ES = {
@@ -43,13 +43,49 @@ function priceOf(product) {
   return Math.round(Math.min(...amounts) * 100) / 100;
 }
 
+/**
+ * Generated media for one variant: the four packshots and the promo video.
+ *
+ * Every field is optional and stays `undefined` when absent — not `{}` or `null` —
+ * so a component can write `color.views?.front` and `{color.video && …}` without
+ * nested guards, and a colourway with nothing generated renders exactly as before.
+ *
+ * The backend stores R2 keys, so everything goes through resolveImage/resolveMedia,
+ * the same funnel as every other product image.
+ */
+function mediaOf(v) {
+  const m = (v && v.metadata) || {};
+
+  const views = Object.fromEntries(
+    Object.entries(m.views || {})
+      .filter(([, key]) => key)
+      .map(([slot, key]) => [slot, resolveImage(key)])
+  );
+
+  return {
+    views: Object.keys(views).length ? views : undefined,
+    // No poster is generated yet, so the caller falls back to the supplier photo.
+    video: m.video ? { src: resolveMedia(m.video), poster: undefined } : undefined,
+    model3d: m.model3d ? resolveMedia(m.model3d) : undefined,
+    // Marks media a model produced rather than a camera. Carried through so the
+    // page can label it if the owner ever wants that; nothing renders it today.
+    mediaGenerated: m.media_generated ? true : undefined,
+  };
+}
+
 function colorsOf(product) {
   const variants = product.variants || [];
   const images = (product.images || []).map((i) => i.url);
   return variants.map((v, i) => {
     const name = v.title || (v.metadata && v.metadata.color) || "Default";
     const raw = (v.metadata && v.metadata.image) || images[i] || product.thumbnail || images[0] || "";
-    return { name, image: resolveImage(raw), hex: hexFor(name), variantId: v.id };
+    return {
+      name,
+      image: resolveImage(raw),
+      hex: hexFor(name),
+      variantId: v.id,
+      ...mediaOf(v),
+    };
   });
 }
 

@@ -21,3 +21,10 @@ export function resolveImage(key) {
   if (/^https?:\/\//i.test(key)) return key;
   return R2_PUBLIC ? `${R2_PUBLIC}/${key.replace(/^\//, "")}` : key;
 }
+
+/**
+ * Same key→URL resolution as images, named apart so a video call does not read as
+ * a lie. An R2 key is an R2 key whatever is inside it, and duplicating the logic
+ * is how the two end up disagreeing about an empty VITE_R2_PUBLIC_URL.
+ */
+export const resolveMedia = resolveImage;

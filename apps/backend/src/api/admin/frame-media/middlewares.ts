@@ -114,7 +114,22 @@ export const ReleaseFrameMediaSchema = z.object({
 });
 export type ReleaseFrameMediaSchema = z.infer<typeof ReleaseFrameMediaSchema>;
 
+/**
+ * Copying ready assets onto the products. No selection means everything — this one
+ * writes no money and produces no side effect beyond making files reachable, so a
+ * full sweep is a sensible default rather than a trap.
+ */
+export const SyncFrameMediaSchema = z.object({
+  handles: z.array(z.string().min(1)).max(2000).optional(),
+});
+export type SyncFrameMediaSchema = z.infer<typeof SyncFrameMediaSchema>;
+
 export const frameMediaMiddlewares: MiddlewareRoute[] = [
+  {
+    matcher: "/admin/frame-media/sync",
+    method: "POST",
+    middlewares: [validateAndTransformBody(SyncFrameMediaSchema)],
+  },
   {
     matcher: "/admin/frame-media/release",
     method: "POST",

@@ -142,6 +142,19 @@ def set_tier(config: Config, tier: int) -> dict[str, Any]:
     return _request(config, "POST", f"{_ADMIN_PREFIX}/tier", json={"tier": tier})
 
 
+def sync(config: Config, handles: list[str] | None = None) -> dict[str, Any]:
+    """Copy ready assets onto the products, so the storefront can reach them.
+
+    This is the step that makes a generated view visible at all: the storefront
+    reads the Store API, which only carries what is on the product. Idempotent and
+    free, so `generate` runs it automatically rather than leaving it to be forgotten.
+    """
+    body: dict[str, Any] = {}
+    if handles:
+        body["handles"] = handles
+    return _request(config, "POST", f"{_ADMIN_PREFIX}/sync", json=body)
+
+
 def board(config: Config, **params: Any) -> dict[str, Any]:
     return _request(config, "GET", _ADMIN_PREFIX, params=params)
 

@@ -11,6 +11,7 @@ import Footer from "./components/Footer.jsx";
 import Home from "./pages/Home.jsx";
 import Catalog from "./pages/Catalog.jsx";
 import ProductDetail from "./pages/ProductDetail.jsx";
+import { MEDIA_REVIEW_ENABLED } from "./config/features.js";
 // Rutas secundarias: se cargan BAJO DEMANDA (code-splitting) para no pesar en el
 // bundle inicial del catálogo. El admin (charts + dashboard) es el mayor ahorro.
 const CaseDetail = lazy(() => import("./pages/CaseDetail.jsx"));
@@ -18,6 +19,10 @@ const LensProcess = lazy(() => import("./pages/LensProcess.jsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 const AccountPage = lazy(() => import("./pages/AccountPage.jsx"));
 const MyOrders = lazy(() => import("./pages/MyOrders.jsx"));
+// Lazy like every other secondary route, and for one extra reason: with the flag
+// off this chunk is never requested, so a dev-only review surface does not ride
+// along in the bundle a customer downloads.
+const MediaReview = lazy(() => import("./pages/MediaReview.jsx"));
 const MedusaCheckout = lazy(() => import("./pages/MedusaCheckout.jsx"));
 import { CartProvider } from "./components/CartContext.jsx";
 import { FeedbackProvider } from "./components/Feedback.jsx";
@@ -69,6 +74,11 @@ export default function App() {
               <Route path="/catalogo" element={<Catalog />} />
               <Route path="/marca/:slug" element={<Catalog />} />
               <Route path="/producto/:slug" element={<ProductDetail />} />
+              {/* Internal media review. Behind a flag: it deliberately shows media
+                  nobody has approved yet, which is the point of reviewing it. */}
+              {MEDIA_REVIEW_ENABLED && (
+                <Route path="/dev/medios" element={<MediaReview />} />
+              )}
               <Route path="/estuche/:slug" element={<CaseDetail />} />
               <Route path="/estuches" element={<Catalog />} />
               <Route path="/recetas/:slug" element={<LensProcess />} />

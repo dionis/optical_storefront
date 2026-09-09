@@ -301,8 +301,22 @@ def generate_cmd(
         click.echo(f"    media          ${average:.4f} por activo ({billed} facturados)")
     click.echo(f"    tope           ${max_cost:.2f}  ·  se detuvo por: {stats.stopped_because}")
     click.echo("─" * 62)
+
     if stats.done:
-        click.echo("Los archivos están en R2. Para verlos: `media results`.")
+        # Automatic on purpose. Generating without syncing leaves files nobody can
+        # reach, and "remember to run one more command" is not a design.
+        try:
+            synced = api.sync(config, handles=selected)
+            click.echo(
+                f"Publicado en el catálogo: {synced.get('variants_updated', 0)} variante(s) "
+                f"actualizadas, {synced.get('variants_unchanged', 0)} ya estaban al día."
+            )
+        except MediaApiError as err:
+            click.echo(
+                f"AVISO: no se pudo publicar en el catálogo ({err}). "
+                "Los archivos están en R2; ejecuta `media sync` cuando se resuelva."
+            )
+        click.echo("Para verlos: `media results`.")
 
     if report_path:
         with open(report_path, "w", encoding="utf-8") as handle:
@@ -571,3 +585,51 @@ def tier_cmd(target: int | None) -> None:
         f"Nivel {tier.get('level')} · máximo {tier.get('max_frames') or 'sin límite'} "
         f"monturas · tope ${tier.get('monthly_ceiling_usd_views')} vistas"
     )
+
+
+@media_group.command("sync")
+@_selection_options
+@_handle_api_errors
+def sync_cmd(
+    pilot: bool,
+    pilot_brand: str | None,
+    handles: tuple[str, ...],
+    from_file_path: str | None,
+    all_frames: bool,
+    pending: bool,
+    kind: str,
+    slot_list: str | None,
+) -> None:
+    """Make the generated files reachable from the storefront. Spends nothing.
+
+    Copies the R2 keys onto `variant.metadata`, which is the only thing the Store
+    API carries. Without it a generated view is a file nobody can see.
+
+    `generate` already does this at the end of a run; this command is for when the
+    catalogue changed underneath, or a run was interrupted before it got there.
+    """
+    config = get_config()
+    config.validate()
+
+    try:
+        selected, description = resolve(
+            pilot=pilot, pilot_brand=pilot_brand, handles=handles,
+            from_file_path=from_file_path, all_frames=all_frames, pending=pending,
+        )
+    except SelectionError as err:
+        raise click.ClickException(str(err)) from err
+
+    result = api.sync(config, handles=selected)
+    click.echo(
+        f"{description}: {result.get('variants_updated', 0)} variante(s) actualizadas, "
+        f"{result.get('variants_unchanged', 0)} sin cambios "
+        f"({result.get('products_seen', 0)} producto(s))."
+    )
+    orphans = result.get("orphan_skus") or []
+    if orphans:
+        # Media generated for a SKU the catalogue no longer has: the frame was
+        # renamed or unpublished after its views were made.
+        click.echo(
+            f"AVISO: {len(orphans)} SKU(s) con medios pero sin variante viva, "
+            f"p. ej. {orphans[:3]}"
+        )

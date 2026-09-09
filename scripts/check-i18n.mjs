@@ -27,7 +27,11 @@ const SRC = join(ROOT, "src");
  * is checked for "at least one key exists with this prefix" rather than exact
  * matches — enough to catch a whole family being deleted or renamed.
  */
-const DYNAMIC_PREFIXES = ["adm.range.", "adm.tab.", "adm.lens.cat.", "adm.err.stage.", "adm.dow."];
+// `pdp.media.view.` is assembled at render time from the slot name, so the
+// linter cannot resolve it statically — without this entry the whole family
+// would silently stop being checked.
+const DYNAMIC_PREFIXES = ["adm.range.", "adm.tab.", "adm.lens.cat.", "adm.err.stage.",
+                          "adm.dow.", "pdp.media.view."];
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {

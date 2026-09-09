@@ -578,7 +578,7 @@ index.html / src   TOCAR  leer el manifiesto de /store/frame-models al arrancar
 | **1** | Módulo, migración, lease, fingerprint, escalera, rutas admin (`claim`/`report`/`enqueue`/`progress`), siembra del piloto. **Sin generar nada** | 2 | `media plan --pilot` imprime 608 vistas y su costo sin gastar un centavo |
 | **2** | El CLI: `plan`/`generate`/`status`, `gemini_media` vendorizado, WebP + R2, reintentos (403/404 no), `--max-cost` | 2,5 | Las 20 Simplylite de punta a punta; `cost_usd` cuadrando con la consola de Google; Ctrl-C y relanzar continúa sin repetir |
 | **3** | Pestaña Medios: matriz, filtros, costo antes de confirmar, panel de escalera y gasto | 2 | `pnpm check:i18n` en verde; `money()`/`shortDate()` siguen el idioma |
-| **4** | Catálogo y ficha: metadata, `medusaCatalog.js`, galería condicional, `export-catalog.mjs` | 1,5 | Un colorway con vistas las muestra; uno sin ellas se ve como hoy. El doc de Meilisearch **no** cambia (§C.5) |
+| **4** | Catálogo y ficha. **Puente backend HECHO** (`sync` + `mediaOf()` + claves i18n); falta solo la galería (Apéndice A) | 0,5 | Un colorway con vistas las muestra; uno sin ellas se ve como hoy. El doc de Meilisearch **no** cambia (§C.5) |
 | **5** | `sync --with-media`: campos nuevos, encolado, publicación en `medusa_push` | 1 | `sync --full --dry-run --with-media` no gasta nada y encola bien. `len(r2_image_keys) == len(colors)` sigue siendo cierto |
 | **6** | Video en el CLI: `--kind video`, `operation` persistido antes de sondear, modos `list`/`all` | 1 | Ctrl-C a los 3 min de un Veo y relanzar retoma la operación en vez de pagar otra |
 | **7** | GLB: orden de trabajo, subida validada, manifiesto público, `vto-web` | 2 | Un `.glb` sube, valida y carga en el probador (con CORS de R2 verificado) |
@@ -1071,96 +1071,109 @@ Mínimo: `adm.tab.media`, `adm.media.progress`, `adm.media.spend`, `adm.media.ti
 backend: `budget_exceeded`, `tier_locked`, `already_done`, `no_source_image`,
 `provider_rejected`, `r2_unconfigured`, …). En `es` **y** en `en`.
 
-## A.10 Encargo: mostrar las vistas y poder revisarlas
+## A.10 Encargo para el agente de frontend
 
-Hay **132 vistas reales ya generadas y subidas** (21 monturas, 33 colorways, las cuatro
-angulaciones en todas). Nada de esto se ve todavía en la tienda. El encargo tiene dos
-mitades y **las dos hacen falta**: sin la primera no hay nada que enseñar; sin la segunda
-no hay forma práctica de revisar 132 imágenes una por una.
+**La fontanería ya está hecha.** El dato llega solo a la ficha; lo que falta es
+pintarlo. Este apéndice describe exactamente eso y nada más.
 
-### Mitad 1 — La galería en la ficha
+### Lo que ya existe (no hay que construirlo)
 
-Lo de §A.2 y §A.3: segundo eje de botones sobre las miniaturas de color, sin tocar
-`active`. Ahí está el detalle a nivel de código.
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| Puente backend | `POST /admin/frame-media/sync` | Copia las claves R2 a `variant.metadata.views` / `.video` |
+| Disparo automático | `media generate` | Sincroniza al terminar cada corrida; no hay que acordarse |
+| Mapeo | `medusaCatalog.js` → `mediaOf()` | Convierte esa metadata en `color.views` y `color.video`, ya resueltas a URL |
+| Resolución de URL | `imageUrl.js` → `resolveMedia` | Alias de `resolveImage` para medios que no son imágenes |
+| Diccionario | `translations.js` | Las 8 claves `pdp.media.*` en `es` y `en`, y el prefijo dinámico registrado en `check-i18n.mjs` |
 
-### Mitad 2 — Una página de revisión, solo en desarrollo
+Es decir: **ya puedes leer `color.views` y `color.video` directamente del catálogo**, sin
+tocar el backend ni el diccionario.
 
-Una ruta `/dev/medios` que liste **lo que existe** y permita entrar a verlo. Es la
-herramienta que convierte "genera 608 imágenes" en "revisa 608 imágenes", que es el
-cuello de botella real (§B.5 pide revisar a ojo antes de publicar).
-
-Datos ya preparados, no hay que derivarlos ni llamar a la API:
+### La forma exacta que recibes
 
 ```js
-import {
-  GENERATED_INDEX,     // [{ handle, sku, brand, colorways, viewCount, tags, reason }]
-  GENERATED_VIEWS,     // { handle: { colorway: { front, left, right, back } } }
-  withGeneratedViews,  // (product) => product con `views` inyectadas
-} from "../data/frameMediaSample.js";
+color = {
+  name: "Black", image: "https://…/dc-50-di-caprio_00.webp", hex, variantId,
+
+  // Presentes solo si existen. Nunca `{}` ni `null`: `undefined`.
+  views: { front: "https://…_black_front.webp", left: "…", right: "…", back: "…" },
+  video: { src: "https://…_black.mp4", poster: undefined },
+  mediaGenerated: true,
+}
+```
+
+`views` puede venir **parcial** (dos slots de cuatro) y `video` puede faltar aunque haya
+vistas. Las URLs ya vienen resueltas: no vuelvas a pasarlas por `resolveImage`.
+
+`video.poster` es `undefined` a propósito — todavía no se generan pósters, así que usa
+`color.image` como cartel del vídeo.
+
+### Lo que hay que construir
+
+**1. La galería de la ficha** — §A.2 y §A.3. Lee §A.2 antes de tocar nada: el eje doble
+es el único error de este trabajo que rompe el carrito, no la maqueta.
+
+**2. Una página de revisión, solo en desarrollo.** Una ruta que liste lo que existe y
+permita mirarlo de un tirón. Es lo que convierte "genera 608 imágenes" en "revisa 608
+imágenes", que es el cuello de botella real (§B.5 pide revisión visual).
+
+Para esa página, `apps/capri-storefront/src/data/frameMediaSample.js` trae el inventario
+ya listado — 21 monturas, 33 colorways, 132 vistas — sin depender de que el backend esté
+sincronizado:
+
+```js
+import { GENERATED_INDEX, GENERATED_VIEWS, withGeneratedViews } from "../data/frameMediaSample.js";
 ```
 
 Lo que la página debe dar:
 
 | | Por qué |
 |---|---|
-| Una fila por montura: SKU, marca, nº de colorways y de vistas | Saber qué hay sin abrir nada |
-| Las 4 vistas de un colorway, juntas y grandes | Un fallo de identidad se ve comparando ángulos, no de uno en uno |
-| La **foto original del proveedor al lado** | Es la única forma de juzgar si la vista generada es *esta* montura |
-| `reason` y `tags` del índice | `control:ordinary` y `rimless+thin-metal` dicen qué esperar de cada una |
-| Enlace a la ficha real (`/producto/<seedSlug>`) | Ver la galería de la mitad 1 en su sitio |
+| Una fila por montura: SKU, marca, colorways, nº de vistas | Saber qué hay sin abrir nada |
+| Las 4 vistas de un colorway juntas y grandes | Un fallo de identidad se ve comparando ángulos |
+| **La foto original del proveedor al lado** | Única forma de juzgar si la vista generada es *esa* montura |
+| `reason` y `tags` del índice | `control:ordinary` y `rimless+thin-metal` dicen qué esperar |
+| Enlace a `/producto/<seedSlug>` | Ver la galería en su sitio |
 
-Sugerencia de orden: primero las que llevan `rimless` o `transparent` en `tags`, que es
-donde el modelo falla; los `control:ordinary` al final, como comprobación de cordura.
+Empieza por las que llevan `rimless` o `transparent` en `tags`: ahí es donde el modelo
+falla. Los `control:ordinary` al final, como comprobación de cordura.
 
-**Que no se cuele a producción**: la ruta va detrás del mismo tipo de flag que el resto
-(`src/config/features.js`), apagada por defecto, y `frameMediaSample.js` no debe
-importarse desde ningún componente de la tienda.
+**Que no llegue a producción**: la ruta detrás de un flag en `src/config/features.js`,
+apagado por defecto, y `frameMediaSample.js` sin importarse desde ningún componente de la
+tienda.
 
-### Por qué el fixture guarda claves y no URLs
+### Sobre `published`: NO filtres por él
 
-Los valores son claves R2 (`products/dc-50-di-caprio/views/..._black_front.webp`),
-exactamente la forma que tendrá `variant.metadata.views`. Es a propósito: obliga a pasar
-todo por `resolveImage()` como el resto de imágenes. Si te lo saltas, verás el cuadro
-gris del 404 en vez de que funcione por accidente con una URL absoluta — y entonces el
-día que lleguen los datos reales fallaría.
+`status = 'done'` significa "el archivo existe"; `published` significa "alguien lo
+revisó". **Decisión del dueño (septiembre 2026): se muestra todo lo generado, sin esperar
+revisión.** La galería pinta cualquier vista que exista y no consulta `published`, que
+sigue existiendo solo para registrar la revisión en el panel.
 
-### Los cuatro casos que hay que verificar
+Dicho una vez y sin dramatismo: estas vistas son **inventadas, no observadas**
+(`gemini_media.py` lo escribe en mayúsculas), así que una vista trasera que no se
+corresponda con la montura real puede llegar a un cliente. La página de revisión es lo
+que permite detectarlo y corregirlo rápido — razón de más para construirla.
+
+### Los casos que hay que verificar
 
 | Caso | Cómo provocarlo | Resultado esperado |
 |---|---|---|
-| Colorway sin vistas | Cualquier montura fuera de `GENERATED_HANDLES` | La ficha se ve **exactamente como hoy**. Sin fila de botones |
-| Vistas parciales | Borra un slot del fixture | Solo los botones que existen. Ninguno gris |
-| Cambio a un color sin vistas | Un colorway ausente del fixture | Vuelve a la foto original; la fila desaparece |
-| Vídeo | Todavía no hay ninguno generado (§D.4) | Cuando los haya: no se descarga hasta pulsar; «play» no dispara el zoom |
+| Colorway sin medios | Cualquier montura fuera de las 21 | La ficha se ve **exactamente como hoy**. Sin fila de botones |
+| Vistas parciales | Un colorway con 2 de 4 | Solo los botones que existen. Ninguno gris |
+| Cambio a un color sin vistas | Otro colorway de la misma montura | Vuelve a la foto original; la fila desaparece |
+| Vídeo presente | Todavía no hay ninguno generado | No se descarga hasta pulsar; «play» no dispara el zoom |
+| Vídeo sin póster | Siempre, hoy | Usa `color.image` como cartel |
 
 Antes de darlo por terminado: `pnpm check:i18n` en verde y la ficha revisada en los dos
 idiomas.
 
-### Regenerar el fixture tras otra corrida
+### Si `color.views` llega vacío
+
+No es un fallo del frontend. Significa que el backend no ha sincronizado todavía:
 
 ```bash
-cd apps/scraper
-uv run python -m scraper media results --pilot --kind views --limit 200
-uv run python -m scraper media results --handle dc-50-di-caprio --urls
+cd apps/scraper && uv run python -m scraper media sync --pilot
 ```
-
-### Sobre `published`: NO filtres por él
-
-En la tabla, `status = 'done'` significa "el archivo existe" y `published` significa
-"alguien lo revisó". Hoy las 132 están en `done` y **ninguna** en `published`.
-
-**Decisión del dueño (septiembre 2026): se muestra todo lo generado, sin esperar
-revisión.** Así que la galería pinta cualquier vista que exista y **no** consulta
-`published`. El fixture no lo trae, y eso es correcto, no un descuido.
-
-`published` no desaparece: sigue registrando la decisión de revisión para el panel y para
-`media publish`. Simplemente ya no es una puerta para enseñar.
-
-Lo que esto implica, dicho una vez y sin dramatismo: estas vistas son **inventadas, no
-observadas** (`gemini_media.py` lo escribe en mayúsculas), así que una vista trasera que
-no se corresponda con la montura real puede llegar a un cliente. La mitad 2 de este
-encargo es lo que permite detectarlo y corregirlo rápido — razón de más para construirla,
-no menos.
 
 ## A.11 Lista de comprobación final
 
@@ -1695,7 +1708,7 @@ a `POST /admin/frame-media/tier`.
 | Fase | Falta | Impacto si se lanza igual |
 |---|---|---|
 | 3 | Pestaña Medios | Sin `/tier` desde el navegador; se sube de nivel por API |
-| 4 | Galería del PDP | Las vistas se generan y guardan, pero **no se ven** en la tienda |
+| 4 | Solo la galería del PDP — el puente de datos ya está | El dato llega a `color.views`, pero todavía nada lo pinta |
 | 5 | `sync --with-media` | Los medios no se encolan solos al detectar cambios |
 | 6 | Vídeo probado | El código está; falta la corrida real y el Ctrl-C/reanudación |
 | 7 | GLB | Sin órdenes de trabajo ni subida de `.glb` |
