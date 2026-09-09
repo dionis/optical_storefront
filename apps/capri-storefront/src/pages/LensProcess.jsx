@@ -1,6 +1,10 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
+// Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
+import { viewsBySku } from "../data/frameMediaSample.js";
+import { resolveImage } from "../data/imageUrl.js";
+const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
 // useLensCatalog; only the presentation-only bits with no backend counterpart —
@@ -383,6 +387,9 @@ export default function LensProcess() {
   // Selected frame colour. Seeded from the ?color= link (so clicking a specific
   // swatch on a card lands here), but editable via the thumbnails under the frame.
   const [colorIdx, setColorIdx] = useState(Number(params.get("color") || 0));
+  // Eje de VISTA (front/left/right/back) de la galería, independiente del color.
+  const [view, setView] = useState("front");
+  useEffect(() => { setView("front"); }, [slug, colorIdx]);
   const navigate = useNavigate();
   const { addConfiguredFrame } = useCart();
 
@@ -784,6 +791,13 @@ export default function LensProcess() {
   const closeLabel = t("common.close");
 
   // Frame material education: first recognized material name gets a quality blurb.
+  // Galería de vistas (4 ángulos) de este color, si existen para este SKU. Claves R2
+  // → resolveImage(). Fallback a la imagen del color si una vista no carga.
+  const genViews = viewsBySku(product.sku);
+  const colorViews = genViews && color ? genViews[color.name] : null;
+  const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
+  const mainViewSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
+
   const frameMats = product.attributes?.material || [];
   const frameEduName = frameMats.find((m) => frameMatEdu(m, lang));
   const frameEdu = frameEduName ? frameMatEdu(frameEduName, lang) : null;
@@ -952,9 +966,23 @@ export default function LensProcess() {
         {/* IZQUIERDA: el espejuelo grande, protagonista */}
         <div className="zlx-main">
           <div className="zlx-float">
-            <div className="zlx-float-inner">
-              <img className="zlx-float-img" src={color.image} alt={`${product.name} · ${color.name}`}
-                   onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+            <div className={`zlx-imgrow ${hasViews ? "has-views" : ""}`}>
+              {hasViews && (
+                <div className="zlx-views" role="tablist" aria-label={t("pdp.views")}>
+                  {FRAME_VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                    <button key={vw} type="button" role="tab" aria-selected={view === vw}
+                            className={`zlx-view ${view === vw ? "on" : ""}`}
+                            onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
+                      <img src={resolveImage(colorViews[vw])} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                           onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                    </button>
+                  ) : null)}
+                </div>
+              )}
+              <div className="zlx-float-inner">
+                <img className="zlx-float-img" src={mainViewSrc} alt={`${product.name} · ${color.name}`}
+                     onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+              </div>
             </div>
             {/* nombre + colección + material, todo en una sola línea (imagen 1) */}
             <div className="zlx-float-head">
