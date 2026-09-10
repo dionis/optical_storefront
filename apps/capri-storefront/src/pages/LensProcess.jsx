@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
-import { viewsBySku } from "../data/frameMediaSample.js";
-import { resolveImage } from "../data/imageUrl.js";
+import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
+import { resolveImage, resolveMedia } from "../data/imageUrl.js";
 const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
@@ -798,6 +798,14 @@ export default function LensProcess() {
   const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
   const mainViewSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
 
+  // Vídeo comercial de este color, del mismo fixture que las vistas. Un color puede
+  // tener vídeo sin las 4 vistas, así que el rail se muestra por cualquiera de las dos.
+  const genVideos = videosBySku(product.sku);
+  const videoKey = genVideos && color ? genVideos[color.name] : null;
+  const videoSrc = videoKey ? resolveMedia(videoKey) : null;
+  const showRail = hasViews || !!videoSrc;
+  const showingVideo = view === "video" && !!videoSrc;
+
   const frameMats = product.attributes?.material || [];
   const frameEduName = frameMats.find((m) => frameMatEdu(m, lang));
   const frameEdu = frameEduName ? frameMatEdu(frameEduName, lang) : null;
@@ -966,10 +974,10 @@ export default function LensProcess() {
         {/* IZQUIERDA: el espejuelo grande, protagonista */}
         <div className="zlx-main">
           <div className="zlx-float">
-            <div className={`zlx-imgrow ${hasViews ? "has-views" : ""}`}>
-              {hasViews && (
+            <div className={`zlx-imgrow ${showRail ? "has-views" : ""}`}>
+              {showRail && (
                 <div className="zlx-views" role="tablist" aria-label={t("pdp.views")}>
-                  {FRAME_VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                  {hasViews && FRAME_VIEW_ORDER.map((vw) => colorViews[vw] ? (
                     <button key={vw} type="button" role="tab" aria-selected={view === vw}
                             className={`zlx-view ${view === vw ? "on" : ""}`}
                             onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
@@ -977,11 +985,31 @@ export default function LensProcess() {
                            onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
                     </button>
                   ) : null)}
+                  {/* Un elemento más del rail, como en la ficha: para el cliente es otra
+                      vista de la misma montura. Sin póster generado, la miniatura es la
+                      foto del color con un ▶ encima. */}
+                  {videoSrc && (
+                    <button type="button" role="tab" aria-selected={view === "video"}
+                            className={`zlx-view zlx-view-video ${view === "video" ? "on" : ""}`}
+                            onClick={() => setView("video")} title={t("pdp.view.video")}>
+                      <img src={color.image} alt={t("pdp.view.video")} loading="lazy" />
+                      <span className="zlx-view-play" aria-hidden>▶</span>
+                    </button>
+                  )}
                 </div>
               )}
               <div className="zlx-float-inner">
-                <img className="zlx-float-img" src={mainViewSrc} alt={`${product.name} · ${color.name}`}
-                     onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+                {showingVideo ? (
+                  /* preload="metadata": Veo deja el índice `moov` al final del MP4, y con
+                     "none" Firefox no lo va a buscar y el vídeo no arranca. Con "metadata"
+                     solo se trae el índice, no el clip entero. */
+                  <video key={videoSrc} className="zlx-float-img" src={videoSrc}
+                         poster={color.image} controls playsInline
+                         preload="metadata" onClick={(e) => e.stopPropagation()} />
+                ) : (
+                  <img className="zlx-float-img" src={mainViewSrc} alt={`${product.name} · ${color.name}`}
+                       onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+                )}
               </div>
             </div>
             {/* nombre + colección + material, todo en una sola línea (imagen 1) */}
