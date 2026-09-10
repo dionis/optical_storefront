@@ -633,3 +633,50 @@ def sync_cmd(
             f"AVISO: {len(orphans)} SKU(s) con medios pero sin variante viva, "
             f"p. ej. {orphans[:3]}"
         )
+
+
+@media_group.command("fixture")
+@click.option("--out", "out_path", default=None, help="Override the output path.")
+@_handle_api_errors
+def fixture_cmd(out_path: str | None) -> None:
+    """Rewrite the storefront's media fixture from what has been generated.
+
+    The storefront reads media from a committed file, not from the Store API, so
+    this snapshot IS the source of truth for what a customer sees. Run it after
+    every generation run and commit the result, or the storefront keeps showing
+    yesterday's media.
+    """
+    from pathlib import Path
+
+    from scraper.media.fixture import FIXTURE_PATH, build
+    from scraper.media.selection import _load_pilot
+
+    config = get_config()
+    config.validate()
+
+    # Everything with a file behind it, not just views: the fixture carries the
+    # promo videos too.
+    assets: list = []
+    for kind in ("view", "video"):
+        page = api.board(config, kind=kind, status="done", limit=200)
+        assets.extend(page.get("assets", []))
+        if page.get("has_more"):
+            click.echo(
+                f"AVISO: hay más de 200 activos de tipo {kind}; el fixture quedaría "
+                "incompleto. Sube el límite en el comando."
+            )
+
+    if not assets:
+        raise click.ClickException(
+            "No hay nada generado todavía, así que el fixture quedaría vacío."
+        )
+
+    target = Path(out_path) if out_path else FIXTURE_PATH
+    target.write_text(build(assets, _load_pilot()["frames"]), encoding="utf-8")
+
+    views = sum(1 for a in assets if a["kind"] == "view")
+    videos = sum(1 for a in assets if a["kind"] == "video")
+    click.echo(f"{target}")
+    click.echo(f"  {views} vistas · {videos} vídeo(s) · "
+               f"{len({a['product_handle'] for a in assets})} monturas")
+    click.echo("Commitea el archivo y despliega el storefront para que se vea.")

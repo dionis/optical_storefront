@@ -1,21 +1,21 @@
 /**
- * Every generated view that exists today, so the gallery can be built and reviewed
- * before the backend feeds it. DEV ONLY — nothing shipped imports this.
+ * Generated frame media, as it exists right now. GENERATED FILE — do not edit.
  *
- * 21 frames · 33 colourways · 132 views, all four angles present. These are the real
- * files the pilot produced and uploaded, not placeholders: what you see while wiring
- * the gallery is what a customer would see.
+ * 21 frames · 33 colourways · 132 views · 3 videos.
  *
- * VALUES ARE R2 OBJECT KEYS, NOT URLS — exactly the shape `variant.metadata.views`
- * will hold. That is deliberate: it forces anything reading them through
- * `resolveImage()` like every other product image. Render a bare key and you get the
- * grey 404 box instead of it working by accident.
+ * The storefront reads media from here rather than from the Store API: turning
+ * on VITE_USE_MEDUSA would drop 118 frames from the catalogue (only nine curated
+ * collections are admitted), including almost every frame that has media.
  *
- * Regenerate after another run:
- *   cd apps/scraper && uv run python -m scraper media results --pilot --limit 200
+ * VALUES ARE R2 OBJECT KEYS, NOT URLS. Anything reading them must go through
+ * resolveImage()/resolveMedia(), the same funnel as every other product image;
+ * render a bare key and you get the grey 404 box instead of a loud failure.
+ *
+ * Regenerate after EVERY run — this snapshot is the storefront's only source:
+ *   cd apps/scraper && uv run python -m scraper media fixture
  */
 
-/** Keyed by Medusa handle → colourway → slot. R2 object keys, never URLs. */
+/** Keyed by Medusa handle → colourway → slot. */
 export const GENERATED_VIEWS = {
   "dc-50-di-caprio": {
     "Grey": {
@@ -259,108 +259,133 @@ export const GENERATED_VIEWS = {
   },
 };
 
-/** Flat list for the dev index page: what exists, and why each frame is here. */
+/** Keyed by Medusa handle → colourway → the promo video's R2 key. */
+export const GENERATED_VIDEOS = {
+  "dc-50-di-caprio": {
+    "Grey": "products/dc-50-di-caprio/video/dc-50-di-caprio_grey.mp4",
+    "Black": "products/dc-50-di-caprio/video/dc-50-di-caprio_black.mp4",
+    "Brown": "products/dc-50-di-caprio/video/dc-50-di-caprio_brown.mp4",
+  },
+};
+
+/** Flat list for listing what exists, and why each frame was chosen. */
 export const GENERATED_INDEX = [
   { handle: "dc-50-di-caprio", sku: "DC 50", brand: "Di Caprio",
-    seedSlug: "dc50", tags: [],
-    reason: "control:ordinary(d=0)", colorways: ["Grey","Black","Brown"], viewCount: 12 },
+    seedSlug: "dc50", brandSlug: "di-caprio", tags: [],
+    reason: "control:ordinary(d=0)", colorways: ["Black", "Brown", "Grey"], viewCount: 12, videoCount: 3 },
   { handle: "sl103-simply-lite", sku: "SL103", brand: "Simplylite",
-    seedSlug: "sl103", tags: ["thin-metal"],
-    reason: "control:ordinary(d=2)", colorways: ["Burgundy","Pink"], viewCount: 8 },
+    seedSlug: "sl103", brandSlug: "simply-lite", tags: ["thin-metal"],
+    reason: "control:ordinary(d=2)", colorways: ["Burgundy", "Pink"], viewCount: 8, videoCount: 0 },
   { handle: "sl105-simply-lite", sku: "SL105", brand: "Simplylite",
-    seedSlug: "sl105", tags: ["pale","rimless","thin-metal"],
-    reason: "coverage:material=Metal", colorways: ["Silver","Blue"], viewCount: 8 },
+    seedSlug: "sl105", brandSlug: "simply-lite", tags: ["pale", "rimless", "thin-metal"],
+    reason: "coverage:material=Metal", colorways: ["Blue", "Silver"], viewCount: 8, videoCount: 0 },
   { handle: "sl106-simply-lite", sku: "SL106", brand: "Simplylite",
-    seedSlug: "sl106", tags: ["rimless","thin-metal"],
-    reason: "difficulty:rimless+thin-metal", colorways: ["Brown","Black"], viewCount: 8 },
+    seedSlug: "sl106", brandSlug: "simply-lite", tags: ["rimless", "thin-metal"],
+    reason: "difficulty:rimless+thin-metal", colorways: ["Black", "Brown"], viewCount: 8, videoCount: 0 },
   { handle: "sl107-simply-lite", sku: "SL107", brand: "Simplylite",
-    seedSlug: "sl107", tags: ["pale","rimless","thin-metal"],
-    reason: "difficulty:pale+rimless+thin-metal", colorways: ["Gunmetal","Silver"], viewCount: 8 },
+    seedSlug: "sl107", brandSlug: "simply-lite", tags: ["pale", "rimless", "thin-metal"],
+    reason: "difficulty:pale+rimless+thin-metal", colorways: ["Gunmetal", "Silver"], viewCount: 8, videoCount: 0 },
   { handle: "sl108-simply-lite", sku: "SL108", brand: "Simplylite",
-    seedSlug: "sl108", tags: ["pale","thin-metal"],
-    reason: "coverage:style=Full frame", colorways: ["Silver","Gunmetal"], viewCount: 8 },
+    seedSlug: "sl108", brandSlug: "simply-lite", tags: ["pale", "thin-metal"],
+    reason: "coverage:style=Full frame", colorways: ["Gunmetal", "Silver"], viewCount: 8, videoCount: 0 },
   { handle: "sl110-simply-lite", sku: "SL110", brand: "Simplylite",
-    seedSlug: "sl110", tags: ["thin-metal"],
-    reason: "control:ordinary(d=2)", colorways: ["Navy","Black"], viewCount: 8 },
+    seedSlug: "sl110", brandSlug: "simply-lite", tags: ["thin-metal"],
+    reason: "control:ordinary(d=2)", colorways: ["Black", "Navy"], viewCount: 8, videoCount: 0 },
   { handle: "sl113-simply-lite", sku: "SL113", brand: "Simplylite",
-    seedSlug: "sl113", tags: ["metallic","thin-metal"],
-    reason: "control:ordinary(d=3)", colorways: ["Gunmetal","Black"], viewCount: 8 },
+    seedSlug: "sl113", brandSlug: "simply-lite", tags: ["metallic", "thin-metal"],
+    reason: "control:ordinary(d=3)", colorways: ["Black", "Gunmetal"], viewCount: 8, videoCount: 0 },
   { handle: "sl114-simply-lite", sku: "SL114", brand: "Simplylite",
-    seedSlug: "sl114", tags: ["metallic","thin-metal"],
-    reason: "control:ordinary(d=3)", colorways: ["Black","Gunmetal"], viewCount: 8 },
+    seedSlug: "sl114", brandSlug: "simply-lite", tags: ["metallic", "thin-metal"],
+    reason: "control:ordinary(d=3)", colorways: ["Black", "Gunmetal"], viewCount: 8, videoCount: 0 },
   { handle: "sl115-simply-lite", sku: "SL115", brand: "Simplylite",
-    seedSlug: "sl115", tags: ["metallic","rimless","thin-metal"],
-    reason: "coverage:gender=Señoras", colorways: ["Black","Rose Gold"], viewCount: 8 },
+    seedSlug: "sl115", brandSlug: "simply-lite", tags: ["metallic", "rimless", "thin-metal"],
+    reason: "coverage:gender=Señoras", colorways: ["Black", "Rose Gold"], viewCount: 8, videoCount: 0 },
   { handle: "sl116-simply-lite", sku: "SL116", brand: "Simplylite",
-    seedSlug: "sl116", tags: ["metallic","rimless","thin-metal"],
-    reason: "difficulty:metallic+rimless+thin-metal", colorways: ["Gold","Black"], viewCount: 8 },
+    seedSlug: "sl116", brandSlug: "simply-lite", tags: ["metallic", "rimless", "thin-metal"],
+    reason: "difficulty:metallic+rimless+thin-metal", colorways: ["Black", "Gold"], viewCount: 8, videoCount: 0 },
   { handle: "sl701-simply-lite", sku: "SL701", brand: "Simplylite",
-    seedSlug: "sl701", tags: ["pale","rimless-3piece","thin-metal"],
-    reason: "coverage:shape=Rectángulo", colorways: ["Silver"], viewCount: 4 },
+    seedSlug: "sl701", brandSlug: "simply-lite", tags: ["pale", "rimless-3piece", "thin-metal"],
+    reason: "coverage:shape=Rectángulo", colorways: ["Silver"], viewCount: 4, videoCount: 0 },
   { handle: "sl702-simply-lite", sku: "SL702", brand: "Simplylite",
-    seedSlug: "sl702", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "coverage:shape=Ronda modificada", colorways: ["Gold"], viewCount: 4 },
+    seedSlug: "sl702", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "coverage:shape=Ronda modificada", colorways: ["Gold"], viewCount: 4, videoCount: 0 },
   { handle: "sl705-simply-lite", sku: "SL705", brand: "Simplylite",
-    seedSlug: "sl705", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gunmetal"], viewCount: 4 },
+    seedSlug: "sl705", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gunmetal"], viewCount: 4, videoCount: 0 },
   { handle: "sl901-simply-lite", sku: "SL901", brand: "Simplylite",
-    seedSlug: "sl901", tags: ["metallic","rimless-3piece","thin-metal","unusual-shape"],
-    reason: "coverage:shape=Geométrico", colorways: ["Gold"], viewCount: 4 },
+    seedSlug: "sl901", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal", "unusual-shape"],
+    reason: "coverage:shape=Geométrico", colorways: ["Gold"], viewCount: 4, videoCount: 0 },
   { handle: "sl902-simply-lite", sku: "SL902", brand: "Simplylite",
-    seedSlug: "sl902", tags: ["pale","rimless-3piece","thin-metal"],
-    reason: "coverage:shape=Óvalo modificado", colorways: ["Silver Blue"], viewCount: 4 },
+    seedSlug: "sl902", brandSlug: "simply-lite", tags: ["pale", "rimless-3piece", "thin-metal"],
+    reason: "coverage:shape=Óvalo modificado", colorways: ["Silver Blue"], viewCount: 4, videoCount: 0 },
   { handle: "sl903-simply-lite", sku: "SL903", brand: "Simplylite",
-    seedSlug: "sl903", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "coverage:shape=Cuadrado", colorways: ["Gunmetal"], viewCount: 4 },
+    seedSlug: "sl903", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "coverage:shape=Cuadrado", colorways: ["Gunmetal"], viewCount: 4, videoCount: 0 },
   { handle: "sl904-simply-lite", sku: "SL904", brand: "Simplylite",
-    seedSlug: "sl904", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Brown"], viewCount: 4 },
+    seedSlug: "sl904", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Brown"], viewCount: 4, videoCount: 0 },
   { handle: "sl905-simply-lite", sku: "SL905", brand: "Simplylite",
-    seedSlug: "sl905", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gunmetal Black"], viewCount: 4 },
+    seedSlug: "sl905", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gunmetal Black"], viewCount: 4, videoCount: 0 },
   { handle: "sl906-simply-lite", sku: "SL906", brand: "Simplylite",
-    seedSlug: "sl906", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Black"], viewCount: 4 },
+    seedSlug: "sl906", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Black"], viewCount: 4, videoCount: 0 },
   { handle: "sl907-simply-lite", sku: "SL907", brand: "Simplylite",
-    seedSlug: "sl907", tags: ["metallic","rimless-3piece","thin-metal"],
-    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Gunmetal"], viewCount: 4 },
+    seedSlug: "sl907", brandSlug: "simply-lite", tags: ["metallic", "rimless-3piece", "thin-metal"],
+    reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Gunmetal"], viewCount: 4, videoCount: 0 },
 ];
 
 /**
- * Merges the generated views into a catalogue product, for developing against.
- *
- *   const shown = withGeneratedViews(product);
+ * Merges generated media into a catalogue product, for the gallery.
  *
  * Returns the product untouched when nothing was generated for it — which is also
  * how the real thing behaves: a colourway with no media renders exactly as today.
  */
 export function withGeneratedViews(product) {
-  const sample = product && GENERATED_VIEWS[product.slug];
-  if (!sample) return product;
+  const views = product && GENERATED_VIEWS[product.slug];
+  const videos = product && GENERATED_VIDEOS[product.slug];
+  if (!views && !videos) return product;
   return {
     ...product,
-    colors: (product.colors || []).map((colour) =>
-      sample[colour.name]
-        ? { ...colour, views: sample[colour.name], mediaGenerated: true }
-        : colour
-    ),
+    colors: (product.colors || []).map((colour) => ({
+      ...colour,
+      ...(views && views[colour.name] ? { views: views[colour.name] } : {}),
+      ...(videos && videos[colour.name]
+        ? { video: { src: videos[colour.name], poster: undefined } }
+        : {}),
+    })),
   };
 }
 
-/** Handles that have generated views, for "is there anything to show?" checks. */
+/** Handles that have generated media, for "is there anything to show?" checks. */
 export const GENERATED_HANDLES = GENERATED_INDEX.map((f) => f.handle);
 
-// El catálogo no expone un slug fiable, pero SÍ el SKU: unión por SKU normalizado.
+// The catalogue carries no reliable slug, so the join with generated media is done
+// on a normalised SKU — which matches for every frame in the cohort.
 const _SKU_TO_HANDLE = {};
 for (const f of GENERATED_INDEX) {
   _SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
 }
 
+function _handleFor(sku) {
+  return _SKU_TO_HANDLE[String(sku || "").toLowerCase().replace(/\s+/g, "")];
+}
+
 /**
- * Vistas generadas de una montura por SKU (p.ej. "SL116" o "SL 116").
- * @returns {null | { [colorway:string]: {front,left,right,back} }}  claves R2 → resolveImage()
+ * Generated views for a frame, by SKU ("SL116" or "SL 116" both work).
+ * @returns {null | { [colorway:string]: {front,left,right,back} }} R2 keys → resolveImage()
  */
 export function viewsBySku(sku) {
-  const h = _SKU_TO_HANDLE[String(sku || "").toLowerCase().replace(/\s+/g, "")];
-  return h ? GENERATED_VIEWS[h] : null;
+  const h = _handleFor(sku);
+  return h ? GENERATED_VIEWS[h] || null : null;
 }
+
+/**
+ * Promo videos for a frame, by SKU. Same normalisation as viewsBySku.
+ * @returns {null | { [colorway:string]: string }} R2 keys → resolveMedia()
+ */
+export function videosBySku(sku) {
+  const h = _handleFor(sku);
+  return h ? GENERATED_VIDEOS[h] || null : null;
+}
+

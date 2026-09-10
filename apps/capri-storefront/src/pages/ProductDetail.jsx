@@ -16,8 +16,8 @@ import { IconMontura } from "../components/LensGraphics.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
-import { GENERATED_INDEX, GENERATED_VIEWS } from "../data/frameMediaSample.js";
-import { resolveImage } from "../data/imageUrl.js";
+import { GENERATED_INDEX, GENERATED_VIEWS, videosBySku } from "../data/frameMediaSample.js";
+import { resolveImage, resolveMedia } from "../data/imageUrl.js";
 
 // El catálogo NO trae un slug fiable, así que la unión con las vistas generadas se
 // hace por SKU normalizado (coincide en las 21 monturas del piloto).
@@ -94,10 +94,14 @@ export default function ProductDetail() {
   const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
   const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
 
-  // Vídeo comercial de ESTE color, si existe. Llega por `variant.metadata.video`
-  // (mediaOf en medusaCatalog.js), no por el fixture: así aparece solo en cuanto se
-  // genera uno y se sincroniza, sin tocar código ni volver a desplegar.
-  const videoSrc = color && color.video ? color.video.src : null;
+  // Vídeo comercial de ESTE color, si existe. Sale del MISMO fixture que las vistas,
+  // no de la metadata de Medusa: leerlo de Medusa exigiría VITE_USE_MEDUSA=true, y ese
+  // flag deja fuera 118 monturas del catálogo (solo admite 9 colecciones), entre ellas
+  // 20 de las 21 que hoy tienen medios. Precio de esta decisión: el fixture es una foto
+  // fija — hay que regenerarlo tras cada corrida con `media fixture` y desplegar.
+  const genVideos = videosBySku(product.sku);
+  const videoKey = genVideos && color ? genVideos[color.name] : null;
+  const videoSrc = videoKey ? resolveMedia(videoKey) : null;
   // Un vídeo puede existir sin las 4 vistas, así que el rail se muestra por
   // cualquiera de las dos cosas.
   const showRail = hasViews || !!videoSrc;
@@ -157,7 +161,7 @@ export default function ProductDetail() {
                   className="fade-in pdp-video"
                   src={videoSrc}
                   /* Todavía no se generan pósters: la foto del color hace de cartel. */
-                  poster={(color.video && color.video.poster) || color.image}
+                  poster={color.image}
                   controls
                   playsInline
                   /* Un clip de 8 s son varios MB. Sin esto, cada visita a la ficha se
