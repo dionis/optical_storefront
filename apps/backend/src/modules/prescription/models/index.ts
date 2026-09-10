@@ -1,38 +1,18 @@
-import { model } from "@medusajs/framework/utils";
-
-export const PrescriptionRecord = model.define("prescription", {
-  id: model.id().primaryKey(),
-  // Right eye (OD)
-  od_sph: model.float().nullable(),
-  od_cyl: model.float().nullable(),
-  od_axis: model.number().nullable(),
-  od_add: model.float().nullable(),
-  od_prism: model.float().nullable(),
-  od_base: model.text().nullable(),
-  // Left eye (OS)
-  os_sph: model.float().nullable(),
-  os_cyl: model.float().nullable(),
-  os_axis: model.number().nullable(),
-  os_add: model.float().nullable(),
-  os_prism: model.float().nullable(),
-  os_base: model.text().nullable(),
-  // PD
-  pd: model.float().nullable(),
-  pd_od: model.float().nullable(),
-  pd_os: model.float().nullable(),
-  /** Fitting/segment height in mm — required to cut a progressive/bifocal */
-  seg_height: model.float().nullable(),
-  // Metadata
-  source: model.enum(["manual", "ocr"]).default("manual"),
-  verified_by_user: model.boolean().default(false),
-  /** R2 object key of uploaded prescription image/PDF — null for manual entry */
-  file_url: model.text().nullable(),
-  /** R2 object key of the AI try-on render (face with frame) — null when unused */
-  tryon_image_url: model.text().nullable(),
-  /** Who the glasses are for: "me" | "other" (chosen in the try-on studio) */
-  patient_for: model.text().nullable(),
-  /** Name of the other person when patient_for = "other" — optional */
-  patient_name: model.text().nullable(),
-  /** Customer ID (Medusa customer) — nullable for guest checkout */
-  customer_id: model.text().nullable(),
-});
+/**
+ * Re-export only. THE MODEL DEFINITIONS MUST NOT LIVE IN THIS FILE.
+ *
+ * Medusa discovers a module's models by reading every file in this directory, and
+ * `loadModels` (in @medusajs/utils) explicitly SKIPS anything named `index.*`. A
+ * module whose models live only here is loaded with NO models, so it gets no
+ * MikroORM connection, so its container has no `manager`, and every service call
+ * dies with:
+ *
+ *     Cannot read properties of undefined (reading 'fork')
+ *         at MikroOrmBaseRepository.getFreshManager
+ *
+ * There is no other symptom: the module still resolves, its routes still mount,
+ * and any read wrapped in a try/catch silently returns its fallback. That is what
+ * made this cost a day to find, and why every module here keeps its definitions in
+ * a named file and uses this one only to re-export.
+ */
+export * from "./prescription";

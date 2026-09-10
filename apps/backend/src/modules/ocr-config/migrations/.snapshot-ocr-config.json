@@ -22,8 +22,8 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "product_handle": {
-          "name": "product_handle",
+        "model_id": {
+          "name": "model_id",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -38,8 +38,24 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "rating": {
-          "name": "rating",
+        "escalation_model_id": {
+          "name": "escalation_model_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "max_image_px": {
+          "name": "max_image_px",
           "type": "integer",
           "unsigned": false,
           "autoincrement": false,
@@ -54,72 +70,8 @@
           "enumItems": [],
           "mappedType": "integer"
         },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "author_name": {
-          "name": "author_name",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "author_email": {
-          "name": "author_email",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "photo_urls": {
-          "name": "photo_urls",
+        "updated_by": {
+          "name": "updated_by",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -183,29 +135,20 @@
           "mappedType": "datetime"
         }
       },
-      "name": "product_review",
+      "name": "ocr_setting",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "IDX_product_review_handle",
+          "keyName": "IDX_ocr_setting_deleted_at",
           "columnNames": [],
           "composite": false,
           "constraint": false,
           "primary": false,
           "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_product_review_handle\" ON \"product_review\" (\"product_handle\") WHERE deleted_at IS NULL"
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_ocr_setting_deleted_at\" ON \"ocr_setting\" (\"deleted_at\") WHERE deleted_at IS NULL"
         },
         {
-          "keyName": "IDX_product_review_deleted_at",
-          "columnNames": [],
-          "composite": false,
-          "constraint": false,
-          "primary": false,
-          "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_product_review_deleted_at\" ON \"product_review\" (\"deleted_at\") WHERE deleted_at IS NULL"
-        },
-        {
-          "keyName": "product_review_pkey",
+          "keyName": "ocr_setting_pkey",
           "columnNames": [
             "id"
           ],

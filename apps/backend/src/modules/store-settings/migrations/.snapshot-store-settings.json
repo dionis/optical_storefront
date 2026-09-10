@@ -22,72 +22,8 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "product_handle": {
-          "name": "product_handle",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "rating": {
-          "name": "rating",
-          "type": "integer",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "integer"
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "author_name": {
-          "name": "author_name",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "text"
-        },
-        "author_email": {
-          "name": "author_email",
+        "owner_notification_email": {
+          "name": "owner_notification_email",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -102,8 +38,8 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "locale": {
-          "name": "locale",
+        "owner_notification_sms": {
+          "name": "owner_notification_sms",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -118,8 +54,72 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "photo_urls": {
-          "name": "photo_urls",
+        "admin_notification_emails": {
+          "name": "admin_notification_emails",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "support_email": {
+          "name": "support_email",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "active_payment_provider": {
+          "name": "active_payment_provider",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "frame_tax_rate": {
+          "name": "frame_tax_rate",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "updated_by": {
+          "name": "updated_by",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -183,29 +183,20 @@
           "mappedType": "datetime"
         }
       },
-      "name": "product_review",
+      "name": "store_setting",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "IDX_product_review_handle",
+          "keyName": "IDX_store_setting_deleted_at",
           "columnNames": [],
           "composite": false,
           "constraint": false,
           "primary": false,
           "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_product_review_handle\" ON \"product_review\" (\"product_handle\") WHERE deleted_at IS NULL"
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_store_setting_deleted_at\" ON \"store_setting\" (\"deleted_at\") WHERE deleted_at IS NULL"
         },
         {
-          "keyName": "IDX_product_review_deleted_at",
-          "columnNames": [],
-          "composite": false,
-          "constraint": false,
-          "primary": false,
-          "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_product_review_deleted_at\" ON \"product_review\" (\"deleted_at\") WHERE deleted_at IS NULL"
-        },
-        {
-          "keyName": "product_review_pkey",
+          "keyName": "store_setting_pkey",
           "columnNames": [
             "id"
           ],

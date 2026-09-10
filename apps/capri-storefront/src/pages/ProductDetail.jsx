@@ -164,9 +164,14 @@ export default function ProductDetail() {
                   poster={color.image}
                   controls
                   playsInline
-                  /* Un clip de 8 s son varios MB. Sin esto, cada visita a la ficha se
-                     los descarga aunque nadie le dé al play. */
-                  preload="none"
+                  /* "metadata", no "none". Veo devuelve el MP4 con el índice `moov` al
+                     FINAL (sin faststart), y con preload="none" Firefox no va a buscarlo:
+                     el vídeo simplemente no arranca. Chrome sí lo pide por rango y disimula
+                     el problema — de ahí el clásico "en Chrome va y en Firefox no".
+                     Con "metadata" el navegador trae solo el índice (decenas de KB), no el
+                     clip entero, así que sigue sin descargarse el megabyte hasta que alguien
+                     pulsa play. El arreglo de fondo es remuxar con `-movflags +faststart`. */
+                  preload="metadata"
                   /* El visor hace zoom al hacer clic; sin frenar la propagación,
                      pulsar "play" dispararía el zoom en vez de reproducir. */
                   onClick={(e) => e.stopPropagation()}

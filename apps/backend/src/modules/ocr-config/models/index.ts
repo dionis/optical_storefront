@@ -1,21 +1,18 @@
-import { model } from "@medusajs/framework/utils";
-
 /**
- * Runtime OCR configuration. A single row (id "default") holding the operator's
- * current choices, so a model can be swapped from the admin dashboard without a
- * redeploy. Env vars supply the values used until a row exists.
+ * Re-export only. THE MODEL DEFINITIONS MUST NOT LIVE IN THIS FILE.
  *
- * This lives server-side on purpose: the model is a cost decision, so it must
- * never be selectable by whoever calls the public OCR endpoint.
+ * Medusa discovers a module's models by reading every file in this directory, and
+ * `loadModels` (in @medusajs/utils) explicitly SKIPS anything named `index.*`. A
+ * module whose models live only here is loaded with NO models, so it gets no
+ * MikroORM connection, so its container has no `manager`, and every service call
+ * dies with:
+ *
+ *     Cannot read properties of undefined (reading 'fork')
+ *         at MikroOrmBaseRepository.getFreshManager
+ *
+ * There is no other symptom: the module still resolves, its routes still mount,
+ * and any read wrapped in a try/catch silently returns its fallback. That is what
+ * made this cost a day to find, and why every module here keeps its definitions in
+ * a named file and uses this one only to re-export.
  */
-export const OcrSetting = model.define("ocr_setting", {
-  id: model.id().primaryKey(),
-  /** Model used for the first read attempt. */
-  model_id: model.text(),
-  /** Model retried when the first read looks unusable. Null disables escalation. */
-  escalation_model_id: model.text().nullable(),
-  /** Longest edge, in pixels, images are downscaled to before being sent. */
-  max_image_px: model.number(),
-  /** Admin user who last changed the configuration. */
-  updated_by: model.text().nullable(),
-});
+export * from "./ocr-config";
