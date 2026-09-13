@@ -5,6 +5,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { CartPanel, FavPanel, AuthPanel } from "./StorePanels.jsx";
 import { useUser } from "./userAuth.js";
 import { isMuted, toggleMuted } from "../lib/sfx.js";
+import { IconUser, IconHeart, IconCart, IconSearch } from "./UiIcons.jsx";
 
 export default function Header() {
   const { count, favCount } = useCart();
@@ -71,7 +72,7 @@ export default function Header() {
         <form className="search desktop-only" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
           {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
-          <button type="submit" aria-label={t("a11y.search")}>⌕</button>
+          <button type="submit" aria-label={t("a11y.search")}><IconSearch className="search-ic" /></button>
         </form>
 
         <div className="header-actions">
@@ -92,17 +93,19 @@ export default function Header() {
           <button className="icon-btn sound-toggle" title={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
                   aria-label={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
                   onClick={() => { const m = toggleMuted(); setSound(!m); }}>
-            {sound ? "🔊" : "🔇"}
+            {sound
+              ? <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+              : <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M22 9.5l-4.5 5M17.5 9.5l4.5 5"/></svg>}
           </button>
           <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")}
                   onClick={() => (user ? navigate("/cuenta") : setPanel("account"))}>
-            {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : "👤"}
+            {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : <IconUser className="hdr-ic" />}
           </button>
           <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
-            ♡{favCount > 0 && <span className="badge">{favCount}</span>}
+            <IconHeart className="hdr-ic" />{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>
           <button className="icon-btn cart" title={t("a11y.cart")} onClick={() => setPanel("cart")}>
-            🛒{count > 0 && <span className="badge">{count}</span>}
+            <IconCart className="hdr-ic" />{count > 0 && <span className="badge">{count}</span>}
           </button>
         </div>
       </div>
@@ -111,7 +114,7 @@ export default function Header() {
         <form className="search mobile-search" onSubmit={submit}>
           <input type="text" placeholder={t("search.placeholder")} value={q} onChange={(e) => setQ(e.target.value)} />
           {q && <button type="button" className="search-clear" onClick={() => setQ("")} aria-label={t("a11y.clear")}>×</button>}
-          <button type="submit" aria-label={t("a11y.search")}>⌕</button>
+          <button type="submit" aria-label={t("a11y.search")}><IconSearch className="search-ic" /></button>
         </form>
         <nav className="drawer-nav">{links}</nav>
         <div className="drawer-lang" role="group" aria-label="Language / Idioma">

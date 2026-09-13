@@ -7,7 +7,7 @@ import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import TrustStrip from "../components/TrustStrip.jsx";
-import { IconFilter } from "../components/UiIcons.jsx";
+import { IconFilter, IconSort, IconGrid, IconList, IconGlasses } from "../components/UiIcons.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { fetchReviewSummaries } from "../data/reviews.js";
 
@@ -25,6 +25,7 @@ export default function Catalog() {
   const [selected, setSelected] = useState({});
   const [sort, setSort] = useState("relevance");
   const [showFilters, setShowFilters] = useState(false);
+  const [view, setView] = useState("grid"); // 'grid' | 'list'
   // All filter groups start CLOSED on load.
   const [openGroups, setOpenGroups] = useState(() =>
     Object.fromEntries(FILTER_GROUPS.map((g) => [g.key, false]))
@@ -132,12 +133,6 @@ export default function Catalog() {
         </section>
       )}
     <div className="catalog">
-      <button className="filters-toggle mobile-only" onClick={() => setShowFilters((v) => !v)}>
-        <IconFilter className="ft-ic" />
-        <span>{t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""}</span>
-        <span className="ft-chev">{showFilters ? "▲" : "▼"}</span>
-      </button>
-
       <aside className={`filters ${showFilters ? "show" : ""}`}>
         <div className="filters-head">
           <span>{t("filters.title")}</span>
@@ -166,23 +161,51 @@ export default function Catalog() {
       </aside>
 
       <section className="listing">
-        <div className="listing-head">
-          <div>
-            <h1>{heading}</h1>
-            <span className="count">{results.length} {t("cat.count")}</span>
+        {!brand && (
+          <div className="cat-hero">
+            <div className="cat-hero-txt">
+              <h1>{heading}</h1>
+              <p>{t("cat.heroSub")}</p>
+            </div>
+            <div className="cat-hero-art" aria-hidden="true">
+              <span className="cat-hero-script">{t("cat.heroScript")}</span>
+              <IconGlasses className="cat-hero-glasses" />
+            </div>
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className="sort">
-            <option value="relevance">{t("sort.relevance")}</option>
-            <option value="price-asc">{t("sort.priceAsc")}</option>
-            <option value="price-desc">{t("sort.priceDesc")}</option>
-            <option value="rating">{t("sort.rating")}</option>
-          </select>
+        )}
+
+        <div className="filterbar">
+          <button className={`fb-pill fb-filters ${activeCount > 0 ? "act" : ""}`}
+                  onClick={() => setShowFilters((v) => !v)}>
+            <IconFilter className="fb-ic" />
+            <span>{t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""}</span>
+          </button>
+          <label className="fb-pill fb-sort">
+            <IconSort className="fb-ic" />
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t("sort.title")}>
+              <option value="relevance">{t("sort.relevance")}</option>
+              <option value="price-asc">{t("sort.priceAsc")}</option>
+              <option value="price-desc">{t("sort.priceDesc")}</option>
+              <option value="rating">{t("sort.rating")}</option>
+            </select>
+          </label>
+          <span className="fb-count">{results.length} {t("cat.count")}</span>
+          <div className="fb-view" role="group" aria-label={t("sort.title")}>
+            <button type="button" className={`fb-vbtn ${view === "grid" ? "on" : ""}`}
+                    onClick={() => setView("grid")} aria-label={t("view.grid")} title={t("view.grid")}>
+              <IconGrid className="fb-ic" />
+            </button>
+            <button type="button" className={`fb-vbtn ${view === "list" ? "on" : ""}`}
+                    onClick={() => setView("list")} aria-label={t("view.list")} title={t("view.list")}>
+              <IconList className="fb-ic" />
+            </button>
+          </div>
         </div>
 
         {results.length === 0 ? (
           <div className="empty">{t("empty.text")} <button onClick={() => setSelected({})}>{t("empty.clear")}</button></div>
         ) : (
-          <div className="product-grid">
+          <div className={`product-grid ${view === "list" ? "list" : ""}`}>
             {results.map((p) => <ProductCard key={p.slug} product={p} />)}
           </div>
         )}
