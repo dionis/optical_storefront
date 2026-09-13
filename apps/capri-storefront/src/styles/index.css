@@ -3807,3 +3807,88 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .cat-hero-glasses { width: 66px; }
   .cat-hero-txt h1 { font-size: 21px; }
 }
+
+
+/* ===================================================================
+   ETAPA 3 — Ajustes de referencia del cliente.
+   Logo real de marca, iconos móviles (solo buscar + carrito), hero con
+   foto de gafas + degradado + brillo + "visión nublada", y franja de
+   confianza premium con el mismo tratamiento abajo.
+   =================================================================== */
+
+/* Logo oficial de marca (blanco) sobre la barra azul en móvil. */
+.logo-mobile-img { height: 30px; width: auto; display: block; }
+
+/* ---- Hero: foto de gafas de fondo + degradado + brillo + desenfoque ---- */
+.cat-hero {
+  isolation: isolate;
+  background:
+    radial-gradient(85% 120% at 90% -15%, rgba(120,170,255,.38) 0%, rgba(120,170,255,0) 60%),
+    linear-gradient(135deg, #eaf2ff 0%, #ffffff 52%, #f2f7ff 100%);
+}
+/* Foto de gafas a la derecha, desenfocada y difuminada hacia la izquierda:
+   sensación de "visión nublada". Se recorta con el overflow del hero. */
+.cat-hero::before {
+  content: ""; position: absolute; inset: -16px; z-index: 0;
+  background: url("/hero-eyewear.jpg") right 22% center / cover no-repeat;
+  opacity: .5; filter: blur(2px) saturate(1.05);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 32%, #000 72%, #000 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, transparent 32%, #000 72%, #000 100%);
+}
+/* Velo de brillo por encima de la foto (glow). */
+.cat-hero::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(55% 78% at 76% 32%, rgba(255,255,255,.45), rgba(255,255,255,0) 72%),
+    linear-gradient(90deg, rgba(255,255,255,.16), rgba(255,255,255,0) 46%);
+}
+.cat-hero-txt, .cat-hero-art { position: relative; z-index: 2; }
+.cat-hero-art { align-self: flex-start; }
+.cat-hero-script { text-shadow: 0 1px 12px rgba(255,255,255,.95), 0 1px 2px rgba(255,255,255,.9); }
+
+/* ---- Franja de confianza (imagen 4): mismo degradado/brillo, abajo ---- */
+.truststrip {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--border-soft); border-top: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  max-width: 1200px; margin: 26px auto 10px; padding: 20px 24px;
+  background:
+    radial-gradient(70% 130% at 10% -20%, rgba(120,170,255,.26), rgba(120,170,255,0) 55%),
+    radial-gradient(70% 130% at 102% 130%, rgba(120,170,255,.20), rgba(120,170,255,0) 55%),
+    linear-gradient(180deg, #f2f7ff 0%, #ffffff 100%);
+}
+.trust-item { color: var(--text-secondary); font-weight: 600; }
+.trust-ic { color: var(--primary-blue); }
+
+/* ---- MÓVIL (≤860px) — apendizado al final: gana la cascada ---- */
+@media (max-width: 860px) {
+  /* Quita la barra superior negra (barra divisoria): más compacto. */
+  .header-top { display: none; }
+
+  /* Arriba solo BUSCAR + CARRITO. Cuenta va en la barra inferior;
+     favoritos y sonido fuera de la barra azul. */
+  .header-main .acct, .header-main .fav-m { display: none; }
+  .header-main .hdr-search-m { display: inline-flex; }
+
+  /* Logo oficial de marca, tamaño cómodo sobre el azul. */
+  .logo-mobile-img { height: 27px; }
+
+  /* Eslogan con subrayado rojo (sin barra vertical divisoria). */
+  .header-main .header-tagline {
+    border-right: none; padding-right: 0;
+    border-bottom: 2px solid #e0241c; padding-bottom: 3px;
+    max-width: 88px;
+  }
+
+  /* Hero compacto para que se vean 4 espejuelos al entrar. */
+  .cat-hero { padding: 15px 16px; margin-bottom: 12px; }
+  .cat-hero-txt h1 { font-size: 22px; margin-bottom: 5px; }
+  .cat-hero-txt p { font-size: 13px; }
+  .cat-hero::before { opacity: .42; }
+
+  /* Barra de filtros más ajustada. */
+  .filterbar { margin-bottom: 12px; }
+
+  /* Franja de confianza con margen lateral (tarjeta con aire). */
+  .truststrip { margin: 18px 12px 8px; padding: 16px 14px; }
+}

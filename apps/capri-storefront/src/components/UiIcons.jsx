@@ -150,8 +150,9 @@ export function IconSearch({ className }) {
 export function IconCart({ className }) {
   return (
     <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
-      <path d="M5 7h14l-1 13.2a1.6 1.6 0 0 1-1.6 1.3H7.6A1.6 1.6 0 0 1 6 20.2z" />
-      <path d="M8.6 7V5.6a3.4 3.4 0 0 1 6.8 0V7" />
+      <circle cx="9.5" cy="20" r="1.3" />
+      <circle cx="17.5" cy="20" r="1.3" />
+      <path d="M2.5 3.8h2.3l2.2 11a1.7 1.7 0 0 0 1.7 1.35h8.1a1.7 1.7 0 0 0 1.66-1.3L21.2 8H6.1" />
     </svg>
   );
 }

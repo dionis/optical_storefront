@@ -60,8 +60,7 @@ export default function Header() {
           <img src="/logo.png" alt="RUBI LENS — Óptica y Salud Visual" className="logo-img" />
           {/* Versión móvil (sobre la barra azul): icono + texto en blanco. */}
           <span className="logo-mobile" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="13" r="3.3" /><circle cx="18" cy="13" r="3.3" /><path d="M9.3 13h5.4" /><path d="M2.4 12C3 10 3.9 9 6 9" /><path d="M21.6 12C21 10 20.1 9 18 9" /></svg>
-            <b>RUBI LENS</b>
+            <img src="/logo-white.png" alt="RUBI LENS" className="logo-mobile-img" />
           </span>
         </Link>
 
@@ -97,11 +96,15 @@ export default function Header() {
               ? <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
               : <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M22 9.5l-4.5 5M17.5 9.5l4.5 5"/></svg>}
           </button>
+          <button className="icon-btn hdr-search-m mobile-only" aria-label={t("a11y.search")} title={t("a11y.search")}
+                  onClick={() => setMenu(true)}>
+            <IconSearch className="hdr-ic" />
+          </button>
           <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")}
                   onClick={() => (user ? navigate("/cuenta") : setPanel("account"))}>
             {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : <IconUser className="hdr-ic" />}
           </button>
-          <button className="icon-btn" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
+          <button className="icon-btn fav-m" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
             <IconHeart className="hdr-ic" />{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>
           <button className="icon-btn cart" title={t("a11y.cart")} onClick={() => setPanel("cart")}>
