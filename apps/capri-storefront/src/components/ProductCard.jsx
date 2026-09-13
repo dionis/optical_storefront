@@ -93,9 +93,11 @@ export default function ProductCard({ product }) {
         <div className="card-row">
           <Link to={`/recetas/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
           {showRating && (
-            <span className="card-rating" aria-label={`${ratingVal.toFixed(1)} / 5`}>
-              <span className="card-star" aria-hidden="true">★</span>
-              {ratingVal.toFixed(1)}
+            <span className="card-rating" aria-label={`${ratingVal.toFixed(1)} / 5 · ${reviewCount}`}>
+              <span className="stars" style={{ "--pct": `${Math.max(0, Math.min(100, (ratingVal / 5) * 100))}%` }} aria-hidden="true">
+                <span className="stars-bg">★★★★★</span>
+                <span className="stars-fg">★★★★★</span>
+              </span>
               <span className="card-reviews">({reviewCount})</span>
             </span>
           )}

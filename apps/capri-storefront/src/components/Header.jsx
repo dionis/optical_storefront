@@ -57,7 +57,14 @@ export default function Header() {
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
           <img src="/logo.png" alt="RUBI LENS — Óptica y Salud Visual" className="logo-img" />
+          {/* Versión móvil (sobre la barra azul): icono + texto en blanco. */}
+          <span className="logo-mobile" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="13" r="3.3" /><circle cx="18" cy="13" r="3.3" /><path d="M9.3 13h5.4" /><path d="M2.4 12C3 10 3.9 9 6 9" /><path d="M21.6 12C21 10 20.1 9 18 9" /></svg>
+            <b>RUBI LENS</b>
+          </span>
         </Link>
+
+        <span className="header-tagline mobile-only">{t("header.tagline")}</span>
 
         <nav className="nav desktop-only">{links}</nav>
 
@@ -107,6 +114,10 @@ export default function Header() {
           <button type="submit" aria-label={t("a11y.search")}>⌕</button>
         </form>
         <nav className="drawer-nav">{links}</nav>
+        <div className="drawer-lang" role="group" aria-label="Language / Idioma">
+          <button className={lang === "es" ? "on" : ""} onClick={() => setLang("es")}>ES · Español</button>
+          <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN · English</button>
+        </div>
       </div>
       {menu && <div className="drawer-backdrop" onClick={() => setMenu(false)} />}
 

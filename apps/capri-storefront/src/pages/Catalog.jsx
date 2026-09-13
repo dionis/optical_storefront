@@ -6,6 +6,7 @@ import { FILTER_GROUPS, productMatches } from "../data/filters.js";
 import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
+import TrustStrip from "../components/TrustStrip.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { fetchReviewSummaries } from "../data/reviews.js";
 
@@ -184,6 +185,7 @@ export default function Catalog() {
         )}
       </section>
     </div>
+    <TrustStrip />
     </>
   );
 }

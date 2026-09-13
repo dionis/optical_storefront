@@ -3537,3 +3537,91 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .card-tryon { text-transform: none; letter-spacing: 0; }
   .card-dot { width: 13px; height: 13px; }
 }
+
+/* ===================================================================
+   ETAPA 1 — estética móvil tipo app (barra superior azul, barra
+   inferior azul, franja de confianza, estrellas). Azul profundo + blanco.
+   =================================================================== */
+
+/* Estrellas de 5 puntos con relleno parcial (más visibles). */
+.card-rating { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.stars { position: relative; display: inline-block; font-size: 14px; line-height: 1; letter-spacing: 1.5px; font-family: Arial, sans-serif; }
+.stars-bg { color: #d9dee8; }
+.stars-fg { position: absolute; top: 0; left: 0; width: var(--pct, 0%); overflow: hidden; color: #f5a623; white-space: nowrap; }
+.card-reviews { font-size: 12px; color: #98a1b0; font-weight: 600; }
+
+/* Franja de confianza (envío, seguridad, pagos, asesoría). */
+.truststrip {
+  max-width: 1320px; margin: 10px auto 0; padding: 20px 22px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  border-top: 1px solid #eef1f6;
+}
+.trust-item { display: flex; align-items: center; gap: 11px; color: #3a4256; font-size: 13px; font-weight: 600; min-width: 0; }
+.trust-ic { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: #eef4ff; color: #0E5AD0; }
+.trust-ic svg { width: 20px; height: 20px; }
+
+/* Barra inferior tipo app (oculta en escritorio). */
+.bottomnav { display: none; }
+
+/* --- Modo móvil: barra superior azul + logo blanco + barra inferior --- */
+@media (max-width: 860px) {
+  /* Barra superior en azul de marca. */
+  .header-main {
+    background: linear-gradient(180deg, #1a49b6 0%, #123a95 100%);
+    border-bottom: none;
+  }
+  .header-main .logo-img { display: none; }
+  .logo-mobile { display: inline-flex; align-items: center; gap: 8px; color: #fff; }
+  .logo-mobile svg { width: 30px; height: 22px; flex: 0 0 auto; }
+  .logo-mobile b { font-size: 17px; font-weight: 800; letter-spacing: .2px; white-space: nowrap; }
+  .header-main .hamburger span { background: #fff; }
+  .header-main .icon-btn { color: #fff; }
+  .header-main .badge { border: 1.5px solid #123a95; }
+  /* Menos ruido en la barra azul: idioma va en el menú, sonido se oculta. */
+  .header-main .lang-flags, .header-main .sound-toggle { display: none; }
+
+  /* Tagline a la derecha (como la referencia). */
+  .header-tagline {
+    display: flex; margin-left: auto; margin-right: 6px;
+    color: #fff; font-size: 10px; font-weight: 800; line-height: 1.15;
+    letter-spacing: .04em; text-transform: uppercase; text-align: right;
+    max-width: 92px; align-self: center;
+    border-right: 3px solid #e0241c; padding-right: 9px;
+  }
+  .header-actions { gap: 6px; margin-left: 4px; }
+
+  /* Idioma dentro del menú lateral. */
+  .drawer-lang { display: flex; gap: 8px; padding: 14px 4px 4px; }
+  .drawer-lang button {
+    flex: 1; padding: 10px; border: 1.5px solid #e2e6ee; border-radius: 10px;
+    background: #fff; color: #17203a; font-weight: 700; font-size: 13px; cursor: pointer;
+  }
+  .drawer-lang button.on { border-color: #0E5AD0; color: #0E5AD0; background: #eef4ff; }
+
+  /* Barra inferior fija, azul, 5 accesos. */
+  .bottomnav {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
+    background: linear-gradient(180deg, #1a49b6 0%, #123a95 100%);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -6px 20px -8px rgba(9, 25, 70, .5);
+  }
+  .bn-item { display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: rgba(255, 255, 255, .72); text-decoration: none; font-size: 10px; font-weight: 700; }
+  .bn-item.on { color: #fff; }
+  .bn-ic { display: grid; place-items: center; }
+  .bn-ic svg { width: 22px; height: 22px; }
+  .bn-tx { line-height: 1; }
+
+  /* Espacio para que la barra inferior no tape el contenido. */
+  .site-main { padding-bottom: 4px; }
+  .footer { padding-bottom: 74px; }
+  /* El botón de chat sube por encima de la barra inferior. */
+  .chat-fab { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 14px 12px; padding: 18px 16px; }
+}
+
+/* Por defecto (escritorio) el logo/tagline móviles NO se muestran. */
+.logo-mobile { display: none; }
+.header-tagline { display: none; }

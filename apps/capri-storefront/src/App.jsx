@@ -7,6 +7,7 @@ import { checkBuildVersion } from "./lib/buildVersion.js";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
+import BottomNav from "./components/BottomNav.jsx";
 // Rutas primarias (primera pintura): se cargan de inmediato.
 import Home from "./pages/Home.jsx";
 import Catalog from "./pages/Catalog.jsx";
@@ -89,6 +90,7 @@ export default function App() {
             </Suspense>
           </main>
           <Footer />
+          <BottomNav />
           </ReviewSummaryProvider>
         </CartProvider>
       </FeedbackProvider>
