@@ -3636,9 +3636,10 @@ video.zlx-float-img { background: #000; object-fit: contain; }
 
 /* Botón "Filtros" (referencia imagen 5): pastilla azul con embudo. */
 .filters-toggle {
-  display: inline-flex; align-items: center; gap: 8px;
+  align-items: center; gap: 8px;
   border: 1.5px solid #cfdaee; background: #fff; color: #0E5AD0;
   border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 14px; cursor: pointer;
 }
 .filters-toggle .ft-ic { width: 18px; height: 18px; display: block; flex: 0 0 auto; }
 .filters-toggle .ft-chev { font-size: 10px; margin-left: 2px; color: #0E5AD0; }
+@media (max-width: 860px) { .filters-toggle { display: inline-flex; width: auto; } }
