@@ -143,7 +143,7 @@ export default function Home() {
       <section className="hero-zee">
         <div className="hero-zee-inner">
           <div className="hero-zee-left" key={slide}>
-            <span className="hero-kicker">Óptica El Rancho · RUBI_LENS</span>
+            <span className="hero-kicker">RUBI LENS · Óptica y Salud Visual</span>
             <h1 className="hero-zee-title">{t(HERO_SLIDES[slide].tk)}</h1>
             <p className="hero-zee-sub">{t(HERO_SLIDES[slide].sk)}</p>
             <div className="hero-cta">
@@ -220,7 +220,7 @@ export default function Home() {
             ))}
           </div>
           <aside className="split-aside">
-            <span className="aside-kicker">RUBI_LENS</span>
+            <span className="aside-kicker">RUBI LENS</span>
             <h2 className="section-title left">{t("home.moods.title")}</h2>
             <p className="section-sub left">{t("home.moods.aside.text")}</p>
             <Link to="/catalogo" className="btn btn-primary">{t("home.moods.aside.cta")}</Link>
@@ -231,7 +231,7 @@ export default function Home() {
       <section className="section shape-shop reveal">
         <div className="split split-30-70">
           <aside className="split-aside">
-            <span className="aside-kicker">RUBI_LENS</span>
+            <span className="aside-kicker">RUBI LENS</span>
             <h2 className="section-title left">{t("home.shapes.title")}</h2>
             <p className="section-sub left">{t("home.shapes.sub")}</p>
             <Link to="/catalogo" className="btn btn-outline">{t("home.shapes.cta")}</Link>

@@ -149,6 +149,9 @@ const FIELDS =
 const ALLOWED_BRAND_SLUGS = new Set([
   "di-caprio", "peachtree", "4u", "millennial",
   "flexure", "trendy", "grande", "prorx", "case",
+  // Simplylite: habilitada para publicar las monturas piloto con vistas 3D
+  // generadas (galería de 4 ángulos). Precios reales en Medusa (~$18).
+  "simply-lite",
 ]);
 
 // Fetch every published product for the store's first region, paginated.

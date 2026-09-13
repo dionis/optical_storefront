@@ -15,14 +15,14 @@ const DEFAULT_SHIPPING = {
   // pickup in store (configurable). Default: main branch on Fry Rd, Katy.
   pickup: {
     enabled: true,
-    name: "Óptica El Rancho",
+    name: "RUBI LENS",
     address: "Fry Rd, Katy, TX 77449",
     city: "Katy, Texas",
     hours: "Lun–Sáb 9:00–19:00",
-    mapsUrl: "https://www.google.com/maps/search/?api=1&query=Optica+El+Rancho+Fry+Rd+Katy+TX",
+    mapsUrl: "https://www.google.com/maps/search/?api=1&query=RUBI+LENS+Fry+Rd+Katy+TX+77449",
   },
   // ship-from origin used to estimate delivery
-  origin: { name: "Óptica El Rancho (Fry Rd)", address: "Fry Rd, Katy, TX 77449", city: "Katy, TX" },
+  origin: { name: "RUBI LENS (Fry Rd)", address: "Fry Rd, Katy, TX 77449", city: "Katy, TX" },
   carriers: ["FedEx", "UPS", "USPS", "DHL", "Consignataria"],
   // configurable shipping zones (destino → transportista, costo y tiempo estimado en días)
   zones: [

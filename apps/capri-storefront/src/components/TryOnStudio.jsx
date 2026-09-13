@@ -595,7 +595,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   async function shareResult() {
     const src = mData?.frontImage || frontImg;
     const text = t("vm.shareText");
-    const title = "Óptica El Rancho";
+    const title = "RUBI LENS";
     const url = typeof location !== "undefined" ? location.href : "";
     try {
       if (src && typeof navigator !== "undefined" && navigator.canShare) {
@@ -673,7 +673,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       cx.textBaseline = "alphabetic";
       cx.fillStyle = "#ffffff";
       cx.font = `800 ${Math.round(38 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
-      cx.fillText("Óptica El Rancho", pad, gy + Math.round(50 * s));
+      cx.fillText("RUBI LENS", pad, gy + Math.round(50 * s));
       cx.fillStyle = "rgba(200,215,240,0.92)";
       cx.font = `600 ${Math.round(26 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
       const sub = [product?.name, product?.brand, color?.name].filter(Boolean).join("   ·   ");
@@ -1036,7 +1036,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             </div>
           </div>
 
-          {/* Pie profesional: fecha, hora y logo RUBI_LENS */}
+          {/* Pie profesional: fecha, hora y logo RUBI LENS */}
           <div className="fs-foot">
             <div className="fs-foot-meta">
               <span className="fs-foot-date">
@@ -1048,7 +1048,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 {timeStr}
               </span>
             </div>
-            <img src="/logo.svg" alt="RUBI_LENS" className="fs-foot-logo" />
+            <img src="/logo.svg" alt="RUBI LENS" className="fs-foot-logo" />
           </div>
         </aside>
       </div>
