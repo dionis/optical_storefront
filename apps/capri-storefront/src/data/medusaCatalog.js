@@ -116,6 +116,13 @@ function toFrame(product) {
     },
     price,
     basePrice: price,
+    // Precio anterior (para mostrar "$42 → $32 OFERTA"). El scraper lo guarda en
+    // centavos; se divide entre 100 y solo se usa si es mayor que el precio actual
+    // (así, si algún día llegara en dólares por error, simplemente no se muestra).
+    originalPrice:
+      typeof m.original_price_cents === "number" && m.original_price_cents > 0
+        ? Math.round(m.original_price_cents) / 100
+        : null,
     rating: typeof m.rating === "number" ? m.rating : 4.6,
     reviews: typeof m.review_count === "number" ? m.review_count : 0,
     medusaId: product.id,

@@ -319,7 +319,9 @@ button { font-family: inherit; cursor: pointer; }
   .stepdot { padding: 7px 11px; font-size: 13px; }
 }
 @media (max-width: 380px) {
-  .product-grid, .props, .brands-grid { grid-template-columns: 1fr; }
+  /* El catálogo SIEMPRE mantiene 2 monturas por fila en móvil (ver bloque
+     "montura protagonista" al final del archivo). */
+  .props, .brands-grid { grid-template-columns: 1fr; }
 }
 
 /* ===== Cases / estuches ===== */
@@ -3437,4 +3439,101 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .zlx-view { width: 50px; height: 50px; }
   .zlx-float-img { min-height: 260px; }
   .zlx-spec-tx b { font-size: 13px; }
+}
+
+/* ===================================================================
+   Tarjeta de producto — "montura protagonista" (rediseño premium)
+   Paleta: blanco + azul profundo + gris muy claro. Rojo SOLO en oferta.
+   =================================================================== */
+.card {
+  border: 1px solid #eef1f6;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 34, 84, .04);
+}
+.card:hover { box-shadow: 0 14px 30px -18px rgba(16, 34, 84, .35); border-color: #e0e7f4; }
+
+/* La FOTO manda: llena la caja (relación fija) y escala con el ancho de la tarjeta. */
+.card-media { aspect-ratio: 1.12; padding: 12px 12px 4px; display: grid; place-items: center; }
+.card-img-link { width: 100%; height: 100%; display: grid; place-items: center; }
+.card-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+
+/* Única acción flotante: el corazón. */
+.card-actions { gap: 0; }
+
+.card-body { padding: 4px 14px 16px; display: flex; flex-direction: column; }
+.card-row { display: flex; align-items: baseline; gap: 8px; }
+.card-name { font-weight: 800; font-size: 15.5px; color: var(--ink, #17203a); text-decoration: none; letter-spacing: -.01em; }
+.card-name:hover { color: var(--blue, #0E5AD0); }
+.card-rating { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 700; color: #4a5164; white-space: nowrap; }
+.card-star { color: #f5a623; font-size: 13px; line-height: 1; }
+.card-reviews { color: #98a1b0; font-weight: 600; }
+.card-sub { color: var(--muted, #6b7280); font-size: 13px; margin: 3px 0 10px; }
+
+/* Fila: puntos de color a la izquierda, precio a la derecha. */
+.card-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-colors { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.card-dots { display: inline-flex; align-items: center; gap: 5px; }
+.card-dot {
+  width: 15px; height: 15px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px #d7deea;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.card-dot:hover { transform: scale(1.12); }
+.card-dot.sel { box-shadow: 0 0 0 2px var(--blue, #0E5AD0); }
+.card-colors-n { font-size: 12px; color: #98a1b0; white-space: nowrap; }
+
+.card-price-wrap { display: inline-flex; align-items: baseline; gap: 7px; }
+.card-price { color: var(--ink, #17203a); font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
+.card-price.sale { color: var(--red, #e0241c); }
+.card-price-old { color: #98a1b0; font-size: 13px; text-decoration: line-through; font-weight: 600; }
+.card-oferta {
+  align-self: flex-start; margin-top: 8px;
+  display: inline-flex; align-items: center;
+  padding: 2px 9px; border-radius: 999px;
+  background: #fdecea; color: var(--red, #e0241c);
+  font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
+}
+
+/* Acción principal: azul, ancho completo. */
+.card-tryon {
+  margin-top: 14px; width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; border: none; border-radius: 12px; cursor: pointer;
+  background: var(--blue, #0E5AD0); color: #fff;
+  font-weight: 800; font-size: 14px; letter-spacing: .02em; text-transform: uppercase;
+  box-shadow: 0 8px 18px -10px rgba(14, 90, 208, .8);
+  transition: filter .15s ease, transform .12s ease;
+}
+.card-tryon:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.card-tryon:active { transform: translateY(0); }
+.card-tryon svg { display: block; }
+
+/* Acción secundaria: contorno, más discreta. */
+.card-add-cart {
+  margin-top: 9px; width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 44px; border: 1.5px solid #cfdaee; border-radius: 12px; cursor: pointer;
+  background: #fff; color: var(--blue, #0E5AD0);
+  font-weight: 700; font-size: 13.5px;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.card-add-cart:hover { background: #eef4ff; border-color: #b7ccf3; }
+.card-add-cart.done { background: #2e7d46; border-color: #2e7d46; color: #fff; }
+.card-add-cart:disabled { opacity: .5; cursor: not-allowed; }
+.card-add-cart svg { display: block; }
+
+/* ---- Responsive: 2 monturas por fila SIEMPRE en móvil, con aire ---- */
+@media (max-width: 640px) {
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .card-body { padding: 4px 11px 13px; }
+  .card-name { font-size: 14.5px; }
+  .card-price { font-size: 16px; }
+  .card-tryon { height: 42px; font-size: 12.5px; gap: 6px; }
+  .card-add-cart { height: 40px; font-size: 12.5px; }
+  .card-colors-n { display: none; }
+}
+@media (max-width: 380px) {
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card-tryon { text-transform: none; letter-spacing: 0; }
+  .card-dot { width: 13px; height: 13px; }
 }

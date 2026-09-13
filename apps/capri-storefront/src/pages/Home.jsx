@@ -160,9 +160,6 @@ export default function Home() {
                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
               </Link>
             ))}
-            <span className="hero-badge" key={`b${slide}`}>
-              {t(HERO_SLIDES[slide].badge).split("\n").map((l, i) => <span key={i}>{l}</span>)}
-            </span>
             <button className="hero-arrow prev" aria-label={t("a11y.prevSlide")}
                     onClick={() => setSlide((s) => (s - 1 + nSlides) % nSlides)}>‹</button>
             <button className="hero-arrow next" aria-label={t("a11y.nextSlide")}

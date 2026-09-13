@@ -13,11 +13,12 @@ import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data
 // Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
 import { viewsBySku } from "../data/frameMediaSample.js";
 
-// Requisito 11 (tarjetas estilo Amazon):
-//  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).
-//  - Al hover aparece un icono "Comprar" que lleva al flujo completo de compra
-//    (/recetas/:slug) — receta + material + tratamientos, no al carrito.
-//  - Clic en el espejuelo = abrir el marco (PDP), donde también arranca el flujo.
+// Tarjeta de producto — rediseño "montura protagonista":
+//  - La FOTO manda; sobre ella solo el corazón (y el sello 360° si aplica).
+//  - Debajo: nombre + valoración, marca · forma, puntos de color, precio (azul
+//    oscuro; rojo solo en oferta).
+//  - Acción principal AZUL "Probármelos" (probador con cámara) y, más discreta,
+//    "Añadir al carrito". Primero invitamos a verse la montura, luego a comprar.
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
   const tryOnOpenKey = useTryOnOpenKey();
@@ -31,8 +32,18 @@ export default function ProductCard({ product }) {
   const fav = isFav(product.slug);
   // ¿Esta montura ya tiene las 4 vistas 3D generadas? → muestra el sello "360°".
   const hasViews = !!viewsBySku(product.sku);
-  // null until somebody actually reviews this frame.
+
+  // Valoración: usamos las reseñas REALES de la tienda si existen; si no, el dato
+  // del catálogo del proveedor. Solo se muestra cuando hay un nº de reseñas > 0,
+  // para no inventar estrellas en monturas sin reseñas.
   const review = useReviewSummary(product.slug);
+  const ratingVal = review ? review.average : (typeof product.rating === "number" ? product.rating : 0);
+  const reviewCount = review ? review.count : (typeof product.reviews === "number" ? product.reviews : 0);
+  const showRating = reviewCount > 0 && ratingVal > 0;
+
+  // Oferta: precio anterior tachado + precio en rojo + etiqueta, solo si el
+  // precio anterior es mayor que el actual.
+  const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).
@@ -48,12 +59,7 @@ export default function ProductCard({ product }) {
     } catch { toast({ tone: "error", message: t("cart.addError") }); }
   };
 
-  // "Comprar" = flujo completo de compra (receta → material → tratamientos).
-  const buyNow = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    navigate(`/recetas/${product.slug}?color=${active}`);
-  };
+  const pickColor = (e, i) => { e.preventDefault(); e.stopPropagation(); setActive(i); };
 
   return (
     <div className="card">
@@ -65,8 +71,7 @@ export default function ProductCard({ product }) {
             360°
           </span>
         )}
-        {/* Acciones como iconos compactos en la esquina superior derecha, para
-            dejar la FOTO del espejuelo lo más limpia y grande posible. */}
+        {/* Única acción sobre la foto: favorito. Todo lo demás va debajo. */}
         <div className="card-actions">
           <button
             className={`card-ic card-ic-fav ${fav ? "on" : ""}`}
@@ -75,16 +80,6 @@ export default function ProductCard({ product }) {
           >
             {fav ? "♥" : "♡"}
           </button>
-          <button type="button" className="card-ic card-ic-buy" onClick={buyNow}
-                  aria-label={t("card.buy")} title={t("card.buy")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
-          </button>
-          {TRY_ON_ENABLED && (
-            <button type="button" className="card-ic card-ic-ar" onClick={() => openTryOn(product)}
-                    aria-label={t("card.ar")} title={t("card.ar")}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-            </button>
-          )}
         </div>
         <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
@@ -98,29 +93,60 @@ export default function ProductCard({ product }) {
       <div className="card-body">
         <div className="card-row">
           <Link to={`/recetas/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
-          <span className="card-price">${product.price.toFixed(2)}</span>
-          {/* Only a rating real customers gave. This used to print
-              `product.rating`, a number the scraper's filler invented for every
-              frame — so all 549 showed a review score nobody had written. */}
-          {review && <span className="card-rating">★ {review.average.toFixed(1)}</span>}
+          {showRating && (
+            <span className="card-rating" aria-label={`${ratingVal.toFixed(1)} / 5`}>
+              <span className="card-star" aria-hidden="true">★</span>
+              {ratingVal.toFixed(1)}
+              <span className="card-reviews">({reviewCount})</span>
+            </span>
+          )}
         </div>
-        <div className="card-sub">{product.brand} · {tv(product.attributes.shape || "Montura")}</div>
+        <div className="card-sub">{product.brand} · {tv(product.attributes?.shape || "Montura")}</div>
 
-        <div className="swatches">
-          {product.colors.map((c, i) => (
-            <button key={c.name} className={`swatch ${i === active ? "sel" : ""}`} style={{ background: c.hex }}
-                    title={c.name} onMouseEnter={() => setActive(i)} onClick={() => setActive(i)} aria-label={c.name} />
-          ))}
+        <div className="card-meta">
+          <div className="card-colors">
+            <span className="card-dots">
+              {product.colors.slice(0, 4).map((c, i) => (
+                <button key={c.name} type="button"
+                        className={`card-dot ${i === active ? "sel" : ""}`} style={{ background: c.hex }}
+                        title={c.name} onMouseEnter={() => setActive(i)} onClick={(e) => pickColor(e, i)}
+                        aria-label={c.name} />
+              ))}
+            </span>
+            <span className="card-colors-n">
+              {product.colors.length} {product.colors.length === 1 ? t("card.color") : t("card.colors")}
+            </span>
+          </div>
+          <span className="card-price-wrap">
+            {hasSale && <span className="card-price-old">${product.originalPrice.toFixed(2)}</span>}
+            <span className={`card-price ${hasSale ? "sale" : ""}`}>${product.price.toFixed(2)}</span>
+          </span>
         </div>
+        {hasSale && <span className="card-oferta">{t("card.sale")}</span>}
 
-        {/* Añadir SOLO la montura al carrito (estilo Amazon). */}
+        {/* Acción principal: probador con cámara. Diferencia la tienda — primero
+            invitamos a verse la montura, después a comprar. */}
+        {TRY_ON_ENABLED && (
+          <button type="button" className="card-tryon" onClick={() => openTryOn(product)}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+            {t("card.tryOn")}
+          </button>
+        )}
+        {/* Acción secundaria: añadir SOLO la montura al carrito. */}
         <button
           type="button"
-          className={`card-add ${added ? "done" : ""}`}
+          className={`card-add-cart ${added ? "done" : ""}`}
           disabled={busy || !color.variantId}
           onClick={addFrameOnly}
         >
-          {added ? "✓ " + t("case.added") : "+ " + t("card.addFrameOnly")}
+          {added ? (
+            <>✓ {t("case.added")}</>
+          ) : (
+            <>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+              {t("card.addToCart")}
+            </>
+          )}
         </button>
       </div>
     </div>
