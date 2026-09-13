@@ -3364,3 +3364,77 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 /* El reproductor ocupa el hueco de la imagen y trae sus propios controles. */
 video.zlx-float-img { background: #000; object-fit: contain; }
+
+/* ================= 360° / vistas 3D — sellos e indicadores ================= */
+/* Sello en la tarjeta del catálogo: la montura ya tiene las 4 vistas generadas. */
+.card-media { position: relative; }
+.card-badge-360 {
+  position: absolute; top: 10px; left: 10px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px;
+  background: #0E5AD0; color: #fff;
+  font-size: 11px; font-weight: 800; letter-spacing: .02em; line-height: 1;
+  box-shadow: 0 2px 8px rgba(14, 90, 208, .35);
+  pointer-events: none;
+}
+.card-badge-360 svg { display: block; }
+
+/* Sello 360° sobre la imagen protagonista de la ficha (esquina inf. derecha). */
+.zlx-float-inner { position: relative; }
+.zlx-badge-360 {
+  position: absolute; right: 12px; bottom: 12px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: #0E5AD0;
+  border: 1px solid #cfe0ff;
+  font-size: 12.5px; font-weight: 800; letter-spacing: .02em; line-height: 1;
+  box-shadow: 0 4px 14px rgba(16, 34, 84, .14);
+  backdrop-filter: blur(3px);
+}
+.zlx-badge-360 svg { display: block; }
+
+/* ================= Ficha: fila de especificaciones con iconos ================= */
+.zlx-specs {
+  display: flex; flex-wrap: wrap; align-items: stretch;
+  gap: 4px 0; margin: 12px 0 2px;
+  border: 1px solid #eef1f6; border-radius: 14px; background: #fbfcff;
+  overflow: hidden;
+}
+.zlx-spec {
+  flex: 1 1 0; min-width: 110px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-right: 1px solid #eef1f6;
+}
+.zlx-spec:last-child { border-right: none; }
+.zlx-spec-ic {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: #eef4ff; color: #0E5AD0;
+}
+.zlx-spec-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zlx-spec-tx small { font-size: 11px; color: #8b93a3; font-weight: 600; letter-spacing: .01em; }
+.zlx-spec-tx b { font-size: 14px; color: #17203a; font-weight: 700; white-space: nowrap; }
+
+/* ================= Responsive: la IMAGEN es la protagonista ================= */
+/* En móvil las miniaturas quedan en una tira VERTICAL a la izquierda y la imagen
+   ocupa el resto, grande — tal como la referencia. (Anula el column-reverse previo.) */
+@media (max-width: 760px) {
+  .zlx-imgrow { flex-direction: row; gap: 10px; align-items: stretch; }
+  .zlx-views {
+    flex-direction: column; width: 58px; flex: 0 0 58px;
+    overflow: visible; padding-bottom: 0; gap: 8px;
+  }
+  .zlx-view { width: 58px; height: 58px; flex: 0 0 auto; aspect-ratio: 1 / 1; }
+  .zlx-imgrow .zlx-float-inner { flex: 1 1 auto; min-width: 0; }
+  .zlx-float-img { width: 100%; min-height: 300px; max-height: 62vh; object-fit: contain; }
+  .zlx-specs { margin-top: 14px; }
+  .zlx-spec { min-width: 100px; padding: 10px 12px; }
+  .zlx-badge-360 { right: 8px; bottom: 8px; padding: 5px 10px; font-size: 11.5px; }
+}
+@media (max-width: 420px) {
+  .zlx-views { width: 50px; flex-basis: 50px; }
+  .zlx-view { width: 50px; height: 50px; }
+  .zlx-float-img { min-height: 260px; }
+  .zlx-spec-tx b { font-size: 13px; }
+}

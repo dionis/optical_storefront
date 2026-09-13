@@ -108,6 +108,11 @@ function toFrame(product) {
       eye_size: m.eye_size_bucket || "",
       bridge_size: m.bridge_size_bucket || "",
       temple_length: m.temple_length_bucket || "",
+      // Medidas exactas (mm) para la fila de especificaciones de la ficha:
+      // "eye · bridge · temple" (p. ej. 55 · 18 · 145).
+      eye: typeof m.eye_size === "number" ? m.eye_size : null,
+      bridge: typeof m.bridge_size === "number" ? m.bridge_size : null,
+      temple: typeof m.temple_length === "number" ? m.temple_length : null,
     },
     price,
     basePrice: price,

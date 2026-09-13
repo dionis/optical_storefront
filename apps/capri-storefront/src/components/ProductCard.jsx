@@ -10,6 +10,8 @@ import TryOn from "./TryOnSwitch.jsx";
 // Abrir/cerrar vive fuera de este componente: sobrevive al remount que sufre esta
 // card cuando el catálogo pasa de seed a Medusa a mitad de sesión (ver tryOnState.js).
 import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
+// Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
+import { viewsBySku } from "../data/frameMediaSample.js";
 
 // Requisito 11 (tarjetas estilo Amazon):
 //  - "Añadir al carrito" añade SOLO LA MONTURA (addVariant, precio base servidor).
@@ -27,6 +29,8 @@ export default function ProductCard({ product }) {
   const navigate = useNavigate();
   const color = product.colors[active];
   const fav = isFav(product.slug);
+  // ¿Esta montura ya tiene las 4 vistas 3D generadas? → muestra el sello "360°".
+  const hasViews = !!viewsBySku(product.sku);
   // null until somebody actually reviews this frame.
   const review = useReviewSummary(product.slug);
 
@@ -54,6 +58,13 @@ export default function ProductCard({ product }) {
   return (
     <div className="card">
       <div className="card-media">
+        {/* Sello 360°: la montura ya tiene las 4 vistas 3D generadas. */}
+        {hasViews && (
+          <span className="card-badge-360" title={t("pdp.has3d")}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><polyline points="21 3 21 9 15 9" /></svg>
+            360°
+          </span>
+        )}
         {/* Acciones como iconos compactos en la esquina superior derecha, para
             dejar la FOTO del espejuelo lo más limpia y grande posible. */}
         <div className="card-actions">
