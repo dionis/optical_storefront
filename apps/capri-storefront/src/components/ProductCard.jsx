@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
@@ -27,7 +27,6 @@ export default function ProductCard({ product }) {
   const { t, tv } = useLang();
   const { toggleFav, isFav, addVariant, busy } = useCart();
   const { toast } = useFeedback();
-  const navigate = useNavigate();
   const color = product.colors[active];
   const fav = isFav(product.slug);
   // ¿Esta montura ya tiene las 4 vistas 3D generadas? → muestra el sello "360°".
