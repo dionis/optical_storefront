@@ -4,6 +4,7 @@ import { useCatalog, matchProduct } from "../data/catalogStore.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
 import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
+import { Icon360, IconMaterial as SpecMaterial, IconMeasures, IconGender } from "../components/UiIcons.jsx";
 const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
@@ -1013,7 +1014,7 @@ export default function LensProcess() {
                 {/* Sello 360°: esta montura tiene las 4 vistas 3D generadas. */}
                 {hasViews && !showingVideo && (
                   <span className="zlx-badge-360" title={t("pdp.has3d")}>
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><polyline points="21 3 21 9 15 9" /></svg>
+                    <Icon360 />
                     360°
                   </span>
                 )}
@@ -1039,7 +1040,7 @@ export default function LensProcess() {
             <div className="zlx-specs">
               {frameMats.length > 0 && (
                 <div className="zlx-spec">
-                  <span className="zlx-spec-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg></span>
+                  <span className="zlx-spec-ic" aria-hidden="true"><SpecMaterial /></span>
                   <span className="zlx-spec-tx"><small>{t("pdp.spec.material")}</small><b>{frameMats.join(" · ")}</b></span>
                 </div>
               )}
@@ -1050,14 +1051,14 @@ export default function LensProcess() {
                   [a.eye_size, a.bridge_size, a.temple_length].filter(Boolean).join(" · ");
                 return measures ? (
                   <div className="zlx-spec">
-                    <span className="zlx-spec-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="13" r="3.2" /><circle cx="18" cy="13" r="3.2" /><path d="M9.2 13h5.6" /><path d="M2.5 11.5C3 9.5 3.8 8.5 6 8.5" /><path d="M21.5 11.5C21 9.5 20.2 8.5 18 8.5" /></svg></span>
+                    <span className="zlx-spec-ic" aria-hidden="true"><IconMeasures /></span>
                     <span className="zlx-spec-tx"><small>{t("pdp.spec.measures")}</small><b>{measures}</b></span>
                   </div>
                 ) : null;
               })()}
               {product.attributes?.gender && (
                 <div className="zlx-spec">
-                  <span className="zlx-spec-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M5 21a7 7 0 0 1 14 0" /></svg></span>
+                  <span className="zlx-spec-ic" aria-hidden="true"><IconGender /></span>
                   <span className="zlx-spec-tx"><small>{t("pdp.spec.gender")}</small><b>{product.attributes.gender}</b></span>
                 </div>
               )}

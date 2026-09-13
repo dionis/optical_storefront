@@ -7,6 +7,7 @@ import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import TrustStrip from "../components/TrustStrip.jsx";
+import { IconFilter } from "../components/UiIcons.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { fetchReviewSummaries } from "../data/reviews.js";
 
@@ -132,7 +133,9 @@ export default function Catalog() {
       )}
     <div className="catalog">
       <button className="filters-toggle mobile-only" onClick={() => setShowFilters((v) => !v)}>
-        {t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""} {showFilters ? "▲" : "▼"}
+        <IconFilter className="ft-ic" />
+        <span>{t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""}</span>
+        <span className="ft-chev">{showFilters ? "▲" : "▼"}</span>
       </button>
 
       <aside className={`filters ${showFilters ? "show" : ""}`}>
