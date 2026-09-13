@@ -3892,3 +3892,15 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   /* Franja de confianza con margen lateral (tarjeta con aire). */
   .truststrip { margin: 18px 12px 8px; padding: 16px 14px; }
 }
+
+/* ---- Visibilidad definitiva de los iconos del header (corrige cascada) ---- */
+/* La lupa extra solo existe en móvil; en escritorio ya hay caja de búsqueda. */
+.header-actions .hdr-search-m { display: none !important; }
+@media (max-width: 860px) {
+  /* En la barra azul móvil SOLO van BUSCAR + CARRITO. */
+  .header-actions .hdr-search-m { display: inline-flex !important; }
+  .header-actions .sound-toggle,
+  .header-actions .acct,
+  .header-actions .fav-m,
+  .header-actions .lang-flags { display: none !important; }
+}
