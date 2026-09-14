@@ -4246,3 +4246,20 @@ body { background: var(--bone); }
   .cat-hero-script span { font-size: 17px; }
   .cat-hero-glass { top: -1px; max-width: 168px; }
 }
+
+
+/* ===================================================================
+   ETAPA 8 — Fondo borroso AZUL a todo lo ancho y alto del hero (sin
+   caja/contenedor) + gafas en escala azul para combinar con el sitio.
+   =================================================================== */
+.cat-hero { overflow: hidden; }
+.cat-hero::before {
+  content: "" !important; position: absolute; inset: 0; z-index: 0;
+  background: url("/hero-blurbg.jpg") center center / cover no-repeat;
+  filter: blur(1px); opacity: .92;
+  -webkit-mask-image: linear-gradient(to left, #000 52%, rgba(0,0,0,.55) 100%);
+          mask-image: linear-gradient(to left, #000 52%, rgba(0,0,0,.55) 100%);
+}
+/* Título legible sobre el fondo borroso. */
+.cat-hero-txt h1 { text-shadow: 0 1px 9px rgba(245,248,253,.95); }
+.cat-hero-txt p { text-shadow: 0 1px 6px rgba(245,248,253,.9); }

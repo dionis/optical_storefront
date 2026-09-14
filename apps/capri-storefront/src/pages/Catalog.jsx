@@ -168,7 +168,7 @@ export default function Catalog() {
               <h1>{heading}</h1>
               <p>{t("cat.heroSub")}</p>
             </div>
-            <img className="cat-hero-glass" src="/hero-glass34.png" alt="" aria-hidden="true" loading="lazy" />
+            <img className="cat-hero-glass" src="/hero-glass34-blue.png" alt="" aria-hidden="true" loading="lazy" />
             <div className="cat-hero-script" aria-hidden="true">
               {t("cat.heroScript").split(",").map((s, i) => (
                 <span key={i}>{s.trim()}</span>
