@@ -4781,3 +4781,10 @@ button.card-genre {
   .pdp-color2-sw { width: 40px; height: 40px; }
   .pdp-tab { padding: 11px 10px; font-size: 13px; }
 }
+
+
+/* ===================== ETAPA28 · caja de imagen del producto en BLANCO puro ===================== */
+/* La foto de la montura trae fondo blanco; el visor tenia un degradado crema
+   (#faf9f6) y se veia el recuadro blanco de la foto contra el crema. Igual que
+   el card del catalogo: fondo blanco liso, sin costura. */
+.pdp .pdp-main { background: #fff !important; }
