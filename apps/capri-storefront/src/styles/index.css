@@ -3918,3 +3918,108 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .card-tryon { height: 40px; margin-top: 10px; }
   .card-add-cart { height: 37px; margin-top: 7px; }
 }
+
+
+/* ===================================================================
+   ETAPA 4 — Hero azul premium (degradado océano→cielo + brillo central,
+   fondo bokeh borroso = visión borrosa, gafas nítidas = enfoque, mensaje
+   caligráfico girado que "flota" fuera del rectángulo). Logo con glow.
+   Barra: "Ordenar" (menú propio) + conteo en la misma línea.
+   =================================================================== */
+
+/* ---- Logo: transparente + glow blanco (sin recuadro), un poco más grande ---- */
+.logo-mobile-img {
+  height: 34px; width: auto; display: block; border-radius: 0; background: none; box-shadow: none;
+  filter:
+    drop-shadow(0 0 2px rgba(255,255,255,.95))
+    drop-shadow(0 0 6px rgba(255,255,255,.65))
+    drop-shadow(0 2px 3px rgba(0,20,60,.28));
+}
+
+/* ---- Hero: desborde visible para que el script se salga (flotando) ---- */
+.cat-hero {
+  position: relative; overflow: visible; isolation: isolate;
+  display: block; padding: 0; border: none; background: none;
+  margin: 18px 0 var(--sp-5); min-height: 132px;
+}
+.cat-hero::before, .cat-hero::after { content: none; }
+
+/* El "rectángulo": degradado azul (océano der → cielo izq) + brillo central. */
+.cat-hero-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: var(--r-lg);
+  background:
+    radial-gradient(58% 130% at 50% 40%, rgba(255,255,255,.34) 0%, rgba(255,255,255,0) 62%),
+    linear-gradient(270deg, #0a3f8f 0%, #1f5fbf 42%, #4f92e0 74%, #7cb5ef 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 30px -16px rgba(8,30,84,.5);
+}
+/* Bokeh borroso a la derecha (visión borrosa), fundido hacia la izquierda. */
+.cat-hero-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background: url("/hero-bokeh.jpg") right center / cover no-repeat;
+  filter: blur(7px) saturate(1.15); opacity: .32; mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(90deg, transparent 6%, #000 60%);
+          mask-image: linear-gradient(90deg, transparent 6%, #000 60%);
+}
+
+/* Texto a la izquierda, en blanco. */
+.cat-hero-txt { position: relative; z-index: 3; padding: 20px 20px; max-width: 60%; }
+.cat-hero-txt h1 { color: #fff; font-size: 29px; line-height: 1.05; margin: 0 0 8px; text-shadow: 0 2px 16px rgba(4,18,54,.45); }
+.cat-hero-txt p { color: rgba(255,255,255,.94); font-size: 15px; font-weight: 500; margin: 0; text-shadow: 0 1px 10px rgba(4,18,54,.4); }
+
+/* Gafas nítidas (enfoque) abajo-derecha, por encima del bokeh. */
+.cat-hero-glass {
+  position: absolute; z-index: 4; right: 3%; bottom: 12px;
+  width: 44%; max-width: 250px; height: auto;
+  filter: drop-shadow(0 12px 20px rgba(4,18,54,.5));
+}
+
+/* Mensaje caligráfico, 2 líneas, girado, saliéndose del rectángulo (flota). */
+.cat-hero-script {
+  position: absolute; z-index: 5; top: -14px; right: 12px;
+  display: flex; flex-direction: column; align-items: flex-end;
+  transform: rotate(-11deg); transform-origin: 100% 0;
+  font-family: "Dancing Script", "Segoe Script", "Snell Roundhand", cursive;
+  color: #fff; line-height: 1.0; pointer-events: none;
+  text-shadow: 0 3px 12px rgba(4,18,54,.55), 0 1px 2px rgba(4,18,54,.7);
+}
+.cat-hero-script span { font-size: 27px; font-weight: 700; white-space: nowrap; }
+.cat-hero-script span:last-child { margin-right: 16px; }
+
+/* ---- Barra de filtros: "Ordenar" (menú propio) + conteo en la misma línea ---- */
+.fb-sort { position: relative; padding: 0; }
+.fb-sort::after { content: none; }
+.fb-sortbtn { gap: 7px; }
+.fb-caret { width: 8px; height: 8px; flex: 0 0 auto; margin-left: 2px; margin-top: -3px;
+  border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(45deg); }
+.fb-menu {
+  list-style: none; position: absolute; z-index: 60; top: calc(100% + 6px); left: 0;
+  min-width: 200px; margin: 0; padding: 6px; background: #fff;
+  border: 1px solid var(--border-soft); border-radius: 12px;
+  box-shadow: 0 16px 36px -12px rgba(16,34,84,.42);
+}
+.fb-menu li { margin: 0; }
+.fb-menu button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  padding: 9px 12px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--text-primary); cursor: pointer;
+}
+.fb-menu button:hover { background: var(--primary-blue-light); }
+.fb-menu button.on { background: var(--primary-blue); color: #fff; }
+.fb-backdrop { position: fixed; inset: 0; z-index: 55; background: transparent; }
+.fb-count { order: 0; width: auto; margin: 0 0 0 2px; }
+
+/* ---- ETAPA 4 móvil (apendizado al final) ---- */
+@media (max-width: 860px) {
+  .logo-mobile-img { height: 33px; }
+  .cat-hero { min-height: 106px; margin: 14px 0 12px; }
+  .cat-hero-txt { padding: 13px 14px; max-width: 58%; }
+  .cat-hero-txt h1 { font-size: 20px; margin-bottom: 4px; }
+  .cat-hero-txt p { font-size: 12px; }
+  .cat-hero-glass { width: 52%; max-width: 200px; bottom: 8px; right: 2%; }
+  .cat-hero-script { top: -10px; right: 6px; }
+  .cat-hero-script span { font-size: 19px; }
+  .cat-hero-script span:last-child { margin-right: 11px; }
+  /* Conteo en la misma línea que Filtros / Ordenar. */
+  .filterbar { gap: 7px; }
+  .fb-count { width: auto; order: 0; margin: 0 2px 0 2px; font-size: 12px; }
+  .fb-pill { padding: 0 13px; }
+}

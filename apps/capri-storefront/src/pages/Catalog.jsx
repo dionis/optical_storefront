@@ -26,6 +26,7 @@ export default function Catalog() {
   const [sort, setSort] = useState("relevance");
   const [showFilters, setShowFilters] = useState(false);
   const [view, setView] = useState("grid"); // 'grid' | 'list'
+  const [sortOpen, setSortOpen] = useState(false);
   // All filter groups start CLOSED on load.
   const [openGroups, setOpenGroups] = useState(() =>
     Object.fromEntries(FILTER_GROUPS.map((g) => [g.key, false]))
@@ -163,12 +164,16 @@ export default function Catalog() {
       <section className="listing">
         {!brand && (
           <div className="cat-hero">
+            <div className="cat-hero-bg" aria-hidden="true" />
             <div className="cat-hero-txt">
               <h1>{heading}</h1>
               <p>{t("cat.heroSub")}</p>
             </div>
-            <div className="cat-hero-art" aria-hidden="true">
-              <span className="cat-hero-script">{t("cat.heroScript")}</span>
+            <img className="cat-hero-glass" src="/hero-glasses.png" alt="" aria-hidden="true" loading="lazy" />
+            <div className="cat-hero-script" aria-hidden="true">
+              {t("cat.heroScript").split(",").map((s, i) => (
+                <span key={i}>{s.trim()}</span>
+              ))}
             </div>
           </div>
         )}
@@ -179,15 +184,27 @@ export default function Catalog() {
             <IconFilter className="fb-ic" />
             <span>{t("filters.title")}{activeCount > 0 ? ` (${activeCount})` : ""}</span>
           </button>
-          <label className="fb-pill fb-sort">
-            <IconSort className="fb-ic" />
-            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t("sort.title")}>
-              <option value="relevance">{t("sort.relevance")}</option>
-              <option value="price-asc">{t("sort.priceAsc")}</option>
-              <option value="price-desc">{t("sort.priceDesc")}</option>
-              <option value="rating">{t("sort.rating")}</option>
-            </select>
-          </label>
+          <div className="fb-sort">
+            <button type="button" className="fb-pill fb-sortbtn" onClick={() => setSortOpen((o) => !o)}
+                    aria-haspopup="listbox" aria-expanded={sortOpen}>
+              <IconSort className="fb-ic" />
+              <span>{t("sort.title")}</span>
+              <span className="fb-caret" aria-hidden="true" />
+            </button>
+            {sortOpen && (
+              <>
+                <div className="fb-backdrop" onClick={() => setSortOpen(false)} />
+                <ul className="fb-menu" role="listbox">
+                  {[["relevance", "sort.relevance"], ["price-asc", "sort.priceAsc"], ["price-desc", "sort.priceDesc"], ["rating", "sort.rating"]].map(([v, k]) => (
+                    <li key={v}>
+                      <button type="button" className={sort === v ? "on" : ""}
+                              onClick={() => { setSort(v); setSortOpen(false); }}>{t(k)}</button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
           <span className="fb-count">{results.length} {t("cat.count")}</span>
           <div className="fb-view" role="group" aria-label={t("sort.title")}>
             <button type="button" className={`fb-vbtn ${view === "grid" ? "on" : ""}`}

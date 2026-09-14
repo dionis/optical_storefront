@@ -57,10 +57,10 @@ export default function Header() {
         </button>
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
-          <img src="/logo-rubilens.png" alt="RUBI LENS" className="logo-img" />
+          <img src="/logo-mark.png" alt="RUBI LENS" className="logo-img" />
           {/* Versión móvil (sobre la barra azul): icono + texto en blanco. */}
           <span className="logo-mobile" aria-hidden="true">
-            <img src="/logo-rubilens.png" alt="RUBI LENS" className="logo-mobile-img" />
+            <img src="/logo-mark.png" alt="RUBI LENS" className="logo-mobile-img" />
           </span>
         </Link>
 
