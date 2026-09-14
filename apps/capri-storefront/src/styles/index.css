@@ -4390,3 +4390,18 @@ body { background: var(--bone); }
   .card-disc-badge { font-size: 11px; padding: 3px 8px 3px 5px; gap: 2px; }
   .card-disc-ic { width: 12px; height: 12px; }
 }
+
+
+/* ===================================================================
+   ETAPA 14 — Hero: gafas a la IZQUIERDA, título/subtítulo a la DERECHA
+   con margen prudencial (sin invadir). Script con las gafas (abajo-izq).
+   =================================================================== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
+.cat-hero-txt { max-width: 56%; text-align: right; padding: 0 20px 0 0; margin-left: auto; }
+.cat-hero-glass { left: -3%; right: auto; }
+.cat-hero-script { left: 12px; right: auto; align-items: flex-start; transform-origin: 0 100%; }
+@media (max-width: 860px) {
+  .cat-hero-txt { max-width: 55%; padding-right: 14px; }
+  .cat-hero-glass { left: -4%; max-width: 150px; }
+  .cat-hero-script { left: 9px; }
+}

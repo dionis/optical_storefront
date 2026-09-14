@@ -14,6 +14,11 @@ import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data
 import { viewsBySku } from "../data/frameMediaSample.js";
 import { Icon360, IconHeart, IconDiscount } from "./UiIcons.jsx";
 
+// Descuentos realistas para la etiqueta (10/15/20/25%), asignados de forma
+// estable por producto (mismo producto → mismo descuento).
+const DISCOUNT_STEPS = [10, 15, 20, 25];
+function hashSlug(s) { let h = 0; const str = String(s || ""); for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+
 // Tarjeta de producto — rediseño "montura protagonista":
 //  - La FOTO manda; sobre ella solo el corazón (y el sello 360° si aplica).
 //  - Debajo: nombre + valoración, marca · forma, puntos de color, precio (azul
@@ -44,7 +49,8 @@ export default function ProductCard({ product }) {
   // Oferta: precio anterior tachado + precio en rojo + etiqueta, solo si el
   // precio anterior es mayor que el actual.
   const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
-  const discountOff = hasSale ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+  const discountOff = hasSale ? DISCOUNT_STEPS[hashSlug(product.slug) % DISCOUNT_STEPS.length] : 0;
+  const oldPrice = hasSale ? product.price / (1 - discountOff / 100) : 0;
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).
@@ -127,7 +133,7 @@ export default function ProductCard({ product }) {
             </span>
           </div>
           <span className="card-price-wrap">
-            {hasSale && <span className="card-price-old">${product.originalPrice.toFixed(2)}</span>}
+            {hasSale && <span className="card-price-old">${oldPrice.toFixed(2)}</span>}
             <span className={`card-price ${hasSale ? "sale" : ""}`}>${product.price.toFixed(2)}</span>
           </span>
         </div>
