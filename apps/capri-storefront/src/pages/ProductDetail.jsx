@@ -253,6 +253,17 @@ export default function ProductDetail() {
                      pulsar "play" dispararía el zoom en vez de reproducir. */
                   onClick={(e) => e.stopPropagation()}
                 />
+              ) : hasViews ? (
+                /* Las 4 vistas pre-renderizadas y apiladas; sólo cambia la opacidad
+                   → giro continuo sin parpadeo al cambiar de foto. */
+                <div className="pdp-360stack">
+                  {VIEW_ORDER.filter((v) => views360[v]).map((v) => (
+                    <img key={v} src={resolveImage(views360[v].key)} draggable="false"
+                         alt={`${product.name} ${color.name} · ${t(`pdp.view.${v}`)}`}
+                         className={`pdp-360frame ${views360[v].mirror ? "mirror" : ""} ${view === v ? "on" : ""}`}
+                         onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                  ))}
+                </div>
               ) : (
                 <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />

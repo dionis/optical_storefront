@@ -4882,3 +4882,22 @@ button.card-genre {
 .pdp-main img.mirror { transform: scaleX(-1); }
 .pdp-main.zoom img.mirror { transform: scale(1.6) scaleX(-1); }
 .pdp-view img.mirror { transform: scaleX(-1); }
+
+
+/* ===================== ETAPA34 · visor 360 sin parpadeo (vistas apiladas) ===================== */
+/* Las 4 vistas se pre-renderizan apiladas; el giro sólo cambia la opacidad (con
+   un fundido corto) en vez de reemplazar el src → flujo continuo sin saltos. */
+.pdp-360stack { position: relative; width: 100%; height: 100%; align-self: stretch; }
+.pdp-360frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity .16s linear;
+  will-change: opacity;
+}
+.pdp-360frame.on { opacity: 1; }
+/* El espejo/zoom siguen aplicando por .mirror y .pdp-main.zoom img (ETAPA33). */
