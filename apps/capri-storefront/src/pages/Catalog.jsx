@@ -177,6 +177,8 @@ export default function Catalog() {
           </div>
         )}
 
+        <TrustStrip />
+
         <div className="filterbar">
           <button className={`fb-pill fb-filters ${activeCount > 0 ? "act" : ""}`}
                   onClick={() => setShowFilters((v) => !v)}>
@@ -226,7 +228,6 @@ export default function Catalog() {
         )}
       </section>
     </div>
-    <TrustStrip />
     </>
   );
 }

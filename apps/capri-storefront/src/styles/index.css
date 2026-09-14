@@ -4263,3 +4263,22 @@ body { background: var(--bone); }
 /* Título legible sobre el fondo borroso. */
 .cat-hero-txt h1 { text-shadow: 0 1px 9px rgba(245,248,253,.95); }
 .cat-hero-txt p { text-shadow: 0 1px 6px rgba(245,248,253,.9); }
+
+
+/* ===================================================================
+   ETAPA 9 — Barra de confianza (Envío / Compra segura / Métodos de
+   pago / Asesoría) en NAVY, visible justo debajo del banner.
+   =================================================================== */
+.truststrip {
+  background: #01326b !important; border: none !important;
+  border-radius: 12px; max-width: none; margin: 0 0 14px; padding: 13px 18px; color: #fff;
+  box-shadow: 0 4px 16px -8px rgba(1, 30, 90, .45);
+}
+.trust-item { color: rgba(255,255,255,.95); font-weight: 600; }
+.trust-ic { color: #fff; }
+.trust-tx { color: rgba(255,255,255,.95); }
+@media (max-width: 860px) {
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 10px 12px; padding: 12px 14px; margin: 0 0 12px; }
+  .trust-item { font-size: 12px; gap: 9px; }
+  .trust-ic { width: 26px; height: 26px; }
+}
