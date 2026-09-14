@@ -4441,3 +4441,21 @@ body { background: var(--bone); }
   .cat-hero-glass { left: auto; right: -4%; max-width: 150px; }
   .cat-hero-script { left: auto; right: 9px; }
 }
+
+
+/* ===================================================================
+   ETAPA 17 — Mensaje al centro vertical + más margen derecho.
+   Gafas con ZOOM (más grandes, recortadas por el borde = "saliendo").
+   =================================================================== */
+.cat-hero-script {
+  top: 50%; bottom: auto; right: 24px;
+  transform: translateY(-50%) rotate(-7deg); transform-origin: 100% 50%;
+}
+.cat-hero-glass {
+  top: 50%; bottom: auto; transform: translateY(-50%);
+  width: 54%; max-width: 430px; right: -6%; opacity: 1;
+}
+@media (max-width: 860px) {
+  .cat-hero-script { top: 50%; right: 18px; transform: translateY(-50%) rotate(-7deg); }
+  .cat-hero-glass { top: 50%; transform: translateY(-50%); width: 66%; max-width: 250px; right: -12%; }
+}
