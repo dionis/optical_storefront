@@ -3904,3 +3904,17 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .header-actions .fav-m,
   .header-actions .lang-flags { display: none !important; }
 }
+
+/* ---- MÓVIL: compactar para que se vean ~4 espejuelos (2 filas) ---- */
+@media (max-width: 860px) {
+  .cat-hero { padding: 12px 14px; margin-bottom: 10px; }
+  .cat-hero-txt h1 { font-size: 20px; margin-bottom: 3px; }
+  .cat-hero-txt p { font-size: 12.5px; }
+  .filterbar { margin-bottom: 10px; }
+  .product-grid { gap: 12px; }
+  .card-media { aspect-ratio: 1.35; padding: 8px 8px 2px; }
+  .card-body { padding: 4px 10px 11px; }
+  .card-sub { margin: 2px 0 7px; }
+  .card-tryon { height: 40px; margin-top: 10px; }
+  .card-add-cart { height: 37px; margin-top: 7px; }
+}
