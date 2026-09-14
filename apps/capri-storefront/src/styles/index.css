@@ -4282,3 +4282,62 @@ body { background: var(--bone); }
   .trust-item { font-size: 12px; gap: 9px; }
   .trust-ic { width: 26px; height: 26px; }
 }
+
+
+/* ===================================================================
+   ETAPA 10 — Icono de descuento (ofertas), gafas del hero a la izq +
+   mensaje en negrita, y compactación responsive: SIEMPRE 4 espejuelos.
+   =================================================================== */
+
+/* Favorito + descuento apilados en la esquina; descuento solo en ofertas. */
+.card-actions { flex-direction: column; align-items: flex-end; gap: 8px; }
+.card-ic-disc {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e0241c; color: #fff; box-shadow: 0 2px 7px rgba(200,20,45,.42);
+}
+.card-ic-disc .card-fav-ic { width: 17px; height: 17px; }
+
+/* Hero: gafas un poco más a la izquierda; mensaje en NEGRITA. */
+.cat-hero-glass { right: 9%; }
+.cat-hero-script span { font-weight: 700; -webkit-text-stroke: 0.6px var(--hero-ink); }
+
+/* ---- Compactación móvil/tablet para ver 4 espejuelos completos ---- */
+@media (max-width: 860px) {
+  /* Banner compacto. */
+  .cat-hero { min-height: 66px; margin: 2px 0 8px; }
+  .cat-hero-txt h1 { font-size: 19px; margin-bottom: 2px; }
+  .cat-hero-txt p { font-size: 11.5px; }
+  .cat-hero-glass { right: 7%; max-width: 150px; }
+  .cat-hero-script span { font-size: 16px; }
+
+  /* Barra de confianza compacta (2×2). */
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 6px 10px; padding: 9px 12px; margin: 0 0 8px; }
+  .trust-item { font-size: 11px; gap: 8px; }
+  .trust-ic { width: 22px; height: 22px; }
+  .trust-ic svg { width: 18px; height: 18px; }
+
+  .filterbar { margin-bottom: 8px; }
+  .product-grid { gap: 9px; }
+
+  /* Tarjetas mínimas: imagen protagonista, textos y botones ajustados. */
+  .card-media { aspect-ratio: 2.15; padding: 1px 8px 0; }
+  .card-body { padding: 2px 9px 9px; }
+  .card-name { font-size: 13.5px; }
+  .card-sub { margin: 1px 0 5px; font-size: 11px; }
+  .card-oferta { margin-top: 4px; padding: 1px 7px; font-size: 10px; }
+  .card-tryon { height: 34px; margin-top: 7px; font-size: 11.5px; }
+  .card-add-cart { height: 31px; margin-top: 5px; font-size: 11.5px; }
+  .card-ic-disc { width: 28px; height: 28px; }
+  .card-ic-disc .card-fav-ic { width: 15px; height: 15px; }
+}
+
+/* Teléfonos pequeños: un punto más de compactación. */
+@media (max-width: 400px) {
+  .cat-hero { min-height: 60px; }
+  .cat-hero-glass { max-width: 132px; }
+  .truststrip { padding: 8px 10px; }
+  .card-media { aspect-ratio: 2.3; }
+  .card-tryon { height: 32px; }
+  .card-add-cart { height: 30px; }
+}

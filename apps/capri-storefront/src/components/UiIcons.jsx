@@ -254,3 +254,14 @@ export function IconCamera({ className }) {
     </svg>
   );
 }
+
+// Descuento — símbolo de porcentaje (para monturas en oferta).
+export function IconDiscount({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
+      <path d="M6.5 17.5 17.5 6.5" />
+      <circle cx="8" cy="8" r="2.1" />
+      <circle cx="16" cy="16" r="2.1" />
+    </svg>
+  );
+}

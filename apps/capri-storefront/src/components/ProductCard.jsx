@@ -12,7 +12,7 @@ import TryOn from "./TryOnSwitch.jsx";
 import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
 // Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
 import { viewsBySku } from "../data/frameMediaSample.js";
-import { Icon360, IconHeart } from "./UiIcons.jsx";
+import { Icon360, IconHeart, IconDiscount } from "./UiIcons.jsx";
 
 // Tarjeta de producto — rediseño "montura protagonista":
 //  - La FOTO manda; sobre ella solo el corazón (y el sello 360° si aplica).
@@ -80,6 +80,11 @@ export default function ProductCard({ product }) {
           >
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
+          {hasSale && (
+            <span className="card-ic card-ic-disc" title={t("card.sale")} aria-label={t("card.sale")}>
+              <IconDiscount className="card-fav-ic" />
+            </span>
+          )}
         </div>
         <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
