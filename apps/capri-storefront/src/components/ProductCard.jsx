@@ -30,6 +30,7 @@ export default function ProductCard({ product }) {
   const tryOnOpenKey = useTryOnOpenKey();
   const tryOn = tryOnOpenKey !== null && tryOnOpenKey === productTryOnKey(product);
   const [added, setAdded] = useState(false);
+  const [genreTip, setGenreTip] = useState(false);
   const { t, tv } = useLang();
   const { toggleFav, isFav, addVariant, busy } = useCart();
   const { toast } = useFeedback();
@@ -98,9 +99,16 @@ export default function ProductCard({ product }) {
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
           {GenderIcon && (
-            <span className="card-genre" title={genderLabel} aria-label={genderLabel}>
+            <button
+              type="button"
+              className={`card-genre ${genreTip ? "on" : ""}`}
+              aria-label={genderLabel}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setGenreTip((v) => !v); }}
+              onMouseLeave={() => setGenreTip(false)}
+            >
               <GenderIcon className="card-genre-ic" />
-            </span>
+              <span className="card-genre-tip" role="tooltip">{genderLabel}</span>
+            </button>
           )}
           {hasSale && (
             <span className="card-disc-badge" title={t("card.sale")} aria-label={`-${discountOff}%`}>
