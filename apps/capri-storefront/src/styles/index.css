@@ -4509,7 +4509,7 @@ body { background: var(--bone); }
    ETAPA 20 — Barra inferior nueva (Marcas / Favoritos con badge) +
    promedio de valoración junto a las estrellas en la card.
    =================================================================== */
-.bottomnav button.bn-item { background: none; border: none; font: inherit; cursor: pointer; padding: 0; }
+.bottomnav button.bn-item { background: none; border: none; font-family: inherit; color: inherit; cursor: pointer; padding: 0; }
 .bn-ic { position: relative; }
 .bn-badge {
   position: absolute; top: -6px; right: -9px; min-width: 15px; height: 15px; padding: 0 3px;
