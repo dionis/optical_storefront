@@ -157,6 +157,11 @@ export default function ProductDetail() {
   // Datos clave para la ficha estilo mockup: forma, medidas (ojo-puente-varilla)
   // y género con su icono.
   const shapeLabel = tv(product.attributes.shape);
+  // Sello de marca (monograma): iniciales de la marca; el nombre completo sale
+  // al pasar el cursor. Los logos de marca son wordmarks externos, así que un
+  // monograma es más limpio y fiable como "sello de calidad".
+  const brandCaps = (product.brand || "").match(/[A-Z]/g) || [];
+  const brandInitials = (brandCaps.length >= 2 ? brandCaps.slice(0, 2).join("") : (product.brand || "").slice(0, 2).toUpperCase());
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
     .filter((x) => x != null && x !== "").join(" - ");
   const genderVal = product.attributes.gender;
@@ -232,6 +237,14 @@ export default function ProductDetail() {
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                       aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
+              {/* Identidad arriba a la derecha: sello de marca (hover → nombre) + modelo/color. */}
+              <div className="pdp-idtag" onClick={(e) => e.stopPropagation()}>
+                <span className="pdp-brandseal" tabIndex={0} role="img" aria-label={product.brand} title={product.brand}>
+                  <span className="pdp-brandseal-mono">{brandInitials}</span>
+                  <span className="pdp-brandseal-tip">{product.brand}</span>
+                </span>
+                <h1 className="pdp-idtag-model">{product.name}{color ? ` · ${color.name}` : ""}</h1>
+              </div>
               {showingVideo ? (
                 <video
                   key={videoSrc}
@@ -294,8 +307,6 @@ export default function ProductDetail() {
         <div className="pdp-info">
           <div className="pdp-head">
             <div className="pdp-head-txt">
-              <div className="pdp-brand">{product.brand}</div>
-              <h1 className="pdp-title">{product.name}{color ? ` · ${color.name}` : ""}</h1>
               <div className="pdp-meta">
                 {review ? (
                   <>

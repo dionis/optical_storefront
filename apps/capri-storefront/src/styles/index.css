@@ -4947,3 +4947,59 @@ button.card-genre {
 @media (prefers-reduced-motion: reduce) {
   /* (a pedido) el giro 3D se muestra siempre, incluso con reduce-motion. */
 }
+
+
+/* ===================== ETAPA37 · ficha pro: imagen mas grande, zoom mayor, sello de marca + nombre ===================== */
+/* Imagen mas grande por defecto (menos padding) y zoom con mas detalle. */
+.pdp-main { padding: 14px; }
+.pdp-main.zoom img { transform: scale(1.9); }
+.pdp-main.zoom img.mirror { transform: scale(1.9) scaleX(-1); }
+
+/* El corazon de favorito pasa a la IZQUIERDA (la identidad va a la derecha). */
+.pdp-main .heart { left: 14px; right: auto; }
+
+/* Etiqueta de identidad arriba a la derecha: sello de marca + modelo/color. */
+.pdp-idtag {
+  position: absolute; top: 12px; right: 14px; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  text-align: right; max-width: 62%;
+}
+/* Sello de calidad: monograma de la marca; el nombre completo sale al hover. */
+.pdp-brandseal {
+  position: relative; width: 42px; height: 42px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1.5px solid #dbe3f0;
+  box-shadow: 0 4px 12px -4px rgba(16, 34, 84, .25);
+  color: var(--primary-blue, #01326b); cursor: help; outline: none;
+}
+.pdp-brandseal::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%;
+  border: 1px solid rgba(1, 50, 107, .16);
+}
+.pdp-brandseal-mono { font-family: var(--display), Georgia, serif; font-weight: 700; font-size: 16px; letter-spacing: .5px; line-height: 1; }
+.pdp-brandseal-tip {
+  position: absolute; top: 50%; right: calc(100% + 10px);
+  transform: translateY(-50%) scale(.95); transform-origin: right center;
+  white-space: nowrap; background: var(--primary-blue, #01326b); color: #fff;
+  font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; padding: 5px 10px; border-radius: 8px;
+  box-shadow: 0 6px 16px -6px rgba(15, 40, 90, .5);
+  opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease;
+}
+.pdp-brandseal-tip::after { content: ""; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-left-color: var(--primary-blue, #01326b); }
+.pdp-brandseal:hover .pdp-brandseal-tip, .pdp-brandseal:focus-visible .pdp-brandseal-tip { opacity: 1; transform: translateY(-50%) scale(1); }
+/* Nombre + serie + color, con la tipografia display (serif) de la marca. */
+.pdp-idtag-model {
+  margin: 0; font-family: var(--display), Georgia, serif; font-weight: 600;
+  color: var(--hero-ink, #01326b); font-size: 18px; line-height: 1.15; letter-spacing: -.01em;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, .95), 0 0 2px rgba(255, 255, 255, .9);
+}
+
+@media (max-width: 720px) {
+  .pdp-main { padding: 6px !important; }
+  .pdp-main .heart { left: 10px; }
+  .pdp-idtag { top: 9px; right: 10px; gap: 6px; max-width: 66%; }
+  .pdp-brandseal { width: 36px; height: 36px; }
+  .pdp-brandseal-mono { font-size: 14px; }
+  .pdp-idtag-model { font-size: 15px; }
+}
