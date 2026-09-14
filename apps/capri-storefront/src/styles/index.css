@@ -4553,3 +4553,25 @@ body { background: var(--bone); }
   color: #fff;
 }
 .bottomnav button.bn-item .bn-ic svg { stroke: currentColor; }
+
+
+/* ===================== ETAPA23 · badge de sexo como etiqueta en la columna derecha ===================== */
+/* Ahora vive dentro de .card-actions (bajo el corazon, sobre el % de descuento):
+   posicion estatica y forma de etiqueta redondeada, no circulo absoluto. */
+.card-genre {
+  position: static;
+  bottom: auto;
+  left: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  border: 1px solid #eef1f6;
+  background: rgba(255, 255, 255, .96);
+  color: var(--primary-blue, #01326b);
+  box-shadow: 0 4px 12px -4px rgba(15, 40, 90, .28);
+}
+.card-genre-ic { width: 19px; height: 19px; }
+@media (max-width: 640px) {
+  .card-genre { width: 34px; height: 34px; border-radius: 10px; bottom: auto; left: auto; }
+  .card-genre-ic { width: 17px; height: 17px; }
+}

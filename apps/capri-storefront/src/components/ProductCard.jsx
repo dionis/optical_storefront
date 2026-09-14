@@ -97,6 +97,11 @@ export default function ProductCard({ product }) {
           >
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
+          {GenderIcon && (
+            <span className="card-genre" title={genderLabel} aria-label={genderLabel}>
+              <GenderIcon className="card-genre-ic" />
+            </span>
+          )}
           {hasSale && (
             <span className="card-disc-badge" title={t("card.sale")} aria-label={`-${discountOff}%`}>
               <IconDiscount className="card-disc-ic" />
@@ -104,11 +109,6 @@ export default function ProductCard({ product }) {
             </span>
           )}
         </div>
-        {GenderIcon && (
-          <span className="card-genre" title={genderLabel} aria-label={genderLabel}>
-            <GenderIcon className="card-genre-ic" />
-          </span>
-        )}
         <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
