@@ -190,7 +190,7 @@ export default function ProductDetail() {
     clearTimeout(spinHold.current);
     clearInterval(spinTimer.current);
     spinHold.current = setTimeout(() => {
-      spinTimer.current = setInterval(() => spin360(1), 300);
+      spinTimer.current = setInterval(() => spin360(1), 190);
     }, 320);
   };
   const stop360 = () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); spinTimer.current = null; };

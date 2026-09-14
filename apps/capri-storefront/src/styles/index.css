@@ -4896,7 +4896,7 @@ button.card-genre {
   max-height: none;
   object-fit: contain;
   opacity: 0;
-  transition: opacity .16s linear;
+  transition: opacity .34s ease-in-out;
   will-change: opacity;
 }
 .pdp-360frame.on { opacity: 1; }
@@ -4922,4 +4922,28 @@ button.card-genre {
 .pdp .pdp-360:active { transform: translateY(-1px) scale(.97); }
 @media (prefers-reduced-motion: reduce) {
   .pdp .pdp-360, .pdp .pdp-360:hover { transition: none; transform: none; }
+}
+
+
+/* ===================== ETAPA36 · giro 360 con transicion 3D natural ===================== */
+/* En vez de un fundido plano (rigido), cada vista "gira" para entrar (rotateY +
+   ligera escala) con perspectiva → sensacion de rotacion 3D real. El cuadro
+   saliente se desvanece rapido; el entrante gira a su sitio. */
+.pdp-360frame {
+  transition: opacity .18s linear;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+}
+.pdp-360frame.on { animation: spin3dIn .34s ease-out; }
+.pdp-360frame.mirror.on { animation: spin3dInMirror .34s ease-out; }
+@keyframes spin3dIn {
+  from { transform: perspective(900px) rotateY(18deg) scale(.96); }
+  to   { transform: perspective(900px) rotateY(0deg) scale(1); }
+}
+@keyframes spin3dInMirror {
+  from { transform: perspective(900px) scaleX(-1) rotateY(18deg) scale(.96); }
+  to   { transform: perspective(900px) scaleX(-1) rotateY(0deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdp-360frame.on, .pdp-360frame.mirror.on { animation: none; }
 }
