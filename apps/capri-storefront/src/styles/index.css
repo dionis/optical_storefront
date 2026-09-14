@@ -4901,3 +4901,25 @@ button.card-genre {
 }
 .pdp-360frame.on { opacity: 1; }
 /* El espejo/zoom siguen aplicando por .mirror y .pdp-main.zoom img (ETAPA33). */
+
+
+/* ===================== ETAPA35 · el zoom no agranda el 360 + hover pro del boton ===================== */
+/* Al hacer clic el visor hace zoom (scale 1.6) sobre las imgs; el boton 360 NO
+   debe agrandarse: se queda igual. */
+.pdp-main.zoom .pdp-360 img { transform: none !important; }
+
+/* Boton 360: estático hasta el hover. Al pasar el cursor flota sutil + glow azul
+   + realce de color. Se ve como un botón profesional. */
+.pdp .pdp-360 {
+  animation: none;
+  transition: transform .2s ease, filter .2s ease;
+  filter: drop-shadow(0 2px 5px rgba(10, 30, 80, .25));
+}
+.pdp .pdp-360:hover {
+  transform: translateY(-3px) scale(1.06);
+  filter: drop-shadow(0 8px 15px rgba(14, 90, 208, .55)) saturate(1.18) brightness(1.06);
+}
+.pdp .pdp-360:active { transform: translateY(-1px) scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  .pdp .pdp-360, .pdp .pdp-360:hover { transition: none; transform: none; }
+}
