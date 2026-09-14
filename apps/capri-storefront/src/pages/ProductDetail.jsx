@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
@@ -26,7 +26,7 @@ const SKU_TO_HANDLE = {};
 for (const f of GENERATED_INDEX) {
   SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
 }
-const VIEW_ORDER = ["front", "left", "right", "back"];
+const VIEW_ORDER = ["front", "left", "back", "right"];
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -40,6 +40,10 @@ export default function ProductDetail() {
   // montura o de color.
   const [view, setView] = useState("front");
   useEffect(() => { setView("front"); }, [slug, active]);
+  // Timers del botón 360 (giro continuo al mantener pulsado).
+  const spinTimer = useRef(null);
+  const spinHold = useRef(null);
+  useEffect(() => () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); }, []);
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -139,6 +143,27 @@ export default function ProductDetail() {
     : genderVal === "Unisexo" ? t("g.unisex")
     : (genderVal ? tv(genderVal) : "");
 
+  // Botón 360: clic = avanza una vista; mantener pulsado = giro continuo. El
+  // orden de VIEW_ORDER (front → left → back → right) da sensación de giro.
+  const spin360 = (dir = 1) => {
+    const avail = VIEW_ORDER.filter((v) => colorViews && colorViews[v]);
+    if (!avail.length) return;
+    setView((prev) => {
+      const i = avail.indexOf(prev);
+      return avail[((i < 0 ? 0 : i) + dir + avail.length) % avail.length];
+    });
+  };
+  const start360 = (e) => {
+    e.stopPropagation();
+    spin360(1);
+    clearTimeout(spinHold.current);
+    clearInterval(spinTimer.current);
+    spinHold.current = setTimeout(() => {
+      spinTimer.current = setInterval(() => spin360(1), 240);
+    }, 350);
+  };
+  const stop360 = () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); spinTimer.current = null; };
+
   return (
     <div className="pdp">
       <div className="breadcrumb">
@@ -202,13 +227,9 @@ export default function ProductDetail() {
               )}
               {hasViews && (
                 <button type="button" className="pdp-360" aria-label="360°" title="360°"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const avail = VIEW_ORDER.filter((v) => colorViews && colorViews[v]);
-                          if (!avail.length) return;
-                          const i = avail.indexOf(view);
-                          setView(avail[(i + 1) % avail.length]);
-                        }}>
+                        onPointerDown={start360} onPointerUp={stop360}
+                        onPointerLeave={stop360} onPointerCancel={stop360}
+                        onClick={(e) => e.stopPropagation()}>
                   <img src="/icon-360.png" alt="360°" />
                 </button>
               )}
