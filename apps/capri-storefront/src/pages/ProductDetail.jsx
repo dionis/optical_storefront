@@ -13,6 +13,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
+import { IconMaterial, IconMeasures, IconGender, IconFemale, IconUnisex, IconKids, IconCamera, IconCart, Icon360 } from "../components/UiIcons.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
@@ -33,6 +34,7 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
+  const [tab, setTab] = useState("detalles");
   // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
@@ -119,10 +121,28 @@ export default function ProductDetail() {
   const eduMaterial = frameMaterials.find((m) => frameMatEdu(m, lang)) || frameMaterials[0];
   const frameEdu = eduMaterial ? frameMatEdu(eduMaterial, lang) : null;
 
+  // Datos clave para la ficha estilo mockup: forma, medidas (ojo-puente-varilla)
+  // y género con su icono.
+  const shapeLabel = tv(product.attributes.shape);
+  const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
+    .filter((x) => x != null && x !== "").join(" - ");
+  const genderVal = product.attributes.gender;
+  const isKidsFrame = product.attributes.age === "Niños";
+  const GenderIcon = isKidsFrame ? IconKids
+    : genderVal === "Hombres" ? IconGender
+    : genderVal === "Señoras" ? IconFemale
+    : genderVal === "Unisexo" ? IconUnisex
+    : IconGender;
+  const genderLabel = isKidsFrame ? t("g.kids")
+    : genderVal === "Hombres" ? t("g.male")
+    : genderVal === "Señoras" ? t("g.female")
+    : genderVal === "Unisexo" ? t("g.unisex")
+    : (genderVal ? tv(genderVal) : "");
+
   return (
     <div className="pdp">
       <div className="breadcrumb">
-        <Link to="/">{t("pdp.home")}</Link> / <Link to={`/marca/${product.brand_slug}`}>{product.brand}</Link> / <span>{product.name}</span>
+        <button type="button" className="bc-back" onClick={() => navigate(-1)}>← {t("pdp.back")}</button> / <Link to="/catalogo">{t("pdp.frames")}</Link> / <span>{product.name}</span>
       </div>
 
       <div className="pdp-grid">
@@ -180,6 +200,7 @@ export default function ProductDetail() {
                 <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}
+              {hasViews && <span className="pdp-360" aria-hidden="true"><Icon360 /> 360°</span>}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
               )}
@@ -196,86 +217,149 @@ export default function ProductDetail() {
         </div>
 
         <div className="pdp-info">
-          <div className="pdp-brand">{product.brand}</div>
-          <h1 className="pdp-title">{product.name}</h1>
+          <div className="pdp-head">
+            <div className="pdp-head-txt">
+              <div className="pdp-brand">{product.brand}</div>
+              <h1 className="pdp-title">{product.name}{color ? ` · ${color.name}` : ""}</h1>
+              <div className="pdp-meta">
+                {review ? (
+                  <>
+                    <span className="stars">★ {review.average.toFixed(1)}</span>
+                    <span className="muted">· {review.count} {t("pdp.reviews")}</span>
+                  </>
+                ) : (
+                  <span className="muted">{t("rev.none")}</span>
+                )}
+              </div>
+            </div>
+            {shapeLabel && <span className="pdp-shape-chip">{shapeLabel}</span>}
+          </div>
 
-          {/* Requisito 6: ficha comercial del marco al abrirlo. */}
-          <div className="frame-id">
-            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
-            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
+          {/* Datos clave con iconos: material · medidas · género. */}
+          <div className="pdp-facts">
             {frameMaterials.length > 0 && (
-              <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
+              <div className="pdp-fact">
+                <IconMaterial className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.material")}</span><b>{frameMaterials.map(tv).join(" · ")}</b></div>
+              </div>
+            )}
+            {measures && (
+              <div className="pdp-fact">
+                <IconMeasures className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("pdp.metaMeasures")}</span><b>{measures}</b></div>
+              </div>
+            )}
+            {genderLabel && (
+              <div className="pdp-fact">
+                <GenderIcon className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.gender")}</span><b>{genderLabel}</b></div>
+              </div>
             )}
           </div>
-          {/* Real reviews only. `product.rating`/`product.reviews` are numbers
-              the scraper's filler generates for presentation; showing them here
-              put a review score on frames nobody had ever reviewed. */}
-          <div className="pdp-meta">
-            {review ? (
-              <>
-                <span className="stars">★ {review.average.toFixed(1)}</span>
-                <span className="muted">· {review.count} {t("pdp.reviews")}</span>
-              </>
-            ) : (
-              <span className="muted">{t("rev.none")}</span>
-            )}
-          </div>
-          <div className="pdp-price">${product.price.toFixed(2)} <span className="muted small">{t("pdp.lensesFrom")}</span></div>
 
-          <div className="pdp-color-row">
-            <span className="lbl">{t("pdp.color")}: <b>{color.name}</b></span>
-            <div className="swatches lg">
+          {/* Colores disponibles con etiqueta bajo cada muestra. */}
+          <div className="pdp-colors2">
+            <div className="pdp-colors2-h">{t("pdp.availableColors")}</div>
+            <div className="pdp-colors2-list">
               {product.colors.map((c, i) => (
-                <button key={c.name} className={`swatch ${i === active ? "sel" : ""}`} style={{ background: c.hex }}
-                        title={c.name} onClick={() => setActive(i)} aria-label={c.name} />
+                <button key={c.name} type="button" className={`pdp-color2 ${i === active ? "sel" : ""}`}
+                        onClick={() => setActive(i)} aria-label={c.name} title={c.name}>
+                  <span className="pdp-color2-sw" style={{ background: c.hex }} />
+                  <span className="pdp-color2-nm">{c.name}</span>
+                </button>
               ))}
             </div>
           </div>
 
-          <div className="pdp-actions">
-            <button className="btn btn-primary big" onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
-              {t("pdp.selectLens")}
-            </button>
-            <button className="btn btn-outline big" disabled={busy || !color.variantId}
-                    onClick={() => addFrame(color.variantId)}>
-              {t("pdp.addFrame")} · ${product.price.toFixed(2)}
+          {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
+              recetas para elegir lentes y comprar — no se pierde esa función). */}
+          <div className="pdp-actions2">
+            {TRY_ON_ENABLED && (
+              <button type="button" className="btn btn-primary big pdp-cta" onClick={() => setTryOnSlug(slug)}>
+                <IconCamera className="pdp-cta-ic" /> {t("tryon.cta")}
+              </button>
+            )}
+            <button type="button" className="btn btn-outline big pdp-cta"
+                    onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
+              <IconCart className="pdp-cta-ic" /> {t("card.addToCart")}
             </button>
           </div>
-          {TRY_ON_ENABLED && (
-            <button className="pdp-tryon-btn" onClick={() => setTryOnSlug(slug)}>📷 {t("tryon.cta")}</button>
-          )}
-
-          <table className="specs">
-            <tbody>
-              <tr><td>{t("spec.brand")}</td><td>{product.brand}</td></tr>
-              <tr><td>{t("spec.shape")}</td><td>{tv(product.attributes.shape) || "—"}</td></tr>
-              <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
-              <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
-              <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
-              <tr><td>{t("spec.eye")}</td><td>{product.attributes.eye_size}</td></tr>
-              <tr><td>{t("spec.bridge")}</td><td>{product.attributes.bridge_size}</td></tr>
-              <tr><td>{t("spec.temple")}</td><td>{product.attributes.temple_length}</td></tr>
-            </tbody>
-          </table>
-
-          {/* Requisito 6: educación de calidad del material del marco. */}
-          {frameEdu && (
-            <div className="frame-quality">
-              <div className="frame-quality-head">
-                <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
-                <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
-              </div>
-              {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
-              <ul className="frame-quality-list">
-                <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
-                <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
-              </ul>
-            </div>
-          )}
         </div>
       </div>
 
-      <Reviews product={product} />
+      {/* Pestañas: Detalles del producto · Medidas · Opiniones. */}
+      <div className="pdp-tabs" role="tablist" aria-label={product.name}>
+        <button type="button" role="tab" aria-selected={tab === "detalles"} className={`pdp-tab ${tab === "detalles" ? "on" : ""}`} onClick={() => setTab("detalles")}>{t("pdp.tab.details")}</button>
+        <button type="button" role="tab" aria-selected={tab === "medidas"} className={`pdp-tab ${tab === "medidas" ? "on" : ""}`} onClick={() => setTab("medidas")}>{t("pdp.tab.measures")}</button>
+        <button type="button" role="tab" aria-selected={tab === "opiniones"} className={`pdp-tab ${tab === "opiniones" ? "on" : ""}`} onClick={() => setTab("opiniones")}>{t("pdp.tab.reviews")} ({review ? review.count : 0})</button>
+      </div>
+
+      <div className="pdp-tabpanel">
+        {tab === "detalles" && (
+          <div className="pdp-details">
+            {/* Ficha comercial del marco: modelo, colección, material. */}
+            <div className="frame-id">
+              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
+              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
+              {frameMaterials.length > 0 && (
+                <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
+              )}
+            </div>
+
+            <table className="specs">
+              <tbody>
+                <tr><td>{t("spec.brand")}</td><td>{product.brand}</td></tr>
+                <tr><td>{t("spec.shape")}</td><td>{tv(product.attributes.shape) || "—"}</td></tr>
+                <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
+                <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
+                <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
+                <tr><td>{t("spec.eye")}</td><td>{product.attributes.eye_size}</td></tr>
+                <tr><td>{t("spec.bridge")}</td><td>{product.attributes.bridge_size}</td></tr>
+                <tr><td>{t("spec.temple")}</td><td>{product.attributes.temple_length}</td></tr>
+              </tbody>
+            </table>
+
+            {/* Educación de calidad del material del marco. */}
+            {frameEdu && (
+              <div className="frame-quality">
+                <div className="frame-quality-head">
+                  <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
+                  <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+                </div>
+                {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
+                <ul className="frame-quality-list">
+                  <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
+                  <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "medidas" && (
+          <div className="pdp-measures">
+            <div className="pdp-measure">
+              <IconMeasures className="pdp-measure-ic" />
+              <span className="pdp-measure-k">{t("spec.eye")}</span>
+              <b>{product.attributes.eye_size} mm</b>
+            </div>
+            <div className="pdp-measure">
+              <IconMeasures className="pdp-measure-ic" />
+              <span className="pdp-measure-k">{t("spec.bridge")}</span>
+              <b>{product.attributes.bridge_size} mm</b>
+            </div>
+            <div className="pdp-measure">
+              <IconMeasures className="pdp-measure-ic" />
+              <span className="pdp-measure-k">{t("spec.temple")}</span>
+              <b>{product.attributes.temple_length} mm</b>
+            </div>
+          </div>
+        )}
+
+        {tab === "opiniones" && (
+          <Reviews product={product} />
+        )}
+      </div>
 
       {/* Cross-sell: recommended cases */}
       <section className="section case-cross">

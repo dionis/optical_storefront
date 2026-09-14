@@ -121,7 +121,7 @@ export default function ProductCard({ product }) {
             </span>
           )}
         </div>
-        <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
+        <Link to={`/producto/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
@@ -132,7 +132,7 @@ export default function ProductCard({ product }) {
 
       <div className="card-body">
         <div className="card-row">
-          <Link to={`/recetas/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
+          <Link to={`/producto/${product.slug}?color=${active}`} className="card-name">{product.name}</Link>
           {showRating && (
             <span className="card-rating" aria-label={`${ratingVal.toFixed(1)} / 5 · ${reviewCount}`}>
               <span className="stars" style={{ "--pct": `${Math.max(0, Math.min(100, (ratingVal / 5) * 100))}%` }} aria-hidden="true">

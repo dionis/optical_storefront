@@ -4673,3 +4673,111 @@ button.card-genre {
   /* Hueco arriba para que el primer contenido no quede bajo la barra fija. */
   .site-main { padding-top: 54px; }
 }
+
+
+/* ===================== ETAPA27 · Ficha de producto estilo mockup (galeria + datos + pestañas) ===================== */
+/* Los thumbs de color se sustituyen por "Colores disponibles"; y la ficha
+   trae el probador como CTA, no como boton flotante ◈. */
+.pdp .pdp-thumbs { display: none; }
+.pdp .pdp-ar { display: none; }
+
+/* Volver (breadcrumb) como enlace. */
+.breadcrumb .bc-back {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--primary-blue, #01326b); font: inherit; font-weight: 700;
+}
+
+/* Sello 360° sobre la imagen. */
+.pdp-main { position: relative; }
+.pdp-360 {
+  position: absolute; right: 12px; bottom: 12px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.96); color: var(--primary-blue, #01326b);
+  border: 1px solid #e7ecf4; border-radius: 999px;
+  padding: 5px 11px; font-size: 12px; font-weight: 800;
+  box-shadow: 0 3px 10px -3px rgba(16,34,84,.25);
+}
+.pdp-360 svg { width: 15px; height: 15px; }
+
+/* Cabecera: marca + titulo + estrellas a la izquierda, chip de forma a la derecha. */
+.pdp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pdp-head .pdp-title { margin: 2px 0 4px; }
+.pdp-shape-chip {
+  flex: 0 0 auto; align-self: flex-start;
+  background: #eef2f8; color: var(--primary-blue, #01326b);
+  border: 1px solid #e0e6f0; border-radius: 999px;
+  padding: 6px 13px; font-size: 12.5px; font-weight: 700; white-space: nowrap;
+}
+
+/* Datos clave: material · medidas · genero, con iconos. */
+.pdp-facts {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin: 16px 0 4px;
+  border-top: 1px solid #eef1f6; border-bottom: 1px solid #eef1f6; padding: 13px 0;
+}
+.pdp-fact { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pdp-fact + .pdp-fact { border-left: 1px solid #eef1f6; padding-left: 10px; }
+.pdp-fact-ic { flex: 0 0 auto; width: 24px; height: 24px; color: var(--primary-blue, #01326b); }
+.pdp-fact-tx { display: flex; flex-direction: column; min-width: 0; }
+.pdp-fact-k { font-size: 10.5px; color: #7c8698; font-weight: 600; line-height: 1.2; }
+.pdp-fact-tx b { font-size: 13px; color: #17203a; line-height: 1.25; }
+
+/* Colores disponibles: muestra + etiqueta debajo. */
+.pdp-colors2 { margin: 16px 0; }
+.pdp-colors2-h { font-size: 14px; font-weight: 800; color: #17203a; margin-bottom: 10px; }
+.pdp-colors2-list { display: flex; flex-wrap: wrap; gap: 16px; }
+.pdp-color2 {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 0;
+}
+.pdp-color2-sw {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid #e2e6ee; box-shadow: inset 0 0 0 2px #fff;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.pdp-color2.sel .pdp-color2-sw { border-color: var(--primary-blue, #01326b); transform: scale(1.04); }
+.pdp-color2-nm { font-size: 12px; color: #4a5164; font-weight: 600; }
+.pdp-color2.sel .pdp-color2-nm { color: var(--primary-blue, #01326b); font-weight: 800; }
+
+/* Acciones: probar con camara (azul) + añadir al carrito (contorno). */
+.pdp-actions2 { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.pdp-cta { width: 100%; gap: 9px; }
+.pdp-cta.btn-primary { background: var(--primary-blue, #01326b); border-color: var(--primary-blue, #01326b); }
+.pdp-cta.btn-primary:hover { background: #022a5c; }
+.pdp-cta.btn-outline { border-color: var(--primary-blue, #01326b); color: var(--primary-blue, #01326b); }
+.pdp-cta.btn-outline:hover { background: #eef3fb; }
+.pdp-cta-ic { width: 19px; height: 19px; flex: 0 0 auto; }
+
+/* Pestañas: Detalles · Medidas · Opiniones. */
+.pdp-tabs {
+  display: flex; gap: 4px; margin: 22px 0 0;
+  border-bottom: 1px solid #e6ebf2;
+}
+.pdp-tab {
+  flex: 0 0 auto; background: none; border: none; cursor: pointer;
+  padding: 12px 14px; font-size: 14px; font-weight: 700; color: #7c8698;
+  border-bottom: 2.5px solid transparent; margin-bottom: -1px;
+}
+.pdp-tab.on { color: var(--primary-blue, #01326b); border-bottom-color: var(--primary-blue, #01326b); }
+.pdp-tabpanel { padding: 18px 0 4px; }
+
+/* Pestaña Medidas: filas con icono. */
+.pdp-measures { display: flex; flex-direction: column; gap: 10px; max-width: 460px; }
+.pdp-measure {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid #eef1f6; border-radius: 12px; background: #fbfcfe;
+}
+.pdp-measure-ic { width: 22px; height: 22px; color: var(--primary-blue, #01326b); }
+.pdp-measure-k { font-size: 13.5px; color: #5b6472; font-weight: 600; }
+.pdp-measure b { font-size: 15px; color: #17203a; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .pdp-facts { gap: 6px; }
+  .pdp-fact { gap: 6px; }
+  .pdp-fact + .pdp-fact { padding-left: 6px; }
+  .pdp-fact-ic { width: 20px; height: 20px; }
+  .pdp-fact-k { font-size: 9.5px; }
+  .pdp-fact-tx b { font-size: 12px; }
+  .pdp-color2-sw { width: 40px; height: 40px; }
+  .pdp-tab { padding: 11px 10px; font-size: 13px; }
+}
