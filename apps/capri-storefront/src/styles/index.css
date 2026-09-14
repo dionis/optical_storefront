@@ -4824,3 +4824,42 @@ button.card-genre {
   .pdp-main { aspect-ratio: 1.6 !important; padding: 12px !important; }
   .pdp-main img { max-height: none !important; }
 }
+
+
+/* ===================== ETAPA32 · boton 360 con imagen, fondo transparente + hover ===================== */
+/* Sustituye la pastilla blanca del 360 por la imagen recortada (fondo
+   transparente). Estilo boton: pulso suave de entrada + realce al pasar el
+   mouse / tocar. Al hacer clic rota a la siguiente vista. */
+.pdp .pdp-360 {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 2px !important;
+  gap: 0 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  filter: drop-shadow(0 3px 6px rgba(10, 30, 80, .28));
+  transition: transform .18s ease, filter .18s ease;
+  animation: pdp360pulse 2.6s ease-in-out infinite;
+}
+.pdp .pdp-360 img { display: block; height: 46px; width: auto; }
+.pdp .pdp-360:hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 6px 14px rgba(14, 90, 208, .55));
+  animation: none;
+}
+.pdp .pdp-360:active { transform: scale(.95); }
+@keyframes pdp360pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@media (max-width: 720px) {
+  .pdp .pdp-360 img { height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdp .pdp-360 { animation: none; }
+}

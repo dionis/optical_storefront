@@ -200,7 +200,18 @@ export default function ProductDetail() {
                 <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}
-              {hasViews && <span className="pdp-360" aria-hidden="true"><Icon360 /> 360°</span>}
+              {hasViews && (
+                <button type="button" className="pdp-360" aria-label="360°" title="360°"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const avail = VIEW_ORDER.filter((v) => colorViews && colorViews[v]);
+                          if (!avail.length) return;
+                          const i = avail.indexOf(view);
+                          setView(avail[(i + 1) % avail.length]);
+                        }}>
+                  <img src="/icon-360.png" alt="360°" />
+                </button>
+              )}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
               )}
