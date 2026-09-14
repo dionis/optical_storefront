@@ -4846,7 +4846,7 @@ button.card-genre {
   transition: transform .18s ease, filter .18s ease;
   animation: pdp360pulse 2.6s ease-in-out infinite;
 }
-.pdp .pdp-360 img { display: block; height: 46px; width: auto; }
+.pdp .pdp-360 img { display: block; height: 34px; width: auto; }
 .pdp .pdp-360:hover {
   transform: scale(1.1);
   filter: drop-shadow(0 6px 14px rgba(14, 90, 208, .55));
@@ -4858,7 +4858,7 @@ button.card-genre {
   50% { transform: scale(1.06); }
 }
 @media (max-width: 720px) {
-  .pdp .pdp-360 img { height: 38px; }
+  .pdp .pdp-360 img { height: 29px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pdp .pdp-360 { animation: none; }
