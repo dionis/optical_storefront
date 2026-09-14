@@ -4656,3 +4656,20 @@ button.card-genre {
   /* (4) El boton de chat flota por encima de la franja de confianza. */
   .chat-fab { bottom: calc(122px + env(safe-area-inset-bottom, 0px)) !important; }
 }
+
+
+/* ===================== ETAPA26 · barra superior FIJA de verdad (sticky se rompe por overflow de un ancestro) ===================== */
+@media (max-width: 860px) {
+  /* La franja de anuncio no se usa en el layout tipo app. */
+  .header-top { display: none; }
+  /* Fijamos la barra al viewport: siempre visible aunque scrollee la lista. */
+  .header {
+    position: fixed !important;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 80;
+  }
+  /* Hueco arriba para que el primer contenido no quede bajo la barra fija. */
+  .site-main { padding-top: 54px; }
+}
