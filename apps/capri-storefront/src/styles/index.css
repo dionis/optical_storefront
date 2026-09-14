@@ -3817,7 +3817,7 @@ video.zlx-float-img { background: #000; object-fit: contain; }
    =================================================================== */
 
 /* Logo oficial de marca (blanco) sobre la barra azul en móvil. */
-.logo-mobile-img { height: 30px; width: auto; display: block; }
+.logo-mobile-img { height: 32px; width: auto; display: block; border-radius: 8px; box-shadow: 0 1px 5px rgba(6, 20, 60, .22); }
 
 /* ---- Hero: foto de gafas de fondo + degradado + brillo + desenfoque ---- */
 .cat-hero {
@@ -3871,7 +3871,7 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .header-main .hdr-search-m { display: inline-flex; }
 
   /* Logo oficial de marca, tamaño cómodo sobre el azul. */
-  .logo-mobile-img { height: 27px; }
+  .logo-mobile-img { height: 31px; }
 
   /* Eslogan con subrayado rojo (sin barra vertical divisoria). */
   .header-main .header-tagline {
