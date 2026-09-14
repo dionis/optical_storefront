@@ -112,6 +112,7 @@ export default function ProductCard({ product }) {
                 <span className="stars-bg">★★★★★</span>
                 <span className="stars-fg">★★★★★</span>
               </span>
+              <b className="card-rating-avg">{ratingVal.toFixed(1)}</b>
               <span className="card-reviews">({reviewCount})</span>
             </span>
           )}

@@ -20,6 +20,7 @@ export default function Catalog() {
   const ageParam = params.get("age");
   const shapeParam = params.get("shape");
   const genderParam = params.get("gender");
+  const ofertaParam = params.get("oferta");
 
   const [selected, setSelected] = useState({});
   const [sort, setSort] = useState("relevance");
@@ -70,6 +71,7 @@ export default function Catalog() {
       if (brand && p.brand_slug !== brand.slug) return false;
       if (q && !(`${p.name} ${p.brand}`.toLowerCase().includes(q))) return false;
       if (!productMatches(p, selected)) return false;
+      if (ofertaParam && !(typeof p.originalPrice === "number" && p.originalPrice > p.price)) return false;
       return true;
     });
     if (sort === "price-asc") list = [...list].sort((a, b) => a.price - b.price);
@@ -86,11 +88,12 @@ export default function Catalog() {
       });
     }
     return list;
-  }, [PRODUCTS, brand, q, selected, sort, ratings]);
+  }, [PRODUCTS, brand, q, selected, sort, ratings, ofertaParam]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
   const urlFilterLabel = shapeParam ? tv(shapeParam) : genderParam ? tv(genderParam) : ageParam ? tv(ageParam) : null;
   const heading = brand ? brand.name
+    : ofertaParam ? t("bn.offers")
     : q ? `${t("cat.results")}: “${q}”`
     : urlFilterLabel ? urlFilterLabel
     : t("cat.all");

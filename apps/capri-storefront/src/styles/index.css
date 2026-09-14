@@ -4503,3 +4503,19 @@ body { background: var(--bone); }
   }
   .filters-apply:active { filter: brightness(.95); }
 }
+
+
+/* ===================================================================
+   ETAPA 20 — Barra inferior nueva (Marcas / Favoritos con badge) +
+   promedio de valoración junto a las estrellas en la card.
+   =================================================================== */
+.bottomnav button.bn-item { background: none; border: none; font: inherit; cursor: pointer; padding: 0; }
+.bn-ic { position: relative; }
+.bn-badge {
+  position: absolute; top: -6px; right: -9px; min-width: 15px; height: 15px; padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 999px;
+  background: #e0241c; color: #fff; font-size: 9px; font-weight: 800; line-height: 1;
+  box-shadow: 0 0 0 1.5px #01326b;
+}
+/* Promedio de valoración junto a las estrellas. */
+.card-rating-avg { font-weight: 800; font-size: 12px; color: var(--text-secondary, #4a5164); }

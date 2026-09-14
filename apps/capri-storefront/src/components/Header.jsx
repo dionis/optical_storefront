@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCart } from "./CartContext.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { CartPanel, FavPanel, AuthPanel } from "./StorePanels.jsx";
@@ -16,6 +16,13 @@ export default function Header() {
   const [panel, setPanel] = useState(null); // 'cart' | 'fav' | 'account' | null
   const [sound, setSound] = useState(!isMuted());
   const navigate = useNavigate();
+
+  // La barra inferior (Mis favoritos) pide abrir el panel de favoritos.
+  useEffect(() => {
+    const open = () => setPanel("fav");
+    window.addEventListener("rubi:open-fav", open);
+    return () => window.removeEventListener("rubi:open-fav", open);
+  }, []);
 
   const submit = (e) => {
     e.preventDefault();
