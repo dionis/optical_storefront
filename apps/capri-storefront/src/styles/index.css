@@ -4788,3 +4788,10 @@ button.card-genre {
    (#faf9f6) y se veia el recuadro blanco de la foto contra el crema. Igual que
    el card del catalogo: fondo blanco liso, sin costura. */
 .pdp .pdp-main { background: #fff !important; }
+
+
+/* ===================== ETAPA29 · sin sombra en la foto de la ficha ===================== */
+/* La foto trae fondo blanco puro (#fff) igual que la caja; lo unico que dibujaba
+   el recuadro era el drop-shadow (sombra alrededor del rectangulo opaco de la
+   foto). Se quita: blanco sobre blanco, sin costura ni sombra. */
+.pdp .pdp-main img { filter: none !important; }
