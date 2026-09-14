@@ -108,7 +108,7 @@ export default function Header() {
             <IconHeart className="hdr-ic" />{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>
           <button className="icon-btn cart" title={t("a11y.cart")} onClick={() => setPanel("cart")}>
-            <IconCart className="hdr-ic" />{count > 0 && <span className="badge">{count}</span>}
+            <IconCart className="hdr-ic" /><span className="badge cart-badge">{count}</span>
           </button>
         </div>
       </div>

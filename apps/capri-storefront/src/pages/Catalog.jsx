@@ -164,12 +164,11 @@ export default function Catalog() {
       <section className="listing">
         {!brand && (
           <div className="cat-hero">
-            <div className="cat-hero-bg" aria-hidden="true" />
             <div className="cat-hero-txt">
               <h1>{heading}</h1>
               <p>{t("cat.heroSub")}</p>
             </div>
-            <img className="cat-hero-glass" src="/hero-glasses.png" alt="" aria-hidden="true" loading="lazy" />
+            <img className="cat-hero-glass" src="/hero-glass34.png" alt="" aria-hidden="true" loading="lazy" />
             <div className="cat-hero-script" aria-hidden="true">
               {t("cat.heroScript").split(",").map((s, i) => (
                 <span key={i}>{s.trim()}</span>

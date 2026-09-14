@@ -4023,3 +4023,95 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .fb-count { width: auto; order: 0; margin: 0 2px 0 2px; font-size: 12px; }
   .fb-pill { padding: 0 13px; }
 }
+
+
+/* ===================================================================
+   ETAPA 5 — Blanco hueso + cards sin separación + hero sin caja azul
+   (texto azul oscuro, gafas 3/4 integradas, script abajo-derecha) +
+   toggle sin contenedor + azul un poco más oscuro + header reordenado.
+   =================================================================== */
+
+:root {
+  --blue: #0c4cc0;
+  --blue-dark: #093a99;
+  --primary-blue: #0c4cc0;
+  --primary-blue-dark: #093a99;
+  --hero-ink: #16306e;   /* azul oscuro: títulos y mensaje */
+  --bone: #f5f2ec;       /* blanco hueso */
+}
+
+/* Fondo blanco hueso; las cards blancas resaltan sin bordes. */
+body { background: var(--bone); }
+
+/* ---- Hero SIN caja azul: fondo hueso, texto azul oscuro ---- */
+.cat-hero {
+  position: relative; overflow: visible; background: none !important; border: none !important;
+  box-shadow: none; padding: 0; margin: 6px 0 16px; min-height: 122px; isolation: auto;
+}
+.cat-hero-bg { display: none !important; }
+.cat-hero::before, .cat-hero::after { content: none !important; }
+.cat-hero-txt { position: relative; z-index: 3; padding: 10px 4px; max-width: 58%; }
+.cat-hero-txt h1 { color: var(--hero-ink); font-size: 30px; line-height: 1.05; margin: 0 0 7px; text-shadow: none; }
+.cat-hero-txt p { color: #5a68a0; font-size: 14.5px; font-weight: 500; margin: 0; text-shadow: none; }
+
+/* Gafas 3/4 arriba-derecha (transparente = sin bordes; leve difuminado). */
+.cat-hero-glass {
+  position: absolute; z-index: 1; top: -6px; right: 0; bottom: auto; left: auto;
+  width: 50%; max-width: 320px; height: auto;
+  filter: blur(.5px) drop-shadow(0 9px 15px rgba(20,40,90,.16));
+  opacity: .96;
+}
+
+/* Mensaje caligráfico ABAJO-DERECHA, azul oscuro con sombra. */
+.cat-hero-script {
+  position: absolute; z-index: 4; right: 8px; bottom: 2px; top: auto;
+  display: flex; flex-direction: column; align-items: flex-end;
+  transform: rotate(-8deg); transform-origin: 100% 100%;
+  font-family: "Dancing Script", "Segoe Script", cursive;
+  color: var(--hero-ink); line-height: 1.0; pointer-events: none;
+  text-shadow: 0 2px 5px rgba(20,40,90,.30), 0 1px 1px rgba(255,255,255,.55);
+}
+.cat-hero-script span { font-size: 25px; font-weight: 700; white-space: nowrap; }
+.cat-hero-script span:last-child { margin-right: 10px; }
+
+/* ---- Cards blancas SIN separación entre la imagen y la card ---- */
+.card { background: #fff; border: none; box-shadow: 0 3px 14px -5px rgba(20,40,90,.12), 0 1px 3px rgba(20,40,90,.05); }
+.card:hover { box-shadow: 0 16px 32px -14px rgba(20,40,90,.26); border: none; }
+.card-media { background: #fff !important; border: none !important; box-shadow: none !important; }
+.card-img-link { background: #fff; }
+.card-media img { filter: drop-shadow(0 6px 9px rgba(20,40,90,.10)); }
+
+/* ---- Toggle rejilla/lista SIN contenedor (iconos cuadrados sueltos) ---- */
+.fb-view { border: none; background: none; padding: 0; gap: 6px; }
+.fb-vbtn { width: 36px; height: 36px; border-radius: 9px; background: none; color: var(--text-muted); }
+.fb-vbtn:hover { color: var(--primary-blue); }
+.fb-vbtn.on { background: var(--primary-blue); color: #fff; }
+.fb-vbtn.on:hover { color: #fff; }
+
+/* ---- Carrito: badge con número siempre visible, atractivo ---- */
+.icon-btn { position: relative; }
+.icon-btn .badge {
+  position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: #e0241c; color: #fff; font-size: 10px; font-weight: 800; line-height: 1;
+}
+
+/* ---- ETAPA 5 móvil (apendizado al final) ---- */
+@media (max-width: 860px) {
+  /* Búsqueda + carrito ENTRE el logo y el eslogan; iconos más juntos. */
+  .header-main .logo { margin-right: auto; }
+  .header-main .header-actions { order: 5; margin: 0 8px 0 0; gap: 2px; }
+  .header-main .header-tagline { order: 9; margin: 0 2px 0 0; }
+  .header-main .badge { box-shadow: 0 0 0 1.5px #123a95; }
+
+  /* Hero hueso compacto. */
+  .cat-hero { min-height: 98px; margin: 2px 0 12px; }
+  .cat-hero-txt { max-width: 56%; padding: 6px 2px; }
+  .cat-hero-txt h1 { font-size: 21px; }
+  .cat-hero-txt p { font-size: 12px; }
+  .cat-hero-glass { width: 54%; max-width: 230px; top: -2px; }
+  .cat-hero-script { right: 6px; bottom: -2px; }
+  .cat-hero-script span { font-size: 18px; }
+  .cat-hero-script span:last-child { margin-right: 8px; }
+  .fb-vbtn { width: 34px; height: 34px; }
+}
