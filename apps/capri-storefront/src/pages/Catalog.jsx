@@ -6,7 +6,7 @@ import { FILTER_GROUPS, productMatches } from "../data/filters.js";
 import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
-import { IconFilter, IconSort, IconGrid, IconList } from "../components/UiIcons.jsx";
+import { IconFilter, IconSort, IconGrid, IconList, IconCheck } from "../components/UiIcons.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { fetchReviewSummaries } from "../data/reviews.js";
 
@@ -136,7 +136,10 @@ export default function Catalog() {
       <aside className={`filters ${showFilters ? "show" : ""}`}>
         <div className="filters-head">
           <span>{t("filters.title")}</span>
-          {activeCount > 0 && <button className="clear" onClick={() => setSelected({})}>{t("filters.clear")} ({activeCount})</button>}
+          <div className="fh-actions">
+            {activeCount > 0 && <button className="clear" onClick={() => setSelected({})}>{t("filters.clear")} ({activeCount})</button>}
+            <button type="button" className="filters-close" onClick={() => setShowFilters(false)} aria-label="✕">✕</button>
+          </div>
         </div>
         {FILTER_GROUPS.map((g) => (
           <div className="fgroup" key={g.key}>
@@ -158,6 +161,10 @@ export default function Catalog() {
             )}
           </div>
         ))}
+        <button type="button" className="filters-apply"
+                onClick={() => { setShowFilters(false); setTimeout(() => document.getElementById("resultados")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}>
+          <IconCheck className="fa-ic" /> {t("filters.apply")} · {results.length}
+        </button>
       </aside>
 
       <section className="listing">
@@ -176,7 +183,7 @@ export default function Catalog() {
           </div>
         )}
 
-        <div className="filterbar">
+        <div className="filterbar" id="resultados">
           <button className={`fb-pill fb-filters ${activeCount > 0 ? "act" : ""}`}
                   onClick={() => setShowFilters((v) => !v)}>
             <IconFilter className="fb-ic" />

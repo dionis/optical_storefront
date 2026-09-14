@@ -265,3 +265,12 @@ export function IconDiscount({ className }) {
     </svg>
   );
 }
+
+// Palomita — aplicar filtros.
+export function IconCheck({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} strokeWidth="2.4" aria-hidden="true">
+      <polyline points="4.5 12.5 10 18 19.5 6.5" />
+    </svg>
+  );
+}
