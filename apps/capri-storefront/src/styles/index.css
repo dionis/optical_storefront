@@ -4079,7 +4079,7 @@ body { background: var(--bone); }
 .card:hover { box-shadow: 0 16px 32px -14px rgba(20,40,90,.26); border: none; }
 .card-media { background: #fff !important; border: none !important; box-shadow: none !important; }
 .card-img-link { background: #fff; }
-.card-media img { filter: drop-shadow(0 6px 9px rgba(20,40,90,.10)); }
+.card-media img { filter: none !important; }
 
 /* ---- Toggle rejilla/lista SIN contenedor (iconos cuadrados sueltos) ---- */
 .fb-view { border: none; background: none; padding: 0; gap: 6px; }
