@@ -4405,3 +4405,24 @@ body { background: var(--bone); }
   .cat-hero-glass { left: -4%; max-width: 150px; }
   .cat-hero-script { left: 9px; }
 }
+
+
+/* ===================================================================
+   ETAPA 15 — Header de ESCRITORIO en el mismo navy del responsive.
+   =================================================================== */
+@media (min-width: 861px) {
+  .header { border-bottom: none; }
+  .header-top { background: #012a5f; color: #dbe8ff; }
+  .header-main {
+    background: linear-gradient(180deg, #033f84 0%, #01326b 100%); border-bottom: none;
+  }
+  .header .nav a { color: #fff; }
+  .header .nav a:hover { color: #bcd4ff; }
+  .header-actions .icon-btn { color: #fff; }
+  .header-actions .icon-btn:hover { background: rgba(255,255,255,.14); }
+  .header-main .hamburger span { background: #fff; }
+  /* Logo con placa blanca para que resalte sobre el navy. */
+  .header .logo-img { background: #fff; border-radius: 10px; padding: 5px 11px; height: 42px; }
+  /* Buscador: caja blanca nítida sobre el navy. */
+  .header .search input { background: #fff; }
+}
