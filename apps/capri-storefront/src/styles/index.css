@@ -4814,3 +4814,13 @@ button.card-genre {
     flex: 0 0 auto;
   }
 }
+
+
+/* ===================== ETAPA31 · menos espacio vacio en el visor de la ficha (movil) ===================== */
+/* El visor era casi cuadrado (aspect 1.1) y el espejuelo (ancho) dejaba mucho
+   hueco arriba y abajo. Se baja el alto y el padding para que la montura llene
+   mas, como el card del catalogo. */
+@media (max-width: 720px) {
+  .pdp-main { aspect-ratio: 1.6 !important; padding: 12px !important; }
+  .pdp-main img { max-height: none !important; }
+}
