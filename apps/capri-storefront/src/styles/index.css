@@ -4363,3 +4363,11 @@ body { background: var(--bone); }
   .trust-ic { width: 18px; height: 18px; }
   .trust-ic svg { width: 15px; height: 15px; }
 }
+
+
+/* ===== ETAPA 12 — Texto del hero centrado (vertical) y con más margen ===== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; }
+.cat-hero-txt { padding-left: 22px; }
+@media (max-width: 860px) {
+  .cat-hero-txt { padding-left: 16px; padding-top: 0; padding-bottom: 0; }
+}
