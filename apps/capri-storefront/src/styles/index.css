@@ -5003,3 +5003,47 @@ button.card-genre {
   .pdp-brandseal-mono { font-size: 14px; }
   .pdp-idtag-model { font-size: 15px; }
 }
+
+
+/* ===================== ETAPA38 · tarjetas de portada (.prop) con VOLUMEN crema (relieve) ===================== */
+/* Fondo crema del panel para que el relieve (neumorfismo) se lea; tarjetas
+   crema elevadas con doble sombra (clara arriba-izq, calida abajo-der). */
+.section.props {
+  background: linear-gradient(180deg, #efe2c1 0%, #ead9ad 100%);
+  border-radius: 26px;
+  padding: 30px 24px;
+  gap: 22px;
+}
+.section.props .prop {
+  background: linear-gradient(145deg, #fbf3da 0%, #ecdcae 100%);
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 20px;
+  padding: 26px 20px;
+  box-shadow:
+    9px 10px 20px rgba(158, 126, 68, .40),
+    -8px -8px 16px rgba(255, 255, 255, .82),
+    inset 0 1px 1px rgba(255, 255, 255, .75);
+  transition: transform .18s cubic-bezier(.2, .7, .2, 1), box-shadow .18s ease;
+}
+.section.props .prop:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    11px 14px 26px rgba(158, 126, 68, .48),
+    -8px -8px 16px rgba(255, 255, 255, .85),
+    inset 0 1px 1px rgba(255, 255, 255, .75);
+}
+.section.props .prop b { color: #182444; }
+.section.props .prop b { color: #182444; }
+.section.props .prop small { color: #8a7850; }
+.section.props .prop span { filter: drop-shadow(0 1px 1px rgba(120, 95, 40, .28)); }
+
+@media (max-width: 640px) {
+  .section.props { padding: 20px 14px; border-radius: 20px; gap: 14px; }
+  .section.props .prop {
+    padding: 20px 14px; border-radius: 16px;
+    box-shadow:
+      6px 7px 15px rgba(158, 126, 68, .38),
+      -6px -6px 12px rgba(255, 255, 255, .82),
+      inset 0 1px 1px rgba(255, 255, 255, .72);
+  }
+}
