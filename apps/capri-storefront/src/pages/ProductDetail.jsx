@@ -160,8 +160,8 @@ export default function ProductDetail() {
   // Sello de marca (monograma): iniciales de la marca; el nombre completo sale
   // al pasar el cursor. Los logos de marca son wordmarks externos, así que un
   // monograma es más limpio y fiable como "sello de calidad".
-  const brandCaps = (product.brand || "").match(/[A-Z]/g) || [];
-  const brandInitials = (brandCaps.length >= 2 ? brandCaps.slice(0, 2).join("") : (product.brand || "").slice(0, 2).toUpperCase());
+  const brandWords = (product.brand || "").trim().split(/\s+/).filter(Boolean);
+  const brandInitials = (brandWords.length >= 2 ? (brandWords[0][0] + brandWords[1][0]) : (brandWords[0] || "").slice(0, 1)).toUpperCase();
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
     .filter((x) => x != null && x !== "").join(" - ");
   const genderVal = product.attributes.gender;
