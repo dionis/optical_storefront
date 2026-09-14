@@ -35,9 +35,13 @@ function build360(cv) {
   if (!cv) return {};
   const out = {};
   for (const k of VIEW_ORDER) if (cv[k]) out[k] = { key: cv[k], mirror: false };
+  // La IA suele generar el lado derecho mirando en la MISMA dirección que el
+  // izquierdo (o directamente falta). Volteamos SIEMPRE la vista derecha con CSS
+  // (o, si no existe, usamos el espejo de la izquierda) para que izquierda y
+  // derecha miren a lados opuestos. Aplica a miniatura y a imagen ampliada.
   const L = cv.left, R = cv.right;
-  if (L && (!R || R === L)) out.right = { key: L, mirror: true };
-  if (R && (!L || R === L) && !(out.left && !out.left.mirror)) out.left = { key: R, mirror: true };
+  if (R) out.right = { key: R, mirror: true };
+  else if (L) out.right = { key: L, mirror: true };
   return out;
 }
 
