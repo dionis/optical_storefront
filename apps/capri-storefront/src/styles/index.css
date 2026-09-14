@@ -3975,7 +3975,7 @@ video.zlx-float-img { background: #000; object-fit: contain; }
 
 /* Mensaje caligráfico, 2 líneas, girado, saliéndose del rectángulo (flota). */
 .cat-hero-script {
-  position: absolute; z-index: 5; top: -14px; right: 12px;
+  position: absolute; z-index: 5; top: -16px; right: 22px;
   display: flex; flex-direction: column; align-items: flex-end;
   transform: rotate(-11deg); transform-origin: 100% 0;
   font-family: "Dancing Script", "Segoe Script", "Snell Roundhand", cursive;
@@ -4015,8 +4015,8 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .cat-hero-txt h1 { font-size: 20px; margin-bottom: 4px; }
   .cat-hero-txt p { font-size: 12px; }
   .cat-hero-glass { width: 52%; max-width: 200px; bottom: 8px; right: 2%; }
-  .cat-hero-script { top: -10px; right: 6px; }
-  .cat-hero-script span { font-size: 19px; }
+  .cat-hero-script { top: -12px; right: 15px; }
+  .cat-hero-script span { font-size: 17px; }
   .cat-hero-script span:last-child { margin-right: 11px; }
   /* Conteo en la misma línea que Filtros / Ordenar. */
   .filterbar { gap: 7px; }
