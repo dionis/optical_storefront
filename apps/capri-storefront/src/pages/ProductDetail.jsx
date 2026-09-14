@@ -28,6 +28,19 @@ for (const f of GENERATED_INDEX) {
 }
 const VIEW_ORDER = ["front", "left", "back", "right"];
 
+// A veces la generación IA deja un lado duplicado o faltante (p.ej. sólo
+// "left"). Construimos las 4 vistas y, si un lado falta o se repite, usamos su
+// par con efecto espejo (scaleX(-1)) para tener izquierda y derecha distintas.
+function build360(cv) {
+  if (!cv) return {};
+  const out = {};
+  for (const k of VIEW_ORDER) if (cv[k]) out[k] = { key: cv[k], mirror: false };
+  const L = cv.left, R = cv.right;
+  if (L && (!R || R === L)) out.right = { key: L, mirror: true };
+  if (R && (!L || R === L) && !(out.left && !out.left.mirror)) out.left = { key: R, mirror: true };
+  return out;
+}
+
 export default function ProductDetail() {
   const { slug } = useParams();
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
@@ -44,6 +57,15 @@ export default function ProductDetail() {
   const spinTimer = useRef(null);
   const spinHold = useRef(null);
   useEffect(() => () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); }, []);
+  // Precarga de las 4 vistas del color actual → giro fluido sin parpadeo.
+  useEffect(() => {
+    if (!product) return;
+    const cv = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const c = product.colors[active];
+    const set = cv && c ? cv[c.name] : null;
+    if (!set) return;
+    Object.values(set).forEach((k) => { if (k) { const im = new Image(); im.src = resolveImage(k); } });
+  }, [product, active]);
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -97,8 +119,11 @@ export default function ProductDetail() {
   // como hoy.
   const genViews = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
   const colorViews = genViews && color ? genViews[color.name] : null;
-  const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
-  const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
+  const views360 = build360(colorViews);
+  const hasViews = Object.keys(views360).length > 0;
+  const curView = views360[view];
+  const mainSrc = curView ? resolveImage(curView.key) : (color ? color.image : "");
+  const mainMirror = !!(curView && curView.mirror);
 
   // Vídeo comercial de ESTE color, si existe. Sale del MISMO fixture que las vistas,
   // no de la metadata de Medusa: leerlo de Medusa exigiría VITE_USE_MEDUSA=true, y ese
@@ -146,7 +171,7 @@ export default function ProductDetail() {
   // Botón 360: clic = avanza una vista; mantener pulsado = giro continuo. El
   // orden de VIEW_ORDER (front → left → back → right) da sensación de giro.
   const spin360 = (dir = 1) => {
-    const avail = VIEW_ORDER.filter((v) => colorViews && colorViews[v]);
+    const avail = VIEW_ORDER.filter((v) => views360[v]);
     if (!avail.length) return;
     setView((prev) => {
       const i = avail.indexOf(prev);
@@ -154,13 +179,15 @@ export default function ProductDetail() {
     });
   };
   const start360 = (e) => {
+    e.preventDefault();
     e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     spin360(1);
     clearTimeout(spinHold.current);
     clearInterval(spinTimer.current);
     spinHold.current = setTimeout(() => {
-      spinTimer.current = setInterval(() => spin360(1), 240);
-    }, 350);
+      spinTimer.current = setInterval(() => spin360(1), 300);
+    }, 320);
   };
   const stop360 = () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); spinTimer.current = null; };
 
@@ -175,11 +202,12 @@ export default function ProductDetail() {
           <div className={`pdp-stage ${showRail ? "has-views" : ""}`}>
             {showRail && (
               <div className="pdp-views" role="tablist" aria-label={t("pdp.views")}>
-                {hasViews && VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                {hasViews && VIEW_ORDER.map((vw) => views360[vw] ? (
                   <button key={vw} type="button" role="tab" aria-selected={view === vw}
                           className={`pdp-view ${view === vw ? "sel" : ""}`}
                           onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
-                    <img src={resolveImage(colorViews[vw])} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                    <img src={resolveImage(views360[vw].key)} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                         className={views360[vw].mirror ? "mirror" : ""}
                          onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
                   </button>
                 ) : null)}
@@ -222,7 +250,7 @@ export default function ProductDetail() {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
+                <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}
               {hasViews && (

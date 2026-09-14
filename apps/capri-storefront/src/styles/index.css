@@ -4863,3 +4863,22 @@ button.card-genre {
 @media (prefers-reduced-motion: reduce) {
   .pdp .pdp-360 { animation: none; }
 }
+
+
+/* ===================== ETAPA33 · 360 tactil (mantener pulsado) + efecto espejo ===================== */
+/* En movil el gesto de mantener pulsado se cortaba porque el navegador lo tomaba
+   como scroll / menu de "guardar imagen". Bloqueamos esos gestos y capturamos el
+   puntero (en el JSX) para que el giro continuo se sostenga. */
+.pdp .pdp-360 {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.pdp .pdp-360 img { pointer-events: none; }
+
+/* Efecto espejo: cuando falta un lado (o viene duplicado) se sintetiza volteando
+   la imagen del lado contrario. */
+.pdp-main img.mirror { transform: scaleX(-1); }
+.pdp-main.zoom img.mirror { transform: scale(1.6) scaleX(-1); }
+.pdp-view img.mirror { transform: scaleX(-1); }
