@@ -44,6 +44,7 @@ export default function ProductCard({ product }) {
   // Oferta: precio anterior tachado + precio en rojo + etiqueta, solo si el
   // precio anterior es mayor que el actual.
   const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
+  const discountOff = hasSale ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).
@@ -81,8 +82,9 @@ export default function ProductCard({ product }) {
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
           {hasSale && (
-            <span className="card-ic card-ic-disc" title={t("card.sale")} aria-label={t("card.sale")}>
-              <IconDiscount className="card-fav-ic" />
+            <span className="card-disc-badge" title={t("card.sale")} aria-label={`-${discountOff}%`}>
+              <IconDiscount className="card-disc-ic" />
+              <b>-{discountOff}%</b>
             </span>
           )}
         </div>
@@ -129,7 +131,7 @@ export default function ProductCard({ product }) {
             <span className={`card-price ${hasSale ? "sale" : ""}`}>${product.price.toFixed(2)}</span>
           </span>
         </div>
-        {hasSale && <span className="card-oferta">{t("card.sale")}</span>}
+
 
         {/* Acción principal: probador con cámara. Diferencia la tienda — primero
             invitamos a verse la montura, después a comprar. */}

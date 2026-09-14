@@ -4371,3 +4371,22 @@ body { background: var(--bone); }
 @media (max-width: 860px) {
   .cat-hero-txt { padding-left: 16px; padding-top: 0; padding-bottom: 0; }
 }
+
+
+/* ===================================================================
+   ETAPA 13 — Etiqueta de descuento elaborada: muestra el % real de
+   ahorro en una píldora roja con degradado y brillo (bajo el favorito).
+   =================================================================== */
+.card-disc-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 4px 9px 4px 6px; border-radius: 999px; white-space: nowrap;
+  background: linear-gradient(135deg, #ff4d63 0%, #e0241c 55%, #c11226 100%);
+  color: #fff; font-size: 12px; font-weight: 800; line-height: 1; letter-spacing: .01em;
+  box-shadow: 0 4px 10px -2px rgba(190,20,45,.55), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.card-disc-badge b { font-weight: 800; }
+.card-disc-ic { width: 13px; height: 13px; display: block; }
+@media (max-width: 860px) {
+  .card-disc-badge { font-size: 11px; padding: 3px 8px 3px 5px; gap: 2px; }
+  .card-disc-ic { width: 12px; height: 12px; }
+}
