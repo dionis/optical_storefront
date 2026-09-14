@@ -4921,7 +4921,7 @@ button.card-genre {
 }
 .pdp .pdp-360:active { transform: translateY(-1px) scale(.97); }
 @media (prefers-reduced-motion: reduce) {
-  .pdp .pdp-360, .pdp .pdp-360:hover { transition: none; transform: none; }
+  /* (a pedido) el hover/animacion del 360 se muestra siempre. */
 }
 
 
@@ -4945,5 +4945,5 @@ button.card-genre {
   to   { transform: perspective(900px) scaleX(-1) rotateY(0deg) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pdp-360frame.on, .pdp-360frame.mirror.on { animation: none; }
+  /* (a pedido) el giro 3D se muestra siempre, incluso con reduce-motion. */
 }
