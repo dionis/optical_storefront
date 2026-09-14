@@ -75,6 +75,14 @@ export default function Header() {
         </form>
 
         <div className="header-actions">
+          <button className="icon-btn lang-toggle" onClick={() => setLang(lang === "es" ? "en" : "es")}
+                  aria-label="Idioma / Language" title={lang === "es" ? "Español — toca para English" : "English — tap for Español"}>
+            {lang === "es" ? (
+              <svg className="flag-ic" viewBox="0 0 3 2" aria-hidden="true"><rect width="3" height="2" fill="#c60b1e"/><rect y="0.5" width="3" height="1" fill="#ffc400"/></svg>
+            ) : (
+              <svg className="flag-ic" viewBox="0 0 19 10" aria-hidden="true"><rect width="19" height="10" fill="#b22234"/><g fill="#fff"><rect y="0.77" width="19" height="0.77"/><rect y="2.31" width="19" height="0.77"/><rect y="3.85" width="19" height="0.77"/><rect y="5.38" width="19" height="0.77"/><rect y="6.92" width="19" height="0.77"/><rect y="8.46" width="19" height="0.77"/></g><rect width="7.6" height="5.38" fill="#3c3b6e"/></svg>
+            )}
+          </button>
           <div className="lang-flags" role="group" aria-label="Language / Idioma">
             <button className={`flag-btn ${lang === "es" ? "on" : ""}`} onClick={() => setLang("es")}
                     title="Español" aria-label="Español" aria-pressed={lang === "es"}>
@@ -120,10 +128,6 @@ export default function Header() {
           <button type="submit" aria-label={t("a11y.search")}><IconSearch className="search-ic" /></button>
         </form>
         <nav className="drawer-nav">{links}</nav>
-        <div className="drawer-lang" role="group" aria-label="Language / Idioma">
-          <button className={lang === "es" ? "on" : ""} onClick={() => setLang("es")}>ES · Español</button>
-          <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN · English</button>
-        </div>
       </div>
       {menu && <div className="drawer-backdrop" onClick={() => setMenu(false)} />}
 

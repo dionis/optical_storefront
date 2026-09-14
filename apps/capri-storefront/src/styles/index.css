@@ -4459,3 +4459,14 @@ body { background: var(--bone); }
   .cat-hero-script { top: 50%; right: 18px; transform: translateY(-50%) rotate(-7deg); }
   .cat-hero-glass { top: 50%; transform: translateY(-50%); width: 66%; max-width: 250px; right: -12%; }
 }
+
+
+/* ===================================================================
+   ETAPA 18 — Selector de idioma en el header (móvil): una sola bandera,
+   la del idioma ACTIVO (España = ES, EE.UU. = EN). Toca para cambiar.
+   =================================================================== */
+.flag-ic { width: 26px; height: auto; border-radius: 3px; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.55); }
+.header-actions .lang-toggle { display: none !important; }
+@media (max-width: 860px) {
+  .header-actions .lang-toggle { display: inline-flex !important; }
+}
