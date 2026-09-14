@@ -9,7 +9,7 @@ const ICONS = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.3 10.8 12 3.5l8.7 7.3" /><path d="M5.6 9.7V20h12.8V9.7" /><path d="M10 20v-5a2 2 0 0 1 4 0v5" /></svg>
   ),
   brands: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4.6 9.7h14.8V20H4.6z" /><path d="M3 9.7 4.7 5h14.6L21 9.7z" /><path d="M9.6 20v-6h4.8v6" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="5.4" /><path d="M9.4 13.6 8.1 20.5 12 18.3 15.9 20.5 14.6 13.6" /><path d="M12 6.5 12.59 8.19 14.38 8.23 12.95 9.31 13.47 11.02 12 10 10.53 11.02 11.05 9.31 9.62 8.23 11.41 8.19Z" /></svg>
   ),
   fav: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20.3 4.4 12.8a4.7 4.7 0 0 1 6.7-6.6l.9.9.9-.9a4.7 4.7 0 0 1 6.7 6.6z" /></svg>

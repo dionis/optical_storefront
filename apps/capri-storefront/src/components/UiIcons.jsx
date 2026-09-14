@@ -274,3 +274,35 @@ export function IconCheck({ className }) {
     </svg>
   );
 }
+
+// Género femenino (♀).
+export function IconFemale({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
+      <circle cx="12" cy="8.4" r="5" />
+      <path d="M12 13.4v7.2" /><path d="M8.6 17.6h6.8" />
+    </svg>
+  );
+}
+
+// Unisex (círculo con flecha + cruz).
+export function IconUnisex({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
+      <circle cx="11.5" cy="12.8" r="4.3" />
+      <path d="M11.5 17.1v4.4" /><path d="M9.3 19.3h4.4" />
+      <path d="M14.6 9.7 18.8 5.5" /><polyline points="15.3 5.5 18.8 5.5 18.8 9" />
+    </svg>
+  );
+}
+
+// Niños (figura pequeña).
+export function IconKids({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
+      <circle cx="12" cy="6" r="2.7" />
+      <path d="M8.6 20.5V15a3.4 3.4 0 0 1 6.8 0v5.5" />
+      <path d="M8.7 14.5h6.6" />
+    </svg>
+  );
+}

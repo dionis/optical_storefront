@@ -12,7 +12,7 @@ import TryOn from "./TryOnSwitch.jsx";
 import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
 // Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
 import { viewsBySku } from "../data/frameMediaSample.js";
-import { Icon360, IconHeart, IconDiscount } from "./UiIcons.jsx";
+import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
 
 // Descuentos realistas para la etiqueta (10/15/20/25%), asignados de forma
 // estable por producto (mismo producto → mismo descuento).
@@ -51,6 +51,16 @@ export default function ProductCard({ product }) {
   const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
   const discountOff = hasSale ? DISCOUNT_STEPS[hashSlug(product.slug) % DISCOUNT_STEPS.length] : 0;
   const oldPrice = hasSale ? product.price / (1 - discountOff / 100) : 0;
+
+  // Badge de género / edad (hombre, mujer, unisex o niños).
+  const genderVal = product.attributes?.gender;
+  const isKids = product.attributes?.age === "Niños";
+  const GenderIcon = isKids ? IconKids
+    : genderVal === "Hombres" ? IconGender
+    : genderVal === "Señoras" ? IconFemale
+    : genderVal === "Unisexo" ? IconUnisex
+    : null;
+  const genderLabel = isKids ? tv("Niños") : (genderVal ? tv(genderVal) : "");
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).
@@ -94,6 +104,11 @@ export default function ProductCard({ product }) {
             </span>
           )}
         </div>
+        {GenderIcon && (
+          <span className="card-genre" title={genderLabel} aria-label={genderLabel}>
+            <GenderIcon className="card-genre-ic" />
+          </span>
+        )}
         <Link to={`/recetas/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
           <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />

@@ -76,6 +76,9 @@ export default function Catalog() {
     });
     if (sort === "price-asc") list = [...list].sort((a, b) => a.price - b.price);
     if (sort === "price-desc") list = [...list].sort((a, b) => b.price - a.price);
+    if (sort === "brand") list = [...list].sort((a, b) =>
+      (a.brand || "").localeCompare(b.brand || "", undefined, { sensitivity: "base", numeric: true }) ||
+      (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base", numeric: true }));
     // Sorting by rating means sorting by what customers actually gave. Frames
     // nobody has reviewed sort last rather than as a zero — they are unrated,
     // not badly rated. (This used to sort by the scraper's invented `rating`,
@@ -203,7 +206,7 @@ export default function Catalog() {
               <>
                 <div className="fb-backdrop" onClick={() => setSortOpen(false)} />
                 <ul className="fb-menu" role="listbox">
-                  {[["relevance", "sort.relevance"], ["price-asc", "sort.priceAsc"], ["price-desc", "sort.priceDesc"], ["rating", "sort.rating"]].map(([v, k]) => (
+                  {[["relevance", "sort.relevance"], ["brand", "sort.brand"], ["price-asc", "sort.priceAsc"], ["price-desc", "sort.priceDesc"], ["rating", "sort.rating"]].map(([v, k]) => (
                     <li key={v}>
                       <button type="button" className={sort === v ? "on" : ""}
                               onClick={() => { setSort(v); setSortOpen(false); }}>{t(k)}</button>
