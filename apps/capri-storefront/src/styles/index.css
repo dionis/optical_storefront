@@ -4426,3 +4426,18 @@ body { background: var(--bone); }
   /* Buscador: caja blanca nítida sobre el navy. */
   .header .search input { background: #fff; }
 }
+
+
+/* ===================================================================
+   ETAPA 16 — Invertir hero: TÍTULO/SUBTÍTULO a la IZQUIERDA, gafas +
+   mensaje a la DERECHA (con margen prudencial, sin invadirse).
+   =================================================================== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.cat-hero-txt { max-width: 54%; text-align: left; padding: 0 0 0 22px; margin-left: 0; margin-right: auto; }
+.cat-hero-glass { left: auto; right: -3%; }
+.cat-hero-script { left: auto; right: 12px; align-items: flex-end; transform-origin: 100% 100%; }
+@media (max-width: 860px) {
+  .cat-hero-txt { max-width: 54%; padding-left: 16px; }
+  .cat-hero-glass { left: auto; right: -4%; max-width: 150px; }
+  .cat-hero-script { left: auto; right: 9px; }
+}
