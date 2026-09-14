@@ -4341,3 +4341,25 @@ body { background: var(--bone); }
   .card-tryon { height: 32px; }
   .card-add-cart { height: 30px; }
 }
+
+
+/* ===================================================================
+   ETAPA 11 — Barra de confianza AL FONDO, a todo el ancho, una sola
+   fila, fondo claro #F0F1F5, iconos y texto en navy.
+   =================================================================== */
+.truststrip {
+  background: #f0f1f5 !important; border: none !important; border-top: 1px solid #e2e6ef !important;
+  border-radius: 0 !important; box-shadow: none !important; color: var(--hero-ink) !important;
+  max-width: none; width: 100vw; margin: 22px 0 0; margin-left: calc(50% - 50vw);
+  padding: 16px 20px; grid-template-columns: repeat(4, 1fr); gap: 14px;
+}
+.trust-item { color: var(--hero-ink); font-weight: 600; }
+.trust-ic { color: var(--hero-ink); }
+.trust-tx { color: var(--hero-ink); }
+
+@media (max-width: 860px) {
+  .truststrip { grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px 8px; margin-top: 16px; }
+  .trust-item { font-size: 9.5px; gap: 5px; line-height: 1.15; align-items: center; }
+  .trust-ic { width: 18px; height: 18px; }
+  .trust-ic svg { width: 15px; height: 15px; }
+}
