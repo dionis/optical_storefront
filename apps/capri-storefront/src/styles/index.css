@@ -4795,3 +4795,22 @@ button.card-genre {
    el recuadro era el drop-shadow (sombra alrededor del rectangulo opaco de la
    foto). Se quita: blanco sobre blanco, sin costura ni sombra. */
 .pdp .pdp-main img { filter: none !important; }
+
+
+/* ===================== ETAPA30 · galeria de vistas a la IZQUIERDA tambien en movil ===================== */
+/* En movil estaba como fila debajo del visor; el mockup las quiere en columna a
+   la izquierda del visor. */
+@media (max-width: 720px) {
+  .pdp-stage { flex-direction: row !important; gap: 8px; align-items: flex-start; }
+  .pdp-views {
+    flex-direction: column !important;
+    width: 56px !important;
+    overflow-x: visible !important;
+  }
+  .pdp-view {
+    width: 56px !important;
+    height: 56px !important;
+    aspect-ratio: 1 / 1 !important;
+    flex: 0 0 auto;
+  }
+}
