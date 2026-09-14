@@ -61,7 +61,11 @@ export default function ProductCard({ product }) {
     : genderVal === "Señoras" ? IconFemale
     : genderVal === "Unisexo" ? IconUnisex
     : null;
-  const genderLabel = isKids ? tv("Niños") : (genderVal ? tv(genderVal) : "");
+  const genderLabel = isKids ? t("g.kids")
+    : genderVal === "Hombres" ? t("g.male")
+    : genderVal === "Señoras" ? t("g.female")
+    : genderVal === "Unisexo" ? t("g.unisex")
+    : "";
 
   // Solo-montura al carrito. Sin variantId no hay compra real: avisamos en vez
   // de simular un carrito local (el precio siempre sale del servidor).

@@ -37,13 +37,21 @@ export default function BottomNav() {
   };
   // Mis favoritos → abre el panel de favoritos (vive en el Header).
   const openFav = (e) => { e.preventDefault(); window.dispatchEvent(new Event("rubi:open-fav")); };
+  // Inicio → NO recarga la portada (eso lo hace el logo): sube al inicio de la
+  // lista de espejuelos. Si no estás en una lista, va a la portada.
+  const goTop = (e) => {
+    e.preventDefault();
+    const toTop = () => window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    if (pathname === "/" || pathname === "/catalogo") toTop();
+    else { navigate("/"); setTimeout(toTop, 60); }
+  };
 
   return (
     <nav className="bottomnav" aria-label={t("bn.aria")}>
-      <Link to="/" className={`bn-item ${pathname === "/" ? "on" : ""}`}>
+      <a href="/" onClick={goTop} className={`bn-item ${pathname === "/" || pathname === "/catalogo" ? "on" : ""}`}>
         <span className="bn-ic">{ICONS.home}</span>
         <span className="bn-tx">{t("bn.home")}</span>
-      </Link>
+      </a>
       <a href="/#marcas" onClick={goBrands} className="bn-item">
         <span className="bn-ic">{ICONS.brands}</span>
         <span className="bn-tx">{t("nav.brands")}</span>
