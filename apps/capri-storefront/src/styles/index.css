@@ -5072,3 +5072,7 @@ button.card-genre {
       inset 0 1px 0 rgba(255, 255, 255, .9) !important;
   }
 }
+
+
+/* ===================== ETAPA40 · quitar el borde exterior naranja de las tarjetas ===================== */
+.section.props .prop { border: none !important; }
