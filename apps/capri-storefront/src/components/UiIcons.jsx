@@ -38,12 +38,15 @@ export function IconMaterial({ className }) {
 // Medidas — gafas redondas (dos aros + puente + varillas).
 export function IconMeasures({ className }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
-      <circle cx="6.6" cy="13.4" r="3.9" />
-      <circle cx="17.4" cy="13.4" r="3.9" />
-      <path d="M10.5 12.6c.7-1 1.8-1 2.9 0" />
-      <path d="M2.7 12.2C2.9 10 3.7 9.1 5.4 9" />
-      <path d="M21.3 12.2C21.1 10 20.3 9.1 18.6 9" />
+    <svg viewBox="0 0 24 24" className={className} {...base} strokeWidth={2} aria-hidden="true">
+      {/* Bisagras (patillas) en las esquinas superiores externas. */}
+      <path d="M3.1 9.6 2 8.4" />
+      <path d="M20.9 9.6 22 8.4" />
+      {/* Lentes redondeados (panto), estilo del icono entregado. */}
+      <rect x="2.4" y="9.4" width="8" height="8" rx="3.6" />
+      <rect x="13.6" y="9.4" width="8" height="8" rx="3.6" />
+      {/* Puente en el centro. */}
+      <path d="M10.4 11.7c.9-.8 2.3-.8 3.2 0" />
     </svg>
   );
 }
