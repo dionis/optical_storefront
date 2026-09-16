@@ -382,22 +382,6 @@ export default function ProductDetail() {
         </div>
 
         <div className="pdp-info">
-          <div className="pdp-head">
-            <div className="pdp-head-txt">
-              <div className="pdp-meta">
-                {review ? (
-                  <>
-                    <span className="stars">★ {review.average.toFixed(1)}</span>
-                    <span className="muted">· {review.count} {t("pdp.reviews")}</span>
-                  </>
-                ) : (
-                  <span className="muted">{t("rev.none")}</span>
-                )}
-              </div>
-            </div>
-            {shapeLabel && <span className="pdp-shape-chip">{shapeLabel}</span>}
-          </div>
-
           {/* Datos clave con iconos: material · medidas · género. */}
           <div className="pdp-facts">
             {frameMaterials.length > 0 && (
@@ -418,20 +402,6 @@ export default function ProductDetail() {
                 <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.gender")}</span><b>{genderLabel}</b></div>
               </div>
             )}
-          </div>
-
-          {/* Colores disponibles con etiqueta bajo cada muestra. */}
-          <div className="pdp-colors2">
-            <div className="pdp-colors2-h">{t("pdp.availableColors")}</div>
-            <div className="pdp-colors2-list">
-              {product.colors.map((c, i) => (
-                <button key={c.name} type="button" className={`pdp-color2 ${i === active ? "sel" : ""}`}
-                        onClick={() => setActive(i)} aria-label={c.name} title={c.name}>
-                  <span className="pdp-color2-sw" style={{ background: c.hex }} />
-                  <span className="pdp-color2-nm">{c.name}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
