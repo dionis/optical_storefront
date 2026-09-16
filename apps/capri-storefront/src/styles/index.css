@@ -5149,3 +5149,12 @@ button.card-genre {
   .pdp .pdp-main { aspect-ratio: 1.65; }
   .pdp .pdp-stage .pdp-views .pdp-view { width: 50px; height: 50px; flex: 0 0 50px; }
 }
+
+
+/* ===================== ETAPA44 · RESPONSIVE: botones (Probar con camara / Anadir al
+   carrito) justo debajo de los espejuelos, antes de los datos ===================== */
+@media (max-width: 720px) {
+  .pdp-info { display: flex; flex-direction: column; }
+  .pdp-info .pdp-actions2 { order: -1; margin-bottom: 4px; }
+  .pdp-info .pdp-facts { order: 0; }
+}
