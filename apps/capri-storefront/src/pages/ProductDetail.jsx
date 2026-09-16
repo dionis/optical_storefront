@@ -366,6 +366,16 @@ export default function ProductDetail() {
                   ))}
                 </div>
               )}
+              {/* Estrellas abajo-izquierda (misma linea que colores y 360). Vacias y
+                  semi-transparentes si no hay reseñas; se llenan segun el promedio. */}
+              {!showingVideo && (
+                <div className="pdp-stars" onClick={(e) => e.stopPropagation()}
+                     aria-label={review ? `${review.average.toFixed(1)} / 5 (${review.count})` : t("rev.none")}
+                     title={review ? `${review.average.toFixed(1)} / 5 · ${review.count}` : t("rev.none")}>
+                  <span className="pdp-stars-base">★★★★★</span>
+                  <span className="pdp-stars-fill" style={{ width: `${((review ? review.average : 0) / 5) * 100}%` }}>★★★★★</span>
+                </div>
+              )}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
               )}
