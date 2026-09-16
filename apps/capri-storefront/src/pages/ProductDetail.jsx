@@ -87,20 +87,21 @@ export default function ProductDetail() {
   const [zoom, setZoom] = useState(false);
   const [tab, setTab] = useState("detalles");
   const [matHelp, setMatHelp] = useState(false); // ayuda de calidad del material (al click)
+  const [measHelp, setMeasHelp] = useState(null); // ayuda de medida: "eye" | "bridge" | "temple" | null
   // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
   const [view, setView] = useState("front");
-  useEffect(() => { setView("front"); setMatHelp(false); }, [slug, active]);
-  // Modal de calidad del material: bloquea el scroll de fondo y cierra con ESC.
+  useEffect(() => { setView("front"); setMatHelp(false); setMeasHelp(null); }, [slug, active]);
+  // Modales (material / medidas): bloquean el scroll de fondo y cierran con ESC.
   useEffect(() => {
-    if (!matHelp) return;
-    const onKey = (e) => { if (e.key === "Escape") setMatHelp(false); };
+    if (!matHelp && !measHelp) return;
+    const onKey = (e) => { if (e.key === "Escape") { setMatHelp(false); setMeasHelp(null); } };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
-  }, [matHelp]);
+  }, [matHelp, measHelp]);
   // Timers del botón 360 (giro continuo al mantener pulsado).
   const spinTimer = useRef(null);
   const spinHold = useRef(null);
@@ -253,6 +254,13 @@ export default function ProductDetail() {
   const brandLogo = brandInfo ? brandInfo.logo : null;
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
     .map(oneMeasure).filter((x) => x != null && x !== "").join(" - ");
+  // Medidas con diagrama de referencia + ayuda (que significa / como se mide).
+  const MEAS = {
+    eye: { img: "/measure-eye.png", label: t("spec.eye"), val: oneMeasure(product.attributes.eye_size), help: t("meas.eye.help") },
+    bridge: { img: "/measure-bridge.png", label: t("spec.bridge"), val: oneMeasure(product.attributes.bridge_size), help: t("meas.bridge.help") },
+    temple: { img: "/measure-temple.png", label: t("spec.temple"), val: oneMeasure(product.attributes.temple_length), help: t("meas.temple.help") },
+  };
+  const MEAS_ORDER = ["eye", "bridge", "temple"];
   const genderVal = product.attributes.gender;
   const isKidsFrame = product.attributes.age === "Niños";
   const GenderIcon = isKidsFrame ? IconKids
@@ -472,6 +480,19 @@ export default function ProductDetail() {
             document.body
           )}
 
+          {/* Ayuda de medida: ventana emergente con el diagrama y como se mide. */}
+          {measHelp && MEAS[measHelp] && createPortal(
+            <div className="pdp-matmodal" role="dialog" aria-modal="true" onClick={() => setMeasHelp(null)}>
+              <div className="pdp-matmodal-card pdp-measmodal-card" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="pdp-matmodal-x" onClick={() => setMeasHelp(null)} aria-label={lang === "en" ? "Close" : "Cerrar"}>×</button>
+                <img className="pdp-measmodal-img" src={MEAS[measHelp].img} alt={MEAS[measHelp].label} />
+                <h3 className="pdp-measmodal-title">{MEAS[measHelp].label}</h3>
+                <p className="pdp-measmodal-desc">{MEAS[measHelp].help}</p>
+              </div>
+            </div>,
+            document.body
+          )}
+
           {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
               recetas para elegir lentes y comprar — no se pierde esa función). */}
           <div className="pdp-actions2">
@@ -505,21 +526,16 @@ export default function ProductDetail() {
 
         {tab === "medidas" && (
           <div className="pdp-measures">
-            <div className="pdp-measure">
-              <IconMeasures className="pdp-measure-ic" />
-              <span className="pdp-measure-k">{t("spec.eye")}</span>
-              <b>{oneMeasure(product.attributes.eye_size)} mm</b>
-            </div>
-            <div className="pdp-measure">
-              <IconMeasures className="pdp-measure-ic" />
-              <span className="pdp-measure-k">{t("spec.bridge")}</span>
-              <b>{oneMeasure(product.attributes.bridge_size)} mm</b>
-            </div>
-            <div className="pdp-measure">
-              <IconMeasures className="pdp-measure-ic" />
-              <span className="pdp-measure-k">{t("spec.temple")}</span>
-              <b>{oneMeasure(product.attributes.temple_length)} mm</b>
-            </div>
+            {MEAS_ORDER.map((k) => (
+              <div key={k} className="pdp-measure">
+                <button type="button" className="pdp-measure-help"
+                        onClick={() => setMeasHelp(k)}
+                        aria-label={`${MEAS[k].label} — ${t("meas.howto")}`}>ⓘ</button>
+                <img className="pdp-measure-img" src={MEAS[k].img} alt={MEAS[k].label} loading="lazy" />
+                <span className="pdp-measure-k">{MEAS[k].label}</span>
+                <b className="pdp-measure-v">{MEAS[k].val} mm</b>
+              </div>
+            ))}
           </div>
         )}
 
