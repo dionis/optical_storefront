@@ -5170,10 +5170,10 @@ button.card-genre {
 
 /* ===================== ETAPA46 · estrellas abajo-izquierda del visor (misma linea que
    colores y 360). Base semi-transparente = vacias; relleno dorado segun promedio ===================== */
-.pdp-stars { position: absolute; left: 14px; bottom: 15px; z-index: 4; display: inline-block; line-height: 1; font-size: 17px; letter-spacing: 1px; white-space: nowrap; pointer-events: none; }
-.pdp-stars-base { color: rgba(18, 40, 90, .22); }
+.pdp-stars { position: absolute; left: 18px; bottom: 18px; z-index: 4; display: inline-block; line-height: 1; font-size: 21px; letter-spacing: 2px; white-space: nowrap; pointer-events: none; }
+.pdp-stars-base { color: rgba(18, 40, 90, .32); }
 .pdp-stars-fill { position: absolute; top: 0; left: 0; width: 0; overflow: hidden; white-space: nowrap; color: #f6a723; }
 
 @media (max-width: 720px) {
-  .pdp-stars { left: 10px; bottom: 12px; font-size: 15px; }
+  .pdp-stars { left: 14px; bottom: 15px; font-size: 19px; }
 }
