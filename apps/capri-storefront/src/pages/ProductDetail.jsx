@@ -281,6 +281,7 @@ export default function ProductDetail() {
               </div>
             )}
             <div ref={mainRef} className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+              {!showingVideo && (<>
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                       aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
@@ -296,6 +297,7 @@ export default function ProductDetail() {
                 </span>
                 <h1 className="pdp-idtag-model">{product.name}{color ? ` · ${color.name}` : ""}</h1>
               </div>
+              </>)}
               {showingVideo ? (
                 <video
                   key={videoSrc}
@@ -342,6 +344,17 @@ export default function ProductDetail() {
                         onClick={(e) => e.stopPropagation()}>
                   <img src="/icon-360.png" alt="360°" />
                 </button>
+              )}
+              {/* Selector de color (solo circulos) centrado, en la linea del boton 360.
+                  Sin texto: el color ya sale en el titulo (DC 50 · Grey). */}
+              {!showingVideo && product.colors.length > 1 && (
+                <div className="pdp-swatches" onClick={(e) => e.stopPropagation()}>
+                  {product.colors.map((c, i) => (
+                    <button key={c.name} type="button" className={`pdp-swatch ${i === active ? "sel" : ""}`}
+                            style={{ background: c.hex }} onClick={(e) => { e.stopPropagation(); setActive(i); }}
+                            aria-label={c.name} title={c.name} />
+                  ))}
+                </div>
               )}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>

@@ -5115,3 +5115,29 @@ button.card-genre {
   .pdp-brandseal-img { max-width: 100px; }
   .pdp-main.zoom .pdp-360stack { transform: scale(1.25); }
 }
+
+
+/* ===================== ETAPA42 · sello sin contorno + mas grande (igual que favorito),
+   selector de color (circulos) centrado en la linea del 360, video sin estorbos ===================== */
+
+/* Logo de marca SIN contorno (ni borde ni sombra ni pastilla); el logo ya trae su
+   fondo. Mas grande, a la par del boton de favorito. */
+.pdp-brandseal.has-logo { border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; height: 46px; min-width: 0; border-radius: 6px; }
+.pdp-brandseal-img { max-width: 132px; }
+
+/* Corazon de favorito mas grande (a juego con el logo). */
+.pdp-main .heart { width: 46px !important; height: 46px !important; font-size: 22px !important; }
+
+/* Selector de color: SOLO circulos, centrado abajo, en la misma linea del boton 360.
+   Sin texto (el color ya sale en el titulo DC 50 · Grey). */
+.pdp-swatches { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 9px; z-index: 4; align-items: center; }
+.pdp-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(15, 40, 90, .35); cursor: pointer; padding: 0; transition: transform .15s ease; }
+.pdp-swatch:hover { transform: scale(1.12); }
+.pdp-swatch.sel { box-shadow: 0 0 0 2px var(--primary-blue, #01326b), 0 1px 5px rgba(15, 40, 90, .35); }
+
+@media (max-width: 720px) {
+  .pdp-brandseal.has-logo { height: 40px; }
+  .pdp-main .heart { width: 40px !important; height: 40px !important; font-size: 19px !important; }
+  .pdp-swatch { width: 19px; height: 19px; }
+  .pdp-swatches { bottom: 12px; gap: 7px; }
+}
