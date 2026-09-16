@@ -5236,3 +5236,11 @@ button.card-genre {
    foto quepa por ancho y alto dentro de la card ===================== */
 .card-case .card-img-link { height: 100%; }
 .card-case .card-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+
+
+/* ===================== ETAPA53 · separacion titulo->cards en "Mas de <marca>"/"Resenas"
+   y menos hueco antes del footer (a la mitad) ===================== */
+.section > .section-title.case-cross-title { margin-bottom: 22px; }
+.pdp { padding-bottom: 20px; }
+.pdp > section:last-of-type { padding-bottom: 24px; }
+.footer { margin-top: 22px; }
