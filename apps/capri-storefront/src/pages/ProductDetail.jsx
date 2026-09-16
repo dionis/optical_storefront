@@ -533,8 +533,8 @@ export default function ProductDetail() {
         <div className="case-cross-head">
           <h2 className="section-title case-cross-title">{t("case.recommendSub")}</h2>
         </div>
-        <div className="case-grid three">
-          {cases.map((c) => <CaseCard key={c.slug} item={c} compact />)}
+        <div className="case-grid three case-cross-cases">
+          {cases.map((c) => <CaseCard key={c.slug} item={c} />)}
         </div>
       </section>
 

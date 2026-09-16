@@ -5222,3 +5222,11 @@ button.card-genre {
 @media (max-width: 720px) {
   .case-cross-title { font-size: clamp(18px, 5.4vw, 26px); white-space: nowrap; letter-spacing: -0.03em; }
 }
+
+
+/* ===================== ETAPA51 · estuches con la MISMA estetica que las cards del
+   catalogo (CaseCard usa .card). En responsive: 2 columnas y solo 2 estuches. ===================== */
+@media (max-width: 720px) {
+  .case-cross-cases { grid-template-columns: repeat(2, 1fr) !important; gap: 14px; max-width: none; }
+  .case-cross-cases > :nth-child(n + 3) { display: none; }
+}
