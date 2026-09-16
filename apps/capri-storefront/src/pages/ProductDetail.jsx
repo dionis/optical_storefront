@@ -47,6 +47,16 @@ function build360(cv) {
   return out;
 }
 
+// Las medidas del catalogo a veces vienen como intervalo ("51-53"). Mostramos un
+// solo valor: el promedio del intervalo, redondeado.
+function oneMeasure(v) {
+  if (v == null || v === "") return v;
+  const s = String(v).trim();
+  const m = s.match(/(\d+(?:\.\d+)?)\s*[-–—aA]\s*(\d+(?:\.\d+)?)/);
+  if (m) return String(Math.round((parseFloat(m[1]) + parseFloat(m[2])) / 2));
+  return s;
+}
+
 export default function ProductDetail() {
   const { slug } = useParams();
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
@@ -210,7 +220,7 @@ export default function ProductDetail() {
   const brandInfo = BRAND_BY_SLUG[product.brand_slug];
   const brandLogo = brandInfo ? brandInfo.logo : null;
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
-    .filter((x) => x != null && x !== "").join(" - ");
+    .map(oneMeasure).filter((x) => x != null && x !== "").join(" - ");
   const genderVal = product.attributes.gender;
   const isKidsFrame = product.attributes.age === "Niños";
   const GenderIcon = isKidsFrame ? IconKids
@@ -466,9 +476,9 @@ export default function ProductDetail() {
                 <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
                 <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
                 <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
-                <tr><td>{t("spec.eye")}</td><td>{product.attributes.eye_size}</td></tr>
-                <tr><td>{t("spec.bridge")}</td><td>{product.attributes.bridge_size}</td></tr>
-                <tr><td>{t("spec.temple")}</td><td>{product.attributes.temple_length}</td></tr>
+                <tr><td>{t("spec.eye")}</td><td>{oneMeasure(product.attributes.eye_size)}</td></tr>
+                <tr><td>{t("spec.bridge")}</td><td>{oneMeasure(product.attributes.bridge_size)}</td></tr>
+                <tr><td>{t("spec.temple")}</td><td>{oneMeasure(product.attributes.temple_length)}</td></tr>
               </tbody>
             </table>
 
@@ -494,17 +504,17 @@ export default function ProductDetail() {
             <div className="pdp-measure">
               <IconMeasures className="pdp-measure-ic" />
               <span className="pdp-measure-k">{t("spec.eye")}</span>
-              <b>{product.attributes.eye_size} mm</b>
+              <b>{oneMeasure(product.attributes.eye_size)} mm</b>
             </div>
             <div className="pdp-measure">
               <IconMeasures className="pdp-measure-ic" />
               <span className="pdp-measure-k">{t("spec.bridge")}</span>
-              <b>{product.attributes.bridge_size} mm</b>
+              <b>{oneMeasure(product.attributes.bridge_size)} mm</b>
             </div>
             <div className="pdp-measure">
               <IconMeasures className="pdp-measure-ic" />
               <span className="pdp-measure-k">{t("spec.temple")}</span>
-              <b>{product.attributes.temple_length} mm</b>
+              <b>{oneMeasure(product.attributes.temple_length)} mm</b>
             </div>
           </div>
         )}
