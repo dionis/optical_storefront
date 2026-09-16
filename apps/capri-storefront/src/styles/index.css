@@ -5158,3 +5158,11 @@ button.card-genre {
   .pdp-info .pdp-actions2 { order: -1; margin-bottom: 4px; }
   .pdp-info .pdp-facts { order: 0; }
 }
+
+
+/* ===================== ETAPA45 · RESPONSIVE: pegar los botones a la imagen del marco
+   (reducir el hueco entre la galeria y las acciones) ===================== */
+@media (max-width: 720px) {
+  .pdp-grid { gap: 10px; }
+  .pdp-info .pdp-actions2 { margin-top: 0; margin-bottom: 6px; }
+}
