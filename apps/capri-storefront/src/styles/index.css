@@ -5243,4 +5243,5 @@ button.card-genre {
 .section > .section-title.case-cross-title { margin-bottom: 22px; }
 .pdp { padding-bottom: 20px; }
 .pdp > section:last-of-type { padding-bottom: 24px; }
-.footer { margin-top: 22px; }
+.footer { margin-top: 14px; }
+.truststrip { margin-top: 12px; }
