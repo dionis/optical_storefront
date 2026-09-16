@@ -5215,3 +5215,10 @@ button.card-genre {
 /* ===================== ETAPA49 · seccion de estuches: solo "Recomendados para esta
    montura" con el azul navy de "Todos los espejuelos" (#01326b) ===================== */
 .case-cross-title { color: var(--primary-blue, #01326b); }
+
+
+/* ===================== ETAPA50 · responsive: "Recomendados para esta montura" en una
+   sola linea (tamano reducido) ===================== */
+@media (max-width: 720px) {
+  .case-cross-title { font-size: clamp(15px, 4.7vw, 19px); white-space: nowrap; letter-spacing: -0.02em; }
+}
