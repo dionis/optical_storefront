@@ -540,7 +540,7 @@ export default function ProductDetail() {
 
       {related.length > 0 && (
         <section className="section">
-          <h2 className="section-title">{t("pdp.moreOf")} {product.brand}</h2>
+          <h2 className="section-title case-cross-title">{t("pdp.moreOf")} {product.brand}</h2>
           <div className="product-grid">
             {related.map((p) => <ProductCard key={p.slug} product={p} />)}
           </div>

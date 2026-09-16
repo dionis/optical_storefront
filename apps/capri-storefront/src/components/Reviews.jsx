@@ -78,7 +78,7 @@ export default function Reviews({ product }) {
 
   return (
     <section className="section reviews">
-      <h2 className="section-title">{t("rev.title")}</h2>
+      <h2 className="section-title case-cross-title">{t("rev.title")}</h2>
       <div className="rev-summary">
         {hasReviews ? (
           <div className="rev-avg">
