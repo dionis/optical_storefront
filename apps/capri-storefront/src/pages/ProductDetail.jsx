@@ -531,8 +531,7 @@ export default function ProductDetail() {
       {/* Cross-sell: recommended cases */}
       <section className="section case-cross">
         <div className="case-cross-head">
-          <h2 className="section-title">{t("case.recommend")}</h2>
-          <span className="muted">{t("case.recommendSub")}</span>
+          <h2 className="section-title case-cross-title">{t("case.recommendSub")}</h2>
         </div>
         <div className="case-grid three">
           {cases.map((c) => <CaseCard key={c.slug} item={c} compact />)}
