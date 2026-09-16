@@ -34,7 +34,7 @@ export default function CaseCard({ item }) {
   const pick = (e, i) => { e.preventDefault(); e.stopPropagation(); setActive(i); };
 
   return (
-    <div className="card">
+    <div className="card card-case">
       <div className="card-media">
         <div className="card-actions">
           <button
