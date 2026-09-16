@@ -5099,10 +5099,10 @@ button.card-genre {
 .pdp-idtag-model { text-align: left; }
 
 /* Sello = LOGO real de la marca (pastilla blanca, wordmark contenido). */
-.pdp-brandseal.has-logo { width: auto; min-width: 46px; height: 30px; border-radius: 9px; padding: 4px 10px; background: #fff; border: 1.5px solid #e3e9f2; }
+.pdp-brandseal.has-logo { width: auto; min-width: 48px; height: 42px; border-radius: 9px; padding: 3px 7px; background: #fff; border: 1.5px solid #e3e9f2; box-shadow: 0 3px 10px -3px rgba(16, 34, 84, .25); }
 .pdp-brandseal.has-logo::after { display: none; }
 .pdp-brandseal.has-logo .pdp-brandseal-mono { display: none; }
-.pdp-brandseal-img { height: 100%; width: auto; max-width: 92px; object-fit: contain; display: block; }
+.pdp-brandseal-img { height: 100%; width: auto; max-width: 120px; object-fit: contain; display: block; }
 
 /* El tooltip ahora abre a la DERECHA (el sello quedo a la izquierda). */
 .pdp-brandseal-tip { right: auto; left: calc(100% + 10px); transform-origin: left center; }
@@ -5111,7 +5111,7 @@ button.card-genre {
 @media (max-width: 720px) {
   .pdp-main .heart { left: auto !important; right: 10px !important; }
   .pdp-idtag { left: 10px; right: auto; top: 9px; gap: 7px; max-width: 74%; }
-  .pdp-brandseal.has-logo { min-width: 40px; height: 26px; padding: 3px 8px; }
-  .pdp-brandseal-img { max-width: 78px; }
+  .pdp-brandseal.has-logo { min-width: 42px; height: 34px; padding: 2px 6px; }
+  .pdp-brandseal-img { max-width: 100px; }
   .pdp-main.zoom .pdp-360stack { transform: scale(1.25); }
 }
