@@ -5177,3 +5177,24 @@ button.card-genre {
 @media (max-width: 720px) {
   .pdp-stars { left: 14px; bottom: 15px; font-size: 19px; }
 }
+
+
+/* ===================== ETAPA47 · pestaña "Descripcion del producto" (marketing, 2 lineas
+   web / 4 responsive) + material clicable que abre la ayuda de calidad ===================== */
+.pdp-pitch {
+  margin: 0; max-width: 640px; color: #33465f; font-size: 15px; line-height: 1.55;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+@media (max-width: 720px) {
+  .pdp-pitch { -webkit-line-clamp: 4; line-clamp: 4; font-size: 14px; }
+}
+
+/* Material clicable (abre la ayuda de calidad). */
+.pdp-fact-click { cursor: pointer; transition: background .15s ease, box-shadow .15s ease; border-radius: 12px; }
+.pdp-fact-click:hover { background: rgba(1, 50, 107, .05); }
+.pdp-fact-click.on { background: rgba(1, 50, 107, .07); box-shadow: inset 0 0 0 1.5px rgba(1, 50, 107, .35); }
+.pdp-fact-help { margin-left: 5px; align-self: flex-start; color: var(--primary-blue, #01326b); opacity: .55; font-size: 13px; line-height: 1; }
+
+/* Caja de ayuda del material (aparece bajo los datos). */
+.pdp-mathelp { margin-top: 10px; animation: matHelpIn .2s ease; }
+@keyframes matHelpIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

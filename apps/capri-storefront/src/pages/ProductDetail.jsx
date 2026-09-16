@@ -57,6 +57,27 @@ function oneMeasure(v) {
   return s;
 }
 
+// Descripcion de marketing generada por montura (sin exagerar). Se arma con los
+// atributos (forma, material, publico) para que cada ficha tenga su texto. Corto
+// a proposito: ~2 lineas en web y ~4 en responsive (ademas se recorta por CSS).
+function productPitch(product, lang, tvFn) {
+  const a = product.attributes || {};
+  const shape = (tvFn(a.shape) || "").toLowerCase();
+  const mat = ((a.material || []).map(tvFn).filter(Boolean)[0] || "").toLowerCase();
+  const kids = a.age === "Niños";
+  const g = a.gender;
+  if (lang === "en") {
+    const who = kids ? "Kids' glasses" : g === "Hombres" ? "Men's frames" : g === "Señoras" ? "Women's frames" : "Unisex frames";
+    const sp = shape ? `${shape} ` : "";
+    const mp = mat ? `in ${mat} ` : "";
+    return `${who} ${sp}${mp}— versatile for any occasion, light and comfortable for everyday wear. Use them as your daily glasses and fit them with prescription or sun lenses.`.replace(/\s+/g, " ").trim();
+  }
+  const who = kids ? "Espejuelos infantiles" : g === "Hombres" ? "Espejuelos para él" : g === "Señoras" ? "Espejuelos para ella" : "Espejuelos unisex";
+  const sp = shape ? `en ${shape} ` : "";
+  const mp = mat ? `de ${mat} ` : "";
+  return `${who} ${sp}${mp}— versátiles para cualquier ocasión, livianos y cómodos para el día a día. Úsalos como lentes diarios y adáptalos con cristales recetados o de sol.`.replace(/\s+/g, " ").trim();
+}
+
 export default function ProductDetail() {
   const { slug } = useParams();
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
@@ -64,6 +85,7 @@ export default function ProductDetail() {
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
   const [tab, setTab] = useState("detalles");
+  const [matHelp, setMatHelp] = useState(false); // ayuda de calidad del material (al click)
   // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
@@ -395,9 +417,14 @@ export default function ProductDetail() {
           {/* Datos clave con iconos: material · medidas · género. */}
           <div className="pdp-facts">
             {frameMaterials.length > 0 && (
-              <div className="pdp-fact">
+              <div className={`pdp-fact ${frameEdu ? "pdp-fact-click" : ""} ${matHelp ? "on" : ""}`}
+                   role={frameEdu ? "button" : undefined} tabIndex={frameEdu ? 0 : undefined}
+                   aria-expanded={frameEdu ? matHelp : undefined}
+                   onClick={() => { if (frameEdu) setMatHelp((v) => !v); }}
+                   onKeyDown={(e) => { if (frameEdu && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setMatHelp((v) => !v); } }}>
                 <IconMaterial className="pdp-fact-ic" />
                 <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.material")}</span><b>{frameMaterials.map(tv).join(" · ")}</b></div>
+                {frameEdu && <span className="pdp-fact-help" aria-hidden="true">ⓘ</span>}
               </div>
             )}
             {measures && (
@@ -413,6 +440,21 @@ export default function ProductDetail() {
               </div>
             )}
           </div>
+
+          {/* Ayuda de calidad del material: se abre al hacer clic en "Material". */}
+          {matHelp && frameEdu && (
+            <div className="frame-quality pdp-mathelp">
+              <div className="frame-quality-head">
+                <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
+                <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+              </div>
+              {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
+              <ul className="frame-quality-list">
+                <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
+                <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
+              </ul>
+            </div>
+          )}
 
           {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
               recetas para elegir lentes y comprar — no se pierde esa función). */}
@@ -440,42 +482,8 @@ export default function ProductDetail() {
       <div className="pdp-tabpanel">
         {tab === "detalles" && (
           <div className="pdp-details">
-            {/* Ficha comercial del marco: modelo, colección, material. */}
-            <div className="frame-id">
-              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
-              <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
-              {frameMaterials.length > 0 && (
-                <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
-              )}
-            </div>
-
-            <table className="specs">
-              <tbody>
-                <tr><td>{t("spec.brand")}</td><td>{product.brand}</td></tr>
-                <tr><td>{t("spec.shape")}</td><td>{tv(product.attributes.shape) || "—"}</td></tr>
-                <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
-                <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
-                <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
-                <tr><td>{t("spec.eye")}</td><td>{oneMeasure(product.attributes.eye_size)}</td></tr>
-                <tr><td>{t("spec.bridge")}</td><td>{oneMeasure(product.attributes.bridge_size)}</td></tr>
-                <tr><td>{t("spec.temple")}</td><td>{oneMeasure(product.attributes.temple_length)}</td></tr>
-              </tbody>
-            </table>
-
-            {/* Educación de calidad del material del marco. */}
-            {frameEdu && (
-              <div className="frame-quality">
-                <div className="frame-quality-head">
-                  <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
-                  <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
-                </div>
-                {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
-                <ul className="frame-quality-list">
-                  <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
-                  <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
-                </ul>
-              </div>
-            )}
+            {/* Descripción de marketing (2 lineas web / 4 responsive por CSS). */}
+            <p className="pdp-pitch">{productPitch(product, lang, tv)}</p>
           </div>
         )}
 
