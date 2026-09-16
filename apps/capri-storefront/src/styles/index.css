@@ -5198,3 +5198,15 @@ button.card-genre {
 /* Caja de ayuda del material (aparece bajo los datos). */
 .pdp-mathelp { margin-top: 10px; animation: matHelpIn .2s ease; }
 @keyframes matHelpIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+
+/* ===================== ETAPA48 · ayuda del material como VENTANA EMERGENTE (modal) al
+   frente, con boton de cerrar; no desplaza ni tapa la pantalla ===================== */
+.pdp-matmodal { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(10, 22, 48, .55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); animation: matFadeIn .16s ease; }
+.pdp-matmodal-card { position: relative; width: 100%; max-width: 440px; max-height: 85vh; overflow: auto; background: #fff; border-radius: 18px; padding: 24px 22px; box-shadow: 0 30px 80px -20px rgba(10, 22, 48, .6); animation: matPop .2s ease; }
+.pdp-matmodal-x { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: none; background: #eef2f8; color: #33465f; font-size: 22px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease; z-index: 1; }
+.pdp-matmodal-x:hover { background: #e0e7f2; }
+.pdp-matmodal .frame-quality { margin: 0; border: none; box-shadow: none; padding: 0; background: none; }
+.pdp-matmodal .frame-quality-head { padding-right: 34px; }
+@keyframes matFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes matPop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }

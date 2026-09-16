@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
@@ -90,7 +91,16 @@ export default function ProductDetail() {
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
   const [view, setView] = useState("front");
-  useEffect(() => { setView("front"); }, [slug, active]);
+  useEffect(() => { setView("front"); setMatHelp(false); }, [slug, active]);
+  // Modal de calidad del material: bloquea el scroll de fondo y cierra con ESC.
+  useEffect(() => {
+    if (!matHelp) return;
+    const onKey = (e) => { if (e.key === "Escape") setMatHelp(false); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [matHelp]);
   // Timers del botón 360 (giro continuo al mantener pulsado).
   const spinTimer = useRef(null);
   const spinHold = useRef(null);
@@ -441,19 +451,25 @@ export default function ProductDetail() {
             )}
           </div>
 
-          {/* Ayuda de calidad del material: se abre al hacer clic en "Material". */}
-          {matHelp && frameEdu && (
-            <div className="frame-quality pdp-mathelp">
-              <div className="frame-quality-head">
-                <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
-                <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+          {/* Ayuda de calidad del material: ventana emergente (modal) al frente. */}
+          {matHelp && frameEdu && createPortal(
+            <div className="pdp-matmodal" role="dialog" aria-modal="true" onClick={() => setMatHelp(false)}>
+              <div className="pdp-matmodal-card" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="pdp-matmodal-x" onClick={() => setMatHelp(false)} aria-label={lang === "en" ? "Close" : "Cerrar"}>×</button>
+                <div className="frame-quality">
+                  <div className="frame-quality-head">
+                    <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
+                    <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+                  </div>
+                  {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
+                  <ul className="frame-quality-list">
+                    <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
+                    <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
+                  </ul>
+                </div>
               </div>
-              {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
-              <ul className="frame-quality-list">
-                <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
-                <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
-              </ul>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
