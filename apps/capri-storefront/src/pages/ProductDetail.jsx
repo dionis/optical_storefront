@@ -19,6 +19,8 @@ import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
 import { GENERATED_INDEX, GENERATED_VIEWS, videosBySku } from "../data/frameMediaSample.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
+import { BRAND_BY_SLUG } from "../data/brands.js";
+import { measureBBox, getCachedBBox, fitTransform } from "../data/frameFit.js";
 
 // El catálogo NO trae un slug fiable, así que la unión con las vistas generadas se
 // hace por SKU normalizado (coincide en las 21 monturas del piloto).
@@ -61,6 +63,47 @@ export default function ProductDetail() {
   const spinTimer = useRef(null);
   const spinHold = useRef(null);
   useEffect(() => () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); }, []);
+  // Auto-recorte del blanco: mide el bbox de cada imagen del color actual y calcula
+  // el transform que la ajusta a su recuadro (recorta el máximo de blanco). Se
+  // recalcula al cambiar de montura/color y al redimensionar (web ↔ responsive).
+  const stackRef = useRef(null);
+  const mainRef = useRef(null);
+  const [fits, setFits] = useState({});
+  useEffect(() => {
+    const p = product;
+    if (!p) { setFits({}); return; }
+    const gv = GENERATED_VIEWS[SKU_TO_HANDLE[String(p.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const col = p.colors[active];
+    const v360 = build360(gv && col ? gv[col.name] : null);
+    const entries = VIEW_ORDER.filter((v) => v360[v]).map((v) => ({ v, src: resolveImage(v360[v].key), mirror: v360[v].mirror }));
+    const singleSrc = col ? col.image : null;
+    let alive = true;
+    const recompute = () => {
+      if (!alive) return;
+      if (entries.length) {
+        const el = stackRef.current; if (!el) return;
+        const W = el.clientWidth, H = el.clientHeight, next = {};
+        for (const { v, src, mirror } of entries) {
+          const bb = getCachedBBox(src);
+          const st = bb ? fitTransform(W, H, bb, mirror) : null;
+          if (st) next[v] = st;
+        }
+        setFits(next);
+      } else {
+        const el = mainRef.current; if (!el) return;
+        const bb = getCachedBBox(singleSrc);
+        const st = bb ? fitTransform(el.clientWidth, el.clientHeight, bb, false) : null;
+        setFits(st ? { single: st } : {});
+      }
+    };
+    const srcs = entries.length ? entries.map((e) => e.src) : [singleSrc];
+    Promise.all(srcs.map((s) => measureBBox(s))).then(() => recompute());
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    const target = entries.length ? stackRef.current : mainRef.current;
+    if (target) ro.observe(target);
+    return () => { alive = false; ro.disconnect(); };
+  }, [product, active]);
   // Precarga de las 4 vistas del color actual → giro fluido sin parpadeo.
   useEffect(() => {
     if (!product) return;
@@ -162,6 +205,10 @@ export default function ProductDetail() {
   // monograma es más limpio y fiable como "sello de calidad".
   const brandWords = (product.brand || "").trim().split(/\s+/).filter(Boolean);
   const brandInitials = (brandWords.length >= 2 ? (brandWords[0][0] + brandWords[1][0]) : (brandWords[0] || "").slice(0, 1)).toUpperCase();
+  // Sello de calidad = logo REAL de la marca (el mismo del catálogo/sección Marcas).
+  // Si no hay logo para esta marca, cae al monograma de iniciales.
+  const brandInfo = BRAND_BY_SLUG[product.brand_slug];
+  const brandLogo = brandInfo ? brandInfo.logo : null;
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
     .filter((x) => x != null && x !== "").join(" - ");
   const genderVal = product.attributes.gender;
@@ -233,13 +280,17 @@ export default function ProductDetail() {
                 )}
               </div>
             )}
-            <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+            <div ref={mainRef} className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                       aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
               {/* Identidad arriba a la derecha: sello de marca (hover → nombre) + modelo/color. */}
               <div className="pdp-idtag" onClick={(e) => e.stopPropagation()}>
-                <span className="pdp-brandseal" tabIndex={0} role="img" aria-label={product.brand} title={product.brand}>
+                <span className={`pdp-brandseal ${brandLogo ? "has-logo" : ""}`} tabIndex={0} role="img" aria-label={product.brand} title={product.brand}>
+                  {brandLogo && (
+                    <img className="pdp-brandseal-img" src={brandLogo} alt={product.brand} loading="lazy"
+                         onError={(e) => { const s = e.currentTarget.closest(".pdp-brandseal"); if (s) s.classList.remove("has-logo"); e.currentTarget.style.display = "none"; }} />
+                  )}
                   <span className="pdp-brandseal-mono">{brandInitials}</span>
                   <span className="pdp-brandseal-tip">{product.brand}</span>
                 </span>
@@ -269,19 +320,22 @@ export default function ProductDetail() {
               ) : hasViews ? (
                 /* Las 4 vistas pre-renderizadas y apiladas; sólo cambia la opacidad
                    → giro continuo sin parpadeo al cambiar de foto. */
-                <div className="pdp-360stack">
+                <div className="pdp-360stack" ref={stackRef}>
                   {VIEW_ORDER.filter((v) => views360[v]).map((v) => (
-                    <img key={v} src={resolveImage(views360[v].key)} draggable="false"
-                         alt={`${product.name} ${color.name} · ${t(`pdp.view.${v}`)}`}
-                         className={`pdp-360frame ${views360[v].mirror ? "mirror" : ""} ${view === v ? "on" : ""}`}
-                         onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                    <div key={v} className={`pdp-360fit ${view === v ? "on" : ""}`} style={fits[v] || undefined}>
+                      <img src={resolveImage(views360[v].key)} draggable="false"
+                           alt={`${product.name} ${color.name} · ${t(`pdp.view.${v}`)}`}
+                           className={`pdp-360frame ${views360[v].mirror ? "mirror" : ""} ${view === v ? "on" : ""}`}
+                           onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                    </div>
                   ))}
                 </div>
               ) : (
                 <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
+                     style={fits.single ? { transform: (mainMirror ? "scaleX(-1) " : "") + fits.single.transform, transformOrigin: fits.single.transformOrigin } : undefined}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}
-              {hasViews && (
+              {hasViews && !showingVideo && (
                 <button type="button" className="pdp-360" aria-label="360°" title="360°"
                         onPointerDown={start360} onPointerUp={stop360}
                         onPointerLeave={stop360} onPointerCancel={stop360}
