@@ -5141,3 +5141,11 @@ button.card-genre {
   .pdp-swatch { width: 19px; height: 19px; }
   .pdp-swatches { bottom: 12px; gap: 7px; }
 }
+
+
+/* ===================== ETAPA43 · WEB: recuadro del visor mas apaisado para que el
+   marco se vea grande y sin tanto blanco (el movil ya es 1.6). Riel a juego. ===================== */
+@media (min-width: 721px) {
+  .pdp .pdp-main { aspect-ratio: 1.65; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 50px; height: 50px; flex: 0 0 50px; }
+}
