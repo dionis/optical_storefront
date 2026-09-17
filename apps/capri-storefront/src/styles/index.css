@@ -5406,5 +5406,6 @@ button.card-genre {
    favorito. La sombra grande y difusa (var(--shadow)) hacia un halo marcado alrededor
    del corazon; en movil se deja una sombra minima y ajustada. Solo movil. ===================== */
 @media (max-width: 720px) {
-  .pdp-main .heart { box-shadow: 0 1px 2px rgba(23, 32, 58, .15) !important; }
+  /* Sin contorno: el corazon queda plano sobre la imagen (a pedido). */
+  .pdp-main .heart { box-shadow: none !important; border: none !important; }
 }
