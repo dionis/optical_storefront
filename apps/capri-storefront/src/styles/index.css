@@ -5409,3 +5409,15 @@ button.card-genre {
   /* Sin contorno: el corazon queda plano sobre la imagen (a pedido). */
   .pdp-main .heart { box-shadow: none !important; border: none !important; }
 }
+
+/* ===================== ETAPA61 · RESPONSIVE: agrandar la vista principal. El visor se
+   extiende casi hasta el borde de la pantalla (recupera el gutter de .pdp) y usa un
+   padding minimo, asi la armadura se ve mas grande. Las miniaturas (fila debajo) y el
+   selector de color mantienen su margen. Solo movil; en web no cambia. ===================== */
+@media (max-width: 720px) {
+  .pdp .pdp-stage { margin-left: -16px !important; margin-right: -16px !important; }
+  .pdp .pdp-stage .pdp-main { padding: 3px !important; }
+  /* La fila de miniaturas vuelve a su ancho normal (no full-bleed) para que
+     queden centradas y con aire. */
+  .pdp .pdp-stage .pdp-views { padding-left: 16px; padding-right: 16px; }
+}
