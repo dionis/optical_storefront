@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
+import { IconMaterial, IconMeasures, IconGender, IconCamera, IconCheck, Icon360, IconGlasses as IconGlassesUi } from "./UiIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
@@ -77,6 +78,39 @@ const IC_ZOOM = (
 );
 const IC_DOWN = (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
+);
+
+/* Iconos pequeños de la lista de recomendaciones (misma familia de trazo que el
+   resto del sitio: contorno, 2px, esquinas redondeadas). */
+const ic = (d) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+);
+const IC_LIGHT = ic(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>);
+const IC_FACE = ic(<><path d="M5 11a7 7 0 0 1 14 0c0 4.2-3.1 8-7 8s-7-3.8-7-8z" /><path d="M9 11h.01M15 11h.01M9.5 15c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1" /></>);
+const IC_PROFILE = ic(<><path d="M7 3.5c4 0 8 3 8 8 0 2 .8 2.6 1.8 3.4.7.6.4 1.6-.5 1.8l-2.3.5v2.3a1 1 0 0 1-1 1H9" /><path d="M7 3.5C4.5 5 3 8 3 11.5 3 16 6 20 10 20" /><path d="M10.5 11h.01" /></>);
+
+/* Ilustración de "Ejemplo" (silueta neutra, sin persona real): rostro de frente y
+   de perfil. Trazo navy sobre fondo suave, con el sello "Ejemplo" encima. */
+const EX_FRONT = (
+  <svg className="ts2-ex-illus" viewBox="0 0 120 150" role="img" aria-hidden="true">
+    <rect width="120" height="150" rx="10" fill="#eef2f8" />
+    <path d="M60 118c-24 0-34 14-37 24h74c-3-10-13-24-37-24z" fill="#c7d2e6" />
+    <ellipse cx="60" cy="66" rx="27" ry="32" fill="#dbe3f1" />
+    <path d="M33 60c0-19 12-30 27-30s27 11 27 30c2-1 4 2 3 7-1 4-4 5-5 5-2 12-13 22-25 22s-23-10-25-22c-1 0-4-1-5-5-1-5 1-8 3-7z" fill="#c7d2e6" />
+    <circle cx="50" cy="66" r="3" fill="#8092b3" /><circle cx="70" cy="66" r="3" fill="#8092b3" />
+    <path d="M52 80c3 2 5 3 8 3s5-1 8-3" stroke="#8092b3" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+  </svg>
+);
+const EX_SIDE = (
+  <svg className="ts2-ex-illus" viewBox="0 0 120 150" role="img" aria-hidden="true">
+    <rect width="120" height="150" rx="10" fill="#eef2f8" />
+    <path d="M64 118c-22 0-31 14-34 24h72c-2-10-12-24-38-24z" fill="#c7d2e6" />
+    <path d="M44 40c14-10 34-6 40 12 4 12 1 22-6 30-2 8-3 14-3 16 0 3-3 4-6 4H45c-9 0-17-8-19-20-3-19 5-34 18-42z" fill="#dbe3f1" />
+    <path d="M44 40c14-10 34-6 40 12 4 12 1 22-6 30-2 8-3 14-3 16" fill="none" stroke="#c7d2e6" strokeWidth="0" />
+    <circle cx="52" cy="66" r="3" fill="#8092b3" />
+    <path d="M40 74c-4 1-7 2-7 5s3 4 6 4" stroke="#8092b3" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    <circle cx="74" cy="72" r="6" fill="none" stroke="#8092b3" strokeWidth="2.2" />
+  </svg>
 );
 
 // Nombre de archivo al descargar: "frontal/lateral-<modelo> <serie> <color>.ext".
@@ -788,12 +822,20 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     { key: "bridge", label: t("fs.bridge"), value: bridgeD, Icon: IconBridge },
     { key: "temple", label: t("fs.temple"), value: templeD, Icon: IconTemple },
   ];
+  const genderLabel = a.gender ? tv(String(a.gender)) : null;
+  const measuresStr = [a.eye_size, a.bridge_size, a.temple_length]
+    .map((x) => String(x == null ? "" : x).trim())
+    .filter(Boolean)
+    .join(" - ") || null;
+  const colorNames = colors.map((c) => c.name).filter(Boolean).join(" · ");
   const specRows = [
     { key: "model", label: t("fs.model"),
       node: (<>{product.name}{product.brand ? <span className="fs-sub"> ({product.brand})</span> : null}</>) },
     { key: "color", label: t("fs.color"), node: color?.name || na },
     materialText && { key: "material", label: t("fs.material"), node: materialText },
     shapeText && { key: "shape", label: t("fs.shape"), node: shapeText },
+    genderLabel && { key: "gender", label: t("spec.gender"), node: genderLabel },
+    measuresStr && { key: "measures", label: t("fs.measures"), node: measuresStr },
   ].filter(Boolean);
 
   // ── Estado de cada caja de captura ──
@@ -801,46 +843,70 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     : camStatus === "denied" ? t("tryon.denied")
     : camStatus === "nocam" ? t("tryon.noCam") : "";
 
-  // Caja de captura (frontal o lateral). Se llama como función (no como <Componente/>)
-  // para no remontar el <video> en cada render y perder la cámara.
-  function capBox({ which, num, title, img, active, waiting }) {
+  // Tarjeta de un paso (frontal o lateral), con la distribución del diseño nuevo:
+  // encabezado (número + título + subtítulo + botón "Subir foto"), y cuerpo con
+  // [ejemplo] · [recuadro de captura/subida] · [lista de recomendaciones].
+  // Se llama como función (no como <Componente/>) para NO remontar el <video> en
+  // cada render y así no perder la cámara.
+  function stepCard({ which, num, title, sub, img, active, waiting, example, checks }) {
+    const inputRef = which === "front" ? frontInput : sideInput;
+    const live = active && camStatus === "ready" && !img;
     return (
-      <div className={`cap-box ${active ? "on" : ""}`}>
-        <div className="cap-head">
-          <span className="cap-title"><span className="cap-num">{num}</span>{title}</span>
-          <button type="button" className="cap-up"
-                  onClick={() => (which === "front" ? frontInput : sideInput).current?.click()}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-            {t(which === "front" ? "cap.upFront" : "cap.upSide")}
+      <section className={`ts2-step ${active ? "on" : ""}`}>
+        <div className="ts2-step-hd">
+          <span className="ts2-step-badge">{num}</span>
+          <div className="ts2-step-tt"><b>{title}</b><span>{sub}</span></div>
+          <button type="button" className="ts2-step-up" onClick={() => inputRef.current?.click()}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+            {t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
           </button>
         </div>
-        <div className="cap-media">
-          {img ? (
-            <>
-              <img src={img} alt={title} />
-              <span className="cap-badge cap-ok">✓ {t("cap.ready")}</span>
-              <button type="button" className="cap-retake" onClick={() => retake(which)}
-                      title={t("cap.retake")} aria-label={t("cap.retake")}>
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
-                <span>{t("cap.retake")}</span>
-              </button>
-            </>
-          ) : active && camStatus === "ready" ? (
-            <>
-              <video ref={attachVideo} className="cap-video" playsInline muted />
-              <span className="cap-badge">● {t("cap.auto")}</span>
-              {count > 0 && <div className="cap-count">{count}</div>}
-              <div className="cap-guide">{guide || t(which === "front" ? "cap.lookFront" : "cap.turnLeft")}</div>
-            </>
-          ) : (
-            <div className="cap-ph">
-              {camStatus !== "ready" ? camMsg
-                : waiting ? t("cap.waitFront")
-                : which === "side" ? t("cap.sideHint") : ""}
-            </div>
-          )}
+        <div className="ts2-step-body">
+          <figure className="ts2-ex">
+            {example}
+            <figcaption className="ts2-ex-badge"><IconCheck className="ts2-ex-badge-ic" /> {t("tryon2.example")}</figcaption>
+          </figure>
+
+          <div className={`ts2-drop ${img ? "has" : ""} ${live ? "live" : ""}`}
+               role="button" tabIndex={0}
+               onClick={() => { if (!img && !live) inputRef.current?.click(); }}
+               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !img && !live) { e.preventDefault(); inputRef.current?.click(); } }}
+               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
+               onDragLeave={(e) => e.currentTarget.classList.remove("over")}
+               onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("over"); const f = e.dataTransfer?.files && e.dataTransfer.files[0]; if (f) onUpload(which, f); }}>
+            {img ? (
+              <>
+                <img src={img} alt={title} className="ts2-drop-img" />
+                <span className="ts2-badge ts2-ok"><IconCheck className="ts2-badge-ic" /> {t("cap.ready")}</span>
+                <button type="button" className="ts2-retake" onClick={(e) => { e.stopPropagation(); retake(which); }}
+                        title={t("cap.retake")} aria-label={t("cap.retake")}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+                  <span>{t("cap.retake")}</span>
+                </button>
+              </>
+            ) : live ? (
+              <>
+                <video ref={attachVideo} className="ts2-video" playsInline muted />
+                <span className="ts2-badge"><span className="ts2-live-dot" aria-hidden="true" /> {t("cap.auto")}</span>
+                {count > 0 && <div className="ts2-count">{count}</div>}
+                <div className="ts2-guide">{guide || t(which === "front" ? "cap.lookFront" : "cap.turnLeft")}</div>
+              </>
+            ) : (
+              <div className="ts2-drop-ph">
+                <span className="ts2-drop-cam"><IconCamera className="ts2-drop-cam-ic" /></span>
+                <b>{camStatus !== "ready" ? camMsg : t("tryon2.drop")}</b>
+                <small>{t("tryon2.dropHint")}</small>
+              </div>
+            )}
+          </div>
+
+          <ul className="ts2-checks">
+            {checks.map((c, i) => (
+              <li key={i}><span className="ts2-check-ic">{c.ic}</span>{c.tx}</li>
+            ))}
+          </ul>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -977,80 +1043,157 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <input ref={sideInput} type="file" accept="image/*" hidden
              onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
 
-      <div className="tryon-studio-grid">
-        {/* Izquierda: captura guiada (frontal + lateral) o, ya con el resultado, las
-            imágenes con los espejuelos puestos — todo en la MISMA ventana. */}
-        <div className="tryon-studio-cap">
+      <div className="tryon-studio-grid ts2wrap">
+        <div className="ts2">
+          {/* Resumen del marco: material · medidas · género (mismo lenguaje visual
+              que la ficha del producto). */}
+          <div className="ts2-facts">
+            <div className="ts2-fact">
+              <IconMaterial className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("spec.material")}</span>
+                <b>{materialText || na}</b>
+                <small>{t("tryon2.materialSub")}</small>
+              </div>
+            </div>
+            <div className="ts2-fact">
+              <IconMeasures className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("pdp.metaMeasures")}</span>
+                <b>{measuresStr || "—"}</b>
+                <small>{t("tryon2.measuresSub")}</small>
+              </div>
+            </div>
+            <div className="ts2-fact">
+              <IconGender className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("spec.gender")}</span>
+                <b>{genderLabel || na}</b>
+              </div>
+            </div>
+          </div>
+
+          {/* Colores disponibles */}
+          {colors.length > 0 && (
+            <div className="ts2-colors">
+              <div className="ts2-colors-sw" role="listbox" aria-label={t("tryon2.colorsAvailable")}>
+                {colors.map((c, i) => (
+                  <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                          className={`ts2-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                          title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                ))}
+              </div>
+              <div className="ts2-colors-tx">
+                <b>{t("tryon2.colorsAvailable")}</b>
+                <span>{colorNames}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Pasos de captura (frontal + lateral) o el resultado con las gafas puestas */}
           {mState === "result" ? resultViews() : (
             <>
-              {capBox({ which: "front", num: "1", title: t("cap.front"), img: frontImg, active: phase === "front", waiting: false })}
-              {capBox({ which: "side", num: "2", title: t("cap.side"), img: sideImg, active: phase === "side", waiting: phase === "front" })}
+              {stepCard({
+                which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.frontSub"),
+                img: frontImg, active: phase === "front", waiting: false, example: EX_FRONT,
+                checks: [
+                  { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                  { ic: IC_FACE, tx: t("tryon2.chk.face") },
+                  { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                  { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.lookFront") },
+                ],
+              })}
+              {stepCard({
+                which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.sideSub"),
+                img: sideImg, active: phase === "side", waiting: phase === "front", example: EX_SIDE,
+                checks: [
+                  { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                  { ic: IC_PROFILE, tx: t("tryon2.chk.profile") },
+                  { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                  { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.headStraight") },
+                ],
+              })}
             </>
           )}
-        </div>
 
-        {/* Derecha: ficha profesional del marco ("Información de la montura") */}
-        <aside className="fs-card">
-          <div className="fs-hd"><IconGlasses className="fs-hd-ic" />{t("fs.frameInfo")}</div>
+          {/* Información de la montura (ancho completo, abajo) */}
+          <aside className="fs-card ts2-frame">
+            <div className="fs-hd">
+              <IconGlasses className="fs-hd-ic" />
+              <span className="ts2-frame-title">{t("fs.frameInfo")}</span>
+              <button type="button" className="ts2-360" onClick={onClose}>
+                <Icon360 className="ts2-360-ic" />{t("tryon2.view360")}
+              </button>
+            </div>
 
-          <div className="fs-top">
-            <div className="fs-info">
-              <dl className="fs-specs">
-                {specRows.map((row) => (
-                  <div className="fs-row" key={row.key}>
-                    <dt>{row.label}</dt>
-                    <dd>{row.node}</dd>
+            <div className="fs-top">
+              <div className="fs-info">
+                <dl className="fs-specs">
+                  {specRows.map((row) => (
+                    <div className="fs-row" key={row.key}>
+                      <dt>{row.label}</dt>
+                      <dd>{row.node}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {colors.length > 1 && (
+                  <div className="ts2-frame-colors">
+                    <span className="ts2-frame-colors-k">{t("tryon2.colorsAvailable")}</span>
+                    <div className="fs-swatches" role="listbox" aria-label={product.name}>
+                      {colors.map((c, i) => (
+                        <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                                className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                                title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="ts2-frame-photo">
+                <div className="fs-photo">
+                  {color?.image
+                    ? <img src={color.image} referrerPolicy="no-referrer"
+                           alt={`${product.name} ${color?.name || ""}`}
+                           onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+                    : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+                </div>
+                <button type="button" className="ts2-morephotos" onClick={onClose}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></svg>
+                  {t("tryon2.morePhotos")}
+                </button>
+              </div>
+            </div>
+
+            <div className="fs-measures">
+              <div className="fs-mhead">
+                {cells.map((c) => <span key={c.key}>{c.label}</span>)}
+              </div>
+              <div className="fs-mbody">
+                {cells.map(({ key, value, Icon }) => (
+                  <div className="fs-mcell" key={key}>
+                    <Icon className="fs-mic" />
+                    <b className="fs-mval">{value || "—"}</b>
                   </div>
                 ))}
-              </dl>
-              {colors.length > 1 && (
-                <div className="fs-swatches" role="listbox" aria-label={product.name}>
-                  {colors.map((c, i) => (
-                    <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                            className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                            title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
-            <div className="fs-photo">
-              {color?.image
-                ? <img src={color.image} referrerPolicy="no-referrer"
-                       alt={`${product.name} ${color?.name || ""}`}
-                       onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
-                : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-            </div>
-          </div>
 
-          <div className="fs-measures">
-            <div className="fs-mhead">
-              {cells.map((c) => <span key={c.key}>{c.label}</span>)}
+            {/* Pie profesional: fecha, hora y logo RUBI LENS */}
+            <div className="fs-foot">
+              <div className="fs-foot-meta">
+                <span className="fs-foot-date">
+                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
+                  {dateStr}
+                </span>
+                <span className="fs-foot-time">
+                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
+                  {timeStr}
+                </span>
+              </div>
+              <img src="/logo.svg" alt="RUBI LENS" className="fs-foot-logo" />
             </div>
-            <div className="fs-mbody">
-              {cells.map(({ key, value, Icon }) => (
-                <div className="fs-mcell" key={key}>
-                  <Icon className="fs-mic" />
-                  <b className="fs-mval">{value || "—"}</b>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pie profesional: fecha, hora y logo RUBI LENS */}
-          <div className="fs-foot">
-            <div className="fs-foot-meta">
-              <span className="fs-foot-date">
-                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
-                {dateStr}
-              </span>
-              <span className="fs-foot-time">
-                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
-                {timeStr}
-              </span>
-            </div>
-            <img src="/logo.svg" alt="RUBI LENS" className="fs-foot-logo" />
-          </div>
-        </aside>
+          </aside>
+        </div>
       </div>
 
       {frontImg && sideImg && mState === "idle" && (
