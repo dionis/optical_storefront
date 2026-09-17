@@ -5271,3 +5271,76 @@ button.card-genre {
   .pdp-measure-help { width: 22px; height: 22px; font-size: 13px; top: 5px; right: 5px; }
   .pdp-measmodal-img { max-height: 120px; }
 }
+
+/* ===================== ETAPA55 · pestaña Opiniones: encabezado navy "Sé el primero
+   en reseñar esta montura" (una sola linea, a todo el ancho del responsive),
+   estrellas transparentes hasta llenarse (con vista previa al pasar el cursor),
+   campos con iconos (nombre / movil / email / reseña) y ventana de confirmacion
+   con casillas de ofertas y novedades por email / SMS. Aplica a web y responsive.
+   ===================== */
+
+/* Encabezado: hereda el navy de .case-cross-title; forzamos una sola linea. */
+.reviews > .section-title.rev-befirst { white-space: nowrap; }
+
+/* Estrellas transparentes (solo contorno) hasta seleccionarse o al hacer hover. */
+.stars-input.editable button {
+  color: transparent;
+  -webkit-text-stroke: 1.4px #c7ccd6;
+  font-size: 26px;
+  transition: color .12s ease, -webkit-text-stroke-color .12s ease;
+}
+.stars-input.editable button.on { color: #f2b01e; -webkit-text-stroke-color: #f2b01e; }
+.stars-input.editable button:hover { -webkit-text-stroke-color: #f2b01e; }
+
+/* Campos del formulario, cada uno con su icono de referencia. */
+.rev-field {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+  padding: 0 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.rev-field:focus-within {
+  border-color: var(--primary-blue, var(--blue));
+  box-shadow: 0 0 0 3px rgba(14, 90, 208, .12);
+}
+.rev-field-ic { display: inline-flex; color: #8a93a3; flex: 0 0 auto; }
+.rev-field:focus-within .rev-field-ic { color: var(--primary-blue, var(--blue)); }
+.rev-field .rev-input {
+  border: none; outline: none; background: none; width: 100%;
+  padding: 12px 0; font-size: 14px; font-family: inherit; color: var(--ink);
+}
+.rev-field .rev-input::placeholder { color: #9aa2b0; }
+.rev-field-area { align-items: flex-start; }
+.rev-field-area .rev-field-ic { margin-top: 13px; }
+.rev-field .rev-text { resize: vertical; min-height: 78px; line-height: 1.45; }
+.rev-err { color: #b42318; font-weight: 600; font-size: 13px; }
+
+/* --- Ventana de confirmacion (reutiliza el overlay .pdp-matmodal de ETAPA48) --- */
+.rev-confirm-card { max-width: 460px; }
+.rev-confirm-title { margin: 0 34px 6px 0; color: var(--primary-blue, #01326b); font-size: 20px; }
+.rev-confirm-text { margin: 0 0 16px; color: #47505f; font-size: 14.5px; line-height: 1.5; }
+.rev-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px;
+  margin-bottom: 10px; cursor: pointer; font-size: 14px; color: var(--ink);
+  transition: border-color .15s ease, background .15s ease;
+}
+.rev-opt:hover { border-color: var(--primary-blue, var(--blue)); background: #f6f9ff; }
+.rev-opt input[type="checkbox"] {
+  width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer;
+  accent-color: var(--primary-blue, var(--blue));
+}
+.rev-opt-ic { display: inline-flex; color: var(--primary-blue, var(--blue)); flex: 0 0 auto; }
+.rev-opt-note { margin: 2px 0 18px; color: #8a93a3; font-size: 12.5px; }
+.rev-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.rev-confirm-actions .btn { padding: 11px 20px; }
+.btn-ghost { background: #fff; border-color: var(--line); color: #47505f; }
+.btn-ghost:hover:not(:disabled) { background: #f2f3f5; border-color: #cfd4dd; }
+
+@media (max-width: 720px) {
+  /* Encabezado en una sola linea ocupando todo el ancho, escalando con la ventana. */
+  .reviews > .section-title.rev-befirst { font-size: clamp(14px, 4.7vw, 24px); letter-spacing: -0.03em; }
+  .stars-input.editable button { font-size: 30px; }
+  .rev-confirm-actions { flex-direction: column-reverse; }
+  .rev-confirm-actions .btn { width: 100%; }
+}

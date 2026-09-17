@@ -106,6 +106,9 @@ interface CreateBody {
   author_name?: string;
   name?: string;
   author_email?: string | null;
+  author_phone?: string | null;
+  wants_email_updates?: boolean | null;
+  wants_sms_updates?: boolean | null;
   locale?: string | null;
   photo_urls?: string[] | null;
 }
@@ -130,6 +133,9 @@ export async function POST(
       body: String(body.body ?? ""),
       author_name: String(body.author_name ?? body.name ?? ""),
       author_email: body.author_email ?? null,
+      author_phone: body.author_phone ?? null,
+      wants_email_updates: body.wants_email_updates ?? false,
+      wants_sms_updates: body.wants_sms_updates ?? false,
       locale: body.locale ?? null,
       photo_urls: body.photo_urls ?? null,
     },

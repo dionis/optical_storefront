@@ -89,8 +89,25 @@ export async function uploadReviewPhotos(files) {
   return res?.urls || [];
 }
 
-/** Publish a review. Resolves with the stored record as other shoppers see it. */
-export async function createReview({ handle, rating, body, authorName, authorEmail, locale, photoUrls }) {
+/**
+ * Publish a review. Resolves with the stored record as other shoppers see it.
+ *
+ * `authorPhone` and the two marketing opt-ins are stored for the shop's own
+ * traceability and offer/announcement lists. The backend keeps them private —
+ * they are never part of what other shoppers read (see `toPublic`).
+ */
+export async function createReview({
+  handle,
+  rating,
+  body,
+  authorName,
+  authorEmail,
+  authorPhone,
+  wantsEmail,
+  wantsSms,
+  locale,
+  photoUrls,
+}) {
   const res = await medusa.client.fetch("/store/product-reviews", {
     method: "POST",
     body: {
@@ -99,6 +116,9 @@ export async function createReview({ handle, rating, body, authorName, authorEma
       body,
       author_name: authorName,
       author_email: authorEmail || null,
+      author_phone: authorPhone || null,
+      wants_email_updates: Boolean(wantsEmail),
+      wants_sms_updates: Boolean(wantsSms),
       locale: locale || null,
       photo_urls: photoUrls && photoUrls.length ? photoUrls : null,
     },

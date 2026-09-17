@@ -14,6 +14,9 @@ export interface CreateProductReviewInput {
   body: string;
   author_name: string;
   author_email?: string | null;
+  author_phone?: string | null;
+  wants_email_updates?: boolean | null;
+  wants_sms_updates?: boolean | null;
   locale?: string | null;
   /** Public URLs returned by POST /store/product-review-photos. */
   photo_urls?: string[] | null;
@@ -31,6 +34,9 @@ interface ValidatedProductReview {
   body: string;
   author_name: string;
   author_email: string | null;
+  author_phone: string | null;
+  wants_email_updates: boolean;
+  wants_sms_updates: boolean;
   locale: string;
   photo_urls: string | null;
 }
@@ -38,6 +44,7 @@ interface ValidatedProductReview {
 /** Hard caps so a single POST can't write an unbounded row. */
 const MAX_BODY_CHARS = 2000;
 const MAX_NAME_CHARS = 80;
+const MAX_PHONE_CHARS = 40;
 const MAX_PHOTOS = 3;
 
 /**
@@ -74,6 +81,17 @@ const validateReviewStep = createStep(
 
     const email = input.author_email ? String(input.author_email).trim().toLowerCase() : null;
 
+    // Phone is free text (international formats vary too much to validate
+    // meaningfully here); we only trim, cap the length, and drop it if empty.
+    const phoneRaw = String(input.author_phone || "").trim().slice(0, MAX_PHONE_CHARS);
+    const phone = phoneRaw || null;
+
+    // Marketing consent is a hard boolean: anything not an explicit true is
+    // treated as "did not opt in". An SMS opt-in without a number is meaningless,
+    // so it is only honoured when a phone was actually provided.
+    const wantsEmail = input.wants_email_updates === true;
+    const wantsSms = input.wants_sms_updates === true && Boolean(phone);
+
     // Only URLs our own upload route produced are stored. Without this check a
     // review body could point at any address on the internet and the product
     // page would dutifully render it — an open image-embed hole.
@@ -88,6 +106,9 @@ const validateReviewStep = createStep(
       body: body.slice(0, MAX_BODY_CHARS),
       author_name: authorName.slice(0, MAX_NAME_CHARS),
       author_email: email || null,
+      author_phone: phone,
+      wants_email_updates: wantsEmail,
+      wants_sms_updates: wantsSms,
       locale: input.locale === "en" ? "en" : "es",
       photo_urls: photos.length ? JSON.stringify(photos) : null,
     });
