@@ -5344,3 +5344,18 @@ button.card-genre {
   .rev-confirm-actions { flex-direction: column-reverse; }
   .rev-confirm-actions .btn { width: 100%; }
 }
+
+/* ===================== ETAPA56 · RESPONSIVE: quitar el video del visor y achicar las
+   vistas laterales para que la imagen principal se vea mucho mas grande. Solo movil;
+   en web el video y las vistas se mantienen igual. ===================== */
+@media (max-width: 720px) {
+  /* Fuera el video: ni su miniatura en el riel ni el reproductor. */
+  .pdp-stage .pdp-view-video { display: none !important; }
+  .pdp-stage .pdp-video { display: none !important; }
+
+  /* Vistas laterales mas pequenas -> el visor central gana ancho (y, por su
+     aspect-ratio, alto), asi la montura se ve mucho mas grande. */
+  .pdp .pdp-stage .pdp-views { width: 40px !important; gap: 7px !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 40px !important; height: 40px !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view img { padding: 3px; }
+}
