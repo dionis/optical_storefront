@@ -5349,9 +5349,8 @@ button.card-genre {
    vistas laterales para que la imagen principal se vea mucho mas grande. Solo movil;
    en web el video y las vistas se mantienen igual. ===================== */
 @media (max-width: 720px) {
-  /* Fuera el video: ni su miniatura en el riel ni el reproductor. */
-  .pdp-stage .pdp-view-video { display: none !important; }
-  .pdp-stage .pdp-video { display: none !important; }
+  /* NOTA: el video vuelve al riel como una miniatura mas, en la misma linea que
+     las vistas (a pedido). Ver ETAPA59. Aqui ya NO se oculta. */
 
   /* Vistas laterales mas pequenas -> el visor central gana ancho (y, por su
      aspect-ratio, alto), asi la montura se ve mucho mas grande. */
@@ -5386,4 +5385,19 @@ button.card-genre {
     aspect-ratio: 1 / 1 !important;
   }
   .pdp .pdp-stage .pdp-views .pdp-view img { padding: 4px; }
+}
+
+/* ===================== ETAPA58 · el zoom del visor NO debe agrandar el sello de marca.
+   La regla .pdp-main.zoom img (ETAPA37) escala TODAS las img del visor, incluido el
+   logo del sello; aqui se excluye para que la marca quede fija al hacer zoom. ===================== */
+.pdp-main.zoom .pdp-brandseal-img { transform: none !important; }
+
+/* ===================== ETAPA59 · RESPONSIVE: el video vuelve al riel como una miniatura
+   mas, en la MISMA LINEA que las vistas. Se muestran la miniatura (con su ▶) y el
+   reproductor. Con el video ya son hasta 5 miniaturas: un pelin mas chicas para que
+   entren en una sola linea. Solo movil; en web no cambia. ===================== */
+@media (max-width: 720px) {
+  .pdp .pdp-stage .pdp-views .pdp-view-video { display: block !important; }
+  .pdp .pdp-stage .pdp-video { display: block !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 56px !important; height: 56px !important; }
 }
