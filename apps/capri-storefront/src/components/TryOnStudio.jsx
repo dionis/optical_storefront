@@ -279,6 +279,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return () => clearTimeout(id);
   }, [finishGender]);
 
+  // En cuanto existe la foto FRONTAL, se van calculando POR DETRÁS nuestras medidas
+  // (MediaPipe, en el navegador — lo que ya tenemos estable) para que estén listas
+  // antes de pulsar "Calcular mis medidas". La IA (montaje) sigue en ese botón.
+  useEffect(() => {
+    if (frontImg) computeOurMeasurement(frontImg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontImg]);
+
   // ¿El cliente lleva espejuelos? Heurística por imagen: densidad de bordes +
   // reflejos en la zona de los ojos comparada con las mejillas. Con persistencia
   // (varios frames) para evitar falsos positivos puntuales. La SUBIDA MANUAL de la
@@ -885,16 +893,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     : camStatus === "denied" ? t("tryon.denied")
     : camStatus === "nocam" ? t("tryon.noCam") : "";
 
-  // Tarjeta de un paso (frontal o lateral), con la distribución del diseño nuevo:
-  // encabezado (número + título + subtítulo + botón "Subir foto"), y cuerpo con
-  // [ejemplo] · [recuadro de captura/subida] · [lista de recomendaciones].
-  // Se llama como función (no como <Componente/>) para NO remontar el <video> en
-  // cada render y así no perder la cámara.
-  function stepCard({ which, num, title, sub, img, active, waiting, example, checks }) {
+  // Paso del asistente (SOLO uno visible a la vez): la cámara a TODO EL ANCHO y,
+  // debajo, la referencia (ejemplo) + la lista de recomendaciones lado a lado. El
+  // mensaje ("Mire directo a la cámara" / "Gire la cabeza hacia un lado") va en la
+  // cabecera. Se llama como función (no como <Componente/>) para NO remontar el
+  // <video> en cada render y así no perder la cámara.
+  function stepCard({ which, num, title, sub, example, checks }) {
     const inputRef = which === "front" ? frontInput : sideInput;
-    const live = active && camStatus === "ready" && !img;
+    const live = camStatus === "ready";
     return (
-      <section className={`ts2-step ${active ? "on" : ""}`}>
+      <section className="ts2-step ts2-wiz on">
         <div className="ts2-step-hd">
           <span className="ts2-step-badge">{num}</span>
           <div className="ts2-step-tt"><b>{title}</b><span>{sub}</span></div>
@@ -905,36 +913,21 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             <span className="ts2-step-up-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
           </button>
         </div>
-        <div className="ts2-step-body">
-          <div className="ts2-cap-main">
-          <figure className="ts2-ex">
-            {example}
-            <figcaption className="ts2-ex-badge"><IconCheck className="ts2-ex-badge-ic" /> {t("tryon2.example")}</figcaption>
-          </figure>
-
-          <div className={`ts2-drop ${img ? "has" : ""} ${live ? "live" : ""}`}
+        <div className="ts2-wiz-body">
+          {/* Cámara a todo el ancho */}
+          <div className={`ts2-drop ts2-wiz-cam ${live ? "live" : ""}`}
                role="button" tabIndex={0}
-               onClick={() => { if (!img && !live) inputRef.current?.click(); }}
-               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !img && !live) { e.preventDefault(); inputRef.current?.click(); } }}
+               onClick={() => { if (!live) inputRef.current?.click(); }}
+               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !live) { e.preventDefault(); inputRef.current?.click(); } }}
                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
                onDragLeave={(e) => e.currentTarget.classList.remove("over")}
                onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("over"); const f = e.dataTransfer?.files && e.dataTransfer.files[0]; if (f) onUpload(which, f); }}>
-            {img ? (
-              <>
-                <img src={img} alt={title} className="ts2-drop-img" />
-                <span className="ts2-badge ts2-ok"><IconCheck className="ts2-badge-ic" /> {t("cap.ready")}</span>
-                <button type="button" className="ts2-retake" onClick={(e) => { e.stopPropagation(); retake(which); }}
-                        title={t("cap.retake")} aria-label={t("cap.retake")}>
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
-                  <span>{t("cap.retake")}</span>
-                </button>
-              </>
-            ) : live ? (
+            {live ? (
               <>
                 <video ref={attachVideo} className="ts2-video" playsInline muted />
                 <span className="ts2-badge"><span className="ts2-live-dot" aria-hidden="true" /> {t("cap.auto")}</span>
                 {count > 0 && <div className="ts2-count">{count}</div>}
-                <div className="ts2-guide">{guide || t(which === "front" ? "cap.lookFront" : "cap.turnLeft")}</div>
+                <div className="ts2-guide">{guide || sub}</div>
               </>
             ) : (
               <div className="ts2-drop-ph">
@@ -944,13 +937,59 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               </div>
             )}
           </div>
+          {/* Referencia (ejemplo) + lista de recomendaciones, lado a lado */}
+          <div className="ts2-wiz-foot">
+            <figure className="ts2-ex">
+              {example}
+              <figcaption className="ts2-ex-badge"><IconCheck className="ts2-ex-badge-ic" /> {t("tryon2.example")}</figcaption>
+            </figure>
+            <ul className="ts2-checks">
+              {checks.map((c, i) => (
+                <li key={i}><span className="ts2-check-ic">{c.ic}</span>{c.tx}</li>
+              ))}
+            </ul>
           </div>
+        </div>
+      </section>
+    );
+  }
 
-          <ul className="ts2-checks">
-            {checks.map((c, i) => (
-              <li key={i}><span className="ts2-check-ic">{c.ic}</span>{c.tx}</li>
-            ))}
-          </ul>
+  // Revisión: con las DOS fotos ya tomadas, se ven por separado la frontal y la
+  // lateral, cada una con "Repetir" y "Subir foto", y debajo (permanente) la ficha
+  // de la montura + la barra con "Calcular mis medidas".
+  function reviewFig(which, img, label) {
+    const inputRef = which === "front" ? frontInput : sideInput;
+    return (
+      <figure className="ts2-rvfig">
+        {img ? <img className="ts2-rvimg" src={img} alt={label} />
+             : <div className="ts2-rvimg ts2-rvimg-ph" aria-hidden="true">📷</div>}
+        <span className="ts2-rvbadge"><IconCheck className="ts2-rvbadge-ic" /> {t("cap.ready")}</span>
+        <div className="ts2-rvtools">
+          <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+            <span>{t("cap.retake")}</span>
+          </button>
+          <button type="button" className="ts2-rvbtn" onClick={() => inputRef.current?.click()}
+                  title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
+                  aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+            <span className="ts2-rvbtn-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
+          </button>
+        </div>
+        <figcaption className="ts2-rvlabel">{label}</figcaption>
+      </figure>
+    );
+  }
+  function captureReview() {
+    return (
+      <section className="ts2-step ts2-rv on">
+        <div className="ts2-step-hd">
+          <span className="ts2-step-badge ts2-badge-done"><IconCheck /></span>
+          <div className="ts2-step-tt"><b>{t("tryon2.reviewTitle")}</b><span>{t("tryon2.reviewSub")}</span></div>
+        </div>
+        <div className="ts2-rv-grid">
+          {reviewFig("front", frontImg, t("cap.front"))}
+          {reviewFig("side", sideImg, t("cap.side"))}
         </div>
       </section>
     );
@@ -1149,32 +1188,31 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             </div>
           )}
 
-          {/* Pasos de captura (frontal + lateral) o el resultado con las gafas puestas */}
-          {mState === "result" ? resultViews() : (
-            <>
-              {stepCard({
-                which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.frontSub"),
-                img: frontImg, active: phase === "front", waiting: false,
-                example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
-                checks: [
-                  { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
-                  { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
-                  { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.lookFront") },
-                ],
-              })}
-              {stepCard({
-                which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.sideSub"),
-                img: sideImg, active: phase === "side", waiting: phase === "front",
-                example: <img className="ts2-ex-img" src={exSide} alt={t("tryon2.example")} loading="lazy" />,
-                checks: [
-                  { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
-                  { ic: IC_PROFILE, tx: t("tryon2.chk.profile") },
-                  { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
-                  { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.headStraight") },
-                ],
-              })}
-            </>
-          )}
+          {/* Asistente paso a paso: frontal -> lateral -> revisión (o el resultado
+              con las gafas puestas). Solo se ve UN paso a la vez, sin salir de la
+              ventana; la ficha de la montura queda permanente debajo. */}
+          {mState === "result" ? resultViews()
+            : (frontImg && sideImg) ? captureReview()
+            : phase === "side"
+              ? stepCard({
+                  which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.msgSide"),
+                  example: <img className="ts2-ex-img" src={exSide} alt={t("tryon2.example")} loading="lazy" />,
+                  checks: [
+                    { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                    { ic: IC_PROFILE, tx: t("tryon2.chk.profile") },
+                    { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                    { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.headStraight") },
+                  ],
+                })
+              : stepCard({
+                  which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.msgFront"),
+                  example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
+                  checks: [
+                    { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                    { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                    { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.lookFront") },
+                  ],
+                })}
 
           {/* Información de la montura (ancho completo, abajo) */}
           <aside className="fs-card ts2-frame">
@@ -1246,7 +1284,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         </div>
       </div>
 
-      {mState === "idle" && (
+      {frontImg && sideImg && mState === "idle" && (
         <div className="vm-actionbar" ref={actionbarRef}>
           {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
               referencia para un familiar/amigo. Se guarda junto con la medición. */}

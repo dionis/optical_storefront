@@ -5625,3 +5625,35 @@ button.card-genre {
 .ts2-fr-badges { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; z-index: 3; }
 .ts2-fr-badge { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.96); color: #17203a; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; box-shadow: 0 2px 8px rgba(16,24,40,.16); white-space: nowrap; }
 .ts2-fr-badge-ic { width: 17px; height: 17px; color: var(--primary-blue, #01326b); flex: 0 0 auto; }
+
+/* ===================== ETAPA66 · Probador PASO A PASO: un solo paso visible (camara a
+   todo el ancho + ejemplo y lista lado a lado), luego la REVISION con la frontal y la
+   lateral por separado (Repetir / Subir foto sobre cada una) y "Calcular mis medidas".
+   La ficha de la montura queda permanente debajo. ===================== */
+.ts2-wiz .ts2-wiz-body { display: flex; flex-direction: column; gap: 14px; }
+.ts2-wiz-cam.ts2-drop { width: 100%; height: clamp(240px, 46vh, 440px); min-height: 0; }
+.ts2-wiz-cam .ts2-guide { font-size: 15px; padding: 12px; }
+.ts2-wiz-foot { display: grid; grid-template-columns: minmax(130px, 220px) 1fr; gap: 18px; align-items: center; }
+.ts2-wiz-foot .ts2-ex { min-height: 0; aspect-ratio: 1 / 1; }
+
+/* Revisión: frontal y lateral por separado */
+.ts2-rv .ts2-rv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ts2-rvfig { position: relative; margin: 0; border-radius: 14px; overflow: hidden; background: #0e1520; }
+.ts2-rvimg { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.ts2-rvimg-ph { display: flex; align-items: center; justify-content: center; font-size: 40px; color: #6b7280; }
+.ts2-rvbadge { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; background: rgba(18,138,77,.94); color: #fff; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 5px 11px; }
+.ts2-rvbadge-ic { width: 14px; height: 14px; }
+.ts2-rvtools { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; }
+.ts2-rvbtn { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.96); color: var(--blue, #0E5AD0); border: none; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(16,24,40,.18); }
+.ts2-rvbtn:hover { background: #fff; }
+.ts2-rvlabel { position: absolute; left: 0; right: 0; bottom: 0; padding: 9px 12px; color: #fff; font-size: 13px; font-weight: 700; background: linear-gradient(0deg, rgba(6,12,26,.82), transparent); }
+.ts2-badge-done { background: #128a4d !important; }
+.ts2-badge-done svg { width: 18px; height: 18px; }
+
+@media (max-width: 640px) {
+  .ts2-rv .ts2-rv-grid { grid-template-columns: 1fr; }
+  .ts2-wiz-foot { grid-template-columns: 1fr; }
+  .ts2-wiz-foot .ts2-ex { aspect-ratio: 16 / 9; }
+  .ts2-wiz-cam.ts2-drop { height: clamp(220px, 52vh, 380px); }
+  .ts2-rvbtn-tx { display: none; }
+}
