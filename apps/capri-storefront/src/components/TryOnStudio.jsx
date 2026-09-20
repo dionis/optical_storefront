@@ -898,12 +898,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         <div className="ts2-step-hd">
           <span className="ts2-step-badge">{num}</span>
           <div className="ts2-step-tt"><b>{title}</b><span>{sub}</span></div>
-          <button type="button" className="ts2-step-up" onClick={() => inputRef.current?.click()}>
+          <button type="button" className="ts2-step-up" onClick={() => inputRef.current?.click()}
+                  title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
+                  aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-            {t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
+            <span className="ts2-step-up-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
           </button>
         </div>
         <div className="ts2-step-body">
+          <div className="ts2-cap-main">
           <figure className="ts2-ex">
             {example}
             <figcaption className="ts2-ex-badge"><IconCheck className="ts2-ex-badge-ic" /> {t("tryon2.example")}</figcaption>
@@ -940,6 +943,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 <small>{t("tryon2.dropHint")}</small>
               </div>
             )}
+          </div>
           </div>
 
           <ul className="ts2-checks">
@@ -1154,7 +1158,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
                 checks: [
                   { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
-                  { ic: IC_FACE, tx: t("tryon2.chk.face") },
                   { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
                   { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.lookFront") },
                 ],
@@ -1183,8 +1186,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               </button>
             </div>
 
+            {/* Modelo + Color, en la cabecera de la ficha */}
+            <div className="ts2-fr-head">
+              <div className="ts2-fr-hspec">
+                <span className="ts2-fr-spec-ic"><IconGlassesUi /></span>
+                <div className="ts2-fr-spec-tx">
+                  <span>{t("fs.model")}</span>
+                  <b>{product.name}{product.brand ? ` (${product.brand})` : ""}</b>
+                </div>
+              </div>
+              <div className="ts2-fr-hspec">
+                <span className="ts2-fr-spec-sw" style={{ background: color?.hex || "#ccc" }} aria-hidden="true" />
+                <div className="ts2-fr-spec-tx">
+                  <span>{t("fs.color")}</span>
+                  <b>{color?.name || na}</b>
+                </div>
+              </div>
+            </div>
+
             <div className="ts2-fr">
-              {/* 75% · foto grande de la montura + medidas justo debajo */}
+              {/* 75% · foto grande con el selector de color encima + medidas debajo */}
               <div className="ts2-fr-main">
                 <div className="fs-photo ts2-fr-photo">
                   {color?.image
@@ -1192,10 +1213,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                            alt={`${product.name} ${color?.name || ""}`}
                            onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
                     : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-                  <button type="button" className="ts2-morephotos" onClick={onClose}>
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></svg>
-                    {t("tryon2.morePhotos")}
-                  </button>
+                  {colors.length > 1 && (
+                    <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
+                      {colors.map((c, i) => (
+                        <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                                className={`ts2-fr-onsw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                                title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="fs-measures">
                   <div className="fs-mhead">
@@ -1212,22 +1238,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 </div>
               </div>
 
-              {/* 25% · datos con icono: Modelo / Color / Material / Sexo */}
+              {/* 25% · a la derecha de la foto: Material y Género como icono */}
               <div className="ts2-fr-specs">
-                <div className="ts2-fr-spec">
-                  <span className="ts2-fr-spec-ic"><IconGlassesUi /></span>
-                  <div className="ts2-fr-spec-tx">
-                    <span>{t("fs.model")}</span>
-                    <b>{product.name}{product.brand ? ` (${product.brand})` : ""}</b>
-                  </div>
-                </div>
-                <div className="ts2-fr-spec">
-                  <span className="ts2-fr-spec-sw" style={{ background: color?.hex || "#ccc" }} aria-hidden="true" />
-                  <div className="ts2-fr-spec-tx">
-                    <span>{t("fs.color")}</span>
-                    <b>{color?.name || na}</b>
-                  </div>
-                </div>
                 <div className="ts2-fr-spec">
                   <span className="ts2-fr-spec-ic"><IconMaterial /></span>
                   <div className="ts2-fr-spec-tx">
@@ -1242,18 +1254,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                     <b>{genderLabel || na}</b>
                   </div>
                 </div>
-                {colors.length > 1 && (
-                  <div className="ts2-fr-colors">
-                    <span className="ts2-fr-colors-k">{t("tryon2.colorsAvailable")}</span>
-                    <div className="fs-swatches" role="listbox" aria-label={product.name}>
-                      {colors.map((c, i) => (
-                        <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                                className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                                title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1269,13 +1269,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                   {timeStr}
                 </span>
               </div>
-              <img src="/logo.svg" alt="RUBI LENS" className="fs-foot-logo" />
+              <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
             </div>
           </aside>
         </div>
       </div>
 
-      {frontImg && sideImg && mState === "idle" && (
+      {mState === "idle" && (
         <div className="vm-actionbar" ref={actionbarRef}>
           {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
               referencia para un familiar/amigo. Se guarda junto con la medición. */}
@@ -1295,8 +1295,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                      placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
             )}
           </div>
-          <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
-          <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
+          <span className="vm-actionbar-ok">
+            {frontImg && sideImg ? <>✓ {t("cap.front")} · {t("cap.side")}</> : t("tryon2.needBoth")}
+          </span>
+          <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>📐 {t("vm.calc")}</button>
         </div>
       )}
 
