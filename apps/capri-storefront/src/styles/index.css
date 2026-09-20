@@ -5526,3 +5526,46 @@ button.card-genre {
   .ts2-step-up { width: 100%; justify-content: center; }
   .ts2-checks { flex-direction: column; }
 }
+
+/* ===================== ETAPA63 · Probador: fotos de EJEMPLO reales (frontal/lateral,
+   hombre/mujer segun deteccion), "preparando…" al encender la camara, y ficha
+   "Informacion de la montura" 75/25 (foto grande + medidas | datos con icono). ===================== */
+
+/* Foto de ejemplo real dentro de la tarjeta del paso */
+.ts2-ex-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Preparacion (deteccion de perfil) — capa breve sobre el probador */
+.ts2-prep { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: #f4f6fb; }
+.ts2-prep-card { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 24px; }
+.ts2-prep-spin { width: 46px; height: 46px; border-radius: 50%; border: 4px solid #dbe3f1; border-top-color: var(--primary-blue, #01326b); animation: ts2spin .8s linear infinite; }
+@keyframes ts2spin { to { transform: rotate(360deg); } }
+.ts2-prep-card b { font-size: 17px; color: #17203a; font-weight: 800; }
+.ts2-prep-card small { font-size: 13px; color: #7c8698; }
+
+/* Ficha del marco en 75/25 */
+.ts2-fr { display: grid; grid-template-columns: 3fr 1fr; }
+.ts2-fr-main { min-width: 0; border-right: 1px solid var(--fs-line, #e7eaf0); }
+.ts2-fr-photo.fs-photo { position: relative; width: 100%; aspect-ratio: 2.4 / 1; border-bottom: 1px solid var(--fs-line, #e7eaf0); }
+.ts2-fr-photo.fs-photo img { object-fit: contain; padding: 12px; }
+.ts2-morephotos { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.96); color: var(--blue, #0E5AD0); border: 1px solid #cfe0ff; border-radius: 999px; padding: 7px 13px; font-weight: 700; font-size: 12.5px; cursor: pointer; box-shadow: 0 2px 8px rgba(16,24,40,.14); }
+.ts2-morephotos:hover { background: #fff; }
+.ts2-fr-main .fs-measures { border-top: none; }
+
+.ts2-fr-specs { display: flex; flex-direction: column; padding: 12px 16px; }
+.ts2-fr-spec { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-bottom: 1px solid #f0f2f7; }
+.ts2-fr-spec:last-child { border-bottom: none; }
+.ts2-fr-spec-ic { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: #eef3fb; color: var(--primary-blue, #01326b); display: flex; align-items: center; justify-content: center; }
+.ts2-fr-spec-ic > svg { width: 20px; height: 20px; }
+.ts2-fr-spec-sw { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; border: 2px solid #fff; box-shadow: inset 0 0 0 1px #e2e6ee, 0 1px 4px rgba(16,24,40,.15); }
+.ts2-fr-spec-tx { display: flex; flex-direction: column; min-width: 0; }
+.ts2-fr-spec-tx span { font-size: 11.5px; color: #7c8698; font-weight: 600; line-height: 1.2; }
+.ts2-fr-spec-tx b { font-size: 14.5px; color: #17203a; font-weight: 800; overflow-wrap: anywhere; line-height: 1.2; }
+.ts2-fr-colors { padding-top: 12px; }
+.ts2-fr-colors-k { display: block; font-size: 11.5px; color: #7c8698; font-weight: 700; margin-bottom: 8px; }
+.ts2-fr-colors .fs-swatches { padding: 0; gap: 8px; }
+
+@media (max-width: 700px) {
+  .ts2-fr { grid-template-columns: 1fr; }
+  .ts2-fr-main { border-right: none; border-bottom: 1px solid var(--fs-line, #e7eaf0); }
+  .ts2-fr-photo.fs-photo { aspect-ratio: 16 / 7; }
+}

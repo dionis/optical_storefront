@@ -7,6 +7,7 @@ import MeasureReport from "./MeasureReport.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
 import { measureFromFrontal, pdFromLandmarks } from "../data/opticalMeasure.js";
+import { predictGender } from "../data/genderDetect.js";
 import {
   startMeasurementJob,
   pollMeasurementJob,
@@ -152,6 +153,18 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const phaseRef = useRef("front");
   const [camStatus, setCamStatus] = useState("starting"); // starting | ready | denied | nocam
   const [phase, setPhase] = useState("front");             // front | side | done
+  // Género detectado (solo para elegir la foto de EJEMPLO) + fase de preparación:
+  // mientras es "detecting" se muestra un "preparando…" y NO la ventana; en cuanto se
+  // sabe el género (o vence el tiempo/no hay cámara) pasa a "done" y aparece la ventana.
+  const [gender, setGender] = useState("male");            // "male" | "female"
+  const [genderPhase, setGenderPhase] = useState("detecting"); // detecting | done
+  const genderDoneRef = useRef(false);
+  const finishGender = useCallback((g) => {
+    if (genderDoneRef.current) return;
+    genderDoneRef.current = true;
+    if (g === "male" || g === "female") setGender(g);
+    setGenderPhase("done");
+  }, []);
   const [frontImg, setFrontImg] = useState(null);
   const [sideImg, setSideImg] = useState(null);
   const [guide, setGuide] = useState("");
@@ -205,7 +218,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   useEffect(() => {
     let cancelled = false;
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); return; }
+      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); finishGender("male"); return; }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: 1280, height: 720 }, audio: false,
@@ -214,8 +227,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
         setCamStatus("ready");
+        // Detección de género (best-effort) para elegir el set de fotos de EJEMPLO.
+        // Corre sobre unos fotogramas bajo el "preparando…"; si no concluye a tiempo,
+        // el temporizador maestro revela la ventana igual (con el ejemplo por defecto).
+        (async () => {
+          const votes = { male: 0, female: 0 };
+          const deadline = Date.now() + 2600;
+          while (!cancelled && !genderDoneRef.current && Date.now() < deadline) {
+            const v = videoRef.current;
+            const r = v ? await predictGender(v) : null;
+            if (r && r.prob >= 0.62) {
+              votes[r.gender] += 1;
+              if (votes.male + votes.female >= 3) break;
+            }
+            await new Promise((s) => setTimeout(s, 320));
+          }
+          if (!cancelled) finishGender(votes.female > votes.male ? "female" : "male");
+        })();
       } catch (e) {
         setCamStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
+        finishGender("male");
         return;
       }
       try {
@@ -239,6 +270,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Red de seguridad: la ventana NUNCA se queda en "preparando…". Pase lo que pase con
+  // la cámara o la detección, a los ~3,8 s se revela con el ejemplo que haya (por
+  // defecto hombre). Así el "cargando" es breve e imperceptible, no un bloqueo.
+  useEffect(() => {
+    const id = setTimeout(() => finishGender(), 3800);
+    return () => clearTimeout(id);
+  }, [finishGender]);
 
   // ¿El cliente lleva espejuelos? Heurística por imagen: densidad de bordes +
   // reflejos en la zona de los ojos comparada con las mejillas. Con persistencia
@@ -828,6 +867,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     .filter(Boolean)
     .join(" - ") || null;
   const colorNames = colors.map((c) => c.name).filter(Boolean).join(" · ");
+  // Fotos de EJEMPLO segun el genero detectado (hombre por defecto).
+  const exFront = gender === "female" ? "/ejemplo-mujer-frontal.jpg" : "/ejemplo-hombre-frontal.jpg";
+  const exSide = gender === "female" ? "/ejemplo-mujer-lateral.jpg" : "/ejemplo-hombre-lateral.jpg";
   const specRows = [
     { key: "model", label: t("fs.model"),
       node: (<>{product.name}{product.brand ? <span className="fs-sub"> ({product.brand})</span> : null}</>) },
@@ -1043,6 +1085,19 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <input ref={sideInput} type="file" accept="image/*" hidden
              onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
 
+      {/* Preparación: mientras la cámara arranca y se detecta el perfil, se muestra un
+          "preparando…" breve (nunca más de ~3,8 s) y luego se revela la ventana ya con
+          las fotos de ejemplo adecuadas. */}
+      {genderPhase === "detecting" && mState === "idle" && !frontImg && !sideImg && (
+        <div className="ts2-prep" role="status" aria-live="polite">
+          <div className="ts2-prep-card">
+            <span className="ts2-prep-spin" aria-hidden="true" />
+            <b>{t("tryon2.preparing")}</b>
+            <small>{t("tryon2.preparingSub")}</small>
+          </div>
+        </div>
+      )}
+
       <div className="tryon-studio-grid ts2wrap">
         <div className="ts2">
           {/* Resumen del marco: material · medidas · género (mismo lenguaje visual
@@ -1095,7 +1150,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             <>
               {stepCard({
                 which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.frontSub"),
-                img: frontImg, active: phase === "front", waiting: false, example: EX_FRONT,
+                img: frontImg, active: phase === "front", waiting: false,
+                example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
                 checks: [
                   { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
                   { ic: IC_FACE, tx: t("tryon2.chk.face") },
@@ -1105,7 +1161,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               })}
               {stepCard({
                 which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.sideSub"),
-                img: sideImg, active: phase === "side", waiting: phase === "front", example: EX_SIDE,
+                img: sideImg, active: phase === "side", waiting: phase === "front",
+                example: <img className="ts2-ex-img" src={exSide} alt={t("tryon2.example")} loading="lazy" />,
                 checks: [
                   { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
                   { ic: IC_PROFILE, tx: t("tryon2.chk.profile") },
@@ -1126,19 +1183,68 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               </button>
             </div>
 
-            <div className="fs-top">
-              <div className="fs-info">
-                <dl className="fs-specs">
-                  {specRows.map((row) => (
-                    <div className="fs-row" key={row.key}>
-                      <dt>{row.label}</dt>
-                      <dd>{row.node}</dd>
-                    </div>
-                  ))}
-                </dl>
+            <div className="ts2-fr">
+              {/* 75% · foto grande de la montura + medidas justo debajo */}
+              <div className="ts2-fr-main">
+                <div className="fs-photo ts2-fr-photo">
+                  {color?.image
+                    ? <img src={color.image} referrerPolicy="no-referrer"
+                           alt={`${product.name} ${color?.name || ""}`}
+                           onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+                    : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+                  <button type="button" className="ts2-morephotos" onClick={onClose}>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></svg>
+                    {t("tryon2.morePhotos")}
+                  </button>
+                </div>
+                <div className="fs-measures">
+                  <div className="fs-mhead">
+                    {cells.map((c) => <span key={c.key}>{c.label}</span>)}
+                  </div>
+                  <div className="fs-mbody">
+                    {cells.map(({ key, value, Icon }) => (
+                      <div className="fs-mcell" key={key}>
+                        <Icon className="fs-mic" />
+                        <b className="fs-mval">{value || "—"}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 25% · datos con icono: Modelo / Color / Material / Sexo */}
+              <div className="ts2-fr-specs">
+                <div className="ts2-fr-spec">
+                  <span className="ts2-fr-spec-ic"><IconGlassesUi /></span>
+                  <div className="ts2-fr-spec-tx">
+                    <span>{t("fs.model")}</span>
+                    <b>{product.name}{product.brand ? ` (${product.brand})` : ""}</b>
+                  </div>
+                </div>
+                <div className="ts2-fr-spec">
+                  <span className="ts2-fr-spec-sw" style={{ background: color?.hex || "#ccc" }} aria-hidden="true" />
+                  <div className="ts2-fr-spec-tx">
+                    <span>{t("fs.color")}</span>
+                    <b>{color?.name || na}</b>
+                  </div>
+                </div>
+                <div className="ts2-fr-spec">
+                  <span className="ts2-fr-spec-ic"><IconMaterial /></span>
+                  <div className="ts2-fr-spec-tx">
+                    <span>{t("fs.material")}</span>
+                    <b>{materialText || na}</b>
+                  </div>
+                </div>
+                <div className="ts2-fr-spec">
+                  <span className="ts2-fr-spec-ic"><IconGender /></span>
+                  <div className="ts2-fr-spec-tx">
+                    <span>{t("spec.gender")}</span>
+                    <b>{genderLabel || na}</b>
+                  </div>
+                </div>
                 {colors.length > 1 && (
-                  <div className="ts2-frame-colors">
-                    <span className="ts2-frame-colors-k">{t("tryon2.colorsAvailable")}</span>
+                  <div className="ts2-fr-colors">
+                    <span className="ts2-fr-colors-k">{t("tryon2.colorsAvailable")}</span>
                     <div className="fs-swatches" role="listbox" aria-label={product.name}>
                       {colors.map((c, i) => (
                         <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
@@ -1148,33 +1254,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                     </div>
                   </div>
                 )}
-              </div>
-              <div className="ts2-frame-photo">
-                <div className="fs-photo">
-                  {color?.image
-                    ? <img src={color.image} referrerPolicy="no-referrer"
-                           alt={`${product.name} ${color?.name || ""}`}
-                           onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
-                    : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-                </div>
-                <button type="button" className="ts2-morephotos" onClick={onClose}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></svg>
-                  {t("tryon2.morePhotos")}
-                </button>
-              </div>
-            </div>
-
-            <div className="fs-measures">
-              <div className="fs-mhead">
-                {cells.map((c) => <span key={c.key}>{c.label}</span>)}
-              </div>
-              <div className="fs-mbody">
-                {cells.map(({ key, value, Icon }) => (
-                  <div className="fs-mcell" key={key}>
-                    <Icon className="fs-mic" />
-                    <b className="fs-mval">{value || "—"}</b>
-                  </div>
-                ))}
               </div>
             </div>
 
