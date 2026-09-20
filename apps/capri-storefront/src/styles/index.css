@@ -5613,3 +5613,15 @@ button.card-genre {
   .ts2-cap-main { grid-template-columns: 1fr; }
   .ts2-cap-main .ts2-ex { min-height: 0; aspect-ratio: 16 / 9; }
 }
+
+/* ===================== ETAPA65 · Ficha del probador estilo "card de tienda": foto a
+   todo el ancho con Material/Genero como badges arriba-derecha y el selector de color
+   abajo-izquierda; el titulo del banner es "Modelo - Color" (sin Ver en 360 ni la
+   cabecera Modelo/Color aparte). ===================== */
+.ts2-fr.ts2-fr-solo { grid-template-columns: 1fr; }
+.ts2-fr-solo .ts2-fr-main { border-right: none; }
+
+/* Badges (Material / Genero) sobre la foto, como en las cards del catalogo */
+.ts2-fr-badges { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; z-index: 3; }
+.ts2-fr-badge { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.96); color: #17203a; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; box-shadow: 0 2px 8px rgba(16,24,40,.16); white-space: nowrap; }
+.ts2-fr-badge-ic { width: 17px; height: 17px; color: var(--primary-blue, #01326b); flex: 0 0 auto; }

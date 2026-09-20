@@ -1180,32 +1180,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           <aside className="fs-card ts2-frame">
             <div className="fs-hd">
               <IconGlasses className="fs-hd-ic" />
-              <span className="ts2-frame-title">{t("fs.frameInfo")}</span>
-              <button type="button" className="ts2-360" onClick={onClose}>
-                <Icon360 className="ts2-360-ic" />{t("tryon2.view360")}
-              </button>
+              <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
             </div>
 
-            {/* Modelo + Color, en la cabecera de la ficha */}
-            <div className="ts2-fr-head">
-              <div className="ts2-fr-hspec">
-                <span className="ts2-fr-spec-ic"><IconGlassesUi /></span>
-                <div className="ts2-fr-spec-tx">
-                  <span>{t("fs.model")}</span>
-                  <b>{product.name}{product.brand ? ` (${product.brand})` : ""}</b>
-                </div>
-              </div>
-              <div className="ts2-fr-hspec">
-                <span className="ts2-fr-spec-sw" style={{ background: color?.hex || "#ccc" }} aria-hidden="true" />
-                <div className="ts2-fr-spec-tx">
-                  <span>{t("fs.color")}</span>
-                  <b>{color?.name || na}</b>
-                </div>
-              </div>
-            </div>
-
-            <div className="ts2-fr">
-              {/* 75% · foto grande con el selector de color encima + medidas debajo */}
+            <div className="ts2-fr ts2-fr-solo">
+              {/* Foto grande de la montura: selector de color abajo-izquierda y
+                  Material/Género como badges arriba-derecha (como las cards de la tienda);
+                  medidas debajo. */}
               <div className="ts2-fr-main">
                 <div className="fs-photo ts2-fr-photo">
                   {color?.image
@@ -1213,6 +1194,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                            alt={`${product.name} ${color?.name || ""}`}
                            onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
                     : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+                  <div className="ts2-fr-badges">
+                    {materialText && (
+                      <span className="ts2-fr-badge"><IconMaterial className="ts2-fr-badge-ic" />{materialText}</span>
+                    )}
+                    {genderLabel && (
+                      <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{genderLabel}</span>
+                    )}
+                  </div>
                   {colors.length > 1 && (
                     <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
                       {colors.map((c, i) => (
@@ -1234,24 +1223,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                         <b className="fs-mval">{value || "—"}</b>
                       </div>
                     ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 25% · a la derecha de la foto: Material y Género como icono */}
-              <div className="ts2-fr-specs">
-                <div className="ts2-fr-spec">
-                  <span className="ts2-fr-spec-ic"><IconMaterial /></span>
-                  <div className="ts2-fr-spec-tx">
-                    <span>{t("fs.material")}</span>
-                    <b>{materialText || na}</b>
-                  </div>
-                </div>
-                <div className="ts2-fr-spec">
-                  <span className="ts2-fr-spec-ic"><IconGender /></span>
-                  <div className="ts2-fr-spec-tx">
-                    <span>{t("spec.gender")}</span>
-                    <b>{genderLabel || na}</b>
                   </div>
                 </div>
               </div>
