@@ -5762,3 +5762,53 @@ button.card-genre {
   .ts2-rv-actions .vm-who-opt { padding: 6px 11px; font-size: 12px; }
   .ts2-rv-actions .vm-go { width: 100%; padding: 15px 18px; font-size: 16px; }
 }
+
+/* ===================== ETAPA69 — Botones PREMIUM con movimiento (estudio) =========
+   Transición suave + realce al pasar/pulsar en TODOS los botones del probador; los
+   primarios (navy) llevan un destello que barre. "Añadir receta" pasa al navy de la
+   marca. Respeta prefers-reduced-motion. ===================== */
+.tryon-studio .vm-go,
+.tryon-studio .vm-addrx,
+.tryon-studio .vm-remeasure,
+.tryon-studio .vm-share,
+.tryon-studio .vm-added,
+.ts2-rv-actions .vm-who-opt,
+.ts2-step-up,
+.ts2-rvbtn {
+  transition: transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .22s ease, filter .18s ease, background .18s ease;
+}
+
+/* "Añadir receta" al navy de la marca (era azul claro) */
+.tryon-studio .vm-addrx { background: linear-gradient(180deg, #0a3d7a, #01326b);
+  box-shadow: 0 10px 24px -10px rgba(1,50,107,.6); }
+
+/* Primarios navy con destello que barre al pasar el cursor */
+.ts2-rv-actions .vm-go, .tryon-studio .vm-addrx { position: relative; overflow: hidden; isolation: isolate; }
+.ts2-rv-actions .vm-go::after, .tryon-studio .vm-addrx::after {
+  content: ""; position: absolute; top: 0; left: -130%; width: 55%; height: 100%; z-index: -1;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.38), transparent);
+  transform: skewX(-18deg); transition: left .65s ease; pointer-events: none;
+}
+.ts2-rv-actions .vm-go:hover::after, .tryon-studio .vm-addrx:hover::after { left: 150%; }
+.ts2-rv-actions .vm-go:hover, .tryon-studio .vm-addrx:hover {
+  transform: translateY(-2px); box-shadow: 0 16px 32px -10px rgba(1,50,107,.62); filter: brightness(1.07); }
+.ts2-rv-actions .vm-go:active, .tryon-studio .vm-addrx:active { transform: translateY(0) scale(.985); }
+
+/* Compartir (verde WhatsApp) con realce */
+.tryon-studio .vm-share:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -10px rgba(18,140,77,.5); filter: brightness(1.03); }
+.tryon-studio .vm-share:active { transform: translateY(0) scale(.985); }
+
+/* Secundarios (Medir de nuevo, subir foto, repetir) — realce sutil */
+.tryon-studio .vm-remeasure:hover, .ts2-step-up:hover, .ts2-rvbtn:hover {
+  transform: translateY(-1px); box-shadow: 0 8px 18px -10px rgba(16,24,40,.4); }
+.tryon-studio .vm-remeasure:active, .ts2-step-up:active, .ts2-rvbtn:active { transform: translateY(0); }
+
+/* Pastillas "¿para quién?" — micro-motion al pulsar */
+.ts2-rv-actions .vm-who-opt { transition: transform .14s ease, background .18s ease, color .18s ease; }
+.ts2-rv-actions .vm-who-opt:active { transform: scale(.95); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tryon-studio .vm-go, .tryon-studio .vm-addrx, .tryon-studio .vm-remeasure,
+  .tryon-studio .vm-share, .ts2-rv-actions .vm-who-opt, .ts2-step-up, .ts2-rvbtn { transition: none; }
+  .ts2-rv-actions .vm-go::after, .tryon-studio .vm-addrx::after { display: none; }
+}
