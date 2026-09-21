@@ -5720,3 +5720,25 @@ button.card-genre {
   .ts2-intro-ic { width: 62px; height: 62px; }
   .ts2-intro-ic svg { width: 31px; height: 31px; }
 }
+
+/* ===================== ETAPA68 — Fix: "Calcular mis medidas" siempre visible ======
+   El estudio (.tryon-studio) es fixed a pantalla completa, pero no era columna flex
+   y el contenedor de scroll (.ts2wrap) no tenía alto propio: en RESPONSIVE, con las
+   dos fotos apiladas, el contenido crecía por debajo del borde y la barra de acción
+   con "Calcular mis medidas" quedaba fuera de vista, sin poder llegar a ella. Se
+   convierte el estudio en columna flex: el contenido central hace su propio scroll y
+   la barra queda anclada abajo, SIEMPRE visible (web y móvil). ===================== */
+.tryon.tryon-studio { display: flex; flex-direction: column; }
+.tryon-studio .tryon-bar { flex: 0 0 auto; }
+.tryon-studio-grid.ts2wrap { flex: 1 1 auto; min-height: 0; }
+.tryon-studio .vm-actionbar { flex: 0 0 auto; position: sticky; bottom: 0; z-index: 20; }
+
+@media (max-width: 640px) {
+  /* En móvil la barra se ordena en columna para que el botón (ancho completo) sea
+     grande y fácil de pulsar, con la pregunta "¿para quién?" encima y el visto de
+     confirmación al lado. */
+  .tryon-studio .vm-actionbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  .tryon-studio .vm-actionbar .vm-who { justify-content: space-between; }
+  .tryon-studio .vm-actionbar-ok { margin-right: 0; text-align: center; }
+  .tryon-studio .vm-go { width: 100%; padding: 14px 18px; font-size: 15px; }
+}
