@@ -1108,7 +1108,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                        placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
               )}
             </div>
-            <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
+            <span className="vm-actionbar-ok" />
             <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>📐 {t("vm.calc")}</button>
           </div>
         )}
