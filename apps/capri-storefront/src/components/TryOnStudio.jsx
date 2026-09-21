@@ -1086,6 +1086,32 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           {reviewFig("front", frontImg, t("cap.front"))}
           {reviewFig("side", sideImg, t("cap.side"))}
         </div>
+        {/* Acción "Calcular mis medidas" DENTRO de la revisión, justo debajo de las
+            fotos (en el flujo, no una barra flotante): así en móvil siempre se ve y no
+            queda tapada por la navegación inferior del sitio. Manda las dos fotos a la
+            IA para devolver el rostro con los espejuelos + las medidas. */}
+        {mState === "idle" && (
+          <div className="ts2-rv-actions" ref={actionbarRef}>
+            <div className="vm-who">
+              <span className="vm-who-q">{t("vm.who.title")}</span>
+              <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
+                <button type="button" role="radio" aria-checked={forWhom === "me"}
+                        className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
+                        onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
+                <button type="button" role="radio" aria-checked={forWhom === "other"}
+                        className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
+                        onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
+              </div>
+              {forWhom === "other" && (
+                <input className="vm-who-name" type="text" value={otherName} maxLength={60}
+                       onChange={(e) => setOtherName(e.target.value)}
+                       placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
+              )}
+            </div>
+            <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
+            <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>📐 {t("vm.calc")}</button>
+          </div>
+        )}
       </section>
     );
   }
@@ -1379,32 +1405,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         </div>
       </div>
 
-      {frontImg && sideImg && mState === "idle" && (
-        <div className="vm-actionbar" ref={actionbarRef}>
-          {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
-              referencia para un familiar/amigo. Se guarda junto con la medición. */}
-          <div className="vm-who">
-            <span className="vm-who-q">{t("vm.who.title")}</span>
-            <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
-              <button type="button" role="radio" aria-checked={forWhom === "me"}
-                      className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
-                      onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
-              <button type="button" role="radio" aria-checked={forWhom === "other"}
-                      className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
-                      onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
-            </div>
-            {forWhom === "other" && (
-              <input className="vm-who-name" type="text" value={otherName} maxLength={60}
-                     onChange={(e) => setOtherName(e.target.value)}
-                     placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
-            )}
-          </div>
-          <span className="vm-actionbar-ok">
-            {frontImg && sideImg ? <>✓ {t("cap.front")} · {t("cap.side")}</> : t("tryon2.needBoth")}
-          </span>
-          <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>📐 {t("vm.calc")}</button>
-        </div>
-      )}
+      {/* La acción "Calcular mis medidas" vive ahora DENTRO de la revisión
+          (captureReview), justo debajo de las fotos, para que en móvil siempre sea
+          visible y no quede tapada por la navegación inferior del sitio. */}
 
       {/* (Las medidas calculadas se muestran EN EL FLUJO dentro de resultViews,
           debajo de las fotos — ver .vm-dims-inflow. Ya no hay tarjeta flotante

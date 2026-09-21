@@ -5722,23 +5722,42 @@ button.card-genre {
 }
 
 /* ===================== ETAPA68 — Fix: "Calcular mis medidas" siempre visible ======
-   El estudio (.tryon-studio) es fixed a pantalla completa, pero no era columna flex
-   y el contenedor de scroll (.ts2wrap) no tenía alto propio: en RESPONSIVE, con las
-   dos fotos apiladas, el contenido crecía por debajo del borde y la barra de acción
-   con "Calcular mis medidas" quedaba fuera de vista, sin poder llegar a ella. Se
-   convierte el estudio en columna flex: el contenido central hace su propio scroll y
-   la barra queda anclada abajo, SIEMPRE visible (web y móvil). ===================== */
+   El estudio (.tryon-studio) es fixed a pantalla completa; se monta como columna
+   flex para que el contenido central (.ts2wrap) haga su propio scroll y todo sea
+   alcanzable en RESPONSIVE. La acción "Calcular mis medidas" ya NO es una barra
+   flotante (quedaba tapada por la navegación inferior del sitio en móvil): ahora va
+   EN EL FLUJO, dentro de la revisión, justo debajo de las dos fotos. ============== */
 .tryon.tryon-studio { display: flex; flex-direction: column; }
 .tryon-studio .tryon-bar { flex: 0 0 auto; }
 .tryon-studio-grid.ts2wrap { flex: 1 1 auto; min-height: 0; }
-.tryon-studio .vm-actionbar { flex: 0 0 auto; position: sticky; bottom: 0; z-index: 20; }
+
+/* Bloque de acción dentro de la revisión (debajo de las fotos). Tarjeta clara con
+   la pregunta "¿para quién?", el visto de confirmación y el botón grande de la IA. */
+.ts2-rv-actions {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 14px; padding: 16px; border-radius: 14px;
+  background: #fff; border: 1px solid #e6ebf3; box-shadow: 0 1px 2px rgba(16,24,40,.05);
+}
+.ts2-rv-actions .vm-actionbar-ok { color: #2c7d3f; font-weight: 700; font-size: 13px; margin-right: auto; }
+.ts2-rv-actions .vm-go { border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 15px;
+  color: #fff; padding: 13px 22px; background: linear-gradient(180deg, #2f74ff, #0E5AD0);
+  box-shadow: 0 6px 18px -6px rgba(14,90,208,.55); }
+.ts2-rv-actions .vm-go:hover { filter: brightness(1.05); }
+.ts2-rv-actions .vm-go:disabled { opacity: .55; cursor: default; box-shadow: none; }
+
+/* Selector "¿para quién son?" (antes sin estilos): pastillas claras coherentes. */
+.ts2-rv-actions .vm-who { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.ts2-rv-actions .vm-who-q { color: #3a4863; font-size: 13px; font-weight: 700; }
+.ts2-rv-actions .vm-who-opts { display: inline-flex; background: #eef2f8; border: 1px solid #dde3ee; border-radius: 999px; padding: 3px; }
+.ts2-rv-actions .vm-who-opt { border: 0; background: transparent; color: #55617a; font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.ts2-rv-actions .vm-who-opt.on { background: linear-gradient(180deg, #2f74ff, #0E5AD0); color: #fff; }
+.ts2-rv-actions .vm-who-name { border: 1px solid #d8dbe0; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: inherit; min-width: 150px; }
+.ts2-rv-actions .vm-who-name:focus { outline: none; border-color: #0E5AD0; box-shadow: 0 0 0 2px rgba(14,90,208,.15); }
 
 @media (max-width: 640px) {
-  /* En móvil la barra se ordena en columna para que el botón (ancho completo) sea
-     grande y fácil de pulsar, con la pregunta "¿para quién?" encima y el visto de
-     confirmación al lado. */
-  .tryon-studio .vm-actionbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
-  .tryon-studio .vm-actionbar .vm-who { justify-content: space-between; }
-  .tryon-studio .vm-actionbar-ok { margin-right: 0; text-align: center; }
-  .tryon-studio .vm-go { width: 100%; padding: 14px 18px; font-size: 15px; }
+  /* En móvil se apila y el botón ocupa todo el ancho: imposible pasarlo por alto. */
+  .ts2-rv-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
+  .ts2-rv-actions .vm-who { justify-content: space-between; }
+  .ts2-rv-actions .vm-actionbar-ok { margin-right: 0; text-align: center; }
+  .ts2-rv-actions .vm-go { width: 100%; padding: 15px 18px; font-size: 16px; }
 }
