@@ -5734,30 +5734,31 @@ button.card-genre {
 /* Bloque de acción dentro de la revisión (debajo de las fotos). Tarjeta clara con
    la pregunta "¿para quién?", el visto de confirmación y el botón grande de la IA. */
 .ts2-rv-actions {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
   margin-top: 14px; padding: 16px; border-radius: 14px;
   background: #fff; border: 1px solid #e6ebf3; box-shadow: 0 1px 2px rgba(16,24,40,.05);
 }
 .ts2-rv-actions .vm-actionbar-ok { color: #2c7d3f; font-weight: 700; font-size: 13px; margin-right: auto; }
 .ts2-rv-actions .vm-go { border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 15px;
-  color: #fff; padding: 13px 22px; background: linear-gradient(180deg, #2f74ff, #0E5AD0);
-  box-shadow: 0 6px 18px -6px rgba(14,90,208,.55); }
-.ts2-rv-actions .vm-go:hover { filter: brightness(1.05); }
+  color: #fff; padding: 13px 22px; background: linear-gradient(180deg, #0a3d7a, #01326b);
+  box-shadow: 0 6px 18px -6px rgba(1,50,107,.5); }
+.ts2-rv-actions .vm-go:hover { filter: brightness(1.08); }
 .ts2-rv-actions .vm-go:disabled { opacity: .55; cursor: default; box-shadow: none; }
 
-/* Selector "¿para quién son?" (antes sin estilos): pastillas claras coherentes. */
-.ts2-rv-actions .vm-who { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.ts2-rv-actions .vm-who-q { color: #3a4863; font-size: 13px; font-weight: 700; }
-.ts2-rv-actions .vm-who-opts { display: inline-flex; background: #eef2f8; border: 1px solid #dde3ee; border-radius: 999px; padding: 3px; }
-.ts2-rv-actions .vm-who-opt { border: 0; background: transparent; color: #55617a; font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
-.ts2-rv-actions .vm-who-opt.on { background: linear-gradient(180deg, #2f74ff, #0E5AD0); color: #fff; }
+/* Selector "¿para quién son?" (antes sin estilos): pastillas navy de la marca. */
+.ts2-rv-actions .vm-who { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
+.ts2-rv-actions .vm-who-q { color: #3a4863; font-size: 13px; font-weight: 700; flex: 0 0 auto; white-space: nowrap; }
+.ts2-rv-actions .vm-who-opts { display: inline-flex; flex: 0 0 auto; background: #eef2f8; border: 1px solid #dde3ee; border-radius: 999px; padding: 3px; }
+.ts2-rv-actions .vm-who-opt { border: 0; background: transparent; color: #55617a; font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.ts2-rv-actions .vm-who-opt.on { background: var(--primary-blue, #01326b); color: #fff; }
 .ts2-rv-actions .vm-who-name { border: 1px solid #d8dbe0; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: inherit; min-width: 150px; }
-.ts2-rv-actions .vm-who-name:focus { outline: none; border-color: #0E5AD0; box-shadow: 0 0 0 2px rgba(14,90,208,.15); }
+.ts2-rv-actions .vm-who-name:focus { outline: none; border-color: #01326b; box-shadow: 0 0 0 2px rgba(1,50,107,.15); }
 
 @media (max-width: 640px) {
-  /* En móvil se apila y el botón ocupa todo el ancho: imposible pasarlo por alto. */
+  /* En móvil se apila el bloque, PERO la fila "¿para quién?" queda en UNA sola línea
+     (pregunta a la izquierda, pastillas a la derecha) y el botón ocupa todo el ancho. */
   .ts2-rv-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
-  .ts2-rv-actions .vm-who { justify-content: space-between; }
-  .ts2-rv-actions .vm-actionbar-ok { margin-right: 0; text-align: center; }
+  .ts2-rv-actions .vm-who { justify-content: space-between; gap: 8px; }
+  .ts2-rv-actions .vm-who-opt { padding: 6px 11px; font-size: 12px; }
   .ts2-rv-actions .vm-go { width: 100%; padding: 15px 18px; font-size: 16px; }
 }
