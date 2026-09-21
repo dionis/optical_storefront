@@ -18,6 +18,7 @@ import {
 import {
   getMeasureJob, setMeasureJob, clearMeasureJob,
   saveMeasureResult, getMeasureResult, clearMeasureResult,
+  saveFacePhotos, getFacePhotos, clearFacePhotos,
 } from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
@@ -89,6 +90,9 @@ const ic = (d) => (
 const IC_LIGHT = ic(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>);
 const IC_FACE = ic(<><path d="M5 11a7 7 0 0 1 14 0c0 4.2-3.1 8-7 8s-7-3.8-7-8z" /><path d="M9 11h.01M15 11h.01M9.5 15c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1" /></>);
 const IC_PROFILE = ic(<><path d="M7 3.5c4 0 8 3 8 8 0 2 .8 2.6 1.8 3.4.7.6.4 1.6-.5 1.8l-2.3.5v2.3a1 1 0 0 1-1 1H9" /><path d="M7 3.5C4.5 5 3 8 3 11.5 3 16 6 20 10 20" /><path d="M10.5 11h.01" /></>);
+// Iconos de los mensajes de introducción del asistente.
+const IC_EYE = ic(<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>);
+const IC_ROTATE = ic(<><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" /><path d="M20 4v4h-4" /><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" /><path d="M4 20v-4h4" /></>);
 
 /* Ilustración de "Ejemplo" (silueta neutra, sin persona real): rostro de frente y
    de perfil. Trazo navy sobre fondo suave, con el sello "Ejemplo" encima. */
@@ -169,6 +173,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const [sideImg, setSideImg] = useState(null);
   const [guide, setGuide] = useState("");
   const [count, setCount] = useState(0);
+  // Sub-etapa del paso actual: "intro" = mensajes guiados sobre la cara de
+  // referencia; "live" = cámara en vivo + conteo de 5 s. Se reinicia al cambiar de
+  // paso (front/side). capStageRef espeja el valor para el bucle de detección.
+  const [capStage, setCapStage] = useState("intro");   // intro | live
+  const [introIdx, setIntroIdx] = useState(0);
+  const capStageRef = useRef("intro");
+  const holdStartRef = useRef(0);                       // ms en que empezó a sostener la pose
   const frontInput = useRef(null);
   const sideInput = useRef(null);
   // Detección de espejuelos en la captura (para pedir que se los quiten).
@@ -181,9 +192,30 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const capturedPdRef = useRef(null);   // { pd, pdRight, pdLeft } mediana de la toma
 
   useEffect(() => {
-    phaseRef.current = phase; holdRef.current = 0; setCount(0);
+    phaseRef.current = phase; holdRef.current = 0; holdStartRef.current = 0; setCount(0);
     if (phase === "front") pdSamplesRef.current = [];   // nueva toma: reinicia muestras de PD
+    // Cada paso de captura arranca con su introducción guiada (mensajes) antes de
+    // la cámara en vivo.
+    if (phase === "front" || phase === "side") { setCapStage("intro"); setIntroIdx(0); }
   }, [phase]);
+
+  // Espeja capStage en un ref para el bucle de detección (que corre fuera de React).
+  useEffect(() => { capStageRef.current = capStage; }, [capStage]);
+
+  // Reproduce los mensajes de introducción del paso (con la cara de referencia de
+  // fondo) UNO TRAS OTRO, con tiempo suficiente para leerlos; al terminar el último
+  // pasa a la cámara en vivo. Solo con la ventana ya revelada (genderPhase "done").
+  useEffect(() => {
+    if (genderPhase !== "done" || capStage !== "intro" || phase === "done") return;
+    const nMsgs = phase === "side" ? 1 : 2;
+    const id = setTimeout(() => {
+      setIntroIdx((i) => {
+        if (i + 1 >= nMsgs) { setCapStage("live"); return i; }
+        return i + 1;
+      });
+    }, 3200);
+    return () => clearTimeout(id);
+  }, [genderPhase, capStage, introIdx, phase]);
 
   // Reloj en vivo (pie de la ficha)
   useEffect(() => {
@@ -351,12 +383,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     rafRef.current = requestAnimationFrame(loop);
     const v = videoRef.current, lm = lmRef.current;
     const ph = phaseRef.current;
-    if (!v || !lm || ph === "done" || v.readyState < 2) return;
+    // Solo se detecta/captura en la etapa "live" (tras los mensajes de introducción).
+    if (!v || !lm || ph === "done" || v.readyState < 2 || capStageRef.current !== "live") return;
     let res;
     try { res = lm.detectForVideo(v, performance.now()); } catch { return; }
     const L = res?.faceLandmarks?.[0];
     if (CAPDBG) { loop._n = (loop._n || 0) + 1; if (loop._n % 15 === 0) console.log("CAPDBG", L ? "faceW " + Math.abs(L[454].x - L[234].x).toFixed(3) + " r " + ((L[1].x - L[234].x) / ((L[454].x - L[234].x) || 1e-6)).toFixed(3) : "noface", "ph", ph); }
-    if (!L) { holdRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
+    if (!L) { holdStartRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
 
     const R = L[234], Lf = L[454], nose = L[1];   // laterales del rostro + punta de nariz
     const faceW = Math.abs(Lf.x - R.x);
@@ -387,11 +420,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           if (pdSamplesRef.current.length > 150) pdSamplesRef.current.shift();
         }
       }
-      holdRef.current += 1;
-      setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / (HOLD_FRAMES / 3))));
-      if (holdRef.current >= HOLD_FRAMES) { capture(ph); }
+      // Conteo de 5 s por tiempo real (no por fotogramas), robusto a los FPS.
+      if (!holdStartRef.current) holdStartRef.current = performance.now();
+      const elapsed = performance.now() - holdStartRef.current;
+      setCount(Math.max(1, Math.ceil((5000 - elapsed) / 1000)));
+      if (elapsed >= 5000) { capture(ph); }
     } else {
-      holdRef.current = 0; setCount(0);
+      holdStartRef.current = 0; setCount(0);
     }
   }
 
@@ -448,6 +483,17 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     clearMeasureResult(product);
     if (which === "front") { capturedPdRef.current = null; pdSamplesRef.current = []; setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
+  }
+  // "Tomar las fotos de nuevo": descarta las fotos GUARDADAS (globales) y la
+  // generación de este producto, y reinicia toda la captura desde la foto frontal.
+  // Es la única vía para rehacer las fotos una vez que ya están reutilizadas.
+  function retakeAll() {
+    autoDoneRef.current = false;
+    clearFacePhotos();
+    clearMeasureResult(product);
+    capturedPdRef.current = null; pdSamplesRef.current = [];
+    setMState("idle"); setMData(null);
+    setFrontImg(null); setSideImg(null); setPhase("front");
   }
 
   // ── Medición óptica (IA): al tener las dos fotos se manda SOLO a Gemini ──
@@ -628,6 +674,32 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     setMState("result");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // REUTILIZAR FOTOS ENTRE MONTURAS: una vez que el cliente tomó su cara (frontal +
+  // lateral), esas fotos quedan guardadas globalmente y sirven para CUALQUIER otra
+  // montura — no hace falta volver a tomarlas. Al abrir el estudio, si no hay trabajo
+  // en curso ni una generación guardada para ESTE producto pero sí hay fotos de cara
+  // guardadas, se restauran y saltamos directo a la revisión (con "Calcular mis
+  // medidas"). El cliente puede rehacerlas con "Tomar las fotos de nuevo".
+  useEffect(() => {
+    if (getMeasureJob(product)) return;
+    if (getMeasureResult(product)) return;
+    const face = getFacePhotos();
+    if (!face) return;
+    setFrontImg(face.frontImg);
+    setSideImg(face.sideImg);
+    setPhase("done");
+    computeOurMeasurement(face.frontImg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persiste las dos fotos de cara en cuanto existen, para reutilizarlas con otras
+  // monturas (ver arriba). Se guardan las tomas ORIGINALES del cliente (no la
+  // generación de la IA), reescaladas para caber en localStorage.
+  useEffect(() => {
+    if (frontImg && sideImg) saveFacePhotos({ frontImg, sideImg });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontImg, sideImg]);
 
   // En RESPONSIVE la barra de "Calcular medidas" queda por debajo del pliegue: en
   // cuanto están las dos fotos la traemos a la vista para que el cliente no se pierda
@@ -898,9 +970,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // mensaje ("Mire directo a la cámara" / "Gire la cabeza hacia un lado") va en la
   // cabecera. Se llama como función (no como <Componente/>) para NO remontar el
   // <video> en cada render y así no perder la cámara.
-  function stepCard({ which, num, title, sub, example, checks }) {
+  function stepCard({ which, num, title, sub, example, refSrc, checks }) {
     const inputRef = which === "front" ? frontInput : sideInput;
-    const live = camStatus === "ready";
+    const camReady = camStatus === "ready";
+    const introMsgs = which === "side"
+      ? [{ ic: IC_ROTATE, tx: t("tryon2.msgSideIntro") }]
+      : [{ ic: IC_EYE, tx: t("tryon2.msgFront") }, { ic: IC_LIGHT, tx: t("tryon2.msgLight") }];
+    const introCur = introMsgs[Math.min(introIdx, introMsgs.length - 1)];
+    const showIntro = camReady && capStage === "intro";
     return (
       <section className="ts2-step ts2-wiz on">
         <div className="ts2-step-hd">
@@ -914,30 +991,43 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           </button>
         </div>
         <div className="ts2-wiz-body">
-          {/* Cámara a todo el ancho */}
-          <div className={`ts2-drop ts2-wiz-cam ${live ? "live" : ""}`}
+          {/* Cámara a todo el ancho. El <video> se monta SIEMPRE (para detección y
+              género); durante la introducción queda cubierto por la capa de mensajes
+              con la cara de referencia de fondo. */}
+          <div className={`ts2-drop ts2-wiz-cam ${camReady ? "live" : ""}`}
                role="button" tabIndex={0}
-               onClick={() => { if (!live) inputRef.current?.click(); }}
-               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !live) { e.preventDefault(); inputRef.current?.click(); } }}
+               onClick={() => { if (!camReady) inputRef.current?.click(); }}
+               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !camReady) { e.preventDefault(); inputRef.current?.click(); } }}
                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
                onDragLeave={(e) => e.currentTarget.classList.remove("over")}
                onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("over"); const f = e.dataTransfer?.files && e.dataTransfer.files[0]; if (f) onUpload(which, f); }}>
-            {live ? (
+            {camReady ? (
               <>
                 <video ref={attachVideo} className="ts2-video" playsInline muted />
-                <span className="ts2-badge"><span className="ts2-live-dot" aria-hidden="true" /> {t("cap.auto")}</span>
-                {count > 0 && <div className="ts2-count">{count}</div>}
-                <div className="ts2-guide">{guide || sub}</div>
+                {showIntro ? (
+                  <div className="ts2-intro" style={refSrc ? { backgroundImage: `url(${refSrc})` } : undefined}>
+                    <div className="ts2-intro-inner" key={introIdx}>
+                      <span className="ts2-intro-ic">{introCur.ic}</span>
+                      <b className="ts2-intro-msg">{introCur.tx}</b>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {count > 0 && <div className="ts2-count ts2-count-top">{count}</div>}
+                    <span className="ts2-badge"><span className="ts2-live-dot" aria-hidden="true" /> {t("cap.auto")}</span>
+                    <div className="ts2-guide">{guide || sub}</div>
+                  </>
+                )}
               </>
             ) : (
               <div className="ts2-drop-ph">
                 <span className="ts2-drop-cam"><IconCamera className="ts2-drop-cam-ic" /></span>
-                <b>{camStatus !== "ready" ? camMsg : t("tryon2.drop")}</b>
+                <b>{camMsg || t("tryon2.drop")}</b>
                 <small>{t("tryon2.dropHint")}</small>
               </div>
             )}
           </div>
-          {/* Referencia (ejemplo) + lista de recomendaciones, lado a lado */}
+          {/* Referencia (ejemplo) + lista de recomendaciones, lado a lado (queda debajo) */}
           <div className="ts2-wiz-foot">
             <figure className="ts2-ex">
               {example}
@@ -986,6 +1076,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         <div className="ts2-step-hd">
           <span className="ts2-step-badge ts2-badge-done"><IconCheck /></span>
           <div className="ts2-step-tt"><b>{t("tryon2.reviewTitle")}</b><span>{t("tryon2.reviewSub")}</span></div>
+          <button type="button" className="ts2-step-up ts2-retake-all" onClick={retakeAll}
+                  title={t("tryon2.retakeAll")} aria-label={t("tryon2.retakeAll")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+            <span className="ts2-step-up-tx">{t("tryon2.retakeAll")}</span>
+          </button>
         </div>
         <div className="ts2-rv-grid">
           {reviewFig("front", frontImg, t("cap.front"))}
@@ -1195,7 +1290,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             : (frontImg && sideImg) ? captureReview()
             : phase === "side"
               ? stepCard({
-                  which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.msgSide"),
+                  which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.msgSide"), refSrc: exSide,
                   example: <img className="ts2-ex-img" src={exSide} alt={t("tryon2.example")} loading="lazy" />,
                   checks: [
                     { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
@@ -1205,7 +1300,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                   ],
                 })
               : stepCard({
-                  which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.msgFront"),
+                  which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.msgFront"), refSrc: exFront,
                   example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
                   checks: [
                     { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
