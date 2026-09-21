@@ -564,7 +564,14 @@ export default function ProductDetail() {
       )}
 
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)} />
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)}
+               onAddPrescription={(payload) => {
+                 // "Añadir receta" desde el probador de la ficha: lleva al flujo de
+                 // receta (/recetas/:slug) y abre el lector de receta (OCR) con las
+                 // medidas del probador ya pre-rellenadas.
+                 setTryOnSlug(null);
+                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: payload } });
+               }} />
       )}
     </div>
   );
