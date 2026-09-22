@@ -1108,7 +1108,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                        placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
               )}
             </div>
-            <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>📐 {t("vm.calc")}</button>
+            <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
+              {t("vm.calc")}
+            </button>
           </div>
         )}
       </section>

@@ -5812,3 +5812,39 @@ button.card-genre {
   .tryon-studio .vm-share, .ts2-rv-actions .vm-who-opt, .ts2-step-up, .ts2-rvbtn { transition: none; }
   .ts2-rv-actions .vm-go::after, .tryon-studio .vm-addrx::after { display: none; }
 }
+
+/* ===================== ETAPA70 — Consistencia visual del PROBADOR ================
+   Un solo azul de marca (navy #01326b) en todos los acentos e interacciones del
+   probador; el azul claro suelto (#0E5AD0 / #2f74ff) se retira. Verde solo para
+   éxito/compartir, gris solo para acciones secundarias (repetir/medir de nuevo).
+   Los iconos comparten color (navy) y estilo (contorno). ===================== */
+:root { --rl-navy: #01326b; --rl-navy-2: #0a3d7a; }
+
+/* Subir foto / acciones azules → navy */
+.tryon-studio .ts2-step-up { color: var(--rl-navy); background: #eef2f8; border-color: #cdd9ee; }
+.tryon-studio .ts2-step-up:hover { background: #e3eaf6; }
+/* "Tomar las fotos de nuevo" se queda neutro (es un reset, no una acción de marca) */
+.tryon-studio .ts2-step-up.ts2-retake-all { color: #55617a; background: #f3f5f9; border-color: #dde3ee; }
+.tryon-studio .ts2-step-up.ts2-retake-all:hover { background: #e9edf4; }
+/* Repetir / Subir foto sobre las fotos de revisión → navy */
+.tryon-studio .ts2-rvbtn { color: var(--rl-navy); }
+.tryon-studio .ts2-rvbtn svg { color: var(--rl-navy); }
+/* Dropzone: foco/hover en navy (no azul claro) */
+.tryon-studio .ts2-drop:hover { border-color: var(--rl-navy); background: #eef2f8; }
+.tryon-studio .ts2-drop.over { border-color: var(--rl-navy); background: #e6edf7; }
+/* Cabecera de "Medidas calculadas" y etiquetas del resultado → navy de marca */
+.tryon-studio .vm-dims-h { color: var(--rl-navy); }
+.tryon-studio .vm-rlabel { background: var(--rl-navy); }
+/* Iconos de la lista de recomendaciones y de las medidas: mismo navy */
+.tryon-studio .ts2-check-ic { color: var(--rl-navy); }
+.tryon-studio .ts2-drop-cam { color: var(--rl-navy); background: #dde7f5; }
+/* Cámara/subida "cargando" y reintento del reporte → navy (no otros azules) */
+.tryon-studio .vm-spinner { border-top-color: var(--rl-navy); }
+.tryon-studio .vm-btn, .tryon-studio .vm-go.vm-btn { background: linear-gradient(180deg, var(--rl-navy-2), var(--rl-navy)); }
+/* Ficha de la montura: cabecera al mismo navy de marca (unifica con "Medidas") */
+.tryon-studio .fs-card { --fs-navy: #01326b; --fs-navy2: #0a3d7a; }
+/* Selector de color activo sobre la foto: anillo navy (no azul claro) */
+.tryon-studio .ts2-sw.on, .tryon-studio .ts2-fr-onsw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rl-navy); }
+/* Botón "Calcular": icono SVG + texto alineados */
+.tryon-studio .vm-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.tryon-studio .vm-go svg { flex: 0 0 auto; }
