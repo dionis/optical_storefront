@@ -11,6 +11,18 @@ import { estimateBatch } from "../../../../lib/frame-media-cost";
 import { resolveFrameMediaSettings } from "../../../../lib/frame-media-settings";
 import type { EnqueueFrameMediaSchema } from "../middlewares";
 
+/**
+ * Collections this pipeline must never enqueue, by `metadata.collection_slug`.
+ * Overridable so the owner can add one without a code change; the default is the
+ * catalogue's 28 cases, which are the ones that actually broke a run.
+ */
+const EXCLUDED_COLLECTIONS = new Set(
+  (process.env.FRAME_MEDIA_EXCLUDED_COLLECTIONS ?? "case")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
 interface VariantLike {
   id: string;
   sku?: string | null;
@@ -49,8 +61,20 @@ export async function POST(
 
   const rows: Parameters<typeof enqueueAssets>[1] = [];
   const skippedNoImage: string[] = [];
+  const skippedNotAFrame: string[] = [];
 
   for (const product of products) {
+    // The prompts describe eyewear. Handed a case, Gemini answers in prose and
+    // the asset fails `no_image_returned` — free, but it is still CLAIMABLE
+    // twice more (MAX_ATTEMPTS), so a handful of cases sitting early in the
+    // alphabet trips the ten-failure breaker before any frame is reached. A
+    // queue is not the place to discover a product was never a frame.
+    const collection = (product.metadata?.collection_slug as string | undefined) ?? null;
+    if (collection && EXCLUDED_COLLECTIONS.has(collection)) {
+      skippedNotAFrame.push(product.handle!);
+      continue;
+    }
+
     const variants = (product.variants ?? []) as VariantLike[];
     for (const variant of variants) {
       const colorway =
@@ -121,5 +145,7 @@ export async function POST(
     unknown_handles: missing,
     /** Variants with no source photo: nothing to generate from. */
     skipped_no_source_image: skippedNoImage,
+    /** Products that are not eyewear (cases, accessories): nothing to render. */
+    skipped_not_a_frame: skippedNotAFrame,
   });
 }

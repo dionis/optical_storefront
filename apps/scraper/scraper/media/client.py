@@ -45,6 +45,18 @@ def _request(config: Config, method: str, path: str, **kwargs: Any) -> dict[str,
     url = f"{config.medusa_backend_url.rstrip('/')}{path}"
     try:
         response = client.request(method, url, **kwargs)
+    except httpx.TimeoutException as err:
+        # Separate from `unreachable` because the fix is the opposite one. The
+        # host answered or would have; it just took longer than we waited. Saying
+        # "cannot reach" here sends the operator to check MEDUSA_BACKEND_URL, and
+        # the URL is the one thing that is certainly fine.
+        raise MediaApiError(
+            f"Medusa did not answer {path} in time ({err}). The server may still "
+            "be working; nothing was lost. Narrow the request (--handle, "
+            "--from-file) or retry.",
+            status=0,
+            reason="timeout",
+        ) from err
     except httpx.HTTPError as err:
         raise MediaApiError(
             f"Cannot reach Medusa at {config.medusa_backend_url}: {err}",
@@ -142,6 +154,15 @@ def set_tier(config: Config, tier: int) -> dict[str, Any]:
     return _request(config, "POST", f"{_ADMIN_PREFIX}/tier", json={"tier": tier})
 
 
+#: Read timeout for `sync` alone. The pooled client's 30s is sized for per-product
+#: calls; a catalogue-wide sync reads every ready asset, loads every product with
+#: its variants and rewrites hundreds of them, and legitimately takes minutes. It
+#: is also idempotent and free, so waiting costs nothing and giving up costs a
+#: manual re-run — with an error that says "Cannot reach Medusa", which sends the
+#: operator to check a URL that was never wrong.
+SYNC_TIMEOUT = 600.0
+
+
 def sync(config: Config, handles: list[str] | None = None) -> dict[str, Any]:
     """Copy ready assets onto the products, so the storefront can reach them.
 
@@ -152,7 +173,9 @@ def sync(config: Config, handles: list[str] | None = None) -> dict[str, Any]:
     body: dict[str, Any] = {}
     if handles:
         body["handles"] = handles
-    return _request(config, "POST", f"{_ADMIN_PREFIX}/sync", json=body)
+    return _request(
+        config, "POST", f"{_ADMIN_PREFIX}/sync", json=body, timeout=SYNC_TIMEOUT
+    )
 
 
 def board(config: Config, **params: Any) -> dict[str, Any]:

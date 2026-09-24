@@ -47,6 +47,10 @@ def _handle_api_errors(fn):
                     "The database tables exist.\n"
                     f"Tried: {err}"
                 ) from err
+            if err.status == 0 and err.reason == "timeout":
+                # The message already says what happened and what to do next;
+                # appending "check the URL" would contradict it.
+                raise click.ClickException(str(err)) from err
             if err.status == 0:
                 raise click.ClickException(
                     f"{err}\nCheck MEDUSA_BACKEND_URL in apps/scraper/.env."
@@ -87,7 +91,13 @@ def _selection_options(fn):
                 "--from-file", "from_file_path", default=None,
                 help="File with one handle per line; # comments ignored.",
             ),
-            click.option("--all", "all_frames", is_flag=True, help="The whole catalogue."),
+            click.option(
+                "--all",
+                "all_frames",
+                is_flag=True,
+                help="Drain everything already queued. Does NOT seed: use "
+                     "--from-file to add frames the queue does not have yet.",
+            ),
             click.option(
                 "--pending", is_flag=True,
                 help="Whatever the panel already queued, without re-selecting.",

@@ -1436,15 +1436,30 @@ que es donde se cuelan los errores caros.
 |---|---|---|
 | `--pilot` | `--pilot` | Las 70 del Apéndice B. Lee `frame-media-pilot.json` |
 | `--pilot-brand` | `--pilot-brand simplylite` | Solo esa marca **dentro** del piloto (nivel 1 de la escalera) |
-| `--brand` | `--brand di-caprio` | Marca completa del catálogo |
+| ~~`--brand`~~ | — | **No implementado.** Usa `--from-file` con los handles de la marca |
 | `--handle` | `--handle sl107-simply-lite` | Repetible. **Handle de Medusa**, no `seed_slug` (§B.3) |
 | `--from-file` | `--from-file lote.txt` | Un handle por línea; `#` comenta |
-| `--all` | `--all` | Todo el catálogo. Exige `--yes` y `--max-cost` |
+| `--all` | `--all` | **Drena lo ya encolado, no siembra** — igual que `--pending`. Para el catálogo entero hace falta `--from-file` con los handles |
 | `--pending` | `--pending` | Lo que ya está encolado desde el panel, sin volver a seleccionar |
 
 Sin ninguno, el comando falla pidiendo uno. **No hay selección por defecto**: un default
 en el argumento que decide cuánto se gasta es una trampa esperando a que alguien pulse
 Enter de más.
+
+> **Los argumentos tachados de este apéndice no existen en el CLI.** Se quedaron aquí
+> desde el diseño y nunca se implementaron; click responde `No such option` y, si la
+> corrida iba con `nohup … &`, el fallo queda enterrado en el log y parece que arrancó.
+> Comprobado contra `cli.py` el 24 de septiembre de 2026. La lista real de opciones de
+> `generate` es: selección, `--max-cost`, `--limit`, `--batch`, `--dry-run`, `--yes`,
+> `--report`.
+
+> **`--from-file` no debe llevar productos que no sean monturas.** Los prompts describen
+> gafas; ante la foto de un estuche el modelo contesta en prosa y el activo falla
+> `no_image_returned` — gratis, pero reclamable dos veces más (`MAX_ATTEMPTS`), así que
+> un puñado de estuches al principio del alfabeto dispara el cortacircuitos antes de
+> llegar a ninguna montura. El catálogo tiene 28 (`collection_slug: case`). Desde
+> septiembre de 2026 el encolado los descarta solo y los devuelve en
+> `skipped_not_a_frame`; la lista es `FRAME_MEDIA_EXCLUDED_COLLECTIONS`.
 
 ### Alcance — qué medios
 
@@ -1466,8 +1481,8 @@ que es donde el modelo inventa monturas distintas (§11).
 | `--dry-run` | off | Recorre todo sin llamar a Gemini ni subir nada. Igual que en `sync` |
 | `--yes` | off | Salta la confirmación interactiva. Necesario en cron, peligroso a mano |
 | `--force` | off | Regenera activos en `done`. Pide confirmación aunque haya `--yes` |
-| `--concurrency N` | 2 | Peticiones simultáneas a Gemini. Subir con cuidado: 429 |
-| `--stop-after-failures N` | 10 | Cortacircuitos, mismo valor que `_MAX_CONSECUTIVE_FAILURES` en `sync.py` |
+| ~~`--concurrency N`~~ | — | **No implementado, y no aplica**: el runner es secuencial, una imagen cada vez. El `max_concurrency` del panel no lo usa este CLI |
+| ~~`--stop-after-failures N`~~ | 10 | **No implementado.** El cortacircuitos es fijo (`MAX_CONSECUTIVE_FAILURES` en `runner.py`) |
 
 `--max-cost` obligatorio es la decisión de diseño más importante de este apéndice. El
 módulo no tiene techo propio, el CLI corre fuera del panel y el catálogo entero son $223:

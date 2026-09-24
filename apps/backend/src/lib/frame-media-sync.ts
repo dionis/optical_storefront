@@ -15,6 +15,9 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import type { IProductModuleService } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 
+/** Variants written per transaction. Big enough to matter, small enough to hold no long lock. */
+const SYNC_WRITE_CHUNK = 100;
+
 interface ReadyAsset {
   product_handle: string;
   variant_sku: string;
@@ -118,8 +121,13 @@ export async function syncVariantMedia(
   );
 
   const seenSkus = new Set<string>();
-  let updated = 0;
   let same = 0;
+
+  // Collected, then written in chunks. One awaited call per variant meant a
+  // catalogue-wide sync made ~1,400 sequential round-trips and blew through the
+  // CLI's 30s read timeout long before it finished — the files were in R2 and
+  // unreachable from the storefront, with an error that blamed the URL.
+  const updates: { id: string; metadata: Record<string, unknown> }[] = [];
 
   for (const product of products) {
     for (const variant of product.variants ?? []) {
@@ -135,12 +143,18 @@ export async function syncVariantMedia(
         continue;
       }
 
-      await productService.updateProductVariants(variant.id, {
-        metadata: { ...existing, ...media },
-      });
-      updated += 1;
+      updates.push({ id: variant.id, metadata: { ...existing, ...media } });
     }
   }
+
+  // Chunked rather than one call: `upsertProductVariants` runs the batch in a
+  // single transaction, and a transaction over the whole catalogue is a long
+  // lock on a 2-vCPU box for no gain. Entries carry an `id`, so every one takes
+  // the same update path as the per-variant call it replaces — never a create.
+  for (let i = 0; i < updates.length; i += SYNC_WRITE_CHUNK) {
+    await productService.upsertProductVariants(updates.slice(i, i + SYNC_WRITE_CHUNK));
+  }
+  const updated = updates.length;
 
   return {
     variants_updated: updated,
