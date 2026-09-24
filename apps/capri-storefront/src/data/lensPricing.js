@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Lista de precios profesional 2026 — Óptica El Rancho.
+// Lista de precios profesional 2026 — RUBI LENS.
 // Precio base del LENTE = matriz (diseño × material). Se suma al precio
 // de la MONTURA (producto). Fotocromáticos/Transitions y antirreflejos
 // son adicionales. Editable desde el board (overrides en priceStore).

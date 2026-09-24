@@ -171,3 +171,38 @@ export function clearMeasureResult(product) {
   const map = readResults();
   if (map[key]) { delete map[key]; writeResults(map); }
 }
+
+
+// ── Fotos de rostro (frontal + lateral) REUTILIZABLES entre monturas ─────────
+//
+// Una vez que el cliente se tomó las dos fotos, sirven para CUALQUIER montura: no
+// tiene sentido volver a pedírselas cada vez que prueba otro espejuelo. Se guardan
+// una sola vez (globales, no por producto) y se reutilizan hasta que el cliente
+// pida "Tomar las fotos de nuevo". Son data URLs; se reducen antes de guardar para
+// no reventar la cuota de localStorage.
+const FACE_LS_KEY = "rubi.tryon.face.v1";
+
+export async function saveFacePhotos({ frontImg, sideImg }) {
+  try {
+    if (!frontImg || !sideImg) return;
+    const [f, s] = await Promise.all([
+      downscaleForStore(frontImg, 900, 0.82),
+      downscaleForStore(sideImg, 900, 0.82),
+    ]);
+    localStorage.setItem(FACE_LS_KEY, JSON.stringify({
+      frontImg: f || frontImg, sideImg: s || sideImg, savedAt: Date.now(),
+    }));
+  } catch { /* cuota u otro: se ignora y seguirá pidiendo las fotos */ }
+}
+
+export function getFacePhotos() {
+  try {
+    const raw = localStorage.getItem(FACE_LS_KEY);
+    const o = raw ? JSON.parse(raw) : null;
+    return o && o.frontImg && o.sideImg ? o : null;
+  } catch { return null; }
+}
+
+export function clearFacePhotos() {
+  try { localStorage.removeItem(FACE_LS_KEY); } catch { /* nada */ }
+}

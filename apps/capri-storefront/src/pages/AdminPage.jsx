@@ -38,7 +38,7 @@ function Login({ onOk }) {
     <div className="adm-login">
       {stage === "creds" ? (
         <form className="adm-login-card" onSubmit={submitCreds}>
-          <img src="/logo.svg" alt="RUBI_LENS" className="adm-login-logo" />
+          <img src="/logo.svg" alt="RUBI LENS" className="adm-login-logo" />
           <h1>{t("adm.title")}</h1>
           <p className="muted">{t("adm.login.sub")}</p>
           <label>{t("adm.login.email")}<input type="email" autoFocus value={user} placeholder={t("adm.login.emailPh")} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
@@ -49,7 +49,7 @@ function Login({ onOk }) {
         </form>
       ) : (
         <form className="adm-login-card" onSubmit={submitOtp}>
-          <img src="/logo.svg" alt="RUBI_LENS" className="adm-login-logo" />
+          <img src="/logo.svg" alt="RUBI LENS" className="adm-login-logo" />
           <h1>{t("adm.login.mfaTitle")}</h1>
           <p className="muted">{t("adm.login.mfaSub")}</p>
           <label>{t("adm.login.code")}<input inputMode="numeric" autoFocus value={otp} placeholder="••••••" onChange={(e) => setOtp(e.target.value)} autoComplete="one-time-code" /></label>
@@ -69,7 +69,7 @@ export default function AdminPage() {
   return (
     <div className="adm-shell">
       <header className="adm-topbar">
-        <div className="adm-brand"><img src="/logo.svg" alt="RUBI_LENS" /><span>{t("adm.title")}</span></div>
+        <div className="adm-brand"><img src="/logo.svg" alt="RUBI LENS" /><span>{t("adm.title")}</span></div>
         <div className="adm-user">
           <Link to="/" className="adm-link">{t("adm.viewStore")}</Link>
           <span className="adm-who">👤 {session.user}</span>

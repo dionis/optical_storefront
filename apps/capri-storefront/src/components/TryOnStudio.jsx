@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
+import { IconMaterial, IconMeasures, IconGender, IconCamera, IconCheck, Icon360, IconGlasses as IconGlassesUi } from "./UiIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
 import { measureFromFrontal, pdFromLandmarks } from "../data/opticalMeasure.js";
+import { predictGender } from "../data/genderDetect.js";
 import {
   startMeasurementJob,
   pollMeasurementJob,
@@ -16,6 +18,7 @@ import {
 import {
   getMeasureJob, setMeasureJob, clearMeasureJob,
   saveMeasureResult, getMeasureResult, clearMeasureResult,
+  saveFacePhotos, getFacePhotos, clearFacePhotos,
 } from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
@@ -79,6 +82,42 @@ const IC_DOWN = (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
 );
 
+/* Iconos pequeños de la lista de recomendaciones (misma familia de trazo que el
+   resto del sitio: contorno, 2px, esquinas redondeadas). */
+const ic = (d) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+);
+const IC_LIGHT = ic(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>);
+const IC_FACE = ic(<><path d="M5 11a7 7 0 0 1 14 0c0 4.2-3.1 8-7 8s-7-3.8-7-8z" /><path d="M9 11h.01M15 11h.01M9.5 15c.8.7 1.6 1 2.5 1s1.7-.3 2.5-1" /></>);
+const IC_PROFILE = ic(<><path d="M7 3.5c4 0 8 3 8 8 0 2 .8 2.6 1.8 3.4.7.6.4 1.6-.5 1.8l-2.3.5v2.3a1 1 0 0 1-1 1H9" /><path d="M7 3.5C4.5 5 3 8 3 11.5 3 16 6 20 10 20" /><path d="M10.5 11h.01" /></>);
+// Iconos de los mensajes de introducción del asistente.
+const IC_EYE = ic(<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>);
+const IC_ROTATE = ic(<><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" /><path d="M20 4v4h-4" /><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" /><path d="M4 20v-4h4" /></>);
+
+/* Ilustración de "Ejemplo" (silueta neutra, sin persona real): rostro de frente y
+   de perfil. Trazo navy sobre fondo suave, con el sello "Ejemplo" encima. */
+const EX_FRONT = (
+  <svg className="ts2-ex-illus" viewBox="0 0 120 150" role="img" aria-hidden="true">
+    <rect width="120" height="150" rx="10" fill="#eef2f8" />
+    <path d="M60 118c-24 0-34 14-37 24h74c-3-10-13-24-37-24z" fill="#c7d2e6" />
+    <ellipse cx="60" cy="66" rx="27" ry="32" fill="#dbe3f1" />
+    <path d="M33 60c0-19 12-30 27-30s27 11 27 30c2-1 4 2 3 7-1 4-4 5-5 5-2 12-13 22-25 22s-23-10-25-22c-1 0-4-1-5-5-1-5 1-8 3-7z" fill="#c7d2e6" />
+    <circle cx="50" cy="66" r="3" fill="#8092b3" /><circle cx="70" cy="66" r="3" fill="#8092b3" />
+    <path d="M52 80c3 2 5 3 8 3s5-1 8-3" stroke="#8092b3" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+  </svg>
+);
+const EX_SIDE = (
+  <svg className="ts2-ex-illus" viewBox="0 0 120 150" role="img" aria-hidden="true">
+    <rect width="120" height="150" rx="10" fill="#eef2f8" />
+    <path d="M64 118c-22 0-31 14-34 24h72c-2-10-12-24-38-24z" fill="#c7d2e6" />
+    <path d="M44 40c14-10 34-6 40 12 4 12 1 22-6 30-2 8-3 14-3 16 0 3-3 4-6 4H45c-9 0-17-8-19-20-3-19 5-34 18-42z" fill="#dbe3f1" />
+    <path d="M44 40c14-10 34-6 40 12 4 12 1 22-6 30-2 8-3 14-3 16" fill="none" stroke="#c7d2e6" strokeWidth="0" />
+    <circle cx="52" cy="66" r="3" fill="#8092b3" />
+    <path d="M40 74c-4 1-7 2-7 5s3 4 6 4" stroke="#8092b3" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    <circle cx="74" cy="72" r="6" fill="none" stroke="#8092b3" strokeWidth="2.2" />
+  </svg>
+);
+
 // Nombre de archivo al descargar: "frontal/lateral-<modelo> <serie> <color>.ext".
 function fileExtFromDataUrl(src) {
   const m = /^data:image\/(png|jpe?g|webp)/i.exec(src || "");
@@ -118,10 +157,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const phaseRef = useRef("front");
   const [camStatus, setCamStatus] = useState("starting"); // starting | ready | denied | nocam
   const [phase, setPhase] = useState("front");             // front | side | done
+  // Género detectado (solo para elegir la foto de EJEMPLO) + fase de preparación:
+  // mientras es "detecting" se muestra un "preparando…" y NO la ventana; en cuanto se
+  // sabe el género (o vence el tiempo/no hay cámara) pasa a "done" y aparece la ventana.
+  const [gender, setGender] = useState("male");            // "male" | "female"
+  const [genderPhase, setGenderPhase] = useState("detecting"); // detecting | done
+  const genderDoneRef = useRef(false);
+  const finishGender = useCallback((g) => {
+    if (genderDoneRef.current) return;
+    genderDoneRef.current = true;
+    if (g === "male" || g === "female") setGender(g);
+    setGenderPhase("done");
+  }, []);
   const [frontImg, setFrontImg] = useState(null);
   const [sideImg, setSideImg] = useState(null);
   const [guide, setGuide] = useState("");
   const [count, setCount] = useState(0);
+  // Sub-etapa del paso actual: "intro" = mensajes guiados sobre la cara de
+  // referencia; "live" = cámara en vivo + conteo de 5 s. Se reinicia al cambiar de
+  // paso (front/side). capStageRef espeja el valor para el bucle de detección.
+  const [capStage, setCapStage] = useState("intro");   // intro | live
+  const [introIdx, setIntroIdx] = useState(0);
+  const capStageRef = useRef("intro");
+  const holdStartRef = useRef(0);                       // ms en que empezó a sostener la pose
   const frontInput = useRef(null);
   const sideInput = useRef(null);
   // Detección de espejuelos en la captura (para pedir que se los quiten).
@@ -134,9 +192,30 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const capturedPdRef = useRef(null);   // { pd, pdRight, pdLeft } mediana de la toma
 
   useEffect(() => {
-    phaseRef.current = phase; holdRef.current = 0; setCount(0);
+    phaseRef.current = phase; holdRef.current = 0; holdStartRef.current = 0; setCount(0);
     if (phase === "front") pdSamplesRef.current = [];   // nueva toma: reinicia muestras de PD
+    // Cada paso de captura arranca con su introducción guiada (mensajes) antes de
+    // la cámara en vivo.
+    if (phase === "front" || phase === "side") { setCapStage("intro"); setIntroIdx(0); }
   }, [phase]);
+
+  // Espeja capStage en un ref para el bucle de detección (que corre fuera de React).
+  useEffect(() => { capStageRef.current = capStage; }, [capStage]);
+
+  // Reproduce los mensajes de introducción del paso (con la cara de referencia de
+  // fondo) UNO TRAS OTRO, con tiempo suficiente para leerlos; al terminar el último
+  // pasa a la cámara en vivo. Solo con la ventana ya revelada (genderPhase "done").
+  useEffect(() => {
+    if (genderPhase !== "done" || capStage !== "intro" || phase === "done") return;
+    const nMsgs = phase === "side" ? 1 : 2;
+    const id = setTimeout(() => {
+      setIntroIdx((i) => {
+        if (i + 1 >= nMsgs) { setCapStage("live"); return i; }
+        return i + 1;
+      });
+    }, 3200);
+    return () => clearTimeout(id);
+  }, [genderPhase, capStage, introIdx, phase]);
 
   // Reloj en vivo (pie de la ficha)
   useEffect(() => {
@@ -171,7 +250,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   useEffect(() => {
     let cancelled = false;
     async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); return; }
+      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); finishGender("male"); return; }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: 1280, height: 720 }, audio: false,
@@ -180,8 +259,26 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
         setCamStatus("ready");
+        // Detección de género (best-effort) para elegir el set de fotos de EJEMPLO.
+        // Corre sobre unos fotogramas bajo el "preparando…"; si no concluye a tiempo,
+        // el temporizador maestro revela la ventana igual (con el ejemplo por defecto).
+        (async () => {
+          const votes = { male: 0, female: 0 };
+          const deadline = Date.now() + 2600;
+          while (!cancelled && !genderDoneRef.current && Date.now() < deadline) {
+            const v = videoRef.current;
+            const r = v ? await predictGender(v) : null;
+            if (r && r.prob >= 0.62) {
+              votes[r.gender] += 1;
+              if (votes.male + votes.female >= 3) break;
+            }
+            await new Promise((s) => setTimeout(s, 320));
+          }
+          if (!cancelled) finishGender(votes.female > votes.male ? "female" : "male");
+        })();
       } catch (e) {
         setCamStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
+        finishGender("male");
         return;
       }
       try {
@@ -205,6 +302,22 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Red de seguridad: la ventana NUNCA se queda en "preparando…". Pase lo que pase con
+  // la cámara o la detección, a los ~3,8 s se revela con el ejemplo que haya (por
+  // defecto hombre). Así el "cargando" es breve e imperceptible, no un bloqueo.
+  useEffect(() => {
+    const id = setTimeout(() => finishGender(), 3800);
+    return () => clearTimeout(id);
+  }, [finishGender]);
+
+  // En cuanto existe la foto FRONTAL, se van calculando POR DETRÁS nuestras medidas
+  // (MediaPipe, en el navegador — lo que ya tenemos estable) para que estén listas
+  // antes de pulsar "Calcular mis medidas". La IA (montaje) sigue en ese botón.
+  useEffect(() => {
+    if (frontImg) computeOurMeasurement(frontImg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontImg]);
 
   // ¿El cliente lleva espejuelos? Heurística por imagen: densidad de bordes +
   // reflejos en la zona de los ojos comparada con las mejillas. Con persistencia
@@ -270,12 +383,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     rafRef.current = requestAnimationFrame(loop);
     const v = videoRef.current, lm = lmRef.current;
     const ph = phaseRef.current;
-    if (!v || !lm || ph === "done" || v.readyState < 2) return;
+    // Solo se detecta/captura en la etapa "live" (tras los mensajes de introducción).
+    if (!v || !lm || ph === "done" || v.readyState < 2 || capStageRef.current !== "live") return;
     let res;
     try { res = lm.detectForVideo(v, performance.now()); } catch { return; }
     const L = res?.faceLandmarks?.[0];
     if (CAPDBG) { loop._n = (loop._n || 0) + 1; if (loop._n % 15 === 0) console.log("CAPDBG", L ? "faceW " + Math.abs(L[454].x - L[234].x).toFixed(3) + " r " + ((L[1].x - L[234].x) / ((L[454].x - L[234].x) || 1e-6)).toFixed(3) : "noface", "ph", ph); }
-    if (!L) { holdRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
+    if (!L) { holdStartRef.current = 0; setCount(0); setGuide(t("cap.noFace")); return; }
 
     const R = L[234], Lf = L[454], nose = L[1];   // laterales del rostro + punta de nariz
     const faceW = Math.abs(Lf.x - R.x);
@@ -306,11 +420,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           if (pdSamplesRef.current.length > 150) pdSamplesRef.current.shift();
         }
       }
-      holdRef.current += 1;
-      setCount(Math.max(1, Math.ceil((HOLD_FRAMES - holdRef.current) / (HOLD_FRAMES / 3))));
-      if (holdRef.current >= HOLD_FRAMES) { capture(ph); }
+      // Conteo de 5 s por tiempo real (no por fotogramas), robusto a los FPS.
+      if (!holdStartRef.current) holdStartRef.current = performance.now();
+      const elapsed = performance.now() - holdStartRef.current;
+      setCount(Math.max(1, Math.ceil((5000 - elapsed) / 1000)));
+      if (elapsed >= 5000) { capture(ph); }
     } else {
-      holdRef.current = 0; setCount(0);
+      holdStartRef.current = 0; setCount(0);
     }
   }
 
@@ -367,6 +483,17 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     clearMeasureResult(product);
     if (which === "front") { capturedPdRef.current = null; pdSamplesRef.current = []; setFrontImg(null); setPhase("front"); }
     else { setSideImg(null); setPhase(frontImg ? "side" : "front"); }
+  }
+  // "Tomar las fotos de nuevo": descarta las fotos GUARDADAS (globales) y la
+  // generación de este producto, y reinicia toda la captura desde la foto frontal.
+  // Es la única vía para rehacer las fotos una vez que ya están reutilizadas.
+  function retakeAll() {
+    autoDoneRef.current = false;
+    clearFacePhotos();
+    clearMeasureResult(product);
+    capturedPdRef.current = null; pdSamplesRef.current = [];
+    setMState("idle"); setMData(null);
+    setFrontImg(null); setSideImg(null); setPhase("front");
   }
 
   // ── Medición óptica (IA): al tener las dos fotos se manda SOLO a Gemini ──
@@ -548,6 +675,32 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // REUTILIZAR FOTOS ENTRE MONTURAS: una vez que el cliente tomó su cara (frontal +
+  // lateral), esas fotos quedan guardadas globalmente y sirven para CUALQUIER otra
+  // montura — no hace falta volver a tomarlas. Al abrir el estudio, si no hay trabajo
+  // en curso ni una generación guardada para ESTE producto pero sí hay fotos de cara
+  // guardadas, se restauran y saltamos directo a la revisión (con "Calcular mis
+  // medidas"). El cliente puede rehacerlas con "Tomar las fotos de nuevo".
+  useEffect(() => {
+    if (getMeasureJob(product)) return;
+    if (getMeasureResult(product)) return;
+    const face = getFacePhotos();
+    if (!face) return;
+    setFrontImg(face.frontImg);
+    setSideImg(face.sideImg);
+    setPhase("done");
+    computeOurMeasurement(face.frontImg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persiste las dos fotos de cara en cuanto existen, para reutilizarlas con otras
+  // monturas (ver arriba). Se guardan las tomas ORIGINALES del cliente (no la
+  // generación de la IA), reescaladas para caber en localStorage.
+  useEffect(() => {
+    if (frontImg && sideImg) saveFacePhotos({ frontImg, sideImg });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frontImg, sideImg]);
+
   // En RESPONSIVE la barra de "Calcular medidas" queda por debajo del pliegue: en
   // cuanto están las dos fotos la traemos a la vista para que el cliente no se pierda
   // y sepa exactamente qué pulsar a continuación.
@@ -595,7 +748,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   async function shareResult() {
     const src = mData?.frontImage || frontImg;
     const text = t("vm.shareText");
-    const title = "Óptica El Rancho";
+    const title = "RUBI LENS";
     const url = typeof location !== "undefined" ? location.href : "";
     try {
       if (src && typeof navigator !== "undefined" && navigator.canShare) {
@@ -673,7 +826,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       cx.textBaseline = "alphabetic";
       cx.fillStyle = "#ffffff";
       cx.font = `800 ${Math.round(38 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
-      cx.fillText("Óptica El Rancho", pad, gy + Math.round(50 * s));
+      cx.fillText("RUBI LENS", pad, gy + Math.round(50 * s));
       cx.fillStyle = "rgba(200,215,240,0.92)";
       cx.font = `600 ${Math.round(26 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
       const sub = [product?.name, product?.brand, color?.name].filter(Boolean).join("   ·   ");
@@ -788,12 +941,23 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     { key: "bridge", label: t("fs.bridge"), value: bridgeD, Icon: IconBridge },
     { key: "temple", label: t("fs.temple"), value: templeD, Icon: IconTemple },
   ];
+  const genderLabel = a.gender ? tv(String(a.gender)) : null;
+  const measuresStr = [a.eye_size, a.bridge_size, a.temple_length]
+    .map((x) => String(x == null ? "" : x).trim())
+    .filter(Boolean)
+    .join(" - ") || null;
+  const colorNames = colors.map((c) => c.name).filter(Boolean).join(" · ");
+  // Fotos de EJEMPLO segun el genero detectado (hombre por defecto).
+  const exFront = gender === "female" ? "/ejemplo-mujer-frontal.jpg" : "/ejemplo-hombre-frontal.jpg";
+  const exSide = gender === "female" ? "/ejemplo-mujer-lateral.jpg" : "/ejemplo-hombre-lateral.jpg";
   const specRows = [
     { key: "model", label: t("fs.model"),
       node: (<>{product.name}{product.brand ? <span className="fs-sub"> ({product.brand})</span> : null}</>) },
     { key: "color", label: t("fs.color"), node: color?.name || na },
     materialText && { key: "material", label: t("fs.material"), node: materialText },
     shapeText && { key: "shape", label: t("fs.shape"), node: shapeText },
+    genderLabel && { key: "gender", label: t("spec.gender"), node: genderLabel },
+    measuresStr && { key: "measures", label: t("fs.measures"), node: measuresStr },
   ].filter(Boolean);
 
   // ── Estado de cada caja de captura ──
@@ -801,46 +965,156 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     : camStatus === "denied" ? t("tryon.denied")
     : camStatus === "nocam" ? t("tryon.noCam") : "";
 
-  // Caja de captura (frontal o lateral). Se llama como función (no como <Componente/>)
-  // para no remontar el <video> en cada render y perder la cámara.
-  function capBox({ which, num, title, img, active, waiting }) {
+  // Paso del asistente (SOLO uno visible a la vez): la cámara a TODO EL ANCHO y,
+  // debajo, la referencia (ejemplo) + la lista de recomendaciones lado a lado. El
+  // mensaje ("Mire directo a la cámara" / "Gire la cabeza hacia un lado") va en la
+  // cabecera. Se llama como función (no como <Componente/>) para NO remontar el
+  // <video> en cada render y así no perder la cámara.
+  function stepCard({ which, num, title, sub, example, refSrc, checks }) {
+    const inputRef = which === "front" ? frontInput : sideInput;
+    const camReady = camStatus === "ready";
+    const introMsgs = which === "side"
+      ? [{ ic: IC_ROTATE, tx: t("tryon2.msgSideIntro") }]
+      : [{ ic: IC_EYE, tx: t("tryon2.msgFront") }, { ic: IC_LIGHT, tx: t("tryon2.msgLight") }];
+    const introCur = introMsgs[Math.min(introIdx, introMsgs.length - 1)];
+    const showIntro = camReady && capStage === "intro";
     return (
-      <div className={`cap-box ${active ? "on" : ""}`}>
-        <div className="cap-head">
-          <span className="cap-title"><span className="cap-num">{num}</span>{title}</span>
-          <button type="button" className="cap-up"
-                  onClick={() => (which === "front" ? frontInput : sideInput).current?.click()}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-            {t(which === "front" ? "cap.upFront" : "cap.upSide")}
+      <section className="ts2-step ts2-wiz on">
+        <div className="ts2-step-hd">
+          <span className="ts2-step-badge">{num}</span>
+          <div className="ts2-step-tt"><b>{title}</b><span>{sub}</span></div>
+          <button type="button" className="ts2-step-up" onClick={() => inputRef.current?.click()}
+                  title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
+                  aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+            <span className="ts2-step-up-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
           </button>
         </div>
-        <div className="cap-media">
-          {img ? (
-            <>
-              <img src={img} alt={title} />
-              <span className="cap-badge cap-ok">✓ {t("cap.ready")}</span>
-              <button type="button" className="cap-retake" onClick={() => retake(which)}
-                      title={t("cap.retake")} aria-label={t("cap.retake")}>
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
-                <span>{t("cap.retake")}</span>
-              </button>
-            </>
-          ) : active && camStatus === "ready" ? (
-            <>
-              <video ref={attachVideo} className="cap-video" playsInline muted />
-              <span className="cap-badge">● {t("cap.auto")}</span>
-              {count > 0 && <div className="cap-count">{count}</div>}
-              <div className="cap-guide">{guide || t(which === "front" ? "cap.lookFront" : "cap.turnLeft")}</div>
-            </>
-          ) : (
-            <div className="cap-ph">
-              {camStatus !== "ready" ? camMsg
-                : waiting ? t("cap.waitFront")
-                : which === "side" ? t("cap.sideHint") : ""}
-            </div>
-          )}
+        <div className="ts2-wiz-body">
+          {/* Cámara a todo el ancho. El <video> se monta SIEMPRE (para detección y
+              género); durante la introducción queda cubierto por la capa de mensajes
+              con la cara de referencia de fondo. */}
+          <div className={`ts2-drop ts2-wiz-cam ${camReady ? "live" : ""}`}
+               role="button" tabIndex={0}
+               onClick={() => { if (!camReady) inputRef.current?.click(); }}
+               onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !camReady) { e.preventDefault(); inputRef.current?.click(); } }}
+               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
+               onDragLeave={(e) => e.currentTarget.classList.remove("over")}
+               onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("over"); const f = e.dataTransfer?.files && e.dataTransfer.files[0]; if (f) onUpload(which, f); }}>
+            {camReady ? (
+              <>
+                <video ref={attachVideo} className="ts2-video" playsInline muted />
+                {showIntro ? (
+                  <div className="ts2-intro" style={refSrc ? { backgroundImage: `url(${refSrc})` } : undefined}>
+                    <div className="ts2-intro-inner" key={introIdx}>
+                      <span className="ts2-intro-ic">{introCur.ic}</span>
+                      <b className="ts2-intro-msg">{introCur.tx}</b>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {count > 0 && <div className="ts2-count ts2-count-top">{count}</div>}
+                    <span className="ts2-badge"><span className="ts2-live-dot" aria-hidden="true" /> {t("cap.auto")}</span>
+                    <div className="ts2-guide">{guide || sub}</div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="ts2-drop-ph">
+                <span className="ts2-drop-cam"><IconCamera className="ts2-drop-cam-ic" /></span>
+                <b>{camMsg || t("tryon2.drop")}</b>
+                <small>{t("tryon2.dropHint")}</small>
+              </div>
+            )}
+          </div>
+          {/* Referencia (ejemplo) + lista de recomendaciones, lado a lado (queda debajo) */}
+          <div className="ts2-wiz-foot">
+            <figure className="ts2-ex">
+              {example}
+              <figcaption className="ts2-ex-badge"><IconCheck className="ts2-ex-badge-ic" /> {t("tryon2.example")}</figcaption>
+            </figure>
+            <ul className="ts2-checks">
+              {checks.map((c, i) => (
+                <li key={i}><span className="ts2-check-ic">{c.ic}</span>{c.tx}</li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
+      </section>
+    );
+  }
+
+  // Revisión: con las DOS fotos ya tomadas, se ven por separado la frontal y la
+  // lateral, cada una con "Repetir" y "Subir foto", y debajo (permanente) la ficha
+  // de la montura + la barra con "Calcular mis medidas".
+  function reviewFig(which, img, label) {
+    const inputRef = which === "front" ? frontInput : sideInput;
+    return (
+      <figure className="ts2-rvfig">
+        {img ? <img className="ts2-rvimg" src={img} alt={label} />
+             : <div className="ts2-rvimg ts2-rvimg-ph" aria-hidden="true">📷</div>}
+        <span className="ts2-rvbadge"><IconCheck className="ts2-rvbadge-ic" /> {t("cap.ready")}</span>
+        <div className="ts2-rvtools">
+          <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+            <span>{t("cap.retake")}</span>
+          </button>
+          <button type="button" className="ts2-rvbtn" onClick={() => inputRef.current?.click()}
+                  title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
+                  aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+            <span className="ts2-rvbtn-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
+          </button>
+        </div>
+        <figcaption className="ts2-rvlabel">{label}</figcaption>
+      </figure>
+    );
+  }
+  function captureReview() {
+    return (
+      <section className="ts2-step ts2-rv on">
+        <div className="ts2-step-hd">
+          <span className="ts2-step-badge ts2-badge-done"><IconCheck /></span>
+          <div className="ts2-step-tt"><b>{t("tryon2.reviewTitle")}</b><span>{t("tryon2.reviewSub")}</span></div>
+          <button type="button" className="ts2-step-up ts2-retake-all" onClick={retakeAll}
+                  title={t("tryon2.retakeAll")} aria-label={t("tryon2.retakeAll")}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
+            <span className="ts2-step-up-tx">{t("tryon2.retakeAll")}</span>
+          </button>
+        </div>
+        <div className="ts2-rv-grid">
+          {reviewFig("front", frontImg, t("cap.front"))}
+          {reviewFig("side", sideImg, t("cap.side"))}
+        </div>
+        {/* Acción "Calcular mis medidas" DENTRO de la revisión, justo debajo de las
+            fotos (en el flujo, no una barra flotante): así en móvil siempre se ve y no
+            queda tapada por la navegación inferior del sitio. Manda las dos fotos a la
+            IA para devolver el rostro con los espejuelos + las medidas. */}
+        {mState === "idle" && (
+          <div className="ts2-rv-actions" ref={actionbarRef}>
+            <div className="vm-who">
+              <span className="vm-who-q">{t("vm.who.title")}</span>
+              <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
+                <button type="button" role="radio" aria-checked={forWhom === "me"}
+                        className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
+                        onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
+                <button type="button" role="radio" aria-checked={forWhom === "other"}
+                        className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
+                        onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
+              </div>
+              {forWhom === "other" && (
+                <input className="vm-who-name" type="text" value={otherName} maxLength={60}
+                       onChange={(e) => setOtherName(e.target.value)}
+                       placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
+              )}
+            </div>
+            <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
+              {t("vm.calc")}
+            </button>
+          </div>
+        )}
+      </section>
     );
   }
 
@@ -977,106 +1251,165 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <input ref={sideInput} type="file" accept="image/*" hidden
              onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
 
-      <div className="tryon-studio-grid">
-        {/* Izquierda: captura guiada (frontal + lateral) o, ya con el resultado, las
-            imágenes con los espejuelos puestos — todo en la MISMA ventana. */}
-        <div className="tryon-studio-cap">
-          {mState === "result" ? resultViews() : (
-            <>
-              {capBox({ which: "front", num: "1", title: t("cap.front"), img: frontImg, active: phase === "front", waiting: false })}
-              {capBox({ which: "side", num: "2", title: t("cap.side"), img: sideImg, active: phase === "side", waiting: phase === "front" })}
-            </>
-          )}
-        </div>
-
-        {/* Derecha: ficha profesional del marco ("Información de la montura") */}
-        <aside className="fs-card">
-          <div className="fs-hd"><IconGlasses className="fs-hd-ic" />{t("fs.frameInfo")}</div>
-
-          <div className="fs-top">
-            <div className="fs-info">
-              <dl className="fs-specs">
-                {specRows.map((row) => (
-                  <div className="fs-row" key={row.key}>
-                    <dt>{row.label}</dt>
-                    <dd>{row.node}</dd>
-                  </div>
-                ))}
-              </dl>
-              {colors.length > 1 && (
-                <div className="fs-swatches" role="listbox" aria-label={product.name}>
-                  {colors.map((c, i) => (
-                    <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                            className={`fs-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                            title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="fs-photo">
-              {color?.image
-                ? <img src={color.image} referrerPolicy="no-referrer"
-                       alt={`${product.name} ${color?.name || ""}`}
-                       onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
-                : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-            </div>
+      {/* Preparación: mientras la cámara arranca y se detecta el perfil, se muestra un
+          "preparando…" breve (nunca más de ~3,8 s) y luego se revela la ventana ya con
+          las fotos de ejemplo adecuadas. */}
+      {genderPhase === "detecting" && mState === "idle" && !frontImg && !sideImg && (
+        <div className="ts2-prep" role="status" aria-live="polite">
+          <div className="ts2-prep-card">
+            <span className="ts2-prep-spin" aria-hidden="true" />
+            <b>{t("tryon2.preparing")}</b>
+            <small>{t("tryon2.preparingSub")}</small>
           </div>
-
-          <div className="fs-measures">
-            <div className="fs-mhead">
-              {cells.map((c) => <span key={c.key}>{c.label}</span>)}
-            </div>
-            <div className="fs-mbody">
-              {cells.map(({ key, value, Icon }) => (
-                <div className="fs-mcell" key={key}>
-                  <Icon className="fs-mic" />
-                  <b className="fs-mval">{value || "—"}</b>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pie profesional: fecha, hora y logo RUBI_LENS */}
-          <div className="fs-foot">
-            <div className="fs-foot-meta">
-              <span className="fs-foot-date">
-                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
-                {dateStr}
-              </span>
-              <span className="fs-foot-time">
-                <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
-                {timeStr}
-              </span>
-            </div>
-            <img src="/logo.svg" alt="RUBI_LENS" className="fs-foot-logo" />
-          </div>
-        </aside>
-      </div>
-
-      {frontImg && sideImg && mState === "idle" && (
-        <div className="vm-actionbar" ref={actionbarRef}>
-          {/* ¿Para quién son los espejuelos? Se puede medir para uno mismo o como
-              referencia para un familiar/amigo. Se guarda junto con la medición. */}
-          <div className="vm-who">
-            <span className="vm-who-q">{t("vm.who.title")}</span>
-            <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
-              <button type="button" role="radio" aria-checked={forWhom === "me"}
-                      className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
-                      onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
-              <button type="button" role="radio" aria-checked={forWhom === "other"}
-                      className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
-                      onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
-            </div>
-            {forWhom === "other" && (
-              <input className="vm-who-name" type="text" value={otherName} maxLength={60}
-                     onChange={(e) => setOtherName(e.target.value)}
-                     placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
-            )}
-          </div>
-          <span className="vm-actionbar-ok">✓ {t("cap.front")} · {t("cap.side")}</span>
-          <button type="button" className="vm-go" onClick={doMeasure}>📐 {t("vm.calc")}</button>
         </div>
       )}
+
+      <div className="tryon-studio-grid ts2wrap">
+        <div className="ts2">
+          {/* Resumen del marco: material · medidas · género (mismo lenguaje visual
+              que la ficha del producto). */}
+          <div className="ts2-facts">
+            <div className="ts2-fact">
+              <IconMaterial className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("spec.material")}</span>
+                <b>{materialText || na}</b>
+                <small>{t("tryon2.materialSub")}</small>
+              </div>
+            </div>
+            <div className="ts2-fact">
+              <IconMeasures className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("pdp.metaMeasures")}</span>
+                <b>{measuresStr || "—"}</b>
+                <small>{t("tryon2.measuresSub")}</small>
+              </div>
+            </div>
+            <div className="ts2-fact">
+              <IconGender className="ts2-fact-ic" />
+              <div className="ts2-fact-tx">
+                <span className="ts2-fact-k">{t("spec.gender")}</span>
+                <b>{genderLabel || na}</b>
+              </div>
+            </div>
+          </div>
+
+          {/* Colores disponibles */}
+          {colors.length > 0 && (
+            <div className="ts2-colors">
+              <div className="ts2-colors-sw" role="listbox" aria-label={t("tryon2.colorsAvailable")}>
+                {colors.map((c, i) => (
+                  <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                          className={`ts2-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                          title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                ))}
+              </div>
+              <div className="ts2-colors-tx">
+                <b>{t("tryon2.colorsAvailable")}</b>
+                <span>{colorNames}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Asistente paso a paso: frontal -> lateral -> revisión (o el resultado
+              con las gafas puestas). Solo se ve UN paso a la vez, sin salir de la
+              ventana; la ficha de la montura queda permanente debajo. */}
+          {mState === "result" ? resultViews()
+            : (frontImg && sideImg) ? captureReview()
+            : phase === "side"
+              ? stepCard({
+                  which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.msgSide"), refSrc: exSide,
+                  example: <img className="ts2-ex-img" src={exSide} alt={t("tryon2.example")} loading="lazy" />,
+                  checks: [
+                    { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                    { ic: IC_PROFILE, tx: t("tryon2.chk.profile") },
+                    { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                    { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.headStraight") },
+                  ],
+                })
+              : stepCard({
+                  which: "front", num: "1", title: t("cap.front"), sub: t("tryon2.msgFront"), refSrc: exFront,
+                  example: <img className="ts2-ex-img" src={exFront} alt={t("tryon2.example")} loading="lazy" />,
+                  checks: [
+                    { ic: IC_LIGHT, tx: t("tryon2.chk.light") },
+                    { ic: <IconGlassesUi className="ts2-check-glass" />, tx: t("tryon2.chk.noGlasses") },
+                    { ic: <IconCheck className="ts2-check-ok" />, tx: t("tryon2.chk.lookFront") },
+                  ],
+                })}
+
+          {/* Información de la montura (ancho completo, abajo) */}
+          <aside className="fs-card ts2-frame">
+            <div className="fs-hd">
+              <IconGlasses className="fs-hd-ic" />
+              <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
+            </div>
+
+            <div className="ts2-fr ts2-fr-solo">
+              {/* Foto grande de la montura: selector de color abajo-izquierda y
+                  Material/Género como badges arriba-derecha (como las cards de la tienda);
+                  medidas debajo. */}
+              <div className="ts2-fr-main">
+                <div className="fs-photo ts2-fr-photo">
+                  {color?.image
+                    ? <img src={color.image} referrerPolicy="no-referrer"
+                           alt={`${product.name} ${color?.name || ""}`}
+                           onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+                    : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+                  <div className="ts2-fr-badges">
+                    {materialText && (
+                      <span className="ts2-fr-badge"><IconMaterial className="ts2-fr-badge-ic" />{materialText}</span>
+                    )}
+                    {genderLabel && (
+                      <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{genderLabel}</span>
+                    )}
+                  </div>
+                  {colors.length > 1 && (
+                    <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
+                      {colors.map((c, i) => (
+                        <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                                className={`ts2-fr-onsw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                                title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="fs-measures">
+                  <div className="fs-mhead">
+                    {cells.map((c) => <span key={c.key}>{c.label}</span>)}
+                  </div>
+                  <div className="fs-mbody">
+                    {cells.map(({ key, value, Icon }) => (
+                      <div className="fs-mcell" key={key}>
+                        <Icon className="fs-mic" />
+                        <b className="fs-mval">{value || "—"}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Pie profesional: fecha, hora y logo RUBI LENS */}
+            <div className="fs-foot">
+              <div className="fs-foot-meta">
+                <span className="fs-foot-date">
+                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
+                  {dateStr}
+                </span>
+                <span className="fs-foot-time">
+                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
+                  {timeStr}
+                </span>
+              </div>
+              <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      {/* La acción "Calcular mis medidas" vive ahora DENTRO de la revisión
+          (captureReview), justo debajo de las fotos, para que en móvil siempre sea
+          visible y no quede tapada por la navegación inferior del sitio. */}
 
       {/* (Las medidas calculadas se muestran EN EL FLUJO dentro de resultViews,
           debajo de las fotos — ver .vm-dims-inflow. Ya no hay tarjeta flotante

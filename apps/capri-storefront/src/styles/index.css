@@ -319,7 +319,9 @@ button { font-family: inherit; cursor: pointer; }
   .stepdot { padding: 7px 11px; font-size: 13px; }
 }
 @media (max-width: 380px) {
-  .product-grid, .props, .brands-grid { grid-template-columns: 1fr; }
+  /* El catálogo SIEMPRE mantiene 2 monturas por fila en móvil (ver bloque
+     "montura protagonista" al final del archivo). */
+  .props, .brands-grid { grid-template-columns: 1fr; }
 }
 
 /* ===== Cases / estuches ===== */
@@ -3364,3 +3366,2485 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 /* El reproductor ocupa el hueco de la imagen y trae sus propios controles. */
 video.zlx-float-img { background: #000; object-fit: contain; }
+
+/* ================= 360° / vistas 3D — sellos e indicadores ================= */
+/* Sello en la tarjeta del catálogo: la montura ya tiene las 4 vistas generadas. */
+.card-media { position: relative; }
+.card-badge-360 {
+  position: absolute; top: 10px; left: 10px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px;
+  background: #0E5AD0; color: #fff;
+  font-size: 11px; font-weight: 800; letter-spacing: .02em; line-height: 1;
+  box-shadow: 0 2px 8px rgba(14, 90, 208, .35);
+  pointer-events: none;
+}
+.card-badge-360 svg { display: block; }
+
+/* Sello 360° sobre la imagen protagonista de la ficha (esquina inf. derecha). */
+.zlx-float-inner { position: relative; }
+.zlx-badge-360 {
+  position: absolute; right: 12px; bottom: 12px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: #0E5AD0;
+  border: 1px solid #cfe0ff;
+  font-size: 12.5px; font-weight: 800; letter-spacing: .02em; line-height: 1;
+  box-shadow: 0 4px 14px rgba(16, 34, 84, .14);
+  backdrop-filter: blur(3px);
+}
+.zlx-badge-360 svg { display: block; }
+
+/* ================= Ficha: fila de especificaciones con iconos ================= */
+.zlx-specs {
+  display: flex; flex-wrap: wrap; align-items: stretch;
+  gap: 4px 0; margin: 12px 0 2px;
+  border: 1px solid #eef1f6; border-radius: 14px; background: #fbfcff;
+  overflow: hidden;
+}
+.zlx-spec {
+  flex: 1 1 0; min-width: 110px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-right: 1px solid #eef1f6;
+}
+.zlx-spec:last-child { border-right: none; }
+.zlx-spec-ic {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: #eef4ff; color: #0E5AD0;
+}
+.zlx-spec-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zlx-spec-tx small { font-size: 11px; color: #8b93a3; font-weight: 600; letter-spacing: .01em; }
+.zlx-spec-tx b { font-size: 14px; color: #17203a; font-weight: 700; white-space: nowrap; }
+
+/* ================= Responsive: la IMAGEN es la protagonista ================= */
+/* En móvil las miniaturas quedan en una tira VERTICAL a la izquierda y la imagen
+   ocupa el resto, grande — tal como la referencia. (Anula el column-reverse previo.) */
+@media (max-width: 760px) {
+  .zlx-imgrow { flex-direction: row; gap: 10px; align-items: stretch; }
+  .zlx-views {
+    flex-direction: column; width: 58px; flex: 0 0 58px;
+    overflow: visible; padding-bottom: 0; gap: 8px;
+  }
+  .zlx-view { width: 58px; height: 58px; flex: 0 0 auto; aspect-ratio: 1 / 1; }
+  .zlx-imgrow .zlx-float-inner { flex: 1 1 auto; min-width: 0; }
+  .zlx-float-img { width: 100%; min-height: 300px; max-height: 62vh; object-fit: contain; }
+  .zlx-specs { margin-top: 14px; }
+  .zlx-spec { min-width: 100px; padding: 10px 12px; }
+  .zlx-badge-360 { right: 8px; bottom: 8px; padding: 5px 10px; font-size: 11.5px; }
+}
+@media (max-width: 420px) {
+  .zlx-views { width: 50px; flex-basis: 50px; }
+  .zlx-view { width: 50px; height: 50px; }
+  .zlx-float-img { min-height: 260px; }
+  .zlx-spec-tx b { font-size: 13px; }
+}
+
+/* ===================================================================
+   Tarjeta de producto — "montura protagonista" (rediseño premium)
+   Paleta: blanco + azul profundo + gris muy claro. Rojo SOLO en oferta.
+   =================================================================== */
+.card {
+  border: 1px solid #eef1f6;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 34, 84, .04);
+}
+.card:hover { box-shadow: 0 14px 30px -18px rgba(16, 34, 84, .35); border-color: #e0e7f4; }
+
+/* La FOTO manda: llena la caja (relación fija) y escala con el ancho de la tarjeta. */
+.card-media { aspect-ratio: 1.12; padding: 12px 12px 4px; display: grid; place-items: center; }
+.card-img-link { width: 100%; height: 100%; display: grid; place-items: center; }
+.card-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+
+/* Única acción flotante: el corazón. */
+.card-actions { gap: 0; }
+
+.card-body { padding: 4px 14px 16px; display: flex; flex-direction: column; }
+.card-row { display: flex; align-items: baseline; gap: 8px; }
+.card-name { font-weight: 800; font-size: 15.5px; color: var(--ink, #17203a); text-decoration: none; letter-spacing: -.01em; }
+.card-name:hover { color: var(--blue, #0E5AD0); }
+.card-rating { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 700; color: #4a5164; white-space: nowrap; }
+.card-star { color: #f5a623; font-size: 13px; line-height: 1; }
+.card-reviews { color: #98a1b0; font-weight: 600; }
+.card-sub { color: var(--muted, #6b7280); font-size: 13px; margin: 3px 0 10px; }
+
+/* Fila: puntos de color a la izquierda, precio a la derecha. */
+.card-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-colors { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.card-dots { display: inline-flex; align-items: center; gap: 5px; }
+.card-dot {
+  width: 15px; height: 15px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px #d7deea;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.card-dot:hover { transform: scale(1.12); }
+.card-dot.sel { box-shadow: 0 0 0 2px var(--blue, #0E5AD0); }
+.card-colors-n { font-size: 12px; color: #98a1b0; white-space: nowrap; }
+
+.card-price-wrap { display: inline-flex; align-items: baseline; gap: 7px; }
+.card-price { color: var(--ink, #17203a); font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
+.card-price.sale { color: var(--red, #e0241c); }
+.card-price-old { color: #98a1b0; font-size: 13px; text-decoration: line-through; font-weight: 600; }
+.card-oferta {
+  align-self: flex-start; margin-top: 8px;
+  display: inline-flex; align-items: center;
+  padding: 2px 9px; border-radius: 999px;
+  background: #fdecea; color: var(--red, #e0241c);
+  font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase;
+}
+
+/* Acción principal: azul, ancho completo. */
+.card-tryon {
+  margin-top: 14px; width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; border: none; border-radius: 12px; cursor: pointer;
+  background: var(--blue, #0E5AD0); color: #fff;
+  font-weight: 800; font-size: 14px; letter-spacing: .02em; text-transform: uppercase;
+  box-shadow: 0 8px 18px -10px rgba(14, 90, 208, .8);
+  transition: filter .15s ease, transform .12s ease;
+}
+.card-tryon:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.card-tryon:active { transform: translateY(0); }
+.card-tryon svg { display: block; }
+
+/* Acción secundaria: contorno, más discreta. */
+.card-add-cart {
+  margin-top: 9px; width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 44px; border: 1.5px solid #cfdaee; border-radius: 12px; cursor: pointer;
+  background: #fff; color: var(--blue, #0E5AD0);
+  font-weight: 700; font-size: 13.5px;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.card-add-cart:hover { background: #eef4ff; border-color: #b7ccf3; }
+.card-add-cart.done { background: #2e7d46; border-color: #2e7d46; color: #fff; }
+.card-add-cart:disabled { opacity: .5; cursor: not-allowed; }
+.card-add-cart svg { display: block; }
+
+/* ---- Responsive: 2 monturas por fila SIEMPRE en móvil, con aire ---- */
+@media (max-width: 640px) {
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .card-body { padding: 4px 11px 13px; }
+  .card-name { font-size: 14.5px; }
+  .card-price { font-size: 16px; }
+  .card-tryon { height: 42px; font-size: 12.5px; gap: 6px; }
+  .card-add-cart { height: 40px; font-size: 12.5px; }
+  .card-colors-n { display: none; }
+}
+@media (max-width: 380px) {
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card-tryon { text-transform: none; letter-spacing: 0; }
+  .card-dot { width: 13px; height: 13px; }
+}
+
+/* ===================================================================
+   ETAPA 1 — estética móvil tipo app (barra superior azul, barra
+   inferior azul, franja de confianza, estrellas). Azul profundo + blanco.
+   =================================================================== */
+
+/* Estrellas de 5 puntos con relleno parcial (más visibles). */
+.card-rating { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.stars { position: relative; display: inline-block; font-size: 14px; line-height: 1; letter-spacing: 1.5px; font-family: Arial, sans-serif; }
+.stars-bg { color: #d9dee8; }
+.stars-fg { position: absolute; top: 0; left: 0; width: var(--pct, 0%); overflow: hidden; color: #f5a623; white-space: nowrap; }
+.card-reviews { font-size: 12px; color: #98a1b0; font-weight: 600; }
+
+/* Franja de confianza (envío, seguridad, pagos, asesoría). */
+.truststrip {
+  max-width: 1320px; margin: 10px auto 0; padding: 20px 22px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  border-top: 1px solid #eef1f6;
+}
+.trust-item { display: flex; align-items: center; gap: 11px; color: #5b6472; font-size: 13.5px; font-weight: 600; min-width: 0; }
+.trust-ic { flex: 0 0 auto; width: 30px; height: 30px; color: #16357e; }
+.trust-tx { line-height: 1.2; }
+.trust-ic svg { width: 20px; height: 20px; }
+
+/* Barra inferior tipo app (oculta en escritorio). */
+.bottomnav { display: none; }
+
+/* --- Modo móvil: barra superior azul + logo blanco + barra inferior --- */
+@media (max-width: 860px) {
+  /* Barra superior en azul de marca. */
+  .header-main {
+    background: linear-gradient(180deg, #1a49b6 0%, #123a95 100%);
+    border-bottom: none;
+  }
+  .header-main .logo-img { display: none; }
+  .logo-mobile { display: inline-flex; align-items: center; gap: 8px; color: #fff; }
+  .logo-mobile svg { width: 30px; height: 22px; flex: 0 0 auto; }
+  .logo-mobile b { font-size: 17px; font-weight: 800; letter-spacing: .2px; white-space: nowrap; }
+  .header-main .hamburger span { background: #fff; }
+  .header-main .icon-btn { color: #fff; }
+  .header-main .badge { border: 1.5px solid #123a95; }
+  /* Menos ruido en la barra azul: idioma va en el menú, sonido se oculta. */
+  .header-main .lang-flags, .header-main .sound-toggle { display: none; }
+
+  /* Tagline a la derecha (como la referencia). */
+  .header-tagline {
+    display: flex; margin-left: auto; margin-right: 6px;
+    color: #fff; font-size: 10px; font-weight: 800; line-height: 1.15;
+    letter-spacing: .04em; text-transform: uppercase; text-align: right;
+    max-width: 92px; align-self: center;
+    border-right: 3px solid #e0241c; padding-right: 9px;
+  }
+  .header-actions { gap: 6px; margin-left: 4px; }
+
+  /* Idioma dentro del menú lateral. */
+  .drawer-lang { display: flex; gap: 8px; padding: 14px 4px 4px; }
+  .drawer-lang button {
+    flex: 1; padding: 10px; border: 1.5px solid #e2e6ee; border-radius: 10px;
+    background: #fff; color: #17203a; font-weight: 700; font-size: 13px; cursor: pointer;
+  }
+  .drawer-lang button.on { border-color: #0E5AD0; color: #0E5AD0; background: #eef4ff; }
+
+  /* Barra inferior fija, azul, 5 accesos. */
+  .bottomnav {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
+    background: linear-gradient(180deg, #1a49b6 0%, #123a95 100%);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -6px 20px -8px rgba(9, 25, 70, .5);
+  }
+  .bn-item { display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: rgba(255, 255, 255, .72); text-decoration: none; font-size: 10px; font-weight: 700; }
+  .bn-item.on { color: #fff; }
+  .bn-ic { display: grid; place-items: center; }
+  .bn-ic svg { width: 22px; height: 22px; }
+  .bn-tx { line-height: 1; }
+
+  /* Espacio para que la barra inferior no tape el contenido. */
+  .site-main { padding-bottom: 4px; }
+  .footer { padding-bottom: 74px; }
+  /* El botón de chat sube por encima de la barra inferior. */
+  .chat-fab { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 14px 12px; padding: 18px 16px; }
+}
+
+/* Por defecto (escritorio) el logo/tagline móviles NO se muestran. */
+.logo-mobile { display: none; }
+.header-tagline { display: none; }
+
+/* Tamaños de los iconos vectoriales (UiIcons) en cada contenedor. */
+.card-badge-360 svg { width: 14px; height: 14px; display: block; }
+.zlx-badge-360 svg { width: 16px; height: 16px; display: block; }
+.zlx-spec-ic svg { width: 21px; height: 21px; display: block; }
+.trust-ic { display: block; }
+.bn-ic svg, .card-tryon svg, .card-add-cart svg { display: block; }
+
+/* Botón "Filtros" (referencia imagen 5): pastilla azul con embudo. */
+.filters-toggle {
+  align-items: center; gap: 8px;
+  border: 1.5px solid #cfdaee; background: #fff; color: #0E5AD0;
+  border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 14px; cursor: pointer;
+}
+.filters-toggle .ft-ic { width: 18px; height: 18px; display: block; flex: 0 0 auto; }
+.filters-toggle .ft-chev { font-size: 10px; margin-left: 2px; color: #0E5AD0; }
+@media (max-width: 860px) { .filters-toggle { display: inline-flex; width: auto; } }
+
+
+/* ===================================================================
+   ETAPA 2 — Rediseño de alta fidelidad del catálogo (referencia móvil).
+   Tokens de diseño + iconos de línea + hero de categoría + barra de
+   filtros + vista rejilla/lista. Todo APENDIZADO al final para que las
+   media queries móviles ganen la cascada (corrige el logo/tagline).
+   =================================================================== */
+
+/* ---- Tokens de diseño (alias legibles sobre la paleta de marca) ---- */
+:root {
+  --primary-blue: #0E5AD0;
+  --primary-blue-dark: #0a47a8;
+  --primary-blue-light: #eef4ff;
+  --text-primary: #17203a;
+  --text-secondary: #4a5164;
+  --text-muted: #8b93a3;
+  --surface: #ffffff;
+  --surface-2: #f7f9fc;
+  --border-soft: #e7ecf4;
+  --star: #f5a623;
+  --success: #2e7d46;
+  --offer: #e0241c;
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-pill: 999px;
+  --shadow-card: 0 2px 10px rgba(16, 34, 84, .06);
+  --shadow-soft: 0 2px 8px rgba(16, 34, 84, .05);
+}
+
+/* ---- Iconos de línea en el header (reemplazan a los emojis) ---- */
+.hdr-ic { width: 22px; height: 22px; display: block; }
+.header-actions .icon-btn { display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px; border: none; background: transparent;
+  color: var(--text-primary); position: relative; transition: background .15s ease; }
+.header-actions .icon-btn:hover { background: var(--primary-blue-light); }
+.search-ic { width: 19px; height: 19px; display: block; }
+.search .search-ic { color: var(--primary-blue); }
+
+/* Corazón de la tarjeta como icono de línea. */
+.card-ic-fav { display: inline-flex; align-items: center; justify-content: center; }
+.card-fav-ic { width: 20px; height: 20px; display: block; }
+.card-ic-fav.on { color: var(--offer); }
+
+/* ---- Hero de categoría (banner editorial encima de los productos) ---- */
+.cat-hero {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+  margin: 0 0 var(--sp-5); padding: var(--sp-6) var(--sp-6);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 140% at 100% 0%, #dfeafe 0%, rgba(223,234,254,0) 55%),
+    linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%);
+  border: 1px solid var(--border-soft);
+}
+.cat-hero-txt { position: relative; z-index: 2; min-width: 0; }
+.cat-hero-txt h1 {
+  font-family: var(--display); font-weight: 600; letter-spacing: -.02em;
+  font-size: 30px; line-height: 1.05; margin: 0 0 8px; color: var(--text-primary);
+}
+.cat-hero-txt p { margin: 0; color: var(--text-secondary); font-size: 15px; font-weight: 500; }
+.cat-hero-art {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  color: var(--primary-blue);
+}
+.cat-hero-script {
+  font-family: var(--display); font-style: italic; font-weight: 500;
+  font-size: 17px; color: var(--primary-blue-dark); opacity: .9; white-space: nowrap;
+}
+.cat-hero-glasses { width: 132px; height: auto; color: var(--primary-blue); opacity: .9; }
+
+/* ---- Barra de filtros: pastillas [Filtros] [Ordenar] N modelos [rejilla/lista] ---- */
+.filterbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin: 0 0 var(--sp-5); flex-wrap: wrap;
+}
+.fb-pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px;
+  border-radius: var(--r-pill); border: 1px solid var(--border-soft);
+  background: var(--surface); color: var(--text-primary);
+  font-weight: 700; font-size: 14px; cursor: pointer; white-space: nowrap;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.fb-pill:hover { border-color: #cfdaee; box-shadow: var(--shadow-soft); }
+.fb-pill .fb-ic { width: 18px; height: 18px; display: block; flex: 0 0 auto; color: var(--primary-blue); }
+.fb-filters.act { border-color: var(--primary-blue); color: var(--primary-blue); background: var(--primary-blue-light); }
+.fb-filters.act .fb-ic { color: var(--primary-blue); }
+
+/* Ordenar: el <select> nativo dentro de la pastilla (accesible). */
+.fb-sort { position: relative; padding-right: 34px; }
+.fb-sort::after {
+  content: ""; position: absolute; right: 15px; top: 50%; width: 8px; height: 8px;
+  border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted);
+  transform: translateY(-70%) rotate(45deg); pointer-events: none;
+}
+.fb-sort select {
+  appearance: none; -webkit-appearance: none; border: none; background: transparent;
+  font: inherit; font-weight: 700; color: var(--text-primary); cursor: pointer;
+  padding: 0; margin: 0; outline: none; max-width: 160px;
+}
+.fb-count { margin-left: 2px; color: var(--text-muted); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+
+/* Conmutador rejilla / lista. */
+.fb-view { margin-left: auto; display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px; border-radius: var(--r-pill); border: 1px solid var(--border-soft); background: var(--surface); }
+.fb-vbtn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border: none; border-radius: var(--r-pill); background: transparent; color: var(--text-muted); cursor: pointer;
+  transition: background .15s ease, color .15s ease; }
+.fb-vbtn:hover { color: var(--primary-blue); }
+.fb-vbtn.on { background: var(--primary-blue); color: #fff; }
+.fb-vbtn .fb-ic { width: 18px; height: 18px; display: block; }
+
+/* ---- Vista LISTA (conmutador): tarjetas horizontales en una columna ---- */
+.product-grid.list { grid-template-columns: 1fr !important; gap: var(--sp-3); }
+.product-grid.list .card { display: grid; grid-template-columns: 168px 1fr; align-items: stretch; }
+.product-grid.list .card-media { aspect-ratio: auto; height: 100%; min-height: 160px; }
+.product-grid.list .card-body { padding: var(--sp-4) var(--sp-5); }
+.product-grid.list .card-tryon { margin-top: auto; }
+@media (min-width: 720px) {
+  .product-grid.list .card { grid-template-columns: 200px 1fr; }
+  .product-grid.list .card-body { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; align-items: start; }
+  .product-grid.list .card-row, .product-grid.list .card-sub, .product-grid.list .card-meta { grid-column: 1 / -1; }
+  .product-grid.list .card-tryon { margin-top: 12px; }
+}
+
+/* En escritorio el filtro vive en la barra lateral: la pastilla [Filtros] sobra. */
+@media (min-width: 861px) { .fb-filters { display: none; } }
+
+/* ===================================================================
+   MÓVIL (≤860px) — APENDIZADO AL FINAL para ganar la cascada.
+   Corrige el logo blanco + tagline que quedaban ocultos en el teléfono
+   y afina el hero y la barra de filtros para pantalla pequeña.
+   =================================================================== */
+@media (max-width: 860px) {
+  /* FIX: en el teléfono el logo blanco y el eslogan SÍ se muestran. */
+  .header-main .logo-mobile { display: inline-flex; }
+  .header-main .header-tagline { display: flex; }
+  /* El icono PNG a color se oculta; manda el logo blanco sobre el azul. */
+  .header-main .logo-img { display: none; }
+
+  /* Iconos del header en blanco sobre la barra azul. */
+  .header-main .icon-btn { color: #fff; }
+  .header-main .icon-btn:hover { background: rgba(255,255,255,.14); }
+
+  /* Hero de categoría más compacto; conserva la ilustración a la derecha. */
+  .cat-hero { padding: var(--sp-5) var(--sp-5); border-radius: var(--r-md); }
+  .cat-hero-txt h1 { font-size: 23px; }
+  .cat-hero-txt p { font-size: 13.5px; }
+  .cat-hero-script { font-size: 13px; }
+  .cat-hero-glasses { width: 86px; }
+
+  /* Barra de filtros: pastillas cómodas al tacto. */
+  .filterbar { gap: 8px; }
+  .fb-pill { height: 40px; font-size: 13.5px; padding: 0 14px; }
+  .fb-count { width: 100%; order: 5; margin: 2px 0 0; }
+  .fb-view { margin-left: auto; order: 4; }
+}
+
+@media (max-width: 400px) {
+  .cat-hero-script { display: none; }
+  .cat-hero-glasses { width: 66px; }
+  .cat-hero-txt h1 { font-size: 21px; }
+}
+
+
+/* ===================================================================
+   ETAPA 3 — Ajustes de referencia del cliente.
+   Logo real de marca, iconos móviles (solo buscar + carrito), hero con
+   foto de gafas + degradado + brillo + "visión nublada", y franja de
+   confianza premium con el mismo tratamiento abajo.
+   =================================================================== */
+
+/* Logo oficial de marca (blanco) sobre la barra azul en móvil. */
+.logo-mobile-img { height: 32px; width: auto; display: block; border-radius: 8px; box-shadow: 0 1px 5px rgba(6, 20, 60, .22); }
+
+/* ---- Hero: foto de gafas de fondo + degradado + brillo + desenfoque ---- */
+.cat-hero {
+  isolation: isolate;
+  background:
+    radial-gradient(85% 120% at 90% -15%, rgba(120,170,255,.38) 0%, rgba(120,170,255,0) 60%),
+    linear-gradient(135deg, #eaf2ff 0%, #ffffff 52%, #f2f7ff 100%);
+}
+/* Foto de gafas a la derecha, desenfocada y difuminada hacia la izquierda:
+   sensación de "visión nublada". Se recorta con el overflow del hero. */
+.cat-hero::before {
+  content: ""; position: absolute; inset: -16px; z-index: 0;
+  background: url("/hero-eyewear.jpg") right 22% center / cover no-repeat;
+  opacity: .5; filter: blur(2px) saturate(1.05);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 32%, #000 72%, #000 100%);
+          mask-image: linear-gradient(90deg, transparent 0%, transparent 32%, #000 72%, #000 100%);
+}
+/* Velo de brillo por encima de la foto (glow). */
+.cat-hero::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(55% 78% at 76% 32%, rgba(255,255,255,.45), rgba(255,255,255,0) 72%),
+    linear-gradient(90deg, rgba(255,255,255,.16), rgba(255,255,255,0) 46%);
+}
+.cat-hero-txt, .cat-hero-art { position: relative; z-index: 2; }
+.cat-hero-art { align-self: flex-start; }
+.cat-hero-script { text-shadow: 0 1px 12px rgba(255,255,255,.95), 0 1px 2px rgba(255,255,255,.9); }
+
+/* ---- Franja de confianza (imagen 4): mismo degradado/brillo, abajo ---- */
+.truststrip {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--border-soft); border-top: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  max-width: 1200px; margin: 26px auto 10px; padding: 20px 24px;
+  background:
+    radial-gradient(70% 130% at 10% -20%, rgba(120,170,255,.26), rgba(120,170,255,0) 55%),
+    radial-gradient(70% 130% at 102% 130%, rgba(120,170,255,.20), rgba(120,170,255,0) 55%),
+    linear-gradient(180deg, #f2f7ff 0%, #ffffff 100%);
+}
+.trust-item { color: var(--text-secondary); font-weight: 600; }
+.trust-ic { color: var(--primary-blue); }
+
+/* ---- MÓVIL (≤860px) — apendizado al final: gana la cascada ---- */
+@media (max-width: 860px) {
+  /* Quita la barra superior negra (barra divisoria): más compacto. */
+  .header-top { display: none; }
+
+  /* Arriba solo BUSCAR + CARRITO. Cuenta va en la barra inferior;
+     favoritos y sonido fuera de la barra azul. */
+  .header-main .acct, .header-main .fav-m { display: none; }
+  .header-main .hdr-search-m { display: inline-flex; }
+
+  /* Logo oficial de marca, tamaño cómodo sobre el azul. */
+  .logo-mobile-img { height: 31px; }
+
+  /* Eslogan con subrayado rojo (sin barra vertical divisoria). */
+  .header-main .header-tagline {
+    border-right: none; padding-right: 0;
+    border-bottom: 2px solid #e0241c; padding-bottom: 3px;
+    max-width: 88px;
+  }
+
+  /* Hero compacto para que se vean 4 espejuelos al entrar. */
+  .cat-hero { padding: 15px 16px; margin-bottom: 12px; }
+  .cat-hero-txt h1 { font-size: 22px; margin-bottom: 5px; }
+  .cat-hero-txt p { font-size: 13px; }
+  .cat-hero::before { opacity: .42; }
+
+  /* Barra de filtros más ajustada. */
+  .filterbar { margin-bottom: 12px; }
+
+  /* Franja de confianza con margen lateral (tarjeta con aire). */
+  .truststrip { margin: 18px 12px 8px; padding: 16px 14px; }
+}
+
+/* ---- Visibilidad definitiva de los iconos del header (corrige cascada) ---- */
+/* La lupa extra solo existe en móvil; en escritorio ya hay caja de búsqueda. */
+.header-actions .hdr-search-m { display: none !important; }
+@media (max-width: 860px) {
+  /* En la barra azul móvil SOLO van BUSCAR + CARRITO. */
+  .header-actions .hdr-search-m { display: inline-flex !important; }
+  .header-actions .sound-toggle,
+  .header-actions .acct,
+  .header-actions .fav-m,
+  .header-actions .lang-flags { display: none !important; }
+}
+
+/* ---- MÓVIL: compactar para que se vean ~4 espejuelos (2 filas) ---- */
+@media (max-width: 860px) {
+  .cat-hero { padding: 12px 14px; margin-bottom: 10px; }
+  .cat-hero-txt h1 { font-size: 20px; margin-bottom: 3px; }
+  .cat-hero-txt p { font-size: 12.5px; }
+  .filterbar { margin-bottom: 10px; }
+  .product-grid { gap: 12px; }
+  .card-media { aspect-ratio: 1.35; padding: 8px 8px 2px; }
+  .card-body { padding: 4px 10px 11px; }
+  .card-sub { margin: 2px 0 7px; }
+  .card-tryon { height: 40px; margin-top: 10px; }
+  .card-add-cart { height: 37px; margin-top: 7px; }
+}
+
+
+/* ===================================================================
+   ETAPA 4 — Hero azul premium (degradado océano→cielo + brillo central,
+   fondo bokeh borroso = visión borrosa, gafas nítidas = enfoque, mensaje
+   caligráfico girado que "flota" fuera del rectángulo). Logo con glow.
+   Barra: "Ordenar" (menú propio) + conteo en la misma línea.
+   =================================================================== */
+
+/* ---- Logo: transparente + glow blanco (sin recuadro), un poco más grande ---- */
+.logo-mobile-img {
+  height: 34px; width: auto; display: block; border-radius: 0; background: none; box-shadow: none;
+  filter:
+    drop-shadow(0 0 2px rgba(255,255,255,.95))
+    drop-shadow(0 0 6px rgba(255,255,255,.65))
+    drop-shadow(0 2px 3px rgba(0,20,60,.28));
+}
+
+/* ---- Hero: desborde visible para que el script se salga (flotando) ---- */
+.cat-hero {
+  position: relative; overflow: visible; isolation: isolate;
+  display: block; padding: 0; border: none; background: none;
+  margin: 18px 0 var(--sp-5); min-height: 132px;
+}
+.cat-hero::before, .cat-hero::after { content: none; }
+
+/* El "rectángulo": degradado azul (océano der → cielo izq) + brillo central. */
+.cat-hero-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: var(--r-lg);
+  background:
+    radial-gradient(58% 130% at 50% 40%, rgba(255,255,255,.34) 0%, rgba(255,255,255,0) 62%),
+    linear-gradient(270deg, #0a3f8f 0%, #1f5fbf 42%, #4f92e0 74%, #7cb5ef 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 30px -16px rgba(8,30,84,.5);
+}
+/* Bokeh borroso a la derecha (visión borrosa), fundido hacia la izquierda. */
+.cat-hero-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background: url("/hero-bokeh.jpg") right center / cover no-repeat;
+  filter: blur(7px) saturate(1.15); opacity: .32; mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(90deg, transparent 6%, #000 60%);
+          mask-image: linear-gradient(90deg, transparent 6%, #000 60%);
+}
+
+/* Texto a la izquierda, en blanco. */
+.cat-hero-txt { position: relative; z-index: 3; padding: 20px 20px; max-width: 60%; }
+.cat-hero-txt h1 { color: #fff; font-size: 29px; line-height: 1.05; margin: 0 0 8px; text-shadow: 0 2px 16px rgba(4,18,54,.45); }
+.cat-hero-txt p { color: rgba(255,255,255,.94); font-size: 15px; font-weight: 500; margin: 0; text-shadow: 0 1px 10px rgba(4,18,54,.4); }
+
+/* Gafas nítidas (enfoque) abajo-derecha, por encima del bokeh. */
+.cat-hero-glass {
+  position: absolute; z-index: 4; right: 3%; bottom: 12px;
+  width: 44%; max-width: 250px; height: auto;
+  filter: drop-shadow(0 12px 20px rgba(4,18,54,.5));
+}
+
+/* Mensaje caligráfico, 2 líneas, girado, saliéndose del rectángulo (flota). */
+.cat-hero-script {
+  position: absolute; z-index: 5; top: -16px; right: 22px;
+  display: flex; flex-direction: column; align-items: flex-end;
+  transform: rotate(-11deg); transform-origin: 100% 0;
+  font-family: "Dancing Script", "Segoe Script", "Snell Roundhand", cursive;
+  color: #fff; line-height: 1.0; pointer-events: none;
+  text-shadow: 0 3px 12px rgba(4,18,54,.55), 0 1px 2px rgba(4,18,54,.7);
+}
+.cat-hero-script span { font-size: 27px; font-weight: 700; white-space: nowrap; }
+.cat-hero-script span:last-child { margin-right: 16px; }
+
+/* ---- Barra de filtros: "Ordenar" (menú propio) + conteo en la misma línea ---- */
+.fb-sort { position: relative; padding: 0; }
+.fb-sort::after { content: none; }
+.fb-sortbtn { gap: 7px; }
+.fb-caret { width: 8px; height: 8px; flex: 0 0 auto; margin-left: 2px; margin-top: -3px;
+  border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(45deg); }
+.fb-menu {
+  list-style: none; position: absolute; z-index: 60; top: calc(100% + 6px); left: 0;
+  min-width: 200px; margin: 0; padding: 6px; background: #fff;
+  border: 1px solid var(--border-soft); border-radius: 12px;
+  box-shadow: 0 16px 36px -12px rgba(16,34,84,.42);
+}
+.fb-menu li { margin: 0; }
+.fb-menu button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  padding: 9px 12px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--text-primary); cursor: pointer;
+}
+.fb-menu button:hover { background: var(--primary-blue-light); }
+.fb-menu button.on { background: var(--primary-blue); color: #fff; }
+.fb-backdrop { position: fixed; inset: 0; z-index: 55; background: transparent; }
+.fb-count { order: 0; width: auto; margin: 0 0 0 2px; }
+
+/* ---- ETAPA 4 móvil (apendizado al final) ---- */
+@media (max-width: 860px) {
+  .logo-mobile-img { height: 33px; }
+  .cat-hero { min-height: 106px; margin: 14px 0 12px; }
+  .cat-hero-txt { padding: 13px 14px; max-width: 58%; }
+  .cat-hero-txt h1 { font-size: 20px; margin-bottom: 4px; }
+  .cat-hero-txt p { font-size: 12px; }
+  .cat-hero-glass { width: 52%; max-width: 200px; bottom: 8px; right: 2%; }
+  .cat-hero-script { top: -12px; right: 15px; }
+  .cat-hero-script span { font-size: 17px; }
+  .cat-hero-script span:last-child { margin-right: 11px; }
+  /* Conteo en la misma línea que Filtros / Ordenar. */
+  .filterbar { gap: 7px; }
+  .fb-count { width: auto; order: 0; margin: 0 2px 0 2px; font-size: 12px; }
+  .fb-pill { padding: 0 13px; }
+}
+
+
+/* ===================================================================
+   ETAPA 5 — Blanco hueso + cards sin separación + hero sin caja azul
+   (texto azul oscuro, gafas 3/4 integradas, script abajo-derecha) +
+   toggle sin contenedor + azul un poco más oscuro + header reordenado.
+   =================================================================== */
+
+:root {
+  --blue: #0c4cc0;
+  --blue-dark: #093a99;
+  --primary-blue: #0c4cc0;
+  --primary-blue-dark: #093a99;
+  --hero-ink: #16306e;   /* azul oscuro: títulos y mensaje */
+  --bone: #f5f2ec;       /* blanco hueso */
+}
+
+/* Fondo blanco hueso; las cards blancas resaltan sin bordes. */
+body { background: var(--bone); }
+
+/* ---- Hero SIN caja azul: fondo hueso, texto azul oscuro ---- */
+.cat-hero {
+  position: relative; overflow: visible; background: none !important; border: none !important;
+  box-shadow: none; padding: 0; margin: 6px 0 16px; min-height: 122px; isolation: auto;
+}
+.cat-hero-bg { display: none !important; }
+.cat-hero::before, .cat-hero::after { content: none !important; }
+.cat-hero-txt { position: relative; z-index: 3; padding: 10px 4px; max-width: 58%; }
+.cat-hero-txt h1 { color: var(--hero-ink); font-size: 30px; line-height: 1.05; margin: 0 0 7px; text-shadow: none; }
+.cat-hero-txt p { color: #5a68a0; font-size: 14.5px; font-weight: 500; margin: 0; text-shadow: none; }
+
+/* Gafas 3/4 arriba-derecha (transparente = sin bordes; leve difuminado). */
+.cat-hero-glass {
+  position: absolute; z-index: 1; top: -6px; right: 0; bottom: auto; left: auto;
+  width: 50%; max-width: 320px; height: auto;
+  filter: blur(.5px) drop-shadow(0 9px 15px rgba(20,40,90,.16));
+  opacity: .96;
+}
+
+/* Mensaje caligráfico ABAJO-DERECHA, azul oscuro con sombra. */
+.cat-hero-script {
+  position: absolute; z-index: 4; right: 8px; bottom: 2px; top: auto;
+  display: flex; flex-direction: column; align-items: flex-end;
+  transform: rotate(-8deg); transform-origin: 100% 100%;
+  font-family: "Dancing Script", "Segoe Script", cursive;
+  color: var(--hero-ink); line-height: 1.0; pointer-events: none;
+  text-shadow: 0 2px 5px rgba(20,40,90,.30), 0 1px 1px rgba(255,255,255,.55);
+}
+.cat-hero-script span { font-size: 25px; font-weight: 700; white-space: nowrap; }
+.cat-hero-script span:last-child { margin-right: 10px; }
+
+/* ---- Cards blancas SIN separación entre la imagen y la card ---- */
+.card { background: #fff; border: none; box-shadow: 0 3px 14px -5px rgba(20,40,90,.12), 0 1px 3px rgba(20,40,90,.05); }
+.card:hover { box-shadow: 0 16px 32px -14px rgba(20,40,90,.26); border: none; }
+.card-media { background: #fff !important; border: none !important; box-shadow: none !important; }
+.card-img-link { background: #fff; }
+.card-media img { filter: none !important; }
+
+/* ---- Toggle rejilla/lista SIN contenedor (iconos cuadrados sueltos) ---- */
+.fb-view { border: none; background: none; padding: 0; gap: 6px; }
+.fb-vbtn { width: 36px; height: 36px; border-radius: 9px; background: none; color: var(--text-muted); }
+.fb-vbtn:hover { color: var(--primary-blue); }
+.fb-vbtn.on { background: var(--primary-blue); color: #fff; }
+.fb-vbtn.on:hover { color: #fff; }
+
+/* ---- Carrito: badge con número siempre visible, atractivo ---- */
+.icon-btn { position: relative; }
+.icon-btn .badge {
+  position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: #e0241c; color: #fff; font-size: 10px; font-weight: 800; line-height: 1;
+}
+
+/* ---- ETAPA 5 móvil (apendizado al final) ---- */
+@media (max-width: 860px) {
+  /* Búsqueda + carrito ENTRE el logo y el eslogan; iconos más juntos. */
+  .header-main .logo { margin-right: auto; }
+  .header-main .header-actions { order: 5; margin: 0 8px 0 0; gap: 2px; }
+  .header-main .header-tagline { order: 9; margin: 0 12px 0 0; }
+  .header-main .badge { box-shadow: 0 0 0 1.5px #123a95; }
+
+  /* Hero hueso compacto. */
+  .cat-hero { min-height: 98px; margin: 2px 0 12px; }
+  .cat-hero-txt { max-width: 56%; padding: 6px 2px; }
+  .cat-hero-txt h1 { font-size: 21px; }
+  .cat-hero-txt p { font-size: 12px; }
+  .cat-hero-glass { width: 54%; max-width: 230px; top: -2px; }
+  .cat-hero-script { right: 6px; bottom: -2px; }
+  .cat-hero-script span { font-size: 18px; }
+  .cat-hero-script span:last-child { margin-right: 8px; }
+  .fb-vbtn { width: 34px; height: 34px; }
+}
+
+
+/* ===================================================================
+   ETAPA 6 — Colores del cliente (azul #01326B + hueso #F9FAFD),
+   logo limpio y más grande, iconos búsqueda/carrito más grandes y
+   centrados, hero más compacto (gafas más grandes, imagen 2).
+   =================================================================== */
+
+:root {
+  --blue: #01326b;         --blue-dark: #011f45;
+  --primary-blue: #01326b; --primary-blue-dark: #011f45;
+  --hero-ink: #01326b;     --bone: #f9fafd;
+}
+body { background: var(--bone); }
+
+/* Logo: badge blanco limpio (legible) y más grande, sin glow turbio. */
+.logo-mobile-img {
+  height: 38px; width: auto; display: block; background: #fff;
+  border-radius: 10px; padding: 4px 9px; box-shadow: 0 2px 7px rgba(0,15,45,.3); filter: none;
+}
+
+/* Hero: título/subtítulo/script en el azul; más compacto, gafas más grandes. */
+.cat-hero { min-height: 92px; margin: 4px 0 12px; }
+.cat-hero-txt { padding: 6px 2px; max-width: 50%; }
+.cat-hero-txt h1 { color: var(--hero-ink); }
+.cat-hero-txt p { color: #4a5a86; }
+.cat-hero-glass { width: 60%; max-width: 320px; top: 2px; right: -2%; }
+.cat-hero-script { bottom: 4px; right: 6px; color: var(--hero-ink); }
+
+/* ---- Móvil (apendizado al final) ---- */
+@media (max-width: 860px) {
+  /* Barra superior e inferior en el azul elegido. */
+  .header-main { background: linear-gradient(180deg, #033f84 0%, #01326b 100%); }
+  .bottomnav { background: linear-gradient(180deg, #033f84 0%, #01326b 100%) !important; }
+  .header-main .badge { box-shadow: 0 0 0 1.5px #01326b; }
+
+  /* Búsqueda + carrito MÁS GRANDES y CENTRADOS entre logo y eslogan. */
+  .header-main .logo { margin-right: 0; }
+  .header-main .header-actions { order: 5; margin-left: auto; margin-right: auto; gap: 5px; }
+  .header-main .header-tagline { order: 9; margin: 0 12px 0 0; }
+  .header-actions .icon-btn { width: 44px; height: 44px; }
+  .header-main .hdr-ic { width: 26px; height: 26px; }
+  .logo-mobile-img { height: 36px; }
+
+  /* Hero compacto: gafas más grandes, menos espacio muerto. */
+  .cat-hero { min-height: 82px; margin: 2px 0 10px; }
+  .cat-hero-txt { max-width: 48%; padding: 4px 2px; }
+  .cat-hero-txt h1 { font-size: 20px; margin-bottom: 3px; }
+  .cat-hero-txt p { font-size: 11.5px; }
+  .cat-hero-glass { width: 60%; max-width: 240px; top: 0; }
+  .cat-hero-script { right: 5px; bottom: 2px; }
+  .cat-hero-script span { font-size: 17px; }
+}
+
+
+/* ===================================================================
+   ETAPA 7 — Hero: gafas más pequeñas, texto más grande, banner
+   desenfocado der→izq (visión borrosa), menos alto. Toggle más grande.
+   Cards: minimizar el espacio en blanco arriba y entre imagen y texto.
+   =================================================================== */
+
+/* Banner desenfocado (visión borrosa) a la derecha, fundido hacia la izq. */
+.cat-hero { overflow: hidden; }
+.cat-hero::before {
+  content: "" !important; position: absolute; inset: 0; z-index: 0;
+  background: url("/hero-bokeh.jpg") right center / cover no-repeat;
+  filter: blur(10px) saturate(.85); opacity: .34;
+  -webkit-mask-image: linear-gradient(to left, #000 10%, transparent 80%);
+          mask-image: linear-gradient(to left, #000 10%, transparent 80%);
+}
+.cat-hero-txt { position: relative; z-index: 3; }
+.cat-hero-glass { z-index: 1; right: 0; }
+.cat-hero-script { z-index: 4; }
+
+/* Texto (títulos y mensaje) un poco más grande. */
+.cat-hero-txt h1 { font-size: 32px; }
+.cat-hero-txt p { font-size: 15.5px; }
+.cat-hero-script span { font-size: 28px; }
+
+/* Gafas más pequeñas. */
+.cat-hero-glass { width: 44%; max-width: 240px; }
+
+/* Botones de la derecha (rejilla/lista) un poco más grandes. */
+.fb-vbtn { width: 40px; height: 40px; }
+.fb-vbtn .fb-ic { width: 20px; height: 20px; }
+
+/* Cards: mínimo espacio en blanco arriba y entre imagen y texto. */
+.card-media { aspect-ratio: 1.85; padding: 2px 10px 0; }
+.card-body { padding-top: 2px; }
+.card-row { align-items: center; }
+
+/* ---- ETAPA 7 móvil ---- */
+@media (max-width: 860px) {
+  .cat-hero { min-height: 76px; margin: 2px 0 10px; }
+  .cat-hero-txt { max-width: 54%; padding: 3px 2px; }
+  .cat-hero-txt h1 { font-size: 22px; margin-bottom: 2px; }
+  .cat-hero-txt p { font-size: 13px; }
+  .cat-hero-glass { width: 44%; max-width: 180px; top: 2px; }
+  .cat-hero-script span { font-size: 20px; }
+  .cat-hero-script { right: 8px; bottom: 4px; }
+  .fb-vbtn { width: 38px; height: 38px; }
+  .card-media { aspect-ratio: 1.95; padding: 1px 8px 0; }
+  .card-body { padding-top: 1px; }
+}
+
+/* ---- ETAPA 7b — compactar para que se vean 4 espejuelos COMPLETOS ---- */
+@media (max-width: 860px) {
+  .site-main { padding-top: 0; }
+  .cat-hero { min-height: 72px; margin: 0 0 8px; }
+  .filterbar { margin-bottom: 8px; }
+  .product-grid { gap: 10px; }
+  .card-body { padding: 2px 10px 10px; }
+  .card-name { font-size: 14px; }
+  .card-sub { margin: 1px 0 6px; font-size: 12px; }
+  .card-meta { margin-bottom: 0; }
+  .card-oferta { margin-top: 5px; }
+  .card-tryon { height: 36px; margin-top: 8px; font-size: 12px; }
+  .card-add-cart { height: 33px; margin-top: 6px; font-size: 12px; }
+}
+
+/* ---- ETAPA 7c — mensaje "Más que lentes..." completo y legible ---- */
+.cat-hero-script {
+  bottom: 12px; transform: rotate(-7deg);
+  text-shadow: 0 1px 2px rgba(255,255,255,.96), 0 0 9px rgba(255,255,255,.9), 0 0 3px rgba(255,255,255,.95), 0 2px 3px rgba(20,40,90,.28);
+}
+@media (max-width: 860px) {
+  .cat-hero { min-height: 78px; }
+  .cat-hero-script { right: 8px; bottom: 11px; }
+  .cat-hero-script span { font-size: 17px; }
+  .cat-hero-glass { top: -1px; max-width: 168px; }
+}
+
+
+/* ===================================================================
+   ETAPA 8 — Fondo borroso AZUL a todo lo ancho y alto del hero (sin
+   caja/contenedor) + gafas en escala azul para combinar con el sitio.
+   =================================================================== */
+.cat-hero { overflow: hidden; }
+.cat-hero::before {
+  content: "" !important; position: absolute; inset: 0; z-index: 0;
+  background: url("/hero-blurbg.jpg") center center / cover no-repeat;
+  filter: blur(1px); opacity: .92;
+  -webkit-mask-image: linear-gradient(to left, #000 52%, rgba(0,0,0,.55) 100%);
+          mask-image: linear-gradient(to left, #000 52%, rgba(0,0,0,.55) 100%);
+}
+/* Título legible sobre el fondo borroso. */
+.cat-hero-txt h1 { text-shadow: 0 1px 9px rgba(245,248,253,.95); }
+.cat-hero-txt p { text-shadow: 0 1px 6px rgba(245,248,253,.9); }
+
+
+/* ===================================================================
+   ETAPA 9 — Barra de confianza (Envío / Compra segura / Métodos de
+   pago / Asesoría) en NAVY, visible justo debajo del banner.
+   =================================================================== */
+.truststrip {
+  background: #01326b !important; border: none !important;
+  border-radius: 12px; max-width: none; margin: 0 0 14px; padding: 13px 18px; color: #fff;
+  box-shadow: 0 4px 16px -8px rgba(1, 30, 90, .45);
+}
+.trust-item { color: rgba(255,255,255,.95); font-weight: 600; }
+.trust-ic { color: #fff; }
+.trust-tx { color: rgba(255,255,255,.95); }
+@media (max-width: 860px) {
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 10px 12px; padding: 12px 14px; margin: 0 0 12px; }
+  .trust-item { font-size: 12px; gap: 9px; }
+  .trust-ic { width: 26px; height: 26px; }
+}
+
+
+/* ===================================================================
+   ETAPA 10 — Icono de descuento (ofertas), gafas del hero a la izq +
+   mensaje en negrita, y compactación responsive: SIEMPRE 4 espejuelos.
+   =================================================================== */
+
+/* Favorito + descuento apilados en la esquina; descuento solo en ofertas. */
+.card-actions { flex-direction: column; align-items: flex-end; gap: 8px; }
+.card-ic-disc {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e0241c; color: #fff; box-shadow: 0 2px 7px rgba(200,20,45,.42);
+}
+.card-ic-disc .card-fav-ic { width: 17px; height: 17px; }
+
+/* Hero: gafas un poco más a la izquierda; mensaje en NEGRITA. */
+.cat-hero-glass { right: 9%; }
+.cat-hero-script span { font-weight: 700; -webkit-text-stroke: 0.6px var(--hero-ink); }
+
+/* ---- Compactación móvil/tablet para ver 4 espejuelos completos ---- */
+@media (max-width: 860px) {
+  /* Banner compacto. */
+  .cat-hero { min-height: 66px; margin: 2px 0 8px; }
+  .cat-hero-txt h1 { font-size: 19px; margin-bottom: 2px; }
+  .cat-hero-txt p { font-size: 11.5px; }
+  .cat-hero-glass { right: 7%; max-width: 150px; }
+  .cat-hero-script span { font-size: 16px; }
+
+  /* Barra de confianza compacta (2×2). */
+  .truststrip { grid-template-columns: repeat(2, 1fr); gap: 6px 10px; padding: 9px 12px; margin: 0 0 8px; }
+  .trust-item { font-size: 11px; gap: 8px; }
+  .trust-ic { width: 22px; height: 22px; }
+  .trust-ic svg { width: 18px; height: 18px; }
+
+  .filterbar { margin-bottom: 8px; }
+  .product-grid { gap: 9px; }
+
+  /* Tarjetas mínimas: imagen protagonista, textos y botones ajustados. */
+  .card-media { aspect-ratio: 2.15; padding: 1px 8px 0; }
+  .card-body { padding: 2px 9px 9px; }
+  .card-name { font-size: 13.5px; }
+  .card-sub { margin: 1px 0 5px; font-size: 11px; }
+  .card-oferta { margin-top: 4px; padding: 1px 7px; font-size: 10px; }
+  .card-tryon { height: 34px; margin-top: 7px; font-size: 11.5px; }
+  .card-add-cart { height: 31px; margin-top: 5px; font-size: 11.5px; }
+  .card-ic-disc { width: 28px; height: 28px; }
+  .card-ic-disc .card-fav-ic { width: 15px; height: 15px; }
+}
+
+/* Teléfonos pequeños: un punto más de compactación. */
+@media (max-width: 400px) {
+  .cat-hero { min-height: 60px; }
+  .cat-hero-glass { max-width: 132px; }
+  .truststrip { padding: 8px 10px; }
+  .card-media { aspect-ratio: 2.3; }
+  .card-tryon { height: 32px; }
+  .card-add-cart { height: 30px; }
+}
+
+
+/* ===================================================================
+   ETAPA 11 — Barra de confianza AL FONDO, a todo el ancho, una sola
+   fila, fondo claro #F0F1F5, iconos y texto en navy.
+   =================================================================== */
+.truststrip {
+  background: #f0f1f5 !important; border: none !important; border-top: 1px solid #e2e6ef !important;
+  border-radius: 0 !important; box-shadow: none !important; color: var(--hero-ink) !important;
+  max-width: none; width: 100vw; margin: 22px 0 0; margin-left: calc(50% - 50vw);
+  padding: 16px 20px; grid-template-columns: repeat(4, 1fr); gap: 14px;
+}
+.trust-item { color: var(--hero-ink); font-weight: 600; }
+.trust-ic { color: var(--hero-ink); }
+.trust-tx { color: var(--hero-ink); }
+
+@media (max-width: 860px) {
+  .truststrip { grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px 8px; margin-top: 16px; }
+  .trust-item { font-size: 9.5px; gap: 5px; line-height: 1.15; align-items: center; }
+  .trust-ic { width: 18px; height: 18px; }
+  .trust-ic svg { width: 15px; height: 15px; }
+}
+
+
+/* ===== ETAPA 12 — Texto del hero centrado (vertical) y con más margen ===== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; }
+.cat-hero-txt { padding-left: 22px; }
+@media (max-width: 860px) {
+  .cat-hero-txt { padding-left: 16px; padding-top: 0; padding-bottom: 0; }
+}
+
+
+/* ===================================================================
+   ETAPA 13 — Etiqueta de descuento elaborada: muestra el % real de
+   ahorro en una píldora roja con degradado y brillo (bajo el favorito).
+   =================================================================== */
+.card-disc-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 4px 9px 4px 6px; border-radius: 999px; white-space: nowrap;
+  background: linear-gradient(135deg, #ff4d63 0%, #e0241c 55%, #c11226 100%);
+  color: #fff; font-size: 12px; font-weight: 800; line-height: 1; letter-spacing: .01em;
+  box-shadow: 0 4px 10px -2px rgba(190,20,45,.55), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.card-disc-badge b { font-weight: 800; }
+.card-disc-ic { width: 13px; height: 13px; display: block; }
+@media (max-width: 860px) {
+  .card-disc-badge { font-size: 11px; padding: 3px 8px 3px 5px; gap: 2px; }
+  .card-disc-ic { width: 12px; height: 12px; }
+}
+
+
+/* ===================================================================
+   ETAPA 14 — Hero: gafas a la IZQUIERDA, título/subtítulo a la DERECHA
+   con margen prudencial (sin invadir). Script con las gafas (abajo-izq).
+   =================================================================== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
+.cat-hero-txt { max-width: 56%; text-align: right; padding: 0 20px 0 0; margin-left: auto; }
+.cat-hero-glass { left: -3%; right: auto; }
+.cat-hero-script { left: 12px; right: auto; align-items: flex-start; transform-origin: 0 100%; }
+@media (max-width: 860px) {
+  .cat-hero-txt { max-width: 55%; padding-right: 14px; }
+  .cat-hero-glass { left: -4%; max-width: 150px; }
+  .cat-hero-script { left: 9px; }
+}
+
+
+/* ===================================================================
+   ETAPA 15 — Header de ESCRITORIO en el mismo navy del responsive.
+   =================================================================== */
+@media (min-width: 861px) {
+  .header { border-bottom: none; }
+  .header-top { background: #012a5f; color: #dbe8ff; }
+  .header-main {
+    background: linear-gradient(180deg, #033f84 0%, #01326b 100%); border-bottom: none;
+  }
+  .header .nav a { color: #fff; }
+  .header .nav a:hover { color: #bcd4ff; }
+  .header-actions .icon-btn { color: #fff; }
+  .header-actions .icon-btn:hover { background: rgba(255,255,255,.14); }
+  .header-main .hamburger span { background: #fff; }
+  /* Logo con placa blanca para que resalte sobre el navy. */
+  .header .logo-img { background: #fff; border-radius: 10px; padding: 5px 11px; height: 42px; }
+  /* Buscador: caja blanca nítida sobre el navy. */
+  .header .search input { background: #fff; }
+}
+
+
+/* ===================================================================
+   ETAPA 16 — Invertir hero: TÍTULO/SUBTÍTULO a la IZQUIERDA, gafas +
+   mensaje a la DERECHA (con margen prudencial, sin invadirse).
+   =================================================================== */
+.cat-hero { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.cat-hero-txt { max-width: 54%; text-align: left; padding: 0 0 0 22px; margin-left: 0; margin-right: auto; }
+.cat-hero-glass { left: auto; right: -3%; }
+.cat-hero-script { left: auto; right: 12px; align-items: flex-end; transform-origin: 100% 100%; }
+@media (max-width: 860px) {
+  .cat-hero-txt { max-width: 54%; padding-left: 16px; }
+  .cat-hero-glass { left: auto; right: -4%; max-width: 150px; }
+  .cat-hero-script { left: auto; right: 9px; }
+}
+
+
+/* ===================================================================
+   ETAPA 17 — Mensaje al centro vertical + más margen derecho.
+   Gafas con ZOOM (más grandes, recortadas por el borde = "saliendo").
+   =================================================================== */
+.cat-hero-script {
+  top: 50%; bottom: auto; right: 24px;
+  transform: translateY(-50%) rotate(-7deg); transform-origin: 100% 50%;
+}
+.cat-hero-glass {
+  top: 50%; bottom: auto; transform: translateY(-50%);
+  width: 54%; max-width: 430px; right: -6%; opacity: 1;
+}
+@media (max-width: 860px) {
+  .cat-hero-script { top: 50%; right: 18px; transform: translateY(-50%) rotate(-7deg); }
+  .cat-hero-glass { top: 50%; transform: translateY(-50%); width: 66%; max-width: 250px; right: -12%; }
+}
+
+
+/* ===================================================================
+   ETAPA 18 — Selector de idioma en el header (móvil): una sola bandera,
+   la del idioma ACTIVO (España = ES, EE.UU. = EN). Toca para cambiar.
+   =================================================================== */
+.flag-ic { width: 26px; height: auto; border-radius: 3px; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.55); }
+.header-actions .lang-toggle { display: none !important; }
+@media (max-width: 860px) {
+  .header-actions .lang-toggle { display: inline-flex !important; }
+}
+
+
+/* ===================================================================
+   ETAPA 19 — Filtros como overlay a pantalla completa en móvil, con
+   botón fijo "Aplicar filtros (N)" que cierra el panel y salta a los
+   resultados. (En escritorio los filtros siguen como barra lateral.)
+   =================================================================== */
+.fh-actions { display: flex; align-items: center; gap: 10px; }
+.filters-close { display: none; }
+.filters-apply { display: none; }
+.fa-ic { width: 20px; height: 20px; display: block; }
+
+@media (max-width: 860px) {
+  .filters.show {
+    position: fixed; inset: 0; z-index: 90; margin: 0;
+    display: block; background: #fff; border: none; border-radius: 0;
+    max-height: none; overflow-y: auto; padding: 12px 16px 84px;
+  }
+  .filters-close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border: none; background: #eef1f8; color: #17203a;
+    border-radius: 50%; font-size: 17px; line-height: 1; cursor: pointer;
+  }
+  .filters-apply {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 95;
+    height: 56px; padding-bottom: env(safe-area-inset-bottom, 0px);
+    border: none; background: var(--primary-blue); color: #fff;
+    font-weight: 800; font-size: 15px; letter-spacing: .01em; cursor: pointer;
+    box-shadow: 0 -6px 20px -8px rgba(9, 25, 70, .45);
+  }
+  .filters-apply:active { filter: brightness(.95); }
+}
+
+
+/* ===================================================================
+   ETAPA 20 — Barra inferior nueva (Marcas / Favoritos con badge) +
+   promedio de valoración junto a las estrellas en la card.
+   =================================================================== */
+.bottomnav button.bn-item { background: none; border: none; font-family: inherit; color: inherit; cursor: pointer; padding: 0; }
+.bn-ic { position: relative; }
+.bn-badge {
+  position: absolute; top: -6px; right: -9px; min-width: 15px; height: 15px; padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 999px;
+  background: #e0241c; color: #fff; font-size: 9px; font-weight: 800; line-height: 1;
+  box-shadow: 0 0 0 1.5px #01326b;
+}
+/* Promedio de valoración junto a las estrellas. */
+.card-rating-avg { font-weight: 800; font-size: 12px; color: var(--text-secondary, #4a5164); }
+
+
+/* ===================== ETAPA21 · badge de sexo/genero en cards ===================== */
+.card-media { position: relative; }
+.card-genre {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, .95);
+  color: var(--primary-blue, #01326b);
+  box-shadow: 0 2px 7px rgba(16, 34, 84, .18);
+  border: 1px solid #e7ecf4;
+}
+.card-genre-ic { width: 17px; height: 17px; }
+@media (max-width: 860px) {
+  .card-genre { width: 26px; height: 26px; bottom: 8px; left: 8px; }
+  .card-genre-ic { width: 15px; height: 15px; }
+}
+
+
+/* ===================== ETAPA22 · Favoritos (boton) en blanco como el resto ===================== */
+.bottomnav button.bn-item,
+.bottomnav button.bn-item .bn-ic,
+.bottomnav button.bn-item .bn-tx {
+  color: #fff;
+}
+.bottomnav button.bn-item .bn-ic svg { stroke: currentColor; }
+
+
+/* ===================== ETAPA23 · badge de sexo como etiqueta en la columna derecha ===================== */
+/* Ahora vive dentro de .card-actions (bajo el corazon, sobre el % de descuento):
+   posicion estatica y forma de etiqueta redondeada, no circulo absoluto. */
+.card-genre {
+  position: static;
+  bottom: auto;
+  left: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  border: 1px solid #eef1f6;
+  background: rgba(255, 255, 255, .96);
+  color: var(--primary-blue, #01326b);
+  box-shadow: 0 4px 12px -4px rgba(15, 40, 90, .28);
+}
+.card-genre-ic { width: 19px; height: 19px; }
+@media (max-width: 640px) {
+  .card-genre { width: 34px; height: 34px; border-radius: 10px; bottom: auto; left: auto; }
+  .card-genre-ic { width: 17px; height: 17px; }
+}
+
+
+/* ===================== ETAPA24 · tooltip del badge de sexo (hover / tap) ===================== */
+/* El badge ahora es un boton: reset de estilos de boton + ancla del tooltip. */
+button.card-genre {
+  position: relative;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Globo que dice el sexo; se abre hacia el centro de la card (a la izquierda del
+   badge) para que no lo corte el borde derecho. */
+.card-genre-tip {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) scale(.94);
+  transform-origin: right center;
+  white-space: nowrap;
+  background: var(--primary-blue, #01326b);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px -6px rgba(15, 40, 90, .5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .14s ease, transform .14s ease;
+  z-index: 6;
+}
+/* Flechita del globo apuntando al badge. */
+.card-genre-tip::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: var(--primary-blue, #01326b);
+}
+.card-genre:hover .card-genre-tip,
+.card-genre:focus-visible .card-genre-tip,
+.card-genre.on .card-genre-tip {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+
+/* ===================== ETAPA25 · layout tipo app: barras fijas, solo la lista scrollea ===================== */
+@media (max-width: 860px) {
+  /* (1) Barra superior azul SIEMPRE visible: se pega arriba al hacer scroll,
+     asi los espejuelos pasan por debajo y nunca se pierde el acceso a buscar/
+     carrito/menu. */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+  }
+
+  /* (2) Franja de confianza PERMANENTE, justo encima de la barra azul inferior
+     (ya no hay que scrollear hasta el fondo para verla). */
+  .truststrip {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    width: 100% !important;
+    margin: 0 !important;
+    z-index: 74;
+  }
+
+  /* (3) Hueco al final para que la lista/pie no queden tapados por la franja
+     fija + la barra inferior. */
+  .footer { padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; }
+
+  /* (4) El boton de chat flota por encima de la franja de confianza. */
+  .chat-fab { bottom: calc(122px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+
+/* ===================== ETAPA26 · barra superior FIJA de verdad (sticky se rompe por overflow de un ancestro) ===================== */
+@media (max-width: 860px) {
+  /* La franja de anuncio no se usa en el layout tipo app. */
+  .header-top { display: none; }
+  /* Fijamos la barra al viewport: siempre visible aunque scrollee la lista. */
+  .header {
+    position: fixed !important;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 80;
+  }
+  /* Hueco arriba para que el primer contenido no quede bajo la barra fija. */
+  .site-main { padding-top: 54px; }
+}
+
+
+/* ===================== ETAPA27 · Ficha de producto estilo mockup (galeria + datos + pestañas) ===================== */
+/* Los thumbs de color se sustituyen por "Colores disponibles"; y la ficha
+   trae el probador como CTA, no como boton flotante ◈. */
+.pdp .pdp-thumbs { display: none; }
+.pdp .pdp-ar { display: none; }
+
+/* Volver (breadcrumb) como enlace. */
+.breadcrumb .bc-back {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--primary-blue, #01326b); font: inherit; font-weight: 700;
+}
+
+/* Sello 360° sobre la imagen. */
+.pdp-main { position: relative; }
+.pdp-360 {
+  position: absolute; right: 12px; bottom: 12px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.96); color: var(--primary-blue, #01326b);
+  border: 1px solid #e7ecf4; border-radius: 999px;
+  padding: 5px 11px; font-size: 12px; font-weight: 800;
+  box-shadow: 0 3px 10px -3px rgba(16,34,84,.25);
+}
+.pdp-360 svg { width: 15px; height: 15px; }
+
+/* Cabecera: marca + titulo + estrellas a la izquierda, chip de forma a la derecha. */
+.pdp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pdp-head .pdp-title { margin: 2px 0 4px; }
+.pdp-shape-chip {
+  flex: 0 0 auto; align-self: flex-start;
+  background: #eef2f8; color: var(--primary-blue, #01326b);
+  border: 1px solid #e0e6f0; border-radius: 999px;
+  padding: 6px 13px; font-size: 12.5px; font-weight: 700; white-space: nowrap;
+}
+
+/* Datos clave: material · medidas · genero, con iconos. */
+.pdp-facts {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin: 16px 0 4px;
+  border-top: 1px solid #eef1f6; border-bottom: 1px solid #eef1f6; padding: 13px 0;
+}
+.pdp-fact { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pdp-fact + .pdp-fact { border-left: 1px solid #eef1f6; padding-left: 10px; }
+.pdp-fact-ic { flex: 0 0 auto; width: 24px; height: 24px; color: var(--primary-blue, #01326b); }
+.pdp-fact-tx { display: flex; flex-direction: column; min-width: 0; }
+.pdp-fact-k { font-size: 10.5px; color: #7c8698; font-weight: 600; line-height: 1.2; }
+.pdp-fact-tx b { font-size: 13px; color: #17203a; line-height: 1.25; }
+
+/* Colores disponibles: muestra + etiqueta debajo. */
+.pdp-colors2 { margin: 16px 0; }
+.pdp-colors2-h { font-size: 14px; font-weight: 800; color: #17203a; margin-bottom: 10px; }
+.pdp-colors2-list { display: flex; flex-wrap: wrap; gap: 16px; }
+.pdp-color2 {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 0;
+}
+.pdp-color2-sw {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid #e2e6ee; box-shadow: inset 0 0 0 2px #fff;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.pdp-color2.sel .pdp-color2-sw { border-color: var(--primary-blue, #01326b); transform: scale(1.04); }
+.pdp-color2-nm { font-size: 12px; color: #4a5164; font-weight: 600; }
+.pdp-color2.sel .pdp-color2-nm { color: var(--primary-blue, #01326b); font-weight: 800; }
+
+/* Acciones: probar con camara (azul) + añadir al carrito (contorno). */
+.pdp-actions2 { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.pdp-cta { width: 100%; gap: 9px; }
+.pdp-cta.btn-primary { background: var(--primary-blue, #01326b); border-color: var(--primary-blue, #01326b); }
+.pdp-cta.btn-primary:hover { background: #022a5c; }
+.pdp-cta.btn-outline { border-color: var(--primary-blue, #01326b); color: var(--primary-blue, #01326b); }
+.pdp-cta.btn-outline:hover { background: #eef3fb; }
+.pdp-cta-ic { width: 19px; height: 19px; flex: 0 0 auto; }
+
+/* Pestañas: Detalles · Medidas · Opiniones. */
+.pdp-tabs {
+  display: flex; gap: 4px; margin: 22px 0 0;
+  border-bottom: 1px solid #e6ebf2;
+}
+.pdp-tab {
+  flex: 0 0 auto; background: none; border: none; cursor: pointer;
+  padding: 12px 14px; font-size: 14px; font-weight: 700; color: #7c8698;
+  border-bottom: 2.5px solid transparent; margin-bottom: -1px;
+}
+.pdp-tab.on { color: var(--primary-blue, #01326b); border-bottom-color: var(--primary-blue, #01326b); }
+.pdp-tabpanel { padding: 18px 0 4px; }
+
+/* Pestaña Medidas: filas con icono. */
+.pdp-measures { display: flex; flex-direction: column; gap: 10px; max-width: 460px; }
+.pdp-measure {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid #eef1f6; border-radius: 12px; background: #fbfcfe;
+}
+.pdp-measure-ic { width: 22px; height: 22px; color: var(--primary-blue, #01326b); }
+.pdp-measure-k { font-size: 13.5px; color: #5b6472; font-weight: 600; }
+.pdp-measure b { font-size: 15px; color: #17203a; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .pdp-facts { gap: 6px; }
+  .pdp-fact { gap: 6px; }
+  .pdp-fact + .pdp-fact { padding-left: 6px; }
+  .pdp-fact-ic { width: 20px; height: 20px; }
+  .pdp-fact-k { font-size: 9.5px; }
+  .pdp-fact-tx b { font-size: 12px; }
+  .pdp-color2-sw { width: 40px; height: 40px; }
+  .pdp-tab { padding: 11px 10px; font-size: 13px; }
+}
+
+
+/* ===================== ETAPA28 · caja de imagen del producto en BLANCO puro ===================== */
+/* La foto de la montura trae fondo blanco; el visor tenia un degradado crema
+   (#faf9f6) y se veia el recuadro blanco de la foto contra el crema. Igual que
+   el card del catalogo: fondo blanco liso, sin costura. */
+.pdp .pdp-main { background: #fff !important; }
+
+
+/* ===================== ETAPA29 · sin sombra en la foto de la ficha ===================== */
+/* La foto trae fondo blanco puro (#fff) igual que la caja; lo unico que dibujaba
+   el recuadro era el drop-shadow (sombra alrededor del rectangulo opaco de la
+   foto). Se quita: blanco sobre blanco, sin costura ni sombra. */
+.pdp .pdp-main img { filter: none !important; }
+
+
+/* ===================== ETAPA30 · galeria de vistas a la IZQUIERDA tambien en movil ===================== */
+/* En movil estaba como fila debajo del visor; el mockup las quiere en columna a
+   la izquierda del visor. */
+@media (max-width: 720px) {
+  .pdp-stage { flex-direction: row !important; gap: 8px; align-items: flex-start; }
+  .pdp-views {
+    flex-direction: column !important;
+    width: 56px !important;
+    overflow-x: visible !important;
+  }
+  .pdp-view {
+    width: 56px !important;
+    height: 56px !important;
+    aspect-ratio: 1 / 1 !important;
+    flex: 0 0 auto;
+  }
+}
+
+
+/* ===================== ETAPA31 · menos espacio vacio en el visor de la ficha (movil) ===================== */
+/* El visor era casi cuadrado (aspect 1.1) y el espejuelo (ancho) dejaba mucho
+   hueco arriba y abajo. Se baja el alto y el padding para que la montura llene
+   mas, como el card del catalogo. */
+@media (max-width: 720px) {
+  .pdp-main { aspect-ratio: 1.6 !important; padding: 12px !important; }
+  .pdp-main img { max-height: none !important; }
+}
+
+
+/* ===================== ETAPA32 · boton 360 con imagen, fondo transparente + hover ===================== */
+/* Sustituye la pastilla blanca del 360 por la imagen recortada (fondo
+   transparente). Estilo boton: pulso suave de entrada + realce al pasar el
+   mouse / tocar. Al hacer clic rota a la siguiente vista. */
+.pdp .pdp-360 {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 2px !important;
+  gap: 0 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  filter: drop-shadow(0 3px 6px rgba(10, 30, 80, .28));
+  transition: transform .18s ease, filter .18s ease;
+  animation: pdp360pulse 2.6s ease-in-out infinite;
+}
+.pdp .pdp-360 img { display: block; height: 28px; width: auto; }
+.pdp .pdp-360:hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 6px 14px rgba(14, 90, 208, .55));
+  animation: none;
+}
+.pdp .pdp-360:active { transform: scale(.95); }
+@keyframes pdp360pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@media (max-width: 720px) {
+  .pdp .pdp-360 img { height: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdp .pdp-360 { animation: none; }
+}
+
+
+/* ===================== ETAPA33 · 360 tactil (mantener pulsado) + efecto espejo ===================== */
+/* En movil el gesto de mantener pulsado se cortaba porque el navegador lo tomaba
+   como scroll / menu de "guardar imagen". Bloqueamos esos gestos y capturamos el
+   puntero (en el JSX) para que el giro continuo se sostenga. */
+.pdp .pdp-360 {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.pdp .pdp-360 img { pointer-events: none; }
+
+/* Efecto espejo: cuando falta un lado (o viene duplicado) se sintetiza volteando
+   la imagen del lado contrario. */
+.pdp-main img.mirror { transform: scaleX(-1); }
+.pdp-main.zoom img.mirror { transform: scale(1.6) scaleX(-1); }
+.pdp-view img.mirror { transform: scaleX(-1); }
+
+
+/* ===================== ETAPA34 · visor 360 sin parpadeo (vistas apiladas) ===================== */
+/* Las 4 vistas se pre-renderizan apiladas; el giro sólo cambia la opacidad (con
+   un fundido corto) en vez de reemplazar el src → flujo continuo sin saltos. */
+.pdp-360stack { position: relative; width: 100%; height: 100%; align-self: stretch; }
+.pdp-360frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity .34s ease-in-out;
+  will-change: opacity;
+}
+.pdp-360frame.on { opacity: 1; }
+/* El espejo/zoom siguen aplicando por .mirror y .pdp-main.zoom img (ETAPA33). */
+
+
+/* ===================== ETAPA35 · el zoom no agranda el 360 + hover pro del boton ===================== */
+/* Al hacer clic el visor hace zoom (scale 1.6) sobre las imgs; el boton 360 NO
+   debe agrandarse: se queda igual. */
+.pdp-main.zoom .pdp-360 img { transform: none !important; }
+
+/* Boton 360: estático hasta el hover. Al pasar el cursor flota sutil + glow azul
+   + realce de color. Se ve como un botón profesional. */
+.pdp .pdp-360 {
+  animation: none;
+  transition: transform .2s ease, filter .2s ease;
+  filter: drop-shadow(0 2px 5px rgba(10, 30, 80, .25));
+}
+.pdp .pdp-360:hover {
+  transform: translateY(-3px) scale(1.06);
+  filter: drop-shadow(0 8px 15px rgba(14, 90, 208, .55)) saturate(1.18) brightness(1.06);
+}
+.pdp .pdp-360:active { transform: translateY(-1px) scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  /* (a pedido) el hover/animacion del 360 se muestra siempre. */
+}
+
+
+/* ===================== ETAPA36 · giro 360 con transicion 3D natural ===================== */
+/* En vez de un fundido plano (rigido), cada vista "gira" para entrar (rotateY +
+   ligera escala) con perspectiva → sensacion de rotacion 3D real. El cuadro
+   saliente se desvanece rapido; el entrante gira a su sitio. */
+.pdp-360frame {
+  transition: opacity .18s linear;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+}
+.pdp-360frame.on { animation: spin3dIn .34s ease-out; }
+.pdp-360frame.mirror.on { animation: spin3dInMirror .34s ease-out; }
+@keyframes spin3dIn {
+  from { transform: perspective(900px) rotateY(18deg) scale(.96); }
+  to   { transform: perspective(900px) rotateY(0deg) scale(1); }
+}
+@keyframes spin3dInMirror {
+  from { transform: perspective(900px) scaleX(-1) rotateY(18deg) scale(.96); }
+  to   { transform: perspective(900px) scaleX(-1) rotateY(0deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* (a pedido) el giro 3D se muestra siempre, incluso con reduce-motion. */
+}
+
+
+/* ===================== ETAPA37 · ficha pro: imagen mas grande, zoom mayor, sello de marca + nombre ===================== */
+/* Imagen mas grande por defecto (menos padding) y zoom con mas detalle. */
+.pdp-main { padding: 14px; }
+.pdp-main.zoom img { transform: scale(1.9); }
+.pdp-main.zoom img.mirror { transform: scale(1.9) scaleX(-1); }
+
+/* El corazon de favorito pasa a la IZQUIERDA (la identidad va a la derecha). */
+.pdp-main .heart { left: 14px; right: auto; }
+
+/* Etiqueta de identidad arriba a la derecha: sello de marca + modelo/color. */
+.pdp-idtag {
+  position: absolute; top: 12px; right: 14px; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  text-align: right; max-width: 62%;
+}
+/* Sello de calidad: monograma de la marca; el nombre completo sale al hover. */
+.pdp-brandseal {
+  position: relative; width: 42px; height: 42px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1.5px solid #dbe3f0;
+  box-shadow: 0 4px 12px -4px rgba(16, 34, 84, .25);
+  color: var(--primary-blue, #01326b); cursor: help; outline: none;
+}
+.pdp-brandseal::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%;
+  border: 1px solid rgba(1, 50, 107, .16);
+}
+.pdp-brandseal-mono { font-family: var(--display), Georgia, serif; font-weight: 700; font-size: 16px; letter-spacing: .5px; line-height: 1; }
+.pdp-brandseal-tip {
+  position: absolute; top: 50%; right: calc(100% + 10px);
+  transform: translateY(-50%) scale(.95); transform-origin: right center;
+  white-space: nowrap; background: var(--primary-blue, #01326b); color: #fff;
+  font-family: system-ui, -apple-system, sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; padding: 5px 10px; border-radius: 8px;
+  box-shadow: 0 6px 16px -6px rgba(15, 40, 90, .5);
+  opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease;
+}
+.pdp-brandseal-tip::after { content: ""; position: absolute; left: 100%; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-left-color: var(--primary-blue, #01326b); }
+.pdp-brandseal:hover .pdp-brandseal-tip, .pdp-brandseal:focus-visible .pdp-brandseal-tip { opacity: 1; transform: translateY(-50%) scale(1); }
+/* Nombre + serie + color, con la tipografia display (serif) de la marca. */
+.pdp-idtag-model {
+  margin: 0; font-family: var(--display), Georgia, serif; font-weight: 600;
+  color: var(--hero-ink, #01326b); font-size: 18px; line-height: 1.15; letter-spacing: -.01em;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, .95), 0 0 2px rgba(255, 255, 255, .9);
+}
+
+@media (max-width: 720px) {
+  .pdp-main { padding: 6px !important; }
+  .pdp-main .heart { left: 10px; }
+  .pdp-idtag { top: 9px; right: 10px; gap: 6px; max-width: 66%; }
+  .pdp-brandseal { width: 36px; height: 36px; }
+  .pdp-brandseal-mono { font-size: 14px; }
+  .pdp-idtag-model { font-size: 15px; }
+}
+
+
+/* ===================== ETAPA38 · tarjetas de portada (.prop) con VOLUMEN crema (relieve) ===================== */
+/* Fondo crema del panel para que el relieve (neumorfismo) se lea; tarjetas
+   crema elevadas con doble sombra (clara arriba-izq, calida abajo-der). */
+.section.props {
+  background: linear-gradient(180deg, #efe2c1 0%, #ead9ad 100%);
+  border-radius: 26px;
+  padding: 30px 24px;
+  gap: 22px;
+}
+.section.props .prop {
+  background: linear-gradient(145deg, #fbf3da 0%, #ecdcae 100%);
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 20px;
+  padding: 26px 20px;
+  box-shadow:
+    9px 10px 20px rgba(158, 126, 68, .40),
+    -8px -8px 16px rgba(255, 255, 255, .82),
+    inset 0 1px 1px rgba(255, 255, 255, .75);
+  transition: transform .18s cubic-bezier(.2, .7, .2, 1), box-shadow .18s ease;
+}
+.section.props .prop:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    11px 14px 26px rgba(158, 126, 68, .48),
+    -8px -8px 16px rgba(255, 255, 255, .85),
+    inset 0 1px 1px rgba(255, 255, 255, .75);
+}
+.section.props .prop b { color: #182444; }
+.section.props .prop b { color: #182444; }
+.section.props .prop small { color: #8a7850; }
+.section.props .prop span { filter: drop-shadow(0 1px 1px rgba(120, 95, 40, .28)); }
+
+@media (max-width: 640px) {
+  .section.props { padding: 20px 14px; border-radius: 20px; gap: 14px; }
+  .section.props .prop {
+    padding: 20px 14px; border-radius: 16px;
+    box-shadow:
+      6px 7px 15px rgba(158, 126, 68, .38),
+      -6px -6px 12px rgba(255, 255, 255, .82),
+      inset 0 1px 1px rgba(255, 255, 255, .72);
+  }
+}
+
+
+/* ===================== ETAPA39 · solo los recuadros amarillos; NO pintar el fondo ===================== */
+.section.props { background: none !important; border-radius: 0 !important; }
+/* Volumen como tarjeta elevada (sirve sobre cualquier fondo, sin halo). */
+.section.props .prop {
+  box-shadow:
+    0 12px 24px -8px rgba(150, 120, 55, .45),
+    0 3px 8px -2px rgba(150, 120, 55, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+.section.props .prop:hover {
+  box-shadow:
+    0 16px 30px -8px rgba(150, 120, 55, .52),
+    0 4px 10px -2px rgba(150, 120, 55, .26),
+    inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+@media (max-width: 640px) {
+  .section.props .prop {
+    box-shadow:
+      0 9px 18px -6px rgba(150, 120, 55, .42),
+      0 2px 6px -2px rgba(150, 120, 55, .2),
+      inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+  }
+}
+
+
+/* ===================== ETAPA40 · quitar el borde exterior naranja de las tarjetas ===================== */
+.section.props .prop { border: none !important; }
+
+
+/* ===================== ETAPA41 · visor: auto-recorte del blanco, sello con logo real,
+   corazon a la derecha, marca+serie en una linea a la izquierda ===================== */
+
+/* Contenedor de ajuste (lleva el transform inline: escala + origen). La animacion 3D
+   vive en la imagen interior; separadas para que no se pisen. */
+.pdp-360fit { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform .25s ease; }
+
+/* Zoom por clic: extra sobre el auto-ajuste, via el contenedor (no la imagen) para no
+   chocar con la animacion. Neutraliza el viejo zoom por-imagen (ETAPA37). */
+.pdp-main.zoom .pdp-360stack { transform: scale(1.32); transition: transform .28s ease; }
+.pdp-main.zoom .pdp-360stack img { transform: none !important; }
+.pdp-main.zoom .pdp-360stack img.mirror { transform: scaleX(-1) !important; }
+
+/* Corazon de favorito a la DERECHA (revierte ETAPA37). */
+.pdp-main .heart { left: auto !important; right: 14px !important; }
+
+/* Identidad a la IZQUIERDA, en una sola linea: [logo marca] serie/color. */
+.pdp-idtag { left: 14px; right: auto; flex-direction: row; align-items: center; text-align: left; gap: 10px; max-width: 72%; }
+.pdp-idtag-model { text-align: left; }
+
+/* Sello = LOGO real de la marca (pastilla blanca, wordmark contenido). */
+.pdp-brandseal.has-logo { width: auto; min-width: 48px; height: 42px; border-radius: 9px; padding: 3px 7px; background: #fff; border: 1.5px solid #e3e9f2; box-shadow: 0 3px 10px -3px rgba(16, 34, 84, .25); }
+.pdp-brandseal.has-logo::after { display: none; }
+.pdp-brandseal.has-logo .pdp-brandseal-mono { display: none; }
+.pdp-brandseal-img { height: 100%; width: auto; max-width: 120px; object-fit: contain; display: block; }
+
+/* El tooltip ahora abre a la DERECHA (el sello quedo a la izquierda). */
+.pdp-brandseal-tip { right: auto; left: calc(100% + 10px); transform-origin: left center; }
+.pdp-brandseal-tip::after { left: auto; right: 100%; border-left-color: transparent; border-right-color: var(--primary-blue, #01326b); }
+
+@media (max-width: 720px) {
+  .pdp-main .heart { left: auto !important; right: 10px !important; }
+  .pdp-idtag { left: 10px; right: auto; top: 9px; gap: 7px; max-width: 74%; }
+  .pdp-brandseal.has-logo { min-width: 42px; height: 34px; padding: 2px 6px; }
+  .pdp-brandseal-img { max-width: 100px; }
+  .pdp-main.zoom .pdp-360stack { transform: scale(1.25); }
+}
+
+
+/* ===================== ETAPA42 · sello sin contorno + mas grande (igual que favorito),
+   selector de color (circulos) centrado en la linea del 360, video sin estorbos ===================== */
+
+/* Logo de marca SIN contorno (ni borde ni sombra ni pastilla); el logo ya trae su
+   fondo. Mas grande, a la par del boton de favorito. */
+.pdp-brandseal.has-logo { border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; height: 46px; min-width: 0; border-radius: 6px; }
+.pdp-brandseal-img { max-width: 132px; }
+
+/* Corazon de favorito mas grande (a juego con el logo). */
+.pdp-main .heart { width: 46px !important; height: 46px !important; font-size: 22px !important; }
+
+/* Selector de color: SOLO circulos, centrado abajo, en la misma linea del boton 360.
+   Sin texto (el color ya sale en el titulo DC 50 · Grey). */
+.pdp-swatches { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 9px; z-index: 4; align-items: center; }
+.pdp-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(15, 40, 90, .35); cursor: pointer; padding: 0; transition: transform .15s ease; }
+.pdp-swatch:hover { transform: scale(1.12); }
+.pdp-swatch.sel { box-shadow: 0 0 0 2px var(--primary-blue, #01326b), 0 1px 5px rgba(15, 40, 90, .35); }
+
+@media (max-width: 720px) {
+  .pdp-brandseal.has-logo { height: 50px; border: none !important; box-shadow: none !important; background: transparent !important; padding: 0 !important; }
+  .pdp-main .heart { width: 50px !important; height: 50px !important; font-size: 24px !important; }
+  .pdp-swatch { width: 19px; height: 19px; }
+  .pdp-swatches { bottom: 12px; gap: 7px; }
+}
+
+
+/* ===================== ETAPA43 · WEB: recuadro del visor mas apaisado para que el
+   marco se vea grande y sin tanto blanco (el movil ya es 1.6). Riel a juego. ===================== */
+@media (min-width: 721px) {
+  .pdp .pdp-main { aspect-ratio: 1.65; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 50px; height: 50px; flex: 0 0 50px; }
+}
+
+
+/* ===================== ETAPA44 · RESPONSIVE: botones (Probar con camara / Anadir al
+   carrito) justo debajo de los espejuelos, antes de los datos ===================== */
+@media (max-width: 720px) {
+  .pdp-info { display: flex; flex-direction: column; }
+  .pdp-info .pdp-actions2 { order: -1; margin-bottom: 4px; }
+  .pdp-info .pdp-facts { order: 0; }
+}
+
+
+/* ===================== ETAPA45 · RESPONSIVE: pegar los botones a la imagen del marco
+   (reducir el hueco entre la galeria y las acciones) ===================== */
+@media (max-width: 720px) {
+  .pdp-grid { gap: 10px; }
+  .pdp-info .pdp-actions2 { margin-top: 0; margin-bottom: 6px; }
+}
+
+
+/* ===================== ETAPA46 · estrellas abajo-izquierda del visor (misma linea que
+   colores y 360). Base semi-transparente = vacias; relleno dorado segun promedio ===================== */
+.pdp-stars { position: absolute; left: 18px; bottom: 18px; z-index: 4; display: inline-block; line-height: 1; font-size: 21px; letter-spacing: -2.5px; white-space: nowrap; pointer-events: none; }
+.pdp-stars-base { color: rgba(18, 40, 90, .32); }
+.pdp-stars-fill { position: absolute; top: 0; left: 0; width: 0; overflow: hidden; white-space: nowrap; color: #f6a723; }
+
+@media (max-width: 720px) {
+  .pdp-stars { left: 14px; bottom: 15px; font-size: 19px; }
+}
+
+
+/* ===================== ETAPA47 · pestaña "Descripcion del producto" (marketing, 2 lineas
+   web / 4 responsive) + material clicable que abre la ayuda de calidad ===================== */
+.pdp-pitch {
+  margin: 0; max-width: 640px; color: #33465f; font-size: 15px; line-height: 1.55;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+@media (max-width: 720px) {
+  .pdp-pitch { -webkit-line-clamp: 4; line-clamp: 4; font-size: 14px; }
+}
+
+/* Material clicable (abre la ayuda de calidad). */
+.pdp-fact-click { cursor: pointer; transition: background .15s ease, box-shadow .15s ease; border-radius: 12px; }
+.pdp-fact-click:hover { background: rgba(1, 50, 107, .05); }
+.pdp-fact-click.on { background: rgba(1, 50, 107, .07); box-shadow: inset 0 0 0 1.5px rgba(1, 50, 107, .35); }
+.pdp-fact-help { margin-left: 5px; align-self: flex-start; color: var(--primary-blue, #01326b); opacity: .55; font-size: 13px; line-height: 1; }
+
+/* Caja de ayuda del material (aparece bajo los datos). */
+.pdp-mathelp { margin-top: 10px; animation: matHelpIn .2s ease; }
+@keyframes matHelpIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+
+/* ===================== ETAPA48 · ayuda del material como VENTANA EMERGENTE (modal) al
+   frente, con boton de cerrar; no desplaza ni tapa la pantalla ===================== */
+.pdp-matmodal { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(10, 22, 48, .55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); animation: matFadeIn .16s ease; }
+.pdp-matmodal-card { position: relative; width: 100%; max-width: 440px; max-height: 85vh; overflow: auto; background: #fff; border-radius: 18px; padding: 24px 22px; box-shadow: 0 30px 80px -20px rgba(10, 22, 48, .6); animation: matPop .2s ease; }
+.pdp-matmodal-x { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: none; background: #eef2f8; color: #33465f; font-size: 22px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease; z-index: 1; }
+.pdp-matmodal-x:hover { background: #e0e7f2; }
+.pdp-matmodal .frame-quality { margin: 0; border: none; box-shadow: none; padding: 0; background: none; }
+.pdp-matmodal .frame-quality-head { padding-right: 34px; }
+@keyframes matFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes matPop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+
+/* ===================== ETAPA49 · seccion de estuches: solo "Recomendados para esta
+   montura" con el azul navy de "Todos los espejuelos" (#01326b) ===================== */
+.case-cross-title { color: var(--primary-blue, #01326b); }
+
+
+/* ===================== ETAPA50 · responsive: "Recomendados para esta montura" en una
+   sola linea (tamano reducido) ===================== */
+@media (max-width: 720px) {
+  .case-cross-title { font-size: clamp(18px, 5.4vw, 26px); white-space: nowrap; letter-spacing: -0.03em; }
+}
+
+
+/* ===================== ETAPA51 · estuches con la MISMA estetica que las cards del
+   catalogo (CaseCard usa .card). En responsive: 2 columnas y solo 2 estuches. ===================== */
+@media (max-width: 720px) {
+  .case-cross-cases { grid-template-columns: repeat(2, 1fr) !important; gap: 14px; max-width: none; }
+  .case-cross-cases > :nth-child(n + 3) { display: none; }
+}
+
+
+/* ===================== ETAPA52 · imagen del estuche completa (no cortada): que la
+   foto quepa por ancho y alto dentro de la card ===================== */
+.card-case .card-img-link { height: 100%; }
+.card-case .card-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+
+
+/* ===================== ETAPA53 · separacion titulo->cards en "Mas de <marca>"/"Resenas"
+   y menos hueco antes del footer (a la mitad) ===================== */
+.section > .section-title.case-cross-title { margin-bottom: 22px; }
+.pdp { padding-bottom: 20px; }
+.pdp > section:last-of-type { padding-bottom: 24px; }
+.footer { margin-top: 14px; }
+.truststrip { margin-top: 12px; }
+
+
+/* ===================== ETAPA54 · pestaña Medidas: diagrama de referencia + valor debajo
+   + ayuda (ventana emergente con el diagrama y como se mide) ===================== */
+.pdp-measures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 620px; }
+.pdp-measure { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 16px 12px 14px; border: 1px solid #eef1f6; border-radius: 14px; background: #fbfcfe; }
+.pdp-measure-img { width: auto; height: auto; max-width: 100%; max-height: 60px; object-fit: contain; margin-bottom: 2px; }
+.pdp-measure-k { font-size: 12.5px; color: #5b6472; font-weight: 600; line-height: 1.2; }
+.pdp-measure-v { font-size: 18px; color: #17203a; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pdp-measure-help { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border: none; background: #eef2f8; color: var(--primary-blue, #01326b); border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease; }
+.pdp-measure-help:hover { background: #dde6f3; }
+
+.pdp-measmodal-card { text-align: center; }
+.pdp-measmodal-img { display: block; width: auto; max-width: 100%; max-height: 150px; margin: 6px auto 14px; }
+.pdp-measmodal-title { margin: 0 0 8px; font-family: var(--display), Georgia, serif; color: var(--primary-blue, #01326b); font-size: 20px; }
+.pdp-measmodal-desc { margin: 0; color: #33465f; font-size: 15px; line-height: 1.55; }
+
+@media (max-width: 720px) {
+  .pdp-measures { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pdp-measure { padding: 12px 6px 10px; }
+  .pdp-measure-img { max-height: 46px; }
+  .pdp-measure-k { font-size: 11px; }
+  .pdp-measure-v { font-size: 15px; }
+  .pdp-measure-help { width: 22px; height: 22px; font-size: 13px; top: 5px; right: 5px; }
+  .pdp-measmodal-img { max-height: 120px; }
+}
+
+/* ===================== ETAPA55 · pestaña Opiniones: encabezado navy "Sé el primero
+   en reseñar esta montura" (una sola linea, a todo el ancho del responsive),
+   estrellas transparentes hasta llenarse (con vista previa al pasar el cursor),
+   campos con iconos (nombre / movil / email / reseña) y ventana de confirmacion
+   con casillas de ofertas y novedades por email / SMS. Aplica a web y responsive.
+   ===================== */
+
+/* Encabezado: hereda el navy de .case-cross-title; forzamos una sola linea. */
+.reviews > .section-title.rev-befirst { white-space: nowrap; }
+
+/* Estrellas transparentes (solo contorno) hasta seleccionarse o al hacer hover. */
+.stars-input.editable button {
+  color: transparent;
+  -webkit-text-stroke: 1.4px #c7ccd6;
+  font-size: 26px;
+  transition: color .12s ease, -webkit-text-stroke-color .12s ease;
+}
+.stars-input.editable button.on { color: #f2b01e; -webkit-text-stroke-color: #f2b01e; }
+.stars-input.editable button:hover { -webkit-text-stroke-color: #f2b01e; }
+
+/* Campos del formulario, cada uno con su icono de referencia. */
+.rev-field {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+  padding: 0 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.rev-field:focus-within {
+  border-color: var(--primary-blue, var(--blue));
+  box-shadow: 0 0 0 3px rgba(14, 90, 208, .12);
+}
+.rev-field-ic { display: inline-flex; color: #8a93a3; flex: 0 0 auto; }
+.rev-field:focus-within .rev-field-ic { color: var(--primary-blue, var(--blue)); }
+.rev-field .rev-input {
+  border: none; outline: none; background: none; width: 100%;
+  padding: 12px 0; font-size: 14px; font-family: inherit; color: var(--ink);
+}
+.rev-field .rev-input::placeholder { color: #9aa2b0; }
+.rev-field-area { align-items: flex-start; }
+.rev-field-area .rev-field-ic { margin-top: 13px; }
+.rev-field .rev-text { resize: vertical; min-height: 78px; line-height: 1.45; }
+.rev-err { color: #b42318; font-weight: 600; font-size: 13px; }
+
+/* --- Ventana de confirmacion (reutiliza el overlay .pdp-matmodal de ETAPA48) --- */
+.rev-confirm-card { max-width: 460px; }
+.rev-confirm-title { margin: 0 34px 6px 0; color: var(--primary-blue, #01326b); font-size: 20px; }
+.rev-confirm-text { margin: 0 0 16px; color: #47505f; font-size: 14.5px; line-height: 1.5; }
+.rev-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px;
+  margin-bottom: 10px; cursor: pointer; font-size: 14px; color: var(--ink);
+  transition: border-color .15s ease, background .15s ease;
+}
+.rev-opt:hover { border-color: var(--primary-blue, var(--blue)); background: #f6f9ff; }
+.rev-opt input[type="checkbox"] {
+  width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer;
+  accent-color: var(--primary-blue, var(--blue));
+}
+.rev-opt-ic { display: inline-flex; color: var(--primary-blue, var(--blue)); flex: 0 0 auto; }
+.rev-opt-note { margin: 2px 0 18px; color: #8a93a3; font-size: 12.5px; }
+.rev-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.rev-confirm-actions .btn { padding: 11px 20px; }
+.btn-ghost { background: #fff; border-color: var(--line); color: #47505f; }
+.btn-ghost:hover:not(:disabled) { background: #f2f3f5; border-color: #cfd4dd; }
+
+@media (max-width: 720px) {
+  /* Encabezado en una sola linea ocupando todo el ancho, escalando con la ventana. */
+  .reviews > .section-title.rev-befirst { font-size: clamp(14px, 4.7vw, 24px); letter-spacing: -0.03em; }
+  .stars-input.editable button { font-size: 30px; }
+  .rev-confirm-actions { flex-direction: column-reverse; }
+  .rev-confirm-actions .btn { width: 100%; }
+}
+
+/* ===================== ETAPA56 · RESPONSIVE: quitar el video del visor y achicar las
+   vistas laterales para que la imagen principal se vea mucho mas grande. Solo movil;
+   en web el video y las vistas se mantienen igual. ===================== */
+@media (max-width: 720px) {
+  /* NOTA: el video vuelve al riel como una miniatura mas, en la misma linea que
+     las vistas (a pedido). Ver ETAPA59. Aqui ya NO se oculta. */
+
+  /* Vistas laterales mas pequenas -> el visor central gana ancho (y, por su
+     aspect-ratio, alto), asi la montura se ve mucho mas grande. */
+  .pdp .pdp-stage .pdp-views { width: 40px !important; gap: 7px !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 40px !important; height: 40px !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view img { padding: 3px; }
+}
+
+/* ===================== ETAPA57 · RESPONSIVE: imagen principal a TODO EL ANCHO arriba y
+   las miniaturas en fila DEBAJO, para apreciar mejor el detalle de la armadura. Solo
+   movil; en web no cambia. El video sigue oculto en movil (ETAPA56). ===================== */
+@media (max-width: 720px) {
+  .pdp .pdp-stage {
+    flex-direction: column-reverse !important;   /* visor arriba (DOM: views, main) -> main queda arriba */
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  .pdp .pdp-stage .pdp-main { width: 100% !important; }
+  .pdp .pdp-stage .pdp-views {
+    flex-direction: row !important;
+    width: 100% !important;
+    gap: 8px !important;
+    justify-content: center;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .pdp .pdp-stage .pdp-views .pdp-view {
+    width: 60px !important;
+    height: 60px !important;
+    flex: 0 0 auto !important;
+    aspect-ratio: 1 / 1 !important;
+  }
+  .pdp .pdp-stage .pdp-views .pdp-view img { padding: 4px; }
+}
+
+/* ===================== ETAPA58 · el zoom del visor NO debe agrandar el sello de marca.
+   La regla .pdp-main.zoom img (ETAPA37) escala TODAS las img del visor, incluido el
+   logo del sello; aqui se excluye para que la marca quede fija al hacer zoom. ===================== */
+.pdp-main.zoom .pdp-brandseal-img { transform: none !important; }
+
+/* ===================== ETAPA59 · RESPONSIVE: el video vuelve al riel como una miniatura
+   mas, en la MISMA LINEA que las vistas. Se muestran la miniatura (con su ▶) y el
+   reproductor. Con el video ya son hasta 5 miniaturas: un pelin mas chicas para que
+   entren en una sola linea. Solo movil; en web no cambia. ===================== */
+@media (max-width: 720px) {
+  .pdp .pdp-stage .pdp-views .pdp-view-video { display: block !important; }
+  .pdp .pdp-stage .pdp-video { display: block !important; }
+  .pdp .pdp-stage .pdp-views .pdp-view { width: 56px !important; height: 56px !important; }
+}
+
+/* ===================== ETAPA60 · RESPONSIVE: reducir el contorno (sombra) del boton de
+   favorito. La sombra grande y difusa (var(--shadow)) hacia un halo marcado alrededor
+   del corazon; en movil se deja una sombra minima y ajustada. Solo movil. ===================== */
+@media (max-width: 720px) {
+  /* Sin contorno: el corazon queda plano sobre la imagen (a pedido). */
+  .pdp-main .heart { box-shadow: none !important; border: none !important; }
+}
+
+/* ===================== ETAPA61 · RESPONSIVE: agrandar la vista principal. El visor se
+   extiende casi hasta el borde de la pantalla (recupera el gutter de .pdp) y usa un
+   padding minimo, asi la armadura se ve mas grande. Las miniaturas (fila debajo) y el
+   selector de color mantienen su margen. Solo movil; en web no cambia. ===================== */
+@media (max-width: 720px) {
+  .pdp .pdp-stage { margin-left: -16px !important; margin-right: -16px !important; }
+  .pdp .pdp-stage .pdp-main { padding: 3px !important; }
+  /* La fila de miniaturas vuelve a su ancho normal (no full-bleed) para que
+     queden centradas y con aire. */
+  .pdp .pdp-stage .pdp-views { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ===================== ETAPA62 · Probador "Probar con camara": nueva ventana con la
+   distribucion del diseno del cliente — resumen (material/medidas/genero), colores
+   disponibles, pasos frontal/lateral (ejemplo + recuadro de captura/subida +
+   recomendaciones) y ficha "Informacion de la montura" a lo ancho. Reutiliza el
+   lenguaje visual del sitio (colores navy, tipografia, tarjetas). ===================== */
+.tryon-studio-grid.ts2wrap { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #f4f6fb; }
+.ts2 { max-width: 1024px; margin: 0 auto; padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+
+/* Resumen: material / medidas / genero */
+.ts2-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #fff;
+  border: 1px solid var(--line, #ececea); border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.ts2-fact { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ts2-fact + .ts2-fact { border-left: 1px solid #eef1f6; padding-left: 14px; }
+.ts2-fact-ic { flex: 0 0 auto; width: 42px; height: 42px; padding: 9px; border-radius: 12px; background: #eef3fb; color: var(--primary-blue, #01326b); }
+.ts2-fact-tx { display: flex; flex-direction: column; min-width: 0; }
+.ts2-fact-k { font-size: 12px; color: #7c8698; font-weight: 600; line-height: 1.3; }
+.ts2-fact-tx b { font-size: 17px; color: #17203a; line-height: 1.2; font-weight: 800; overflow-wrap: anywhere; }
+.ts2-fact-tx small { font-size: 11.5px; color: #9aa2b0; margin-top: 1px; }
+
+/* Colores disponibles */
+.ts2-colors { display: flex; align-items: center; gap: 14px; padding: 2px 4px; flex-wrap: wrap; }
+.ts2-colors-sw { display: flex; gap: 10px; }
+.ts2-sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #e2e6ee; box-shadow: inset 0 0 0 2px #fff; cursor: pointer; padding: 0; transition: border-color .15s, transform .15s; }
+.ts2-sw.on { border-color: var(--primary-blue, #01326b); transform: scale(1.05); }
+.ts2-colors-tx { display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap; }
+.ts2-colors-tx b { font-size: 15px; font-weight: 800; color: #17203a; }
+.ts2-colors-tx span { font-size: 15px; color: #5b6472; }
+
+/* Paso (tarjeta) */
+.ts2-step { background: #fff; border: 1px solid var(--line, #ececea); border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.ts2-step.on { border-color: #cfe0ff; box-shadow: 0 0 0 3px rgba(14,90,208,.08); }
+.ts2-step-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ts2-step-badge { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; background: var(--primary-blue, #01326b); color: #fff; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+.ts2-step-tt { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.ts2-step-tt b { font-size: 18px; color: #17203a; font-weight: 800; line-height: 1.15; }
+.ts2-step-tt span { font-size: 13px; color: #7c8698; }
+.ts2-step-up { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; background: #eef4ff; color: var(--blue, #0E5AD0); border: 1px solid #cfe0ff; border-radius: 999px; padding: 10px 18px; font-weight: 700; font-size: 14px; cursor: pointer; transition: background .15s; }
+.ts2-step-up:hover { background: #e0ecff; }
+.ts2-step-body { display: grid; grid-template-columns: 150px 1fr 200px; gap: 16px; align-items: stretch; }
+
+/* Ejemplo */
+.ts2-ex { position: relative; margin: 0; border-radius: 12px; overflow: hidden; background: #eef2f8; min-height: 190px; }
+.ts2-ex-illus { width: 100%; height: 100%; display: block; }
+.ts2-ex-badge { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; background: #fff; color: #128a4d; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(16,24,40,.15); }
+.ts2-ex-badge-ic { width: 14px; height: 14px; }
+
+/* Recuadro de captura / subida (dropzone) */
+.ts2-drop { position: relative; border: 2px dashed #c7d3e8; border-radius: 12px; background: #f7faff; min-height: 190px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; transition: border-color .15s, background .15s; }
+.ts2-drop:hover { border-color: var(--blue, #0E5AD0); background: #eef4ff; }
+.ts2-drop.over { border-color: var(--blue, #0E5AD0); background: #e3edff; }
+.ts2-drop.has, .ts2-drop.live { border-style: solid; border-color: #e2e6ee; background: #0e1520; cursor: default; }
+.ts2-drop-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ts2-video { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+.ts2-drop-ph { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 20px; }
+.ts2-drop-cam { width: 58px; height: 58px; border-radius: 14px; background: #dbe6fb; color: var(--primary-blue, #01326b); display: flex; align-items: center; justify-content: center; }
+.ts2-drop-cam-ic { width: 30px; height: 30px; }
+.ts2-drop-ph b { font-size: 15px; color: #3a4863; font-weight: 700; }
+.ts2-drop-ph small { font-size: 12.5px; color: #9aa2b0; }
+.ts2-badge { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(10,16,28,.6); color: #fff; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 5px 11px; }
+.ts2-badge.ts2-ok { background: rgba(18,138,77,.92); }
+.ts2-badge-ic { width: 13px; height: 13px; }
+.ts2-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d; animation: ts2pulse 1.4s infinite; }
+@keyframes ts2pulse { 0% { box-shadow: 0 0 0 0 rgba(255,77,77,.6);} 70% { box-shadow: 0 0 0 7px rgba(255,77,77,0);} 100% { box-shadow: 0 0 0 0 rgba(255,77,77,0);} }
+.ts2-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 72px; font-weight: 800; color: rgba(255,255,255,.92); text-shadow: 0 4px 20px rgba(0,0,0,.5); }
+.ts2-guide { position: absolute; left: 0; right: 0; bottom: 0; padding: 9px 12px; text-align: center; color: #fff; font-size: 13px; font-weight: 600; background: linear-gradient(0deg, rgba(6,12,26,.82), transparent); }
+.ts2-retake { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.94); color: var(--blue, #0E5AD0); border: none; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(16,24,40,.18); }
+.ts2-retake:hover { background: #fff; }
+
+/* Recomendaciones */
+.ts2-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.ts2-checks li { display: flex; align-items: center; gap: 11px; font-size: 14px; color: #3a4863; font-weight: 600; }
+.ts2-check-ic { flex: 0 0 auto; width: 26px; height: 26px; color: var(--primary-blue, #01326b); display: flex; align-items: center; justify-content: center; }
+.ts2-check-ic .ts2-check-glass { width: 24px; height: 24px; }
+.ts2-check-ic .ts2-check-ok { width: 24px; height: 24px; color: #128a4d; }
+
+/* Ficha del marco a lo ancho (reutiliza .fs-card) */
+.fs-card.ts2-frame { margin: 4px 0 0; max-height: none; align-self: stretch; }
+.fs-card.ts2-frame .fs-hd { position: relative; }
+.ts2-frame-title { margin-right: auto; }
+.ts2-360 { display: inline-flex; align-items: center; gap: 7px; background: #fff; color: var(--primary-blue, #01326b); border: none; border-radius: 999px; padding: 7px 14px; font-size: 12.5px; font-weight: 800; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.ts2-360:hover { background: #eef3fb; }
+.ts2-360-ic { width: 16px; height: 16px; }
+.fs-card.ts2-frame .fs-top { grid-template-columns: 1fr minmax(240px, 42%); }
+.ts2-frame-colors { display: flex; align-items: center; gap: 10px; padding-top: 12px; flex-wrap: wrap; }
+.ts2-frame-colors-k { color: var(--primary-blue, #01326b); font-weight: 800; font-size: 14px; }
+.ts2-frame-photo { display: flex; flex-direction: column; gap: 10px; }
+.ts2-morephotos { align-self: flex-end; display: inline-flex; align-items: center; gap: 8px; background: #eef4ff; color: var(--blue, #0E5AD0); border: 1px solid #cfe0ff; border-radius: 999px; padding: 9px 16px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.ts2-morephotos:hover { background: #e0ecff; }
+
+/* Responsive */
+@media (max-width: 820px) {
+  .ts2-step-body { grid-template-columns: 1fr; }
+  .ts2-ex { min-height: 0; aspect-ratio: 16 / 8; }
+  .ts2-checks { flex-direction: row; flex-wrap: wrap; gap: 10px 20px; }
+  .fs-card.ts2-frame .fs-top { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .ts2 { padding: 12px 12px 32px; gap: 12px; }
+  .ts2-facts { grid-template-columns: 1fr; gap: 8px; }
+  .ts2-fact + .ts2-fact { border-left: none; padding-left: 0; border-top: 1px solid #eef1f6; padding-top: 8px; }
+  .ts2-step-hd { flex-wrap: wrap; }
+  .ts2-step-up { width: 100%; justify-content: center; }
+  .ts2-checks { flex-direction: column; }
+}
+
+/* ===================== ETAPA63 · Probador: fotos de EJEMPLO reales (frontal/lateral,
+   hombre/mujer segun deteccion), "preparando…" al encender la camara, y ficha
+   "Informacion de la montura" 75/25 (foto grande + medidas | datos con icono). ===================== */
+
+/* Foto de ejemplo real dentro de la tarjeta del paso */
+.ts2-ex-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Preparacion (deteccion de perfil) — capa breve sobre el probador */
+.ts2-prep { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: #f4f6fb; }
+.ts2-prep-card { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 24px; }
+.ts2-prep-spin { width: 46px; height: 46px; border-radius: 50%; border: 4px solid #dbe3f1; border-top-color: var(--primary-blue, #01326b); animation: ts2spin .8s linear infinite; }
+@keyframes ts2spin { to { transform: rotate(360deg); } }
+.ts2-prep-card b { font-size: 17px; color: #17203a; font-weight: 800; }
+.ts2-prep-card small { font-size: 13px; color: #7c8698; }
+
+/* Ficha del marco en 75/25 */
+.ts2-fr { display: grid; grid-template-columns: 3fr 1fr; }
+.ts2-fr-main { min-width: 0; border-right: 1px solid var(--fs-line, #e7eaf0); }
+.ts2-fr-photo.fs-photo { position: relative; width: 100%; aspect-ratio: 2.4 / 1; border-bottom: 1px solid var(--fs-line, #e7eaf0); }
+.ts2-fr-photo.fs-photo img { object-fit: contain; padding: 12px; }
+.ts2-morephotos { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.96); color: var(--blue, #0E5AD0); border: 1px solid #cfe0ff; border-radius: 999px; padding: 7px 13px; font-weight: 700; font-size: 12.5px; cursor: pointer; box-shadow: 0 2px 8px rgba(16,24,40,.14); }
+.ts2-morephotos:hover { background: #fff; }
+.ts2-fr-main .fs-measures { border-top: none; }
+
+.ts2-fr-specs { display: flex; flex-direction: column; padding: 12px 16px; }
+.ts2-fr-spec { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-bottom: 1px solid #f0f2f7; }
+.ts2-fr-spec:last-child { border-bottom: none; }
+.ts2-fr-spec-ic { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; background: #eef3fb; color: var(--primary-blue, #01326b); display: flex; align-items: center; justify-content: center; }
+.ts2-fr-spec-ic > svg { width: 20px; height: 20px; }
+.ts2-fr-spec-sw { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 10px; border: 2px solid #fff; box-shadow: inset 0 0 0 1px #e2e6ee, 0 1px 4px rgba(16,24,40,.15); }
+.ts2-fr-spec-tx { display: flex; flex-direction: column; min-width: 0; }
+.ts2-fr-spec-tx span { font-size: 11.5px; color: #7c8698; font-weight: 600; line-height: 1.2; }
+.ts2-fr-spec-tx b { font-size: 14.5px; color: #17203a; font-weight: 800; overflow-wrap: anywhere; line-height: 1.2; }
+.ts2-fr-colors { padding-top: 12px; }
+.ts2-fr-colors-k { display: block; font-size: 11.5px; color: #7c8698; font-weight: 700; margin-bottom: 8px; }
+.ts2-fr-colors .fs-swatches { padding: 0; gap: 8px; }
+
+@media (max-width: 700px) {
+  .ts2-fr { grid-template-columns: 1fr; }
+  .ts2-fr-main { border-right: none; border-bottom: 1px solid var(--fs-line, #e7eaf0); }
+  .ts2-fr-photo.fs-photo { aspect-ratio: 16 / 7; }
+}
+
+/* ===================== ETAPA64 · Probador — ajustes del cliente: resumen fuera en
+   movil, encabezado del paso en una linea, captura 75/25 (ejemplo+recuadro | lista),
+   ficha con Modelo/Color en cabecera, Material/Genero a la derecha, selector de color
+   sobre la foto y sin "Ver mas fotos". ===================== */
+
+/* Captura: ejemplo + recuadro a la IZQUIERDA (75%), lista a la DERECHA (25%) */
+.ts2-step-body { grid-template-columns: 3fr 1fr; align-items: stretch; }
+.ts2-cap-main { display: grid; grid-template-columns: minmax(140px, 0.8fr) 1.5fr; gap: 16px; min-width: 0; }
+.ts2-cap-main .ts2-ex, .ts2-cap-main .ts2-drop { min-height: 210px; }
+
+/* Encabezado del paso: SIEMPRE en una sola linea */
+.ts2-step-hd { flex-wrap: nowrap; }
+.ts2-step-tt { overflow: hidden; }
+.ts2-step-tt b, .ts2-step-tt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Ficha: cabecera con Modelo + Color */
+.ts2-fr-head { display: flex; flex-wrap: wrap; gap: 10px 28px; padding: 13px 16px; border-bottom: 1px solid var(--fs-line, #e7eaf0); }
+.ts2-fr-hspec { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ts2-fr-hspec .ts2-fr-spec-ic { width: 34px; height: 34px; border-radius: 10px; background: #eef3fb; color: var(--primary-blue, #01326b); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ts2-fr-hspec .ts2-fr-spec-ic > svg { width: 20px; height: 20px; }
+.ts2-fr-hspec .ts2-fr-spec-sw { width: 34px; height: 34px; border-radius: 10px; border: 2px solid #fff; box-shadow: inset 0 0 0 1px #e2e6ee, 0 1px 4px rgba(16,24,40,.15); flex: 0 0 auto; }
+
+/* Selector de color SOBRE la foto */
+.ts2-fr-onphoto { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; z-index: 2; }
+.ts2-fr-onsw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(15,40,90,.4); cursor: pointer; padding: 0; transition: transform .15s ease; }
+.ts2-fr-onsw:hover { transform: scale(1.1); }
+.ts2-fr-onsw.on { box-shadow: 0 0 0 2px var(--primary-blue, #01326b), 0 1px 5px rgba(15,40,90,.4); }
+
+/* Solo Material + Genero a la derecha; centrados */
+.ts2-fr-specs { justify-content: center; }
+
+/* RESPONSIVE: fuera el resumen de arriba (material/medidas/genero + colores) */
+@media (max-width: 820px) {
+  .ts2 > .ts2-facts, .ts2 > .ts2-colors { display: none; }
+  .ts2-cap-main { grid-template-columns: minmax(120px, 0.85fr) 1.4fr; }
+}
+@media (max-width: 560px) {
+  /* Encabezado en una linea: el boton de subir queda como icono */
+  .ts2-step-up { width: auto; padding: 9px; }
+  .ts2-step-up-tx { display: none; }
+  .ts2-cap-main { grid-template-columns: 1fr; }
+  .ts2-cap-main .ts2-ex { min-height: 0; aspect-ratio: 16 / 9; }
+}
+
+/* ===================== ETAPA65 · Ficha del probador estilo "card de tienda": foto a
+   todo el ancho con Material/Genero como badges arriba-derecha y el selector de color
+   abajo-izquierda; el titulo del banner es "Modelo - Color" (sin Ver en 360 ni la
+   cabecera Modelo/Color aparte). ===================== */
+.ts2-fr.ts2-fr-solo { grid-template-columns: 1fr; }
+.ts2-fr-solo .ts2-fr-main { border-right: none; }
+
+/* Badges (Material / Genero) sobre la foto, como en las cards del catalogo */
+.ts2-fr-badges { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; z-index: 3; }
+.ts2-fr-badge { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.96); color: #17203a; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; box-shadow: 0 2px 8px rgba(16,24,40,.16); white-space: nowrap; }
+.ts2-fr-badge-ic { width: 17px; height: 17px; color: var(--primary-blue, #01326b); flex: 0 0 auto; }
+
+/* ===================== ETAPA66 · Probador PASO A PASO: un solo paso visible (camara a
+   todo el ancho + ejemplo y lista lado a lado), luego la REVISION con la frontal y la
+   lateral por separado (Repetir / Subir foto sobre cada una) y "Calcular mis medidas".
+   La ficha de la montura queda permanente debajo. ===================== */
+.ts2-wiz .ts2-wiz-body { display: flex; flex-direction: column; gap: 14px; }
+.ts2-wiz-cam.ts2-drop { width: 100%; height: clamp(240px, 46vh, 440px); min-height: 0; }
+.ts2-wiz-cam .ts2-guide { font-size: 15px; padding: 12px; }
+.ts2-wiz-foot { display: grid; grid-template-columns: minmax(130px, 220px) 1fr; gap: 18px; align-items: center; }
+.ts2-wiz-foot .ts2-ex { min-height: 0; aspect-ratio: 1 / 1; }
+
+/* Revisión: frontal y lateral por separado */
+.ts2-rv .ts2-rv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ts2-rvfig { position: relative; margin: 0; border-radius: 14px; overflow: hidden; background: #0e1520; }
+.ts2-rvimg { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.ts2-rvimg-ph { display: flex; align-items: center; justify-content: center; font-size: 40px; color: #6b7280; }
+.ts2-rvbadge { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; background: rgba(18,138,77,.94); color: #fff; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 5px 11px; }
+.ts2-rvbadge-ic { width: 14px; height: 14px; }
+.ts2-rvtools { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; }
+.ts2-rvbtn { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.96); color: var(--blue, #0E5AD0); border: none; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(16,24,40,.18); }
+.ts2-rvbtn:hover { background: #fff; }
+.ts2-rvlabel { position: absolute; left: 0; right: 0; bottom: 0; padding: 9px 12px; color: #fff; font-size: 13px; font-weight: 700; background: linear-gradient(0deg, rgba(6,12,26,.82), transparent); }
+.ts2-badge-done { background: #128a4d !important; }
+.ts2-badge-done svg { width: 18px; height: 18px; }
+
+@media (max-width: 640px) {
+  .ts2-rv .ts2-rv-grid { grid-template-columns: 1fr; }
+  .ts2-wiz-foot { grid-template-columns: 1fr; }
+  .ts2-wiz-foot .ts2-ex { aspect-ratio: 16 / 9; }
+  .ts2-wiz-cam.ts2-drop { height: clamp(220px, 52vh, 380px); }
+  .ts2-rvbtn-tx { display: none; }
+}
+
+/* ===================== ETAPA67 — Intro guiada del paso + conteo arriba =========
+   Al arrancar cada paso de captura, en la MISMA caja donde saldrá la foto, primero
+   se muestran los mensajes guiados UNO TRAS OTRO (icono + texto) con la cara de
+   referencia de fondo (atenuada) y tiempo suficiente para leerlos. Luego se enfoca
+   el rostro en vivo y aparece el conteo de 5 s ARRIBA. En la revisión, botón para
+   "Tomar las fotos de nuevo". Todo pensado responsive primero. ===================== */
+.ts2-intro {
+  position: absolute; inset: 0; z-index: 3;
+  background-size: cover; background-position: center top;
+  background-color: #0e1520;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+}
+.ts2-intro::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(1,12,30,.60), rgba(1,12,30,.80));
+}
+.ts2-intro-inner {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 22px; max-width: 90%;
+  animation: ts2introin .45s ease both;
+}
+@keyframes ts2introin {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+.ts2-intro-ic {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(255,255,255,.14); border: 2px solid rgba(255,255,255,.55);
+  color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 22px rgba(0,0,0,.35);
+}
+.ts2-intro-ic svg { width: 36px; height: 36px; }
+.ts2-intro-msg {
+  color: #fff; font-size: clamp(19px, 4.6vw, 27px); font-weight: 800;
+  line-height: 1.25; text-shadow: 0 2px 16px rgba(0,0,0,.6);
+}
+
+/* Conteo de 5 s ARRIBA (chip circular centrado en la parte superior) */
+.ts2-count.ts2-count-top {
+  inset: auto; top: 14px; left: 50%; transform: translateX(-50%);
+  width: 62px; height: 62px; border-radius: 50%;
+  background: rgba(1,12,30,.55); border: 2px solid rgba(255,255,255,.6);
+  font-size: 34px; text-shadow: 0 2px 10px rgba(0,0,0,.5);
+  animation: ts2counttop 1s ease-in-out infinite;
+  z-index: 4;
+}
+@keyframes ts2counttop {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50%      { transform: translateX(-50%) scale(1.09); }
+}
+
+/* Botón "Tomar las fotos de nuevo" en la revisión (reset neutro, no alarmante) */
+.ts2-step-up.ts2-retake-all { background: #f3f5f9; color: #55617a; border-color: #dde3ee; }
+.ts2-step-up.ts2-retake-all:hover { background: #e9edf4; }
+
+@media (max-width: 480px) {
+  .ts2-step-up.ts2-retake-all { padding: 9px 12px; font-size: 13px; }
+  .ts2-intro-inner { gap: 13px; padding: 16px; }
+  .ts2-intro-ic { width: 62px; height: 62px; }
+  .ts2-intro-ic svg { width: 31px; height: 31px; }
+}
+
+/* ===================== ETAPA68 — Fix: "Calcular mis medidas" siempre visible ======
+   El estudio (.tryon-studio) es fixed a pantalla completa; se monta como columna
+   flex para que el contenido central (.ts2wrap) haga su propio scroll y todo sea
+   alcanzable en RESPONSIVE. La acción "Calcular mis medidas" ya NO es una barra
+   flotante (quedaba tapada por la navegación inferior del sitio en móvil): ahora va
+   EN EL FLUJO, dentro de la revisión, justo debajo de las dos fotos. ============== */
+.tryon.tryon-studio { display: flex; flex-direction: column; }
+.tryon-studio .tryon-bar { flex: 0 0 auto; }
+.tryon-studio-grid.ts2wrap { flex: 1 1 auto; min-height: 0; }
+
+/* Bloque de acción dentro de la revisión (debajo de las fotos). Tarjeta clara con
+   la pregunta "¿para quién?", el visto de confirmación y el botón grande de la IA. */
+.ts2-rv-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin-top: 14px; padding: 16px; border-radius: 14px;
+  background: #fff; border: 1px solid #e6ebf3; box-shadow: 0 1px 2px rgba(16,24,40,.05);
+}
+.ts2-rv-actions .vm-actionbar-ok { color: #2c7d3f; font-weight: 700; font-size: 13px; margin-right: auto; }
+.ts2-rv-actions .vm-go { border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 15px;
+  color: #fff; padding: 13px 22px; background: linear-gradient(180deg, #0a3d7a, #01326b);
+  box-shadow: 0 6px 18px -6px rgba(1,50,107,.5); }
+.ts2-rv-actions .vm-go:hover { filter: brightness(1.08); }
+.ts2-rv-actions .vm-go:disabled { opacity: .55; cursor: default; box-shadow: none; }
+
+/* Selector "¿para quién son?" (antes sin estilos): pastillas navy de la marca. */
+.ts2-rv-actions .vm-who { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
+.ts2-rv-actions .vm-who-q { color: #3a4863; font-size: 13px; font-weight: 700; flex: 0 0 auto; white-space: nowrap; }
+.ts2-rv-actions .vm-who-opts { display: inline-flex; flex: 0 0 auto; background: #eef2f8; border: 1px solid #dde3ee; border-radius: 999px; padding: 3px; }
+.ts2-rv-actions .vm-who-opt { border: 0; background: transparent; color: #55617a; font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.ts2-rv-actions .vm-who-opt.on { background: var(--primary-blue, #01326b); color: #fff; }
+.ts2-rv-actions .vm-who-name { border: 1px solid #d8dbe0; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: inherit; min-width: 150px; }
+.ts2-rv-actions .vm-who-name:focus { outline: none; border-color: #01326b; box-shadow: 0 0 0 2px rgba(1,50,107,.15); }
+
+@media (max-width: 640px) {
+  /* En móvil se apila el bloque, PERO la fila "¿para quién?" queda en UNA sola línea
+     (pregunta a la izquierda, pastillas a la derecha) y el botón ocupa todo el ancho. */
+  .ts2-rv-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; }
+  .ts2-rv-actions .vm-who { justify-content: space-between; gap: 8px; }
+  .ts2-rv-actions .vm-who-opt { padding: 6px 11px; font-size: 12px; }
+  .ts2-rv-actions .vm-go { width: 100%; padding: 15px 18px; font-size: 16px; }
+}
+
+/* ===================== ETAPA69 — Botones PREMIUM con movimiento (estudio) =========
+   Transición suave + realce al pasar/pulsar en TODOS los botones del probador; los
+   primarios (navy) llevan un destello que barre. "Añadir receta" pasa al navy de la
+   marca. Respeta prefers-reduced-motion. ===================== */
+.tryon-studio .vm-go,
+.tryon-studio .vm-addrx,
+.tryon-studio .vm-remeasure,
+.tryon-studio .vm-share,
+.tryon-studio .vm-added,
+.ts2-rv-actions .vm-who-opt,
+.ts2-step-up,
+.ts2-rvbtn {
+  transition: transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .22s ease, filter .18s ease, background .18s ease;
+}
+
+/* "Añadir receta" al navy de la marca (era azul claro) */
+.tryon-studio .vm-addrx { background: linear-gradient(180deg, #0a3d7a, #01326b);
+  box-shadow: 0 10px 24px -10px rgba(1,50,107,.6); }
+
+/* Primarios navy con destello que barre al pasar el cursor */
+.ts2-rv-actions .vm-go, .tryon-studio .vm-addrx { position: relative; overflow: hidden; isolation: isolate; }
+.ts2-rv-actions .vm-go::after, .tryon-studio .vm-addrx::after {
+  content: ""; position: absolute; top: 0; left: -130%; width: 55%; height: 100%; z-index: -1;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.38), transparent);
+  transform: skewX(-18deg); transition: left .65s ease; pointer-events: none;
+}
+.ts2-rv-actions .vm-go:hover::after, .tryon-studio .vm-addrx:hover::after { left: 150%; }
+.ts2-rv-actions .vm-go:hover, .tryon-studio .vm-addrx:hover {
+  transform: translateY(-2px); box-shadow: 0 16px 32px -10px rgba(1,50,107,.62); filter: brightness(1.07); }
+.ts2-rv-actions .vm-go:active, .tryon-studio .vm-addrx:active { transform: translateY(0) scale(.985); }
+
+/* Compartir (verde WhatsApp) con realce */
+.tryon-studio .vm-share:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -10px rgba(18,140,77,.5); filter: brightness(1.03); }
+.tryon-studio .vm-share:active { transform: translateY(0) scale(.985); }
+
+/* Secundarios (Medir de nuevo, subir foto, repetir) — realce sutil */
+.tryon-studio .vm-remeasure:hover, .ts2-step-up:hover, .ts2-rvbtn:hover {
+  transform: translateY(-1px); box-shadow: 0 8px 18px -10px rgba(16,24,40,.4); }
+.tryon-studio .vm-remeasure:active, .ts2-step-up:active, .ts2-rvbtn:active { transform: translateY(0); }
+
+/* Pastillas "¿para quién?" — micro-motion al pulsar */
+.ts2-rv-actions .vm-who-opt { transition: transform .14s ease, background .18s ease, color .18s ease; }
+.ts2-rv-actions .vm-who-opt:active { transform: scale(.95); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tryon-studio .vm-go, .tryon-studio .vm-addrx, .tryon-studio .vm-remeasure,
+  .tryon-studio .vm-share, .ts2-rv-actions .vm-who-opt, .ts2-step-up, .ts2-rvbtn { transition: none; }
+  .ts2-rv-actions .vm-go::after, .tryon-studio .vm-addrx::after { display: none; }
+}
+
+/* ===================== ETAPA70 — Consistencia visual del PROBADOR ================
+   Un solo azul de marca (navy #01326b) en todos los acentos e interacciones del
+   probador; el azul claro suelto (#0E5AD0 / #2f74ff) se retira. Verde solo para
+   éxito/compartir, gris solo para acciones secundarias (repetir/medir de nuevo).
+   Los iconos comparten color (navy) y estilo (contorno). ===================== */
+:root { --rl-navy: #01326b; --rl-navy-2: #0a3d7a; }
+
+/* Subir foto / acciones azules → navy */
+.tryon-studio .ts2-step-up { color: var(--rl-navy); background: #eef2f8; border-color: #cdd9ee; }
+.tryon-studio .ts2-step-up:hover { background: #e3eaf6; }
+/* "Tomar las fotos de nuevo" se queda neutro (es un reset, no una acción de marca) */
+.tryon-studio .ts2-step-up.ts2-retake-all { color: #55617a; background: #f3f5f9; border-color: #dde3ee; }
+.tryon-studio .ts2-step-up.ts2-retake-all:hover { background: #e9edf4; }
+/* Repetir / Subir foto sobre las fotos de revisión → navy */
+.tryon-studio .ts2-rvbtn { color: var(--rl-navy); }
+.tryon-studio .ts2-rvbtn svg { color: var(--rl-navy); }
+/* Dropzone: foco/hover en navy (no azul claro) */
+.tryon-studio .ts2-drop:hover { border-color: var(--rl-navy); background: #eef2f8; }
+.tryon-studio .ts2-drop.over { border-color: var(--rl-navy); background: #e6edf7; }
+/* Cabecera de "Medidas calculadas" y etiquetas del resultado → navy de marca */
+.tryon-studio .vm-dims-h { color: var(--rl-navy); }
+.tryon-studio .vm-rlabel { background: var(--rl-navy); }
+/* Iconos de la lista de recomendaciones y de las medidas: mismo navy */
+.tryon-studio .ts2-check-ic { color: var(--rl-navy); }
+.tryon-studio .ts2-drop-cam { color: var(--rl-navy); background: #dde7f5; }
+/* Cámara/subida "cargando" y reintento del reporte → navy (no otros azules) */
+.tryon-studio .vm-spinner { border-top-color: var(--rl-navy); }
+.tryon-studio .vm-btn, .tryon-studio .vm-go.vm-btn { background: linear-gradient(180deg, var(--rl-navy-2), var(--rl-navy)); }
+/* Ficha de la montura: cabecera al mismo navy de marca (unifica con "Medidas") */
+.tryon-studio .fs-card { --fs-navy: #01326b; --fs-navy2: #0a3d7a; }
+/* Selector de color activo sobre la foto: anillo navy (no azul claro) */
+.tryon-studio .ts2-sw.on, .tryon-studio .ts2-fr-onsw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rl-navy); }
+/* Botón "Calcular": icono SVG + texto alineados */
+.tryon-studio .vm-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.tryon-studio .vm-go svg { flex: 0 0 auto; }

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
@@ -13,11 +14,14 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
+import { IconMaterial, IconMeasures, IconGender, IconFemale, IconUnisex, IconKids, IconCamera, IconCart, Icon360 } from "../components/UiIcons.jsx";
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
 import { GENERATED_INDEX, GENERATED_VIEWS, videosBySku } from "../data/frameMediaSample.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
+import { BRAND_BY_SLUG } from "../data/brands.js";
+import { measureBBox, getCachedBBox, fitTransform } from "../data/frameFit.js";
 
 // El catálogo NO trae un slug fiable, así que la unión con las vistas generadas se
 // hace por SKU normalizado (coincide en las 21 monturas del piloto).
@@ -25,7 +29,55 @@ const SKU_TO_HANDLE = {};
 for (const f of GENERATED_INDEX) {
   SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
 }
-const VIEW_ORDER = ["front", "left", "right", "back"];
+const VIEW_ORDER = ["front", "left", "back", "right"];
+
+// A veces la generación IA deja un lado duplicado o faltante (p.ej. sólo
+// "left"). Construimos las 4 vistas y, si un lado falta o se repite, usamos su
+// par con efecto espejo (scaleX(-1)) para tener izquierda y derecha distintas.
+function build360(cv) {
+  if (!cv) return {};
+  const out = {};
+  for (const k of VIEW_ORDER) if (cv[k]) out[k] = { key: cv[k], mirror: false };
+  // La IA suele generar el lado derecho mirando en la MISMA dirección que el
+  // izquierdo (o directamente falta). Volteamos SIEMPRE la vista derecha con CSS
+  // (o, si no existe, usamos el espejo de la izquierda) para que izquierda y
+  // derecha miren a lados opuestos. Aplica a miniatura y a imagen ampliada.
+  const L = cv.left, R = cv.right;
+  if (R) out.right = { key: R, mirror: true };
+  else if (L) out.right = { key: L, mirror: true };
+  return out;
+}
+
+// Las medidas del catalogo a veces vienen como intervalo ("51-53"). Mostramos un
+// solo valor: el promedio del intervalo, redondeado.
+function oneMeasure(v) {
+  if (v == null || v === "") return v;
+  const s = String(v).trim();
+  const m = s.match(/(\d+(?:\.\d+)?)\s*[-–—aA]\s*(\d+(?:\.\d+)?)/);
+  if (m) return String(Math.round((parseFloat(m[1]) + parseFloat(m[2])) / 2));
+  return s;
+}
+
+// Descripcion de marketing generada por montura (sin exagerar). Se arma con los
+// atributos (forma, material, publico) para que cada ficha tenga su texto. Corto
+// a proposito: ~2 lineas en web y ~4 en responsive (ademas se recorta por CSS).
+function productPitch(product, lang, tvFn) {
+  const a = product.attributes || {};
+  const shape = (tvFn(a.shape) || "").toLowerCase();
+  const mat = ((a.material || []).map(tvFn).filter(Boolean)[0] || "").toLowerCase();
+  const kids = a.age === "Niños";
+  const g = a.gender;
+  if (lang === "en") {
+    const who = kids ? "Kids' glasses" : g === "Hombres" ? "Men's frames" : g === "Señoras" ? "Women's frames" : "Unisex frames";
+    const sp = shape ? `${shape} ` : "";
+    const mp = mat ? `in ${mat} ` : "";
+    return `${who} ${sp}${mp}— versatile for any occasion, light and comfortable for everyday wear. Use them as your daily glasses and fit them with prescription or sun lenses.`.replace(/\s+/g, " ").trim();
+  }
+  const who = kids ? "Espejuelos infantiles" : g === "Hombres" ? "Espejuelos para él" : g === "Señoras" ? "Espejuelos para ella" : "Espejuelos unisex";
+  const sp = shape ? `en ${shape} ` : "";
+  const mp = mat ? `de ${mat} ` : "";
+  return `${who} ${sp}${mp}— versátiles para cualquier ocasión, livianos y cómodos para el día a día. Úsalos como lentes diarios y adáptalos con cristales recetados o de sol.`.replace(/\s+/g, " ").trim();
+}
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -33,11 +85,77 @@ export default function ProductDetail() {
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
+  const [tab, setTab] = useState("detalles");
+  const [matHelp, setMatHelp] = useState(false); // ayuda de calidad del material (al click)
+  const [measHelp, setMeasHelp] = useState(null); // ayuda de medida: "eye" | "bridge" | "temple" | null
   // Eje de VISTA (front/left/right/back). Independiente del color (active): solo
   // cambia qué se pinta en el visor central; se reinicia a "frontal" al cambiar de
   // montura o de color.
   const [view, setView] = useState("front");
-  useEffect(() => { setView("front"); }, [slug, active]);
+  useEffect(() => { setView("front"); setMatHelp(false); setMeasHelp(null); }, [slug, active]);
+  // Modales (material / medidas): bloquean el scroll de fondo y cierran con ESC.
+  useEffect(() => {
+    if (!matHelp && !measHelp) return;
+    const onKey = (e) => { if (e.key === "Escape") { setMatHelp(false); setMeasHelp(null); } };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [matHelp, measHelp]);
+  // Timers del botón 360 (giro continuo al mantener pulsado).
+  const spinTimer = useRef(null);
+  const spinHold = useRef(null);
+  useEffect(() => () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); }, []);
+  // Auto-recorte del blanco: mide el bbox de cada imagen del color actual y calcula
+  // el transform que la ajusta a su recuadro (recorta el máximo de blanco). Se
+  // recalcula al cambiar de montura/color y al redimensionar (web ↔ responsive).
+  const stackRef = useRef(null);
+  const mainRef = useRef(null);
+  const [fits, setFits] = useState({});
+  useEffect(() => {
+    const p = product;
+    if (!p) { setFits({}); return; }
+    const gv = GENERATED_VIEWS[SKU_TO_HANDLE[String(p.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const col = p.colors[active];
+    const v360 = build360(gv && col ? gv[col.name] : null);
+    const entries = VIEW_ORDER.filter((v) => v360[v]).map((v) => ({ v, src: resolveImage(v360[v].key), mirror: v360[v].mirror }));
+    const singleSrc = col ? col.image : null;
+    let alive = true;
+    const recompute = () => {
+      if (!alive) return;
+      if (entries.length) {
+        const el = stackRef.current; if (!el) return;
+        const W = el.clientWidth, H = el.clientHeight, next = {};
+        for (const { v, src, mirror } of entries) {
+          const bb = getCachedBBox(src);
+          const st = bb ? fitTransform(W, H, bb, mirror) : null;
+          if (st) next[v] = st;
+        }
+        setFits(next);
+      } else {
+        const el = mainRef.current; if (!el) return;
+        const bb = getCachedBBox(singleSrc);
+        const st = bb ? fitTransform(el.clientWidth, el.clientHeight, bb, false) : null;
+        setFits(st ? { single: st } : {});
+      }
+    };
+    const srcs = entries.length ? entries.map((e) => e.src) : [singleSrc];
+    Promise.all(srcs.map((s) => measureBBox(s))).then(() => recompute());
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    const target = entries.length ? stackRef.current : mainRef.current;
+    if (target) ro.observe(target);
+    return () => { alive = false; ro.disconnect(); };
+  }, [product, active]);
+  // Precarga de las 4 vistas del color actual → giro fluido sin parpadeo.
+  useEffect(() => {
+    if (!product) return;
+    const cv = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const c = product.colors[active];
+    const set = cv && c ? cv[c.name] : null;
+    if (!set) return;
+    Object.values(set).forEach((k) => { if (k) { const im = new Image(); im.src = resolveImage(k); } });
+  }, [product, active]);
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -91,8 +209,11 @@ export default function ProductDetail() {
   // como hoy.
   const genViews = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
   const colorViews = genViews && color ? genViews[color.name] : null;
-  const hasViews = !!(colorViews && (colorViews.front || colorViews.left || colorViews.right || colorViews.back));
-  const mainSrc = hasViews && colorViews[view] ? resolveImage(colorViews[view]) : (color ? color.image : "");
+  const views360 = build360(colorViews);
+  const hasViews = Object.keys(views360).length > 0;
+  const curView = views360[view];
+  const mainSrc = curView ? resolveImage(curView.key) : (color ? color.image : "");
+  const mainMirror = !!(curView && curView.mirror);
 
   // Vídeo comercial de ESTE color, si existe. Sale del MISMO fixture que las vistas,
   // no de la metadata de Medusa: leerlo de Medusa exigiría VITE_USE_MEDUSA=true, y ese
@@ -119,10 +240,67 @@ export default function ProductDetail() {
   const eduMaterial = frameMaterials.find((m) => frameMatEdu(m, lang)) || frameMaterials[0];
   const frameEdu = eduMaterial ? frameMatEdu(eduMaterial, lang) : null;
 
+  // Datos clave para la ficha estilo mockup: forma, medidas (ojo-puente-varilla)
+  // y género con su icono.
+  const shapeLabel = tv(product.attributes.shape);
+  // Sello de marca (monograma): iniciales de la marca; el nombre completo sale
+  // al pasar el cursor. Los logos de marca son wordmarks externos, así que un
+  // monograma es más limpio y fiable como "sello de calidad".
+  const brandWords = (product.brand || "").trim().split(/\s+/).filter(Boolean);
+  const brandInitials = (brandWords.length >= 2 ? (brandWords[0][0] + brandWords[1][0]) : (brandWords[0] || "").slice(0, 1)).toUpperCase();
+  // Sello de calidad = logo REAL de la marca (el mismo del catálogo/sección Marcas).
+  // Si no hay logo para esta marca, cae al monograma de iniciales.
+  const brandInfo = BRAND_BY_SLUG[product.brand_slug];
+  const brandLogo = brandInfo ? brandInfo.logo : null;
+  const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
+    .map(oneMeasure).filter((x) => x != null && x !== "").join(" - ");
+  // Medidas con diagrama de referencia + ayuda (que significa / como se mide).
+  const MEAS = {
+    eye: { img: "/measure-eye.png", label: t("spec.eye"), val: oneMeasure(product.attributes.eye_size), help: t("meas.eye.help") },
+    bridge: { img: "/measure-bridge.png", label: t("spec.bridge"), val: oneMeasure(product.attributes.bridge_size), help: t("meas.bridge.help") },
+    temple: { img: "/measure-temple.png", label: t("spec.temple"), val: oneMeasure(product.attributes.temple_length), help: t("meas.temple.help") },
+  };
+  const MEAS_ORDER = ["eye", "bridge", "temple"];
+  const genderVal = product.attributes.gender;
+  const isKidsFrame = product.attributes.age === "Niños";
+  const GenderIcon = isKidsFrame ? IconKids
+    : genderVal === "Hombres" ? IconGender
+    : genderVal === "Señoras" ? IconFemale
+    : genderVal === "Unisexo" ? IconUnisex
+    : IconGender;
+  const genderLabel = isKidsFrame ? t("g.kids")
+    : genderVal === "Hombres" ? t("g.male")
+    : genderVal === "Señoras" ? t("g.female")
+    : genderVal === "Unisexo" ? t("g.unisex")
+    : (genderVal ? tv(genderVal) : "");
+
+  // Botón 360: clic = avanza una vista; mantener pulsado = giro continuo. El
+  // orden de VIEW_ORDER (front → left → back → right) da sensación de giro.
+  const spin360 = (dir = 1) => {
+    const avail = VIEW_ORDER.filter((v) => views360[v]);
+    if (!avail.length) return;
+    setView((prev) => {
+      const i = avail.indexOf(prev);
+      return avail[((i < 0 ? 0 : i) + dir + avail.length) % avail.length];
+    });
+  };
+  const start360 = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    spin360(1);
+    clearTimeout(spinHold.current);
+    clearInterval(spinTimer.current);
+    spinHold.current = setTimeout(() => {
+      spinTimer.current = setInterval(() => spin360(1), 190);
+    }, 320);
+  };
+  const stop360 = () => { clearTimeout(spinHold.current); clearInterval(spinTimer.current); spinTimer.current = null; };
+
   return (
     <div className="pdp">
       <div className="breadcrumb">
-        <Link to="/">{t("pdp.home")}</Link> / <Link to={`/marca/${product.brand_slug}`}>{product.brand}</Link> / <span>{product.name}</span>
+        <button type="button" className="bc-back" onClick={() => navigate(-1)}>← {t("pdp.back")}</button> / <Link to="/catalogo">{t("pdp.frames")}</Link> / <span>{product.name}</span>
       </div>
 
       <div className="pdp-grid">
@@ -130,11 +308,12 @@ export default function ProductDetail() {
           <div className={`pdp-stage ${showRail ? "has-views" : ""}`}>
             {showRail && (
               <div className="pdp-views" role="tablist" aria-label={t("pdp.views")}>
-                {hasViews && VIEW_ORDER.map((vw) => colorViews[vw] ? (
+                {hasViews && VIEW_ORDER.map((vw) => views360[vw] ? (
                   <button key={vw} type="button" role="tab" aria-selected={view === vw}
                           className={`pdp-view ${view === vw ? "sel" : ""}`}
                           onClick={() => setView(vw)} title={t(`pdp.view.${vw}`)}>
-                    <img src={resolveImage(colorViews[vw])} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                    <img src={resolveImage(views360[vw].key)} alt={t(`pdp.view.${vw}`)} loading="lazy"
+                         className={views360[vw].mirror ? "mirror" : ""}
                          onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
                   </button>
                 ) : null)}
@@ -151,10 +330,24 @@ export default function ProductDetail() {
                 )}
               </div>
             )}
-            <div className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+            <div ref={mainRef} className={`pdp-main zlx-float ${zoom ? "zoom" : ""}`} onClick={() => setZoom((z) => !z)}>
+              {!showingVideo && (<>
               <button className={`heart ${isFav(product.slug) ? "on" : ""}`}
                       onClick={(e) => { e.stopPropagation(); toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: (product.colors[0] || {}).variantId }); }}
                       aria-label={t("a11y.fav")}>{isFav(product.slug) ? "♥" : "♡"}</button>
+              {/* Identidad arriba a la derecha: sello de marca (hover → nombre) + modelo/color. */}
+              <div className="pdp-idtag" onClick={(e) => e.stopPropagation()}>
+                <span className={`pdp-brandseal ${brandLogo ? "has-logo" : ""}`} tabIndex={0} role="img" aria-label={product.brand} title={product.brand}>
+                  {brandLogo && (
+                    <img className="pdp-brandseal-img" src={brandLogo} alt={product.brand} loading="lazy"
+                         onError={(e) => { const s = e.currentTarget.closest(".pdp-brandseal"); if (s) s.classList.remove("has-logo"); e.currentTarget.style.display = "none"; }} />
+                  )}
+                  <span className="pdp-brandseal-mono">{brandInitials}</span>
+                  <span className="pdp-brandseal-tip">{product.brand}</span>
+                </span>
+                <h1 className="pdp-idtag-model">{product.name}{color ? ` · ${color.name}` : ""}</h1>
+              </div>
+              </>)}
               {showingVideo ? (
                 <video
                   key={videoSrc}
@@ -176,9 +369,52 @@ export default function ProductDetail() {
                      pulsar "play" dispararía el zoom en vez de reproducir. */
                   onClick={(e) => e.stopPropagation()}
                 />
+              ) : hasViews ? (
+                /* Las 4 vistas pre-renderizadas y apiladas; sólo cambia la opacidad
+                   → giro continuo sin parpadeo al cambiar de foto. */
+                <div className="pdp-360stack" ref={stackRef}>
+                  {VIEW_ORDER.filter((v) => views360[v]).map((v) => (
+                    <div key={v} className={`pdp-360fit ${view === v ? "on" : ""}`} style={fits[v] || undefined}>
+                      <img src={resolveImage(views360[v].key)} draggable="false"
+                           alt={`${product.name} ${color.name} · ${t(`pdp.view.${v}`)}`}
+                           className={`pdp-360frame ${views360[v].mirror ? "mirror" : ""} ${view === v ? "on" : ""}`}
+                           onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; }} />
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <img key={mainSrc} src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className="fade-in"
+                <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
+                     style={fits.single ? { transform: (mainMirror ? "scaleX(-1) " : "") + fits.single.transform, transformOrigin: fits.single.transformOrigin } : undefined}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
+              )}
+              {hasViews && !showingVideo && (
+                <button type="button" className="pdp-360" aria-label="360°" title="360°"
+                        onPointerDown={start360} onPointerUp={stop360}
+                        onPointerLeave={stop360} onPointerCancel={stop360}
+                        onClick={(e) => e.stopPropagation()}>
+                  <img src="/icon-360.png" alt="360°" />
+                </button>
+              )}
+              {/* Selector de color (solo circulos) centrado, en la linea del boton 360.
+                  Sin texto: el color ya sale en el titulo (DC 50 · Grey). */}
+              {!showingVideo && product.colors.length > 1 && (
+                <div className="pdp-swatches" onClick={(e) => e.stopPropagation()}>
+                  {product.colors.map((c, i) => (
+                    <button key={c.name} type="button" className={`pdp-swatch ${i === active ? "sel" : ""}`}
+                            style={{ background: c.hex }} onClick={(e) => { e.stopPropagation(); setActive(i); }}
+                            aria-label={c.name} title={c.name} />
+                  ))}
+                </div>
+              )}
+              {/* Estrellas abajo-izquierda (misma linea que colores y 360). Vacias y
+                  semi-transparentes si no hay reseñas; se llenan segun el promedio. */}
+              {!showingVideo && (
+                <div className="pdp-stars" onClick={(e) => e.stopPropagation()}
+                     aria-label={review ? `${review.average.toFixed(1)} / 5 (${review.count})` : t("rev.none")}
+                     title={review ? `${review.average.toFixed(1)} / 5 · ${review.count}` : t("rev.none")}>
+                  <span className="pdp-stars-base">★★★★★</span>
+                  <span className="pdp-stars-fill" style={{ width: `${((review ? review.average : 0) / 5) * 100}%` }}>★★★★★</span>
+                </div>
               )}
               {TRY_ON_ENABLED && (
                 <button className="pdp-ar" onClick={(e) => { e.stopPropagation(); setTryOnSlug(slug); }}>◈ {t("card.ar")}</button>
@@ -196,101 +432,131 @@ export default function ProductDetail() {
         </div>
 
         <div className="pdp-info">
-          <div className="pdp-brand">{product.brand}</div>
-          <h1 className="pdp-title">{product.name}</h1>
-
-          {/* Requisito 6: ficha comercial del marco al abrirlo. */}
-          <div className="frame-id">
-            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.model")}</span> {product.sku}</span>
-            <span className="frame-id-chip"><span className="frame-id-k">{t("frame.collection")}</span> {product.brand}</span>
+          {/* Datos clave con iconos: material · medidas · género. */}
+          <div className="pdp-facts">
             {frameMaterials.length > 0 && (
-              <span className="frame-id-chip"><IconMontura className="frame-id-ic" size={16} aria-hidden="true" /><span className="frame-id-k">{t("frame.material")}</span> {frameMaterials.map(tv).join(" · ")}</span>
-            )}
-          </div>
-          {/* Real reviews only. `product.rating`/`product.reviews` are numbers
-              the scraper's filler generates for presentation; showing them here
-              put a review score on frames nobody had ever reviewed. */}
-          <div className="pdp-meta">
-            {review ? (
-              <>
-                <span className="stars">★ {review.average.toFixed(1)}</span>
-                <span className="muted">· {review.count} {t("pdp.reviews")}</span>
-              </>
-            ) : (
-              <span className="muted">{t("rev.none")}</span>
-            )}
-          </div>
-          <div className="pdp-price">${product.price.toFixed(2)} <span className="muted small">{t("pdp.lensesFrom")}</span></div>
-
-          <div className="pdp-color-row">
-            <span className="lbl">{t("pdp.color")}: <b>{color.name}</b></span>
-            <div className="swatches lg">
-              {product.colors.map((c, i) => (
-                <button key={c.name} className={`swatch ${i === active ? "sel" : ""}`} style={{ background: c.hex }}
-                        title={c.name} onClick={() => setActive(i)} aria-label={c.name} />
-              ))}
-            </div>
-          </div>
-
-          <div className="pdp-actions">
-            <button className="btn btn-primary big" onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
-              {t("pdp.selectLens")}
-            </button>
-            <button className="btn btn-outline big" disabled={busy || !color.variantId}
-                    onClick={() => addFrame(color.variantId)}>
-              {t("pdp.addFrame")} · ${product.price.toFixed(2)}
-            </button>
-          </div>
-          {TRY_ON_ENABLED && (
-            <button className="pdp-tryon-btn" onClick={() => setTryOnSlug(slug)}>📷 {t("tryon.cta")}</button>
-          )}
-
-          <table className="specs">
-            <tbody>
-              <tr><td>{t("spec.brand")}</td><td>{product.brand}</td></tr>
-              <tr><td>{t("spec.shape")}</td><td>{tv(product.attributes.shape) || "—"}</td></tr>
-              <tr><td>{t("spec.material")}</td><td>{product.attributes.material.map(tv).join(", ")}</td></tr>
-              <tr><td>{t("spec.gender")}</td><td>{tv(product.attributes.gender)}</td></tr>
-              <tr><td>{t("spec.age")}</td><td>{tv(product.attributes.age)}</td></tr>
-              <tr><td>{t("spec.eye")}</td><td>{product.attributes.eye_size}</td></tr>
-              <tr><td>{t("spec.bridge")}</td><td>{product.attributes.bridge_size}</td></tr>
-              <tr><td>{t("spec.temple")}</td><td>{product.attributes.temple_length}</td></tr>
-            </tbody>
-          </table>
-
-          {/* Requisito 6: educación de calidad del material del marco. */}
-          {frameEdu && (
-            <div className="frame-quality">
-              <div className="frame-quality-head">
-                <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
-                <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+              <div className={`pdp-fact ${frameEdu ? "pdp-fact-click" : ""} ${matHelp ? "on" : ""}`}
+                   role={frameEdu ? "button" : undefined} tabIndex={frameEdu ? 0 : undefined}
+                   aria-expanded={frameEdu ? matHelp : undefined}
+                   onClick={() => { if (frameEdu) setMatHelp((v) => !v); }}
+                   onKeyDown={(e) => { if (frameEdu && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setMatHelp((v) => !v); } }}>
+                <IconMaterial className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.material")}</span><b>{frameMaterials.map(tv).join(" · ")}</b></div>
+                {frameEdu && <span className="pdp-fact-help" aria-hidden="true">ⓘ</span>}
               </div>
-              {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
-              <ul className="frame-quality-list">
-                <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
-                <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
-              </ul>
-            </div>
+            )}
+            {measures && (
+              <div className="pdp-fact">
+                <IconMeasures className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("pdp.metaMeasures")}</span><b>{measures}</b></div>
+              </div>
+            )}
+            {genderLabel && (
+              <div className="pdp-fact">
+                <GenderIcon className="pdp-fact-ic" />
+                <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.gender")}</span><b>{genderLabel}</b></div>
+              </div>
+            )}
+          </div>
+
+          {/* Ayuda de calidad del material: ventana emergente (modal) al frente. */}
+          {matHelp && frameEdu && createPortal(
+            <div className="pdp-matmodal" role="dialog" aria-modal="true" onClick={() => setMatHelp(false)}>
+              <div className="pdp-matmodal-card" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="pdp-matmodal-x" onClick={() => setMatHelp(false)} aria-label={lang === "en" ? "Close" : "Cerrar"}>×</button>
+                <div className="frame-quality">
+                  <div className="frame-quality-head">
+                    <IconMontura className="frame-quality-ic" size={20} aria-hidden="true" />
+                    <b>{t("frame.qualityTitle")}: {tv(eduMaterial)}</b>
+                  </div>
+                  {frameEdu.quality && <p className="frame-quality-lead">{frameEdu.quality}</p>}
+                  <ul className="frame-quality-list">
+                    <li className="good"><span aria-hidden>✓</span> <span><b>{t("frame.goodFor")}:</b> {frameEdu.good}</span></li>
+                    <li className="bad"><span aria-hidden>✕</span> <span><b>{t("frame.badFor")}:</b> {frameEdu.bad}</span></li>
+                  </ul>
+                </div>
+              </div>
+            </div>,
+            document.body
           )}
+
+          {/* Ayuda de medida: ventana emergente con el diagrama y como se mide. */}
+          {measHelp && MEAS[measHelp] && createPortal(
+            <div className="pdp-matmodal" role="dialog" aria-modal="true" onClick={() => setMeasHelp(null)}>
+              <div className="pdp-matmodal-card pdp-measmodal-card" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="pdp-matmodal-x" onClick={() => setMeasHelp(null)} aria-label={lang === "en" ? "Close" : "Cerrar"}>×</button>
+                <img className="pdp-measmodal-img" src={MEAS[measHelp].img} alt={MEAS[measHelp].label} />
+                <h3 className="pdp-measmodal-title">{MEAS[measHelp].label}</h3>
+                <p className="pdp-measmodal-desc">{MEAS[measHelp].help}</p>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
+              recetas para elegir lentes y comprar — no se pierde esa función). */}
+          <div className="pdp-actions2">
+            {TRY_ON_ENABLED && (
+              <button type="button" className="btn btn-primary big pdp-cta" onClick={() => setTryOnSlug(slug)}>
+                <IconCamera className="pdp-cta-ic" /> {t("tryon.cta")}
+              </button>
+            )}
+            <button type="button" className="btn btn-outline big pdp-cta"
+                    onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
+              <IconCart className="pdp-cta-ic" /> {t("card.addToCart")}
+            </button>
+          </div>
         </div>
       </div>
 
-      <Reviews product={product} />
+      {/* Pestañas: Detalles del producto · Medidas · Opiniones. */}
+      <div className="pdp-tabs" role="tablist" aria-label={product.name}>
+        <button type="button" role="tab" aria-selected={tab === "detalles"} className={`pdp-tab ${tab === "detalles" ? "on" : ""}`} onClick={() => setTab("detalles")}>{t("pdp.tab.details")}</button>
+        <button type="button" role="tab" aria-selected={tab === "medidas"} className={`pdp-tab ${tab === "medidas" ? "on" : ""}`} onClick={() => setTab("medidas")}>{t("pdp.tab.measures")}</button>
+        <button type="button" role="tab" aria-selected={tab === "opiniones"} className={`pdp-tab ${tab === "opiniones" ? "on" : ""}`} onClick={() => setTab("opiniones")}>{t("pdp.tab.reviews")} ({review ? review.count : 0})</button>
+      </div>
+
+      <div className="pdp-tabpanel">
+        {tab === "detalles" && (
+          <div className="pdp-details">
+            {/* Descripción de marketing (2 lineas web / 4 responsive por CSS). */}
+            <p className="pdp-pitch">{productPitch(product, lang, tv)}</p>
+          </div>
+        )}
+
+        {tab === "medidas" && (
+          <div className="pdp-measures">
+            {MEAS_ORDER.map((k) => (
+              <div key={k} className="pdp-measure">
+                <button type="button" className="pdp-measure-help"
+                        onClick={() => setMeasHelp(k)}
+                        aria-label={`${MEAS[k].label} — ${t("meas.howto")}`}>ⓘ</button>
+                <img className="pdp-measure-img" src={MEAS[k].img} alt={MEAS[k].label} loading="lazy" />
+                <span className="pdp-measure-k">{MEAS[k].label}</span>
+                <b className="pdp-measure-v">{MEAS[k].val} mm</b>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "opiniones" && (
+          <Reviews product={product} />
+        )}
+      </div>
 
       {/* Cross-sell: recommended cases */}
       <section className="section case-cross">
         <div className="case-cross-head">
-          <h2 className="section-title">{t("case.recommend")}</h2>
-          <span className="muted">{t("case.recommendSub")}</span>
+          <h2 className="section-title case-cross-title">{t("case.recommendSub")}</h2>
         </div>
-        <div className="case-grid three">
-          {cases.map((c) => <CaseCard key={c.slug} item={c} compact />)}
+        <div className="case-grid three case-cross-cases">
+          {cases.map((c) => <CaseCard key={c.slug} item={c} />)}
         </div>
       </section>
 
       {related.length > 0 && (
         <section className="section">
-          <h2 className="section-title">{t("pdp.moreOf")} {product.brand}</h2>
+          <h2 className="section-title case-cross-title">{t("pdp.moreOf")} {product.brand}</h2>
           <div className="product-grid">
             {related.map((p) => <ProductCard key={p.slug} product={p} />)}
           </div>
@@ -298,7 +564,14 @@ export default function ProductDetail() {
       )}
 
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)} />
+        <TryOn product={product} colorIdx={active} onClose={() => setTryOnSlug(null)}
+               onAddPrescription={(payload) => {
+                 // "Añadir receta" desde el probador de la ficha: lleva al flujo de
+                 // receta (/recetas/:slug) y abre el lector de receta (OCR) con las
+                 // medidas del probador ya pre-rellenadas.
+                 setTryOnSlug(null);
+                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: payload } });
+               }} />
       )}
     </div>
   );

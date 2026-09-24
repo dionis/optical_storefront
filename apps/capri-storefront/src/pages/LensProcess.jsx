@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
 import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
+import { Icon360, IconMaterial as SpecMaterial, IconMeasures, IconGender } from "../components/UiIcons.jsx";
 const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
@@ -391,6 +392,7 @@ export default function LensProcess() {
   const [view, setView] = useState("front");
   useEffect(() => { setView("front"); }, [slug, colorIdx]);
   const navigate = useNavigate();
+  const location = useLocation();
   const { addConfiguredFrame } = useCart();
 
   // Probador abierto desde el espejuelo de esta página.
@@ -426,7 +428,25 @@ export default function LensProcess() {
       setPatientName(m.forWhom === "other" ? (m.otherName || "") : "");
     }
     setRxDirty(true);
+    // "Añadir receta" desde el probador ABRE el lector de receta (OCR): cerramos el
+    // probador y abrimos el popup de receta, donde el cliente sube/escanea su receta
+    // (OCR) — las medidas de encaje ya quedan pre-rellenadas arriba.
+    setTryOnOpen(false);
+    setPop("rx");
   };
+
+  // Llegada desde el probador de la FICHA (PDP): "Añadir receta" navega aquí con las
+  // medidas y la orden de abrir el lector de receta (OCR). Aplicamos las medidas y
+  // abrimos el popup "rx"; limpiamos el state para no repetirlo al re-renderizar/volver.
+  useEffect(() => {
+    const st = location.state;
+    if (st && st.openRxOcr) {
+      if (st.tryOnMeasurement) applyTryOnMeasurement(st.tryOnMeasurement);
+      else setPop("rx");
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [designId, setDesignId] = useState(null); // "sv" | "bifocal" | ... | "frame-only"
   const [matId, setMatId] = useState(null);
@@ -1010,6 +1030,13 @@ export default function LensProcess() {
                   <img className="zlx-float-img" src={mainViewSrc} alt={`${product.name} · ${color.name}`}
                        onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
                 )}
+                {/* Sello 360°: esta montura tiene las 4 vistas 3D generadas. */}
+                {hasViews && !showingVideo && (
+                  <span className="zlx-badge-360" title={t("pdp.has3d")}>
+                    <Icon360 />
+                    360°
+                  </span>
+                )}
               </div>
             </div>
             {/* nombre + colección + material, todo en una sola línea (imagen 1) */}
@@ -1025,6 +1052,35 @@ export default function LensProcess() {
                 {frameMats.length ? frameMats.join(" · ") : "—"}
                 <Ic name="info" className="zlx-help-dot" />
               </button>
+            </div>
+            {/* Fila de especificaciones con iconos (ver imagen de referencia):
+                material · medidas exactas (mm) · género. Cada columna se oculta si
+                no hay dato, para que la ficha nunca muestre un hueco vacío. */}
+            <div className="zlx-specs">
+              {frameMats.length > 0 && (
+                <div className="zlx-spec">
+                  <span className="zlx-spec-ic" aria-hidden="true"><SpecMaterial /></span>
+                  <span className="zlx-spec-tx"><small>{t("pdp.spec.material")}</small><b>{frameMats.join(" · ")}</b></span>
+                </div>
+              )}
+              {(() => {
+                const a = product.attributes || {};
+                const measures =
+                  [a.eye, a.bridge, a.temple].filter((n) => n != null).join(" · ") ||
+                  [a.eye_size, a.bridge_size, a.temple_length].filter(Boolean).join(" · ");
+                return measures ? (
+                  <div className="zlx-spec">
+                    <span className="zlx-spec-ic" aria-hidden="true"><IconMeasures /></span>
+                    <span className="zlx-spec-tx"><small>{t("pdp.spec.measures")}</small><b>{measures}</b></span>
+                  </div>
+                ) : null;
+              })()}
+              {product.attributes?.gender && (
+                <div className="zlx-spec">
+                  <span className="zlx-spec-ic" aria-hidden="true"><IconGender /></span>
+                  <span className="zlx-spec-tx"><small>{t("pdp.spec.gender")}</small><b>{product.attributes.gender}</b></span>
+                </div>
+              )}
             </div>
             {/* miniaturas de color más grandes; bolita con el nombre del color al pasar el cursor */}
             {product.colors.length > 1 && (

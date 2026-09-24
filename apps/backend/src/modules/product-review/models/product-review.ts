@@ -27,10 +27,24 @@ export const ProductReview = model.define("product_review", {
    */
   author_name: model.text(),
   /**
-   * Reviewer's email when they were signed in. Kept so a review can be traced
-   * back or removed on request, never rendered to other shoppers.
+   * Reviewer's email. Kept so a review can be traced back or removed on request,
+   * and so the shop can reach an opted-in customer. Never rendered to other
+   * shoppers (see `toPublic` in the store route).
    */
   author_email: model.text().nullable(),
+  /**
+   * Reviewer's mobile number, collected on the review form. Same rule as the
+   * email: stored for traceability and, when opted in, for SMS announcements —
+   * never exposed to other shoppers.
+   */
+  author_phone: model.text().nullable(),
+  /**
+   * Whether the reviewer opted in, in the confirmation dialog, to receive offers
+   * and new-product announcements. Two independent channels so the shop can
+   * honour exactly what was consented to and track each list separately.
+   */
+  wants_email_updates: model.boolean().default(false),
+  wants_sms_updates: model.boolean().default(false),
   /**
    * Locale the review was written in ("es" / "en"), so the storefront can note
    * when a review is not in the reader's language rather than silently mixing

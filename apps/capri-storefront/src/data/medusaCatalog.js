@@ -108,9 +108,21 @@ function toFrame(product) {
       eye_size: m.eye_size_bucket || "",
       bridge_size: m.bridge_size_bucket || "",
       temple_length: m.temple_length_bucket || "",
+      // Medidas exactas (mm) para la fila de especificaciones de la ficha:
+      // "eye · bridge · temple" (p. ej. 55 · 18 · 145).
+      eye: typeof m.eye_size === "number" ? m.eye_size : null,
+      bridge: typeof m.bridge_size === "number" ? m.bridge_size : null,
+      temple: typeof m.temple_length === "number" ? m.temple_length : null,
     },
     price,
     basePrice: price,
+    // Precio anterior (para mostrar "$42 → $32 OFERTA"). El scraper lo guarda en
+    // centavos; se divide entre 100 y solo se usa si es mayor que el precio actual
+    // (así, si algún día llegara en dólares por error, simplemente no se muestra).
+    originalPrice:
+      typeof m.original_price_cents === "number" && m.original_price_cents > 0
+        ? Math.round(m.original_price_cents) / 100
+        : null,
     rating: typeof m.rating === "number" ? m.rating : 4.6,
     reviews: typeof m.review_count === "number" ? m.review_count : 0,
     medusaId: product.id,
@@ -149,6 +161,9 @@ const FIELDS =
 const ALLOWED_BRAND_SLUGS = new Set([
   "di-caprio", "peachtree", "4u", "millennial",
   "flexure", "trendy", "grande", "prorx", "case",
+  // Simplylite: habilitada para publicar las monturas piloto con vistas 3D
+  // generadas (galería de 4 ángulos). Precios reales en Medusa (~$18).
+  "simply-lite",
 ]);
 
 // Fetch every published product for the store's first region, paginated.
