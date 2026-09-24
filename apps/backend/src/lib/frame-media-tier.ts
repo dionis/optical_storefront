@@ -18,6 +18,7 @@ import {
   pilotHandlesForBrand,
 } from "./frame-media-pilot";
 import { viewCostUsd } from "./frame-media-cost";
+import { resolveFrameMediaSettings } from "./frame-media-settings";
 
 /** Views accepted, out of views attempted. */
 const PASS_RATE = 0.9;
@@ -99,6 +100,10 @@ export async function evaluateTier(
   current: number
 ): Promise<TierEligibility> {
   const rows = await loadAssets(container);
+  // The drift gate below prices the pilot, and the price depends on WHICH model
+  // generated it — see FLAT_IMAGE_TOKENS_BY_MODEL. Pricing it with the size table
+  // alone made a correctly-predicted run look 75% adrift and blocked tier 3.
+  const { image_model_id } = await resolveFrameMediaSettings(container);
   const next = current >= 3 ? null : current + 1;
   const checks: TierCheck[] = [];
 
@@ -165,7 +170,7 @@ export async function evaluateTier(
     // A cost model that cannot predict the pilot cannot be trusted to authorise
     // the catalogue, which is 10x the money on the same arithmetic.
     const attempted = t.done + t.failed;
-    const expected = viewCostUsd() * attempted;
+    const expected = viewCostUsd(undefined, image_model_id) * attempted;
     const drift = expected > 0 ? Math.abs(t.cost - expected) / expected : null;
     checks.push({
       key: "adm.media.tierCond.costDrift",

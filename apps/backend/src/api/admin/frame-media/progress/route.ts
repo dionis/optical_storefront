@@ -50,6 +50,7 @@ export async function GET(
   const outstanding = estimateBatch({
     views: pendingViews,
     videos: pendingVideos,
+    imageModel: settings.image_model_id,
     videoModel: settings.video_model_id,
   });
 

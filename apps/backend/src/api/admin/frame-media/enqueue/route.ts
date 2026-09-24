@@ -91,6 +91,7 @@ export async function POST(
   const estimate = estimateBatch({
     views: kind === "view" ? inserted : 0,
     videos: kind === "video" ? inserted : 0,
+    imageModel: settings.image_model_id,
     videoModel: settings.video_model_id,
   });
 

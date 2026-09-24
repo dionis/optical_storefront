@@ -85,10 +85,24 @@ Slimfold 19, ProRx 11.
 | Video, modo `all` × colorway | 1.440 videos | ~**$1.152** |
 | GLB | — | $0 de API; horas de GPU fuera de este repo |
 
-¹ Ancla documentada: 1.290 tokens de salida por imagen ≤1024px a $30/1M = **$0,0387**.
-**El módulo pide `imageSize: "2K"`** (`IMAGE_SIZE`), que factura más tokens por un
-múltiplo que no está fijado aquí. Video: `veo-3.1-fast` @720p = $0,10/s × 8s = **$0,80**.
-La Fase 0 reemplaza esta columna por números medidos.
+¹ **Columna medida, ya no estimada** (23 de septiembre de 2026, 224 recibos reales).
+Coste por vista: **$0,0388**. Video: `veo-3.1-fast` @720p = $0,10/s × 8s = **$0,80**.
+
+La Fase 0 confirmó el ancla de 1.290 tokens de salida a $30/1M y descartó la sospecha que
+la acompañaba. El módulo pide `imageSize: "2K"` (`gemini_media.py:40`), pero
+**`gemini-2.5-flash-image` ignora ese parámetro**: renderiza a 1024px y factura 1.290
+tokens de salida siempre. Las 224 imágenes de la corrida lo reportaron sin una sola
+excepción, así que los ~$223 del catálogo completo eran correctos desde el principio.
+
+El estimador del backend, en cambio, asumía `1290 × 4` para 2K y cotizaba el catálogo en
+**$884**. No era un número cosmético: el techo diario **reserva la estimación** antes de
+correr un lote, así que paraba las corridas con tres cuartas partes del presupuesto del
+día sin gastar; y la condición de ascenso por desvío de costo (§6) comparaba el gasto real
+contra esa misma aritmética, de modo que una corrida perfectamente predicha se leía como
+un 75% de desvío y bloqueaba el nivel 3 por sí sola. Corregido en
+`FLAT_IMAGE_TOKENS_BY_MODEL` (`apps/backend/src/lib/frame-media-cost.ts`): un modelo que
+ignora `imageSize` se cobra a su tarifa plana medida, y uno sin medir sigue pasándose por
+la tabla por tamaño — ausencia significa "sin medir", nunca "cobra plano".
 
 **El almacenamiento no es el problema.** 5.760 WebP a 1600px ≈ 1,0–1,4 GB; 550 mp4 de
 8s ≈ 5–8 GB. En R2 eso son **centavos al mes** y el egreso es gratis. Toda la

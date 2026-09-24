@@ -39,6 +39,38 @@ export const IMAGE_TOKENS_BY_SIZE: Record<string, number> = {
   "2K": Number(process.env.GEMINI_IMAGE_TOKENS_2K ?? 1290 * 4),
 };
 
+/**
+ * Models that IGNORE the requested `imageSize` and bill one flat token count.
+ *
+ * Measured, not published. `gemini-2.5-flash-image` renders at 1024px whatever
+ * `imageConfig.imageSize` asks for, so the module's hardcoded "2K" request
+ * (`gemini_media.py:40`) costs 1290 output tokens, not 5160: 224 receipts from
+ * the September 2026 catalogue run reported exactly 1290, every one of them.
+ *
+ * This is the phase-0 measurement the whole ladder was waiting for, and it is
+ * load-bearing in two places beyond the estimate an operator reads:
+ *   - the DAILY CEILING reserves the estimate before a batch runs, so a 4x
+ *     overestimate stops a run with three quarters of the day's budget unspent;
+ *   - the tier ladder's cost-drift gate compares real spend against this
+ *     arithmetic, so the same 4x reads as a 75% drift and blocks tier 3 by itself.
+ *
+ * A model NOT listed here is priced by IMAGE_TOKENS_BY_SIZE as before — absence
+ * means "not measured yet", never "bills flat".
+ */
+export const FLAT_IMAGE_TOKENS_BY_MODEL: Record<string, number> = {
+  "gemini-2.5-flash-image": Number(process.env.GEMINI_IMAGE_TOKENS_FLASH ?? 1290),
+};
+
+/** Output tokens one image costs, preferring a measured model rate over the size table. */
+export function imageOutputTokens(
+  imageSize: string = DEFAULT_IMAGE_SIZE,
+  model?: string
+): number {
+  const flat = model ? FLAT_IMAGE_TOKENS_BY_MODEL[model] : undefined;
+  if (flat != null) return flat;
+  return IMAGE_TOKENS_BY_SIZE[imageSize] ?? IMAGE_TOKENS_BY_SIZE["2K"];
+}
+
 /** Tokens the source photo plus prompt contribute to each request (measured low). */
 const PROMPT_AND_IMAGE_INPUT_TOKENS = Number(
   process.env.GEMINI_IMAGE_INPUT_TOKENS ?? 800
@@ -67,9 +99,17 @@ export interface CostEstimate {
   rates: Record<string, number | string>;
 }
 
-/** USD for one generated view at the configured image size. */
-export function viewCostUsd(imageSize: string = DEFAULT_IMAGE_SIZE): number {
-  const output = IMAGE_TOKENS_BY_SIZE[imageSize] ?? IMAGE_TOKENS_BY_SIZE["2K"];
+/**
+ * USD for one generated view at the configured image size.
+ *
+ * Pass `model` wherever it is known: without it the size table is used, which
+ * over-prices every model that ignores `imageSize` (see FLAT_IMAGE_TOKENS_BY_MODEL).
+ */
+export function viewCostUsd(
+  imageSize: string = DEFAULT_IMAGE_SIZE,
+  model?: string
+): number {
+  const output = imageOutputTokens(imageSize, model);
   return (
     (output / 1_000_000) * USD_PER_1M_OUTPUT_TOKENS +
     (PROMPT_AND_IMAGE_INPUT_TOKENS / 1_000_000) * USD_PER_1M_INPUT_TOKENS
@@ -103,6 +143,7 @@ export function estimateBatch(input: {
   views?: number;
   videos?: number;
   imageSize?: string;
+  imageModel?: string;
   videoModel?: string;
   videoResolution?: string;
   videoSeconds?: number;
@@ -110,18 +151,22 @@ export function estimateBatch(input: {
   const imageSize = input.imageSize ?? DEFAULT_IMAGE_SIZE;
   const viewCount = input.views ?? 0;
   const videoCount = input.videos ?? 0;
+  const unit = viewCostUsd(imageSize, input.imageModel);
 
   const views: CostEstimate | null = viewCount
     ? {
-        total: viewCostUsd(imageSize) * viewCount,
-        unit_cost: viewCostUsd(imageSize),
+        total: unit * viewCount,
+        unit_cost: unit,
         units: viewCount,
         billing_unit: "tokens",
         rates: {
           usd_per_1m_output_tokens: USD_PER_1M_OUTPUT_TOKENS,
           usd_per_1m_input_tokens: USD_PER_1M_INPUT_TOKENS,
-          output_tokens_per_image: IMAGE_TOKENS_BY_SIZE[imageSize] ?? 0,
+          output_tokens_per_image: imageOutputTokens(imageSize, input.imageModel),
           image_size: imageSize,
+          // Named because the rate depends on it: the same size costs different
+          // tokens on a model that honours it and one that ignores it.
+          image_model: input.imageModel ?? "unspecified",
           published_prices_read_on: PRICES_READ_ON,
         },
       }

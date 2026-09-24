@@ -17,13 +17,25 @@ el mapa de qué mirar allí está al final de este archivo.
 | Generar vídeo y guardarlo en R2 | ✅ funciona |
 | Reanudar una corrida cortada | ✅ funciona |
 | Techo de gasto y escalera de niveles | ✅ funciona |
-| **Que un cliente vea las vistas en la ficha** | ❌ **no** — falta la Fase 4 |
+| **Que un cliente vea las vistas en la ficha** | ✅ funciona — Fase 4 hecha, **exige `media sync`** |
+| Revisar lo generado desde el navegador | ✅ `/dev/medios` en el storefront |
 | Pestaña «Medios» en `/admin` | ❌ falta la Fase 3 |
 | Modelos 3D (`.glb`) | ❌ falta la Fase 7 |
 
-Es decir: hoy puedes **producir y almacenar** medios, revisarlos, y saber lo que
-costaron. Lo que todavía no puedes es publicarlos en la tienda. `media publish` marca
-la decisión de revisión, pero el storefront aún no lee esa marca.
+Es decir: hoy puedes **producir, almacenar, revisar y mostrar** medios, y saber lo que
+costaron. Lo que falta es operarlo desde el panel del dueño: todo pasa por este CLI.
+
+**Generar no basta para que se vea.** El storefront lee la Store API, y la Store API
+solo lleva lo que está en `variant.metadata`; el puente que copia las claves de R2 ahí
+es `media sync` (§ 11). `generate` lo corre al final de cada corrida, así que en el
+camino normal no hay que pensarlo — pero una corrida cortada antes de ese paso deja
+archivos en R2 que nadie alcanza, y volver a correrlo es gratis.
+
+**`published` ya no es una compuerta.** Por decisión del dueño (septiembre de 2026) el
+storefront muestra todo lo generado (`done` y también `stale`: una vista vieja es mejor
+que un hueco). `media publish` sigue registrando la decisión de revisión, pero ya no
+decide qué se ve. Si eso se revierte algún día, el cambio es de una línea: el filtro de
+`status` en `loadReadyAssets` (`apps/backend/src/lib/frame-media-sync.ts`).
 
 ---
 
@@ -50,7 +62,7 @@ Comprobación de que quedó instalado:
 uv run python -m scraper media --help
 ```
 
-Debe listar `generate · plan · publish · retry · status`.
+Debe listar `plan · generate · status · results · sync · publish · retry · tier · fixture`.
 
 ## 2. Configurar `apps/scraper/.env`
 
@@ -219,6 +231,45 @@ gasta dinero contra una API que no responde.
 
 ---
 
+## 11. Que se vea en la tienda
+
+Un archivo en R2 no es una vista que un cliente pueda ver. El storefront lee la Store
+API, y la Store API solo lleva lo que está en `variant.metadata`. Copiar ahí las claves
+es lo que hace `sync`:
+
+```bash
+uv run python -m scraper media sync --all
+```
+
+No gasta nada, es idempotente y acepta los mismos argumentos de selección que todo lo
+demás. Te dice cuántas variantes actualizó y cuántas ya estaban al día.
+
+**En el camino normal no hace falta ejecutarlo**: `generate` lo corre al terminar cada
+corrida. Se usa cuando eso no llegó a pasar — una corrida cortada antes del último paso,
+o un catálogo que cambió por debajo.
+
+Si avisa de `orphan_skus`, son medios de un SKU que ya no tiene variante viva: la montura
+se renombró o se despublicó después de generarle las vistas. No es un error del
+proceso, pero sí dinero gastado en algo que ya no se muestra.
+
+### Dónde mirarlas
+
+| | |
+|---|---|
+| La ficha de producto | El rail de miniaturas bajo la foto, con el vídeo como una vista más |
+| Página de revisión | `/dev/medios` en el storefront |
+| Desde la terminal | `media results --all --urls` imprime las URL públicas, una por línea |
+
+Dos variables del **storefront** (no de este `.env`) tienen que estar puestas, o no se ve
+nada aunque el `sync` diga que actualizó todo:
+
+| Variable | Si falta |
+|---|---|
+| `VITE_USE_MEDUSA=true` | El storefront sirve el catálogo semilla empaquetado, que no tiene medios generados |
+| `VITE_R2_PUBLIC_URL` | Las claves no se resuelven a URL. Tiene que apuntar al **mismo bucket** al que sube este CLI |
+
+---
+
 ## Dónde está el resto de la documentación
 
 Todo en [`docs/frame-media-generation.md`](../../../../docs/frame-media-generation.md):
@@ -237,16 +288,25 @@ Todo en [`docs/frame-media-generation.md`](../../../../docs/frame-media-generati
 | Escalera de presupuesto | **§6** |
 | Cómo se almacena y por qué así | **§3** |
 | Reanudación e idempotencia | **§5** |
-| Implementar la galería en la ficha (Fase 4) | **Apéndice A** |
+| Diseño de la galería en la ficha (Fase 4, **ya implementada**) | **Apéndice A** |
 
 Y [`VENDORED.md`](VENDORED.md), aquí al lado: por qué `gemini_media.py` es una copia
 literal, qué trampas de la API trae ya resueltas, y cómo verificar que nadie la editó.
 
 ---
 
-## Una advertencia que conviene leer antes de publicar nada
+## Una advertencia que conviene leer antes de generar nada
 
 El propio módulo lo dice en mayúsculas: **estas vistas son inventadas, no observadas.**
 Una "vista trasera" generada de una montura que la tienda vende de verdad puede diferir
-del producto físico. Por eso generar y publicar son dos actos distintos y `published`
-arranca en `false`: alguien las mira antes de que las vea un cliente.
+del producto físico.
+
+Esto importaba menos cuando `published` era una compuerta y alguien tenía que aprobar
+cada vista antes de que la viera un cliente. **Ya no lo es** (§ «Lo primero»): desde que
+el dueño tomó esa decisión, generar y mostrar son prácticamente el mismo acto — lo que
+salga de una corrida aparece en la ficha en cuanto corre el `sync`. La revisión sigue
+existiendo, pero ahora ocurre **después** de que el cliente pueda verlo, no antes.
+
+Ahí está `/dev/medios`, y ahí está `media results --all --urls`: mira un lote en cuanto
+termine, no semanas después. Lo que esté mal se quita con `media retry` y se regenera;
+lo que no se mire, no lo mira nadie.

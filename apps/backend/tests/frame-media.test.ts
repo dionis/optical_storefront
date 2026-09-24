@@ -198,6 +198,38 @@ describe("cost arithmetic", () => {
     expect(viewCostUsd("2K")).toBeGreaterThan(viewCostUsd("1K"));
   });
 
+  it("prices a model that ignores imageSize at its measured flat rate", () => {
+    // MEASURED, 224 receipts from the September 2026 run: gemini-2.5-flash-image
+    // reports 1290 output tokens while gemini_media.py asks for "2K". Pricing it
+    // off the size table overcharged 4x, which stopped runs on the daily ceiling
+    // with most of the budget unspent.
+    const flash = viewCostUsd("2K", "gemini-2.5-flash-image");
+    expect(flash).toBeCloseTo(viewCostUsd("1K"), 6);
+    expect(flash).toBeLessThan(viewCostUsd("2K") / 3);
+  });
+
+  it("still uses the size table for a model nobody has measured", () => {
+    // Absence from the flat table means "not measured yet", never "bills flat".
+    expect(viewCostUsd("2K", "gemini-3-pro-image")).toBe(viewCostUsd("2K"));
+  });
+
+  it("prices the whole catalogue at what the run actually billed", () => {
+    // 5,704 queued views. The size table alone said $884; the receipts say ~$221,
+    // which is the $223 the ladder was designed around all along.
+    const { total_usd } = estimateBatch({
+      views: 5704,
+      imageModel: "gemini-2.5-flash-image",
+    });
+    expect(total_usd).toBeGreaterThan(200);
+    expect(total_usd).toBeLessThan(240);
+  });
+
+  it("names the model in the rates, so an estimate can be argued with", () => {
+    const { views } = estimateBatch({ views: 10, imageModel: "gemini-2.5-flash-image" });
+    expect(views?.rates.image_model).toBe("gemini-2.5-flash-image");
+    expect(views?.rates.output_tokens_per_image).toBe(1290);
+  });
+
   it("bills video by the second, not by tokens", () => {
     expect(videoRateUsd("veo-3.1-fast-generate-preview", "720p")).toBe(0.1);
     expect(videoCostUsd("veo-3.1-fast-generate-preview", "720p", 8)).toBeCloseTo(0.8, 5);
