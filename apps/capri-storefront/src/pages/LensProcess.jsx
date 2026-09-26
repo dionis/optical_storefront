@@ -310,7 +310,7 @@ function ZlxStepper({ value, options, onChange, label, withEmpty, flag = "" }) {
 // ── popover shell (requirement 3): floats OVER the stage, frame stays visible ─
 // `onBack` (optional) shows a ← button so material/treatments feel like steps of
 // the SAME window (the customer never feels they left the popup).
-function ZlxPop({ title, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, children }) {
+function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, children }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -335,6 +335,7 @@ function ZlxPop({ title, icon, onClose, onBack, onHelp, closeLabel, backLabel, h
             <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
           </span>
         </div>
+        {subtitle && <p className="zlx-pop-sub">{subtitle}</p>}
         <div className="zlx-pop-body">{children}</div>
       </div>
     </>
@@ -1189,7 +1190,7 @@ export default function LensProcess() {
 
       {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
       {pop === "rx" && (
-        <ZlxPop title={t("lens.q.rx")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} closeLabel={closeLabel} className="zlx-pop-rx">
+        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} closeLabel={closeLabel} className="zlx-pop-rx">
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {USE_MEDUSA && (
                 <div className="zlx-rx-upload">
@@ -1199,13 +1200,16 @@ export default function LensProcess() {
                         input está en display:none, aunque esté dentro del label. */}
                     <input type="file" accept="image/*,application/pdf" className="zlx-upload-input"
                            disabled={ocr.status === "loading"} onChange={handleRxUpload} />
-                    <Ic name="upload" />
-                    <span>{t("lens.upload")}</span>
-                    <small>
-                      {ocr.status === "loading" ? t("lens.upload.reading")
-                        : ocr.fileName ? `${t("lens.upload.file")}: ${ocr.fileName}`
-                        : t("lens.upload.sub")}
-                    </small>
+                    <span className="zlx-upload-ic"><Ic name="upload" /></span>
+                    <span className="zlx-upload-tx">
+                      <b>{t("lens.upload")}</b>
+                      <small>
+                        {ocr.status === "loading" ? t("lens.upload.reading")
+                          : ocr.fileName ? `${t("lens.upload.file")}: ${ocr.fileName}`
+                          : t("lens.upload.types")}
+                      </small>
+                    </span>
+                    <span className="zlx-upload-btn">{t("lens.upload.choose")}</span>
                   </label>
                   {/* Cómo debe ser la foto. Va ANTES de subirla, no como consejo
                       tras el fallo: casi todas las lecturas que fallan lo hacen
@@ -1360,6 +1364,10 @@ export default function LensProcess() {
                   );
                 })}
               </div>
+              <p className="zlx-rx-secure">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" /></svg>
+                {t("lens.rx.secure")}
+              </p>
         </ZlxPop>
       )}
 
