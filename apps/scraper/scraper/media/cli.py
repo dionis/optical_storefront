@@ -717,6 +717,39 @@ def _sleep_until_budget_reset(echo) -> None:
             echo(f"[stream]   … esperando el presupuesto, faltan {rest / 3600:.1f} h")
 
 
+def _without_collections(
+    config, media_kind: str, selected: list[str] | None, excluded: tuple[str, ...]
+) -> list[str] | None:
+    """`selected` minus the excluded collections, reading the queue for `--all`.
+
+    The handle is `{slug}-{collection_slug}` (parser.py), so the collection is its
+    suffix. With no explicit selection the claim would take anything, so the
+    frames still queued are listed and passed as an explicit handle filter.
+    """
+    if not excluded:
+        return selected
+    suffixes = tuple(f"-{c}" for c in excluded)
+    if selected:
+        return [h for h in selected if not h.endswith(suffixes)]
+
+    handles: set[str] = set()
+    for status in ("pending", "failed", "running"):
+        offset = 0
+        while True:
+            page = api.board(config, kind=media_kind, status=status, limit=200, offset=offset)
+            batch = page.get("assets", [])
+            handles.update(a["product_handle"] for a in batch)
+            offset += len(batch)
+            if not batch or not page.get("has_more"):
+                break
+    kept = sorted(h for h in handles if not h.endswith(suffixes))
+    click.echo(
+        f"[stream] {len(handles) - len(kept)} producto(s) de {', '.join(excluded)} "
+        f"fuera de esta corrida; {len(kept)} monturas con trabajo pendiente."
+    )
+    return kept
+
+
 #: Failures that belong to ONE input photo, not to the run: the provider answered
 #: 200 and simply produced no image for it. Stopping there would park the whole
 #: catalogue behind a single product the model will not draw.
@@ -739,6 +772,11 @@ _PER_IMAGE_FAILURES = frozenset({"no_image_returned"})
     help="On the DAILY ceiling, sleep until the next UTC day and carry on.",
 )
 @click.option(
+    "--exclude-collection", "excluded", multiple=True, default=("case",),
+    show_default=True,
+    help="Collections never drained (handle suffix). Repeatable.",
+)
+@click.option(
     "--strict", is_flag=True,
     help="Stop on EVERY failure, including one image the model will not draw.",
 )
@@ -757,6 +795,7 @@ def stream_cmd(
     checkpoint_every: int,
     batch: int,
     wait_for_budget: bool,
+    excluded: tuple[str, ...],
     strict: bool,
     assume_yes: bool,
 ) -> None:
@@ -802,6 +841,19 @@ def stream_cmd(
         raise click.ClickException("3D models are produced by the offline GPU pipeline.")
 
     _enqueue(config, selected, media_kind, slots)
+
+    # What the runner may claim. Enqueue already refuses these collections, but
+    # rows queued before that rule are still there, and the claim runs in handle
+    # order — so 28 cases ("case-…") sit ahead of every frame and each one fails
+    # `no_image_returned` up to three times. Narrowing the claim is what gets
+    # past them; the rows themselves stay untouched.
+    claim_handles = _without_collections(config, media_kind, selected, excluded)
+    if claim_handles is not None and not claim_handles:
+        # An empty filter is NO filter on the server: it would claim the very
+        # products just excluded.
+        click.secho("[stream] Nada que generar fuera de las colecciones excluidas.", fg="green")
+        return
+
 
     state = api.progress(config, scope="pilot" if pilot else None)
     estimate = state.get("outstanding", {}).get("estimate", {}).get("total_usd", 0.0)
@@ -852,7 +904,7 @@ def stream_cmd(
             stats = runner.run(
                 config,
                 kind=media_kind,
-                handles=selected,
+                handles=claim_handles,
                 slots=slots,
                 max_cost=remaining,
                 limit=None,

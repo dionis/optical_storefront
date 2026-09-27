@@ -221,6 +221,11 @@ tocadas y el manifiesto `media/frame-media.json` en el bucket. El storefront lo 
 cargar y lo fusiona sobre el fixture del build, así que **las vistas nuevas se ven sin
 commit ni despliegue**.
 
+Los **estuches** (colección `case`) nunca se procesan en `stream`
+(`--exclude-collection`, por defecto `case`). El backend ya no los encola, pero quedan
+filas de antes de esa regla y, como la cola va por orden alfabético de handle, 28
+`case-…` estaban delante de todas las monturas.
+
 `no_image_returned` no detiene el stream: Gemini respondió bien pero no dibujó *esa*
 foto (típicamente un estuche, que no es una montura). Habla de un producto, no del
 proceso, y el servidor deja de ofrecer el activo tras 3 intentos. Se anota y sigue; diez
