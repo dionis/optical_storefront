@@ -212,7 +212,7 @@ En qué se diferencia de `generate`:
 | | `generate` | `stream` |
 |---|---|---|
 | Publicar (sync a Medusa + manifiesto del storefront) | una vez, al final | **cada 50 activos** (`--checkpoint-every`) y al salir, pase lo que pase |
-| Un activo que falla | se anota y sigue (para a los 10 seguidos) | **se detiene en el primero**, lo imprime en rojo y sale con código 1 |
+| Un activo que falla | se anota y sigue (para a los 10 seguidos) | **se detiene en el primero**, lo imprime en rojo y sale con código 1 — salvo `no_image_returned` (ver abajo) |
 | Techo **diario** | se detiene | espera al siguiente día UTC y sigue (`--no-wait-for-budget` para no esperar) |
 | `--max-cost` | tope de esa corrida | tope de **todo** el stream, esperas incluidas |
 
@@ -220,6 +220,11 @@ Publicar un tramo son dos pasos gratuitos e idempotentes: `media sync` de las mo
 tocadas y el manifiesto `media/frame-media.json` en el bucket. El storefront lo lee al
 cargar y lo fusiona sobre el fixture del build, así que **las vistas nuevas se ven sin
 commit ni despliegue**.
+
+`no_image_returned` no detiene el stream: Gemini respondió bien pero no dibujó *esa*
+foto (típicamente un estuche, que no es una montura). Habla de un producto, no del
+proceso, y el servidor deja de ofrecer el activo tras 3 intentos. Se anota y sigue; diez
+seguidos sí lo paran. `--strict` hace que pare también con él.
 
 Códigos de salida: `0` terminó la cola · `1` error · `2` parado por techo mensual, nivel
 o `--max-cost` (no es un error) · `130` Ctrl-C. Tras un error, arregla la causa (y usa

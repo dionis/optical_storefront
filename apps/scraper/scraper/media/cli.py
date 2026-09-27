@@ -717,6 +717,12 @@ def _sleep_until_budget_reset(echo) -> None:
             echo(f"[stream]   … esperando el presupuesto, faltan {rest / 3600:.1f} h")
 
 
+#: Failures that belong to ONE input photo, not to the run: the provider answered
+#: 200 and simply produced no image for it. Stopping there would park the whole
+#: catalogue behind a single product the model will not draw.
+_PER_IMAGE_FAILURES = frozenset({"no_image_returned"})
+
+
 @media_group.command("stream")
 @_selection_options
 @click.option(
@@ -731,6 +737,10 @@ def _sleep_until_budget_reset(echo) -> None:
 @click.option(
     "--wait-for-budget/--no-wait-for-budget", default=True, show_default=True,
     help="On the DAILY ceiling, sleep until the next UTC day and carry on.",
+)
+@click.option(
+    "--strict", is_flag=True,
+    help="Stop on EVERY failure, including one image the model will not draw.",
 )
 @click.option("--yes", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
 @_handle_api_errors
@@ -747,6 +757,7 @@ def stream_cmd(
     checkpoint_every: int,
     batch: int,
     wait_for_budget: bool,
+    strict: bool,
     assume_yes: bool,
 ) -> None:
     """Generate to the end, publishing every N assets, stopping at the FIRST error.
@@ -758,7 +769,11 @@ def stream_cmd(
     - every --checkpoint-every assets it syncs Medusa and republishes the live
       manifest, so the storefront shows the new views without a deploy;
     - the first failed asset stops everything: it is printed, what was done is
-      published, the lease is released, and the process exits with code 1;
+      published, the lease is released, and the process exits with code 1.
+      Except `no_image_returned` (HTTP 200, the model declined to draw THAT
+      photo — typically a case, not a frame): it is logged and skipped, since
+      it says nothing about the run and the server stops offering the asset
+      after 3 attempts. `--strict` stops on it too;
     - the daily ceiling is a pause, not an end: it waits for the next UTC day.
 
     Exit codes: 0 finished · 1 error · 2 stopped by budget/tier/--max-cost · 130 Ctrl-C.
@@ -846,6 +861,7 @@ def stream_cmd(
                 echo=click.echo,
                 stop_on_error=True,
                 on_done=on_done,
+                tolerate=frozenset() if strict else _PER_IMAGE_FAILURES,
             )
             totals["done"] += stats.done
             totals["failed"] += stats.failed

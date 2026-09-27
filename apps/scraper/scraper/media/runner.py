@@ -346,6 +346,7 @@ def run(
     echo: Callable[[str], None],
     stop_on_error: bool = False,
     on_done: Callable[[dict[str, Any]], None] | None = None,
+    tolerate: frozenset[str] = frozenset(),
 ) -> RunStats:
     """Claim, generate, report — releasing whatever is still held on the way out.
 
@@ -364,7 +365,7 @@ def run(
     try:
         _drain(config, stats, kind=kind, handles=handles, slots=slots,
                max_cost=max_cost, limit=limit, batch=batch, echo=echo,
-               stop_on_error=stop_on_error, on_done=on_done)
+               stop_on_error=stop_on_error, on_done=on_done, tolerate=tolerate)
     finally:
         # Any exit — finished, Ctrl-C, or a crash — hands the batch back at once.
         # The 20-minute lease still covers a hard kill; this covers everything else,
@@ -430,11 +431,14 @@ def _drain(
     echo: Callable[[str], None],
     stop_on_error: bool = False,
     on_done: Callable[[dict[str, Any]], None] | None = None,
+    tolerate: frozenset[str] = frozenset(),
 ) -> None:
     """The claim/generate/report loop.
 
     `stop_on_error` turns the first failed asset into the end of the run (reason
-    `error`) instead of tolerating up to MAX_CONSECUTIVE_FAILURES. `on_done` is
+    `error`) instead of tolerating up to MAX_CONSECUTIVE_FAILURES — except for the
+    reasons in `tolerate`, which say something about ONE input rather than about
+    the run, and keep the old behaviour (breaker included). `on_done` is
     called after each asset is reported `done`; whatever it raises ends the run.
     """
     processed = 0
@@ -527,7 +531,7 @@ def _drain(
                     if processed % PROGRESS_EVERY == 0:
                         echo(_subtotal(stats, processed, max_cost))
 
-                    if stop_on_error:
+                    if stop_on_error and reason not in tolerate:
                         stats.stopped_because = "error"
                         return
 

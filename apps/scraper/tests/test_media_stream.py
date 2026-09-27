@@ -70,6 +70,24 @@ def test_stop_on_error_ends_the_run_at_the_first_failure(fake_backend, monkeypat
     assert [r["id"] for r in fake_backend["reports"]] == ["a0", "a1", "a2"]
 
 
+def test_per_image_failures_are_skipped_but_run_failures_still_stop(fake_backend, monkeypatch):
+    fake_backend["queue"] = [_asset(i) for i in range(6)]
+
+    def generate(_config, asset, _model, _workdir):
+        if asset["id"] == "a1":
+            raise RuntimeError("la respuesta no traia ninguna imagen")  # a case, not a frame
+        if asset["id"] == "a4":
+            raise RuntimeError("HTTP 403 API_KEY_INVALID")
+        return {"status": "done", "output_key": "k", "cost_usd": 0.04}
+
+    monkeypatch.setattr(runner, "_generate_view", generate)
+    stats = _drain(stop_on_error=True, tolerate=frozenset({"no_image_returned"}))
+
+    assert stats.stopped_because == "error"
+    assert [f["reason"] for f in stats.failures] == ["no_image_returned", "auth_failed"]
+    assert stats.done == 3
+
+
 def test_without_stop_on_error_a_single_failure_is_tolerated(fake_backend, monkeypatch):
     fake_backend["queue"] = [_asset(i) for i in range(4)]
 
