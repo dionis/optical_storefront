@@ -5848,3 +5848,42 @@ button.card-genre {
 /* Botón "Calcular": icono SVG + texto alineados */
 .tryon-studio .vm-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .tryon-studio .vm-go svg { flex: 0 0 auto; }
+
+/* ===================== ETAPA71 — Pulido visual de la ventana de RECETA ============
+   Acerca el popup "Tu receta" al mockup: subtítulo bajo el título, caja de subida en
+   fila (icono + texto + botón "Seleccionar archivo" + tipos de archivo), opciones de
+   tipo de lente con indicador de radio a la derecha, y pie de confidencialidad.
+   Solo visual (scoped a .zlx-pop-rx); no cambia la lógica de OCR/edición/precios. === */
+.zlx-pop-sub { margin: -2px 0 12px; padding: 0 2px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+
+/* Caja de subida en fila (como el mockup) */
+.zlx-pop-rx .zlx-upload-box { flex-direction: row; align-items: center; gap: 12px; text-align: left; padding: 13px 14px; border-color: #cdd9ee; background: #f7faff; }
+.zlx-upload-ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 11px; background: #e7eefb; color: var(--cuba-blue); display: inline-flex; align-items: center; justify-content: center; }
+.zlx-upload-ic .zlx-ic { width: 22px; height: 22px; color: var(--cuba-blue); }
+.zlx-upload-tx { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.zlx-upload-tx b { font-size: 14px; color: var(--ink); font-weight: 700; line-height: 1.2; }
+.zlx-upload-tx small { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.zlx-upload-btn { flex: 0 0 auto; border: 1px solid #cdd9ee; border-radius: 10px; padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--cuba-blue); background: #fff; white-space: nowrap; transition: background .15s ease; }
+.zlx-upload-box:hover .zlx-upload-btn { background: #eef4ff; }
+@media (max-width: 420px) {
+  .zlx-pop-rx .zlx-upload-box { flex-wrap: wrap; }
+  .zlx-upload-tx { flex: 1 1 100%; order: 2; }
+  .zlx-upload-btn { order: 3; width: 100%; text-align: center; }
+}
+
+/* Opciones de tipo de lente con indicador de RADIO a la derecha (como el mockup).
+   Se mantiene el acordeón (al seleccionar se despliegan los campos editables). */
+.zlx-pop-rx .zlx-use-chev, .zlx-pop-rx .zlx-use-check { display: none; }
+.zlx-pop-rx .zlx-use-main { position: relative; padding-right: 42px; }
+.zlx-pop-rx .zlx-use-main::after {
+  content: ""; position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border-radius: 50%; border: 2px solid #cdd9ee; background: #fff; box-sizing: border-box;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.zlx-pop-rx .zlx-use-row.sel .zlx-use-main::after {
+  border-color: var(--cuba-blue); box-shadow: inset 0 0 0 4px var(--cuba-blue);
+}
+
+/* Pie de confidencialidad */
+.zlx-rx-secure { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 14px 0 2px; color: var(--muted); font-size: 12px; }
+.zlx-rx-secure svg { flex: 0 0 auto; color: var(--muted); }
