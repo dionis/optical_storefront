@@ -195,6 +195,10 @@ def _classify(error: Exception | str) -> str:
     backend stores the code so `adm.media.err.<reason>` resolves in the panel.
     """
     text = str(error)
+    # Prepaid credit exhausted. Its own code because the fix is a payment, not a
+    # key or a retry: "provider_rejected" sent the operator looking at the prompt.
+    if "HTTP 402" in text:
+        return "credits_depleted"
     if "HTTP 401" in text or "HTTP 403" in text or "API_KEY" in text.upper():
         return "auth_failed"
     if "HTTP 404" in text:
