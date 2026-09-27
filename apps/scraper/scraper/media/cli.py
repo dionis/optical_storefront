@@ -189,6 +189,29 @@ def plan_cmd(
     click.echo("Nothing was generated. Re-run with `generate --max-cost N` to execute.")
 
 
+def _enqueue(config, selected: list[str] | None, media_kind: str, slots) -> None:
+    """Enqueue first: asking for assets that already exist is free (the unique
+    index makes it a no-op), and it means `--handle` works on frames nobody
+    queued from the panel."""
+    if not selected:
+        return
+    queued = api.enqueue(config, selected, kind=media_kind, slots=slots)
+    if queued.get("unknown_handles"):
+        click.echo(
+            f"[media] WARNING: {len(queued['unknown_handles'])} handle(s) unknown to "
+            f"Medusa, e.g. {queued['unknown_handles'][:3]} — did you pass a seed slug?"
+        )
+    if queued.get("skipped_no_source_image"):
+        click.echo(
+            f"[media] {len(queued['skipped_no_source_image'])} variant(s) have no "
+            "source photo and were skipped: there is nothing to generate from."
+        )
+    click.echo(
+        f"[media] queued {queued.get('inserted', 0)} new asset(s); "
+        f"{queued.get('already_present', 0)} already existed."
+    )
+
+
 @media_group.command("generate")
 @_selection_options
 @click.option(
@@ -250,25 +273,7 @@ def generate_cmd(
             "Use the admin panel to raise a work order, then upload the .glb."
         )
 
-    # Enqueue first: asking for assets that already exist is free (the unique
-    # index makes it a no-op), and it means `--handle` works on frames nobody
-    # queued from the panel.
-    if selected:
-        queued = api.enqueue(config, selected, kind=media_kind, slots=slots)
-        if queued.get("unknown_handles"):
-            click.echo(
-                f"[media] WARNING: {len(queued['unknown_handles'])} handle(s) unknown to "
-                f"Medusa, e.g. {queued['unknown_handles'][:3]} — did you pass a seed slug?"
-            )
-        if queued.get("skipped_no_source_image"):
-            click.echo(
-                f"[media] {len(queued['skipped_no_source_image'])} variant(s) have no "
-                "source photo and were skipped: there is nothing to generate from."
-            )
-        click.echo(
-            f"[media] queued {queued.get('inserted', 0)} new asset(s); "
-            f"{queued.get('already_present', 0)} already existed."
-        )
+    _enqueue(config, selected, media_kind, slots)
 
     state = api.progress(config, scope="pilot" if pilot else None)
     estimate = state.get("outstanding", {}).get("estimate", {}).get("total_usd", 0.0)
@@ -658,6 +663,7 @@ def fixture_cmd(out_path: str | None) -> None:
     """
     from pathlib import Path
 
+    from scraper.media.checkpoint import done_assets
     from scraper.media.fixture import FIXTURE_PATH, build
     from scraper.media.selection import _load_pilot
 
@@ -665,19 +671,8 @@ def fixture_cmd(out_path: str | None) -> None:
     config.validate()
 
     # Everything with a file behind it, not just views: the fixture carries the
-    # promo videos too. Paged: the board caps a page at 200 (MAX_LIMIT on the
-    # route), and a single page silently froze the storefront at the first 200
-    # views while the catalogue kept growing behind it.
-    assets: list = []
-    for kind in ("view", "video"):
-        offset = 0
-        while True:
-            page = api.board(config, kind=kind, status="done", limit=200, offset=offset)
-            batch = page.get("assets", [])
-            assets.extend(batch)
-            offset += len(batch)
-            if not batch or not page.get("has_more"):
-                break
+    # promo videos too.
+    assets = done_assets(config)
 
     if not assets:
         raise click.ClickException(
@@ -692,4 +687,230 @@ def fixture_cmd(out_path: str | None) -> None:
     click.echo(f"{target}")
     click.echo(f"  {views} vistas · {videos} vídeo(s) · "
                f"{len({a['product_handle'] for a in assets})} monturas")
-    click.echo("Commitea el archivo y despliega el storefront para que se vea.")
+    click.echo(
+        "Es la base que va en el build. Las vistas nuevas ya se ven antes, por el "
+        "manifiesto que publica `media stream`."
+    )
+
+
+#: How long `stream` waits past UTC midnight before retrying after the daily
+#: ceiling: the spend window is a UTC day (`resolveSpend` in the backend), and a
+#: few minutes of slack keeps a skewed clock from knocking on a closed door.
+_BUDGET_RESET_SLACK_S = 5 * 60
+
+
+def _sleep_until_budget_reset(echo) -> None:
+    import time
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    wake = reset + timedelta(seconds=_BUDGET_RESET_SLACK_S)
+    echo(
+        f"[stream] techo DIARIO alcanzado. Espero hasta {wake:%Y-%m-%d %H:%M} UTC "
+        "y continúo solo (Ctrl-C para salir; lo hecho ya está publicado)."
+    )
+    while (left := (wake - datetime.now(timezone.utc)).total_seconds()) > 0:
+        time.sleep(min(left, 30 * 60))
+        rest = (wake - datetime.now(timezone.utc)).total_seconds()
+        if rest > 0:
+            echo(f"[stream]   … esperando el presupuesto, faltan {rest / 3600:.1f} h")
+
+
+@media_group.command("stream")
+@_selection_options
+@click.option(
+    "--max-cost", type=float, required=True,
+    help="Hard USD ceiling for the WHOLE stream, across daily waits.",
+)
+@click.option(
+    "--checkpoint-every", type=click.IntRange(min=1), default=50, show_default=True,
+    help="Sync to Medusa and republish the storefront manifest every N assets.",
+)
+@click.option("--batch", type=int, default=8, show_default=True, help="Assets per claim.")
+@click.option(
+    "--wait-for-budget/--no-wait-for-budget", default=True, show_default=True,
+    help="On the DAILY ceiling, sleep until the next UTC day and carry on.",
+)
+@click.option("--yes", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
+@_handle_api_errors
+def stream_cmd(
+    pilot: bool,
+    pilot_brand: str | None,
+    handles: tuple[str, ...],
+    from_file_path: str | None,
+    all_frames: bool,
+    pending: bool,
+    kind: str,
+    slot_list: str | None,
+    max_cost: float,
+    checkpoint_every: int,
+    batch: int,
+    wait_for_budget: bool,
+    assume_yes: bool,
+) -> None:
+    """Generate to the end, publishing every N assets, stopping at the FIRST error.
+
+    Unlike `generate`, which tolerates scattered failures and publishes once at the
+    end, this is meant to be left running on the server:
+
+    \b
+    - every --checkpoint-every assets it syncs Medusa and republishes the live
+      manifest, so the storefront shows the new views without a deploy;
+    - the first failed asset stops everything: it is printed, what was done is
+      published, the lease is released, and the process exits with code 1;
+    - the daily ceiling is a pause, not an end: it waits for the next UTC day.
+
+    Exit codes: 0 finished · 1 error · 2 stopped by budget/tier/--max-cost · 130 Ctrl-C.
+    """
+    from scraper.media.checkpoint import run_checkpoint
+    from scraper.media.selection import _load_pilot
+
+    config = get_config()
+    try:
+        config.validate()
+        config.validate_media()
+    except ConfigError as err:
+        raise click.ClickException(str(err)) from err
+
+    try:
+        selected, description = resolve(
+            pilot=pilot, pilot_brand=pilot_brand, handles=handles,
+            from_file_path=from_file_path, all_frames=all_frames, pending=pending,
+        )
+    except SelectionError as err:
+        raise click.ClickException(str(err)) from err
+
+    slots = _slots(slot_list)
+    media_kind = _kind(kind)
+    if media_kind == "model3d":
+        raise click.ClickException("3D models are produced by the offline GPU pipeline.")
+
+    _enqueue(config, selected, media_kind, slots)
+
+    state = api.progress(config, scope="pilot" if pilot else None)
+    estimate = state.get("outstanding", {}).get("estimate", {}).get("total_usd", 0.0)
+    click.echo("")
+    click.echo(f"Selección:        {description}")
+    click.echo(f"Tipo:             {kind}")
+    click.echo(f"En cola (est.):   ${estimate:.2f}")
+    click.echo(f"Tope del stream:  ${max_cost:.2f}")
+    click.echo(f"Publicar cada:    {checkpoint_every} activos")
+    click.echo("")
+    if not assume_yes:
+        click.confirm("¿Arrancar y gastar hasta ese tope?", abort=True)
+
+    pilot_frames = _load_pilot()["frames"]
+    touched: set[str] = set()
+    since_checkpoint = 0
+    totals = {"done": 0, "failed": 0, "cost": 0.0, "checkpoints": 0}
+
+    def checkpoint(label: str) -> None:
+        nonlocal since_checkpoint
+        result = run_checkpoint(config, sorted(touched), pilot_frames)
+        touched.clear()
+        since_checkpoint = 0
+        totals["checkpoints"] += 1
+        click.echo(
+            f"[stream] ✔ publicado ({label}): {result['variants_updated']} variante(s) "
+            f"en Medusa · el storefront ve {result['colorways']} colorways / "
+            f"{result['views']} vistas en {result['frames']} monturas"
+        )
+
+    def on_done(asset: dict) -> None:
+        nonlocal since_checkpoint
+        touched.add(asset["product_handle"])
+        since_checkpoint += 1
+        if since_checkpoint >= checkpoint_every:
+            checkpoint(f"cada {checkpoint_every}")
+
+    stopped: str | None = None
+    failure: dict | None = None
+    crash: BaseException | None = None
+
+    try:
+        while True:
+            remaining = max_cost - totals["cost"]
+            if remaining <= 0:
+                stopped = "max_cost"
+                break
+            stats = runner.run(
+                config,
+                kind=media_kind,
+                handles=selected,
+                slots=slots,
+                max_cost=remaining,
+                limit=None,
+                batch=batch,
+                dry_run=False,
+                echo=click.echo,
+                stop_on_error=True,
+                on_done=on_done,
+            )
+            totals["done"] += stats.done
+            totals["failed"] += stats.failed
+            totals["cost"] += stats.cost_usd
+            stopped = stats.stopped_because
+
+            if stopped == "error":
+                failure = stats.failures[-1] if stats.failures else None
+                break
+            if stopped == "daily_ceiling" and wait_for_budget:
+                if touched:
+                    checkpoint("antes de esperar")
+                _sleep_until_budget_reset(click.echo)
+                continue
+            break
+    except KeyboardInterrupt:
+        stopped = "interrupted"
+    except Exception as err:  # noqa: BLE001 — reported below, after publishing
+        stopped, crash = "error", err
+    finally:
+        # Whatever ended the stream, what was generated gets published: it is
+        # paid for, it is in R2, and a crash is no reason to leave it unreachable.
+        if touched:
+            try:
+                checkpoint("final")
+            except Exception as err:  # noqa: BLE001
+                click.secho(
+                    f"[stream] AVISO: no se pudo publicar el último tramo ({err}). "
+                    "Los archivos están en R2: ejecuta `media sync` y vuelve a lanzar.",
+                    fg="yellow", err=True,
+                )
+
+    click.echo("")
+    click.echo("─" * 62)
+    click.echo(
+        f"  STREAM · {totals['done']} generados · {totals['failed']} fallidos · "
+        f"${totals['cost']:.4f} USD · {totals['checkpoints']} publicaciones"
+    )
+    click.echo(f"  se detuvo por: {stopped}")
+    click.echo("─" * 62)
+
+    if stopped == "error":
+        click.secho("\n[stream] ERROR — procesamiento detenido.", fg="red", bold=True, err=True)
+        if failure:
+            click.secho(f"  activo:  {failure['asset']}", fg="red", err=True)
+            click.secho(f"  motivo:  {failure['reason']}", fg="red", err=True)
+            click.secho(f"  detalle: {failure['note']}", fg="red", err=True)
+        if crash is not None:
+            import traceback
+
+            click.secho(f"  {type(crash).__name__}: {crash}", fg="red", err=True)
+            click.echo("".join(traceback.format_exception(crash)), err=True)
+        click.secho(
+            "  Corrige la causa y relanza el MISMO comando: continúa donde se quedó.",
+            fg="red", err=True,
+        )
+        raise SystemExit(1)
+    if stopped == "interrupted":
+        raise SystemExit(130)
+    if stopped in ("empty", None):
+        click.secho("[stream] Terminado: no queda nada en la cola.", fg="green")
+        return
+    click.secho(
+        f"[stream] Parado por {stopped} (no es un error): relanza cuando haya "
+        "presupuesto o nivel para seguir.",
+        fg="yellow",
+    )
+    raise SystemExit(2)

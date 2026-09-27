@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate, useLocation, Link } from "reac
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
 import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
+import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
 import { Icon360, IconMaterial as SpecMaterial, IconMeasures, IconGender } from "../components/UiIcons.jsx";
 const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
@@ -380,6 +381,7 @@ export default function LensProcess() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t, lang } = useLang();
+  useFrameMediaVersion();
   const { toast } = useFeedback();
   const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
   const NON_PROG_DESIGNS = DESIGNS.filter((d) => d.cat !== "prog");

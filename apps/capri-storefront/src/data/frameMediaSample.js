@@ -7,11 +7,15 @@
  * on VITE_USE_MEDUSA would drop 118 frames from the catalogue (only nine curated
  * collections are admitted), including almost every frame that has media.
  *
+ * This is the BASELINE bundled with the build. On load, frameMediaLive.js
+ * fetches `media/frame-media.json` from the bucket (published by `media stream` at
+ * every checkpoint) and merges it in, so new views show without a deploy.
+ *
  * VALUES ARE R2 OBJECT KEYS, NOT URLS. Anything reading them must go through
  * resolveImage()/resolveMedia(), the same funnel as every other product image;
  * render a bare key and you get the grey 404 box instead of a loud failure.
  *
- * Regenerate after EVERY run — this snapshot is the storefront's only source:
+ * Regenerate to refresh the baseline:
  *   cd apps/scraper && uv run python -m scraper media fixture
  */
 
@@ -2586,6 +2590,41 @@ export const GENERATED_INDEX = [
     reason: "difficulty:metallic+rimless-3piece+thin-metal", colorways: ["Gold Gunmetal"], viewCount: 4, videoCount: 0 },
 ];
 
+// The catalogue carries no reliable slug, so the join with generated media is done
+// on a normalised SKU. Rebuilt by mergeGeneratedMedia(), so it follows the live
+// manifest instead of freezing at whatever this bundle shipped with.
+const _SKU_TO_HANDLE = {};
+const _normSku = (sku) => String(sku || "").toLowerCase().replace(/\s+/g, "");
+
+function _indexSkus() {
+  for (const f of GENERATED_INDEX) _SKU_TO_HANDLE[_normSku(f.sku)] = f.handle;
+}
+_indexSkus();
+
+/** Medusa handle for a catalogue SKU ("SL116" or "SL 116"), or undefined. */
+export function handleForSku(sku) {
+  return _SKU_TO_HANDLE[_normSku(sku)];
+}
+
+/**
+ * Folds a newer snapshot (the live manifest a generation run publishes to the
+ * bucket) into the objects above, IN PLACE: every importer keeps its reference and
+ * sees the new media on its next render. Additive only — a manifest older than
+ * this bundle can add nothing and remove nothing.
+ */
+export function mergeGeneratedMedia(manifest) {
+  if (!manifest || typeof manifest !== "object") return false;
+  Object.assign(GENERATED_VIEWS, manifest.views || {});
+  Object.assign(GENERATED_VIDEOS, manifest.videos || {});
+  const at = new Map(GENERATED_INDEX.map((f, i) => [f.handle, i]));
+  for (const f of manifest.index || []) {
+    if (at.has(f.handle)) GENERATED_INDEX[at.get(f.handle)] = f;
+    else GENERATED_INDEX.push(f);
+  }
+  _indexSkus();
+  return true;
+}
+
 /**
  * Merges generated media into a catalogue product, for the gallery.
  *
@@ -2608,26 +2647,12 @@ export function withGeneratedViews(product) {
   };
 }
 
-/** Handles that have generated media, for "is there anything to show?" checks. */
-export const GENERATED_HANDLES = GENERATED_INDEX.map((f) => f.handle);
-
-// The catalogue carries no reliable slug, so the join with generated media is done
-// on a normalised SKU — which matches for every frame in the cohort.
-const _SKU_TO_HANDLE = {};
-for (const f of GENERATED_INDEX) {
-  _SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
-}
-
-function _handleFor(sku) {
-  return _SKU_TO_HANDLE[String(sku || "").toLowerCase().replace(/\s+/g, "")];
-}
-
 /**
  * Generated views for a frame, by SKU ("SL116" or "SL 116" both work).
  * @returns {null | { [colorway:string]: {front,left,right,back} }} R2 keys → resolveImage()
  */
 export function viewsBySku(sku) {
-  const h = _handleFor(sku);
+  const h = handleForSku(sku);
   return h ? GENERATED_VIEWS[h] || null : null;
 }
 
@@ -2636,7 +2661,7 @@ export function viewsBySku(sku) {
  * @returns {null | { [colorway:string]: string }} R2 keys → resolveMedia()
  */
 export function videosBySku(sku) {
-  const h = _handleFor(sku);
+  const h = handleForSku(sku);
   return h ? GENERATED_VIDEOS[h] || null : null;
 }
 

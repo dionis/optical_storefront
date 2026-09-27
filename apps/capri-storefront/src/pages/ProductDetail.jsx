@@ -18,17 +18,12 @@ import { IconMaterial, IconMeasures, IconGender, IconFemale, IconUnisex, IconKid
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
-import { GENERATED_INDEX, GENERATED_VIEWS, videosBySku } from "../data/frameMediaSample.js";
+import { GENERATED_VIEWS, handleForSku, videosBySku } from "../data/frameMediaSample.js";
+import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { measureBBox, getCachedBBox, fitTransform } from "../data/frameFit.js";
 
-// El catálogo NO trae un slug fiable, así que la unión con las vistas generadas se
-// hace por SKU normalizado (coincide en las 21 monturas del piloto).
-const SKU_TO_HANDLE = {};
-for (const f of GENERATED_INDEX) {
-  SKU_TO_HANDLE[String(f.sku || "").toLowerCase().replace(/\s+/g, "")] = f.handle;
-}
 const VIEW_ORDER = ["front", "left", "back", "right"];
 
 // A veces la generación IA deja un lado duplicado o faltante (p.ej. sólo
@@ -84,6 +79,8 @@ export default function ProductDetail() {
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
   const product = matchProduct(slug, productBySlug, PRODUCTS);
   const [active, setActive] = useState(0);
+  // Re-pinta cuando llega el manifiesto en vivo de medios generados (frameMediaLive.js).
+  const mediaVersion = useFrameMediaVersion();
   const [zoom, setZoom] = useState(false);
   const [tab, setTab] = useState("detalles");
   const [matHelp, setMatHelp] = useState(false); // ayuda de calidad del material (al click)
@@ -115,7 +112,7 @@ export default function ProductDetail() {
   useEffect(() => {
     const p = product;
     if (!p) { setFits({}); return; }
-    const gv = GENERATED_VIEWS[SKU_TO_HANDLE[String(p.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const gv = GENERATED_VIEWS[handleForSku(p.sku)];
     const col = p.colors[active];
     const v360 = build360(gv && col ? gv[col.name] : null);
     const entries = VIEW_ORDER.filter((v) => v360[v]).map((v) => ({ v, src: resolveImage(v360[v].key), mirror: v360[v].mirror }));
@@ -146,16 +143,16 @@ export default function ProductDetail() {
     const target = entries.length ? stackRef.current : mainRef.current;
     if (target) ro.observe(target);
     return () => { alive = false; ro.disconnect(); };
-  }, [product, active]);
+  }, [product, active, mediaVersion]);
   // Precarga de las 4 vistas del color actual → giro fluido sin parpadeo.
   useEffect(() => {
     if (!product) return;
-    const cv = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
+    const cv = GENERATED_VIEWS[handleForSku(product.sku)];
     const c = product.colors[active];
     const set = cv && c ? cv[c.name] : null;
     if (!set) return;
     Object.values(set).forEach((k) => { if (k) { const im = new Image(); im.src = resolveImage(k); } });
-  }, [product, active]);
+  }, [product, active, mediaVersion]);
   // React Router reuses this same component instance across two URLs that match the
   // same route (/producto/:slug -> /producto/:slug), so a plain `useState(false)` for
   // "is the try-on open" would survive a navigation to a DIFFERENT product instead of
@@ -207,7 +204,7 @@ export default function ProductDetail() {
   // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,
   // cae a la imagen actual del color (nunca un recuadro roto). Sin vistas: ficha
   // como hoy.
-  const genViews = GENERATED_VIEWS[SKU_TO_HANDLE[String(product.sku || "").toLowerCase().replace(/\s+/g, "")]];
+  const genViews = GENERATED_VIEWS[handleForSku(product.sku)];
   const colorViews = genViews && color ? genViews[color.name] : null;
   const views360 = build360(colorViews);
   const hasViews = Object.keys(views360).length > 0;
@@ -218,8 +215,8 @@ export default function ProductDetail() {
   // Vídeo comercial de ESTE color, si existe. Sale del MISMO fixture que las vistas,
   // no de la metadata de Medusa: leerlo de Medusa exigiría VITE_USE_MEDUSA=true, y ese
   // flag deja fuera 118 monturas del catálogo (solo admite 9 colecciones), entre ellas
-  // 20 de las 21 que hoy tienen medios. Precio de esta decisión: el fixture es una foto
-  // fija — hay que regenerarlo tras cada corrida con `media fixture` y desplegar.
+  // 20 de las 21 que hoy tienen medios. El fixture es solo la base del build: el
+  // manifiesto en vivo que publica `media stream` se fusiona encima al cargar.
   const genVideos = videosBySku(product.sku);
   const videoKey = genVideos && color ? genVideos[color.name] : null;
   const videoSrc = videoKey ? resolveMedia(videoKey) : null;

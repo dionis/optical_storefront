@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import { GENERATED_INDEX, GENERATED_VIEWS } from "../data/frameMediaSample.js";
+import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { resolveImage } from "../data/imageUrl.js";
 
 // Review surface for AI-generated frame media. DEV ONLY — mounted behind
@@ -32,6 +33,7 @@ function riskScore(tags) {
 
 export default function MediaReview() {
   const { t } = useLang();
+  const mediaVersion = useFrameMediaVersion();
   const { productBySlug } = useCatalog();
   const [openHandle, setOpenHandle] = useState(null);
   const [onlyRisky, setOnlyRisky] = useState(false);
@@ -43,7 +45,7 @@ export default function MediaReview() {
     // Hardest first: that is where the model invents a different frame, and a review
     // that starts with the easy ones builds false confidence.
     return list.sort((a, b) => riskScore(b.tags) - riskScore(a.tags) || a.sku.localeCompare(b.sku));
-  }, [onlyRisky]);
+  }, [onlyRisky, mediaVersion]);
 
   const totals = useMemo(
     () => ({
@@ -51,7 +53,7 @@ export default function MediaReview() {
       colorways: GENERATED_INDEX.reduce((n, f) => n + f.colorways.length, 0),
       views: GENERATED_INDEX.reduce((n, f) => n + f.viewCount, 0),
     }),
-    []
+    [mediaVersion]
   );
 
   return (

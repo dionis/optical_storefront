@@ -344,6 +344,8 @@ def run(
     batch: int,
     dry_run: bool,
     echo: Callable[[str], None],
+    stop_on_error: bool = False,
+    on_done: Callable[[dict[str, Any]], None] | None = None,
 ) -> RunStats:
     """Claim, generate, report — releasing whatever is still held on the way out.
 
@@ -361,7 +363,8 @@ def run(
 
     try:
         _drain(config, stats, kind=kind, handles=handles, slots=slots,
-               max_cost=max_cost, limit=limit, batch=batch, echo=echo)
+               max_cost=max_cost, limit=limit, batch=batch, echo=echo,
+               stop_on_error=stop_on_error, on_done=on_done)
     finally:
         # Any exit — finished, Ctrl-C, or a crash — hands the batch back at once.
         # The 20-minute lease still covers a hard kill; this covers everything else,
@@ -425,8 +428,15 @@ def _drain(
     limit: int | None,
     batch: int,
     echo: Callable[[str], None],
+    stop_on_error: bool = False,
+    on_done: Callable[[dict[str, Any]], None] | None = None,
 ) -> None:
-    """The claim/generate/report loop. Raises nothing the caller must catch."""
+    """The claim/generate/report loop.
+
+    `stop_on_error` turns the first failed asset into the end of the run (reason
+    `error`) instead of tolerating up to MAX_CONSECUTIVE_FAILURES. `on_done` is
+    called after each asset is reported `done`; whatever it raises ends the run.
+    """
     processed = 0
     consecutive_failures = 0
 
@@ -517,6 +527,10 @@ def _drain(
                     if processed % PROGRESS_EVERY == 0:
                         echo(_subtotal(stats, processed, max_cost))
 
+                    if stop_on_error:
+                        stats.stopped_because = "error"
+                        return
+
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         stats.stopped_because = "consecutive_failures"
                         echo(
@@ -535,6 +549,8 @@ def _drain(
                 f"[media]   {label} ✓ {time.monotonic() - started:.1f}s "
                 f"${cost:.4f} (run total ${stats.cost_usd:.2f})"
             )
+            if on_done:
+                on_done(asset)
 
             if processed % PROGRESS_EVERY == 0:
                 echo(_subtotal(stats, processed, max_cost))

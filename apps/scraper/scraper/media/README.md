@@ -197,6 +197,34 @@ continúa donde se quedó** — eso *es* el `--resume`, y no necesita ningún ar
 Dos terminales a la vez es seguro (cada una reclama activos distintos), pero comparten
 techo y cuota de Gemini. Mejor una.
 
+### `media stream`: generar hasta el final, publicando por tramos
+
+Para dejar el catálogo entero corriendo en el servidor:
+
+```bash
+nohup uv run python -m scraper media stream --all --kind views \
+      --max-cost 190 --yes > stream.log 2>&1 &
+tail -f stream.log
+```
+
+En qué se diferencia de `generate`:
+
+| | `generate` | `stream` |
+|---|---|---|
+| Publicar (sync a Medusa + manifiesto del storefront) | una vez, al final | **cada 50 activos** (`--checkpoint-every`) y al salir, pase lo que pase |
+| Un activo que falla | se anota y sigue (para a los 10 seguidos) | **se detiene en el primero**, lo imprime en rojo y sale con código 1 |
+| Techo **diario** | se detiene | espera al siguiente día UTC y sigue (`--no-wait-for-budget` para no esperar) |
+| `--max-cost` | tope de esa corrida | tope de **todo** el stream, esperas incluidas |
+
+Publicar un tramo son dos pasos gratuitos e idempotentes: `media sync` de las monturas
+tocadas y el manifiesto `media/frame-media.json` en el bucket. El storefront lo lee al
+cargar y lo fusiona sobre el fixture del build, así que **las vistas nuevas se ven sin
+commit ni despliegue**.
+
+Códigos de salida: `0` terminó la cola · `1` error · `2` parado por techo mensual, nivel
+o `--max-cost` (no es un error) · `130` Ctrl-C. Tras un error, arregla la causa (y usa
+`media retry` si hace falta) y relanza **el mismo comando**: sigue donde se quedó.
+
 ## 9. Cuando algo falla
 
 ```bash
@@ -260,13 +288,14 @@ proceso, pero sí dinero gastado en algo que ya no se muestra.
 | Página de revisión | `/dev/medios` en el storefront |
 | Desde la terminal | `media results --all --urls` imprime las URL públicas, una por línea |
 
-Dos variables del **storefront** (no de este `.env`) tienen que estar puestas, o no se ve
-nada aunque el `sync` diga que actualizó todo:
+La ficha no lee las vistas de la Store API sino de `frameMediaSample.js` (la base que va
+en el build, `media fixture`) más el manifiesto en vivo `media/frame-media.json` (lo
+publica `media stream`). Una variable del **storefront** (no de este `.env`) tiene que
+estar puesta, o no se ve nada:
 
 | Variable | Si falta |
 |---|---|
-| `VITE_USE_MEDUSA=true` | El storefront sirve el catálogo semilla empaquetado, que no tiene medios generados |
-| `VITE_R2_PUBLIC_URL` | Las claves no se resuelven a URL. Tiene que apuntar al **mismo bucket** al que sube este CLI |
+| `VITE_R2_PUBLIC_URL` | Las claves no se resuelven a URL ni se puede leer el manifiesto. Tiene que apuntar al **mismo bucket** al que sube este CLI |
 
 ---
 

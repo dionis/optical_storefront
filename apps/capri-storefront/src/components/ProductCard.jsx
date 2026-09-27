@@ -12,6 +12,7 @@ import TryOn from "./TryOnSwitch.jsx";
 import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
 // Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
 import { viewsBySku } from "../data/frameMediaSample.js";
+import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
 
 // Descuentos realistas para la etiqueta (10/15/20/25%), asignados de forma
@@ -37,6 +38,7 @@ export default function ProductCard({ product }) {
   const color = product.colors[active];
   const fav = isFav(product.slug);
   // ¿Esta montura ya tiene las 4 vistas 3D generadas? → muestra el sello "360°".
+  useFrameMediaVersion();
   const hasViews = !!viewsBySku(product.sku);
 
   // Valoración: usamos las reseñas REALES de la tienda si existen; si no, el dato
