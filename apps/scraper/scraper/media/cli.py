@@ -665,16 +665,19 @@ def fixture_cmd(out_path: str | None) -> None:
     config.validate()
 
     # Everything with a file behind it, not just views: the fixture carries the
-    # promo videos too.
+    # promo videos too. Paged: the board caps a page at 200 (MAX_LIMIT on the
+    # route), and a single page silently froze the storefront at the first 200
+    # views while the catalogue kept growing behind it.
     assets: list = []
     for kind in ("view", "video"):
-        page = api.board(config, kind=kind, status="done", limit=200)
-        assets.extend(page.get("assets", []))
-        if page.get("has_more"):
-            click.echo(
-                f"AVISO: hay más de 200 activos de tipo {kind}; el fixture quedaría "
-                "incompleto. Sube el límite en el comando."
-            )
+        offset = 0
+        while True:
+            page = api.board(config, kind=kind, status="done", limit=200, offset=offset)
+            batch = page.get("assets", [])
+            assets.extend(batch)
+            offset += len(batch)
+            if not batch or not page.get("has_more"):
+                break
 
     if not assets:
         raise click.ClickException(

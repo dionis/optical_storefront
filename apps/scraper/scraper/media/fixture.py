@@ -16,6 +16,7 @@ step instead of a hand edit, so the snapshot cannot silently drift from reality.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,40 @@ FIXTURE_PATH = (
 )
 
 SLOTS = ("front", "left", "right", "back")
+
+#: The storefront's bundled catalogue — the side of the SKU join the PDP reads.
+CATALOG_PATH = FIXTURE_PATH.parents[2] / "public" / "catalog.json"
+
+
+def _slug(text: str) -> str:
+    """Same rule as parser._slug, which is what built the Medusa handle."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower().strip()).strip("-")
+
+
+def catalog_frames() -> dict[str, dict[str, Any]]:
+    """Every catalogue frame keyed by its Medusa handle.
+
+    The storefront joins generated media on SKU, and the queue only knows the
+    handle. The pilot manifest used to be the only bridge, so every frame outside
+    the 70-frame cohort was emitted with `sku = handle`, matched nothing, and its
+    views never reached a product page. The handle is `{_slug(name)}-{brand_slug}`
+    (parser.py), so the catalogue can rebuild the bridge for all of them.
+    """
+    if not CATALOG_PATH.exists():
+        return {}
+    rows = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    out: dict[str, dict[str, Any]] = {}
+    for p in rows:
+        name, brand_slug = p.get("name") or p.get("sku"), p.get("brand_slug")
+        if not name or not brand_slug:
+            continue
+        out[f"{_slug(str(name))}-{brand_slug}"] = {
+            "sku": p.get("sku"),
+            "brand": p.get("brand"),
+            "brand_slug": brand_slug,
+            "seed_slug": re.sub(r"[^a-z0-9]+", "", str(p.get("sku") or "").lower()),
+        }
+    return out
 
 _TAIL = r'''/**
  * Merges generated media into a catalogue product, for the gallery.
@@ -106,7 +141,8 @@ def build(assets: list[dict[str, Any]], pilot_frames: list[dict[str, Any]]) -> s
         elif asset["kind"] == "video":
             videos.setdefault(handle, {})[colour] = key
 
-    by_handle = {f["handle"]: f for f in pilot_frames}
+    # Pilot entries win: they also carry the tags and the reason for selection.
+    by_handle = {**catalog_frames(), **{f["handle"]: f for f in pilot_frames}}
     handles = sorted(set(views) | set(videos))
 
     total_views = sum(len(s) for cs in views.values() for s in cs.values())
