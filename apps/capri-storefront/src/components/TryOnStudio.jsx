@@ -14,7 +14,9 @@ import {
   armMeasurementNotification,
   pickMeasurement,
   frameImageDataUrl,
+  saveTryOnResult,
 } from "../data/visionMeasure.js";
+import { USE_MEDUSA } from "../data/medusa.js";
 import {
   getMeasureJob, setMeasureJob, clearMeasureJob,
   saveMeasureResult, getMeasureResult, clearMeasureResult,
@@ -579,6 +581,35 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           // Persistimos la generación (imágenes + números) para que salir/reabrir el
           // estudio NO obligue a re-generar: al reabrir se restaura tal cual.
           try { saveMeasureResult(product, { data: picked, frontImg, sideImg }); } catch { /* cuota: se ignora */ }
+          // Guardar la salida (imagen frontal con espejuelos + medidas) en el
+          // backend para verla luego en el panel admin. Best-effort: si falla o
+          // no hay almacenamiento configurado, NO afecta al cliente.
+          try {
+            if (USE_MEDUSA && (picked.frontImage || frontImg)) {
+              const a = product.attributes || {};
+              saveTryOnResult({
+                front_image: picked.frontImage || frontImg,
+                product_id: product.id,
+                product_name: product.name,
+                brand: product.brand,
+                sku: product.sku,
+                color_name: color?.name || null,
+                for_whom: forWhom,
+                patient_name: forWhom === "other" ? (otherName || null) : null,
+                measurements: {
+                  pd: picked.pd ?? null,
+                  pd_od: picked.pdRight ?? null,
+                  pd_os: picked.pdLeft ?? null,
+                  corridor: picked.corridor ?? null,
+                  seg_height: picked.segHeight ?? picked.corridor ?? null,
+                  eye: a.eye ?? null,
+                  bridge: a.bridge ?? null,
+                  temple: a.temple ?? null,
+                  quality: picked.quality?.level ?? null,
+                },
+              });
+            }
+          } catch { /* best-effort */ }
         }
       })
       .catch((e) => {

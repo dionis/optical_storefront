@@ -184,6 +184,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "10mb" },
     },
     {
+      // Persisting a finished try-on carries the frontal render as a base64
+      // `data:` URL (JSON), which runs past Medusa's default body limit.
+      matcher: "/vision-measure/result",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "10mb" },
+    },
+    {
       // Called BY vision-measure (see that folder's notify/route.ts), never by the
       // browser. Unauthenticated by design, so the rate limit is the backstop against
       // it turning into a spam relay on top of the shared-secret check inside the route.

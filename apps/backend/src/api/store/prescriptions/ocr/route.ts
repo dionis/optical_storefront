@@ -251,6 +251,18 @@ function classifyModelFailure(err: unknown): ModelFailure {
       status, type, name, message,
     };
   }
+  // A 404 (or a 400 that names the model) means the configured OCR model id is
+  // not a real model, or the account has no access to it — the single most
+  // common way this route breaks after a model is renamed or retired. Naming it
+  // turns an opaque "model call failed" into an actionable "fix the model id".
+  if (status === 404 || (status === 400 && /model/i.test(message))) {
+    return {
+      code: "ocr_model_unavailable",
+      error: "The configured OCR model is unavailable — check the model id in OCR settings.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
   return {
     code: "ocr_failed",
     error: "The model call failed.",

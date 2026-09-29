@@ -9,6 +9,22 @@ import { MEDUSA_URL } from "./medusa.js";
 const API = `${MEDUSA_URL}/vision-measure`;
 const JOB_API = `${API}/job`;
 
+// Guarda la salida de una prueba con IA (imagen frontal con los espejuelos +
+// medidas) para que el dueño la vea luego en el panel admin. Es best-effort: si
+// falla (o no hay almacenamiento configurado) NO rompe el flujo del cliente.
+export async function saveTryOnResult(payload) {
+  try {
+    const r = await fetch(`${API}/result`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 // La foto del marco vive en el host de imágenes del catálogo, que no manda cabeceras
 // CORS: el servidor la descarga por nosotros y la devuelve como data URL.
 export async function frameImageDataUrl(url) {
