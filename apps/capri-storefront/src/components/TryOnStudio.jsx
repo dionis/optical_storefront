@@ -1128,7 +1128,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const side = mData?.profileImage || sideImg;
     return (
       <div className="vm-result">
-        <div className="vm-result-imgs">
+        {/* Resultado: SOLO la imagen FRONTAL con los espejuelos puestos. Todas las
+            medidas que necesitamos van en el panel inferior (.vm-dims-inflow). */}
+        <div className="vm-result-imgs vm-result-imgs-solo">
           <figure className="vm-rfig">
             <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
             {front ? (
@@ -1144,22 +1146,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               </>
             ) : <div className="vm-noimg">📷</div>}
             <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
-          </figure>
-          <figure className="vm-rfig">
-            <figcaption className="vm-rlabel">{t("vm.side")}</figcaption>
-            {side ? (
-              <>
-                <img className="vm-rimg" src={side} alt={t("vm.side")}
-                     onClick={() => setZoom({ src: side, which: "side" })} />
-                <div className="vm-rtools">
-                  <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
-                          onClick={() => setZoom({ src: side, which: "side" })}>{IC_ZOOM}</button>
-                  <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
-                          onClick={() => downloadResult(side, "side")}>{IC_DOWN}</button>
-                </div>
-              </>
-            ) : <div className="vm-noimg">📷</div>}
-            <div className="vm-rbadge"><span>{t("vm.corridor")}</span><b>{mmv(mData?.corridor)}</b></div>
           </figure>
         </div>
         {mData?.quality && (
@@ -1266,6 +1252,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
       <div className="tryon-studio-grid ts2wrap">
         <div className="ts2">
+          <div className="ts2-top">
           {/* Resumen del marco: material · medidas · género (mismo lenguaje visual
               que la ficha del producto). */}
           <div className="ts2-facts">
@@ -1337,7 +1324,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                   ],
                 })}
 
-          {/* Información de la montura (ancho completo, abajo) */}
+          </div>{/* /.ts2-top */}
+          {/* Información de la montura (ancho completo, abajo) — SIEMPRE visible.
+              En móvil ocupa la mitad inferior (50/50 con la cámara). */}
           <aside className="fs-card ts2-frame">
             <div className="fs-hd">
               <IconGlasses className="fs-hd-ic" />

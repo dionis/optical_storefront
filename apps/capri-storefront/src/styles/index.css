@@ -5603,7 +5603,7 @@ button.card-genre {
 
 /* RESPONSIVE: fuera el resumen de arriba (material/medidas/genero + colores) */
 @media (max-width: 820px) {
-  .ts2 > .ts2-facts, .ts2 > .ts2-colors { display: none; }
+  .ts2 .ts2-facts, .ts2 .ts2-colors { display: none; }
   .ts2-cap-main { grid-template-columns: minmax(120px, 0.85fr) 1.4fr; }
 }
 @media (max-width: 560px) {
@@ -6017,4 +6017,88 @@ button.card-genre {
   .tryon-studio-grid.ts2wrap { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
   .tryon-result.tryon-studio .tryon-studio-cap { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
   .vm-overlay .vm-body { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+}
+
+
+/* ===================================================================
+   ETAPA 74 - Ajustes pedidos por el cliente:
+   1) Boton 360 de la ficha (PDP) un poco mas pequeno.
+   2) Miniatura del ejemplo de receta -> boton que abre un lightbox
+      ampliado (se ve CLARO lo que se espera de la receta).
+   3) Probador en movil durante la CAPTURA: 50% camara / 50% ficha del
+      espejuelo (la montura que se prueba SIEMPRE visible abajo).
+   4) Resultado del probador: SOLO la imagen frontal (una columna).
+   =================================================================== */
+
+/* 1) Boton 360 mas pequeno */
+.pdp .pdp-360 img { height: 22px; }
+@media (max-width: 720px) { .pdp .pdp-360 img { height: 19px; } }
+
+/* 2) Miniatura del ejemplo (ahora es un boton con lupa) */
+.zlx-pop-rx .zlx-rx-tips-ex {
+  position: relative; flex: 0 0 auto; width: 96px; padding: 0; border: 0; background: none;
+  cursor: zoom-in; border-radius: 8px; display: block; line-height: 0; align-self: center;
+  box-shadow: none;
+}
+.zlx-pop-rx .zlx-rx-tips-ex img {
+  width: 100%; height: auto; display: block; border-radius: 8px;
+  border: 1px solid #cbd7ee; box-shadow: 0 3px 9px rgba(16,34,84,.14);
+}
+.zlx-pop-rx .zlx-rx-tips-ex-zoom {
+  position: absolute; right: 4px; bottom: 4px; width: 23px; height: 23px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(26,73,182,.94); color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.28);
+}
+.zlx-pop-rx .zlx-rx-tips-ex:hover .zlx-rx-tips-ex-zoom { background: #1a49b6; }
+@media (max-width: 640px) { .zlx-pop-rx .zlx-rx-tips-ex { width: 88px; } }
+
+/* Lightbox del ejemplo de receta (por encima del popup) */
+.zlx-rxex-lb {
+  position: fixed; inset: 0; z-index: 5000; display: flex; align-items: center; justify-content: center;
+  padding: 22px; background: rgba(9,16,34,.74); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  animation: zlxRxexIn .16s ease-out;
+}
+@keyframes zlxRxexIn { from { opacity: 0; } to { opacity: 1; } }
+.zlx-rxex-inner {
+  position: relative; background: #fff; border-radius: 16px; padding: 16px;
+  max-width: min(540px, 92vw); box-shadow: 0 24px 60px -18px rgba(0,0,0,.6);
+}
+.zlx-rxex-img { display: block; width: 100%; height: auto; border-radius: 10px; }
+.zlx-rxex-cap { margin: 11px 4px 2px; color: #4a5164; font-size: 13px; text-align: center; font-weight: 500; line-height: 1.4; }
+.zlx-rxex-x {
+  position: absolute; top: -13px; right: -13px; width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: #fff; color: #17203a; display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.28);
+}
+.zlx-rxex-x:hover { background: #f2f5fb; }
+.zlx-rxex-x svg { width: 18px; height: 18px; }
+
+/* 4) Resultado del probador: una sola columna centrada (solo la frontal) */
+.vm-result-imgs.vm-result-imgs-solo { display: grid; grid-template-columns: 1fr; }
+.vm-result-imgs-solo .vm-rfig { max-width: 420px; margin-left: auto; margin-right: auto; width: 100%; }
+
+/* 3) Probador (CAPTURA) en movil: mitad camara / mitad ficha del espejuelo.
+      Solo mientras se capturan/revisan las fotos (NO en el resultado, que baja
+      en scroll normal). El bloque superior (.ts2-top) hace su propio scroll y la
+      ficha del espejuelo queda anclada en la mitad inferior, siempre visible. */
+@media (max-width: 900px) {
+  .tryon-studio:not(.tryon-result) .ts2wrap { overflow: hidden; }
+  .tryon-studio:not(.tryon-result) .ts2 {
+    display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 0;
+  }
+  .tryon-studio:not(.tryon-result) .ts2-top {
+    flex: 1 1 50%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  /* Durante la captura la tira de material/colores es redundante (ya esta en la
+     ficha de abajo): la ocultamos para dar la mitad completa a la camara. */
+  .tryon-studio:not(.tryon-result) .ts2-facts,
+  .tryon-studio:not(.tryon-result) .ts2-colors { display: none; }
+  /* Camara mas contenida para caber en su mitad junto al ejemplo. */
+  .tryon-studio:not(.tryon-result) .ts2-wiz-cam.ts2-drop { height: clamp(180px, 32vh, 320px); }
+  .tryon-studio:not(.tryon-result) .ts2-frame {
+    flex: 1 1 50%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    margin: 0; border-top: 1px solid #e6ebf3;
+  }
+  /* Ficha compacta para que quepa completa en su mitad. */
+  .tryon-studio:not(.tryon-result) .ts2-frame .fs-foot { padding-top: 8px; }
 }

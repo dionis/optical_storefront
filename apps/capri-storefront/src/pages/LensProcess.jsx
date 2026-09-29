@@ -470,7 +470,9 @@ export default function LensProcess() {
   //   "pick" = subir foto / elegir tipo de lente   ·   "fill" = ajustar valores
   // Al cerrar el popup vuelve a "pick".
   const [rxStage, setRxStage] = useState("pick");
-  useEffect(() => { if (pop !== "rx") setRxStage("pick"); }, [pop]);
+  // Lightbox del ejemplo de receta (se abre al tocar la miniatura de los consejos).
+  const [rxExample, setRxExample] = useState(false);
+  useEffect(() => { if (pop !== "rx") { setRxStage("pick"); setRxExample(false); } }, [pop]);
   // El campo que falta vive DENTRO del popup de receta: al pulsar el aviso del
   // botón de comprar abrimos ese popup y hacemos scroll/destello sobre la altura,
   // que si no queda invisible con el popup cerrado y el pago parece bloqueado.
@@ -1243,8 +1245,14 @@ export default function LensProcess() {
                           <li><Ic name="check" /> {t("lens.upload.tips.flat")}</li>
                         </ul>
                       </div>
-                      <img className="zlx-rx-tips-ex" src="/rx/ejemplo.png"
-                           alt={lang === "es" ? "Ejemplo de receta" : "Prescription example"} loading="lazy" />
+                      <button type="button" className="zlx-rx-tips-ex" onClick={() => setRxExample(true)}
+                              aria-label={lang === "es" ? "Ver ejemplo de receta ampliado" : "View enlarged prescription example"}>
+                        <img src="/rx/ejemplo.png"
+                             alt={lang === "es" ? "Ejemplo de receta" : "Prescription example"} loading="lazy" />
+                        <span className="zlx-rx-tips-ex-zoom" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M11 8v6M8 11h6" /></svg>
+                        </span>
+                      </button>
                     </div>
                   )}
                   {ocr.status === "error" && <p className="rx-ocr-error">{t(`lens.upload.err.${ocr.reason || "generic"}`)}</p>}
@@ -1398,6 +1406,20 @@ export default function LensProcess() {
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" /></svg>
                 {t("lens.rx.secure")}
               </p>
+              {/* Lightbox: al tocar la miniatura del ejemplo se agranda para que se
+                  vea CLARO lo que se espera de la receta (ojos, esfera, cilindro…). */}
+              {rxExample && (
+                <div className="zlx-rxex-lb" role="dialog" aria-modal="true"
+                     aria-label={lang === "es" ? "Ejemplo de receta" : "Prescription example"}
+                     onClick={() => setRxExample(false)}>
+                  <div className="zlx-rxex-inner" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="zlx-rxex-x" aria-label={closeLabel} onClick={() => setRxExample(false)}><Ic name="close" /></button>
+                    <img className="zlx-rxex-img" src="/rx/ejemplo.png"
+                         alt={lang === "es" ? "Ejemplo de receta" : "Prescription example"} />
+                    <p className="zlx-rxex-cap">{lang === "es" ? "Así debe verse tu receta: legible, de frente y sin tapar los números." : "This is how your prescription should look: legible, square-on and with nothing covering the numbers."}</p>
+                  </div>
+                </div>
+              )}
         </ZlxPop>
       )}
 
