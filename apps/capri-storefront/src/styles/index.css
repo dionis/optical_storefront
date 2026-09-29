@@ -6003,3 +6003,18 @@ button.card-genre {
   .zlx-pop-rx .zlx-rx-tips-ex { width: 84px; }
   .zlx-pop-rx .zlx-use-txt b { font-size: 14.5px; }
 }
+
+
+/* ===================================================================
+   ETAPA 73 - El resultado del probador (panel "Medidas calculadas" +
+   ficha de la montura con las medidas ANCHO/PUENTE/VARILLA) se cortaba
+   por abajo en movil. Damos aire al final del scroll para que la ultima
+   fila y la ficha se vean COMPLETAS, sin quedar tapadas por la barra
+   inferior del sitio. Aplica al estudio (.ts2wrap), al resultado legacy
+   y al overlay del reporte de medidas.
+   =================================================================== */
+@media (max-width: 860px) {
+  .tryon-studio-grid.ts2wrap { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .tryon-result.tryon-studio .tryon-studio-cap { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .vm-overlay .vm-body { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+}
