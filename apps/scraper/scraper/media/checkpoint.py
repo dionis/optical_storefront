@@ -28,23 +28,49 @@ from scraper.media.fixture import MANIFEST_KEY, collect, manifest_json, summary
 _PAGE = 200
 
 
-def done_assets(config: Config) -> list[dict[str, Any]]:
-    """Every `done` view and video, all pages.
+#: Frames per board request when reading by handle. A frame has at most a few
+#: colourways × 4 slots, so this stays well under one page of `_PAGE` rows.
+_HANDLES_PER_CALL = 6
 
-    Paged on purpose: one page of 200 is what froze the storefront at the first
-    50 colourways while the queue kept growing behind it.
+
+def _paged(config: Config, **params: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = api.board(config, limit=_PAGE, offset=offset, **params)
+        batch = page.get("assets", [])
+        rows.extend(batch)
+        offset += len(batch)
+        if not batch or not page.get("has_more"):
+            return rows
+
+
+def done_assets(config: Config) -> list[dict[str, Any]]:
+    """Every `done` view and video, exactly once.
+
+    NOT a plain offset walk. The board orders by `kind, product_handle, slot`,
+    which ties across the colourways of one frame, and Postgres does not keep
+    ties in the same order from one query to the next — so consecutive pages
+    repeat some rows and skip others. That silently dropped 7 finished views
+    from the storefront. Reading a few frames per request needs no second page
+    at all, so the ordering cannot matter. The offset walk is kept only to
+    discover which frames exist, where a skipped row costs nothing: every frame
+    has many rows, and the catalogue fills in the rest.
     """
-    assets: list[dict[str, Any]] = []
+    from scraper.media.fixture import catalog_frames
+
+    handles = set(catalog_frames())
     for kind in ("view", "video"):
-        offset = 0
-        while True:
-            page = api.board(config, kind=kind, status="done", limit=_PAGE, offset=offset)
-            batch = page.get("assets", [])
-            assets.extend(batch)
-            offset += len(batch)
-            if not batch or not page.get("has_more"):
-                break
-    return assets
+        handles.update(a["product_handle"] for a in _paged(config, kind=kind, status="done"))
+
+    by_id: dict[str, dict[str, Any]] = {}
+    ordered = sorted(handles)
+    for kind in ("view", "video"):
+        for i in range(0, len(ordered), _HANDLES_PER_CALL):
+            chunk = ordered[i : i + _HANDLES_PER_CALL]
+            for a in _paged(config, kind=kind, status="done", handle=",".join(chunk)):
+                by_id[a["id"]] = a
+    return list(by_id.values())
 
 
 def publish_manifest(config: Config, pilot_frames: list[dict[str, Any]]) -> dict[str, int]:

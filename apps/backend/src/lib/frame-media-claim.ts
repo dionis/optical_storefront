@@ -254,7 +254,9 @@ export async function listAssets(
               source_image_url, operation, finished_at, updated_at
          FROM frame_media_asset
         WHERE ${predicate}
-        ORDER BY kind, product_handle, slot
+        -- colorway, id break the ties: without them the order within one frame
+        -- is unspecified, so OFFSET pages repeated some rows and skipped others.
+        ORDER BY kind, product_handle, colorway, slot, id
         LIMIT :limit OFFSET :offset`,
       bindings
     ),
