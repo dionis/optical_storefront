@@ -45,7 +45,16 @@ const DESIGN_ICON = {
 };
 const designIcon = (id) => (id === "frame-only" ? IconMontura : DESIGN_ICON[id] || IconSencilla);
 // Progresivo se muestra como UN solo botón; la gama (Media/Alta) se elige dentro.
-const PROG_GROUP = { id: "prog", group: true, cat: "prog", label: { es: "Progresivo", en: "Progressive" } };
+const PROG_GROUP = { id: "prog", group: true, cat: "prog", label: { es: "Lentes Progresivos", en: "Progressive lenses" } };
+// Iconos realistas e info por tipo de lente en el popup de receta (maqueta).
+const RX_TYPE_ICON = {
+  "frame-only": "/rx/solo-montura.png",
+  sv: "/rx/vision-sencilla.png",
+  bifocal: "/rx/bifocal.png",
+  prog: "/rx/progresivo.png",
+};
+const rxTypeIcon = (d) => (d.group || d.cat === "prog") ? RX_TYPE_ICON.prog : (RX_TYPE_ICON[d.id] || RX_TYPE_ICON.sv);
+const rxTypeDescKey = (d) => d.id === "frame-only" ? "frame" : (d.group || d.cat === "prog") ? "prog" : d.id;
 // Transitions: ocultos por ahora; se podrán configurar a futuro (poner en true).
 const SHOW_TRANSITIONS = false;
 // Blue-light AR variants get the screen icon + blue-light diagram; the rest are
@@ -457,6 +466,13 @@ export default function LensProcess() {
   const [arId, setArId] = useState(null);         // null = ninguno
   const [rx, setRx] = useState({ od_sph: "0", od_cyl: "0", od_axis: "0", os_sph: "0", os_cyl: "0", os_axis: "0", pd: "", pd_od: "", pd_os: "", add: "", seg_height: "" });
   const [pop, setPop] = useState(null);           // null | "rx" | "mat" | "treat" | "frame"
+  // La receta tiene DOS pasos dentro del mismo popup (como la maqueta):
+  //   "pick" = subir foto / elegir tipo de lente   ·   "fill" = ajustar valores
+  // Al cerrar el popup vuelve a "pick".
+  const [rxStage, setRxStage] = useState("pick");
+  // Lightbox del ejemplo de receta (se abre al tocar la miniatura de los consejos).
+  const [rxExample, setRxExample] = useState(false);
+  useEffect(() => { if (pop !== "rx") { setRxStage("pick"); setRxExample(false); } }, [pop]);
   // El campo que falta vive DENTRO del popup de receta: al pulsar el aviso del
   // botón de comprar abrimos ese popup y hacemos scroll/destello sobre la altura,
   // que si no queda invisible con el popup cerrado y el pago parece bloqueado.
@@ -1192,9 +1208,9 @@ export default function LensProcess() {
 
       {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
       {pop === "rx" && (
-        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} closeLabel={closeLabel} className="zlx-pop-rx">
+        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
-          {USE_MEDUSA && (
+          {rxStage === "pick" && USE_MEDUSA && (
                 <div className="zlx-rx-upload">
                   <label className="zlx-upload-box">
                     {/* Visually hidden en vez de `hidden` (display:none): algunos
@@ -1221,11 +1237,22 @@ export default function LensProcess() {
                       lee y una vez confirmada la receta, cuando ya no aporta. */}
                   {ocr.status !== "loading" && !ocr.confirmed && (
                     <div className="zlx-rx-tips">
-                      <ul>
-                        <li>{t("lens.upload.tips.whole")}</li>
-                        <li>{t("lens.upload.tips.light")}</li>
-                        <li>{t("lens.upload.tips.flat")}</li>
-                      </ul>
+                      <div className="zlx-rx-tips-main">
+                        <div className="zlx-rx-tips-h"><Ic name="info" /> {t("lens.rx.tipsTitle")}</div>
+                        <ul>
+                          <li><Ic name="check" /> {t("lens.upload.tips.whole")}</li>
+                          <li><Ic name="check" /> {t("lens.upload.tips.light")}</li>
+                          <li><Ic name="check" /> {t("lens.upload.tips.flat")}</li>
+                        </ul>
+                      </div>
+                      <button type="button" className="zlx-rx-tips-ex" onClick={() => setRxExample(true)}
+                              aria-label={lang === "es" ? "Ver ejemplo de receta ampliado" : "View enlarged prescription example"}>
+                        <img src="/rx/ejemplo.png"
+                             alt={lang === "es" ? "Ejemplo de receta" : "Prescription example"} loading="lazy" />
+                        <span className="zlx-rx-tips-ex-zoom" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M11 8v6M8 11h6" /></svg>
+                        </span>
+                      </button>
                     </div>
                   )}
                   {ocr.status === "error" && <p className="rx-ocr-error">{t(`lens.upload.err.${ocr.reason || "generic"}`)}</p>}
@@ -1251,7 +1278,9 @@ export default function LensProcess() {
 
               {/* 3) Acordeón de tipos — una línea; al seleccionar se abre su formulario.
                      La adición (ADD) puede cambiar el tipo automáticamente (ver aviso). */}
-              <div className="zlx-use-sep"><span>{t("lens.q.use")}</span></div>
+              {rxStage === "pick" && (
+                <div className="zlx-use-sep"><span>{t("lens.q.use")}</span><small>{t("lens.use.subtitle2")}</small></div>
+              )}
               {rxNote && (
                 <div className="zlx-rx-note" role="status">
                   <Ic name="info" />
@@ -1260,10 +1289,11 @@ export default function LensProcess() {
                 </div>
               )}
               <div className="zlx-use-rows">
-                {[FRAME_ONLY, ...NON_PROG_DESIGNS, PROG_GROUP].map((d) => {
+                {[FRAME_ONLY, ...NON_PROG_DESIGNS, PROG_GROUP]
+                  .filter((d) => rxStage === "pick" ? true : (d.group ? (!!design && design.cat === "prog") : designId === d.id))
+                  .map((d) => {
                   const isFO = d.id === "frame-only";
                   const isProgGroup = !!d.group;
-                  const DIcon = isFO ? IconMontura : designIcon(isProgGroup ? "prog-mid" : d.id);
                   const sel = isProgGroup ? (!!design && design.cat === "prog") : designId === d.id;
                   const hasDiag = !isFO && d.cat === "prog";
                   const fromMin = isProgGroup
@@ -1273,22 +1303,21 @@ export default function LensProcess() {
                     <div key={d.id} className={`zlx-use-item ${sel ? "open" : ""}`}>
                       <div className={`zlx-use-row ${sel ? "sel" : ""}`}>
                         <button type="button" className="zlx-use-main" onClick={() => { if (isProgGroup) { if (!sel) chooseDesign("prog-mid"); } else chooseDesign(d.id); }}>
-                          <DIcon className="zlx-use-ic" active={sel} />
+                          <img className="zlx-use-ic zlx-use-ic-img" src={rxTypeIcon(d)} alt="" aria-hidden="true" loading="lazy" />
                           <span className="zlx-use-txt">
                             <b>{L(d.label, lang)}{sel && !isFO && ocr.status === "done" && ocrFields.size > 0 && <em className="zlx-use-sugg">{t("lens.suggested")}</em>}</b>
-                            <small>{isFO ? t("lens.included") : t("lens.rxFree")}</small>
+                            <small>{t(`lens.use.desc.${rxTypeDescKey(d)}`)}</small>
                           </span>
-                          {sel && <Ic name="check" className="zlx-use-check" />}
-                          <span className={`zlx-use-chev ${sel ? "up" : ""}`} aria-hidden="true"><Ic name="down" /></span>
+                          <span className={`zlx-use-radio ${sel ? "on" : ""}`} aria-hidden="true" />
                         </button>
-                        {hasDiag && (
+                        {hasDiag && rxStage === "fill" && (
                           <button type="button" className="zlx-use-info"
                                   aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d))}>
                             <Ic name="info" />
                           </button>
                         )}
                       </div>
-                      {sel && isFO && (
+                      {sel && isFO && rxStage === "fill" && (
                         <div className="zlx-use-fill">
                           <p className="muted small zlx-solo-note">{t("lens.rx.none")}</p>
                           <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="select" onClick={() => setPop(null)}>
@@ -1296,7 +1325,7 @@ export default function LensProcess() {
                           </button>
                         </div>
                       )}
-                      {sel && !isFO && (
+                      {sel && !isFO && rxStage === "fill" && (
                         <div className="zlx-use-fill">
                           {isProgGroup && (
                             <div className="zlx-gama" role="radiogroup" aria-label={lang === "es" ? "Gama" : "Tier"}>
@@ -1366,10 +1395,31 @@ export default function LensProcess() {
                   );
                 })}
               </div>
+              {rxStage === "pick" && (
+                <button type="button" className="btn btn-primary zlx-rx-continue" data-sfx="select"
+                        disabled={!designId}
+                        onClick={() => { if (frameOnly) { setPop(null); } else if (designId) { setRxStage("fill"); } }}>
+                  {t("lens.use.continue")} <span className="zlx-rx-continue-ar" aria-hidden="true" />
+                </button>
+              )}
               <p className="zlx-rx-secure">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" /></svg>
                 {t("lens.rx.secure")}
               </p>
+              {/* Lightbox: al tocar la miniatura del ejemplo se agranda para que se
+                  vea CLARO lo que se espera de la receta (ojos, esfera, cilindro…). */}
+              {rxExample && (
+                <div className="zlx-rxex-lb" role="dialog" aria-modal="true"
+                     aria-label={lang === "es" ? "Ejemplo de receta" : "Prescription example"}
+                     onClick={() => setRxExample(false)}>
+                  <div className="zlx-rxex-inner" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="zlx-rxex-x" aria-label={closeLabel} onClick={() => setRxExample(false)}><Ic name="close" /></button>
+                    <img className="zlx-rxex-img" src="/rx/ejemplo.png"
+                         alt={lang === "es" ? "Ejemplo de receta" : "Prescription example"} />
+                    <p className="zlx-rxex-cap">{lang === "es" ? "Así debe verse tu receta: legible, de frente y sin tapar los números." : "This is how your prescription should look: legible, square-on and with nothing covering the numbers."}</p>
+                  </div>
+                </div>
+              )}
         </ZlxPop>
       )}
 
