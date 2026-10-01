@@ -716,6 +716,11 @@ export default function LensProcess() {
         setDesignId(suggested);
         setMatId(null); setPhotoId(null); setArId(null);
       }
+      // Tras leer la receta saltamos DIRECTO al paso de valores para que el
+      // cliente VEA de inmediato lo que el OCR leyó (OD/OS esfera, cilindro, eje,
+      // DIP, ADD). Antes quedaban escondidos un paso más adelante, tras
+      // "Continuar", y en móvil ni se veían: parecía que no había leído nada.
+      setRxStage("fill");
       // Flag exactly the fields the model actually filled, so the review
       // highlight points at what it read rather than at the whole form.
       setOcrFields(new Set(Object.keys(picked).filter((k) => picked[k] != null)));
