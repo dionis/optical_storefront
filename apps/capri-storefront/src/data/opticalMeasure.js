@@ -130,8 +130,19 @@ export function pdFromLandmarks(L, W, H) {
   const midOff = (bridgeMid * 2 + canthiMid) / 3;
 
   const pdTotal = axLen * mmPerPx;
-  let pdRight = Math.abs(proj(irisA) - midOff) * mmPerPx;
-  let pdLeft = Math.abs(proj(irisB) - midOff) * mmPerPx;
+  // Reparto monocular ANCLADO al PD binocular (lo más fiable: medido pupila a
+  // pupila sobre el eje inter-iris). Proyectamos cada iris respecto a la línea
+  // media nasal y repartimos el binocular en esa proporción, de modo que
+  // OD + OS == PD binocular SIEMPRE (consistencia de laboratorio), en lugar de
+  // dos medidas sueltas que podían no sumar el total.
+  let pdRight = null, pdLeft = null;
+  const offR = Math.abs(proj(irisA) - midOff);
+  const offL = Math.abs(proj(irisB) - midOff);
+  const offSum = offR + offL;
+  if (offSum > 1e-6) {
+    pdRight = pdTotal * (offR / offSum);
+    pdLeft = pdTotal * (offL / offSum);
+  }
 
   const rollRaw = Math.abs(Math.atan2(irisB.y - irisA.y, irisB.x - irisA.x) * 180 / Math.PI);
   const roll = Math.min(rollRaw, Math.abs(180 - rollRaw));

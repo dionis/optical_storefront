@@ -6102,3 +6102,44 @@ button.card-genre {
   /* Ficha compacta para que quepa completa en su mitad. */
   .tryon-studio:not(.tryon-result) .ts2-frame .fs-foot { padding-top: 8px; }
 }
+
+/* ===================================================================
+   ETAPA 75 - Pedido del cliente:
+   1) RECETA (responsive): el formulario de valores salía "muy estrecho y
+      extraño" en movil porque OD/OS iban en DOS columnas apretadas y cada
+      ojo apilaba Esfera/Cilindro/Eje en vertical. En pantallas angostas
+      ahora cada ojo ocupa TODA la fila (una sola columna OD sobre OI) y sus
+      tres valores (Esfera · Cilindro · Eje) van EN LINEA, con aire. Se lee
+      claro y deja de verse comprimido.
+   =================================================================== */
+@media (max-width: 600px) {
+  /* OD sobre OI, cada ojo a lo ancho */
+  .zlx-pop-rx .zlx-rx-grid { grid-template-columns: 1fr; gap: 10px; margin: 8px 0 12px; }
+
+  /* Tarjeta de ojo: cabecera a todo el ancho y debajo los 3 steppers en fila */
+  .zlx-pop-rx .zlx-rx-eye {
+    flex-direction: row; flex-wrap: wrap; align-items: flex-start;
+    justify-content: center; gap: 10px 12px; padding: 11px 10px 13px;
+  }
+  .zlx-pop-rx .zlx-rx-eye-h {
+    flex: 1 1 100%; width: 100%; text-align: left; margin-bottom: 2px;
+    font-size: 13.5px; letter-spacing: .01em;
+  }
+  /* Esfera (hijo directo) + Cilindro/Eje (dentro de .zlx-rx-fields) en una fila */
+  .zlx-pop-rx .zlx-rx-eye > .zlx-stepper { margin: 0; }
+  .zlx-pop-rx .zlx-rx-fields {
+    flex-direction: row; width: auto; margin-top: 0; gap: 12px; align-items: flex-start;
+  }
+  /* Controles con ancho cómodo (tres caben en la fila; si no, envuelven) */
+  .zlx-pop-rx .zlx-stepper { gap: 4px; }
+  .zlx-pop-rx .zlx-stepper-ctl { width: 86px; }
+  .zlx-pop-rx .zlx-stepper-lbl { font-size: 10.5px; }
+}
+
+/* Teléfonos estrechos (≤360px): controles un pelín más compactos para que los
+   tres valores sigan cabiendo en la fila sin saltar de línea. */
+@media (max-width: 360px) {
+  .zlx-pop-rx .zlx-rx-eye { gap: 8px 8px; padding: 10px 7px 12px; }
+  .zlx-pop-rx .zlx-rx-fields { gap: 8px; }
+  .zlx-pop-rx .zlx-stepper-ctl { width: 80px; }
+}

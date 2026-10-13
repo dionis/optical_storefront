@@ -36,6 +36,11 @@ import {
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.6";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const HOLD_FRAMES = 90; // ~3 s sosteniendo la pose antes de capturar (más tiempo para colocarse)
+// Ventana de gracia (ms): si la pose se pierde un instante (micromovimiento,
+// parpadeo de detección) NO reiniciamos la cuenta atrás; la congelamos y, si se
+// recupera dentro de esta ventana, continúa donde iba. Evita que "se desenfoque"
+// o se reinicie el conteo con cualquier pequeño movimiento al ir a tomar la foto.
+const HOLD_GRACE_MS = 900;
 const CAPDBG = typeof location !== "undefined" && location.search.includes("capdbg");
 
 /* Sonido de obturador de cámara (WebAudio, sin assets externos). Al capturar cada
@@ -182,6 +187,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const [introIdx, setIntroIdx] = useState(0);
   const capStageRef = useRef("intro");
   const holdStartRef = useRef(0);                       // ms en que empezó a sostener la pose
+  const lostStartRef = useRef(0);                       // ms en que se perdió la pose (ventana de gracia anti-reinicio)
   const frontInput = useRef(null);
   const sideInput = useRef(null);
   // Detección de espejuelos en la captura (para pedir que se los quiten).
@@ -194,7 +200,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const capturedPdRef = useRef(null);   // { pd, pdRight, pdLeft } mediana de la toma
 
   useEffect(() => {
-    phaseRef.current = phase; holdRef.current = 0; holdStartRef.current = 0; setCount(0);
+    phaseRef.current = phase; holdRef.current = 0; holdStartRef.current = 0; lostStartRef.current = 0; setCount(0);
     if (phase === "front") pdSamplesRef.current = [];   // nueva toma: reinicia muestras de PD
     // Cada paso de captura arranca con su introducción guiada (mensajes) antes de
     // la cámara en vivo.
@@ -259,6 +265,17 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         });
         if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
         streamRef.current = stream;
+        // Enfoque/exposición CONTINUOS (best-effort): muchas webcams "cazan" el foco
+        // y la toma puede salir borrosa. Si el navegador lo admite, pedimos modo
+        // continuo para que la imagen se mantenga nítida durante la captura.
+        try {
+          const track = stream.getVideoTracks?.()[0];
+          const caps = track?.getCapabilities?.() || {};
+          const adv = [];
+          if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
+          if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
+          if (adv.length) track.applyConstraints({ advanced: adv }).catch(() => {});
+        } catch { /* no soportado: se ignora */ }
         if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
         setCamStatus("ready");
         // Detección de género (best-effort) para elegir el set de fotos de EJEMPLO.
@@ -397,8 +414,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const faceW = Math.abs(Lf.x - R.x);
     const denom = (Lf.x - R.x) || 1e-6;
     const r = (nose.x - R.x) / denom;             // 0.5 ≈ de frente; lejos de 0.5 ≈ girado
-    const centered = r > 0.38 && r < 0.62;
-    const turned = r < 0.37 || r > 0.63;
+    // Tolerancia de pose más holgada: una vez que ya estamos contando (holdStart
+    // activo) ampliamos aún más el margen (histéresis) para que el conteo no se
+    // caiga por un ligero movimiento justo antes de disparar.
+    const holding = holdStartRef.current > 0;
+    const cLo = holding ? 0.32 : 0.35, cHi = holding ? 0.68 : 0.65;
+    const centered = r > cLo && r < cHi;
+    const turned = r < (holding ? 0.40 : 0.37) || r > (holding ? 0.60 : 0.63);
 
     let ok = false, msg = "";
     if (ph === "front") {
@@ -422,13 +444,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           if (pdSamplesRef.current.length > 150) pdSamplesRef.current.shift();
         }
       }
+      // Si veníamos de una pérdida BREVE de pose (dentro de la gracia), descontamos
+      // ese tiempo del arranque para que la cuenta atrás continúe donde iba, sin
+      // saltos ni reinicios.
+      if (lostStartRef.current && holdStartRef.current) {
+        holdStartRef.current += performance.now() - lostStartRef.current;
+      }
+      lostStartRef.current = 0;
       // Conteo de 5 s por tiempo real (no por fotogramas), robusto a los FPS.
       if (!holdStartRef.current) holdStartRef.current = performance.now();
       const elapsed = performance.now() - holdStartRef.current;
       setCount(Math.max(1, Math.ceil((5000 - elapsed) / 1000)));
       if (elapsed >= 5000) { capture(ph); }
+    } else if (holdStartRef.current) {
+      // La pose se perdió MIENTRAS contábamos: ventana de gracia. No reiniciamos la
+      // cuenta (la dejamos congelada); solo si la pérdida se prolonga más de
+      // HOLD_GRACE_MS damos la toma por caída y volvemos a empezar. Esto evita que
+      // un micromovimiento justo antes del disparo "desenfoque"/reinicie el conteo.
+      if (!lostStartRef.current) lostStartRef.current = performance.now();
+      if (performance.now() - lostStartRef.current >= HOLD_GRACE_MS) {
+        holdStartRef.current = 0; lostStartRef.current = 0; setCount(0);
+      }
     } else {
-      holdStartRef.current = 0; setCount(0);
+      holdStartRef.current = 0; lostStartRef.current = 0; setCount(0);
     }
   }
 
@@ -936,8 +974,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const p = typeof location !== "undefined" && new URLSearchParams(location.search).get("vmdemo");
     if (!p) return;
     if (p === "loading") { setMState("loading"); setMProg(37000); return; }
-    setMData({ pd: 63, pdRight: 31.5, pdLeft: 31.5, corridor: 22, progressive: 22, bifocal: null,
-      suitable: true, warnings: [], frontImage: null, profileImage: null });
+    setMData({ pd: 63, pdRight: 31.5, pdLeft: 31.5, corridor: 22, progressive: 22, bifocal: 17,
+      suitable: true, minRequired: 18, warnings: [], frontImage: null, profileImage: null,
+      measuredBy: "device",
+      quality: { level: "high", score: 0.9, estErrorMm: 1.2, reasons: [] },
+      fit: { level: "good", faceWidthMM: 138, frameFrontMM: 140, diffMM: 2 } });
     setMState("result");
   }, []);
 
@@ -1221,22 +1262,35 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // Panel de dimensiones (esquina inferior derecha): mismo lenguaje visual que la
   // ficha "Información de la montura" — encabezado azul marino + iconos por medida.
   function dimsPanel() {
-    const sub = (mData?.pdRight != null || mData?.pdLeft != null)
-      ? `OD ${mmv(mData?.pdRight)} · OS ${mmv(mData?.pdLeft)}` : null;
     const q = mData?.quality;
     const svg = (d) => (
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
     );
     const icPd = svg(<><circle cx="12" cy="12" r="3" /><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /></>);
+    const icEye = svg(<><circle cx="12" cy="12" r="2.3" /><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z" /></>);
     const icCorr = svg(<><path d="M12 3v18" /><path d="M8 6l4-3 4 3" /><path d="M8 18l4 3 4-3" /></>);
     const icFrame = svg(<><circle cx="6" cy="14" r="4" /><circle cx="18" cy="14" r="4" /><path d="M10 14a2 2 0 0 1 4 0M2.5 11l3-2.5M21.5 11l-3-2.5" /></>);
+    const icFit = svg(<><path d="M5 11a7 7 0 0 1 14 0c0 4-3 7.5-7 8.5C8 18.5 5 15 5 11z" /><path d="M9 11h.01M15 11h.01M9.5 14.5c.8.6 1.6.9 2.5.9s1.7-.3 2.5-.9" /></>);
     const icConf = svg(<><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>);
+    // TODAS las medidas calculadas, en la propia vista frontal del resultado:
+    // DIP binocular, DIP monocular OD/OS, altura de corredor (con aptitud para
+    // progresivos), altura bifocal si aplica, encaje de la montura y confianza.
+    // Dimensiones de la montura ya formateadas (añaden "mm" solo si es numérico),
+    // igual que en la ficha del espejuelo — evita duplicar unidades.
+    const frameDims = [eyeD, bridgeD, templeD].filter(Boolean).join(" · ");
     const rows = [
-      { ic: icPd, k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `${sub ? sub + " · " : ""}±${q.estErrorMm} mm` : sub },
-      { ic: icCorr, k: t("vm.corridor"), v: mmv(mData?.corridor) },
-      { ic: icFrame, k: `${t("fs.lensWidth")} · ${t("fs.bridge")}`, v: `${eyeD || "—"} · ${bridgeD || "—"}` },
-      ...(q ? [{ ic: icConf, k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`) }] : []),
+      { ic: icPd, k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `±${q.estErrorMm} mm` : null },
     ];
+    if (mData?.pdRight != null) rows.push({ ic: icEye, k: t("vm.od"), v: mmv(mData.pdRight) });
+    if (mData?.pdLeft != null) rows.push({ ic: icEye, k: t("vm.os"), v: mmv(mData.pdLeft) });
+    rows.push({
+      ic: icCorr, k: t("vm.corridor"), v: mmv(mData?.corridor),
+      sub: mData?.suitable == null ? null : (mData.suitable ? t("vm.suitOk") : t("vm.suitNo")),
+    });
+    if (mData?.bifocal != null) rows.push({ ic: icCorr, k: t("vm.bifocal"), v: mmv(mData.bifocal) });
+    if (frameDims) rows.push({ ic: icFrame, k: `${t("fs.lensWidth")} · ${t("fs.bridge")} · ${t("fs.temple")}`, v: frameDims });
+    if (mData?.fit?.level) rows.push({ ic: icFit, k: t("vm.fit.label"), v: t(`vm.fit.short.${mData.fit.level}`) });
+    if (q) rows.push({ ic: icConf, k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`), sub: q.estErrorMm != null ? `${t("vm.conf.pm")} ±${q.estErrorMm} mm` : null });
     return (
       <aside className="vm-dims" aria-label={t("vm.dims.title")}>
         <div className="vm-dims-h">
