@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
@@ -28,6 +28,7 @@ function hashSlug(s) { let h = 0; const str = String(s || ""); for (let i = 0; i
 //    "Añadir al carrito". Primero invitamos a verse la montura, luego a comprar.
 export default function ProductCard({ product }) {
   const [active, setActive] = useState(0);
+  const navigate = useNavigate();
   const tryOnOpenKey = useTryOnOpenKey();
   const tryOn = tryOnOpenKey !== null && tryOnOpenKey === productTryOnKey(product);
   const [added, setAdded] = useState(false);
@@ -129,7 +130,28 @@ export default function ProductCard({ product }) {
         </Link>
       </div>
       {TRY_ON_ENABLED && tryOn && (
-        <TryOn product={product} colorIdx={active} onClose={closeTryOn} />
+        <TryOn product={product} colorIdx={active} onClose={closeTryOn}
+               onAddPrescription={(payload) => {
+                 // "Añadir receta" desde el probador abierto en una CARD del catálogo:
+                 // antes NO se pasaba este callback, así que el botón ponía "Añadida"
+                 // y NO abría la ventana de la receta (bug reportado). Igual que en la
+                 // ficha (PDP): cerramos el probador y vamos al flujo de receta
+                 // (/recetas/:slug) con el lector (OCR) abierto y las medidas del
+                 // probador pre-rellenadas. Solo viajan datos LIGEROS y serializables
+                 // (números + para quién); la imagen generada ya quedó guardada por
+                 // producto en localStorage y LensProcess la recupera de ahí (evita el
+                 // DataCloneError de history.pushState con imágenes reales).
+                 closeTryOn();
+                 const p = payload || {};
+                 const light = {
+                   productSku: p.productSku, colorName: p.colorName, colorIndex: p.colorIndex,
+                   forWhom: p.forWhom, otherName: p.otherName,
+                   pd: p.pd, pdRight: p.pdRight, pdLeft: p.pdLeft,
+                   corridor: p.corridor, segHeight: p.segHeight,
+                   bifocal: p.bifocal, suitable: p.suitable,
+                 };
+                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
+               }} />
       )}
 
       <div className="card-body">
