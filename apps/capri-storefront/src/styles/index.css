@@ -6729,3 +6729,22 @@ button.card-genre {
 
 /* Material/genero de vuelta en la ficha (revision) */
 .vm-review-2col .ts2-fr-badges { display: flex; }
+
+
+/* ===================================================================
+   ETAPA 87 - La barra "Atras / X" (probador y receta) se ALINEA con el
+   contenido del header: "Atras" debajo del LOGO (izquierda) y la "X" debajo
+   del CARRITO (derecha), no pegadas al borde del viewport. El fondo de la
+   barra sigue a todo el ancho; solo su contenido se alinea al contenedor de
+   1280px centrado del header (.header-main: padding 22px escritorio / 16px movil).
+   =================================================================== */
+.tryon-pagebar, .zlx-page .zlx-page-bar {
+  padding-left: calc(max(0px, (100% - 1280px) / 2) + 22px);
+  padding-right: calc(max(0px, (100% - 1280px) / 2) + 22px);
+}
+@media (max-width: 860px) {
+  .tryon-pagebar, .zlx-page .zlx-page-bar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
