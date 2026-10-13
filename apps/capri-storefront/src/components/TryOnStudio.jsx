@@ -148,8 +148,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const { t, tv, lang } = useLang();
   // Confirmación tras "Añadir receta" ("idle" | "added").
   const [addedState, setAddedState] = useState("idle");
-  // Imagen del resultado ampliada (lightbox): { src, which } | null.
+  // Imagen ampliada (lightbox): { src, kind, which?, name? } | null.
   const [zoom, setZoom] = useState(null);
+  // Zoom/paneo dentro del lightbox (rueda del ratón + pellizco en táctil).
+  const [zt, setZt] = useState({ scale: 1, x: 0, y: 0 });
+  const zDragRef = useRef(null);
+  const zPinchRef = useRef(null);
   const [ci, setCi] = useState(colorIdx);
   const [now, setNow] = useState(() => new Date());
   const [headerH, setHeaderH] = useState(0);
@@ -231,8 +235,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return () => clearInterval(id);
   }, []);
 
-  // Deja ver el menú superior de la web: el probador arranca bajo el header sticky
-  // y bloquea el scroll del fondo mientras está abierto.
+  // El probador es una capa a PANTALLA COMPLETA (nada de la web debe verse ni
+  // moverse por detrás). Bloqueo robusto del scroll del fondo (html + body)
+  // mientras está abierto; el scroll interno del probador no encadena al fondo.
   useEffect(() => {
     const measure = () => {
       const h = document.querySelector(".header");
@@ -240,10 +245,64 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     };
     measure();
     window.addEventListener("resize", measure);
-    const prevOv = document.body.style.overflow;
+    const html = document.documentElement;
+    const prevBodyOv = document.body.style.overflow;
+    const prevHtmlOv = html.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("resize", measure); document.body.style.overflow = prevOv; };
+    html.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("resize", measure);
+      document.body.style.overflow = prevBodyOv;
+      html.style.overflow = prevHtmlOv;
+    };
   }, []);
+
+  // Lightbox: al abrir se resetea el zoom; se cierra con Escape (además del ✕ y
+  // del clic en el fondo). Evita quedarse "atrapado" en la imagen ampliada.
+  useEffect(() => {
+    if (!zoom) return;
+    setZt({ scale: 1, x: 0, y: 0 });
+    const onKey = (e) => { if (e.key === "Escape") setZoom(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoom]);
+
+  // Zoom con la RUEDA del ratón (hacia arriba acerca). Al volver a 1x se recentra.
+  function zoomWheel(e) {
+    try { e.preventDefault(); } catch { /* listener pasivo: el fondo ya está bloqueado */ }
+    setZt((p) => {
+      const ns = Math.min(5, Math.max(1, p.scale - e.deltaY * 0.0016 * p.scale));
+      return ns <= 1.001 ? { scale: 1, x: 0, y: 0 } : { ...p, scale: ns };
+    });
+  }
+  // Paneo (arrastrar) cuando está ampliada.
+  function zoomPointerDown(e) {
+    if (zt.scale <= 1) return;
+    zDragRef.current = { x: e.clientX, y: e.clientY, ox: zt.x, oy: zt.y };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function zoomPointerMove(e) {
+    const d = zDragRef.current; if (!d) return;
+    setZt((p) => ({ ...p, x: d.ox + (e.clientX - d.x), y: d.oy + (e.clientY - d.y) }));
+  }
+  function zoomPointerUp() { zDragRef.current = null; }
+  // Pellizco con dos dedos en táctil.
+  function zoomTouchStart(e) {
+    if (e.touches.length === 2) {
+      const [a, b] = e.touches;
+      zPinchRef.current = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, s: zt.scale };
+    }
+  }
+  function zoomTouchMove(e) {
+    if (e.touches.length === 2 && zPinchRef.current) {
+      try { e.preventDefault(); } catch { /* pasivo */ }
+      const [a, b] = e.touches;
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const ns = Math.min(5, Math.max(1, zPinchRef.current.s * (dist / zPinchRef.current.d)));
+      setZt((p) => ns <= 1.001 ? { scale: 1, x: 0, y: 0 } : { ...p, scale: ns });
+    }
+  }
+  function zoomTouchEnd(e) { if (e.touches.length < 2) zPinchRef.current = null; }
 
   // Adjunta el stream al <video> activo (se remonta al cambiar de caja)
   const attachVideo = useCallback((node) => {
@@ -1498,7 +1557,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
   return createPortal(
     <div className={`tryon tryon-studio ${(mState === "loading" || mState === "error") ? "tryon-busy" : ""} ${mState === "result" ? "tryon-result" : ""}`}
-         role="dialog" aria-modal="true" style={{ top: headerH || 0 }}>
+         role="dialog" aria-modal="true" style={{ top: 0 }}>
       <div className="tryon-bar">
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
       </div>
@@ -1583,7 +1642,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                     onClick={() => setZoom(null)}>×</button>
           </div>
           <img className="vm-zoom-img" src={zoom.src} alt=""
-               onClick={(e) => e.stopPropagation()} />
+               style={{ transform: `translate(${zt.x}px, ${zt.y}px) scale(${zt.scale})`,
+                        cursor: zt.scale > 1 ? "grab" : "zoom-in", touchAction: "none" }}
+               onClick={(e) => e.stopPropagation()}
+               onWheel={zoomWheel}
+               onPointerDown={zoomPointerDown} onPointerMove={zoomPointerMove}
+               onPointerUp={zoomPointerUp} onPointerLeave={zoomPointerUp}
+               onTouchStart={zoomTouchStart} onTouchMove={zoomTouchMove} onTouchEnd={zoomTouchEnd}
+               draggable={false} />
         </div>
       )}
 
@@ -1592,7 +1658,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       {(mState === "loading" || mState === "error") && (
         <MeasureReport
           phase={mState} data={mData} frontFallback={frontImg} sideFallback={sideImg}
-          error={mError} errorCode={mCode} topOffset={headerH || 0} progressMs={mProg}
+          error={mError} errorCode={mCode} topOffset={0} progressMs={mProg}
           slow={Boolean(mProgress?.slow)} notifyState={notifyState} notifyError={notifyError}
           onNotifySubmit={handleNotifySubmit}
           product={product} color={color}
