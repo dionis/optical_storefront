@@ -34,6 +34,7 @@ import GlassesLoader from "../components/GlassesLoader.jsx";
 // y tomar sus medidas sin salir del flujo de compra.
 import TryOn from "../components/TryOnSwitch.jsx";
 import { TRY_ON_ENABLED } from "../config/features.js";
+import { getMeasureResult } from "../data/tryOnState.js";
 
 // ── LensGraphics wiring ─────────────────────────────────────────────────────
 // Map each catalog option to its LensGraphics icon and to the educational
@@ -475,7 +476,12 @@ export default function LensProcess() {
       seg_height: oneDp(m.segHeight ?? m.corridor) || r.seg_height,
     }));
     if (hasDual) setPdMode("dual");
+    // La imagen generada se adjunta a la orden. Cuando venimos de la FICHA (PDP) NO
+    // viaja en el state de navegación (podía ser varios MB a tamaño completo y hacía
+    // fallar history.pushState con fotos reales, dejando "Añadida" sin abrir la
+    // ventana); se recupera del guardado por producto (localStorage).
     if (m.frontImage) setTryOnImage(m.frontImage);
+    else { try { const saved = getMeasureResult(product); if (saved?.data?.frontImage) setTryOnImage(saved.data.frontImage); } catch { /* nada */ } }
     if (m.forWhom === "me" || m.forWhom === "other") {
       setPatientFor(m.forWhom);
       setPatientName(m.forWhom === "other" ? (m.otherName || "") : "");

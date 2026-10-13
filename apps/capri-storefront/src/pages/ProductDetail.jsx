@@ -567,7 +567,21 @@ export default function ProductDetail() {
                  // receta (/recetas/:slug) y abre el lector de receta (OCR) con las
                  // medidas del probador ya pre-rellenadas.
                  setTryOnSlug(null);
-                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: payload } });
+                 // IMPORTANTE: el state de navegación viaja por history.pushState, que
+                 // con imágenes REALES a tamaño completo (varios MB, o valores no
+                 // serializables) podía fallar y dejar "Añadida a tu receta" SIN abrir
+                 // la ventana. Enviamos SOLO datos ligeros y serializables (números +
+                 // para quién); la imagen generada ya quedó guardada por producto en
+                 // localStorage y LensProcess la recupera de ahí para adjuntarla.
+                 const p = payload || {};
+                 const light = {
+                   productSku: p.productSku, colorName: p.colorName, colorIndex: p.colorIndex,
+                   forWhom: p.forWhom, otherName: p.otherName,
+                   pd: p.pd, pdRight: p.pdRight, pdLeft: p.pdLeft,
+                   corridor: p.corridor, segHeight: p.segHeight,
+                   bifocal: p.bifocal, suitable: p.suitable,
+                 };
+                 navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
                }} />
       )}
     </div>
