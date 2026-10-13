@@ -6465,3 +6465,49 @@ button.card-genre {
 /* El DIP sobre la foto es un pie de dato (caption), no un boton */
 .vm-rbadge { left: 0; right: 0; bottom: 0; border: 0; border-radius: 0; padding: 9px 14px; cursor: default;
   background: linear-gradient(180deg, rgba(9,18,40,0), rgba(9,18,40,.92)); }
+
+/* ===================================================================
+   ETAPA 81 - El PROBADOR se ve como una PAGINA (pedido del cliente):
+   Header real arriba + Footer real abajo, contenido en medio, con scroll de
+   pagina. Sigue cubriendo la web (sin fondo detras, sin scroll del fondo),
+   pero ahora con header y footer como el resto del sitio.
+   =================================================================== */
+.tryon.tryon-studio { overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+/* Header real pegajoso dentro del probador */
+.tryon.tryon-studio > .header { position: sticky; top: 0; flex: 0 0 auto; }
+/* El contenido ya NO scrollea por su cuenta: scrollea toda la pagina */
+.tryon.tryon-studio .tryon-studio-grid.ts2wrap { flex: 0 0 auto; overflow: visible; height: auto; min-height: 0; }
+.tryon.tryon-studio > .footer { flex: 0 0 auto; }
+
+/* Barra fina de "volver / cerrar" bajo el header */
+.tryon-pagebar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #ececea; }
+.tryon-pagebar .tryon-back { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none;
+  cursor: pointer; color: var(--cuba-blue, #01326b); font-weight: 800; font-size: 14px; padding: 4px 6px; border-radius: 8px; }
+.tryon-pagebar .tryon-back:hover { color: var(--cuba-red, #d2463c); background: #f2f5fb; }
+.tryon-pagebar .tryon-x { background: #f7f6f3; color: #17191f; border: 1px solid #ececea; width: 36px; height: 36px;
+  border-radius: 999px; font-size: 22px; line-height: 1; cursor: pointer; }
+.tryon-pagebar .tryon-x:hover { background: #ececea; }
+
+/* Los paneles y el menu lateral del header deben salir POR ENCIMA del probador */
+.drawer, .drawer-backdrop, .panel-backdrop, .side-panel { z-index: 320 !important; }
+
+/* Captura (movil): ya no se fuerza 50/50 del viewport; camara y ficha fluyen y
+   la pagina scrollea (asi se ve el footer). */
+@media (max-width: 900px) {
+  .tryon-studio:not(.tryon-result) .ts2wrap { overflow: visible; }
+  .tryon-studio:not(.tryon-result) .ts2 { height: auto; }
+  .tryon-studio:not(.tryon-result) .ts2-top { flex: 0 0 auto; overflow: visible; }
+  .tryon-studio:not(.tryon-result) .ts2-frame { flex: 0 0 auto; overflow: visible; }
+}
+
+/* Resultado (movil): 40/20/40 por proporcion, sin forzar la altura exacta del
+   viewport (deja espacio para el footer debajo). */
+@media (max-width: 939px) {
+  .vm-result.vm-result-grid { height: auto; grid-template-rows: 44vh auto 44vh; }
+}
+
+/* ETAPA 81b - "Para otra persona": el campo Nombre baja a su propia linea y a
+   todo el ancho, para que no se salga en la columna estrecha de la revision. */
+.vm-who { flex-wrap: wrap; }
+.vm-who-name { flex: 1 1 100%; min-width: 0; width: 100%; }

@@ -4,6 +4,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import { IconMaterial, IconMeasures, IconGender, IconCamera, IconCheck, Icon360, IconGlasses as IconGlassesUi } from "./UiIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
+import Header from "./Header.jsx";
+import Footer from "./Footer.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
 import { measureFromFrontal, pdFromLandmarks } from "../data/opticalMeasure.js";
@@ -1573,7 +1575,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   return createPortal(
     <div className={`tryon tryon-studio ${(mState === "loading" || mState === "error") ? "tryon-busy" : ""} ${mState === "result" ? "tryon-result" : ""}`}
          role="dialog" aria-modal="true" style={{ top: 0 }}>
-      <div className="tryon-bar">
+      {/* Header real del sitio (el probador se ve como una página: header arriba,
+          contenido en medio, footer abajo; sin fondo detrás). */}
+      <Header />
+      <div className="tryon-pagebar">
+        <button type="button" className="tryon-back" onClick={onClose}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          {t("lens.back")}
+        </button>
         <button className="tryon-x" onClick={onClose} aria-label={t("tryon.close")}>×</button>
       </div>
 
@@ -1634,6 +1643,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           {mState !== "result" && !(frontImg && sideImg) && frameAside()}
         </div>
       </div>
+
+      {/* Footer real del sitio, al final del probador (se ve como una página). */}
+      <Footer />
 
       {/* La acción "Calcular mis medidas" vive ahora DENTRO de la revisión
           (captureReview), justo debajo de las fotos, para que en móvil siempre sea
