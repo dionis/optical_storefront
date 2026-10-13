@@ -1,5 +1,8 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
+import Header from "../components/Header.jsx";
+import Footer from "../components/Footer.jsx";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
 import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
@@ -320,12 +323,50 @@ function ZlxStepper({ value, options, onChange, label, withEmpty, flag = "" }) {
 // ── popover shell (requirement 3): floats OVER the stage, frame stays visible ─
 // `onBack` (optional) shows a ← button so material/treatments feel like steps of
 // the SAME window (the customer never feels they left the popup).
-function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, children }) {
+function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, fullpage, children }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // En modo PÁGINA: bloqueamos el scroll del fondo (como el probador), ya que el
+  // paso de receta cubre toda la pantalla con su propio scroll.
+  useEffect(() => {
+    if (!fullpage) return;
+    const b = document.body.style.overflow, h = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden"; document.documentElement.style.overflow = "hidden";
+    return () => { document.body.style.overflow = b; document.documentElement.style.overflow = h; };
+  }, [fullpage]);
+
+  // PÁGINA completa (mismo formato que el probador): header del sitio arriba,
+  // barra "Volver / ✕", el contenido (con los iconos/infografía) en medio y el
+  // footer del sitio abajo. Reutiliza TODO el contenido del popup (children).
+  if (fullpage) {
+    return createPortal(
+      <div className={`zlx-page ${className || ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <Header />
+        <div className="tryon-pagebar zlx-page-bar">
+          <button type="button" className="tryon-back" onClick={onBack || onClose} aria-label={backLabel}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+            {backLabel}
+          </button>
+          <button type="button" className="tryon-x" onClick={onClose} aria-label={closeLabel}>×</button>
+        </div>
+        <div className="zlx-page-scroll">
+          <div className="zlx-page-inner">
+            <div className="zlx-page-head">
+              <b>{icon} {title}</b>
+              {subtitle && <span className="zlx-page-sub">{subtitle}</span>}
+            </div>
+            <div className="zlx-pop-body zlx-page-body">{children}</div>
+          </div>
+        </div>
+        <Footer />
+      </div>,
+      document.body
+    );
+  }
+
   return (
     <>
       {/* transparent catcher: closes on outside click without hiding the frame */}
@@ -1213,7 +1254,7 @@ export default function LensProcess() {
 
       {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
       {pop === "rx" && (
-        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
+        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {rxStage === "pick" && USE_MEDUSA && (
                 <div className="zlx-rx-upload">

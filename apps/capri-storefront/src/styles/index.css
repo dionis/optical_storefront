@@ -6577,3 +6577,44 @@ button.card-genre {
   .vm-result-grid .vm-a-img img { object-position: center 22%; }
   .vm-result-grid .vm-a-actions { gap: 6px; }
 }
+
+/* ===================================================================
+   ETAPA 83 - "Anadir receta" como PAGINA completa (mismo formato que el
+   probador): header del sitio arriba (pegajoso) + barra "Volver / X" +
+   el contenido con los iconos/infografia (tipos de lente, subir receta) +
+   footer del sitio abajo. Reutiliza TODO el contenido del popup de receta.
+   =================================================================== */
+.zlx-page { position: fixed; inset: 0; width: auto; max-width: none; z-index: 250;
+  background: #f4f6fb; display: flex; flex-direction: column; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; }
+.zlx-page > .header { position: sticky; top: 0; flex: 0 0 auto; z-index: 60; }
+.zlx-page .zlx-page-bar { flex: 0 0 auto; }
+.zlx-page .zlx-page-scroll { flex: 1 0 auto; width: 100%; }
+.zlx-page .zlx-page-inner { width: 100%; max-width: 720px; margin: 0 auto; padding: 16px 16px 40px; }
+.zlx-page > .footer { flex: 0 0 auto; }
+
+/* Cabecera del paso (titulo + subtitulo) dentro de la pagina */
+.zlx-page .zlx-page-head { display: flex; flex-direction: column; gap: 2px; margin: 4px 2px 12px; }
+.zlx-page .zlx-page-head > b { display: flex; align-items: center; gap: 9px;
+  font-size: 20px; font-weight: 800; color: var(--cuba-blue, #01326b); }
+.zlx-page .zlx-page-head .zlx-ic { width: 24px; height: 24px; flex: 0 0 auto; }
+.zlx-page .zlx-page-sub { font-size: 13.5px; color: #5b6472; padding-left: 33px; }
+
+/* El cuerpo reutiliza las tarjetas/iconos ya existentes; aqui solo soltamos el
+   alto maximo del popup para que fluya como pagina. */
+.zlx-page .zlx-pop-body.zlx-page-body { max-height: none; overflow: visible; padding: 0; }
+
+/* Paneles/menu lateral del header POR ENCIMA de la pagina de receta */
+.zlx-page ~ .drawer, .zlx-page ~ .drawer-backdrop,
+.zlx-page ~ .panel-backdrop, .zlx-page ~ .side-panel { z-index: 320 !important; }
+
+/* En escritorio el contenido de receta puede ensancharse un poco mas comodo */
+@media (min-width: 940px) {
+  .zlx-page .zlx-page-inner { max-width: 760px; padding-top: 22px; }
+}
+
+/* Movil: el header del sitio es position:fixed (sale del flujo), asi que dejamos
+   hueco arriba para que la barra "Volver / X" no quede tapada por el header. */
+@media (max-width: 860px) {
+  .zlx-page { padding-top: 54px; }
+}
