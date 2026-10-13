@@ -88,6 +88,10 @@ const IC_ZOOM = (
 const IC_DOWN = (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
 );
+// Icono "ver medidas" (regla/lista) para el botón sobre la foto del resultado.
+const IC_MEAS = (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h12" /></svg>
+);
 
 /* Iconos pequeños de la lista de recomendaciones (misma familia de trazo que el
    resto del sitio: contorno, 2px, esquinas redondeadas). */
@@ -150,6 +154,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const [addedState, setAddedState] = useState("idle");
   // Imagen ampliada (lightbox): { src, kind, which?, name? } | null.
   const [zoom, setZoom] = useState(null);
+  // Popup de medidas (se abre con el botón sobre la foto del resultado, sobre todo
+  // en móvil, donde las medidas no van en línea).
+  const [showMeas, setShowMeas] = useState(false);
   // Zoom/paneo dentro del lightbox (rueda del ratón + pellizco en táctil).
   const [zt, setZt] = useState({ scale: 1, x: 0, y: 0 });
   const zDragRef = useRef(null);
@@ -266,6 +273,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [zoom]);
+
+  // Popup de medidas: cierra con Escape (además del ✕ y el fondo).
+  useEffect(() => {
+    if (!showMeas) return;
+    const onKey = (e) => { if (e.key === "Escape") setShowMeas(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showMeas]);
 
   // Zoom con la RUEDA del ratón (hacia arriba acerca). Al volver a 1x se recentra.
   function zoomWheel(e) {
@@ -1069,7 +1084,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (!p) return;
     if (p === "loading") { setMState("loading"); setMProg(37000); return; }
     setMData({ pd: 63, pdRight: 31.5, pdLeft: 31.5, corridor: 22, progressive: 22, bifocal: 17,
-      suitable: true, minRequired: 18, warnings: [], frontImage: null, profileImage: null,
+      suitable: true, minRequired: 18, warnings: [], frontImage: "/ejemplo-hombre-frontal.jpg", profileImage: "/ejemplo-hombre-lateral.jpg",
       measuredBy: "device",
       quality: { level: "high", score: 0.9, estErrorMm: 1.2, reasons: [] },
       fit: { level: "good", faceWidthMM: 138, frameFrontMM: 140, diffMM: 2 } });
@@ -1438,38 +1453,35 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const front = mData?.frontImage || frontImg;
     const side = mData?.profileImage || sideImg;
     return (
-      <div className="vm-result vm-result-2col">
-        {/* CONTENEDOR 1 (izquierda): imagen frontal. CONTENEDOR 2 (derecha):
-            dividido 50/50 en Medidas calculadas (arriba) y ficha del espejuelo
-            (abajo). Reutiliza todo el alto sin espacios en blanco. En móvil baja
-            todo en una sola columna. */}
-        <div className="vm-result-cols">
-          <div className="vm-result-c1">
-            <figure className="vm-rfig">
-              <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
-              {front ? (
-                <>
-                  <img className="vm-rimg" src={front} alt={t("vm.front")}
-                       onClick={() => setZoom({ src: front, kind: "ai", which: "front" })} />
-                  <div className="vm-rtools">
-                    <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
-                            onClick={() => setZoom({ src: front, kind: "ai", which: "front" })}>{IC_ZOOM}</button>
-                    <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
-                            onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
-                  </div>
-                </>
-              ) : <div className="vm-noimg">📷</div>}
-              <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
-            </figure>
-          </div>
-          <div className="vm-result-c2">
-            <div className="vm-result-c2a vm-dims-inflow">{dimsPanel()}</div>
-            <div className="vm-result-c2b">{frameAside()}</div>
-          </div>
-        </div>
-        {/* Confianza + acciones, a lo ancho debajo de las dos columnas. */}
+      <div className="vm-result vm-result-grid">
+        {/* Imagen generada por la IA. Escritorio: izquierda. Móvil: arriba (40%).
+            Botón de MEDIDAS arriba-derecha (en móvil abre las medidas en popup). */}
+        <figure className="vm-rfig vm-a-img">
+          <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
+          {front ? (
+            <>
+              <img className="vm-rimg" src={front} alt={t("vm.front")}
+                   onClick={() => setZoom({ src: front, kind: "ai", which: "front" })} />
+              <div className="vm-rtools">
+                <button type="button" className="vm-rtool vm-rtool-meas" title={t("vm.dims.title")} aria-label={t("vm.dims.title")}
+                        onClick={() => setShowMeas(true)}>{IC_MEAS}</button>
+                <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
+                        onClick={() => setZoom({ src: front, kind: "ai", which: "front" })}>{IC_ZOOM}</button>
+                <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
+                        onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
+              </div>
+            </>
+          ) : <div className="vm-noimg">📷</div>}
+          <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
+        </figure>
+
+        {/* Medidas calculadas: en ESCRITORIO van en línea (arriba-derecha); en MÓVIL
+            se ocultan y se consultan con el botón de la foto (popup). */}
+        <div className="vm-a-dims vm-dims-inflow">{dimsPanel()}</div>
+
+        {/* Confianza (info, no botón) */}
         {mData?.quality && (
-          <div className={`vm-conf vm-conf-${mData.quality.level}`}>
+          <div className={`vm-conf vm-a-conf vm-conf-${mData.quality.level}`}>
             <span className="vm-conf-dot" aria-hidden="true" />
             <span className="vm-conf-tx">
               <b>{t(`vm.conf.${mData.quality.level}`)}</b>
@@ -1482,7 +1494,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             )}
           </div>
         )}
-        <div className="vm-result-actions">
+
+        {/* Acciones (botones). En móvil: justo debajo de la foto (20%). */}
+        <div className="vm-result-actions vm-a-actions">
           <button type="button" className="vm-remeasure" onClick={remeasure}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
             {t("vm.remeasure")}
@@ -1500,6 +1514,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             </button>
           )}
         </div>
+
+        {/* Ficha del espejuelo. Escritorio: derecha-abajo. Móvil: abajo (40%). */}
+        <div className="vm-a-frame">{frameAside()}</div>
       </div>
     );
   }
@@ -1514,15 +1531,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const icPd = svg(<><circle cx="12" cy="12" r="3" /><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /></>);
     const icEye = svg(<><circle cx="12" cy="12" r="2.3" /><path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z" /></>);
     const icCorr = svg(<><path d="M12 3v18" /><path d="M8 6l4-3 4 3" /><path d="M8 18l4 3 4-3" /></>);
-    const icFrame = svg(<><circle cx="6" cy="14" r="4" /><circle cx="18" cy="14" r="4" /><path d="M10 14a2 2 0 0 1 4 0M2.5 11l3-2.5M21.5 11l-3-2.5" /></>);
     const icFit = svg(<><path d="M5 11a7 7 0 0 1 14 0c0 4-3 7.5-7 8.5C8 18.5 5 15 5 11z" /><path d="M9 11h.01M15 11h.01M9.5 14.5c.8.6 1.6.9 2.5.9s1.7-.3 2.5-.9" /></>);
     const icConf = svg(<><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z" /><path d="M9 12l2 2 4-4" /></>);
     // TODAS las medidas calculadas, en la propia vista frontal del resultado:
     // DIP binocular, DIP monocular OD/OS, altura de corredor (con aptitud para
     // progresivos), altura bifocal si aplica, encaje de la montura y confianza.
-    // Dimensiones de la montura ya formateadas (añaden "mm" solo si es numérico),
-    // igual que en la ficha del espejuelo — evita duplicar unidades.
-    const frameDims = [eyeD, bridgeD, templeD].filter(Boolean).join(" · ");
+    // (La fila de dimensiones de la montura ya no va aquí: está en la ficha.)
     const rows = [
       { ic: icPd, k: t("vm.pd"), v: mmv(mData?.pd), sub: q?.estErrorMm != null ? `±${q.estErrorMm} mm` : null },
     ];
@@ -1533,7 +1547,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       sub: mData?.suitable == null ? null : (mData.suitable ? t("vm.suitOk") : t("vm.suitNo")),
     });
     if (mData?.bifocal != null) rows.push({ ic: icCorr, k: t("vm.bifocal"), v: mmv(mData.bifocal) });
-    if (frameDims) rows.push({ ic: icFrame, k: `${t("fs.lensWidth")} · ${t("fs.bridge")} · ${t("fs.temple")}`, v: frameDims });
+    // La fila del espejuelo (Ancho·Puente·Varilla) NO va aquí: ya aparece en la
+    // ficha del espejuelo, junto a la montura. (frameDims queda sin usar a propósito.)
     if (mData?.fit?.level) rows.push({ ic: icFit, k: t("vm.fit.label"), v: t(`vm.fit.short.${mData.fit.level}`) });
     if (q) rows.push({ ic: icConf, k: t("vm.conf.label"), v: t(`vm.conf.short.${q.level}`), sub: q.estErrorMm != null ? `${t("vm.conf.pm")} ±${q.estErrorMm} mm` : null });
     return (
@@ -1627,6 +1642,30 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       {/* (Las medidas calculadas se muestran EN EL FLUJO dentro de resultViews,
           debajo de las fotos — ver .vm-dims-inflow. Ya no hay tarjeta flotante
           para evitar solapamientos.) */}
+
+      {/* Popup de MEDIDAS: se abre con el botón sobre la foto del resultado. Muestra
+          las medidas calculadas (sin la fila del espejuelo, que ya está en la ficha)
+          + la confianza. Se cierra con ✕, clic fuera o Escape. */}
+      {showMeas && mState === "result" && (
+        <div className="vm-meas-pop" role="dialog" aria-modal="true" onClick={() => setShowMeas(false)}>
+          <div className="vm-meas-card" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="vm-meas-x" aria-label={t("tryon.close")}
+                    onClick={() => setShowMeas(false)}>×</button>
+            {dimsPanel()}
+            {mData?.quality && (
+              <div className={`vm-conf vm-conf-${mData.quality.level}`}>
+                <span className="vm-conf-dot" aria-hidden="true" />
+                <span className="vm-conf-tx">
+                  <b>{t(`vm.conf.${mData.quality.level}`)}</b>
+                  {mData.quality.estErrorMm != null && (
+                    <small>{t("vm.conf.pm")} ±{mData.quality.estErrorMm} mm</small>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Lightbox: foto del resultado ampliada, con opción de descargar. */}
       {zoom && (

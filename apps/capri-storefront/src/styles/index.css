@@ -2651,7 +2651,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 /* ══ Probador (studio): estilo CLARO con la paleta de la web + header visible ══ */
 .tryon.tryon-studio { position: fixed; left: 0; right: 0; bottom: 0; top: 0;
-  background: #fff; color: #17191f; z-index: 50; }
+  background: #fff; color: #17191f; z-index: 250; }
 .tryon-studio .tryon-bar { background: #fff; color: #17191f; border-bottom: 1px solid #ececea;
   padding: 8px 14px; min-height: 0; display: flex; justify-content: flex-end; align-items: center; }
 .tryon-studio .tryon-x { background: #f7f6f3; color: #17191f; border: 1px solid #ececea;
@@ -6364,3 +6364,104 @@ button.card-genre {
   .header-actions .hdr-ic { width: 20px; height: 20px; }
   .flag-ic { width: 19px; }
 }
+
+/* ===================================================================
+   ETAPA 80 - Resultado del probador (pedido del cliente):
+   - Escritorio: rejilla imagen (izq) | medidas (arriba-der) + ficha (abajo-der),
+     con la FOTO del espejuelo mas grande. Confianza + acciones a lo ancho.
+   - Movil: 40% imagen / 20% botones / 40% ficha, en UNA pantalla; las medidas
+     se consultan con el boton sobre la foto -> POPUP.
+   - Lightbox: la X siempre visible. Info (DIP, confianza) con estilo de LABEL,
+     distinto de los botones de accion.
+   =================================================================== */
+
+/* El boton de medidas sobre la foto: solo en movil (en escritorio van en linea) */
+.vm-rtool-meas { display: none; }
+.vm-rtool-meas svg { width: 18px; height: 18px; }
+
+/* --- Escritorio: rejilla con foto de marco GRANDE --- */
+@media (min-width: 940px) {
+  .vm-result.vm-result-grid {
+    display: grid; width: 918px; max-width: 100%; margin: 0 auto;
+    grid-template-columns: 440px 1fr;
+    grid-template-areas:
+      "img dims"
+      "img frame"
+      "conf conf"
+      "actions actions";
+    grid-template-rows: auto auto auto auto;
+    column-gap: 18px; row-gap: 12px; align-items: start;
+  }
+  .vm-result-grid .vm-a-img { grid-area: img; align-self: stretch; min-height: 0; }
+  .vm-result-grid .vm-a-dims { grid-area: dims; min-height: 0; }
+  .vm-result-grid .vm-a-frame { grid-area: frame; min-height: 300px; }
+  .vm-result-grid .vm-a-conf { grid-area: conf; }
+  .vm-result-grid .vm-a-actions { grid-area: actions; margin-top: 2px; justify-content: center; }
+
+  .vm-result-grid .vm-a-img.vm-rfig { margin: 0; height: 100%; border-radius: 16px; overflow: hidden; aspect-ratio: auto; }
+  .vm-result-grid .vm-a-img .vm-rimg,
+  .vm-result-grid .vm-a-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .vm-result-grid .vm-a-dims .vm-dims { width: auto; margin: 0; }
+
+  .vm-result-grid .vm-a-frame .ts2-frame {
+    height: 100%; margin: 0; display: flex; flex-direction: column; min-height: 0;
+    border-radius: 14px; overflow: hidden;
+  }
+  .vm-result-grid .vm-a-frame .ts2-frame .fs-hd,
+  .vm-result-grid .vm-a-frame .ts2-frame .fs-measures,
+  .vm-result-grid .vm-a-frame .ts2-frame .fs-foot { flex: 0 0 auto; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-main { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo {
+    aspect-ratio: auto; flex: 1 1 auto; min-height: 150px; border-bottom: 1px solid var(--fs-line, #e7eaf0);
+  }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo img { object-fit: contain; padding: 8px; }
+}
+
+/* --- Movil (<940px): 40% imagen / 20% botones / 40% ficha, en una pantalla --- */
+@media (max-width: 939px) {
+  .vm-result.vm-result-grid {
+    display: grid; grid-template-columns: 1fr;
+    grid-template-areas: "img" "actions" "frame";
+    grid-template-rows: 40% 20% 40%;
+    height: calc(100dvh - 118px); min-height: 440px; row-gap: 8px;
+  }
+  .vm-result-grid .vm-a-img { grid-area: img; min-height: 0; }
+  .vm-result-grid .vm-a-actions { grid-area: actions; min-height: 0; align-content: center; justify-content: center; }
+  .vm-result-grid .vm-a-frame { grid-area: frame; min-height: 0; }
+  .vm-result-grid .vm-a-dims, .vm-result-grid .vm-a-conf { display: none; }  /* medidas y confianza -> popup */
+  .vm-result-grid .vm-rtool-meas { display: inline-flex; }
+
+  .vm-result-grid .vm-a-img.vm-rfig { margin: 0; height: 100%; aspect-ratio: auto; border-radius: 14px; overflow: hidden; }
+  .vm-result-grid .vm-a-img .vm-rimg,
+  .vm-result-grid .vm-a-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vm-result-grid .vm-a-frame .ts2-frame { height: 100%; margin: 0; display: flex; flex-direction: column; min-height: 0; border-radius: 14px; overflow: hidden; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-main { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { aspect-ratio: auto; flex: 1 1 auto; min-height: 0; }
+}
+
+/* Popup de MEDIDAS (boton sobre la foto) */
+.vm-meas-pop { position: fixed; inset: 0; z-index: 4200; display: grid; place-items: center; padding: 18px;
+  background: rgba(9,16,34,.6); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.vm-meas-card { position: relative; width: min(440px, 94vw); max-height: 86vh; overflow-y: auto;
+  background: #fff; border-radius: 16px; box-shadow: 0 24px 60px -18px rgba(0,0,0,.6); padding: 10px; }
+.vm-meas-card .vm-dims { position: static; display: block; width: auto; margin: 0; box-shadow: none; }
+.vm-meas-card .vm-conf { margin: 10px 2px 2px; }
+.vm-meas-x { position: absolute; top: -12px; right: -12px; width: 38px; height: 38px; border-radius: 50%;
+  border: 0; background: #fff; color: #17203a; font-size: 22px; line-height: 1; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.28); display: grid; place-items: center; z-index: 2; }
+.vm-meas-x:hover { background: #f2f5fb; }
+
+/* La X del lightbox SIEMPRE visible */
+.vm-zoom-bar { z-index: 6; }
+.vm-zoom-x { background: #fff !important; color: #17203a !important; border: 0 !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+.vm-zoom-x:hover { background: #eef2f8 !important; }
+
+/* INFO (no botones): la confianza es una banda informativa con acento lateral */
+.vm-conf { border: 0; border-left: 4px solid currentColor; border-radius: 8px; cursor: default; }
+/* El DIP sobre la foto es un pie de dato (caption), no un boton */
+.vm-rbadge { left: 0; right: 0; bottom: 0; border: 0; border-radius: 0; padding: 9px 14px; cursor: default;
+  background: linear-gradient(180deg, rgba(9,18,40,0), rgba(9,18,40,.92)); }
