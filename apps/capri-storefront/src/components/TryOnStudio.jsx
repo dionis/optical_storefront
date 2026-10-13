@@ -24,6 +24,7 @@ import {
   saveMeasureResult, getMeasureResult, clearMeasureResult,
   saveFacePhotos, getFacePhotos, clearFacePhotos,
   measureSignature, getCachedGeneration, saveCachedGeneration,
+  getAttempts, bumpAttempts, attemptsReached, MAX_ATTEMPTS,
 } from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
@@ -51,7 +52,7 @@ const CAPDBG = typeof location !== "undefined" && location.search.includes("capd
 // capturar, su geometría EXACTA en píxeles del fotograma (según la resolución real
 // de la cámara) se registra junto a la foto como referencia de encuadre/escala para
 // el cálculo de medidas. cx/cy = centro; rx/ry = semiejes (horizontal/vertical).
-const FACE_OVAL = { cx: 0.5, cy: 0.46, rx: 0.30, ry: 0.42 };
+const FACE_OVAL = { cx: 0.5, cy: 0.46, rx: 0.22, ry: 0.31 };
 
 /* Sonido de obturador de cámara (WebAudio, sin assets externos). Al capturar cada
    foto el cliente oye el "clic" de la cámara — como en una óptica real — para que
@@ -181,6 +182,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const videoRef = useRef(null);
   const lmRef = useRef(null);
   const rafRef = useRef(0);
+  const camKillRef = useRef(false);     // true al desmontar: no re-adquirir la cámara
+  const camReleasedRef = useRef(false); // true cuando se soltó la webcam (dos fotos listas)
   const holdRef = useRef(0);
   const phaseRef = useRef("front");
   const [camStatus, setCamStatus] = useState("starting"); // starting | ready | denied | nocam
@@ -341,37 +344,40 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     }
   }, []);
 
-  // Arranca cámara + FaceLandmarker
-  useEffect(() => {
-    let cancelled = false;
-    async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); finishGender("male"); return; }
+  // Adquiere (o RE-adquiere) la webcam + FaceLandmarker y arranca el bucle de captura.
+  // withGender=true solo en el primer arranque (para elegir las fotos de ejemplo). Al
+  // re-adquirir tras un "retake" NO se vuelve a detectar género (ya se eligió) ni se
+  // recarga MediaPipe (se reutiliza). Se declara como función normal (closure fresca
+  // en cada render) y se llama desde los efectos sin meterla en sus dependencias.
+  async function acquireCamera(withGender) {
+    if (!navigator.mediaDevices?.getUserMedia) { setCamStatus("nocam"); if (withGender) finishGender("male"); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: 1280, height: 720 }, audio: false,
+      });
+      if (camKillRef.current) { stream.getTracks().forEach((tr) => tr.stop()); return; }
+      streamRef.current = stream;
+      // Enfoque/exposición CONTINUOS (best-effort): muchas webcams "cazan" el foco
+      // y la toma puede salir borrosa. Si el navegador lo admite, pedimos modo
+      // continuo para que la imagen se mantenga nítida durante la captura.
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: 1280, height: 720 }, audio: false,
-        });
-        if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return; }
-        streamRef.current = stream;
-        // Enfoque/exposición CONTINUOS (best-effort): muchas webcams "cazan" el foco
-        // y la toma puede salir borrosa. Si el navegador lo admite, pedimos modo
-        // continuo para que la imagen se mantenga nítida durante la captura.
-        try {
-          const track = stream.getVideoTracks?.()[0];
-          const caps = track?.getCapabilities?.() || {};
-          const adv = [];
-          if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
-          if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
-          if (adv.length) track.applyConstraints({ advanced: adv }).catch(() => {});
-        } catch { /* no soportado: se ignora */ }
-        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
-        setCamStatus("ready");
-        // Detección de género (best-effort) para elegir el set de fotos de EJEMPLO.
-        // Corre sobre unos fotogramas bajo el "preparando…"; si no concluye a tiempo,
-        // el temporizador maestro revela la ventana igual (con el ejemplo por defecto).
+        const track = stream.getVideoTracks?.()[0];
+        const caps = track?.getCapabilities?.() || {};
+        const adv = [];
+        if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
+        if (Array.isArray(caps.exposureMode) && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
+        if (adv.length) track.applyConstraints({ advanced: adv }).catch(() => {});
+      } catch { /* no soportado: se ignora */ }
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
+      setCamStatus("ready");
+      // Detección de género (best-effort) para elegir el set de fotos de EJEMPLO.
+      // Corre sobre unos fotogramas bajo el "preparando…"; si no concluye a tiempo,
+      // el temporizador maestro revela la ventana igual (con el ejemplo por defecto).
+      if (withGender) {
         (async () => {
           const votes = { male: 0, female: 0 };
           const deadline = Date.now() + 2600;
-          while (!cancelled && !genderDoneRef.current && Date.now() < deadline) {
+          while (!camKillRef.current && !genderDoneRef.current && Date.now() < deadline) {
             const v = videoRef.current;
             const r = v ? await predictGender(v) : null;
             if (r && r.prob >= 0.62) {
@@ -380,13 +386,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             }
             await new Promise((s) => setTimeout(s, 320));
           }
-          if (!cancelled) finishGender(votes.female > votes.male ? "female" : "male");
+          if (!camKillRef.current) finishGender(votes.female > votes.male ? "female" : "male");
         })();
-      } catch (e) {
-        setCamStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
-        finishGender("male");
-        return;
       }
+    } catch (e) {
+      setCamStatus(e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "nocam");
+      if (withGender) finishGender("male");
+      return;
+    }
+    // MediaPipe: cargar UNA sola vez y reutilizar en las re-adquisiciones.
+    if (!lmRef.current) {
       try {
         const vision = await import(/* @vite-ignore */ MP);
         const fileset = await vision.FilesetResolver.forVisionTasks(MP + "/wasm");
@@ -394,20 +403,46 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           baseOptions: { modelAssetPath: MODEL },
           runningMode: "VIDEO", numFaces: 1,
         });
-        if (cancelled) { lm.close?.(); return; }
+        if (camKillRef.current) { lm.close?.(); return; }
         lmRef.current = lm;
-        rafRef.current = requestAnimationFrame(loop);
-      } catch (e) { /* sin auto-captura: quedan las subidas manuales */ }
+      } catch (e) { return; /* sin auto-captura: quedan las subidas manuales */ }
     }
-    start();
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(loop);
+  }
+
+  // Arranca cámara + FaceLandmarker (una vez, al montar).
+  useEffect(() => {
+    camKillRef.current = false;
+    acquireCamera(true);
     return () => {
-      cancelled = true;
+      camKillRef.current = true;
       cancelAnimationFrame(rafRef.current);
-      lmRef.current?.close?.();
+      lmRef.current?.close?.(); lmRef.current = null;
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
+      streamRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // DESOCUPAR LA CÁMARA en cuanto están las DOS fotos (revisión/resultado): no tiene
+  // sentido mantener la webcam encendida (luz, batería, privacidad). Si el cliente
+  // vuelve a capturar (retake), se vuelve a pedir la cámara automáticamente.
+  const bothShots = Boolean(frontImg && sideImg);
+  useEffect(() => {
+    if (camKillRef.current) return;
+    if (bothShots) {
+      cancelAnimationFrame(rafRef.current);
+      try { streamRef.current?.getTracks().forEach((tr) => tr.stop()); } catch { /* nada */ }
+      streamRef.current = null;
+      if (videoRef.current) { try { videoRef.current.srcObject = null; } catch { /* nada */ } }
+      camReleasedRef.current = true;
+    } else if (camReleasedRef.current) {
+      camReleasedRef.current = false;
+      acquireCamera(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bothShots]);
 
   // Red de seguridad: la ventana NUNCA se queda en "preparando…". Pase lo que pase con
   // la cámara o la detección, a los ~3,8 s se revela con el ejemplo que haya (por
@@ -653,6 +688,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // para un familiar/amigo (con nombre opcional). Se guarda junto con la medición.
   const [forWhom, setForWhom] = useState("me");    // "me" | "other"
   const [otherName, setOtherName] = useState("");
+  // Intentos de prueba usados en ESTA sesión (ver tryOnState.js). Al llegar a
+  // MAX_ATTEMPTS no se permite generar más simulaciones.
+  const [attempts, setAttempts] = useState(() => getAttempts());
   const mAbort = useRef(null);
   // El jobId del trabajo en curso, para que el formulario de aviso (fuera del flujo
   // async de doMeasure) sepa a qué trabajo armar el contacto.
@@ -785,6 +823,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       try { saveMeasureResult(product, { data: cachedGen, frontImg, sideImg }); } catch { /* cuota */ }
       return;
     }
+    // LÍMITE DE PRUEBAS: cada GENERACIÓN nueva (no los aciertos de caché de arriba)
+    // cuenta como un intento. Al llegar a MAX_ATTEMPTS no se permite simular más en
+    // esta sesión; se muestra el aviso y no se llama a la IA.
+    if (attemptsReached()) { setAttempts(getAttempts()); return; }
+    const used = bumpAttempts(); setAttempts(used);
     if (mAbort.current) mAbort.current.abort();
     const ctrl = new AbortController();
     mAbort.current = ctrl;
@@ -1260,7 +1303,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                       none) para que sea un óvalo vertical claro en cualquier pantalla. */}
                   {which === "front" && (
                     <svg className="ts2-cap2-oval" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                      <ellipse cx="50" cy="46" rx="30" ry="40" />
+                      <ellipse cx="50" cy="46" rx="22" ry="31" />
                     </svg>
                   )}
                   {showIntro ? (
@@ -1418,10 +1461,20 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                        placeholder={t("vm.who.otherName")} aria-label={t("vm.who.otherName")} />
               )}
             </div>
-            <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
-              {t("vm.calc")}
-            </button>
+            {attempts >= MAX_ATTEMPTS ? (
+              <div className="vm-limit" role="status">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+                <span>{t("vm.limitReached")}</span>
+              </div>
+            ) : (
+              <div className="vm-go-wrap">
+                <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
+                  {t("vm.calc")}
+                </button>
+                <span className="vm-attempts">{t("vm.attempts")} {attempts}/{MAX_ATTEMPTS}</span>
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -282,3 +282,30 @@ export async function saveCachedGeneration(sig, data) {
 export function clearCachedGenerations() {
   try { localStorage.removeItem(GEN_LS_KEY); } catch { /* nada */ }
 }
+
+
+// ── Límite de pruebas por SESIÓN ─────────────────────────────────────────────
+//
+// Cada vez que el cliente GENERA una prueba nueva (la IA monta los espejuelos y
+// calcula las medidas, es decir, un acierto de caché NO cuenta) se suma un intento.
+// Al llegar a MAX_ATTEMPTS no se permiten más simulaciones en esa sesión. Se guarda
+// en sessionStorage: cuenta por pestaña/sesión y se reinicia al cerrarla (a propósito,
+// "en una misma sección"). Si sessionStorage no está disponible, nunca bloquea.
+const ATTEMPTS_KEY = "rubi.tryon.attempts.v1";
+export const MAX_ATTEMPTS = 10;
+
+export function getAttempts() {
+  try { return Number(sessionStorage.getItem(ATTEMPTS_KEY)) || 0; } catch { return 0; }
+}
+
+export function bumpAttempts() {
+  try {
+    const n = getAttempts() + 1;
+    sessionStorage.setItem(ATTEMPTS_KEY, String(n));
+    return n;
+  } catch { return 0; }
+}
+
+export function attemptsReached() {
+  return getAttempts() >= MAX_ATTEMPTS;
+}

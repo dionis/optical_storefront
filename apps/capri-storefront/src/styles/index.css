@@ -6834,3 +6834,67 @@ button.card-genre {
 @media (max-width: 480px) {
   .ts2-cap2col .ts2-cap2-box { aspect-ratio: 4 / 3; }
 }
+
+
+/* ===================================================================
+   ETAPA 89 - Ajustes pedidos por el cliente sobre la captura/cálculo:
+   1) Óvalo guía más pequeño (ver JSX: rx/ry menores).
+   2) Conteo CENTRADO en la mitad de la cámara (no arriba).
+   3) "¿Para quién son?" + nombre: el nombre baja a su propia línea y NO
+      se sale de la columna (antes aparecía a la derecha y detrás de la ficha).
+   4) Al CALCULAR: desenfocar TODA la ventana del probador y mostrar el
+      conteo/mensajes en una tarjeta flotante DELANTE (no una página en blanco).
+   5) Límite de pruebas por sesión: contador + aviso al llegar al máximo.
+   =================================================================== */
+
+/* 2) Conteo centrado en la mitad de la cámara */
+.ts2-cap2-live .ts2-count.ts2-count-top {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  animation: none;
+}
+
+/* 3) Nombre "para otra persona" en su propia línea, contenido en la columna */
+.ts2-rv-actions .vm-who { flex-wrap: wrap; }
+.ts2-rv-actions .vm-who-name { flex: 1 1 100%; width: 100%; min-width: 0; margin-top: 2px; }
+.vm-review-2col .vm-review-c1 { position: relative; z-index: 1; min-width: 0; }
+.ts2-rv-actions { min-width: 0; }
+
+/* 5) Contador de pruebas + aviso de límite */
+.vm-go-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.vm-attempts { font-size: 11.5px; color: #8a93a6; font-weight: 700; }
+.vm-limit {
+  display: flex; align-items: center; gap: 9px; max-width: 360px;
+  background: #fff4f3; border: 1px solid #f3c9c4; color: #9a3a30;
+  border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; line-height: 1.35;
+}
+.vm-limit svg { flex: 0 0 auto; color: #c2443a; }
+@media (max-width: 939px) {
+  .vm-go-wrap { align-items: stretch; }
+  .vm-go-wrap .vm-go { width: 100%; }
+  .vm-attempts { text-align: center; }
+  .vm-limit { max-width: none; }
+}
+
+/* 4) CALCULANDO: ventana del probador DESENFOCADA + tarjeta flotante delante.
+   El overlay (MeasureReport) es un portal hermano del estudio, así que podemos
+   desenfocar el estudio entero sin tocar el overlay. */
+.tryon-studio.tryon-busy { filter: blur(3px); pointer-events: none; }
+.vm-overlay { background: rgba(9, 14, 28, .46); }
+.vm-overlay .vm-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  background: transparent; border-bottom: 0; padding: 14px 16px;
+}
+.vm-overlay .vm-title { display: none; }
+.vm-overlay .vm-x { background: rgba(255,255,255,.92); color: #17203a; }
+.vm-overlay .vm-x:hover { background: #fff; }
+/* El cuerpo del overlay era opaco (#f4f6fa con mayor especificidad) y TAPABA la
+   ventana borrosa; lo volvemos transparente para que se vea el probador detrás. */
+.tryon-studio ~ .vm-overlay .vm-body,
+.vm-overlay .vm-body { background: transparent; display: flex; align-items: center; justify-content: center; }
+.vm-overlay .vm-state {
+  background: #fff; color: #3a4863; border-radius: 20px;
+  max-width: 460px; width: calc(100% - 32px); margin: auto;
+  padding: 30px 26px; min-height: 0; box-shadow: 0 24px 70px rgba(0,0,0,.34);
+}
+.vm-overlay .vm-state .vm-calcing { color: #17203a; }
+.vm-overlay .vm-state .vm-load-note { color: #7c8698; }
