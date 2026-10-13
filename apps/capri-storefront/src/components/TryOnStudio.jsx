@@ -843,11 +843,46 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     window.open(`https://wa.me/?text=${encodeURIComponent(text + (url ? " " + url : ""))}`, "_blank", "noopener");
   }
 
-  // Nombre del archivo de la foto generada: "frontal|lateral-<modelo> <serie> <color>".
+  // Base de nombre "SERIE-COLOR" (serie = SKU del espejuelo; color = color elegido).
+  function seriesColorBase() {
+    const series = cleanFilePart(product?.sku || product?.name);
+    const col = cleanFilePart(color?.name);
+    return [series, col].filter(Boolean).join("-");
+  }
+  // Nombre de la foto GENERADA por la IA: "frontal|perfil-<serie>-<color>".
   function resultFileName(which, src) {
-    const base = [product?.name, product?.brand, color?.name].map(cleanFilePart).filter(Boolean).join(" ");
-    const prefix = which === "side" ? "lateral" : "frontal";
+    const base = seriesColorBase();
+    const prefix = which === "side" ? "perfil" : "frontal";
     return `${prefix}${base ? "-" + base : ""}.${fileExtFromDataUrl(src)}`;
+  }
+  // Nombre de la foto del ESPEJUELO (catálogo): "<serie>-<color>".
+  function frameFileName(src) {
+    const base = seriesColorBase() || "espejuelo";
+    return `${base}.${fileExtFromDataUrl(src)}`;
+  }
+  // Nombre ALEATORIO para las fotos que se toma el propio cliente (sin datos del marco).
+  function randomPhotoName(src) {
+    const r = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+    return `foto-${r}.${fileExtFromDataUrl(src)}`;
+  }
+  // Descarga genérica con nombre dado. Intenta blob (renombra fiable) y si falla
+  // (imagen remota sin CORS) cae a un <a download> directo.
+  async function downloadNamed(src, name) {
+    if (!src) return;
+    try {
+      const blob = await (await fetch(src)).blob();
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = u; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 4000);
+      return;
+    } catch { /* sin CORS: intento directo */ }
+    try {
+      const a = document.createElement("a");
+      a.href = src; a.download = name; a.target = "_blank"; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch { /* navegador sin descarga */ }
   }
 
   // Dibuja las medidas SOBRE la foto (para descargarla ya rotulada, no como una
@@ -1123,7 +1158,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     const inputRef = which === "front" ? frontInput : sideInput;
     return (
       <figure className="ts2-rvfig">
-        {img ? <img className="ts2-rvimg" src={img} alt={label} />
+        {img ? <img className="ts2-rvimg" src={img} alt={label} style={{ cursor: "zoom-in" }}
+                    onClick={() => setZoom({ src: img, kind: "photo", name: randomPhotoName(img) })} />
              : <div className="ts2-rvimg ts2-rvimg-ph" aria-hidden="true">📷</div>}
         <span className="ts2-rvbadge"><IconCheck className="ts2-rvbadge-ic" /> {t("cap.ready")}</span>
         <div className="ts2-rvtools">
@@ -1193,6 +1229,74 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // Formato de milímetros para los números medidos (DIP, altura de corredor).
   const mmv = (v) => (v == null || Number.isNaN(Number(v)) ? "—" : `${Math.round(Number(v) * 10) / 10} mm`);
 
+  // Franja de datos del marco (material · medidas · género). En captura va arriba
+  // a lo ancho; en revisión va en la columna derecha.
+  function factsStrip() {
+    return (
+      <div className="ts2-facts">
+        <div className="ts2-fact">
+          <IconMaterial className="ts2-fact-ic" />
+          <div className="ts2-fact-tx">
+            <span className="ts2-fact-k">{t("spec.material")}</span>
+            <b>{materialText || na}</b>
+            <small>{t("tryon2.materialSub")}</small>
+          </div>
+        </div>
+        <div className="ts2-fact">
+          <IconMeasures className="ts2-fact-ic" />
+          <div className="ts2-fact-tx">
+            <span className="ts2-fact-k">{t("pdp.metaMeasures")}</span>
+            <b>{measuresStr || "—"}</b>
+            <small>{t("tryon2.measuresSub")}</small>
+          </div>
+        </div>
+        <div className="ts2-fact">
+          <IconGender className="ts2-fact-ic" />
+          <div className="ts2-fact-tx">
+            <span className="ts2-fact-k">{t("spec.gender")}</span>
+            <b>{genderLabel || na}</b>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // Colores disponibles del marco.
+  function colorsStrip() {
+    if (!colors.length) return null;
+    return (
+      <div className="ts2-colors">
+        <div className="ts2-colors-sw" role="listbox" aria-label={t("tryon2.colorsAvailable")}>
+          {colors.map((c, i) => (
+            <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                    className={`ts2-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                    title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+          ))}
+        </div>
+        <div className="ts2-colors-tx">
+          <b>{t("tryon2.colorsAvailable")}</b>
+          <span>{colorNames}</span>
+        </div>
+      </div>
+    );
+  }
+  // Revisión de fotos en 2 columnas (escritorio): IZQUIERDA la revisión (las dos
+  // fotos una sobre otra + ¿para quién? + Calcular); DERECHA facts + colores +
+  // ficha del espejuelo, todo en una sola pantalla. Móvil: una sola columna.
+  function reviewLayout() {
+    return (
+      <div className="vm-result vm-review-2col">
+        <div className="vm-review-cols">
+          <div className="vm-review-c1">{captureReview()}</div>
+          <div className="vm-review-c2">
+            {factsStrip()}
+            {colorsStrip()}
+            {frameAside()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Ficha del espejuelo seleccionado (foto + medidas + pie con fecha/logo). Se usa
   // en captura/revisión (ancho completo, debajo) y en el RESULTADO (columna derecha,
   // bajo las medidas calculadas). El pie (fecha/hora + logo RUBI LENS) va SIEMPRE.
@@ -1211,8 +1315,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           <div className="ts2-fr-main">
             <div className="fs-photo ts2-fr-photo">
               {color?.image
-                ? <img src={color.image} referrerPolicy="no-referrer"
+                ? <img src={color.image} referrerPolicy="no-referrer" style={{ cursor: "zoom-in" }}
                        alt={`${product.name} ${color?.name || ""}`}
+                       onClick={() => setZoom({ src: color.image, kind: "frame", name: frameFileName(color.image) })}
                        onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
                 : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
               <div className="ts2-fr-badges">
@@ -1286,10 +1391,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               {front ? (
                 <>
                   <img className="vm-rimg" src={front} alt={t("vm.front")}
-                       onClick={() => setZoom({ src: front, which: "front" })} />
+                       onClick={() => setZoom({ src: front, kind: "ai", which: "front" })} />
                   <div className="vm-rtools">
                     <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
-                            onClick={() => setZoom({ src: front, which: "front" })}>{IC_ZOOM}</button>
+                            onClick={() => setZoom({ src: front, kind: "ai", which: "front" })}>{IC_ZOOM}</button>
                     <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
                             onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
                   </div>
@@ -1419,56 +1524,15 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <div className="tryon-studio-grid ts2wrap">
         <div className="ts2">
           <div className="ts2-top">
-          {/* Resumen del marco: material · medidas · género (mismo lenguaje visual
-              que la ficha del producto). */}
-          <div className="ts2-facts">
-            <div className="ts2-fact">
-              <IconMaterial className="ts2-fact-ic" />
-              <div className="ts2-fact-tx">
-                <span className="ts2-fact-k">{t("spec.material")}</span>
-                <b>{materialText || na}</b>
-                <small>{t("tryon2.materialSub")}</small>
-              </div>
-            </div>
-            <div className="ts2-fact">
-              <IconMeasures className="ts2-fact-ic" />
-              <div className="ts2-fact-tx">
-                <span className="ts2-fact-k">{t("pdp.metaMeasures")}</span>
-                <b>{measuresStr || "—"}</b>
-                <small>{t("tryon2.measuresSub")}</small>
-              </div>
-            </div>
-            <div className="ts2-fact">
-              <IconGender className="ts2-fact-ic" />
-              <div className="ts2-fact-tx">
-                <span className="ts2-fact-k">{t("spec.gender")}</span>
-                <b>{genderLabel || na}</b>
-              </div>
-            </div>
-          </div>
+          {/* facts + colores: SOLO en captura (paso). En REVISIÓN van a la columna
+              derecha (reviewLayout) y en el RESULTADO se omiten (ya están en la ficha). */}
+          {mState !== "result" && !(frontImg && sideImg) && factsStrip()}
+          {mState !== "result" && !(frontImg && sideImg) && colorsStrip()}
 
-          {/* Colores disponibles */}
-          {colors.length > 0 && (
-            <div className="ts2-colors">
-              <div className="ts2-colors-sw" role="listbox" aria-label={t("tryon2.colorsAvailable")}>
-                {colors.map((c, i) => (
-                  <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                          className={`ts2-sw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                          title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-                ))}
-              </div>
-              <div className="ts2-colors-tx">
-                <b>{t("tryon2.colorsAvailable")}</b>
-                <span>{colorNames}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Asistente paso a paso: frontal -> lateral -> revisión (o el resultado
-              con las gafas puestas). Solo se ve UN paso a la vez, sin salir de la
-              ventana; la ficha de la montura queda permanente debajo. */}
+          {/* Un paso a la vez: RESULTADO (2 col) | REVISIÓN (2 col) | CAPTURA (paso).
+              Solo se ve uno; la ficha del marco va dentro de cada layout 2-col. */}
           {mState === "result" ? resultViews()
-            : (frontImg && sideImg) ? captureReview()
+            : (frontImg && sideImg) ? reviewLayout()
             : phase === "side"
               ? stepCard({
                   which: "side", num: "2", title: t("cap.side"), sub: t("tryon2.msgSide"), refSrc: exSide,
@@ -1491,9 +1555,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 })}
 
           </div>{/* /.ts2-top */}
-          {/* Ficha de la montura: en captura/revisión va a ancho completo debajo;
-              en el RESULTADO va en la columna derecha (dentro de resultViews). */}
-          {mState !== "result" && frameAside()}
+          {/* Ficha de la montura SUELTA (ancho completo) SOLO en captura; en
+              revisión y resultado va dentro de la columna derecha del layout 2-col. */}
+          {mState !== "result" && !(frontImg && sideImg) && frameAside()}
         </div>
       </div>
 
@@ -1510,7 +1574,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         <div className="vm-zoom" role="dialog" aria-modal="true" onClick={() => setZoom(null)}>
           <div className="vm-zoom-bar" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="vm-zoom-dl"
-                    onClick={() => downloadResult(zoom.src, zoom.which)}>
+                    onClick={() => (zoom.kind === "ai"
+                      ? downloadResult(zoom.src, zoom.which)
+                      : downloadNamed(zoom.src, zoom.name))}>
               {IC_DOWN}<span>{t("vm.download")}</span>
             </button>
             <button type="button" className="vm-zoom-x" aria-label={t("tryon.close")}

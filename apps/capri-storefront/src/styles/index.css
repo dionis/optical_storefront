@@ -6244,3 +6244,69 @@ button.card-genre {
 #root { display: flex; flex-direction: column; min-height: 100vh; }
 #root > .site-main { flex: 1 0 auto; }
 #root > .footer { flex-shrink: 0; }
+
+/* ===================================================================
+   ETAPA 78 - "Revisa tus fotos" (revisión) en 2 columnas (pedido del
+   cliente): IZQUIERDA la revisión (las dos fotos una sobre otra al 50% +
+   ¿para quién? + Calcular); DERECHA los datos del marco (material/medidas/
+   género) + colores + ficha del espejuelo. Todo en UNA sola pantalla, con
+   contenedores de tamaño FIJO (igual en cualquier laptop/PC, sin importar
+   resolucion ni escala). Movil / <940px: una sola columna.
+   =================================================================== */
+@media (min-width: 940px) {
+  .vm-result.vm-review-2col { display: block; width: 100%; }
+  .vm-review-2col .vm-review-cols {
+    display: grid; grid-template-columns: 420px 1fr; gap: 18px;
+    align-items: stretch; width: 918px; max-width: 100%; margin: 0 auto; height: 700px;
+  }
+  .vm-review-2col .vm-review-c1,
+  .vm-review-2col .vm-review-c2 { min-height: 0; min-width: 0; }
+
+  /* Columna 1: la revisión ocupa todo el alto; las dos fotos una sobre otra (50/50) */
+  .vm-review-2col .vm-review-c1 .ts2-step.ts2-rv {
+    height: 100%; display: flex; flex-direction: column; min-height: 0; margin: 0;
+  }
+  .vm-review-2col .vm-review-c1 .ts2-step-hd { flex: 0 0 auto; margin-bottom: 10px; }
+  .vm-review-2col .vm-review-c1 .ts2-rv-grid {
+    grid-template-columns: 1fr; grid-auto-rows: 1fr; gap: 10px; flex: 1 1 auto; min-height: 0;
+  }
+  .vm-review-2col .vm-review-c1 .ts2-rvfig { height: 100%; min-height: 0; margin: 0; }
+  .vm-review-2col .vm-review-c1 .ts2-rvimg { width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; }
+  .vm-review-2col .vm-review-c1 .ts2-rv-actions { flex: 0 0 auto; margin-top: 10px; }
+
+  /* Columna 2: facts + colores + ficha apilados; la ficha ocupa el resto */
+  .vm-review-2col .vm-review-c2 { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+  .vm-review-2col .vm-review-c2 .ts2-facts,
+  .vm-review-2col .vm-review-c2 .ts2-colors { flex: 0 0 auto; }
+  .vm-review-2col .vm-review-c2 .ts2-facts { grid-template-columns: 1fr; gap: 6px; }
+  .vm-review-2col .vm-review-c2 .ts2-fact + .ts2-fact { border-left: 0; padding-left: 0; border-top: 1px solid #eef1f6; padding-top: 6px; }
+  .vm-review-2col .vm-review-c2 .ts2-frame {
+    flex: 1 1 auto; min-height: 0; margin: 0; display: flex; flex-direction: column;
+    border-radius: 14px; overflow: hidden;
+  }
+  .vm-review-2col .vm-review-c2 .ts2-frame .fs-hd { flex: 0 0 auto; }
+  .vm-review-2col .vm-review-c2 .ts2-frame .ts2-fr { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .vm-review-2col .vm-review-c2 .ts2-frame .ts2-fr-main { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .vm-review-2col .vm-review-c2 .ts2-frame .ts2-fr-photo.fs-photo {
+    aspect-ratio: auto; flex: 1 1 auto; min-height: 0; border-bottom: 1px solid var(--fs-line, #e7eaf0);
+  }
+  .vm-review-2col .vm-review-c2 .ts2-frame .ts2-fr-photo.fs-photo img { object-fit: contain; padding: 8px; }
+  .vm-review-2col .vm-review-c2 .ts2-frame .fs-measures,
+  .vm-review-2col .vm-review-c2 .ts2-frame .fs-foot { flex: 0 0 auto; }
+}
+
+/* Movil / <940px: la revisión baja en una sola columna (como antes) */
+@media (max-width: 939px) {
+  .vm-review-2col .vm-review-cols { display: flex; flex-direction: column; gap: 12px; }
+  .vm-review-2col .vm-review-c2 { display: flex; flex-direction: column; gap: 12px; }
+}
+
+/* ETAPA 78b - Pulido del encabezado de la revisión en 2 columnas: el título no se
+   trunca y el botón "Tomar las fotos de nuevo" queda como icono para dar aire. */
+@media (min-width: 940px) {
+  .vm-review-2col .vm-review-c1 .ts2-step-hd { flex-wrap: wrap; gap: 8px 10px; }
+  .vm-review-2col .vm-review-c1 .ts2-step-tt { min-width: 0; flex: 1 1 auto; }
+  .vm-review-2col .vm-review-c1 .ts2-step-tt b { white-space: normal; overflow: visible; }
+  .vm-review-2col .vm-review-c1 .ts2-retake-all .ts2-step-up-tx { display: none; }
+  .vm-review-2col .vm-review-c1 .ts2-retake-all { padding: 7px 9px; }
+}
