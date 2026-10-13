@@ -6748,3 +6748,89 @@ button.card-genre {
     padding-right: 16px;
   }
 }
+
+/* ===================================================================
+   ETAPA 88 - CAPTURA con el MISMO formato que la revisión (2 columnas) y
+   cada caja DIVIDIDA A LA MITAD: izquierda la foto de REFERENCIA (cómo
+   colocarse), derecha la CÁMARA en vivo + conteo (o la foto ya tomada).
+   En la frontal, un ÓVALO guía centra el rostro. Debajo de las cajas, los
+   consejos en HORIZONTAL (buena iluminación / sin gafas / mira al frente),
+   que sustituyen al "¿para quién son?" (ese solo sale ya en la revisión).
+   Reutiliza el contenedor .vm-review-2col: la columna derecha (datos del
+   marco + colores + ficha) hereda sus reglas tal cual.
+   =================================================================== */
+.ts2-step.ts2-cap2 { margin: 0; }
+.ts2-step-badge-ic { width: 18px; height: 18px; }
+
+/* Rejilla de las dos cajas (una sobre otra, como la revisión) */
+.ts2-cap2-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+/* Caja dividida a la mitad: referencia | cámara-o-foto */
+.ts2-cap2-box {
+  position: relative; margin: 0; border-radius: 14px; overflow: hidden;
+  background: #0e1520; display: grid; grid-template-columns: 1fr 1fr; min-height: 0;
+}
+.ts2-cap2-ref {
+  position: relative; overflow: hidden; background: #eef2f8;
+  border-right: 2px solid rgba(255,255,255,.14);
+}
+.ts2-cap2-refimg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ts2-cap2-cam { position: relative; overflow: hidden; background: #0e1520; display: flex; min-width: 0; }
+
+/* La cámara en vivo rellena su mitad (anula el alto fijo de .ts2-wiz-cam.ts2-drop) */
+.tryon-studio .ts2-cap2-cam .ts2-cap2-live.ts2-drop {
+  width: 100%; height: 100%; min-height: 0; border: none; border-radius: 0;
+}
+.ts2-cap2-shot { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ts2-cap2-wait {
+  width: 100%; height: 100%; border: none; background: #f7faff; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; color: #3a4863; text-align: center; padding: 14px;
+}
+.ts2-cap2-wait b { font-size: 14px; font-weight: 800; color: #3a4863; }
+.ts2-cap2-wait small { font-size: 12px; color: #9aa2b0; }
+
+/* Óvalo guía (solo frontal): estirado a la caja para que sea un óvalo vertical
+   claro en cualquier pantalla; no intercepta clics. */
+.ts2-cap2-oval { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.ts2-cap2-oval ellipse {
+  fill: none; stroke: rgba(255,255,255,.9); stroke-width: 1.1; stroke-dasharray: 4 3;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.55));
+}
+
+/* Etiqueta de la caja (Frontal / Lateral), arriba-izquierda sobre la referencia */
+.ts2-cap2-label {
+  position: absolute; top: 8px; left: 8px; z-index: 4;
+  background: rgba(10,16,28,.66); color: #fff; font-size: 12px; font-weight: 800;
+  border-radius: 999px; padding: 4px 10px;
+}
+
+/* Consejos en HORIZONTAL debajo de las cajas (img4) */
+.ts2-cap2-tips { flex-direction: row; flex-wrap: wrap; gap: 8px 18px; justify-content: center; margin-top: 4px; }
+.ts2-cap2-tips li { font-size: 13.5px; }
+
+/* Escritorio (>=940px): la captura ocupa el alto de la columna, como la revisión.
+   Las reglas de .vm-review-c2 (datos+colores+ficha) ya aplican por .vm-review-2col. */
+@media (min-width: 940px) {
+  .ts2-cap2col .vm-review-c1 .ts2-step.ts2-cap2 {
+    height: 100%; display: flex; flex-direction: column; min-height: 0;
+  }
+  .ts2-cap2col .vm-review-c1 .ts2-step-hd { flex: 0 0 auto; margin-bottom: 10px; }
+  .ts2-cap2col .vm-review-c1 .ts2-cap2-grid {
+    grid-auto-rows: 1fr; flex: 1 1 auto; min-height: 0; gap: 10px;
+  }
+  .ts2-cap2col .vm-review-c1 .ts2-cap2-box { height: 100%; min-height: 0; }
+  .ts2-cap2col .vm-review-c1 .ts2-cap2-tips { flex: 0 0 auto; margin-top: 10px; }
+}
+
+/* Móvil / <940px: una sola columna; cada caja mantiene sus dos mitades (horizontal)
+   con una proporción cómoda para ver la cámara y la referencia. */
+@media (max-width: 939px) {
+  .ts2-cap2col .ts2-cap2-grid { grid-template-columns: 1fr; gap: 10px; }
+  .ts2-cap2col .ts2-cap2-box { height: auto; aspect-ratio: 16 / 9; }
+  .ts2-cap2-tips { gap: 6px 14px; }
+  .ts2-cap2-tips li { font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .ts2-cap2col .ts2-cap2-box { aspect-ratio: 4 / 3; }
+}
