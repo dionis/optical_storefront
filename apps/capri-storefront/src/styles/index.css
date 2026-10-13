@@ -6618,3 +6618,72 @@ button.card-genre {
 @media (max-width: 860px) {
   .zlx-page { padding-top: 54px; }
 }
+
+/* ===================================================================
+   ETAPA 84 - Ajustes finos de resultado (pedido del cliente):
+   - Escritorio: columnas IGUALES (imagen = medidas/ficha); "Anadir receta" en
+     su propia fila a todo lo ancho, debajo de confianza + Medir/Compartir;
+     espacios reducidos para que asome el footer.
+   - Movil: en la ficha, selector de colores abajo-DERECHA y mas pequeno,
+     imagen del espejuelo un poco mas grande; que asome el footer.
+   - Lightbox: la X (y descarga) SIEMPRE visibles al ampliar la foto IA
+     (por encima del header del sitio).
+   =================================================================== */
+
+/* Lightbox por encima del header/probador (el header movil es fixed z-index 80) */
+.vm-zoom { z-index: 500 !important; }
+.vm-zoom-bar { z-index: 6; }
+
+/* "Anadir receta" SIEMPRE en su propia linea, a todo lo ancho (debajo del resto) */
+.vm-result-actions { flex-wrap: wrap; }
+.vm-result-actions .vm-remeasure, .vm-result-actions .vm-share { flex: 1 1 auto; }
+.vm-result-actions .vm-addrx, .vm-result-actions .vm-added { flex: 1 1 100%; order: 9; }
+
+/* --- Escritorio: columnas IGUALES (imagen = medidas/ficha), con alturas de fila
+   EXPLICITAS para que salga SIEMPRE igual y quepa TODO: medidas (7 filas) +
+   ficha con foto + Ancho/Puente/Varilla + pie + confianza + Medir/Compartir +
+   Anadir receta. El conjunto ~735px, asi que en laptops asoma el footer. --- */
+@media (min-width: 940px) {
+  .vm-result.vm-result-grid {
+    grid-template-columns: 1fr 1fr; width: 940px;
+    grid-template-rows: auto 276px auto auto;
+    height: auto; min-height: 0; max-height: none;
+    row-gap: 6px; column-gap: 16px; align-items: stretch;
+  }
+  /* Medidas compactas, TODAS visibles (7 filas) */
+  .vm-result-grid .vm-a-dims .vm-dims-h { padding: 6px 14px; }
+  .vm-result-grid .vm-a-dims .vm-dims-body { padding: 2px 14px 5px; }
+  .vm-result-grid .vm-a-dims .vm-dims-row { padding: 2px 0; }
+  .vm-result-grid .vm-a-dims .vm-dims-ic { width: 23px; height: 23px; }
+  .vm-result-grid .vm-a-conf { padding-top: 7px; padding-bottom: 7px; }
+  /* Ficha (300px): la foto encoge pero las dimensiones (Ancho/Puente/Varilla) y
+     el pie SIEMPRE se ven. (La regla de ETAPA80 fija la foto a 150px con mayor
+     especificidad; aqui la igualamos y la bajamos para que no empuje las medidas.) */
+  .vm-result-grid .vm-a-frame { min-height: 0; overflow: hidden; }
+  .vm-result-grid .vm-a-frame .ts2-frame { height: 100%; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 70px; }
+  .vm-result-grid .vm-a-frame .fs-mic { height: 30px; }
+  .vm-result-grid .vm-a-frame .fs-mhead span { padding: 5px 4px; }
+  .vm-result-grid .vm-a-frame .fs-mcell { padding: 6px 4px; }
+  .vm-result-grid .vm-a-frame .fs-foot { padding-top: 7px; padding-bottom: 7px; }
+  .vm-result-grid .vm-result-actions { gap: 8px; }
+}
+
+/* --- Movil: foto IA proporcional (vh) arriba; ficha del espejuelo a su altura
+   natural con foto un poco MAS GRANDE, dimensiones (Ancho/Puente/Varilla) + pie
+   SIEMPRE visibles, y el selector de colores en la esquina inferior DERECHA y
+   mas pequeno. Altura natural -> cabe todo y asoma una porcion del footer. --- */
+@media (max-width: 939px) {
+  .vm-result.vm-result-grid {
+    height: auto; min-height: 0; grid-template-rows: auto auto auto; row-gap: 7px;
+  }
+  /* Foto IA: proporcion del alto de pantalla (igual en cualquier movil), encuadrada a la cara */
+  .vm-result-grid .vm-a-img { height: 34vh; min-height: 200px; max-height: 340px; }
+  /* Selector de colores sobre la foto del espejuelo -> esquina inferior DERECHA, mas pequeno */
+  .vm-result-grid .ts2-fr-onphoto { left: auto; right: 10px; bottom: 10px; gap: 6px; }
+  .vm-result-grid .ts2-fr-onsw { width: 18px; height: 18px; border-width: 2px; }
+  /* Ficha a su altura natural, con la foto del espejuelo un poco mas grande */
+  .vm-result-grid .vm-a-frame { min-height: 0; overflow: visible; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 158px; }
+  .vm-result-grid .vm-a-frame .ts2-frame .fs-measures { flex: 0 0 auto; }
+}
