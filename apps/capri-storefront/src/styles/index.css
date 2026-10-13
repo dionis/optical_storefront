@@ -6646,26 +6646,33 @@ button.card-genre {
 @media (min-width: 940px) {
   .vm-result.vm-result-grid {
     grid-template-columns: 1fr 1fr; width: 940px;
-    grid-template-rows: auto 276px auto auto;
-    height: auto; min-height: 0; max-height: none;
-    row-gap: 6px; column-gap: 16px; align-items: stretch;
+    grid-template-rows: auto minmax(0,1fr) auto auto;
+    height: calc(100dvh - 172px); min-height: 430px; max-height: 740px;
+    row-gap: 5px; column-gap: 16px; align-items: stretch;
   }
-  /* Medidas compactas, TODAS visibles (7 filas) */
+  /* CLAVE: la imagen (vertical) NO debe forzar el alto de su fila, o deja un hueco
+     entre las medidas y la ficha. Con min-height:0 + overflow:hidden se recorta a
+     la altura de la columna derecha (medidas + ficha), sin hueco. */
+  .vm-result-grid .vm-a-img { min-height: 0; overflow: hidden; }
+  /* Medidas compactas, TODAS visibles (altura natural, sin recorte) */
   .vm-result-grid .vm-a-dims .vm-dims-h { padding: 6px 14px; }
   .vm-result-grid .vm-a-dims .vm-dims-body { padding: 2px 14px 5px; }
   .vm-result-grid .vm-a-dims .vm-dims-row { padding: 2px 0; }
   .vm-result-grid .vm-a-dims .vm-dims-ic { width: 23px; height: 23px; }
   .vm-result-grid .vm-a-conf { padding-top: 7px; padding-bottom: 7px; }
-  /* Ficha (300px): la foto encoge pero las dimensiones (Ancho/Puente/Varilla) y
-     el pie SIEMPRE se ven. (La regla de ETAPA80 fija la foto a 150px con mayor
-     especificidad; aqui la igualamos y la bajamos para que no empuje las medidas.) */
+  /* Ficha: ocupa el resto (1fr); la foto encoge pero Ancho/Puente/Varilla + pie
+     SIEMPRE se ven. (ETAPA80 fija la foto a 150px con mayor especificidad; aqui la
+     igualamos y la bajamos para que no empuje las dimensiones.) */
   .vm-result-grid .vm-a-frame { min-height: 0; overflow: hidden; }
   .vm-result-grid .vm-a-frame .ts2-frame { height: 100%; }
-  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 70px; }
-  .vm-result-grid .vm-a-frame .fs-mic { height: 30px; }
-  .vm-result-grid .vm-a-frame .fs-mhead span { padding: 5px 4px; }
-  .vm-result-grid .vm-a-frame .fs-mcell { padding: 6px 4px; }
-  .vm-result-grid .vm-a-frame .fs-foot { padding-top: 7px; padding-bottom: 7px; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 62px; }
+  .vm-result-grid .vm-a-frame .fs-hd { padding-top: 8px; padding-bottom: 8px; }
+  .vm-result-grid .vm-a-frame .fs-mic { height: 24px; }
+  .vm-result-grid .vm-a-frame .fs-mval { font-size: 13px; }
+  .vm-result-grid .vm-a-frame .fs-mhead span { padding: 3px 4px; font-size: 9px; }
+  .vm-result-grid .vm-a-frame .fs-mcell { padding: 3px 4px; }
+  .vm-result-grid .vm-a-frame .fs-foot { padding-top: 5px; padding-bottom: 5px; }
+  .vm-result-grid .vm-a-frame .fs-foot-date, .vm-result-grid .vm-a-frame .fs-foot-time { font-size: 11px; }
   .vm-result-grid .vm-result-actions { gap: 8px; }
 }
 
@@ -6675,15 +6682,36 @@ button.card-genre {
    mas pequeno. Altura natural -> cabe todo y asoma una porcion del footer. --- */
 @media (max-width: 939px) {
   .vm-result.vm-result-grid {
-    height: auto; min-height: 0; grid-template-rows: auto auto auto; row-gap: 7px;
+    height: auto; min-height: 0; grid-template-rows: auto auto auto; row-gap: 6px;
   }
-  /* Foto IA: proporcion del alto de pantalla (igual en cualquier movil), encuadrada a la cara */
-  .vm-result-grid .vm-a-img { height: 34vh; min-height: 200px; max-height: 340px; }
+  /* Foto IA: proporcion del alto de pantalla (igual en cualquier movil), un poco
+     REDUCIDA para que suba la ficha y asome el borde del footer. Encuadrada a la cara. */
+  .vm-result-grid .vm-a-img { height: 29vh; min-height: 180px; max-height: 300px; }
   /* Selector de colores sobre la foto del espejuelo -> esquina inferior DERECHA, mas pequeno */
   .vm-result-grid .ts2-fr-onphoto { left: auto; right: 10px; bottom: 10px; gap: 6px; }
   .vm-result-grid .ts2-fr-onsw { width: 18px; height: 18px; border-width: 2px; }
-  /* Ficha a su altura natural, con la foto del espejuelo un poco mas grande */
+  /* Ficha a su altura natural; la foto del espejuelo un poco mas chica para que
+     entren las dimensiones (Ancho/Puente/Varilla) + pie y asome el footer. */
   .vm-result-grid .vm-a-frame { min-height: 0; overflow: visible; }
-  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 158px; }
+  .vm-result-grid .vm-a-frame .ts2-frame .ts2-fr-photo.fs-photo { min-height: 124px; }
   .vm-result-grid .vm-a-frame .ts2-frame .fs-measures { flex: 0 0 auto; }
+}
+
+/* ===================================================================
+   ETAPA 85 - La ventana de CAPTURA (camara) cabe en UNA sola vista en
+   escritorio: la tira material/medidas/genero + colores es redundante
+   durante la captura (ya esta en la ficha del espejuelo de abajo), asi que
+   se oculta — igual que ya se hace en movil — y la camara se contiene un
+   poco, para que camara + ejemplo/consejos + ficha quepan sin desbordar.
+   =================================================================== */
+@media (min-width: 901px) {
+  .tryon-studio:not(.tryon-result) .ts2 .ts2-facts,
+  .tryon-studio:not(.tryon-result) .ts2 .ts2-colors { display: none; }
+  /* Camara mas contenida (cabe junto al ejemplo/consejos y la ficha) */
+  .tryon-studio:not(.tryon-result) .ts2-wiz-cam.ts2-drop { height: clamp(220px, 38vh, 360px); }
+  /* Menos aire vertical en la captura */
+  .tryon-studio:not(.tryon-result) .ts2 { padding-top: 12px; gap: 12px; }
+  .tryon-studio:not(.tryon-result) .ts2-wiz .ts2-wiz-body { gap: 10px; }
+  .tryon-studio:not(.tryon-result) .ts2-step { padding: 12px 16px; }
+  .tryon-studio:not(.tryon-result) .ts2-step-hd { margin-bottom: 10px; }
 }
