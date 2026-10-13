@@ -1557,7 +1557,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <aside className="vm-dims" aria-label={t("vm.dims.title")}>
         <div className="vm-dims-h">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18" /></svg>
-          {t("vm.dims.title")}
+          <b className="vm-dims-tt">{t("vm.dims.title")}</b>
+          <span className="vm-dims-sub">{t("vm.dims.sub")}</span>
         </div>
         <div className="vm-dims-body">
           {rows.map((r, i) => (

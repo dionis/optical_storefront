@@ -6511,3 +6511,69 @@ button.card-genre {
    todo el ancho, para que no se salga en la columna estrecha de la revision. */
 .vm-who { flex-wrap: wrap; }
 .vm-who-name { flex: 1 1 100%; min-width: 0; width: 100%; }
+
+/* ===================================================================
+   ETAPA 82 - Ajustes de resultado / popup / logo (pedido del cliente):
+   - Logo movil: solo el espejuelo, CENTRADO en su caja blanca.
+   - Cabecera "MEDIDAS CALCULADAS" legible (blanco sobre azul) + subtitulo.
+   - Popup de medidas: la X DENTRO de la tarjeta (nunca cortada).
+   - Resultado ESCRITORIO: TODO en una vista (imagen | medidas 50% / ficha 50%).
+   - Resultado MOVIL: TODO en una vista; foto recortada de pecho hacia arriba.
+   =================================================================== */
+
+/* 1) Cabecera de medidas: titulo blanco legible + subtitulo en la barra azul */
+.tryon-studio .vm-dims-h { color: #fff; }
+.vm-dims-h { flex-wrap: wrap; align-items: center; row-gap: 1px; }
+.vm-dims-h .vm-dims-tt { font-weight: 800; }
+.vm-dims-h .vm-dims-sub { flex: 1 1 100%; padding-left: 25px; font-size: 10.5px;
+  font-weight: 600; letter-spacing: .2px; color: rgba(255,255,255,.82); text-transform: none; }
+
+/* 2) Popup de medidas: la X va DENTRO de la tarjeta, sobre la barra azul */
+.vm-meas-x { top: 9px; right: 9px; z-index: 5; width: 34px; height: 34px;
+  background: #fff; color: #17203a; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+/* 3) Logo movil: solo el espejuelo, centrado (caja mas ancha, sin recorte lateral) */
+@media (max-width: 860px) {
+  .header-main .logo-mobile {
+    width: 56px; height: 36px; padding: 3px; overflow: hidden; background: #fff;
+    border-radius: 9px; display: inline-flex; align-items: center; justify-content: flex-start;
+  }
+  .header-main .logo-mobile .logo-mobile-img {
+    height: 100%; width: 100%; max-width: none; object-fit: cover; object-position: left center;
+  }
+}
+
+/* 4) Resultado ESCRITORIO: todo cabe en una vista. Columna izquierda = imagen a
+   toda la altura; columna derecha dividida 50/50 (medidas arriba, ficha abajo).
+   Debajo, confianza + acciones (compactas). Altura acotada al viewport. */
+@media (min-width: 940px) {
+  .vm-result.vm-result-grid {
+    height: calc(100dvh - 160px); min-height: 500px; max-height: 780px;
+    grid-template-rows: auto 1fr auto auto; row-gap: 10px;
+  }
+  /* Medidas: TODAS visibles (altura natural, 7 filas) pero COMPACTAS, para que la
+     ficha del espejuelo quepa completa debajo (foto + Ancho/Puente/Varilla). */
+  .vm-result-grid .vm-a-dims { min-height: 0; }
+  .vm-result-grid .vm-a-dims .vm-dims { height: auto; }
+  .vm-result-grid .vm-a-dims .vm-dims-h { padding: 8px 14px; }
+  .vm-result-grid .vm-a-dims .vm-dims-body { padding: 2px 14px 5px; }
+  .vm-result-grid .vm-a-dims .vm-dims-row { padding: 5px 0; }
+  .vm-result-grid .vm-a-dims .vm-dims-ic { width: 26px; height: 26px; }
+  .vm-result-grid .vm-a-frame { min-height: 250px; }
+  .vm-result-grid .vm-a-conf { align-self: center; }
+  .vm-result-grid .vm-a-actions { margin-top: 0; }
+  /* La imagen frontal, encuadrada a la cara (recorte de pecho hacia arriba) */
+  .vm-result-grid .vm-a-img img { object-position: center 24%; }
+}
+
+/* 5) Resultado MOVIL: las tres zonas caben en una sola vista. La foto se recorta
+   de pecho hacia arriba (object-position) para poder reducir su alto sin perder
+   la cara; botones compactos; ficha del espejuelo completa. */
+@media (max-width: 939px) {
+  .vm-result.vm-result-grid {
+    height: calc(100dvh - 128px); min-height: 460px; max-height: none;
+    grid-template-rows: 40% auto 1fr; row-gap: 6px;
+  }
+  .vm-result-grid .vm-a-img img { object-position: center 22%; }
+  .vm-result-grid .vm-a-actions { gap: 6px; }
+}
