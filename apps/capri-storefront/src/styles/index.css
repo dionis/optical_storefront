@@ -5427,7 +5427,7 @@ button.card-genre {
    disponibles, pasos frontal/lateral (ejemplo + recuadro de captura/subida +
    recomendaciones) y ficha "Informacion de la montura" a lo ancho. Reutiliza el
    lenguaje visual del sitio (colores navy, tipografia, tarjetas). ===================== */
-.tryon-studio-grid.ts2wrap { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #f4f6fb; }
+.tryon-studio-grid.ts2wrap { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #f4f6fb; overscroll-behavior: contain; }
 .ts2 { max-width: 1024px; margin: 0 auto; padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
 
 /* Resumen: material / medidas / genero */
@@ -6309,4 +6309,58 @@ button.card-genre {
   .vm-review-2col .vm-review-c1 .ts2-step-tt b { white-space: normal; overflow: visible; }
   .vm-review-2col .vm-review-c1 .ts2-retake-all .ts2-step-up-tx { display: none; }
   .vm-review-2col .vm-review-c1 .ts2-retake-all { padding: 7px 9px; }
+}
+
+/* ===================================================================
+   ETAPA 79 - Ajustes pedidos por el cliente:
+   1) Badges Acetato/Hombres: solo TEXTO con relieve (no botón), tamaño
+      consistente, sin tapar el marco. En la REVISIÓN se ocultan (ya
+      aparecen arriba en material/género).
+   2) "¿Para quién son?" contenido en móvil (no se sale "Para otra persona").
+   3) Revisión en móvil más compacta para que las dos fotos + Calcular
+      queden en la primera pantalla.
+   4) Header en móvil: logo recortado a SOLO el espejuelo (sin texto),
+      bandera/búsqueda e iconos más pequeños para dar aire al logo.
+   =================================================================== */
+
+/* 1) Badges como texto en relieve, no botón */
+.ts2-fr-badges { top: 10px; right: 10px; gap: 3px; }
+.ts2-fr-badge {
+  background: none; box-shadow: none; padding: 0; border-radius: 0;
+  font-size: 12px; font-weight: 800; color: #17203a; letter-spacing: .01em;
+  text-shadow: 0 1px 0 rgba(255,255,255,.95), 0 1px 3px rgba(255,255,255,.7);
+}
+.ts2-fr-badge-ic { width: 15px; height: 15px; filter: drop-shadow(0 1px 1px rgba(255,255,255,.95)); }
+/* en la REVISIÓN la info ya está en la franja de datos de arriba: no repetir */
+.vm-review-2col .ts2-fr-badges { display: none; }
+
+/* 2) ¿Para quién son? contenido en móvil */
+@media (max-width: 939px) {
+  .vm-who { flex-direction: column; align-items: stretch; gap: 6px; }
+  .vm-who-opts { width: 100%; }
+  .vm-who-opt { flex: 1 1 0; text-align: center; padding: 8px 6px; white-space: nowrap; }
+  .vm-who-name { width: 100%; }
+}
+
+/* 3) Revisión móvil compacta: dos fotos + Calcular en la primera pantalla */
+@media (max-width: 939px) {
+  .vm-review-2col .vm-review-c1 .ts2-rvimg { aspect-ratio: 16 / 9; }
+  .vm-review-2col .vm-review-c1 .ts2-step-hd { margin-bottom: 8px; }
+  .vm-review-2col .vm-review-c1 .ts2-rv-grid { gap: 8px; }
+  .vm-review-2col .vm-review-c1 .ts2-rv-actions { margin-top: 8px; }
+}
+
+/* 4) Header móvil: logo recortado (solo el espejuelo) + iconos compactos */
+@media (max-width: 860px) {
+  .header-main .logo-mobile {
+    display: inline-flex; align-items: center; width: 46px; height: 34px;
+    overflow: hidden; background: #fff; border-radius: 9px; padding: 3px 0 3px 5px;
+  }
+  .header-main .logo-mobile .logo-mobile-img {
+    height: 100%; width: auto; max-width: none; object-fit: cover; object-position: left center; display: block;
+  }
+  .header-actions { gap: 2px; margin-left: 2px; }
+  .header-actions .icon-btn { width: 38px; height: 38px; padding: 5px; }
+  .header-actions .hdr-ic { width: 20px; height: 20px; }
+  .flag-ic { width: 19px; }
 }
