@@ -23,6 +23,7 @@ import {
   getMeasureJob, setMeasureJob, clearMeasureJob,
   saveMeasureResult, getMeasureResult, clearMeasureResult,
   saveFacePhotos, getFacePhotos, clearFacePhotos,
+  measureSignature, getCachedGeneration, saveCachedGeneration,
 } from "../data/tryOnState.js";
 
 // Interfaz de CLIENTE del probador (producción).
@@ -695,6 +696,12 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           // Persistimos la generación (imágenes + números) para que salir/reabrir el
           // estudio NO obligue a re-generar: al reabrir se restaura tal cual.
           try { saveMeasureResult(product, { data: picked, frontImg, sideImg }); } catch { /* cuota: se ignora */ }
+          // CACHÉ POR FIRMA (fotos + espejuelo + color): si el cliente vuelve a
+          // calcular con exactamente los mismos datos, se devuelve esto sin re-generar.
+          try {
+            const sig = measureSignature({ frontImg, sideImg, sku: product?.sku, colorName: color?.name });
+            if (sig) saveCachedGeneration(sig, picked);
+          } catch { /* cuota: se ignora */ }
           // Guardar la salida (imagen frontal con espejuelos + medidas) en el
           // backend para verla luego en el panel admin. Best-effort: si falla o
           // no hay almacenamiento configurado, NO afecta al cliente.
@@ -744,6 +751,19 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
   async function doMeasure() {
     if (!frontImg || !sideImg) return;
+    // CACHÉ: si estas MISMAS fotos + este MISMO espejuelo + ESTE MISMO color ya se
+    // generaron antes, NO se vuelve a llamar a la IA: se devuelve el resultado
+    // guardado al instante (sin coste ni espera). La firma distingue por foto,
+    // SKU y color, así que cambiar cualquiera de los tres sí re-genera.
+    const sig = measureSignature({ frontImg, sideImg, sku: product?.sku, colorName: color?.name });
+    const cachedGen = sig ? getCachedGeneration(sig) : null;
+    if (cachedGen) {
+      if (mAbort.current) mAbort.current.abort();
+      setPhase("done");
+      setMData(cachedGen); setMState("result");
+      try { saveMeasureResult(product, { data: cachedGen, frontImg, sideImg }); } catch { /* cuota */ }
+      return;
+    }
     if (mAbort.current) mAbort.current.abort();
     const ctrl = new AbortController();
     mAbort.current = ctrl;

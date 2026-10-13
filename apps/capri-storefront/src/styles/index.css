@@ -6715,3 +6715,17 @@ button.card-genre {
   .tryon-studio:not(.tryon-result) .ts2-step { padding: 12px 16px; }
   .tryon-studio:not(.tryon-result) .ts2-step-hd { margin-bottom: 10px; }
 }
+
+/* ===================================================================
+   ETAPA 86 - Ajustes finos:
+   - Barra "Atrás / ✕" del probador mas fina y compacta (mas cerca del header).
+   - Material y genero (Acetato / Hombres) VUELVEN a verse en la ficha del
+     espejuelo tambien en la REVISION (se habian ocultado porque antes estaban
+     en la tira de arriba, que ahora ya no se muestra).
+   =================================================================== */
+.tryon-pagebar { padding: 4px 14px; }
+.tryon-pagebar .tryon-back { font-size: 13.5px; padding: 3px 7px; gap: 5px; }
+.tryon-pagebar .tryon-x { width: 32px; height: 32px; font-size: 20px; }
+
+/* Material/genero de vuelta en la ficha (revision) */
+.vm-review-2col .ts2-fr-badges { display: flex; }

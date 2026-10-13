@@ -206,3 +206,79 @@ export function getFacePhotos() {
 export function clearFacePhotos() {
   try { localStorage.removeItem(FACE_LS_KEY); } catch { /* nada */ }
 }
+
+
+// ── Caché de GENERACIÓN por firma (fotos + espejuelo + color) ────────────────
+//
+// La IA que "pone" los espejuelos en la cara es cara (segundos/minutos + una
+// petición al proveedor). Si el cliente vuelve a pulsar "Calcular mis medidas"
+// con las MISMAS dos fotos, el MISMO espejuelo (SKU) y el MISMO color, el
+// resultado sería idéntico: no hay que re-generar, se devuelve lo guardado.
+// La clave es una FIRMA estable derivada de (sku, color, hash de cada foto).
+// Guardamos varias (LRU) para que alternar entre colores tampoco re-genere.
+const GEN_LS_KEY = "rubi.tryon.gen.v1";
+const MAX_GEN = 8;
+
+// Hash rápido y estable (djb2) de una cadena larga (la data URL de una foto).
+function quickHash(s) {
+  s = String(s || "");
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) >>> 0;
+  return (h >>> 0).toString(36) + ":" + s.length.toString(36);
+}
+
+// Firma de una medición: misma firma ⇒ misma generación (no re-generar).
+export function measureSignature({ frontImg, sideImg, sku, colorName } = {}) {
+  if (!frontImg || !sideImg) return null;
+  return [normalize(sku), normalize(colorName), quickHash(frontImg), quickHash(sideImg)].join("~");
+}
+
+function readGen() {
+  try {
+    const raw = localStorage.getItem(GEN_LS_KEY);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch { return {}; }
+}
+
+function writeGen(map) {
+  let entries = Object.entries(map).sort((a, b) => (b[1]?.savedAt || 0) - (a[1]?.savedAt || 0));
+  if (entries.length > MAX_GEN) entries = entries.slice(0, MAX_GEN);
+  while (entries.length) {
+    try { localStorage.setItem(GEN_LS_KEY, JSON.stringify(Object.fromEntries(entries))); return true; }
+    catch { entries.pop(); }
+  }
+  try { localStorage.removeItem(GEN_LS_KEY); } catch { /* nada */ }
+  return false;
+}
+
+// Devuelve los datos (medidas + imágenes IA) guardados para esa firma, o null.
+export function getCachedGeneration(sig) {
+  if (!sig) return null;
+  const map = readGen();
+  const hit = map[sig];
+  if (!hit || !hit.data) return null;
+  // "Toca" la entrada para que la LRU la considere reciente.
+  try { hit.savedAt = Date.now(); map[sig] = hit; writeGen(map); } catch { /* nada */ }
+  return hit.data;
+}
+
+// Guarda la generación bajo su firma (imágenes reducidas para no reventar la cuota).
+export async function saveCachedGeneration(sig, data) {
+  if (!sig || !data) return;
+  try {
+    const d = { ...data };
+    const [f, p] = await Promise.all([
+      downscaleForStore(d.frontImage),
+      downscaleForStore(d.profileImage),
+    ]);
+    d.frontImage = f || d.frontImage || null;
+    d.profileImage = p || d.profileImage || null;
+    const map = readGen();
+    map[sig] = { data: d, savedAt: Date.now() };
+    writeGen(map);
+  } catch { /* cuota u otro: se ignora */ }
+}
+
+export function clearCachedGenerations() {
+  try { localStorage.removeItem(GEN_LS_KEY); } catch { /* nada */ }
+}
