@@ -1193,33 +1193,117 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // Formato de milímetros para los números medidos (DIP, altura de corredor).
   const mmv = (v) => (v == null || Number.isNaN(Number(v)) ? "—" : `${Math.round(Number(v) * 10) / 10} mm`);
 
+  // Ficha del espejuelo seleccionado (foto + medidas + pie con fecha/logo). Se usa
+  // en captura/revisión (ancho completo, debajo) y en el RESULTADO (columna derecha,
+  // bajo las medidas calculadas). El pie (fecha/hora + logo RUBI LENS) va SIEMPRE.
+  function frameAside() {
+    return (
+      <aside className="fs-card ts2-frame">
+        <div className="fs-hd">
+          <IconGlasses className="fs-hd-ic" />
+          <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
+        </div>
+
+        <div className="ts2-fr ts2-fr-solo">
+          {/* Foto grande de la montura: selector de color abajo-izquierda y
+              Material/Género como badges arriba-derecha (como las cards de la tienda);
+              medidas debajo. */}
+          <div className="ts2-fr-main">
+            <div className="fs-photo ts2-fr-photo">
+              {color?.image
+                ? <img src={color.image} referrerPolicy="no-referrer"
+                       alt={`${product.name} ${color?.name || ""}`}
+                       onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+                : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+              <div className="ts2-fr-badges">
+                {materialText && (
+                  <span className="ts2-fr-badge"><IconMaterial className="ts2-fr-badge-ic" />{materialText}</span>
+                )}
+                {genderLabel && (
+                  <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{genderLabel}</span>
+                )}
+              </div>
+              {colors.length > 1 && (
+                <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
+                  {colors.map((c, i) => (
+                    <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
+                            className={`ts2-fr-onsw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                            title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="fs-measures">
+              <div className="fs-mhead">
+                {cells.map((c) => <span key={c.key}>{c.label}</span>)}
+              </div>
+              <div className="fs-mbody">
+                {cells.map(({ key, value, Icon }) => (
+                  <div className="fs-mcell" key={key}>
+                    <Icon className="fs-mic" />
+                    <b className="fs-mval">{value || "—"}</b>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pie profesional: fecha, hora y logo RUBI LENS */}
+        <div className="fs-foot">
+          <div className="fs-foot-meta">
+            <span className="fs-foot-date">
+              <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
+              {dateStr}
+            </span>
+            <span className="fs-foot-time">
+              <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
+              {timeStr}
+            </span>
+          </div>
+          <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
+        </div>
+      </aside>
+    );
+  }
+
   // Resultado DENTRO de la misma ventana del estudio (reemplaza la columna de captura):
-  // las dos imágenes con los espejuelos puestos + "Añadir receta" / "Medir de nuevo".
+  // Escritorio: imagen frontal a la IZQUIERDA; a la DERECHA, apiladas, las medidas
+  // calculadas (arriba) y la ficha del espejuelo (abajo). Móvil: en una columna.
   function resultViews() {
     const front = mData?.frontImage || frontImg;
     const side = mData?.profileImage || sideImg;
     return (
-      <div className="vm-result">
-        {/* Resultado: SOLO la imagen FRONTAL con los espejuelos puestos. Todas las
-            medidas que necesitamos van en el panel inferior (.vm-dims-inflow). */}
-        <div className="vm-result-imgs vm-result-imgs-solo">
-          <figure className="vm-rfig">
-            <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
-            {front ? (
-              <>
-                <img className="vm-rimg" src={front} alt={t("vm.front")}
-                     onClick={() => setZoom({ src: front, which: "front" })} />
-                <div className="vm-rtools">
-                  <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
-                          onClick={() => setZoom({ src: front, which: "front" })}>{IC_ZOOM}</button>
-                  <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
-                          onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
-                </div>
-              </>
-            ) : <div className="vm-noimg">📷</div>}
-            <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
-          </figure>
+      <div className="vm-result vm-result-2col">
+        {/* CONTENEDOR 1 (izquierda): imagen frontal. CONTENEDOR 2 (derecha):
+            dividido 50/50 en Medidas calculadas (arriba) y ficha del espejuelo
+            (abajo). Reutiliza todo el alto sin espacios en blanco. En móvil baja
+            todo en una sola columna. */}
+        <div className="vm-result-cols">
+          <div className="vm-result-c1">
+            <figure className="vm-rfig">
+              <figcaption className="vm-rlabel">{t("vm.front")}</figcaption>
+              {front ? (
+                <>
+                  <img className="vm-rimg" src={front} alt={t("vm.front")}
+                       onClick={() => setZoom({ src: front, which: "front" })} />
+                  <div className="vm-rtools">
+                    <button type="button" className="vm-rtool" title={t("vm.zoom")} aria-label={t("vm.zoom")}
+                            onClick={() => setZoom({ src: front, which: "front" })}>{IC_ZOOM}</button>
+                    <button type="button" className="vm-rtool" title={t("vm.download")} aria-label={t("vm.download")}
+                            onClick={() => downloadResult(front, "front")}>{IC_DOWN}</button>
+                  </div>
+                </>
+              ) : <div className="vm-noimg">📷</div>}
+              <div className="vm-rbadge"><span>{t("vm.pd")}</span><b>{mmv(mData?.pd)}</b></div>
+            </figure>
+          </div>
+          <div className="vm-result-c2">
+            <div className="vm-result-c2a vm-dims-inflow">{dimsPanel()}</div>
+            <div className="vm-result-c2b">{frameAside()}</div>
+          </div>
         </div>
+        {/* Confianza + acciones, a lo ancho debajo de las dos columnas. */}
         {mData?.quality && (
           <div className={`vm-conf vm-conf-${mData.quality.level}`}>
             <span className="vm-conf-dot" aria-hidden="true" />
@@ -1252,9 +1336,6 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             </button>
           )}
         </div>
-        {/* En MÓVIL las medidas calculadas se muestran aquí, debajo de las fotos
-            (en escritorio van en la tarjeta flotante de la esquina). */}
-        <div className="vm-dims-inflow">{dimsPanel()}</div>
       </div>
     );
   }
@@ -1410,74 +1491,9 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 })}
 
           </div>{/* /.ts2-top */}
-          {/* Información de la montura (ancho completo, abajo) — SIEMPRE visible.
-              En móvil ocupa la mitad inferior (50/50 con la cámara). */}
-          <aside className="fs-card ts2-frame">
-            <div className="fs-hd">
-              <IconGlasses className="fs-hd-ic" />
-              <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
-            </div>
-
-            <div className="ts2-fr ts2-fr-solo">
-              {/* Foto grande de la montura: selector de color abajo-izquierda y
-                  Material/Género como badges arriba-derecha (como las cards de la tienda);
-                  medidas debajo. */}
-              <div className="ts2-fr-main">
-                <div className="fs-photo ts2-fr-photo">
-                  {color?.image
-                    ? <img src={color.image} referrerPolicy="no-referrer"
-                           alt={`${product.name} ${color?.name || ""}`}
-                           onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
-                    : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
-                  <div className="ts2-fr-badges">
-                    {materialText && (
-                      <span className="ts2-fr-badge"><IconMaterial className="ts2-fr-badge-ic" />{materialText}</span>
-                    )}
-                    {genderLabel && (
-                      <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{genderLabel}</span>
-                    )}
-                  </div>
-                  {colors.length > 1 && (
-                    <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
-                      {colors.map((c, i) => (
-                        <button key={c.name + i} type="button" role="option" aria-selected={i === ci}
-                                className={`ts2-fr-onsw ${i === ci ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
-                                title={c.name} aria-label={c.name} onClick={() => setCi(i)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="fs-measures">
-                  <div className="fs-mhead">
-                    {cells.map((c) => <span key={c.key}>{c.label}</span>)}
-                  </div>
-                  <div className="fs-mbody">
-                    {cells.map(({ key, value, Icon }) => (
-                      <div className="fs-mcell" key={key}>
-                        <Icon className="fs-mic" />
-                        <b className="fs-mval">{value || "—"}</b>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Pie profesional: fecha, hora y logo RUBI LENS */}
-            <div className="fs-foot">
-              <div className="fs-foot-meta">
-                <span className="fs-foot-date">
-                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
-                  {dateStr}
-                </span>
-                <span className="fs-foot-time">
-                  <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
-                  {timeStr}
-                </span>
-              </div>
-              <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
-            </div>
-          </aside>
+          {/* Ficha de la montura: en captura/revisión va a ancho completo debajo;
+              en el RESULTADO va en la columna derecha (dentro de resultViews). */}
+          {mState !== "result" && frameAside()}
         </div>
       </div>
 

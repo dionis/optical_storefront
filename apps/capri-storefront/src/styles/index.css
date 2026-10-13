@@ -6143,3 +6143,104 @@ button.card-genre {
   .zlx-pop-rx .zlx-rx-fields { gap: 8px; }
   .zlx-pop-rx .zlx-stepper-ctl { width: 80px; }
 }
+
+/* ===================================================================
+   ETAPA 76 - Vista de RESULTADO del probador (pedido del cliente):
+   Escritorio horizontal: CONTENEDOR 1 (imagen frontal) a la izquierda;
+   CONTENEDOR 2 (derecha) dividido 50/50 -> Medidas calculadas (arriba) y
+   ficha del espejuelo (abajo). Reutiliza todo el alto sin espacios en
+   blanco. Tamaño FIJO: el bloque mide lo mismo y se ve IGUAL en cualquier
+   laptop/PC, sin importar la resolucion ni la escala (zoom escala todo por
+   igual). Debajo, a lo ancho, confianza + acciones.
+   =================================================================== */
+
+/* En el resultado no repetimos la franja superior (material/medidas/genero):
+   ya estan en la ficha del espejuelo de la derecha. */
+.tryon-result .ts2-top > .ts2-facts,
+.tryon-result .ts2-top > .ts2-colors { display: none; }
+
+/* --- Escritorio horizontal: layout de tamano FIJO (identico en toda pantalla) --- */
+@media (min-width: 940px) {
+  .tryon-result .ts2 { max-width: 960px; }
+
+  .vm-result.vm-result-2col { display: block; width: 100%; }
+
+  .vm-result-2col .vm-result-cols {
+    display: grid;
+    grid-template-columns: 440px 1fr;   /* imagen fija | derecha ocupa el resto */
+    gap: 18px;
+    align-items: stretch;               /* las dos columnas con el MISMO alto */
+    width: 918px; max-width: 100%; margin: 0 auto;
+    height: 700px;                      /* alto FIJO -> identico en toda resolucion */
+  }
+
+  /* Contenedor 1: imagen a todo el alto, sin huecos */
+  .vm-result-2col .vm-result-c1 { min-height: 0; min-width: 0; }
+  .vm-result-2col .vm-result-c1 .vm-rfig {
+    margin: 0; width: 100%; height: 100%; aspect-ratio: auto;
+    border-radius: 16px; overflow: hidden;
+  }
+  .vm-result-2col .vm-result-c1 .vm-rfig img,
+  .vm-result-2col .vm-result-c1 .vm-rimg { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* Contenedor 2: dividido en dos. Las MEDIDAS toman el alto que necesitan
+     (todas las filas visibles, sin scroll) y la FICHA ocupa el resto: así se
+     reutiliza el espacio sin huecos en blanco. */
+  .vm-result-2col .vm-result-c2 {
+    display: grid; grid-template-rows: auto 1fr; gap: 14px; height: 100%;
+    min-height: 0; min-width: 0;
+  }
+  .vm-result-2col .vm-result-c2a,
+  .vm-result-2col .vm-result-c2b { min-height: 0; min-width: 0; display: block; }
+  .vm-result-2col .vm-result-c2a .vm-dims { width: auto; margin: 0; }
+  /* medidas compactas para que las 8 filas quepan sin scroll */
+  .vm-result-2col .vm-result-c2a .vm-dims-h { padding: 9px 14px; }
+  .vm-result-2col .vm-result-c2a .vm-dims-body { padding: 4px 14px 8px; overflow: visible; }
+  .vm-result-2col .vm-result-c2a .vm-dims-row { padding: 4px 0; }
+  /* ficha del espejuelo: ocupa toda su fila. La foto FLEXIONA (se encoge) para que
+     SIEMPRE se vean la barra de medidas (Ancho·Puente·Varilla) y el pie (fecha+logo). */
+  .vm-result-2col .vm-result-c2b .ts2-frame {
+    height: 100%; margin: 0; display: flex; flex-direction: column; min-height: 0;
+    border-radius: 14px; overflow: hidden;
+  }
+  .vm-result-2col .vm-result-c2b .ts2-frame .fs-hd { flex: 0 0 auto; }
+  .vm-result-2col .vm-result-c2b .ts2-frame .ts2-fr { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  .vm-result-2col .vm-result-c2b .ts2-frame .ts2-fr-main {
+    display: flex; flex-direction: column; height: 100%; min-height: 0;
+  }
+  .vm-result-2col .vm-result-c2b .ts2-frame .ts2-fr-photo.fs-photo {
+    aspect-ratio: auto; flex: 1 1 auto; min-height: 0; border-bottom: 1px solid var(--fs-line, #e7eaf0);
+  }
+  .vm-result-2col .vm-result-c2b .ts2-frame .ts2-fr-photo.fs-photo img { object-fit: contain; padding: 8px; }
+  .vm-result-2col .vm-result-c2b .ts2-frame .fs-measures { flex: 0 0 auto; }
+  .vm-result-2col .vm-result-c2b .ts2-frame .fs-foot { flex: 0 0 auto; }
+
+  /* confianza + acciones centradas, al ancho del bloque */
+  .tryon-result .vm-conf,
+  .tryon-result .vm-result-actions { width: 918px; max-width: 100%; margin-left: auto; margin-right: auto; }
+  .tryon-result .vm-result-actions { margin-top: 14px; justify-content: center; }
+}
+
+/* --- Pantallas menores a 940px: todo en una sola columna (imagen, medidas, ficha) --- */
+@media (max-width: 939px) {
+  .vm-result.vm-result-2col { display: flex; flex-direction: column; gap: 12px; }
+  .vm-result-2col .vm-result-cols { display: flex; flex-direction: column; gap: 12px; }
+  .vm-result-2col .vm-result-c2 { display: flex; flex-direction: column; gap: 12px; }
+  .vm-result-2col .vm-result-c1 .vm-rfig {
+    margin: 0 auto; width: 100%; max-width: 420px; aspect-ratio: 3 / 4; height: auto; overflow: hidden; border-radius: 14px;
+  }
+  .vm-result-2col .vm-result-c1 .vm-rfig img,
+  .vm-result-2col .vm-result-c1 .vm-rimg { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vm-result-2col .vm-result-c2a .vm-dims,
+  .vm-result-2col .vm-result-c2b .ts2-frame { margin: 0; }
+}
+
+/* ===================================================================
+   ETAPA 77 - Footer SIEMPRE visible en todas las paginas: layout sticky
+   (el pie se ancla al fondo aunque la pagina sea corta, en todas las
+   rutas). No cambia nada del contenido; solo asegura que el footer este
+   presente y al fondo en cualquier pantalla.
+   =================================================================== */
+#root { display: flex; flex-direction: column; min-height: 100vh; }
+#root > .site-main { flex: 1 0 auto; }
+#root > .footer { flex-shrink: 0; }
