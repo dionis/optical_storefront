@@ -9026,3 +9026,44 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .zlx-pop-treat .zlx-choice.sel .zlx-choice-price,
 .zlx-pop-treat .zlx-choice.sel .zlx-choice-ic { color: #f3e3b3; text-shadow: 0 1px 2px rgba(0, 0, 0, .38); }
 .zlx-pop-treat .zlx-choice-main { flex-direction: row; align-items: center; gap: 8px; }
+
+/* ===================================================================
+   ETAPA 131 — RESUMEN del pedido en móvil en UNA SOLA VISTA (pedido del
+   cliente): fuera la foto generada grande de abajo — ya se ve en la
+   ficha 50/50 de arriba — y los pasos + "Comprar ahora" se compactan
+   para caber con la ficha y el resumen en la misma pantalla. En la web
+   no cambia nada (la foto vive en su columna izquierda y todo cabe).
+   =================================================================== */
+@media (max-width: 939px) {
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-gen-img { display: none !important; }
+  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo,
+  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo.has-gen { height: 11vh; height: 11dvh; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-page-head { margin: 0 0 4px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 8px 12px 10px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 3px 0; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-total { margin-top: 6px; padding-top: 6px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps { gap: 6px; margin: 8px 0 0; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab { min-height: 56px; padding: 6px 10px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab-txt small { display: none; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-buy-left { margin-top: 8px; }
+}
+/* "Revisa tu pedido" a juego con la confirmación de receta: botón en barra
+   navy/oro 9-slice (sin deformar), filas con rótulo tenue y valor navy, y
+   el total en navy con la raya dorada. */
+.btn.btn-primary.zlx-review-go {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 52px; padding: 0 12px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+  font-size: 13.5px; white-space: nowrap;
+}
+.btn.btn-primary.zlx-review-go:hover:not(:disabled) {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}
+.zlx-review-card .zlx-summary-list li span { color: var(--muted); }
+.zlx-review-card .zlx-summary-list li b { color: #0b2f66; }
+.zlx-review-card .zlx-summary-total { border-top: 2px solid #d9b85c !important; }
+.zlx-review-card .zlx-summary-total span { color: var(--cuba-blue); }
+.zlx-review-card .zlx-summary-total b { color: #0b2f66; }
