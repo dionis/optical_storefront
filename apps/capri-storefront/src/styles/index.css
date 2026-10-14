@@ -6898,3 +6898,37 @@ button.card-genre {
 }
 .vm-overlay .vm-state .vm-calcing { color: #17203a; }
 .vm-overlay .vm-state .vm-load-note { color: #7c8698; }
+
+
+/* ===================================================================
+   ETAPA 90 - Armonizar el flujo de RECETA con el probador: el paso de
+   receta (pantalla completa) ahora muestra, a la DERECHA, la ficha del
+   espejuelo elegido (igual que en el probador), para que los espejuelos
+   queden SIEMPRE visibles mientras se añade la receta. La receta va a la
+   izquierda; a su lado, la montura. En móvil la ficha va arriba, compacta.
+   =================================================================== */
+@media (min-width: 960px) {
+  .zlx-page .zlx-page-inner.zlx-page-2col {
+    max-width: 1080px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: 28px;
+    align-items: start;
+  }
+  .zlx-page-2col .zlx-page-main { min-width: 0; }
+  .zlx-page-2col .zlx-page-side { position: sticky; top: 10px; }
+}
+@media (max-width: 959px) {
+  .zlx-page .zlx-page-inner.zlx-page-2col { display: flex; flex-direction: column; }
+  /* La ficha del espejuelo ARRIBA (compacta), luego la receta. */
+  .zlx-page-2col .zlx-page-side { order: -1; margin-bottom: 14px; }
+}
+
+/* Ficha del espejuelo dentro del flujo de receta (reutiliza el look del probador) */
+.zlx-page-side .fs-card.ts2-frame.zlx-frameside {
+  margin: 0; max-height: none; align-self: start; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, .08); border: 1px solid #e7eaf0;
+}
+.zlx-page-side .zlx-frameside .ts2-fr-photo.fs-photo { aspect-ratio: 16 / 9; }
+.zlx-page-side .zlx-frameside .ts2-fr-badges { display: flex; }
+@media (max-width: 959px) {
+  .zlx-page-side .zlx-frameside .ts2-fr-photo.fs-photo { aspect-ratio: 20 / 7; }
+}

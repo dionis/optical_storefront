@@ -9,6 +9,8 @@ import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { resolveImage, resolveMedia } from "../data/imageUrl.js";
 import { Icon360, IconMaterial as SpecMaterial, IconMeasures, IconGender } from "../components/UiIcons.jsx";
+// Iconos de medida del probador, para la ficha del espejuelo que acompaña al flujo.
+import { IconGlasses as IconGlassesFs, IconLensWidth, IconBridge, IconTemple } from "../components/measureIcons.jsx";
 const FRAME_VIEW_ORDER = ["front", "left", "right", "back"];
 import { subscribe as onPrices, lensBasePrice, lensPhotoPrice, lensARPrice } from "../admin/priceStore.js";
 // Catalog rows (designs/materials/prices/photo/AR) come from the backend via
@@ -324,7 +326,7 @@ function ZlxStepper({ value, options, onChange, label, withEmpty, flag = "" }) {
 // ── popover shell (requirement 3): floats OVER the stage, frame stays visible ─
 // `onBack` (optional) shows a ← button so material/treatments feel like steps of
 // the SAME window (the customer never feels they left the popup).
-function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, fullpage, children }) {
+function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, backLabel, helpLabel, className, fullpage, side, children }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -354,12 +356,17 @@ function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, ba
           <button type="button" className="tryon-x" onClick={onClose} aria-label={closeLabel}>×</button>
         </div>
         <div className="zlx-page-scroll">
-          <div className="zlx-page-inner">
-            <div className="zlx-page-head">
-              <b>{icon} {title}</b>
-              {subtitle && <span className="zlx-page-sub">{subtitle}</span>}
+          <div className={`zlx-page-inner ${side ? "zlx-page-2col" : ""}`}>
+            <div className="zlx-page-main">
+              <div className="zlx-page-head">
+                <b>{icon} {title}</b>
+                {subtitle && <span className="zlx-page-sub">{subtitle}</span>}
+              </div>
+              <div className="zlx-pop-body zlx-page-body">{children}</div>
             </div>
-            <div className="zlx-pop-body zlx-page-body">{children}</div>
+            {/* Columna derecha: los espejuelos elegidos SIEMPRE visibles durante el
+                flujo (receta → material → antirreflejo), igual que en el probador. */}
+            {side && <aside className="zlx-page-side">{side}</aside>}
           </div>
         </div>
         <Footer />
@@ -1048,6 +1055,76 @@ export default function LensProcess() {
     </>
   );
 
+  // Ficha del espejuelo elegido (misma que el probador): acompaña al flujo de
+  // receta → material → antirreflejo en la columna derecha, para que los
+  // espejuelos estén SIEMPRE visibles mientras se añade la receta y se elige todo.
+  const fsA = product.attributes || {};
+  const fsMats = Array.isArray(fsA.material) ? fsA.material.filter(Boolean).join(" / ") : (fsA.material || "");
+  const fsNow = new Date();
+  const fsLocale = lang === "en" ? "en-US" : "es-ES";
+  const fsDate = fsNow.toLocaleDateString(fsLocale, { day: "2-digit", month: "short", year: "numeric" });
+  const fsTime = fsNow.toLocaleTimeString(fsLocale, { hour: "2-digit", minute: "2-digit" });
+  const fsCells = [
+    { k: t("fs.lensWidth"), v: fsA.eye_size, Icon: IconLensWidth },
+    { k: t("fs.bridge"), v: fsA.bridge_size, Icon: IconBridge },
+    { k: t("fs.temple"), v: fsA.temple_length, Icon: IconTemple },
+  ];
+  const frameSide = (
+    <aside className="fs-card ts2-frame zlx-frameside">
+      <div className="fs-hd">
+        <IconGlassesFs className="fs-hd-ic" />
+        <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
+      </div>
+      <div className="ts2-fr ts2-fr-solo">
+        <div className="ts2-fr-main">
+          <div className="fs-photo ts2-fr-photo">
+            {color?.image
+              ? <img src={color.image} referrerPolicy="no-referrer" alt={`${product.name} ${color?.name || ""}`}
+                     onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
+              : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
+            <div className="ts2-fr-badges">
+              {fsMats && <span className="ts2-fr-badge"><SpecMaterial className="ts2-fr-badge-ic" />{fsMats}</span>}
+              {fsA.gender && <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{fsA.gender}</span>}
+            </div>
+            {product.colors.length > 1 && (
+              <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
+                {product.colors.map((c, i) => (
+                  <button key={c.name + i} type="button" role="option" aria-selected={i === colorIdx}
+                          className={`ts2-fr-onsw ${i === colorIdx ? "on" : ""}`} style={{ background: c.hex || "#ccc" }}
+                          title={c.name} aria-label={c.name} onClick={() => setColorIdx(i)} />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="fs-measures">
+            <div className="fs-mhead">{fsCells.map((c) => <span key={c.k}>{c.k}</span>)}</div>
+            <div className="fs-mbody">
+              {fsCells.map(({ k, v, Icon }) => (
+                <div className="fs-mcell" key={k}>
+                  <Icon className="fs-mic" />
+                  <b className="fs-mval">{v == null || v === "" ? "—" : (/mm/i.test(String(v)) ? String(v) : `${v} mm`)}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="fs-foot">
+        <div className="fs-foot-meta">
+          <span className="fs-foot-date">
+            <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>
+            {fsDate}
+          </span>
+          <span className="fs-foot-time">
+            <svg className="fs-foot-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3.5 2" /></svg>
+            {fsTime}
+          </span>
+        </div>
+        <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
+      </div>
+    </aside>
+  );
+
   return (
     <div className="zlx">
       <div className="zlx-head">
@@ -1260,7 +1337,7 @@ export default function LensProcess() {
 
       {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
       {pop === "rx" && (
-        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
+        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {rxStage === "pick" && USE_MEDUSA && (
                 <div className="zlx-rx-upload">
