@@ -302,10 +302,23 @@ export default function Home() {
       </section>
 
       <section className="section props reveal">
-        <div className="prop"><span>◈</span><b>{t("prop.ar")}</b><small>{t("prop.ar.sub")}</small></div>
-        <div className="prop"><span>℞</span><b>{t("prop.rx")}</b><small>{t("prop.rx.sub")}</small></div>
-        <div className="prop"><span>⇄</span><b>{t("prop.warranty")}</b><small>{t("prop.warranty.sub")}</small></div>
-        <div className="prop"><span>✈</span><b>{t("prop.ship")}</b><small>{t("prop.ship.sub")}</small></div>
+        {/* Iconos 3D navy de la lámina (probador=cámara, receta=regla,
+            garantía=escudo, envío=camión); respaldo: el glifo de siempre. */}
+        {[
+          ["navy-camera", "◈", "prop.ar", "prop.ar.sub"],
+          ["navy-ruler", "℞", "prop.rx", "prop.rx.sub"],
+          ["navy-shield", "⇄", "prop.warranty", "prop.warranty.sub"],
+          ["navy-truck", "✈", "prop.ship", "prop.ship.sub"],
+        ].map(([icon, glyph, tk, sk]) => (
+          <div className="prop" key={tk}>
+            <span className="prop-ic">
+              <img className="i3d i3d-prop" src={`/ui/icons3d/${icon}.png`} alt=""
+                   onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+              <span className="prop-glyph">{glyph}</span>
+            </span>
+            <b>{t(tk)}</b><small>{t(sk)}</small>
+          </div>
+        ))}
       </section>
 
       <section className="section reveal">

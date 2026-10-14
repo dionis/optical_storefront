@@ -8074,3 +8074,16 @@ img.i3d-measure { max-height: 28px; }
 /* ETAPA 115e — toggle grid/lista del catálogo con iconos 3D de la lámina. */
 img.i3d-view { height: 17px !important; width: auto !important; }
 .fb-vbtn:not(.no-i3d) .fb-ic { display: none; }
+
+/* ETAPA 115f — Iconos 3D en la franja de confianza y los beneficios. */
+img.i3d-trust { height: 26px !important; width: auto !important; }
+.trust-item:not(.no-i3d) .trust-ic { display: none; }
+.prop-ic { display: grid; place-items: center; min-height: 34px; margin-bottom: 8px; }
+img.i3d-prop { height: 32px !important; width: auto !important;
+  filter: drop-shadow(0 4px 8px rgba(10, 25, 60, .18)); }
+.prop-ic:not(.no-i3d) .prop-glyph { display: none; }
+.prop-ic.no-i3d .prop-glyph { font-size: 28px; color: var(--blue); }
+@media (max-width: 760px) {
+  img.i3d-prop { height: 26px !important; }
+  img.i3d-trust { height: 22px !important; }
+}
