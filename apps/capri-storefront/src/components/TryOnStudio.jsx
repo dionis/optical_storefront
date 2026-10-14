@@ -189,6 +189,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const rafRef = useRef(0);
   const camKillRef = useRef(false);     // true al desmontar: no re-adquirir la cámara
   const camReleasedRef = useRef(false); // true cuando se soltó la webcam (dos fotos listas)
+  const hiddenReleasedRef = useRef(false); // true cuando se soltó por pasar a 2.º plano
+  const bothShotsRef = useRef(false); // espejo de bothShots para los handlers de visibilidad
   const holdRef = useRef(0);
   const phaseRef = useRef("front");
   const [camStatus, setCamStatus] = useState("starting"); // starting | ready | denied | nocam
@@ -443,10 +445,42 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryMode]);
 
+  // DESOCUPAR LA CÁMARA también al pasar a SEGUNDO PLANO (pedido del cliente):
+  // cambiar de app, atender una llamada o minimizar dejaba la webcam tomada y la
+  // luz encendida. Al esconderse la pestaña se sueltan las pistas; al volver, si
+  // el cliente sigue capturando (sin las dos fotos y en modo cámara), se vuelve a
+  // pedir sola. pagehide hace lo mismo al salir de la página (bfcache incluido).
+  useEffect(() => {
+    if (entryMode !== "camera") return undefined;
+    const releaseNow = () => {
+      if (!streamRef.current) return;
+      cancelAnimationFrame(rafRef.current);
+      try { streamRef.current.getTracks().forEach((tr) => tr.stop()); } catch { /* nada */ }
+      streamRef.current = null;
+      if (videoRef.current) { try { videoRef.current.srcObject = null; } catch { /* nada */ } }
+      hiddenReleasedRef.current = true;
+    };
+    const onVis = () => {
+      if (document.hidden) { releaseNow(); return; }
+      if (hiddenReleasedRef.current && !camKillRef.current && !bothShotsRef.current) {
+        hiddenReleasedRef.current = false;
+        acquireCamera(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", releaseNow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", releaseNow);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryMode]);
+
   // DESOCUPAR LA CÁMARA en cuanto están las DOS fotos (revisión/resultado): no tiene
   // sentido mantener la webcam encendida (luz, batería, privacidad). Si el cliente
   // vuelve a capturar (retake), se vuelve a pedir la cámara automáticamente.
   const bothShots = Boolean(frontImg && sideImg);
+  bothShotsRef.current = bothShots;
   useEffect(() => {
     if (camKillRef.current) return;
     if (bothShots) {
