@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, rangeFor, subscribe as onAnalytics, clearDemo, productSales } from "./analytics.js";
+import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalytics, clearDemo, productSales, productSalesFrom } from "./analytics.js";
+// REAL analytics: the panel's Resumen/Ventas/Precios feed on the store's actual
+// orders (Medusa order board) when the login is real; the demo seed only backs
+// the demo login and the error fallback. See realAnalytics.js.
+import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
+import { isDemoLogin } from "./adminAuth.js";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
 // tabs still use. `money` is aliased because this file already has its own,
@@ -72,10 +77,59 @@ function useSummary(preset) {
   return useMemo(() => summarize(rangeFor(preset)), [preset, snap]);
 }
 
+// REAL summary: same aggregation, fed by the store's actual orders. With the
+// demo login (or while real orders fail to load) it falls back to the demo
+// summarize so the charts never go blank. Returns the summary plus the source
+// so the tabs can label what the numbers are ("real", "demo", "loading").
+function useRealSummary(preset) {
+  const snap = useAnalyticsTick();            // keeps the demo fallback live
+  const demoMode = isDemoLogin();
+  const { products, cases } = useCatalog();
+  const [win, setWin] = useState(null);       // { orders, truncated, scanLimit }
+  const [state, setState] = useState(demoMode ? "demo" : "loading");
+  useEffect(() => {
+    if (demoMode) { setState("demo"); return undefined; }
+    let on = true;
+    setState("loading");
+    fetchBoardWindow(rangeFor(preset))
+      .then((w) => { if (on) { setWin(w); setState("real"); } })
+      .catch(() => { if (on) setState("error"); });
+    return () => { on = false; };
+  }, [preset, demoMode]);
+  const catalogIndex = useMemo(() => buildCatalogIndex(products, cases), [products, cases]);
+  const s = useMemo(() => {
+    if (state === "real" && win) {
+      // Revenue truth: canceled/refunded/payment-pending orders don't count.
+      const revenue = (win.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, catalogIndex));
+      return summarizeOrders(revenue, rangeFor(preset));
+    }
+    return summarize(rangeFor(preset));       // demo login / load error
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, win, catalogIndex, preset, snap]);
+  return { s, source: state, truncated: state === "real" && win ? win.truncated : false, scanLimit: win?.scanLimit || 300 };
+}
+
+// Small banner naming the data source of the analytics tabs (real store data,
+// scan-window note, or the demo/error fallback). Keys live in adm.real.*.
+function SourceNote({ source, truncated, scanLimit }) {
+  const { t } = useLang();
+  if (source === "loading") return <div className="adm-src-note loading">{t("adm.real.loading")}</div>;
+  if (source === "error") return <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>;
+  if (source === "real") {
+    return (
+      <div className="adm-src-note real">
+        <b>{t("adm.real.source")}</b>
+        {truncated ? <span> · {t("adm.real.truncated", { n: int(scanLimit) })}</span> : null}
+      </div>
+    );
+  }
+  return null;
+}
+
 /* ---------------- Overview ---------------- */
 function Overview({ preset, setPreset }) {
   const { t } = useLang();
-  const s = useSummary(preset);
+  const { s, source, truncated, scanLimit } = useRealSummary(preset);
   const k = s.kpis;
   const { products } = useCatalog();
   const imgByName = useMemo(() => Object.fromEntries(products.map((p) => [p.name, p.colors?.[0]?.image])), [products]);
@@ -90,6 +144,7 @@ function Overview({ preset, setPreset }) {
         <h2>{t("adm.tab.overview")}</h2>
         <RangePicker value={preset} onChange={setPreset} />
       </div>
+      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
       {s.hasDemo && (
         <div className="adm-demo-banner">
           <span dangerouslySetInnerHTML={{ __html: t("adm.demoBanner") }} />{" "}
@@ -100,7 +155,7 @@ function Overview({ preset, setPreset }) {
         <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon="💵" sub={t("adm.kpi.unitsSub", { n: int(k.units) })} />
         <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon="🧾" />
         <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon="📈" />
-        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon="👣" />
+        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon="👣" sub={source === "real" ? t("adm.real.funnelLocal") : undefined} />
         <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon="🎯" sub={t("adm.kpi.convSub")} />
       </div>
       <div className="adm-grid-2">
@@ -120,11 +175,12 @@ function Overview({ preset, setPreset }) {
 /* ---------------- Sales ---------------- */
 function Sales({ preset, setPreset }) {
   const { t, lang } = useLang();
-  const s = useSummary(preset);
+  const { s, source, truncated, scanLimit } = useRealSummary(preset);
   const recent = s.orders.slice(0, 40);
   return (
     <div className="adm-section">
       <div className="adm-head-row"><h2>{t("adm.tab.sales")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
+      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
       <div className="adm-kpis">
         <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon="💵" />
         <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon="🧾" />
@@ -147,7 +203,8 @@ function Sales({ preset, setPreset }) {
                     <td>{o.id}{o.demo && <span className="tag-demo">{t("adm.demoTag")}</span>}</td>
                     <td>{shortDate(o.t, lang)}</td>
                     <td>{o.items.map((i) => i.name).slice(0, 3).join(", ")}{o.items.length > 3 ? "…" : ""}</td>
-                    <td className="r">{money(o.total)}</td>
+                    {/* Real orders carry their currency; demo ones fall back to USD. */}
+                    <td className="r">{fmtMoney(o.total, o.currency || "usd", lang)}</td>
                   </tr>
                 ))}
             </tbody>
@@ -439,7 +496,21 @@ function Prices({ preQ }) {
   const fileRef = useRef(null);
 
   const frames = useMemo(() => products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [products, q]);
-  const sales = useMemo(() => productSales(), []);
+  // Units sold per product: REAL orders when the login is real (newest scan
+  // window of the whole history); demo localStorage otherwise or on error.
+  const [sales, setSales] = useState(() => productSales());
+  useEffect(() => {
+    if (isDemoLogin()) return undefined;
+    let on = true;
+    fetchBoardWindow(rangeFor("all"))
+      .then((w) => {
+        if (!on) return;
+        const real = (w.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, null));
+        setSales(productSalesFrom(real));
+      })
+      .catch(() => { /* keep demo fallback */ });
+    return () => { on = false; };
+  }, []);
 
   // shared product price row: photo + name + (hover) units bought this month + never-sold tag
   const ProdRow = ({ p, value, onCommit }) => {
@@ -1060,7 +1131,9 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState("overview");
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
-  useEffect(() => { ensureSeed(); }, []);
+  // Demo seed ONLY for the demo login: a real store owner must never see
+  // invented orders mixed into (or underneath) their real numbers.
+  useEffect(() => { if (isDemoLogin()) ensureSeed(); }, []);
   const onFind = (v) => { setFind(v); if (v) setTab("prices"); };
   return (
     <div className="adm-body">

@@ -340,3 +340,10 @@
 
 /* Badge: la orden usó el probador virtual (adopción/conversión de un vistazo) */
 .ord-tryon { font-size: 11px; margin-left: 6px; white-space: nowrap; cursor: help; }
+
+/* Nota de FUENTE de datos en Resumen/Ventas: datos reales de la tienda (con el
+   aviso de ventana de escaneo cuando aplica), carga o error. */
+.adm-src-note { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; margin-bottom: 14px; }
+.adm-src-note.real { background: #e9f8ef; border: 1px solid #b9e6c9; color: #116633; }
+.adm-src-note.real b { font-weight: 800; }
+.adm-src-note.loading { background: #eef4ff; border: 1px solid #c9dcf8; color: #1c4f9c; }

@@ -1333,9 +1333,19 @@ export default function LensProcess() {
               )}
               {(() => {
                 const a = product.attributes || {};
+                // Compacto, como en la ficha: "55 - 19 - 148" (un rango "54-56"
+                // se reduce a su punto medio). En móvil el chip es estrecho y la
+                // forma larga "54-56 mm · 18-19 mm · 145-150 mm" no cabe.
+                const mid = (v) => {
+                  if (v == null || v === "") return null;
+                  const s = String(v).trim();
+                  const m = s.match(/(\d+(?:\.\d+)?)\s*[-–—aA]\s*(\d+(?:\.\d+)?)/);
+                  if (m) return String(Math.round((parseFloat(m[1]) + parseFloat(m[2])) / 2));
+                  return s.replace(/\s*mm\.?$/i, "");
+                };
                 const measures =
-                  [a.eye, a.bridge, a.temple].filter((n) => n != null).join(" · ") ||
-                  [a.eye_size, a.bridge_size, a.temple_length].filter(Boolean).join(" · ");
+                  [a.eye, a.bridge, a.temple].filter((n) => n != null).map(mid).join(" - ") ||
+                  [a.eye_size, a.bridge_size, a.temple_length].map(mid).filter(Boolean).join(" - ");
                 return measures ? (
                   <div className="zlx-spec">
                     <span className="zlx-spec-ic" aria-hidden="true"><IconMeasures /></span>

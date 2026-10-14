@@ -90,21 +90,25 @@ export function getOrders() { return rd(ORDERS, []); }
 // `updateOrderStatus` sitting next to the real one is an invitation to call the
 // wrong one. The remaining readers below only power the demo charts.
 
-// units sold per product — this month and all-time (for the Prices tab)
-export function productSales() {
-  const orders = getOrders();
+// units sold per product — this month and all-time (for the Prices tab).
+// `productSalesFrom(orders)` is the source-agnostic core: the demo tab feeds it
+// localStorage orders, the REAL panel feeds it orders mapped from the Medusa
+// order board (see realAnalytics.js). Same shape either way: { month, ever }.
+export function productSalesFrom(orders) {
   const monthAgo = Date.now() - 30 * 864e5;
   const month = {}, ever = {};
-  for (const o of orders) {
+  for (const o of (orders || [])) {
     const t = new Date(o.t).getTime();
     for (const it of (o.items || [])) {
       const k = String(it.sku).toLowerCase().replace(/[^a-z0-9]+/g, "");
-      ever[k] = (ever[k] || 0) + 1;
-      if (t >= monthAgo) month[k] = (month[k] || 0) + 1;
+      const n = it.qty || 1;
+      ever[k] = (ever[k] || 0) + n;
+      if (t >= monthAgo) month[k] = (month[k] || 0) + n;
     }
   }
   return { month, ever };
 }
+export function productSales() { return productSalesFrom(getOrders()); }
 
 // a customer's own orders (used by the "Mi cuenta" area)
 export function ordersByUser(email) {
@@ -142,9 +146,15 @@ const eachDay = (from, to) => {
 };
 
 // ---- aggregations for the dashboard ----
-export function summarize({ from, to }) {
-  const daily = getDaily();
-  const orders = getOrders().filter((o) => inRange(o.t, from, to));
+// `summarize(range)` keeps its original contract (demo/local orders). The body
+// now lives in `summarizeOrders(orders, range, daily)` so the SAME aggregation
+// (series, funnel, tops, weekday…) can run over REAL orders fetched from the
+// Medusa order board — one aggregation, two sources, identical charts.
+export function summarize(range) {
+  const { from, to } = range;
+  return summarizeOrders(getOrders().filter((o) => inRange(o.t, from, to)), range);
+}
+export function summarizeOrders(orders, { from, to }, daily = getDaily()) {
   const days = eachDay(from, to);
   let access = 0, view = 0, atc = 0, fav = 0;
   for (const k of days) { const b = daily[k]; if (b) { access += b.access || 0; view += b.view || 0; atc += b.atc || 0; fav += b.fav || 0; } }

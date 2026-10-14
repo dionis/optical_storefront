@@ -7247,3 +7247,22 @@ button.card-genre {
   .ts2-entry-opts { grid-template-columns: 1fr; }
   .ts2-entry-card { padding: 20px 16px 16px; }
 }
+
+/* ===================================================================
+   ETAPA 99 - Pulido responsive detectado en auditoría:
+   1) Chips de especificaciones de la receta (Material/Medidas/Género) en
+      móvil: los valores iban en nowrap y se montaban unos sobre otros.
+      Ahora envuelven dentro de su chip, con icono y tipografía compactos.
+   2) Tarjetas del catálogo en móvil: el contador de reseñas "(123)" se
+      cortaba; en pantallas estrechas se oculta y queda la nota media.
+   =================================================================== */
+@media (max-width: 560px) {
+  .zlx-spec { min-width: 0; flex: 1 1 32%; padding: 9px 8px; gap: 7px; }
+  .zlx-spec-ic { width: 28px; height: 28px; border-radius: 8px; }
+  .zlx-spec-ic svg { width: 17px; height: 17px; }
+  .zlx-spec-tx b { white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.25; }
+  .zlx-spec-tx small { font-size: 10px; }
+
+  .card-reviews { display: none; }
+  .card-rating { gap: 3px; }
+}
