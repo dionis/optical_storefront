@@ -7859,3 +7859,30 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
     min-height: 230px;
   }
 }
+
+/* ═══ ETAPA 112 — Zoom central de los medallones de marca ═════════════════
+   Dónde se usa: portada, sección Marcas (.brands-circles .brand-circle).
+   Al pasar el cursor, al tocar/clic o estando seleccionado (.is-active), el
+   medallón hace ZOOM CENTRAL dentro de su círculo — overflow:hidden lo
+   recorta, nunca se sale del contenedor — y el círculo gana sombra profunda.
+   Teclado: mismo efecto con :focus-visible. */
+.brand-circle { overflow: hidden; border-radius: 50%; }
+.brand-circle img {
+  transform-origin: center;
+  transition: transform var(--dur-2) var(--ease);
+  will-change: transform;
+}
+.brand-circle:hover img,
+.brand-circle:focus-visible img,
+.brand-circle:active img,
+.brand-circle.is-active img { transform: scale(1.16); }
+.brand-circle:active img { transform: scale(1.22); }
+.brand-circle:hover,
+.brand-circle:focus-visible,
+.brand-circle.is-active {
+  box-shadow: 0 20px 40px -14px rgba(1, 50, 107, .45);
+}
+.brand-circle.is-active {
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--blue), 0 20px 40px -14px rgba(1, 50, 107, .45);
+}
+@media (prefers-reduced-motion: reduce) { .brand-circle img { transition: none; } }
