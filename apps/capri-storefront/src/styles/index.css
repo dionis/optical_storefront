@@ -8784,3 +8784,28 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-pop-rx .zlx-upload-btn { flex: 0 0 auto !important; width: auto !important; max-width: 132px; }
   .zlx-pop-rx .zlx-upload-tx { flex: 1 1 auto !important; }
 }
+
+/* ===================================================================
+   ETAPA 127 — Ficha del paso de receta (pedido del cliente):
+   MÓVIL: en ese espacio tan pequeño fuera Material y Sexo — solo el
+   espejuelo —, y la foto generada ENFOCA los ojos/espejuelos (cover
+   anclado arriba-centro). WEB: columnas IGUALES (50/50), ficha más
+   grande para ver bien foto y montura, todo en una sola vista.
+   =================================================================== */
+@media (max-width: 939px) {
+  .zlx-pop-rx .zlx-frameside .ts2-fr-badges { display: none !important; }
+  .fs-photo.has-gen .fs-photo-gen { object-position: 50% 30%; }
+  .zlx-pop-rx .fs-card.ts2-frame .fs-photo,
+  .zlx-pop-rx .fs-card.ts2-frame .fs-photo.has-gen { height: 14vh; height: 14dvh; }
+  .zlx-pop-rx .fs-photo.has-gen > img:not(.fs-photo-gen):not(.fs-photo-wm) {
+    width: 100% !important; height: 100% !important; object-fit: contain !important;
+    padding: 3px 6px !important; min-width: 0;
+  }
+}
+@media (min-width: 960px) {
+  .zlx-page .zlx-page-inner.zlx-page-2col { max-width: 1200px; grid-template-columns: 1fr 1fr; gap: 26px; }
+  .zlx-page-side .fs-card.ts2-frame.zlx-frameside { width: 100%; }
+  .zlx-page-side .zlx-frameside .ts2-fr-photo.fs-photo { aspect-ratio: auto; height: 300px; }
+  .zlx-page-side .zlx-frameside .fs-mcell .fs-mic { height: 30px; width: auto; }
+  .zlx-page-side .zlx-frameside .fs-mval { font-size: 15px; }
+}
