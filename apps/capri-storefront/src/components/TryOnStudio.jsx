@@ -1618,7 +1618,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   function reviewLayout() {
     return (
       /* ts2-cap2col: comparte las reglas móviles de "una sola vista" (ETAPAs 120/121). */
-      <div className="vm-result vm-review-2col ts2-cap2col">
+      <div className="vm-result vm-review-2col ts2-cap2col ts2-rvlayout">
         <div className="vm-review-cols">
           <div className="vm-review-c1">{captureReview()}</div>
           <div className="vm-review-c2">

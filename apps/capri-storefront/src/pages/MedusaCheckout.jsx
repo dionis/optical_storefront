@@ -523,11 +523,11 @@ export default function MedusaCheckout() {
                           </label>
                         ))}
                       </div>
-                      <small className="co-hint co-freehint">
-                        {carriers[0]?.free
-                          ? `🎉 ${t("ship.freeApplied", { n: freeThreshold })}`
-                          : `💡 ${t("ship.freeHint", { n: freeThreshold })}`}
-                      </small>
+                      {/* Promo de envío gratis retirada: el aviso solo sale si el
+                          servidor realmente marca la cotización como gratis. */}
+                      {carriers[0]?.free && (
+                        <small className="co-hint co-freehint">🎉 {t("ship.freeApplied", { n: freeThreshold })}</small>
+                      )}
                       <small className="co-hint">🇺🇸 {t("ship.usOnlyNote")}</small>
                     </>
                   ) : (

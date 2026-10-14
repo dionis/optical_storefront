@@ -28,7 +28,12 @@ const num = (v: string | undefined, fallback: number): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-export const FREE_SHIPPING_THRESHOLD = num(process.env.FREE_SHIPPING_THRESHOLD, 100);
+// Promo de envío gratis RETIRADA (pedido del dueño, 14-oct-2026): sin la env
+// no hay umbral (Infinity = nunca gratis). Poner FREE_SHIPPING_THRESHOLD en
+// Coolify la reactiva sin tocar código.
+export const FREE_SHIPPING_THRESHOLD = process.env.FREE_SHIPPING_THRESHOLD
+  ? num(process.env.FREE_SHIPPING_THRESHOLD, Infinity)
+  : Infinity;
 
 const CARRIERS: Array<Omit<CarrierQuote, "amount" | "free"> & { rate: number }> = [
   {
