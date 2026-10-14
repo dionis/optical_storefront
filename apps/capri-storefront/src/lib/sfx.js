@@ -78,4 +78,33 @@ export function initSfx() {
     },
     true
   );
+
+  // Sonido de aproximación (hover): un tic muy suave al entrar con el ratón en
+  // cualquier botón, a juego con el efecto visual de ETAPA 117 (escala+sombra).
+  // Solo puntero de ratón (nunca táctil), des-duplicado por elemento para que
+  // mover el cursor dentro del mismo botón no repita el sonido.
+  let lastHoverEl = null;
+  let lastHoverAt = 0;
+  document.addEventListener(
+    "pointerover",
+    (e) => {
+      if (e.pointerType && e.pointerType !== "mouse") return;
+      const el = e.target.closest(
+        "button, a, [role=button], .choice, .zlx-float-color, .brand-circle, .flag-btn, .swatch, .pdp-thumb, .chip, .icon-btn"
+      );
+      if (!el || el === lastHoverEl || el.getAttribute("aria-disabled") === "true" || el.disabled) {
+        if (!el) lastHoverEl = null;
+        return;
+      }
+      lastHoverEl = el;
+      const now = performance.now();
+      if (now - lastHoverAt < 90) return; // ráfagas al cruzar una fila de botones
+      lastHoverAt = now;
+      blip({ freq: 1180, type: "sine", dur: 0.035, gain: 0.014 });
+    },
+    true
+  );
+  document.addEventListener("pointerout", (e) => {
+    if (lastHoverEl && e.target === lastHoverEl) lastHoverEl = null;
+  }, true);
 }

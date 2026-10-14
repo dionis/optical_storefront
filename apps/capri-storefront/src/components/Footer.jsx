@@ -8,7 +8,7 @@ export default function Footer() {
     <footer className="footer">
       <div className="footer-cols">
         <div className="footer-brand">
-          <img src="/logo.png" alt="RUBI LENS — Óptica y Salud Visual" className="footer-logo" />
+          <img src="/logo-oficial.png" alt="RUBI LENS — Óptica y Salud Visual" className="footer-logo" />
           <p>{t("footer.about")}</p>
         </div>
         <div>

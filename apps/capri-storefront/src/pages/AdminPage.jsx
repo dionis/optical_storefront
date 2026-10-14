@@ -41,7 +41,7 @@ function Login({ onOk }) {
     <div className="adm-login">
       {stage === "creds" ? (
         <form className="adm-login-card" onSubmit={submitCreds}>
-          <img src="/logo-mark.png" alt="RUBI LENS" className="adm-login-logo" />
+          <img src="/logo-oficial.png" alt="RUBI LENS" className="adm-login-logo" />
           <h1>{t("adm.title")}</h1>
           <p className="muted">{t("adm.login.sub")}</p>
           <label>{t("adm.login.email")}<input type="email" autoFocus value={user} placeholder={t("adm.login.emailPh")} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
@@ -52,7 +52,7 @@ function Login({ onOk }) {
         </form>
       ) : (
         <form className="adm-login-card" onSubmit={submitOtp}>
-          <img src="/logo-mark.png" alt="RUBI LENS" className="adm-login-logo" />
+          <img src="/logo-oficial.png" alt="RUBI LENS" className="adm-login-logo" />
           <h1>{t("adm.login.mfaTitle")}</h1>
           <p className="muted">{t("adm.login.mfaSub")}</p>
           <label>{t("adm.login.code")}<input inputMode="numeric" autoFocus value={otp} placeholder="••••••" onChange={(e) => setOtp(e.target.value)} autoComplete="one-time-code" /></label>
@@ -96,7 +96,7 @@ function FirstPasswordGate({ onDone }) {
   return (
     <div className="adm-login">
       <form className="adm-login-card" onSubmit={submit}>
-        <img src="/logo-mark.png" alt="RUBI LENS" className="adm-login-logo" />
+        <img src="/logo-oficial.png" alt="RUBI LENS" className="adm-login-logo" />
         <h1>{t("adm.team.gate.title")}</h1>
         <p className="muted">{t("adm.team.gate.sub")}</p>
         <label>{t("adm.team.gate.current")}<input type="password" autoFocus value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" /></label>
@@ -132,7 +132,7 @@ export default function AdminPage() {
     <div className="adm-shell">
       <header className="adm-topbar">
         <div className="adm-brand">
-          <img src="/logo-mark.png" alt="RUBI LENS" />
+          <img src="/logo-oficial.png" alt="RUBI LENS" />
           <span>{t("adm.title")}</span>
           {/* Sello que DIFERENCIA el panel de la tienda al primer vistazo. */}
           <em className="adm-badge">ADMIN</em>

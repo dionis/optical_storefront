@@ -1679,7 +1679,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               {timeStr}
             </span>
           </div>
-          <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
+          <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
         </div>
       </aside>
     );

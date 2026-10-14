@@ -1155,7 +1155,7 @@ export default function LensProcess() {
             {fsTime}
           </span>
         </div>
-        <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
+        <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
       </div>
     </aside>
   );
