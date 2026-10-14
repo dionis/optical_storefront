@@ -1515,10 +1515,18 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               <div className="vm-who-opts" role="radiogroup" aria-label={t("vm.who.title")}>
                 <button type="button" role="radio" aria-checked={forWhom === "me"}
                         className={`vm-who-opt ${forWhom === "me" ? "on" : ""}`}
-                        onClick={() => setForWhom("me")}>{t("vm.who.me")}</button>
+                        onClick={() => setForWhom("me")}>
+                  <img className="i3d i3d-who" src={`/ui/icons3d/${forWhom === "me" ? "white" : "navy"}-heart.png`} alt=""
+                       onError={(e) => e.currentTarget.remove()} />
+                  {t("vm.who.me")}
+                </button>
                 <button type="button" role="radio" aria-checked={forWhom === "other"}
                         className={`vm-who-opt ${forWhom === "other" ? "on" : ""}`}
-                        onClick={() => setForWhom("other")}>{t("vm.who.other")}</button>
+                        onClick={() => setForWhom("other")}>
+                  <img className="i3d i3d-who" src={`/ui/icons3d/${forWhom === "other" ? "white" : "navy"}-share.png`} alt=""
+                       onError={(e) => e.currentTarget.remove()} />
+                  {t("vm.who.other")}
+                </button>
               </div>
               {forWhom === "other" && (
                 <input className="vm-who-name" type="text" value={otherName} maxLength={60}
@@ -1539,7 +1547,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
                   {t("vm.calc")}
                 </button>
-                <span className="vm-attempts">{t("vm.attempts")} {attempts}/{MAX_ATTEMPTS}</span>
+                <span className="vm-attempts">
+                  <img className="i3d i3d-att" src="/ui/icons3d/navy-camera.png" alt="" onError={(e) => e.currentTarget.remove()} />
+                  {t("vm.attempts")} {attempts}/{MAX_ATTEMPTS}
+                </span>
               </div>
             )}
           </div>
@@ -1606,7 +1617,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // ficha del espejuelo, todo en una sola pantalla. Móvil: una sola columna.
   function reviewLayout() {
     return (
-      <div className="vm-result vm-review-2col">
+      /* ts2-cap2col: comparte las reglas móviles de "una sola vista" (ETAPAs 120/121). */
+      <div className="vm-result vm-review-2col ts2-cap2col">
         <div className="vm-review-cols">
           <div className="vm-review-c1">{captureReview()}</div>
           <div className="vm-review-c2">
