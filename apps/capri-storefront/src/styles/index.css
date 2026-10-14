@@ -7904,3 +7904,60 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
   .card .card-add-cart.btn-glass .btn-glass-img { height: 37px; }
   .pdp-cta.btn-glass .btn-glass-img { height: 48px; }
 }
+
+/* ═══ ETAPA 114 — Cristal de la lámina para los botones de TEXTO VIVO ═════
+   Dónde se usa: todos los .btn-primary / .btn-outline del storefront (hero,
+   portada, checkout, paneles, receta…) salvo los que ya son obra completa
+   (.btn-glass de tarjetas/PDP). La píldora de cristal SIN texto del dueño se
+   estira como fondo (100%/100%) y el texto sigue siendo HTML: cambia con el
+   idioma y nunca pierde nitidez. Primario = navy/oro con letra dorada clara;
+   secundario = blanco/oro con letra navy. Hover: brillo + elevación + sombra. */
+.btn-primary:not(.btn-glass) {
+  background: url("/ui/glass/pill-navy-gold.png") center / 100% 100% no-repeat;
+  border: none;
+  color: #f3e3b3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+  box-shadow: none;
+  transition: transform var(--dur-1) var(--ease), filter var(--dur-2) var(--ease);
+}
+.btn-primary:not(.btn-glass):hover:not(:disabled) {
+  background: url("/ui/glass/pill-navy-gold.png") center / 100% 100% no-repeat;
+  filter: brightness(1.08) drop-shadow(0 12px 22px rgba(1, 50, 107, .40));
+  transform: translateY(-2px);
+}
+.btn-outline:not(.btn-glass) {
+  background: url("/ui/glass/pill-white-gold.png") center / 100% 100% no-repeat;
+  border: none;
+  color: #0b2f66;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+  transition: transform var(--dur-1) var(--ease), filter var(--dur-2) var(--ease);
+}
+.btn-outline:not(.btn-glass):hover:not(:disabled) {
+  background: url("/ui/glass/pill-white-gold.png") center / 100% 100% no-repeat;
+  filter: brightness(1.05) drop-shadow(0 12px 22px rgba(1, 50, 107, .28));
+  transform: translateY(-2px);
+}
+.btn-primary:not(.btn-glass):active:not(:disabled),
+.btn-outline:not(.btn-glass):active:not(:disabled) { transform: translateY(0) scale(.985); }
+.btn-primary:not(.btn-glass):disabled { filter: grayscale(.5) opacity(.55); }
+.btn-primary:not(.btn-glass):focus-visible,
+.btn-outline:not(.btn-glass):focus-visible { outline: 3px solid rgba(26, 75, 150, .55); outline-offset: 2px; }
+/* El CTA grande del flujo de receta usa la BARRA navy/oro (más ancha). */
+.zlx-buy {
+  background: url("/ui/glass/bar-navy-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important;
+  color: #f3e3b3 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.zlx-buy:hover:not(:disabled) { filter: brightness(1.08) drop-shadow(0 12px 22px rgba(1, 50, 107, .40)); }
+/* En el band promocional el secundario sobre foto lleva letra navy del cristal. */
+.promo-cta .btn-outline { color: #0b2f66; border: none; }
+.promo-cta .btn-outline:hover { background: url("/ui/glass/pill-white-gold.png") center / 100% 100% no-repeat; }
+
+/* ETAPA 113b — PDP: los botones de cristal aún se veían enormes; se compactan
+   (46px el navy, 42px el claro) y se alinean al ancho del bloque de compra. */
+.pdp-cta.btn-glass .btn-glass-img { height: 46px; max-width: 360px; }
+.pdp-cta.btn-glass + .pdp-cta.btn-glass .btn-glass-img,
+.pdp-cta.btn-outline.btn-glass .btn-glass-img { height: 42px; }
+@media (max-width: 760px) { .pdp-cta.btn-glass .btn-glass-img { height: 42px; }
+  .pdp-cta.btn-outline.btn-glass .btn-glass-img { height: 38px; } }
