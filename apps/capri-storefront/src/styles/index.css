@@ -8453,7 +8453,7 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .vm-attempts { display: inline-flex; align-items: center; gap: 5px; }
 .vm-attempts .i3d-att { height: 13px; width: auto; }
 @media (max-width: 939px) {
-  .ts2-cap2col { margin: 4px 0 0; }
+  .ts2-cap2col { margin: 12px 0 0; } /* aire respecto al header (pedido del cliente) */
   .ts2-cap2col .vm-review-cols { gap: 8px; }
   .ts2-cap2col .ts2-step { padding: 8px 10px 10px; margin: 0; }
   .ts2-cap2col .ts2-cap2-box { height: 20vh; height: 20dvh; }
@@ -8495,3 +8495,17 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .ts2-rvlayout .ts2-frame .ts2-fr-photo img { max-height: 17vh; max-height: 17dvh; width: 100%; }
   .ts2-rvlayout .ts2-frame .fs-photo { padding: 2px 6px; }
 }
+
+/* ETAPA 121e — "Para mí / Para otra persona" MÁS CUADRADOS (pedido del
+   cliente): en vez de la píldora, la BARRA de cristal en 9-slice (esquinas
+   poco redondeadas a escala fija, centro estirado sin deformar). */
+.vm-who-opt {
+  background: none !important;
+  border: 11px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; padding: 2px 8px; min-height: 34px;
+}
+.vm-who-opt.on {
+  border-image-source: url("/ui/glass/bar-navy-gold.png") !important;
+}
+.vm-who-opts { background: none; border: none; gap: 6px; }
