@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import { T, tv } from "./translations.js";
 
 const LangContext = createContext(null);
@@ -35,8 +35,12 @@ export function LanguageProvider({ children }) {
   const translateValue = useCallback((v) => tv(v, lang), [lang]);
   const toggle = useCallback(() => setLang((l) => (l === "es" ? "en" : "es")), []);
 
+  // Memoizado: este provider está en la raíz y lo consume cada componente con
+  // texto; un value nuevo por render propagaba re-renders globales gratuitos.
+  const value = useMemo(() => ({ lang, setLang, toggle, t, tv: translateValue }), [lang, toggle, t, translateValue]);
+
   return (
-    <LangContext.Provider value={{ lang, setLang, toggle, t, tv: translateValue }}>
+    <LangContext.Provider value={value}>
       {children}
     </LangContext.Provider>
   );

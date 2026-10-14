@@ -15,10 +15,9 @@ import { viewsBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
 
-// Descuentos realistas para la etiqueta (10/15/20/25%), asignados de forma
-// estable por producto (mismo producto → mismo descuento).
-const DISCOUNT_STEPS = [10, 15, 20, 25];
-function hashSlug(s) { let h = 0; const str = String(s || ""); for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+// (El descuento por hash se eliminó: el precio tachado ahora es SIEMPRE el
+// `originalPrice` real del catálogo — mostrar una rebaja inventada contradice
+// el principio de que el precio lo dicta el servidor.)
 
 // Tarjeta de producto — rediseño "montura protagonista":
 //  - La FOTO manda; sobre ella solo el corazón (y el sello 360° si aplica).
@@ -51,10 +50,11 @@ export default function ProductCard({ product }) {
   const showRating = reviewCount > 0 && ratingVal > 0;
 
   // Oferta: precio anterior tachado + precio en rojo + etiqueta, solo si el
-  // precio anterior es mayor que el actual.
+  // precio anterior REAL del catálogo es mayor que el actual. El % se deriva
+  // de los dos precios reales (nada de rebajas inventadas por hash).
   const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
-  const discountOff = hasSale ? DISCOUNT_STEPS[hashSlug(product.slug) % DISCOUNT_STEPS.length] : 0;
-  const oldPrice = hasSale ? product.price / (1 - discountOff / 100) : 0;
+  const discountOff = hasSale ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+  const oldPrice = hasSale ? product.originalPrice : 0;
 
   // Badge de género / edad (hombre, mujer, unisex o niños).
   const genderVal = product.attributes?.gender;

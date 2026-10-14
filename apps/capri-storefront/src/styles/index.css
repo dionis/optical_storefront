@@ -7266,3 +7266,72 @@ button.card-genre {
   .card-reviews { display: none; }
   .card-rating { gap: 3px; }
 }
+
+/* ===================================================================
+   ETAPA 100 - SISTEMA VISUAL UNIFICADO (auditoría de diseño).
+   Una sola familia de azules (el navy de la marca #01326b, el mismo del
+   header), UN rojo, y las ventanas/tarjetas con cabecera navy idéntica en
+   toda la app. Este bloque va al FINAL a propósito: la cascada lo hace
+   ganar sobre los 3 sistemas de tokens anteriores sin tocar 7.000 líneas.
+   =================================================================== */
+:root {
+  /* Azul de marca: el del header (#01326b). --cuba-blue valía #002A8F y
+     --blue ya era #01326b desde ETAPA 6: dos navys distintos conviviendo. */
+  --cuba-blue: #01326b;
+  --blue: #01326b;
+  --blue-dark: #011f45;
+  --blue-soft: #eef4ff;
+  /* UN rojo (antes #FD0E3F en precios y #CF142B en iconos). */
+  --red: #d6123e;
+  --red-dark: #b30e33;
+  --cuba-red: #d6123e;
+  /* Neutros alineados con tokens.css */
+  --line: #e7eaf0;
+  --muted: #5b6472;
+}
+/* Cabeceras navy de TODAS las fichas/tarjetas = el degradado del header. */
+.fs-card { --fs-navy: #01326b; --fs-navy2: #033f84; }
+.zlx-summary-navyhd { background: linear-gradient(180deg, #033f84, #01326b); }
+
+/* Caligrafía fuera: "Dancing Script" rompía el sistema (3ª familia).
+   El acento pasa a la misma serif editorial (Fraunces) en cursiva. */
+.cat-hero-script { font-family: var(--display); font-style: italic; letter-spacing: .01em; }
+.cat-hero-script span { font-weight: 600; }
+
+/* VENTANAS EMERGENTES estandarizadas: mismo radio, misma sombra y el mismo
+   velo desenfocado detrás, sea receta, confirmación, OCR, info o entrada
+   del probador. */
+.zlx-review-overlay, .ts2-entry {
+  background: rgba(10, 16, 28, .52);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.zlx-review-card, .ts2-entry-card, .ts2-prep-card, .zlx-infopop {
+  border-radius: 16px;
+  box-shadow: 0 24px 70px -18px rgba(10, 16, 28, .5);
+  border: none;
+}
+.zlx-pop { border-radius: 16px; }
+.zlx-pop-head { border-radius: 16px 16px 0 0; }
+
+/* Botón primario: siempre el navy de marca (algunos salían con el azul
+   #0E5AD0 de la paleta vieja vía --blue local o hex suelto). */
+.btn.btn-primary, .zlx-buy, .card-tryon, .pdp-cta {
+  background: var(--blue);
+}
+.btn.btn-primary:hover:not(:disabled), .zlx-buy:hover:not(:disabled),
+.card-tryon:hover:not(:disabled), .pdp-cta:hover:not(:disabled) {
+  background: var(--blue-dark);
+}
+/* Centinela del scroll incremental del catálogo (invisible, solo geometría). */
+.grid-more { height: 2px; width: 100%; }
+/* CTA de la receta ("Añadir receta") al degradado NAVY del sistema (antes un
+   azul brillante ajeno a la paleta). Mismo tratamiento que el header. */
+.zlx-fab.zlx-fab-cta,
+.zlx-fab.zlx-fab-cta.open {
+  background: linear-gradient(180deg, #0a4a9e, #01326b);
+  border-color: #01326b;
+}
+.zlx-fab.zlx-fab-cta:hover:not(:disabled) {
+  background: linear-gradient(180deg, #0b54b5, #022f63);
+  border-color: #01326b;
+}

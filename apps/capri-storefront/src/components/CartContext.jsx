@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { trackAddToCart, trackFav } from "../admin/analytics.js";
 import * as mcart from "../data/medusaCart.js";
 
@@ -96,13 +96,20 @@ export function CartProvider({ children }) {
   const count = items.reduce((s, i) => s + (i.quantity || 1), 0);
   const total = cart?.total ?? 0;
 
+  // El value MEMOIZADO importa de verdad: este provider envuelve toda la app y
+  // cada tarjeta del catálogo (≈550) consume useCart(). Un objeto nuevo por
+  // render re-renderizaba el catálogo completo con cada favorito o cambio de
+  // carrito; con useMemo solo se propaga cuando cambia algo de la lista.
+  const value = useMemo(() => ({
+    cart, items, count, total, busy,
+    refresh, addVariant, addConfiguredFrame, removeItem, clearCart,
+    priceChanges, ackPriceChanges,
+    favorites, toggleFav, isFav, favCount: favorites.length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [cart, busy, priceChanges, favorites, refresh, addVariant, addConfiguredFrame, removeItem, clearCart, ackPriceChanges, toggleFav, isFav]);
+
   return (
-    <CartContext.Provider value={{
-      cart, items, count, total, busy,
-      refresh, addVariant, addConfiguredFrame, removeItem, clearCart,
-      priceChanges, ackPriceChanges,
-      favorites, toggleFav, isFav, favCount: favorites.length,
-    }}>
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );

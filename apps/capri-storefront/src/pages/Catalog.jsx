@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
@@ -92,6 +92,23 @@ export default function Catalog() {
     }
     return list;
   }, [PRODUCTS, brand, q, selected, sort, ratings, ofertaParam]);
+
+  // Render INCREMENTAL de la rejilla: primero 48 tarjetas y, al acercarse al
+  // final, 48 más (IntersectionObserver). Con 549 montadas de golpe el primer
+  // pintado del catálogo era el tramo más caro de toda la web.
+  const PAGE = 48;
+  const [visible, setVisible] = useState(PAGE);
+  const moreRef = useRef(null);
+  useEffect(() => { setVisible(PAGE); }, [brand, q, selected, sort, ofertaParam]);
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setVisible((v) => v + PAGE);
+    }, { rootMargin: "900px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible, results.length]);
 
   const activeCount = Object.values(selected).reduce((s, a) => s + (a?.length || 0), 0);
   const urlFilterLabel = shapeParam ? tv(shapeParam) : genderParam ? tv(genderParam) : ageParam ? tv(ageParam) : null;
@@ -232,9 +249,14 @@ export default function Catalog() {
         {results.length === 0 ? (
           <div className="empty">{t("empty.text")} <button onClick={() => setSelected({})}>{t("empty.clear")}</button></div>
         ) : (
-          <div className={`product-grid ${view === "list" ? "list" : ""}`}>
-            {results.map((p) => <ProductCard key={p.slug} product={p} />)}
-          </div>
+          <>
+            <div className={`product-grid ${view === "list" ? "list" : ""}`}>
+              {results.slice(0, visible).map((p) => <ProductCard key={p.slug} product={p} />)}
+            </div>
+            {/* Centinela de scroll: carga el siguiente tramo al acercarse al
+                final. 549 tarjetas de golpe congelaban el primer render. */}
+            {visible < results.length && <div ref={moreRef} className="grid-more" aria-hidden="true" />}
+          </>
         )}
       </section>
     </div>

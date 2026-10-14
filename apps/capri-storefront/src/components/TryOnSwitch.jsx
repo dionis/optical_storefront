@@ -65,8 +65,10 @@ const UIS = {
 const DEFAULT_UI = "prod";
 
 function resolveKey() {
-  // 1) Override por URL (útil para probar en el sitio ya desplegado).
-  if (typeof window !== "undefined") {
+  // 1) Override por URL — SOLO en desarrollo. En producción permitía a
+  //    cualquiera cargar el motor de depuración (three.js, 569 KB) con
+  //    ?tryonUi=dev, saltándose la interfaz validada.
+  if (import.meta.env.DEV && typeof window !== "undefined") {
     try {
       const q = new URLSearchParams(window.location.search).get("tryonUi");
       if (q && UIS[q.toLowerCase()]) return q.toLowerCase();
