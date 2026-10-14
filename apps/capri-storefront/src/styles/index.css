@@ -7831,3 +7831,31 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
 @media (prefers-reduced-motion: reduce) {
   .chip-pill, .shape-tile-img, .btn-glass-img { transition: none; }
 }
+
+/* ═══ ETAPA 111 — Banner promocional con el arte Di Caprio del dueño ═══════
+   Dónde se usa: portada, sección .promo-band ("Lentes graduados a domicilio").
+   La foto (gafas + estuche Di Caprio sobre degradado azul-púrpura) es el FONDO
+   del band, anclada a la derecha para que el producto siempre se vea; un velo
+   oscuro sutil a la izquierda garantiza la lectura del texto es/en, que sigue
+   siendo HTML vivo. Si la foto no cargara, queda el degradado de siempre. */
+.promo-inner {
+  grid-template-columns: 1fr;
+  background:
+    linear-gradient(90deg, rgba(10, 14, 60, .42) 0%, rgba(10, 14, 60, .18) 46%, rgba(10, 14, 60, 0) 65%),
+    url("/promo/promo-dicaprio.jpg") right center / cover no-repeat,
+    linear-gradient(120deg, #2b3bd4 0%, #4a3fd9 60%, #7a2fb8 100%);
+  min-height: clamp(210px, 24vw, 290px);
+}
+.promo-text { max-width: 560px; }
+.promo-text h2 { color: #fff; }
+@media (max-width: 760px) {
+  /* En móvil la foto se ancla al 70% derecho para conservar gafas+estuche y el
+     velo cubre más, porque el texto ocupa casi todo el ancho. */
+  .promo-inner {
+    background:
+      linear-gradient(90deg, rgba(10, 14, 60, .55) 0%, rgba(10, 14, 60, .25) 70%, rgba(10, 14, 60, .08) 100%),
+      url("/promo/promo-dicaprio.jpg") 78% center / cover no-repeat,
+      linear-gradient(120deg, #2b3bd4 0%, #7a2fb8 100%);
+    min-height: 230px;
+  }
+}

@@ -331,7 +331,10 @@ export default function Home() {
               <Link to="/catalogo" className="btn btn-outline">{t("home.promo.cta2")}</Link>
             </div>
           </div>
-          <div className="promo-art" aria-hidden="true"><span className="promo-emoji">👓</span></div>
+          {/* El arte ahora lo pone el banner fotográfico Di Caprio del dueño
+              (public/promo/promo-dicaprio.jpg, fondo de .promo-inner): las gafas
+              y el estuche viven en la mitad derecha de la foto. El emoji queda
+              fuera; el texto y los CTAs siguen vivos para es/en. */}
         </div>
       </section>
 
