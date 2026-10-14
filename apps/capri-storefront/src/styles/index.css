@@ -7751,3 +7751,19 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
 @media (max-width: 560px) {
   .shape-ico-photo img { height: 68px; }
 }
+
+/* ETAPA 109 — Iconos 3D bronce del header (lámina del dueño, public/ui/hdr-*).
+   Dónde se usa: Header.jsx — banderas es/en, altavoz on/off, cuenta, favoritos
+   y carrito. Con el PNG presente, el SVG de línea se oculta (queda de respaldo
+   vía onError → clase no-img en el botón). Tamaños contenidos para que el
+   header no crezca; badges (contador carrito/favoritos) quedan por encima. */
+.hdr-img { height: 24px; width: auto; object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)); }
+.hdr-img-flag { height: 20px; border-radius: 3px; }
+.icon-btn:not(.no-img) .hdr-ic,
+.icon-btn:not(.no-img) .flag-ic,
+.flag-btn:not(.no-img) .flag { display: none; }
+.flag-btn .hdr-img-flag { display: block; }
+.flag-btn.on { box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+.icon-btn:hover .hdr-img { transform: translateY(-1px); }
+.hdr-img { transition: transform var(--dur-1) var(--ease); }

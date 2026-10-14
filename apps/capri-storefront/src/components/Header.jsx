@@ -85,19 +85,23 @@ export default function Header() {
         <div className="header-actions">
           <button className="icon-btn lang-toggle" onClick={() => setLang(lang === "es" ? "en" : "es")}
                   aria-label="Idioma / Language" title={lang === "es" ? "Español — toca para English" : "English — tap for Español"}>
+            {/* Banderas 3D bronce de la lámina del dueño (public/ui/); el SVG
+                plano queda de respaldo si el PNG no carga. */}
             {lang === "es" ? (
-              <svg className="flag-ic" viewBox="0 0 3 2" aria-hidden="true"><rect width="3" height="2" fill="#c60b1e"/><rect y="0.5" width="3" height="1" fill="#ffc400"/></svg>
+              <><img className="hdr-img hdr-img-flag" src="/ui/hdr-flag-es.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><svg className="flag-ic" viewBox="0 0 3 2" aria-hidden="true"><rect width="3" height="2" fill="#c60b1e"/><rect y="0.5" width="3" height="1" fill="#ffc400"/></svg></>
             ) : (
-              <svg className="flag-ic" viewBox="0 0 19 10" aria-hidden="true"><rect width="19" height="10" fill="#b22234"/><g fill="#fff"><rect y="0.77" width="19" height="0.77"/><rect y="2.31" width="19" height="0.77"/><rect y="3.85" width="19" height="0.77"/><rect y="5.38" width="19" height="0.77"/><rect y="6.92" width="19" height="0.77"/><rect y="8.46" width="19" height="0.77"/></g><rect width="7.6" height="5.38" fill="#3c3b6e"/></svg>
+              <><img className="hdr-img hdr-img-flag" src="/ui/hdr-flag-us.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><svg className="flag-ic" viewBox="0 0 19 10" aria-hidden="true"><rect width="19" height="10" fill="#b22234"/><g fill="#fff"><rect y="0.77" width="19" height="0.77"/><rect y="2.31" width="19" height="0.77"/><rect y="3.85" width="19" height="0.77"/><rect y="5.38" width="19" height="0.77"/><rect y="6.92" width="19" height="0.77"/><rect y="8.46" width="19" height="0.77"/></g><rect width="7.6" height="5.38" fill="#3c3b6e"/></svg></>
             )}
           </button>
           <div className="lang-flags" role="group" aria-label="Language / Idioma">
             <button className={`flag-btn ${lang === "es" ? "on" : ""}`} onClick={() => setLang("es")}
                     title="Español" aria-label="Español" aria-pressed={lang === "es"}>
+              <img className="hdr-img hdr-img-flag" src="/ui/hdr-flag-es.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
               <svg viewBox="0 0 3 2" className="flag"><rect width="3" height="2" fill="#c60b1e"/><rect y="0.5" width="3" height="1" fill="#ffc400"/></svg>
             </button>
             <button className={`flag-btn ${lang === "en" ? "on" : ""}`} onClick={() => setLang("en")}
                     title="English" aria-label="English" aria-pressed={lang === "en"}>
+              <img className="hdr-img hdr-img-flag" src="/ui/hdr-flag-us.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
               <svg viewBox="0 0 19 10" className="flag">
                 <rect width="19" height="10" fill="#b22234"/>
                 <g fill="#fff"><rect y="0.77" width="19" height="0.77"/><rect y="2.31" width="19" height="0.77"/><rect y="3.85" width="19" height="0.77"/><rect y="5.38" width="19" height="0.77"/><rect y="6.92" width="19" height="0.77"/><rect y="8.46" width="19" height="0.77"/></g>
@@ -108,9 +112,11 @@ export default function Header() {
           <button className="icon-btn sound-toggle" title={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
                   aria-label={sound ? t("a11y.soundOff") : t("a11y.soundOn")}
                   onClick={() => { const m = toggleMuted(); setSound(!m); }}>
+            {/* Altavoz bronce (lámina): variante con ondas al estar activo y con × al
+                estar silenciado; SVG de línea como respaldo. */}
             {sound
-              ? <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
-              : <svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M22 9.5l-4.5 5M17.5 9.5l4.5 5"/></svg>}
+              ? <><img className="hdr-img" src="/ui/hdr-sound-on.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg></>
+              : <><img className="hdr-img" src="/ui/hdr-sound-off.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><svg className="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M22 9.5l-4.5 5M17.5 9.5l4.5 5"/></svg></>}
           </button>
           <button className="icon-btn hdr-search-m mobile-only" aria-label={t("a11y.search")} title={t("a11y.search")}
                   onClick={() => setMenu(true)}>
@@ -118,13 +124,13 @@ export default function Header() {
           </button>
           <button className={`icon-btn acct ${user ? "on" : ""}`} title={user ? user.email : t("auth.login")}
                   onClick={() => (user ? navigate("/cuenta") : setPanel("account"))}>
-            {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : <IconUser className="hdr-ic" />}
+            {user ? <span className="acct-badge">{(user.email[0] || "?").toUpperCase()}</span> : <><img className="hdr-img" src="/ui/hdr-user.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><IconUser className="hdr-ic" /></>}
           </button>
           <button className="icon-btn fav-m" title={t("a11y.fav")} onClick={() => setPanel("fav")}>
-            <IconHeart className="hdr-ic" />{favCount > 0 && <span className="badge">{favCount}</span>}
+            <img className="hdr-img" src="/ui/hdr-heart.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><IconHeart className="hdr-ic" />{favCount > 0 && <span className="badge">{favCount}</span>}
           </button>
           <button className="icon-btn cart" title={t("a11y.cart")} onClick={() => setPanel("cart")}>
-            <IconCart className="hdr-ic" /><span className="badge cart-badge">{count}</span>
+            <img className="hdr-img" src="/ui/hdr-cart.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} /><IconCart className="hdr-ic" /><span className="badge cart-badge">{count}</span>
           </button>
         </div>
       </div>
