@@ -7121,3 +7121,38 @@ button.card-genre {
 .zlx-fab.open { border-color: var(--cuba-blue); box-shadow: 0 0 0 3px #eff5ff; }
 .zlx-fab-ok { color: #128a4d; }
 .zlx-fab-ok.warn { color: #d9920b; }
+
+
+/* ===================================================================
+   ETAPA 96 - Ventana de receta DETRÁS desenfocada mientras se elige material/
+   tratamiento (popups delante). Resumen final a 2 columnas: IZQUIERDA imagen
+   generada (IA o montura) + pasos + "Comprar ahora"; DERECHA "Resumen del pedido".
+   =================================================================== */
+.zlx-pop-rx-behind { filter: blur(3px); pointer-events: none; }
+
+.zlx-rx-summary-left { display: flex; flex-direction: column; gap: 14px; }
+.zlx-rx-summary-left .zlx-gen-img {
+  margin: 0; border-radius: 14px; overflow: hidden; border: 1px solid #e7eaf0;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, .08); background: #0e1520;
+}
+.zlx-rx-summary-left .zlx-gen-img img { width: 100%; display: block; }
+.zlx-rx-summary-left .zlx-steps.zlx-summary-steps { display: flex; flex-direction: column; gap: 10px; }
+.zlx-rx-summary-left .zlx-buy.zlx-buy-left { width: 100%; margin-top: 2px; }
+.zlx-rx-stage-summary .zlx-page-side .zlx-summary.zlx-summary-inpage { margin: 0; position: static; }
+.zlx-rx-stage-summary .zlx-page-side .zlx-summary.zlx-summary-inpage .zlx-summary-h { margin-top: 0; }
+
+/* ETAPA 96b - "Comprar solo el marco": botón pequeño al lado de "Añadir receta"
+   en el resultado del probador. */
+.vm-addrx-row { display: flex; gap: 10px; flex: 1 1 100%; order: 9; }
+.vm-addrx-row .vm-addrx { flex: 1 1 auto; margin: 0; }
+.vm-buyframe {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 0 16px; border-radius: 12px; border: 1.5px solid var(--primary-blue, #01326b);
+  background: #fff; color: var(--primary-blue, #01326b); font-weight: 700; font-size: 13px;
+  cursor: pointer; white-space: nowrap; transition: background .15s ease;
+}
+.vm-buyframe:hover { background: #eef4ff; }
+@media (max-width: 560px) {
+  .vm-addrx-row { flex-direction: column; }
+  .vm-buyframe { width: 100%; padding: 12px 16px; }
+}

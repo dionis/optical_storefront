@@ -151,6 +151,11 @@ export default function ProductCard({ product }) {
                    bifocal: p.bifocal, suitable: p.suitable,
                  };
                  navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
+               }}
+               onBuyFrameOnly={(p) => {
+                 // "Comprar solo el marco": directo al resumen del pedido (solo montura).
+                 closeTryOn();
+                 navigate(`/recetas/${product.slug}`, { state: { buyFrameOnly: true, colorIndex: p?.colorIndex } });
                }} />
       )}
 

@@ -159,7 +159,7 @@ function median(nums) {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 }
 
-export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPrescription }) {
+export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPrescription, onBuyFrameOnly }) {
   const { t, tv, lang } = useLang();
   // Confirmación tras "Añadir receta" ("idle" | "added").
   const [addedState, setAddedState] = useState("idle");
@@ -1164,6 +1164,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (typeof onAddPrescription === "function") onAddPrescription(payload);
   }
 
+  // "Comprar solo el marco": lleva directo al RESUMEN del pedido (solo montura, sin
+  // lentes) en la pantalla de la receta, sin pasar por la configuración de lentes.
+  function buyFrameOnly() {
+    if (typeof onBuyFrameOnly === "function") {
+      onBuyFrameOnly({ productSku: product?.sku, colorName: color?.name, colorIndex: ci });
+    }
+  }
+
   // Vista previa sin cámara: ?vmdemo=result | ?vmdemo=loading (solo para revisar el diseño).
   useEffect(() => {
     const p = typeof location !== "undefined" && new URLSearchParams(location.search).get("vmdemo");
@@ -1689,10 +1697,18 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           {addedState === "added" ? (
             <span className="vm-added">✓ {t("vm.added")}</span>
           ) : (
-            <button type="button" className="vm-addrx" onClick={addPrescription}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5v14" /></svg>
-              {t("lens.step.rx")}
-            </button>
+            <div className="vm-addrx-row">
+              <button type="button" className="vm-addrx" onClick={addPrescription}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5v14" /></svg>
+                {t("lens.step.rx")}
+              </button>
+              {typeof onBuyFrameOnly === "function" && (
+                <button type="button" className="vm-buyframe" onClick={buyFrameOnly} title={t("vm.buyFrame")}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+                  {t("vm.buyFrame")}
+                </button>
+              )}
+            </div>
           )}
         </div>
 

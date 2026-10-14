@@ -510,6 +510,14 @@ export default function LensProcess() {
       if (st.tryOnMeasurement) applyTryOnMeasurement(st.tryOnMeasurement);
       else setPop("rx");
       navigate(location.pathname + location.search, { replace: true, state: null });
+    } else if (st && st.buyFrameOnly) {
+      // "Comprar solo el marco" desde el probador: directo al RESUMEN del pedido
+      // (solo montura, sin lentes), en la misma ventana de receta.
+      if (typeof st.colorIndex === "number") setColorIdx(st.colorIndex);
+      setDesignId("frame-only");
+      setRxStage("summary");
+      setPop("rx");
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -527,8 +535,19 @@ export default function LensProcess() {
   // Lightbox del ejemplo de receta (se abre al tocar la miniatura de los consejos).
   const [rxExample, setRxExample] = useState(false);
   // Al CERRAR del todo la receta (no al abrir material/tratamiento, que ahora
-  // conviven con la ventana de receta detrás) se vuelve a "pick".
-  useEffect(() => { if (!pop) { setRxStage("pick"); setRxExample(false); } }, [pop]);
+  // conviven con la ventana de receta detrás) se vuelve a "pick". Solo se resetea
+  // en un CIERRE REAL (pop pasa de algo -> null), nunca al montar: así no se pisa
+  // el estado inicial que fijan las llegadas desde el probador (p. ej. "Comprar
+  // solo el marco" => rxStage summary). Un guardado por "primera ejecución" no
+  // basta: con React.StrictMode el efecto se invoca dos veces al montar y la
+  // segunda vez vería pop=null (el setPop de la llegada aún sin confirmar) y
+  // borraría el summary. Comparar con el valor ANTERIOR de pop es robusto a eso.
+  const prevPopRef = useRef(pop);
+  useEffect(() => {
+    const prev = prevPopRef.current;
+    prevPopRef.current = pop;
+    if (prev && !pop) { setRxStage("pick"); setRxExample(false); }
+  }, [pop]);
   // El campo que falta vive DENTRO del popup de receta: al pulsar el aviso del
   // botón de comprar abrimos ese popup y hacemos scroll/destello sobre la altura,
   // que si no queda invisible con el popup cerrado y el pago parece bloqueado.
@@ -1141,54 +1160,71 @@ export default function LensProcess() {
   );
 
   // RESUMEN DEL PEDIDO dentro de la MISMA ventana de receta (cuando ya se eligió
-  // material + tratamiento): pasos elegidos (editables, reabren su ventana emergente)
-  // + resumen + "Comprar ahora". Así NO se cae a la página de lentes.
-  const summaryView = (
-    <div className="zlx-rx-summary">
-      <div className="zlx-steps zlx-summary-steps">
-        <button type="button" className={`zlx-fab ${design ? "on" : ""}`} onClick={() => setRxStage("fill")}>
-          <IconReceta className="zlx-ic" />
-          <span className="zlx-fab-txt">
-            <b>{t("lens.step.rx")}</b>
-            <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
-          </span>
-          {design && <Ic name="check" className="zlx-fab-ok" />}
-        </button>
-        {design && !frameOnly && (
-          <>
-            <button type="button" className={`zlx-fab ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
-              <IconMaterial className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.material")}</b>
-                <small>{material ? L(material.label, lang) : t("lens.pickHint")}</small>
-              </span>
-              {matId && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
-            <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""}`} onClick={() => setPop("treat")}>
-              <IconTratamiento className="zlx-ic" />
-              <span className="zlx-fab-txt">
-                <b>{t("lens.treatBtn")}</b>
-                <small>{(photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
-              </span>
-              {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
-            </button>
-          </>
-        )}
-      </div>
-      <aside className="zlx-summary zlx-summary-inpage">
-        <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
-        {summaryInner}
-        <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
-        <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={startReview}>
-          <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
-        </button>
-        {buyHint && (buyHintGo
-          ? <button type="button" className={`zlx-buy-hint zlx-buy-hint-go ${heightMissing ? "req" : ""}`} onClick={buyHintGo}>
-              {buyHint} <Ic name="edit" className="zlx-buy-hint-ic" />
-            </button>
-          : <p className="zlx-buy-hint">{buyHint}</p>)}
-      </aside>
+  // material + tratamiento). IZQUIERDA: imagen (IA si existe, si no la montura) +
+  // pasos elegidos (editables, reabren su ventana emergente). DERECHA: resumen de
+  // precios + "Comprar ahora". Así NO se cae a la página de lentes.
+  const generatedImg = tryOnImage ? (
+    <figure className="zlx-gen-img">
+      <img src={tryOnImage} alt={product.name} referrerPolicy="no-referrer" />
+    </figure>
+  ) : frameSide;
+
+  const summarySteps = (
+    <div className="zlx-steps zlx-summary-steps">
+      <button type="button" className={`zlx-fab ${design ? "on" : ""}`} onClick={() => setRxStage("fill")}>
+        <IconReceta className="zlx-ic" />
+        <span className="zlx-fab-txt">
+          <b>{t("lens.step.rx")}</b>
+          <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
+        </span>
+        {design && <Ic name="check" className="zlx-fab-ok" />}
+      </button>
+      {design && !frameOnly && (
+        <>
+          <button type="button" className={`zlx-fab ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
+            <IconMaterial className="zlx-ic" />
+            <span className="zlx-fab-txt">
+              <b>{t("lens.material")}</b>
+              <small>{material ? L(material.label, lang) : t("lens.pickHint")}</small>
+            </span>
+            {matId && <Ic name="check" className="zlx-fab-ok" />}
+          </button>
+          <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""}`} onClick={() => setPop("treat")}>
+            <IconTratamiento className="zlx-ic" />
+            <span className="zlx-fab-txt">
+              <b>{t("lens.treatBtn")}</b>
+              <small>{(photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
+            </span>
+            {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
+          </button>
+        </>
+      )}
     </div>
+  );
+
+  // Columna IZQUIERDA del resumen: imagen generada + pasos + botón de compra.
+  const summaryLeft = (
+    <div className="zlx-rx-summary-left">
+      {generatedImg}
+      {summarySteps}
+      <button type="button" className="btn btn-primary zlx-buy zlx-buy-left" data-sfx="success" disabled={!canBuy} onClick={startReview}>
+        <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
+      </button>
+      {buyHint && (buyHintGo
+        ? <button type="button" className={`zlx-buy-hint zlx-buy-hint-go ${heightMissing ? "req" : ""}`} onClick={buyHintGo}>
+            {buyHint} <Ic name="edit" className="zlx-buy-hint-ic" />
+          </button>
+        : <p className="zlx-buy-hint">{buyHint}</p>)}
+    </div>
+  );
+
+  // Columna DERECHA del resumen: la ficha "Resumen del pedido".
+  const orderSummaryCard = (
+    <aside className="zlx-summary zlx-summary-inpage">
+      <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
+      {summaryInner}
+      <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
+    </aside>
   );
 
   return (
@@ -1408,8 +1444,8 @@ export default function LensProcess() {
       {(pop === "rx" || pop === "mat" || pop === "treat") && rxStage === "summary" && (
         <ZlxPop title={t("lens.summary")} icon={<IconMontura className="zlx-ic" />} onClose={() => setPop(null)}
                 onBack={() => setRxStage("fill")} backLabel={t("lens.back")} closeLabel={closeLabel}
-                fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-summary ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
-          {summaryView}
+                fullpage side={orderSummaryCard} className={`zlx-pop-rx zlx-rx-stage-summary ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
+          {summaryLeft}
         </ZlxPop>
       )}
       {(pop === "rx" || pop === "mat" || pop === "treat") && rxStage !== "summary" && (
@@ -1652,7 +1688,7 @@ export default function LensProcess() {
              resaltado, lo NO apto en rojo con el porqué, ayuda tras un botón (i) ── */}
       {pop === "mat" && !frameOnly && design && (
         <ZlxPop title={t("lens.chooseMaterial")} icon={<IconMaterial className="zlx-ic" />}
-                onClose={() => setPop(null)} onBack={() => setPop("rx")} closeLabel={closeLabel} backLabel={t("lens.back")}
+                onClose={() => setPop("rx")} onBack={() => setPop("rx")} closeLabel={closeLabel} backLabel={t("lens.back")}
                 onHelp={() => openInfo(t("lens.material"), null, materialDiagKeys())} helpLabel={t("lens.help")}
                 className="zlx-pop-mat">
           {recommendedMat && (
@@ -1685,7 +1721,7 @@ export default function LensProcess() {
 
       {/* ── TREATMENTS popover: photochromic + AR with education (req 3, 5) ── */}
       {pop === "treat" && !frameOnly && design && (
-        <ZlxPop title={t("lens.treatBtn")} icon={<IconTratamiento className="zlx-ic" />} onClose={() => setPop(null)}
+        <ZlxPop title={t("lens.treatBtn")} icon={<IconTratamiento className="zlx-ic" />} onClose={() => setPop("rx")}
                 onBack={treatStep === "photo" ? () => setTreatStep("ar") : () => setPop("mat")}
                 closeLabel={closeLabel} backLabel={t("lens.back")} className="zlx-pop-treat">
           {treatStep === "ar" ? (

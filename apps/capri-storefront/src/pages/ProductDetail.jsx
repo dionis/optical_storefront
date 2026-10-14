@@ -582,6 +582,10 @@ export default function ProductDetail() {
                    bifocal: p.bifocal, suitable: p.suitable,
                  };
                  navigate(`/recetas/${product.slug}`, { state: { openRxOcr: true, tryOnMeasurement: light } });
+               }}
+               onBuyFrameOnly={(p) => {
+                 setTryOnSlug(null);
+                 navigate(`/recetas/${product.slug}`, { state: { buyFrameOnly: true, colorIndex: p?.colorIndex } });
                }} />
       )}
     </div>
