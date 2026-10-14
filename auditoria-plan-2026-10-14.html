@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUBI LENS · Auditoría senior y plan de mejoras</title>
+<style>
+  :root { --navy:#01326b; --navy2:#033f84; --ink:#17203a; --muted:#5b6472; --line:#e7eaf0;
+          --soft:#f6f8fc; --ok:#116633; --okbg:#e9f8ef; --warn:#7a5b00; --warnbg:#fff7e6;
+          --crit:#8f1030; --critbg:#fdecef; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--soft); }
+  header { background:linear-gradient(180deg,var(--navy2),var(--navy)); color:#fff; padding:26px 22px; }
+  header h1 { margin:0; font-size:23px; }
+  header p { margin:6px 0 0; opacity:.85; font-size:13.5px; }
+  main { max-width:1060px; margin:0 auto; padding:22px 16px 60px; }
+  section { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-top:18px; box-shadow:0 10px 30px rgba(16,24,40,.06); }
+  h2 { margin:0 0 10px; font-size:17px; color:var(--navy); border-bottom:2px solid #eef3fb; padding-bottom:8px; }
+  h3 { margin:16px 0 6px; font-size:14.5px; color:#0a4a9e; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; }
+  th,td { padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  code { background:#f2f5fa; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12px; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+  .ok { background:var(--okbg); color:var(--ok); }
+  .warn { background:var(--warnbg); color:var(--warn); }
+  .crit { background:var(--critbg); color:var(--crit); }
+  .info { background:#eef4ff; color:#1c4f9c; }
+  ul { margin:6px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  .muted { color:var(--muted); }
+  .kpi { display:inline-block; background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:8px 14px; margin:4px 6px 4px 0; font-size:13px; }
+  .kpi b { display:block; font-size:16px; color:var(--navy); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Auditoría senior fullstack · RUBI LENS — hallazgos y plan de mejoras</h1>
+  <p>Código frontend + backend, diseño visual, prueba del flujo de compra con Stripe en producción · 14-oct-2026</p>
+</header>
+<main>
+
+<section>
+  <h2>Resumen ejecutivo</h2>
+  <span class="kpi"><b>✅ Compra E2E</b>Pedido #37 real con Stripe test</span>
+  <span class="kpi"><b>⚡ −85%</b>peso de logos (780→115 KB)</span>
+  <span class="kpi"><b>🎨 1 navy, 1 rojo</b>antes 4 azules y 2 rojos</span>
+  <span class="kpi"><b>🧱 48 vs 549</b>tarjetas en el primer render</span>
+  <span class="kpi"><b>🔐 5 críticos</b>backend a cerrar esta semana</span>
+  <p>El flujo de venta completo <b>funciona en producción</b> (catálogo → carrito → datos del paciente → envío → pago Stripe modo test → pedido #37 confirmado, visible para el admin en Pedidos). La base visual quedó <b>unificada hoy</b> (paleta, tipografías, ventanas). Lo más urgente que queda es <b>seguridad del backend</b>: dos endpoints abiertos que gastan dinero o envían correos en nombre de la tienda, los rate-limits esquivables y los proveedores PayPal/Square con las unidades de dinero mal (no activarlos hasta arreglarlos; Stripe, el activo, está bien).</p>
+</section>
+
+<section>
+  <h2>1 · Prueba real del flujo de compra (producción, Stripe test)</h2>
+  <table>
+    <tr><th>Paso</th><th>Resultado</th><th>Nota</th></tr>
+    <tr><td>Añadir al carrito (card del catálogo)</td><td><span class="tag ok">OK</span></td><td>DC407 $42.00, badge y drawer correctos</td></tr>
+    <tr><td>Checkout: datos del paciente + envío</td><td><span class="tag ok">OK</span></td><td>Standard shipping $6.95; email/SMS opcionales</td></tr>
+    <tr><td>Pago Stripe (Payment Element)</td><td><span class="tag ok">OK</span></td><td><code>pk_test_…</code> confirmado; tarjeta 4242 → <b>"Payment complete! Your order: #37"</b>, carrito vaciado</td></tr>
+    <tr><td>Visibilidad admin</td><td><span class="tag ok">OK</span></td><td>El pedido entra al order board (etapas confirmed→in_lab→shipped→delivered gestionables); Resumen/Ventas ya agregan pedidos reales</td></tr>
+    <tr><td><code>POST /store/carts/:id/revalidate</code></td><td><span class="tag warn">500 SIEMPRE</span></td><td>No bloquea (el cliente lo traga), pero la protección anti-precio-viejo está muerta. Arreglar en backend: la ruta revienta con líneas no configuradas y no tiene try/catch</td></tr>
+    <tr><td>Ficha de producto (PDP)</td><td><span class="tag warn">Mejorable</span></td><td>No muestra PRECIO ni botón "añadir al carrito" (solo probador); <code>addFrame</code> existe sin usar. Solo se compra desde las cards</td></tr>
+    <tr><td>Métodos extra del Element (Bank/Cash App/Affirm)</td><td><span class="tag info">Revisar</span></td><td>Los muestra Stripe automáticamente; decidir si se limitan a tarjeta en el Dashboard de Stripe</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>2 · Diseño visual — qué estaba roto y qué se unificó HOY (commit <code>97738fb</code>)</h2>
+  <table>
+    <tr><th>Problema detectado</th><th>Estado</th><th>Qué se hizo</th></tr>
+    <tr><td>4 azules conviviendo (#01326b header, #002A8F iconos, #0E5AD0 paleta vieja, #182a4e fichas) y 2 rojos (#FD0E3F precios, #CF142B iconos)</td><td><span class="tag ok">Unificado</span></td><td>ETAPA 100: un solo navy de marca <code>#01326b</code> en variables, cabeceras de fichas, CTA de receta y botones primarios; un solo rojo <code>#d6123e</code></td></tr>
+    <tr><td>3 familias tipográficas (Inter + Fraunces + Dancing Script)</td><td><span class="tag ok">Unificado</span></td><td>Dancing Script eliminada (carga incluida); el acento caligráfico pasa a Fraunces italic. Sistema de 2 fuentes: Inter (UI) + Fraunces (títulos)</td></tr>
+    <tr><td>Ventanas emergentes dispares (radios 12–18px, sombras y velos distintos)</td><td><span class="tag ok">Unificado</span></td><td>Mismo radio 16px, misma sombra y mismo velo desenfocado en receta/confirmación/OCR/info/entrada del probador</td></tr>
+    <tr><td>Chips de especificaciones montados en móvil; contador de reseñas cortado</td><td><span class="tag ok">Arreglado</span></td><td>ETAPA 99 (ayer) + medidas compactas "55-19-148"</td></tr>
+    <tr><td>Precio tachado INVENTADO (hash del slug) que no coincidía con el real</td><td><span class="tag ok">Arreglado</span></td><td>El tachado y el % salen SIEMPRE de <code>originalPrice</code> real del catálogo</td></tr>
+  </table>
+  <h3>Dirección minimalista a consolidar (siguiente pasada)</h3>
+  <ul>
+    <li><b>Menos ornamento:</b> retirar los emojis de encabezados del checkout/panel (📋👤💳) y sustituirlos por los iconos de línea del sistema; rebajar degradados secundarios a planos.</li>
+    <li><b>Escala tipográfica fija</b> (12 / 13.5 / 15 / 17 / 21 / 26) y espaciado en múltiplos de 4 px — hoy hay ~30 tamaños sueltos.</li>
+    <li><b>Radios en 2 niveles</b> (14 px tarjetas, 999 px pills) y una sola sombra por elevación.</li>
+    <li><b>Un solo selector de color de montura:</b> hay 8 implementaciones (card-dot, pdp-swatch, ts2-fr-onsw, zlx-float-color…). Extraer <code>&lt;ColorDots/&gt;</code> y usarlo en todas.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3 · Código frontend — hallazgos clave (los de impacto; detalle en auditoría)</h2>
+  <table>
+    <tr><th>Hallazgo</th><th>Sev.</th><th>Acción propuesta</th></tr>
+    <tr><td><code>index.css</code>: 7.300 líneas en 99 "ETAPAS" append-only; 644 selectores redefinidos (<code>.cat-hero</code> ×21), 149 <code>!important</code>, 328 hex distintos, ~17% de reglas muertas; 29 breakpoints distintos</td><td><span class="tag warn">Alta</span></td><td>Congelar ETAPAS; consolidar por bloques (empezar por <code>.cat-hero*</code>/<code>.truststrip</code>/<code>.card-media</code>, ~900 líneas); 4 breakpoints canónicos (560/860/960/1200); borrar reglas muertas con cobertura de capturas antes/después</td></tr>
+    <tr><td>Componentes-dios: <code>TryOnStudio</code> (1.941 líneas, 29 useState), <code>LensProcess</code> (1.917)</td><td><span class="tag warn">Alta</span></td><td>Extraer hooks (<code>useCamera</code>, <code>useMeasurement</code>, <code>useZoomPan</code>) y vistas (CaptureStage, ResultViews, RxPopover, TreatmentsPopover) en hitos de 1 extracción = 1 commit con verificación visual</td></tr>
+    <tr><td>Bundle 987 KB: ~62% son DATOS (frames-extra 293 KB + frameMediaSample 156 KB + translations 134 KB) y el catálogo además se re-descarga por fetch (<code>catalog.json</code>)</td><td><span class="tag warn">Alta</span></td><td>Semilla mínima + arrancar de <code>/catalog.json</code>; índice ligero de vistas 360 y <code>GENERATED_*</code> lazy; dividir traducciones por idioma y sacar <code>adm.*</code> al chunk del admin. Objetivo ≤ 350 KB</td></tr>
+    <tr><td>Ficha del espejuelo duplicada (LensProcess vs TryOnStudio), <code>oneMeasure</code>/<code>mid</code> duplicados, género sin <code>tv()</code> en receta ("Hombres" en inglés)</td><td><span class="tag info">Media</span></td><td>Extraer <code>&lt;FrameSheet/&gt;</code>, <code>formatMeasure()</code> y <code>genderMeta()</code> compartidos</td></tr>
+    <tr><td>Fotos de la cara en <code>localStorage</code> (<code>rubi.tryon.face.v1</code>) sin caducidad y fuera de la purga por versión (solo barre <code>oer_*</code>)</td><td><span class="tag crit">Alta</span></td><td>Incluir prefijo <code>rubi.</code> en <code>purgeStaleStorage()</code>, TTL (p. ej. 7 días) y botón "borrar mis fotos"; es dato biométrico</td></tr>
+    <tr><td>Hecho hoy: contexts sin memo (re-render de ~550 cards por favorito), catálogo sin paginar, logos 780 KB, override <code>?tryonUi=dev</code> abierto en prod, reseñas sin reintento</td><td><span class="tag ok">Resuelto</span></td><td>Commit <code>97738fb</code></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>4 · Backend — hallazgos de seguridad y dinero (rama <code>main</code>, planificar con cuidado)</h2>
+  <p class="muted">Ninguno se tocó hoy: el backend despliega desde <code>main</code> y estos cambios merecen su propia tanda con pruebas. Orden = prioridad.</p>
+  <table>
+    <tr><th>#</th><th>Hallazgo</th><th>Sev.</th><th>Cómo arreglarlo</th></tr>
+    <tr><td>1</td><td><code>/vision-measure/notify</code> es un relay abierto de email/WhatsApp si falta <code>VISION_INTERNAL_SECRET</code> (y en <code>.env.example</code> viene vacío); comparación no constante</td><td><span class="tag crit">Crítica</span></td><td>Fallar CERRADO sin secreto, <code>timingSafeEqual</code>, asunto/cuerpo fijados en servidor, límite por destinatario</td></tr>
+    <tr><td>2</td><td><code>/vision-measure</code> y <code>/job</code> sin auth ni límite: cualquiera quema el crédito de OpenAI/Anthropic/Gemini con las claves del servidor</td><td><span class="tag crit">Crítica</span></td><td>Exigir clave publicable + cuota por IP real y por día; no usar claves del servidor en llamadas anónimas</td></tr>
+    <tr><td>3</td><td>PayPal divide el importe entre 100 (cobraría 1/100) y Square manda decimales donde esperan centavos; claves de idempotencia aleatorias por reintento; webhooks que fallan en abierto</td><td><span class="tag crit">Crítica si se activan</span></td><td><b>Bloquear su selección en store-settings hasta arreglar unidades + idempotencia + firma. Stripe (activo) está correcto</b></td></tr>
+    <tr><td>4</td><td>Secrets por defecto <code>change-me-in-production</code> para JWT/cookies sin comprobación al arrancar; con ellos se forjan JWT de admin</td><td><span class="tag crit">Crítica</span></td><td>Fail-fast en producción si falta o vale el default; igual para <code>R2_PRESCRIPTION_BUCKET</code> (hoy cae al bucket PÚBLICO: recetas = datos de salud)</td></tr>
+    <tr><td>5</td><td>Rate limiters confían en el primer <code>X-Forwarded-For</code> (lo controla el cliente): spam de enlaces mágicos a terceros, OCR ilimitado</td><td><span class="tag crit">Alta</span></td><td><code>req.ip</code> con trust proxy correcto; helper único; límite también en cancel/support/reviews; acotar los Maps</td></tr>
+    <tr><td>6</td><td>Precios: material/foto/AR desconocidos caen a $0; variante sin precio → montura a $0; <code>prescription_id</code> ajeno exime de impuesto y expone la receta de otro en my-orders; <code>file_url</code> del cliente se presigna tal cual</td><td><span class="tag crit">Alta</span></td><td>Rechazar códigos/celdas inexistentes; validar que la receta existe y pertenece al flujo; aceptar solo claves de archivo emitidas por el OCR</td></tr>
+    <tr><td>7</td><td><code>revalidate</code> 500 permanente (visto en producción); cancelación no atómica (puede dejar pedido cobrado sin fulfillment y bloquear el reintento); metadata con lecturas-escrituras que se pisan</td><td><span class="tag warn">Alta</span></td><td>try/catch + soporte de líneas simples en revalidate; cancelación en un workflow con compensación e idempotencia por pedido</td></tr>
+    <tr><td>8</td><td><code>order-board</code> escanea 300 pedidos con ~30 rutas de campos en CADA página/filtro; <code>tryon-results</code> lista S3 sin paginar y con GetObject secuencial</td><td><span class="tag info">Media</span></td><td>Etapa como columna/metadata indexada vía subscriber; quitar <code>billing_address.*</code>; caché corta; paginar S3</td></tr>
+    <tr><td>9</td><td>5 formatos de error distintos y reason codes sin clave i18n (<code>unknown_terminal</code>, <code>bad_date</code>…); migraciones no bloqueantes (<code>|| echo</code>) con orden alfabético dudoso</td><td><span class="tag info">Media</span></td><td>Contrato único <code>{type, reason, message(en)}</code> con zod; claves <code>adm.err.stage.*</code> faltantes; migrar en CI sobre BD vacía y hacer el migrate bloqueante</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>5 · Hoja de ruta (hitos cortos, verificables)</h2>
+  <table>
+    <tr><th>Hito</th><th>Contenido</th><th>Rama</th><th>Verificación</th></tr>
+    <tr><td><b>H1 · hoy</b> <span class="tag ok">HECHO</span></td><td>Unificación visual base + quick-wins rendimiento + prueba E2E Stripe</td><td>develop</td><td>Capturas + pedido #37</td></tr>
+    <tr><td><b>H2 · seguridad crítica</b></td><td>Puntos 1–5 del backend (relay, proxy IA, bloqueo PayPal/Square, fail-fast secrets, IP real)</td><td>main</td><td>curl de cada endpoint cerrado + arranque falla sin secrets</td></tr>
+    <tr><td><b>H3 · dinero e integridad</b></td><td>Punto 6 (precios $0, prescription_id, file_url) + revalidate 500 + cancelación atómica</td><td>main</td><td>Tests unitarios de lens-quote + E2E de cancelación</td></tr>
+    <tr><td><b>H4 · dieta del bundle</b></td><td>Catálogo fuera del JS, media-index lazy, traducciones por idioma; objetivo ≤350 KB; PDP con precio + añadir al carrito</td><td>develop</td><td>vite build + Lighthouse antes/después</td></tr>
+    <tr><td><b>H5 · minimal pass 2</b></td><td>Escala tipográfica/espaciado, radios 2 niveles, &lt;ColorDots/&gt; único, emojis→iconos, breakpoints canónicos</td><td>develop</td><td>Capturas 8 vistas × 2 anchos</td></tr>
+    <tr><td><b>H6 · CSS consolidado</b></td><td>Compactar ETAPAS por bloques + borrar reglas muertas (~17%) + privacidad fotos try-on (TTL + purga)</td><td>develop</td><td>Diff visual por página; peso CSS −40%</td></tr>
+    <tr><td><b>H7 · desacoplar componentes-dios</b></td><td>TryOnStudio y LensProcess en hooks + vistas; FrameSheet compartido</td><td>develop</td><td>Flujos E2E del probador y receta en Playwright</td></tr>
+  </table>
+  <p class="muted">Regla de cada hito: build + <code>check:i18n</code> + captura/probe ANTES de commitear; un hito = uno o dos commits enfocados; nada se mezcla con main sin su propia verificación.</p>
+</section>
+
+</main>
+</body>
+</html>
