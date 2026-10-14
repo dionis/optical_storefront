@@ -1,4 +1,5 @@
 import { lazy, Suspense, Component } from "react";
+import { useLang } from "../i18n/LanguageContext.jsx";
 
 // Red de seguridad: si el probador lanza un error en tiempo de ejecución, en vez de
 // tumbar toda la app (o devolver al usuario a la página sin avisar), lo atrapamos y
@@ -87,8 +88,11 @@ function resolveKey() {
 /** Punto único de entrada del probador. Misma firma que cada interfaz. */
 export default function TryOnSwitch(props) {
   const Ui = UIS[resolveKey()] || UIS[DEFAULT_UI];
+  // El boundary es un componente de clase (no puede usar useLang): el texto
+  // traducido entra por props desde aquí, donde el hook sí vive.
+  const { t } = useLang();
   return (
-    <TryOnBoundary onClose={props.onClose}>
+    <TryOnBoundary onClose={props.onClose} message={t("tryon.boundary")} closeLabel={t("common.close")}>
       <Suspense fallback={null}>
         <Ui {...props} />
       </Suspense>

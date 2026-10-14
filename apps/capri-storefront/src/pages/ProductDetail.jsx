@@ -490,8 +490,21 @@ export default function ProductDetail() {
             document.body
           )}
 
-          {/* Acciones: probar con cámara + añadir al carrito (abre el flujo de
-              recetas para elegir lentes y comprar — no se pierde esa función). */}
+          {/* PRECIO — la ficha no lo mostraba en ninguna parte (auditoría 2.10):
+              el cliente llegaba a las acciones sin saber cuánto cuesta. Mismo
+              criterio que las tarjetas: tachado SOLO con originalPrice real. */}
+          <div className="pdp-price-row">
+            {typeof product.originalPrice === "number" && product.originalPrice > product.price && (
+              <span className="pdp-price-old">${product.originalPrice.toFixed(2)}</span>
+            )}
+            <span className={`pdp-price ${typeof product.originalPrice === "number" && product.originalPrice > product.price ? "sale" : ""}`}>
+              ${product.price.toFixed(2)}
+            </span>
+            <span className="pdp-price-note">{t("pdp.priceNote")}</span>
+          </div>
+
+          {/* Acciones: probar con cámara + añadir la montura al carrito (directo,
+              como en las tarjetas). El flujo de lentes graduados sigue a un clic. */}
           <div className="pdp-actions2">
             {TRY_ON_ENABLED && (
               <button type="button" className="btn btn-primary big pdp-cta" onClick={() => setTryOnSlug(slug)}>
@@ -499,10 +512,15 @@ export default function ProductDetail() {
               </button>
             )}
             <button type="button" className="btn btn-outline big pdp-cta"
-                    onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
+                    disabled={!color?.variantId}
+                    onClick={() => addFrame(color?.variantId)}>
               <IconCart className="pdp-cta-ic" /> {t("card.addToCart")}
             </button>
           </div>
+          <button type="button" className="pdp-lensflow"
+                  onClick={() => navigate(`/recetas/${product.slug}?color=${active}`)}>
+            {t("pdp.lensFlow")} →
+          </button>
         </div>
       </div>
 

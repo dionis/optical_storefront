@@ -8,13 +8,14 @@ import { useUser, login, register, logout } from "./userAuth.js";
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
 export function SidePanel({ open, onClose, title, children }) {
+  const { t } = useLang();
   return (
     <>
       {open && <div className="panel-backdrop" onClick={onClose} />}
       <aside className={`side-panel ${open ? "open" : ""}`} role="dialog" aria-label={title}>
         <div className="side-panel-head">
           <h3>{title}</h3>
-          <button className="side-close" onClick={onClose} aria-label="×">×</button>
+          <button className="side-close" onClick={onClose} aria-label={t("common.close")}>×</button>
         </div>
         <div className="side-panel-body">{children}</div>
       </aside>

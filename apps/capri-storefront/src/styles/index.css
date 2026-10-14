@@ -7352,3 +7352,37 @@ button.card-genre {
 }
 .ts2-cap2-cam .ts2-rvbtn .ts2-rvbtn-tx { display: none; }
 .ts2-cap2-cam .ts2-rvbadge { top: 8px; left: 8px; font-size: 11.5px; padding: 4px 9px; z-index: 3; }
+
+/* ===================================================================
+   ETAPA 102 - Ficha de producto: PRECIO visible (no aparecía en toda la
+   ficha) + "Añadir al carrito" directo + enlace al flujo de lentes.
+   =================================================================== */
+.pdp-price-row { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 10px; flex-wrap: wrap; }
+.pdp-price { font-family: var(--display); font-size: 30px; font-weight: 700; color: var(--ink); }
+.pdp-price.sale { color: var(--red); }
+.pdp-price-old { font-size: 17px; color: var(--muted); text-decoration: line-through; }
+.pdp-price-note { font-size: 12.5px; color: var(--muted); }
+.pdp-lensflow {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+  color: var(--blue); font-size: 14px; font-weight: 700; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pdp-lensflow:hover { color: var(--blue-dark); }
+
+/* ===================================================================
+   ETAPA 103 - Resumen final en MÓVIL (pendiente aplazado): la ficha de la
+   montura iba a media anchura con los badges tapando la foto, y el título
+   "Resumen del pedido" salía dos veces (la tarjeta navy ya lo dice).
+   =================================================================== */
+@media (max-width: 959px) {
+  .zlx-rx-stage-summary .zlx-page-side,
+  .zlx-rx-stage-summary .zlx-rx-summary-right,
+  .zlx-rx-stage-summary .zlx-page-side .fs-card.ts2-frame.zlx-frameside { width: 100%; }
+  .zlx-rx-stage-summary .zlx-page-side .zlx-frameside .ts2-fr-badges { display: none; }
+  .zlx-rx-stage-summary .zlx-page-main > .zlx-page-head { display: none; }
+  /* La imagen IA compacta también en móvil: deja ver pasos y compra sin
+     un pantallazo entero de foto. */
+  .zlx-rx-summary-left .zlx-gen-img,
+  .zlx-rx-summary-left .zlx-gen-img img { max-height: 240px; }
+}

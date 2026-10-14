@@ -438,7 +438,7 @@ function EduBlock({ edu, goodLbl, notLbl }) {
 export default function LensProcess() {
   const { slug } = useParams();
   const [params] = useSearchParams();
-  const { t, lang } = useLang();
+  const { t, tv, lang } = useLang();
   useFrameMediaVersion();
   const { toast } = useFeedback();
   const { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } = useLensCatalog();
@@ -1093,7 +1093,7 @@ export default function LensProcess() {
   // receta → material → antirreflejo en la columna derecha, para que los
   // espejuelos estén SIEMPRE visibles mientras se añade la receta y se elige todo.
   const fsA = product.attributes || {};
-  const fsMats = Array.isArray(fsA.material) ? fsA.material.filter(Boolean).join(" / ") : (fsA.material || "");
+  const fsMats = Array.isArray(fsA.material) ? fsA.material.filter(Boolean).map(tv).join(" / ") : (fsA.material ? tv(fsA.material) : "");
   const fsNow = new Date();
   const fsLocale = lang === "en" ? "en-US" : "es-ES";
   const fsDate = fsNow.toLocaleDateString(fsLocale, { day: "2-digit", month: "short", year: "numeric" });
@@ -1118,7 +1118,7 @@ export default function LensProcess() {
               : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
             <div className="ts2-fr-badges">
               {fsMats && <span className="ts2-fr-badge"><SpecMaterial className="ts2-fr-badge-ic" />{fsMats}</span>}
-              {fsA.gender && <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{fsA.gender}</span>}
+              {fsA.gender && <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{tv(fsA.gender)}</span>}
             </div>
             {product.colors.length > 1 && (
               <div className="ts2-fr-onphoto" role="listbox" aria-label={product.name}>
@@ -1356,7 +1356,7 @@ export default function LensProcess() {
               {product.attributes?.gender && (
                 <div className="zlx-spec">
                   <span className="zlx-spec-ic" aria-hidden="true"><IconGender /></span>
-                  <span className="zlx-spec-tx"><small>{t("pdp.spec.gender")}</small><b>{product.attributes.gender}</b></span>
+                  <span className="zlx-spec-tx"><small>{t("pdp.spec.gender")}</small><b>{tv(product.attributes.gender)}</b></span>
                 </div>
               )}
             </div>
