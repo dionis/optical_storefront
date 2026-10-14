@@ -8554,3 +8554,31 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   object-fit: contain !important; opacity: .07 !important;
   pointer-events: none; z-index: 1; padding: 0 !important;
 }
+
+/* ===================================================================
+   ETAPA 122 — Pantalla de RESULTADO del probador igual que la revisión
+   (pedido del cliente): mismos iconos 3D y botones de cristal.
+   - Medir de nuevo / Compartir / Comprar solo el marco: barra blanca/oro
+     con icono 3D navy (retry, compartir, carrito de la lámina).
+   - Añadir receta: barra navy/oro con letra dorada e icono 3D blanco.
+   - Botoncitos sobre la foto (medidas/zoom/descargar): iconos 3D navy.
+   Respaldos svg intactos (clase no-i3d si el PNG no carga).
+   =================================================================== */
+.i3d-act { height: 16px; width: auto; }
+.i3d-rtool { height: 15px; width: auto; }
+.vm-remeasure:not(.no-i3d) svg, .tryon-studio .vm-share:not(.no-i3d) svg,
+.vm-addrx:not(.no-i3d) svg, .vm-buyframe:not(.no-i3d) svg,
+.vm-rtool:not(.no-i3d) svg { display: none; }
+.vm-remeasure, .tryon-studio .vm-share, .vm-buyframe {
+  background: url("/ui/glass/bar-white-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important; color: #0b2f66 !important; font-weight: 800;
+  box-shadow: none !important; text-shadow: none;
+}
+.vm-addrx {
+  background: url("/ui/glass/bar-navy-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important; color: #f3e3b3 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .38); box-shadow: none !important;
+}
+.vm-addrx:hover, .vm-remeasure:hover, .tryon-studio .vm-share:hover, .vm-buyframe:hover {
+  filter: brightness(1.07) drop-shadow(0 9px 14px rgba(8, 30, 84, .32));
+}
