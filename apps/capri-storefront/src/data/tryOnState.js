@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 
 const normalize = (sku) => String(sku || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-let openKey = null;
+let openKey = (() => { try { return localStorage.getItem("rubi.tryon.open.v1") || null; } catch { return null; } })();
 const subs = new Set();
 function emit() {
   for (const f of subs) f();
@@ -24,13 +24,20 @@ export function productTryOnKey(product) {
   return normalize(product?.sku || product?.name);
 }
 
+// La ventana abierta SOBREVIVE a recargar (pedido del dueño: "recargo y me
+// sale una ventana distinta"): el probador abierto se apunta en localStorage
+// y al recargar la página que lo alberga lo reabre tal cual.
+const OPEN_LS_KEY = "rubi.tryon.open.v1";
+
 export function openTryOn(product) {
   openKey = productTryOnKey(product);
+  try { localStorage.setItem(OPEN_LS_KEY, openKey); } catch { /* nada */ }
   emit();
 }
 
 export function closeTryOn() {
   openKey = null;
+  try { localStorage.removeItem(OPEN_LS_KEY); } catch { /* nada */ }
   emit();
 }
 

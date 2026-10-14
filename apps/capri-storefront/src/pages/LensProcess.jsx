@@ -607,12 +607,16 @@ export default function LensProcess() {
     if (c.confirmRx) setConfirmRx(true);
     if (c.patientFor) setPatientFor(c.patientFor);
     if (c.patientName) setPatientName(c.patientName);
+    // La VENTANA abierta (receta/material/tratamientos) y su etapa también se
+    // restauran: recargar ya no te saca a una pantalla distinta.
+    if (c.pop) setPop(c.pop);
+    if (c.rxStage) setRxStage(c.rxStage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (!cacheRestored.current) return;
-    saveCache(lensCacheKey, { designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName });
-  }, [lensCacheKey, designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName]);
+    saveCache(lensCacheKey, { designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName, pop, rxStage });
+  }, [lensCacheKey, designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName, pop, rxStage]);
   // Fields whose current value came from the OCR and the user has not touched
   // since — used to highlight what still needs checking (a confident model error
   // looks exactly like a value the customer typed). Preserves Dionis's OCR UX.
