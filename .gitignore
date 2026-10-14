@@ -82,3 +82,4 @@ _to_delete/
 change.patch
 __commitmsg.txt 
 .fuse_hidden* 
+.fuse_hidden* 
