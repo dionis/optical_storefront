@@ -8298,3 +8298,46 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .card-badge-360 { padding: 2px 6px; }
   .card-badge-360 .i3d-360 { height: 11px; }
 }
+
+/* ===================================================================
+   ETAPA 119 — Ventanas emergentes del pie (pedido del cliente): cada
+   enlace de Ayuda/Servicio abre un diálogo al frente con el fondo
+   distorsionado (blur fuerte, como el resto de diálogos) y el tema
+   explicado en detalle. Dónde se usa: Footer → FooterInfo.jsx.
+   =================================================================== */
+.footer-link {
+  background: none; border: none; padding: 0; text-align: left; cursor: pointer;
+  color: inherit; font: inherit; display: block;
+}
+.footer-link:hover { color: #fff; text-decoration: underline; }
+.fi-backdrop {
+  z-index: 940; /* por encima de paneles (320) y toasts */
+  background: rgba(6, 18, 44, .52);
+  -webkit-backdrop-filter: blur(7px) saturate(.9);
+          backdrop-filter: blur(7px) saturate(.9);
+}
+.fi-card {
+  max-width: 580px; max-height: 84vh; overflow-y: auto; text-align: left;
+  padding: 30px 30px 26px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid rgba(243, 227, 179, .65); /* filo dorado de la marca */
+  box-shadow: 0 30px 70px -30px rgba(2, 12, 36, .6);
+}
+.fi-title {
+  font-family: var(--display); font-size: 24px; font-weight: 600;
+  letter-spacing: -.02em; color: #0b2f66; margin: 0 0 6px; padding-right: 28px;
+}
+.fi-intro { margin: 0 0 14px; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.fi-sec { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: #f7f9fd; border: 1px solid #e8edf6; }
+.fi-sec h4 { margin: 0 0 4px; font-size: 14px; font-weight: 800; color: #0b2f66; }
+.fi-sec p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); }
+.fi-ok { width: 100%; margin-top: 8px; }
+@media (max-width: 640px) {
+  .fi-backdrop { padding: 0; align-items: end; }
+  .fi-card {
+    max-width: none; width: 100%; max-height: 88vh;
+    border-radius: 22px 22px 0 0; padding: 24px 20px 20px;
+    animation-name: fi-sheet;
+  }
+  @keyframes fi-sheet { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+}
