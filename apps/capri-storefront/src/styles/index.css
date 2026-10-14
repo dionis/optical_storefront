@@ -8521,3 +8521,18 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .fs-hd-mark img { height: 18px; width: auto; display: block; }
 .fs-hd-mark:not(.no-img) .fs-hd-ic { display: none; }
 .fs-hd-mark.no-img { background: none; padding: 0; box-shadow: none; }
+
+/* ETAPA 121g — Foto de la ficha a TODO el espacio (pedido del cliente): el
+   área de foto pasa a BLANCO PURO para fundirse con el fondo blanco de las
+   fotos de producto (desaparece el rectángulo que contrastaba) y la montura
+   se agranda ocupando todo el ancho, sin bordes ni padding alrededor. */
+.fs-card.ts2-frame { --fs-photo: #ffffff; }
+.fs-card.ts2-frame .fs-photo,
+.fs-card.ts2-frame .ts2-fr-photo { background: #fff; border: none; border-radius: 0; }
+.fs-card.ts2-frame .ts2-fr-photo.fs-photo img { padding: 0; width: 100%; }
+@media (max-width: 939px) {
+  .ts2-cap2col .ts2-frame .fs-photo { padding: 0 !important; }
+  .ts2-cap2col .ts2-frame .ts2-fr-photo img,
+  .ts2-cap2col .ts2-frame .fs-photo img { max-height: 15vh; max-height: 15dvh; }
+  .ts2-rvlayout .ts2-frame .ts2-fr-photo img { max-height: 19vh; max-height: 19dvh; }
+}

@@ -523,11 +523,8 @@ export default function MedusaCheckout() {
                           </label>
                         ))}
                       </div>
-                      {/* Promo de envío gratis retirada: el aviso solo sale si el
-                          servidor realmente marca la cotización como gratis. */}
-                      {carriers[0]?.free && (
-                        <small className="co-hint co-freehint">🎉 {t("ship.freeApplied", { n: freeThreshold })}</small>
-                      )}
+                      {/* Promo de envío gratis RETIRADA por completo (pedido del dueño):
+                          sin avisos de gratis en el checkout. */}
                       <small className="co-hint">🇺🇸 {t("ship.usOnlyNote")}</small>
                     </>
                   ) : (
