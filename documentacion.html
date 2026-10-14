@@ -60,6 +60,8 @@
     <tr><td><code>1243048</code> + <code>b9dbace</code></td><td><b>Panel admin con datos reales</b>: Resumen/Ventas/Precios se alimentan del order board de Medusa (capa <code>realAnalytics.js</code>: ventana de escaneo con caché, mapeo pedido→analítica, marca/tipo vía catálogo). Demo solo con login demo. Nota de fuente y aviso de ventana (300 pedidos). <b>Responsive</b>: chips de especificaciones de la receta ya no se montan en móvil; contador de reseñas oculto en pantallas estrechas.</td></tr>
     <tr><td><code>97738fb</code>…</td><td><b>Sistema visual unificado</b> (un navy, un rojo, 2 fuentes, ventanas estándar), catálogo incremental, contexts memoizados, logos −85%, precio tachado real, auditoría senior completa (front+back) y prueba E2E con Stripe test (pedido #37).</td></tr>
   <tr><td><i>madrugada</i></td><td><b>Admin profesional + cuentas</b>: dashboard Ejecutivo con alertas y pipeline; email automático al cliente en CADA cambio de etapa con URL de tracking; gestión de catálogo (precios reales vía Admin API, descontinuar montura/marca, export Excel/CSV); cuentas cliente con contraseña; seguridad backend: relay de notificaciones cerrado (fail-closed + timingSafeEqual), cuotas por IP real en todos los límites, proxy IA con cuota, bucket de recetas fail-closed, PayPal/Square bloqueados, revalidate sin 500, recetas inválidas rechazadas y file_url saneado.</td></tr>
+  <tr><td><code>8fd6b96</code></td><td><b>Equipo admin</b>: pestaña Equipo en <code>/admin</code> — el dueño crea otros administradores con contraseña temporal que DEBE cambiarse en la primera entrada (<code>FirstPasswordGate</code>); el super admin (usuario más antiguo) no puede eliminarse ni eliminarse a sí mismo. Logo real de la empresa en el panel; botones Repetir/Subir del probador homogéneos (círculos 32px).</td></tr>
+  <tr><td><code>3808168</code></td><td><b>Envío FedEx/DHL + SMS + Google Sheets + checkout reversible</b>: cotización de envío en el servidor (<code>shipping-quote</code>/<code>shipping-select</code>) con FedEx Home Delivery y DHL eCommerce, <b>gratis desde $100</b> de subtotal, SOLO direcciones de EE.UU. (país fijado, 422 <code>us_only</code>); el transportista ELEGIDO viaja como nombre del método → visible en el panel admin y en los correos. <b>SMS al cliente</b> en cada cambio de etapa (si marcó SMS), bilingüe y con tracking. <b>Réplica de ventas en Google Sheets</b> (<code>lib/gsheet-sync.ts</code>, sin dependencias): pestaña <i>Pedidos</i> (una fila por pedido con TODO el proceso y su estado, upsert) + pestaña <i>Historial</i> (una fila por evento: compra, cada etapa, cancelación); no-op sin credenciales. <b>Checkout siempre reversible</b>: quitar líneas (×) desde el resumen, "Seguir comprando" y botón "Volver a mis datos" desde el pago.</td></tr>
 </table>
   <h3>Verificación realizada</h3>
   <ul>
@@ -67,6 +69,7 @@
     <li>Auditoría visual 16 vistas (8 páginas × web 1366px / móvil 390px): sin scroll horizontal, sin errores JS.</li>
     <li><code>pnpm check:i18n</code> (1196 claves × es/en) y build de producción en verde en cada lote.</li>
     <li>Producción comprobada tras el deploy (entry chooser activo, sin errores de consola).</li>
+    <li>E2E con tarjeta de prueba 4242 (dev contra backend de producción): pedido <b>#38</b> completado — quitar línea en el checkout (2→1), volver del pago conservando los datos, respaldo clásico de envío cuando la ruta de cotización aún no está desplegada; <code>tsc</code> backend 0 errores; i18n 1305 claves.</li>
   </ul>
 </section>
 
@@ -108,6 +111,8 @@
 <section>
   <h2>Pendientes conocidos</h2>
   <ul>
+    <li><span class="tag wip">Deploy</span> <b>Coolify requiere clic manual en Deploy</b> para activar TODO el lote backend (envío FedEx/DHL, SMS de etapas, Google Sheets, equipo admin). Variables nuevas a configurar en Coolify: <code>TWILIO_*</code> (SMS), <code>GSHEET_SPREADSHEET_ID</code> + <code>GSHEET_SERVICE_ACCOUNT_EMAIL</code> + <code>GSHEET_SERVICE_ACCOUNT_KEY</code> (hoja de ventas), <code>SHIPPING_FEDEX_RATE</code>/<code>SHIPPING_DHL_RATE</code>/<code>FREE_SHIPPING_THRESHOLD</code> (opcionales), <code>VISION_INTERNAL_SECRET</code>. Usuario admin: Coolify → Terminal → <code>npx medusa user -e correo -p contraseña</code>.</li>
+    <li><span class="tag wip">Envío</span> Tarifas FedEx/DHL hoy son tabla publicada en el servidor; cuando haya cuentas de transportista, conectar sus APIs en <code>src/lib/shipping-rates.ts</code>.</li>
     <li><span class="tag wip">Backend</span> Separar ingresos montura vs. lente en analítica (el order board no expone <code>frame_price</code>/<code>lens_addon</code> por línea).</li>
     <li><span class="tag wip">Datos</span> Analítica de visitas real multi-dispositivo (hoy: contadores locales por navegador).</li>
     <li><span class="tag wip">3D</span> Generar <code>.glb</code> reales para las monturas (pipeline GPU externo; hoy solo <code>sample-frame</code>).</li>
