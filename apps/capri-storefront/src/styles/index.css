@@ -8616,3 +8616,38 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .resume-tx { font-size: 12px; }
   .resume-go { font-size: 12px; padding: 7px 13px; }
 }
+
+/* ===================================================================
+   ETAPA 124 — Resultado del probador, remates (pedido del cliente):
+   1) Botoncitos sobre la foto (medidas/zoom/descargar) en BLANCO Y ORO:
+      el tile cuadrado de cristal de la lámina con el icono 3D navy.
+   2) Aire arriba y abajo del contenedor en móvil (estaba pegado al
+      header y al pie) y la foto UN POCO más baja, en proporciones dvh
+      como las demás pantallas.
+   3) Lightbox: Descargar en barra navy/oro con icono 3D blanco y la ×
+      sobre tile blanco/oro.
+   =================================================================== */
+.vm-rtool {
+  background: url("/ui/glass/sq-white-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important; color: #0b2f66 !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+.vm-rtool:hover { filter: brightness(1.06) drop-shadow(0 7px 12px rgba(8, 30, 84, .35)); }
+.vm-rtool svg { color: #0b2f66; }
+.vm-zoom-dl {
+  background: url("/ui/glass/bar-navy-gold.png") center / 100% 100% no-repeat !important;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+  border: none !important;
+}
+.vm-zoom-dl:not(.no-i3d) svg { display: none; }
+.vm-zoom-x {
+  background: url("/ui/glass/sq-white-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important; color: #0b2f66 !important; font-weight: 800; font-size: 22px;
+  border-radius: 0 !important;
+}
+.vm-zoom-x:hover { filter: brightness(1.06); background: url("/ui/glass/sq-white-gold.png") center / 100% 100% no-repeat !important; }
+@media (max-width: 939px) {
+  .tryon-studio .vm-result.vm-result-grid { margin: 12px 0 16px; }
+  .tryon-result .vm-rfig { aspect-ratio: auto; height: 38vh; height: 38dvh; min-height: 0; }
+  .tryon-result .vm-rfig img.vm-rimg { width: 100%; height: 100%; object-fit: cover; }
+}

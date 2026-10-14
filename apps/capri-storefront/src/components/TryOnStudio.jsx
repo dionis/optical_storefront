@@ -2008,6 +2008,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                     onClick={() => (zoom.kind === "ai"
                       ? downloadResult(zoom.src, zoom.which)
                       : downloadNamed(zoom.src, zoom.name))}>
+              <img className="i3d i3d-act" src="/ui/icons3d/white-download.png" alt=""
+                   onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
               {IC_DOWN}<span>{t("vm.download")}</span>
             </button>
             <button type="button" className="vm-zoom-x" aria-label={t("tryon.close")}
