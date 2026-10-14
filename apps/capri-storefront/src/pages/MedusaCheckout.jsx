@@ -1,5 +1,6 @@
 // Dónde se usa: /checkout. Resumen con quitar-línea (×), datos del paciente, envío FedEx/DHL (gratis desde $100, solo EE.UU.), pago Stripe con vuelta atrás garantizada.
 import { useEffect, useRef, useState } from "react";
+import { loadCache, saveCache } from "../lib/appCache.js";
 import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "../components/CartContext.jsx";
@@ -47,9 +48,16 @@ export default function MedusaCheckout() {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState("contact"); // contact | pay | done
-  const [f, setF] = useState({ email: "", phone: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us" });
+  // Caché de la app: los datos del cliente (contacto y dirección, NUNCA el
+  // pago) se recuperan si vuelve al checkout.
+  const [f, setF] = useState(() => ({
+    email: "", phone: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us",
+    ...loadCache("rl_checkout_form", {}),
+  }));
   // Cómo recibir la confirmación del pedido (el envío real es del backend).
-  const [notify, setNotify] = useState({ email: true, sms: false });
+  const [notify, setNotify] = useState(() => loadCache("rl_checkout_notify", { email: true, sms: false }));
+  useEffect(() => { saveCache("rl_checkout_form", f); }, [f]);
+  useEffect(() => { saveCache("rl_checkout_notify", notify); }, [notify]);
   // ¿La dirección de facturación de la tarjeta es la misma del paciente? Si sí,
   // autorellenamos los datos de facturación de Stripe con los del paciente.
   const [cardMatches, setCardMatches] = useState(true);

@@ -1,5 +1,6 @@
 // Dónde se usa: probador virtual con IA — se abre desde Probármelos (tarjetas y PDP). Captura frontal+lateral guiada (MediaPipe), medidas locales (opticalMeasure.js) y simulación: TODAS las fotos de la montura viajan a la IA con el rostro como verdad de base.
 import { useEffect, useRef, useState, useCallback } from "react";
+import { loadCache, saveCache } from "../lib/appCache.js";
 import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -712,8 +713,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   const [notifyError, setNotifyError] = useState(null);
   // ¿Para quién son los espejuelos? "me" = para el propio cliente; "other" = referencia
   // para un familiar/amigo (con nombre opcional). Se guarda junto con la medición.
-  const [forWhom, setForWhom] = useState("me");    // "me" | "other"
-  const [otherName, setOtherName] = useState("");
+  // Caché de la app: "¿para quién son?" se recuerda entre sesiones.
+  const [forWhom, setForWhom] = useState(() => loadCache("rl_whofor", "me"));    // "me" | "other"
+  const [otherName, setOtherName] = useState(() => loadCache("rl_whofor_name", ""));
+  useEffect(() => { saveCache("rl_whofor", forWhom); }, [forWhom]);
+  useEffect(() => { saveCache("rl_whofor_name", otherName); }, [otherName]);
   // Intentos de prueba usados en ESTA sesión (ver tryOnState.js). Al llegar a
   // MAX_ATTEMPTS no se permite generar más simulaciones.
   const [attempts, setAttempts] = useState(() => getAttempts());

@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useNavigate, useLocation, Link } from "reac
 import Header from "../components/Header.jsx";
 import Footer from "../components/Footer.jsx";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
+import { loadCache, saveCache } from "../lib/appCache.js";
 // Vistas 3D generadas (4 ángulos) por montura — galería de la ficha. Ver §A.10.
 import { viewsBySku, videosBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
@@ -572,6 +573,33 @@ export default function LensProcess() {
   // "single" = one total PD, "dual" = one value per eye (FPD/DNP on order forms).
   // Switched automatically when an OCR reading comes back with per-eye values.
   const [pdMode, setPdMode] = useState("single");
+
+  // ── Caché de la app: el progreso del asistente se guarda por producto y se
+  // recupera al volver (tipo de lente, material, tratamientos, receta escrita,
+  // modo de DIP y para quién son). La foto de la receta no se re-sube: solo
+  // quedan sus valores ya leídos. ──
+  const lensCacheKey = `rl_lens_${slug}`;
+  const cacheRestored = useRef(false);
+  useEffect(() => {
+    if (cacheRestored.current) return;
+    cacheRestored.current = true;
+    const c = loadCache(lensCacheKey, null);
+    if (!c) return;
+    if (c.designId) setDesignId(c.designId);
+    if (c.matId) setMatId(c.matId);
+    if (c.photoId != null) setPhotoId(c.photoId);
+    if (c.arId != null) setArId(c.arId);
+    if (c.rx) setRx((prev) => ({ ...prev, ...c.rx }));
+    if (c.pdMode) setPdMode(c.pdMode);
+    if (c.confirmRx) setConfirmRx(true);
+    if (c.patientFor) setPatientFor(c.patientFor);
+    if (c.patientName) setPatientName(c.patientName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!cacheRestored.current) return;
+    saveCache(lensCacheKey, { designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName });
+  }, [lensCacheKey, designId, matId, photoId, arId, rx, pdMode, confirmRx, patientFor, patientName]);
   // Fields whose current value came from the OCR and the user has not touched
   // since — used to highlight what still needs checking (a confident model error
   // looks exactly like a value the customer typed). Preserves Dionis's OCR UX.
