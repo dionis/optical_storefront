@@ -8509,3 +8509,15 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   border-image-source: url("/ui/glass/bar-navy-gold.png") !important;
 }
 .vm-who-opts { background: none; border: none; gap: 6px; }
+
+/* ETAPA 121f — Cabecera navy de la ficha del espejuelo (card reutilizable:
+   probador y proceso de receta): la marca oficial RUBI LENS en placa blanca
+   en vez del dibujo de línea; el svg queda de respaldo. */
+.fs-hd-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border-radius: 8px; padding: 2px 7px; flex: 0 0 auto;
+  box-shadow: 0 1px 4px rgba(0, 10, 35, .35);
+}
+.fs-hd-mark img { height: 18px; width: auto; display: block; }
+.fs-hd-mark:not(.no-img) .fs-hd-ic { display: none; }
+.fs-hd-mark.no-img { background: none; padding: 0; box-shadow: none; }

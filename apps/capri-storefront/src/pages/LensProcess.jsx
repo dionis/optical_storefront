@@ -1107,7 +1107,12 @@ export default function LensProcess() {
   const frameSide = (
     <aside className="fs-card ts2-frame zlx-frameside">
       <div className="fs-hd">
-        <IconGlassesFs className="fs-hd-ic" />
+        {/* Marca oficial en placa blanca (mismo elemento que la card del probador). */}
+        <span className="fs-hd-mark">
+            <img src="/logo-oficial-mark.png" alt="" aria-hidden="true"
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
+            <IconGlassesFs className="fs-hd-ic" />
+          </span>
         <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
       </div>
       <div className="ts2-fr ts2-fr-solo">

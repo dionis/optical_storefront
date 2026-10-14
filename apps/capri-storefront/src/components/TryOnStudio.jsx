@@ -1638,7 +1638,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return (
       <aside className="fs-card ts2-frame">
         <div className="fs-hd">
-          <IconGlasses className="fs-hd-ic" />
+          {/* Marca oficial en placa blanca (elemento reutilizable de la card);
+              respaldo: el svg de gafas de siempre. */}
+          <span className="fs-hd-mark">
+            <img src="/logo-oficial-mark.png" alt="" aria-hidden="true"
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
+            <IconGlasses className="fs-hd-ic" />
+          </span>
           <span className="ts2-frame-title">{product.name}{color?.name ? ` - ${color.name}` : ""}</span>
         </div>
 
