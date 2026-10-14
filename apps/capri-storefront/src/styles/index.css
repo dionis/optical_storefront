@@ -7030,3 +7030,75 @@ button.card-genre {
   .zlx-rx-upload-row { flex-direction: column; }
   .zlx-upload-manual { flex-direction: row; min-width: 0; width: 100%; padding: 12px 16px; }
 }
+
+
+/* ===================================================================
+   ETAPA 94 - Rediseño/pulido del flujo de receta (pedidos del cliente):
+   1) Botón "Insertar manual" como PASTILLA limpia (no una caja que rompe).
+   2) Quitar los ROJOS de selección/enmarcado -> azul de marca (coherente web).
+   3) Valores de receta COMPACTOS: OD arriba y OI abajo, cada ojo HORIZONTAL
+      (etiqueta + esfera/cilindro/eje en fila) -> sube el botón, cabe en una vista.
+   4) Ayuda, MATERIAL y ANTIRREFLEJO DELANTE de la ventana de receta (z-index),
+      sin salir de ella.
+   5) Móvil: selector de color abajo-derecha, HORIZONTAL y más pequeño.
+   =================================================================== */
+
+/* 1) "Insertar manual": pastilla igual de limpia que "Seleccionar archivo" */
+.zlx-rx-upload-row { display: flex; align-items: center; gap: 10px; }
+.zlx-rx-upload-row .zlx-upload-box { flex: 1 1 auto; min-width: 0; }
+.zlx-upload-manual {
+  flex: 0 0 auto; flex-direction: row; display: inline-flex; align-items: center; gap: 7px;
+  min-width: 0; padding: 9px 15px; border: 1.5px solid var(--cuba-blue); border-radius: 10px;
+  background: #fff; color: var(--cuba-blue); font-weight: 700; font-size: 13px; line-height: 1.1;
+  white-space: nowrap; cursor: pointer; transition: background .15s ease;
+}
+.zlx-upload-manual .zlx-ic { width: 16px; height: 16px; color: var(--cuba-blue); }
+.zlx-upload-manual:hover:not(:disabled) { background: #eef4ff; box-shadow: none; }
+.zlx-upload-manual:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 560px) {
+  .zlx-rx-upload-row { flex-direction: column; align-items: stretch; }
+  .zlx-upload-manual { justify-content: center; width: 100%; padding: 11px 15px; }
+}
+
+/* 2) Fuera los ROJOS de selección: azul de marca + fondo azul suave */
+.zlx-use-item.open { border-color: var(--cuba-blue); box-shadow: 0 0 0 1px var(--cuba-blue), 0 8px 22px rgba(15,25,45,.07); }
+.zlx-use-row.solo.sel { border-color: var(--cuba-blue); background: #eff5ff; box-shadow: 0 0 0 1px var(--cuba-blue); }
+.zlx-use-row.sel .zlx-use-ic, .zlx-use-row.solo.sel .zlx-use-ic { color: var(--cuba-blue); }
+.zlx-gama-opt.on { border-color: var(--cuba-blue); background: #eff5ff; color: var(--ink); }
+.zlx-choice.sel { border-color: var(--cuba-blue); background: #eff5ff; }
+.zlx-choice.sel .zlx-choice-ic { color: var(--cuba-blue); }
+.zlx-chip.sel { border-color: var(--cuba-blue); background: #eff5ff; }
+.zlx-chip.sel .zlx-chip-ic { color: var(--cuba-blue); }
+.zlx-choice-wrap.sel { border-color: var(--cuba-blue); box-shadow: 0 0 0 1px var(--cuba-blue); }
+
+/* 3) Valores COMPACTOS: OD/OI apilados, cada ojo en fila horizontal */
+.zlx-rx-grid { grid-template-columns: 1fr; gap: 8px; margin: 8px 0 10px; }
+.zlx-rx-eye { flex-direction: row; align-items: center; gap: 12px; padding: 10px 12px; }
+.zlx-rx-eye-h { margin-bottom: 0; flex: 0 0 auto; min-width: 84px; text-align: left; }
+.zlx-rx-fields { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 0; }
+.zlx-rx-fields > .zlx-stepper { flex: 1 1 0; min-width: 0; }
+.zlx-rx-fields .zlx-stepper-ctl { width: 100%; }
+@media (max-width: 560px) {
+  .zlx-rx-eye { flex-direction: column; align-items: stretch; gap: 6px; }
+  .zlx-rx-eye-h { text-align: center; }
+}
+
+/* 4) Material/antirreflejo/ayuda DELANTE de la ventana de receta (que queda detrás) */
+.zlx-pop-backdrop { z-index: 410; }
+.zlx-pop { z-index: 411; }
+.zlx-infopop-backdrop { z-index: 440; }
+.zlx-infopop { z-index: 441; }
+
+/* 5) Móvil: colores abajo-derecha, en fila y más pequeños */
+@media (max-width: 959px) {
+  .ts2-fr-onphoto { left: auto; right: 8px; top: auto; bottom: 8px; flex-direction: row; gap: 6px; }
+  .ts2-fr-onsw { width: 20px; height: 20px; }
+}
+
+/* ETAPA 94b - En el paso de VALORES, los tipos NO seleccionados van compactos
+   (el seleccionado va primero, expandido); así el cliente puede cambiar de tipo
+   sin que el botón "Confirmar receta" se salga de la vista. */
+.zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) { margin-top: 6px; }
+.zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main { padding-top: 8px; padding-bottom: 8px; }
+.zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt small { display: none; }
+.zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { width: 30px; height: auto; }

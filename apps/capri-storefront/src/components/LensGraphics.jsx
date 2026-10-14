@@ -67,7 +67,9 @@ function IconBase({
   children,
   ...rest
 }) {
-  const tint = color || (active ? "var(--cuba-red)" : "currentColor");
+  // El acento activo/seleccionado es el AZUL de marca (antes rojo cubano), para
+  // mantener la estética coherente en toda la web (pedido del cliente).
+  const tint = color || (active ? "var(--cuba-blue)" : "currentColor");
   return (
     <svg
       viewBox="0 0 24 24"

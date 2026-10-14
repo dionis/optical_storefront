@@ -1347,9 +1347,12 @@ export default function LensProcess() {
         </div>
       </div>
 
-      {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ── */}
-      {pop === "rx" && (
-        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-${rxStage}`}>
+      {/* ── RECETA popover: solo montura → subir receta → acordeón de tipos → materiales ──
+          La ventana de receta SIGUE montada (detrás) cuando se abren material y
+          antirreflejo, para que esos salgan DELANTE como ventana emergente sin salir
+          de la ventana de receta (ver z-index de .zlx-pop en ETAPA 94). */}
+      {(pop === "rx" || pop === "mat" || pop === "treat") && (
+        <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-${rxStage} ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {rxStage === "pick" && USE_MEDUSA && (
                 <div className="zlx-rx-upload">
@@ -1440,7 +1443,18 @@ export default function LensProcess() {
               )}
               <div className="zlx-use-rows">
                 {[FRAME_ONLY, ...NON_PROG_DESIGNS, PROG_GROUP]
-                  .filter((d) => rxStage === "pick" ? true : (d.group ? (!!design && design.cat === "prog") : designId === d.id))
+                  // Mostrar SIEMPRE todos los tipos (también al rellenar): aunque la
+                  // receta sugiera uno (p. ej. Progresivo por la ADD), el cliente debe
+                  // poder CAMBIAR al que quiera. En el paso de valores el SELECCIONADO
+                  // va PRIMERO (expandido con sus valores + botón), y los demás,
+                  // colapsados debajo, listos para cambiar.
+                  .slice()
+                  .sort((a, b) => {
+                    if (rxStage !== "fill") return 0;
+                    const sa = a.group ? (!!design && design.cat === "prog") : designId === a.id;
+                    const sb = b.group ? (!!design && design.cat === "prog") : designId === b.id;
+                    return Number(sb) - Number(sa);
+                  })
                   .map((d) => {
                   const isFO = d.id === "frame-only";
                   const isProgGroup = !!d.group;
@@ -1493,8 +1507,8 @@ export default function LensProcess() {
                             {[{ eye: "od", label: t("lens.right") }, { eye: "os", label: t("lens.left") }].map(({ eye, label }) => (
                               <div key={eye} className="zlx-rx-eye">
                                 <div className="zlx-rx-eye-h">{label}</div>
-                                <ZlxStepper value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sphS")} flag={ocrClass(`${eye}_sph`)} />
                                 <div className="zlx-rx-fields">
+                                  <ZlxStepper value={rx[`${eye}_sph`]} options={SPH} onChange={setF(`${eye}_sph`)} label={t("lens.sphS")} flag={ocrClass(`${eye}_sph`)} />
                                   <ZlxStepper value={rx[`${eye}_cyl`]} options={CYL} onChange={setF(`${eye}_cyl`)} label={t("lens.cylS")} flag={ocrClass(`${eye}_cyl`)} />
                                   <ZlxStepper value={rx[`${eye}_axis`]} options={AXIS} onChange={setF(`${eye}_axis`)} label={t("lens.axisS")} flag={ocrClass(`${eye}_axis`)} />
                                 </div>
