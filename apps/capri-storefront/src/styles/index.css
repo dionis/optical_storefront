@@ -8809,3 +8809,30 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-page-side .zlx-frameside .fs-mcell .fs-mic { height: 30px; width: auto; }
   .zlx-page-side .zlx-frameside .fs-mval { font-size: 15px; }
 }
+
+/* ETAPA 127b — Revisión a fondo de la foto generada en la ficha 50/50:
+   el recorte con porcentaje fijo fallaba según la foto real (salía de la
+   boca hacia abajo y sin los espejuelos). Solución determinista: la foto
+   generada se AJUSTA COMPLETA a su mitad (contain, centrada, con fondo
+   suave) — así los ojos y los espejuelos se ven SIEMPRE, con cualquier
+   foto, en cualquier tamaño. */
+.fs-photo.has-gen .fs-photo-gen {
+  object-fit: contain !important; object-position: center !important;
+  background: #eef2f8; border-right: 2px solid #fff;
+}
+
+/* ETAPA 127c — CAUSA RAÍZ encontrada: en la rejilla 50/50 la fila era de
+   alto automático y el "height:100%" de las imágenes no resolvía (la foto
+   generada media 234px dentro de una caja de 118px: se desbordaba y solo se
+   veía su franja superior — por eso "salía de la boca" y sin espejuelos).
+   La fila pasa a medir el 100% de la caja y las dos imágenes se estiran a
+   ella; con contain, la generada entra COMPLETA siempre. */
+.fs-photo.has-gen {
+  grid-template-rows: 100%; align-items: stretch; justify-items: stretch;
+  overflow: hidden;
+}
+.fs-photo.has-gen .fs-photo-gen,
+.fs-photo.has-gen > img:not(.fs-photo-wm) {
+  width: 100% !important; height: 100% !important; max-height: none !important;
+  align-self: stretch; min-height: 0;
+}
