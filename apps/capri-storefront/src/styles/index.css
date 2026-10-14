@@ -8651,3 +8651,59 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .tryon-result .vm-rfig { aspect-ratio: auto; height: 38vh; height: 38dvh; min-height: 0; }
   .tryon-result .vm-rfig img.vm-rimg { width: 100%; height: 100%; object-fit: cover; }
 }
+
+/* ===================================================================
+   ETAPA 125 — "Añadir receta" con cristal e iconos 3D + ajustes de
+   espacio (pedido del cliente):
+   1) Caja de subir receta: icono 3D navy; "Seleccionar archivo" en
+      píldora blanca/oro; "Insertar manual" en barra blanca/oro 9-slice.
+   2) "Continuar" en 9-slice navy/oro (esquinas a escala fija: ya no
+      sale distorsionado al estirarse).
+   3) Ficha: la foto AUTOGENERADA del probador a la IZQUIERDA y la
+      montura a la derecha, 50% y 50%.
+   4) Tipos de lente en tarjetas CUADRADAS, dos por fila.
+   =================================================================== */
+.zlx-upload-ic .i3d-up { height: 22px; width: auto; }
+.zlx-upload-ic:not(.no-i3d) svg { display: none; }
+.zlx-upload-btn {
+  background: url("/ui/glass/pill-white-gold.png") center / 100% 100% no-repeat !important;
+  border: none !important; color: #0b2f66 !important; font-weight: 800;
+}
+.zlx-upload-manual {
+  position: relative; background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; color: #0b2f66 !important; font-weight: 800; min-height: 46px;
+}
+.btn.btn-primary.zlx-rx-continue {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 12px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+/* Ficha 50/50: generada (izq) + montura (der). La marca de agua sigue encima. */
+.fs-photo.has-gen { display: grid !important; grid-template-columns: 1fr 1fr; align-items: stretch; }
+.fs-photo.has-gen .fs-photo-gen {
+  width: 100% !important; height: 100% !important; object-fit: cover !important;
+  max-height: none !important; padding: 0 !important; border-right: 2px solid #fff;
+}
+.fs-photo.has-gen > img:not(.fs-photo-gen):not(.fs-photo-wm) {
+  width: 100% !important; height: 100% !important; object-fit: contain !important; max-height: none !important;
+}
+.fs-card.ts2-frame .fs-photo.has-gen { height: 170px; }
+@media (max-width: 939px) {
+  .ts2-cap2col .ts2-frame .fs-photo.has-gen,
+  .fs-card.ts2-frame .fs-photo.has-gen { height: 17vh; height: 17dvh; }
+}
+/* Tipos de lente: dos tarjetas por fila, radio arriba-derecha. El elegido
+   (con su panel desplegado) ocupa las dos columnas. */
+.zlx-pop-rx .zlx-use-rows { grid-template-columns: 1fr 1fr; gap: 8px; }
+.zlx-pop-rx .zlx-use-item:has(.zlx-use-row.sel) { grid-column: 1 / -1; }
+.zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-main {
+  flex-direction: column; align-items: center; text-align: center; gap: 5px;
+  padding: 12px 10px 10px; position: relative;
+}
+.zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-txt { align-items: center; gap: 1px; }
+.zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-txt small { font-size: 11px; line-height: 1.3; }
+.zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-radio { position: absolute; top: 8px; right: 8px; }

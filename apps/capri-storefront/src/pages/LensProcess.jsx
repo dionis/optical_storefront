@@ -464,6 +464,13 @@ export default function LensProcess() {
   // Imagen generada por el probador (rostro con los espejuelos), para adjuntarla a la
   // receta/orden al finalizar la compra (se sube a R2 en el backend, sin correo).
   const [tryOnImage, setTryOnImage] = useState(null);
+  // La foto AUTOGENERADA guardada por producto (probador) se carga también al
+  // entrar directo a /recetas: la ficha la muestra al 50% junto a la montura.
+  useEffect(() => {
+    if (tryOnImage || !product) return;
+    try { const saved = getMeasureResult(product); if (saved?.data?.frontImage) setTryOnImage(saved.data.frontImage); } catch { /* nada */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.slug]);
   // ¿Para quién son? (elegido en el probador): "me" | "other" (+ nombre). Se guarda
   // con la receta al comprar.
   const [patientFor, setPatientFor] = useState(null);
@@ -1152,9 +1159,14 @@ export default function LensProcess() {
       </div>
       <div className="ts2-fr ts2-fr-solo">
         <div className="ts2-fr-main">
-          <div className="fs-photo ts2-fr-photo">
+          <div className={`fs-photo ts2-fr-photo ${tryOnImage ? "has-gen" : ""}`}>
             {brandByName(product.brand)?.logoWide && (
               <img className="fs-photo-wm" src={brandByName(product.brand).logoWide} alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
+            )}
+            {/* Foto AUTOGENERADA del probador (izquierda, 50%) cuando existe. */}
+            {tryOnImage && (
+              <img className="fs-photo-gen" src={tryOnImage} alt="" aria-hidden="true"
                    onError={(e) => e.currentTarget.remove()} />
             )}
             {color?.image
@@ -1536,7 +1548,11 @@ export default function LensProcess() {
                           input está en display:none, aunque esté dentro del label. */}
                       <input type="file" accept="image/*,application/pdf" className="zlx-upload-input"
                              disabled={ocr.status === "loading"} onChange={handleRxUpload} />
-                      <span className="zlx-upload-ic"><Ic name="upload" /></span>
+                      <span className="zlx-upload-ic">
+                        <img className="i3d i3d-up" src="/ui/icons3d/navy-upload.png" alt=""
+                             onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+                        <Ic name="upload" />
+                      </span>
                       <span className="zlx-upload-tx">
                         <b>{t("lens.upload")}</b>
                         <small>
