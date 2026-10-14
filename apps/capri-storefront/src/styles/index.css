@@ -7102,3 +7102,22 @@ button.card-genre {
 .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main { padding-top: 8px; padding-bottom: 8px; }
 .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt small { display: none; }
 .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { width: 30px; height: auto; }
+
+
+/* ===================================================================
+   ETAPA 95 - RESUMEN DEL PEDIDO dentro de la MISMA ventana de receta (cuando ya
+   se eligió material + tratamiento): pasos elegidos (editables) + resumen +
+   "Comprar ahora", sin caer en la página de lentes. Línea "Receta: Sí/No".
+   =================================================================== */
+.zlx-rx-summary { display: flex; flex-direction: column; gap: 14px; }
+.zlx-rx-summary .zlx-steps.zlx-summary-steps { display: flex; flex-direction: column; gap: 10px; }
+.zlx-rx-summary .zlx-summary.zlx-summary-inpage { margin: 0; position: static; }
+.zlx-rx-summary .zlx-summary.zlx-summary-inpage .zlx-buy { width: 100%; }
+
+/* ETAPA 95b - Fuera el rojo de las tarjetas de paso (receta/material/tratamiento):
+   seleccion en azul de marca; el check en verde (confirmacion). */
+.zlx-fab.sel, .zlx-fab.on { border-color: var(--cuba-blue); color: var(--cuba-blue); }
+.zlx-fab.on .zlx-ic { color: var(--cuba-blue); }
+.zlx-fab.open { border-color: var(--cuba-blue); box-shadow: 0 0 0 3px #eff5ff; }
+.zlx-fab-ok { color: #128a4d; }
+.zlx-fab-ok.warn { color: #d9920b; }

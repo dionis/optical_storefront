@@ -526,7 +526,9 @@ export default function LensProcess() {
   const [rxStage, setRxStage] = useState("pick");
   // Lightbox del ejemplo de receta (se abre al tocar la miniatura de los consejos).
   const [rxExample, setRxExample] = useState(false);
-  useEffect(() => { if (pop !== "rx") { setRxStage("pick"); setRxExample(false); } }, [pop]);
+  // Al CERRAR del todo la receta (no al abrir material/tratamiento, que ahora
+  // conviven con la ventana de receta detrás) se vuelve a "pick".
+  useEffect(() => { if (!pop) { setRxStage("pick"); setRxExample(false); } }, [pop]);
   // El campo que falta vive DENTRO del popup de receta: al pulsar el aviso del
   // botón de comprar abrimos ese popup y hacemos scroll/destello sobre la altura,
   // que si no queda invisible con el popup cerrado y el pago parece bloqueado.
@@ -1060,6 +1062,7 @@ export default function LensProcess() {
         <li className="zlx-sum-sub"><span>{t("lens.collection")}</span><b>{product.brand}</b></li>
         <li className="zlx-sum-sub"><span>{t("lens.color")}</span><b>{color.name}</b></li>
         {design && <li><span>{t("lens.use")}</span><b>{frameOnly ? t("lens.included") : L(design.label, lang)}</b></li>}
+        <li><span>{t("lens.sum.rx")}</span><b>{frameOnly ? t("lens.sum.no") : t("lens.sum.yes")}</b></li>
         {material && !frameOnly && <li><span>{t("lens.material")}: {L(material.label, lang)}</span><b>{money(basePrice(designId, matId))}</b></li>}
         {photo && !frameOnly && photoPriceOf(photo) != null && <li><span>{t("lens.transitions")}: {L(photo.label, lang)}</span><b>+ {money(photoPriceOf(photo))}</b></li>}
         {ar && !frameOnly && <li><span>{t("lens.treatment")}: {L(ar.label, lang)}</span><b>+ {money(arPriceOf(ar))}</b></li>}
@@ -1135,6 +1138,57 @@ export default function LensProcess() {
         <img src="/logo-rubilens.png" alt="RUBI LENS" className="fs-foot-logo" />
       </div>
     </aside>
+  );
+
+  // RESUMEN DEL PEDIDO dentro de la MISMA ventana de receta (cuando ya se eligió
+  // material + tratamiento): pasos elegidos (editables, reabren su ventana emergente)
+  // + resumen + "Comprar ahora". Así NO se cae a la página de lentes.
+  const summaryView = (
+    <div className="zlx-rx-summary">
+      <div className="zlx-steps zlx-summary-steps">
+        <button type="button" className={`zlx-fab ${design ? "on" : ""}`} onClick={() => setRxStage("fill")}>
+          <IconReceta className="zlx-ic" />
+          <span className="zlx-fab-txt">
+            <b>{t("lens.step.rx")}</b>
+            <small>{frameOnly ? L(FRAME_ONLY.label, lang) : design ? L(design.label, lang) : t("lens.pickHint")}</small>
+          </span>
+          {design && <Ic name="check" className="zlx-fab-ok" />}
+        </button>
+        {design && !frameOnly && (
+          <>
+            <button type="button" className={`zlx-fab ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
+              <IconMaterial className="zlx-ic" />
+              <span className="zlx-fab-txt">
+                <b>{t("lens.material")}</b>
+                <small>{material ? L(material.label, lang) : t("lens.pickHint")}</small>
+              </span>
+              {matId && <Ic name="check" className="zlx-fab-ok" />}
+            </button>
+            <button type="button" className={`zlx-fab ${photo || ar ? "on" : ""}`} onClick={() => setPop("treat")}>
+              <IconTratamiento className="zlx-ic" />
+              <span className="zlx-fab-txt">
+                <b>{t("lens.treatBtn")}</b>
+                <small>{(photo || ar) ? [photo && L(photo.label, lang), ar && L(ar.label, lang)].filter(Boolean).join(" · ") : t("lens.optional")}</small>
+              </span>
+              {(photo || ar) && <Ic name="check" className="zlx-fab-ok" />}
+            </button>
+          </>
+        )}
+      </div>
+      <aside className="zlx-summary zlx-summary-inpage">
+        <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
+        {summaryInner}
+        <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
+        <button type="button" className="btn btn-primary zlx-buy" data-sfx="success" disabled={!canBuy} onClick={startReview}>
+          <Ic name="buy" /> {t("lens.buy")} · ${total.toFixed(2)}
+        </button>
+        {buyHint && (buyHintGo
+          ? <button type="button" className={`zlx-buy-hint zlx-buy-hint-go ${heightMissing ? "req" : ""}`} onClick={buyHintGo}>
+              {buyHint} <Ic name="edit" className="zlx-buy-hint-ic" />
+            </button>
+          : <p className="zlx-buy-hint">{buyHint}</p>)}
+      </aside>
+    </div>
   );
 
   return (
@@ -1351,7 +1405,14 @@ export default function LensProcess() {
           La ventana de receta SIGUE montada (detrás) cuando se abren material y
           antirreflejo, para que esos salgan DELANTE como ventana emergente sin salir
           de la ventana de receta (ver z-index de .zlx-pop en ETAPA 94). */}
-      {(pop === "rx" || pop === "mat" || pop === "treat") && (
+      {(pop === "rx" || pop === "mat" || pop === "treat") && rxStage === "summary" && (
+        <ZlxPop title={t("lens.summary")} icon={<IconMontura className="zlx-ic" />} onClose={() => setPop(null)}
+                onBack={() => setRxStage("fill")} backLabel={t("lens.back")} closeLabel={closeLabel}
+                fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-summary ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
+          {summaryView}
+        </ZlxPop>
+      )}
+      {(pop === "rx" || pop === "mat" || pop === "treat") && rxStage !== "summary" && (
         <ZlxPop title={t("lens.q.rx")} subtitle={t("lens.rx.subtitle")} icon={<IconReceta className="zlx-ic" />} onClose={() => setPop(null)} onBack={rxStage === "fill" ? () => setRxStage("pick") : undefined} backLabel={t("lens.back")} closeLabel={closeLabel} fullpage side={frameSide} className={`zlx-pop-rx zlx-rx-stage-${rxStage} ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {rxStage === "pick" && USE_MEDUSA && (
@@ -1688,7 +1749,10 @@ export default function LensProcess() {
                   )}
                 </>
               )}
-              <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="success" onClick={() => setPop(null)}>
+              {/* Terminar: en vez de cerrar y caer en la página de lentes, trae el
+                  RESUMEN DEL PEDIDO a la MISMA ventana de receta (que estaba detrás). */}
+              <button type="button" className="btn btn-primary zlx-pop-done" data-sfx="success"
+                      onClick={() => { setPop("rx"); setRxStage("summary"); }}>
                 <Ic name="check" /> {t("lens.done")}
               </button>
             </>
