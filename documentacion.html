@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUBI LENS · Documentación</title>
+<style>
+  :root { --navy:#182a4e; --navy2:#26456f; --blue:#0E5AD0; --ink:#17203a; --muted:#5b6472;
+          --line:#e7eaf0; --soft:#f6f8fc; --ok:#116633; --okbg:#e9f8ef; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--soft); }
+  header { background:linear-gradient(180deg,var(--navy2),var(--navy)); color:#fff; padding:26px 22px; }
+  header h1 { margin:0; font-size:24px; letter-spacing:.03em; }
+  header p { margin:6px 0 0; opacity:.85; font-size:13.5px; }
+  main { max-width:1040px; margin:0 auto; padding:22px 16px 60px; }
+  section { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-top:18px; box-shadow:0 10px 30px rgba(16,24,40,.06); }
+  h2 { margin:0 0 10px; font-size:17px; color:var(--navy); border-bottom:2px solid #eef3fb; padding-bottom:8px; }
+  h3 { margin:16px 0 6px; font-size:14.5px; color:var(--blue); }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; }
+  th,td { padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  code { background:#f2f5fa; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12.5px; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; }
+  .ok { background:var(--okbg); color:var(--ok); }
+  .wip { background:#fff7e6; color:#7a5b00; }
+  ul { margin:6px 0; padding-left:20px; }
+  li { margin:3px 0; }
+  .muted { color:var(--muted); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:760px){ .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>RUBI LENS — Documentación del proyecto</h1>
+  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 14-oct-2026</p>
+</header>
+<main>
+
+<section>
+  <h2>Estado general</h2>
+  <table>
+    <tr><th>Área</th><th>Estado</th><th>Detalle</th></tr>
+    <tr><td>Storefront (Vercel, rama <code>develop</code>)</td><td><span class="tag ok">En producción</span></td><td><a href="https://optical-storefront-capri-storefront-to-production.vercel.app">optical-storefront…vercel.app</a></td></tr>
+    <tr><td>Backend Medusa v2 (Coolify, rama <code>main</code>)</td><td><span class="tag ok">En producción</span></td><td>Pedidos, receta, OCR, pagos, notificaciones email/SMS</td></tr>
+    <tr><td>Probador virtual (cámara + medidas IA)</td><td><span class="tag ok">Funcional</span></td><td>Entrada con elección cámara / subir fotos; imagen generada; medidas DIP/altura</td></tr>
+    <tr><td>Flujo receta → material → tratamiento → resumen</td><td><span class="tag ok">Funcional</span></td><td>Popups delante con fondo desenfocado; resumen 2 columnas; "Comprar solo el marco"</td></tr>
+    <tr><td>Checkout + entrega (teléfono, email, dirección)</td><td><span class="tag ok">Funcional</span></td><td><code>MedusaCheckout.jsx</code>: Stripe, datos del paciente, confirmaciones email/SMS</td></tr>
+    <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Datos reales</span></td><td>Pedidos (gestión de etapas), Resumen/Ventas/Precios con pedidos reales del order board</td></tr>
+    <tr><td>Seguimiento de pedidos del cliente</td><td><span class="tag ok">Funcional</span></td><td><code>/my-orders</code> con enlace mágico por email; cancelación con política de plazos</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Progreso de la jornada (14-oct-2026)</h2>
+  <table>
+    <tr><th>Commit</th><th>Qué entrega</th></tr>
+    <tr><td><code>ef459a2</code></td><td><b>"Comprar solo el marco"</b> en el resultado del probador → directo al resumen del pedido (solo montura). Fix StrictMode: el resumen ya no se resetea a "pick" al llegar.</td></tr>
+    <tr><td><code>17cb862</code></td><td><b>Resumen final</b>: derecha = ficha del espejuelo (encabezado navy) + "Resumen del pedido" con el mismo estilo; izquierda = imagen IA reducida + pasos + compra, todo en una vista. <b>Fix compra</b>: confirmar la receta marca la lectura OCR como confirmada (el botón "Comprar ahora" se habilita). <b>Entrada del probador</b>: emergente con fondo desenfocado para elegir "Tomar con cámara" o "Subir mis fotos" (cámara congelada en modo subir).</td></tr>
+    <tr><td><code>1243048</code> + <code>b9dbace</code></td><td><b>Panel admin con datos reales</b>: Resumen/Ventas/Precios se alimentan del order board de Medusa (capa <code>realAnalytics.js</code>: ventana de escaneo con caché, mapeo pedido→analítica, marca/tipo vía catálogo). Demo solo con login demo. Nota de fuente y aviso de ventana (300 pedidos). <b>Responsive</b>: chips de especificaciones de la receta ya no se montan en móvil; contador de reseñas oculto en pantallas estrechas.</td></tr>
+  </table>
+  <h3>Verificación realizada</h3>
+  <ul>
+    <li>Playwright (Chromium cloud): probador → elección de entrada (cámara nunca arranca en modo subir: <code>getUserMedia</code> sin llamadas), flujo receta completo hasta el resumen con compra habilitada, "comprar solo el marco" → resumen.</li>
+    <li>Auditoría visual 16 vistas (8 páginas × web 1366px / móvil 390px): sin scroll horizontal, sin errores JS.</li>
+    <li><code>pnpm check:i18n</code> (1196 claves × es/en) y build de producción en verde en cada lote.</li>
+    <li>Producción comprobada tras el deploy (entry chooser activo, sin errores de consola).</li>
+  </ul>
+</section>
+
+<section class="grid">
+  <div>
+    <h2>Arquitectura</h2>
+    <ul>
+      <li><code>apps/capri-storefront</code> — React 18 + Vite; catálogo Medusa; probador; receta; checkout; panel admin.</li>
+      <li><code>apps/backend</code> — Medusa v2 (Node 20 TS): order board, receta/OCR, pagos Stripe, notificaciones Resend/Twilio, store-settings.</li>
+      <li><code>apps/vto-web</code> — try-on 3D (Three.js + MediaPipe), embebido por iframe.</li>
+      <li><code>apps/vision-measure</code> — FastAPI, medidas con IA multimodal (proxy <code>/medusa/vision-measure</code>).</li>
+      <li><code>apps/scraper</code> — ingesta del catálogo (caprioptics.com) + traducción IA.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Flujo de compra (cliente)</h2>
+    <ul>
+      <li>Catálogo → ficha → <b>Probármelos</b> (cámara o subir fotos).</li>
+      <li>Resultado con imagen generada → <b>Añadir receta</b> (OCR o manual) o <b>Comprar solo el marco</b>.</li>
+      <li>Tipo de lente (cambiable) → confirmar receta → material → antirreflejo/fotocromático (emergentes, fondo desenfocado).</li>
+      <li>Resumen del pedido (ficha navy + totales) → <b>Comprar ahora</b> → checkout: teléfono, email, entrega, pago Stripe.</li>
+      <li>Seguimiento en <code>/my-orders</code>; el dueño gestiona etapas en <code>/admin</code> → Pedidos.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Panel admin — fuentes de datos</h2>
+  <table>
+    <tr><th>Pestaña</th><th>Fuente</th><th>Nota</th></tr>
+    <tr><td>Pedidos</td><td>Real — <code>GET /admin/order-board</code></td><td>Gestión de etapas (laboratorio → envío → entrega), ventana de escaneo 300</td></tr>
+    <tr><td>Resumen / Ventas</td><td>Real — order board agregado (<code>realAnalytics.js</code>)</td><td>Cancelados/reembolsados/pago pendiente excluidos; visitas = contador local del navegador</td></tr>
+    <tr><td>Precios</td><td>Catálogo real + unidades vendidas reales</td><td>Overrides del dueño en <code>priceStore.js</code></td></tr>
+    <tr><td>Productos</td><td>Catálogo real (Medusa)</td><td>Altas/bajas requieren <code>catalog-history.json</code> (histórico del scraper)</td></tr>
+  </table>
+  <p class="muted">Con <code>VITE_ADMIN_DEMO_LOGIN=true</code> el panel funciona como demo (datos sembrados, sin backend). Con login real nunca se siembran datos demo.</p>
+</section>
+
+<section>
+  <h2>Pendientes conocidos</h2>
+  <ul>
+    <li><span class="tag wip">Backend</span> Separar ingresos montura vs. lente en analítica (el order board no expone <code>frame_price</code>/<code>lens_addon</code> por línea).</li>
+    <li><span class="tag wip">Datos</span> Analítica de visitas real multi-dispositivo (hoy: contadores locales por navegador).</li>
+    <li><span class="tag wip">3D</span> Generar <code>.glb</code> reales para las monturas (pipeline GPU externo; hoy solo <code>sample-frame</code>).</li>
+    <li><span class="tag wip">Móvil</span> Ajuste fino del resumen final de la receta en móvil (la vista web quedó aprobada; el responsive de esa pantalla se revisará con el dueño).</li>
+  </ul>
+  <p class="muted">Más documentación por fases en <code>docs/</code> (estado de vistas, checkout, scraper, probador, deploy Coolify/Vercel).</p>
+</section>
+
+</main>
+</body>
+</html>
