@@ -421,3 +421,19 @@
    "RUBI_LENS"). En la barra oscura va sobre su placa blanca ya existente. */
 .adm-login-logo { height: 54px; width: auto; object-fit: contain; }
 .adm-topbar .adm-brand img { height: 30px; padding: 3px 8px; }
+
+/* ── Equipo de administradores ── */
+.adm-team-form { display: grid; grid-template-columns: 1.3fr 1.1fr 1fr 1fr auto; gap: 8px; align-items: center; }
+.adm-team-form input { padding: 8px 11px; border: 1px solid #d6dbe6; border-radius: 9px; font-size: 13.5px; min-width: 0; }
+.adm-team-rows { display: flex; flex-direction: column; }
+.adm-team-row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid #eef1f6; }
+.adm-team-row.super { background: linear-gradient(90deg, #f7faff, transparent); }
+.adm-team-avatar { width: 34px; height: 34px; border-radius: 50%; background: #01326b; color: #fff; display: grid; place-items: center; font-weight: 800; flex: 0 0 auto; }
+.adm-team-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.adm-team-main b { font-size: 13.5px; }
+.adm-team-tag { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.adm-team-tag.super { background: #01326b; color: #ffd76a; }
+.adm-team-tag.me { background: #eef4ff; color: #1c4f9c; }
+.adm-team-tag.temp { background: #fff7e6; color: #7a5b00; }
+.adm-team-note { margin-top: 10px; }
+@media (max-width: 860px) { .adm-team-form { grid-template-columns: 1fr 1fr; } .adm-team-form button { grid-column: 1 / -1; } }
