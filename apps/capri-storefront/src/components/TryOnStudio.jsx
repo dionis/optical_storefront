@@ -1298,9 +1298,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                    onClick={() => setZoom({ src: img, kind: "photo", name: randomPhotoName(img) })} />
               <span className="ts2-rvbadge"><IconCheck className="ts2-rvbadge-ic" /> {t("cap.ready")}</span>
               <div className="ts2-rvtools">
-                <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}>
+                <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}
+                        title={t("cap.retake")} aria-label={t("cap.retake")}>
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
-                  <span>{t("cap.retake")}</span>
+                  <span className="ts2-rvbtn-tx">{t("cap.retake")}</span>
                 </button>
                 <button type="button" className="ts2-rvbtn" onClick={() => inputRef.current?.click()}
                         title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
