@@ -9280,3 +9280,83 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   background: none !important;
   filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
 }
+
+/* ===================================================================
+   ETAPA 136 — Botones de las ventanas del footer + envíos SOLO FedEx +
+   RASTREO del pedido por número de recibo (pedidos del cliente).
+   =================================================================== */
+/* "Cerrar" (y cualquier botón a todo lo ancho de los globos del footer)
+   en barra 9-slice: no se deforma. */
+.btn.btn-primary.fi-ok {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.btn.btn-primary.fi-ok:hover {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}
+.co-pay-err .btn.btn-outline {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 48px; color: #0b2f66 !important; font-weight: 800;
+}
+/* WEB: Finalizar compra en UNA PANTALLA SIN SCROLL — dos columnas: el
+   resumen (con más aire para el espejuelo) a la izquierda y los datos a
+   la derecha. Solo cuando hay resumen (no en vacío/confirmación). */
+@media (min-width: 960px) {
+  .section.checkout:has(.co-summary2) {
+    max-width: 1120px !important;
+    display: grid; grid-template-columns: 1fr 1.05fr; gap: 0 28px;
+    align-items: start; padding-top: 14px;
+  }
+  .section.checkout:has(.co-summary2) .co-head { grid-column: 1 / -1; margin-bottom: 2px; }
+  .section.checkout:has(.co-summary2) .co-summary2 { grid-column: 1; position: sticky; top: 86px; margin: 8px 0; }
+  .section.checkout:has(.co-summary2) > .co-form,
+  .section.checkout:has(.co-summary2) > .auth-err { grid-column: 2; }
+  .section.checkout:has(.co-summary2) > .co-form { margin: 8px 0; }
+  /* Más espacio al espejuelo y al resumen */
+  .section.checkout:has(.co-summary2) .co-item-ph { width: 180px; height: 120px; }
+  .section.checkout:has(.co-summary2) .co-item2 { padding: 12px 0; gap: 14px; }
+  .section.checkout:has(.co-summary2) .co-item2 .panel-item-info b { font-size: 16px; }
+  .section.checkout:has(.co-summary2) .co-item2 .panel-item-info small { font-size: 13px; line-height: 1.5; }
+  .section.checkout:has(.co-summary2) .panel-item-price { font-size: 17px; }
+  .section.checkout:has(.co-summary2) .co-totals > div { padding: 3px 0; font-size: 14.5px; }
+  .section.checkout:has(.co-summary2) .panel-total { font-size: 21px; }
+  .section.checkout:has(.co-summary2) .co-sum-navyhd { padding: 11px 16px; font-size: 14.5px; }
+  /* Confirmación en una línea también en web */
+  .section.checkout:has(.co-summary2) .co-notify { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+  .section.checkout:has(.co-summary2) .co-notify-h { margin: 0; flex: 0 0 100%; }
+}
+/* Caja de rastreo por recibo (/my-orders) */
+.trk-box { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 15px; margin: 10px 0 18px; background: #fff; }
+.trk-hd { display: flex; align-items: center; gap: 9px; font-size: 15.5px; color: var(--cuba-blue); }
+.trk-hd .i3d { height: 24px; width: auto; }
+.trk-intro { font-size: 13px; margin: 4px 0 10px; }
+.trk-form { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: stretch; }
+.trk-form input { border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 14px; min-width: 0; }
+.btn.btn-primary.trk-go {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 46px; padding: 0 14px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38); white-space: nowrap;
+}
+.trk-result { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.trk-result-hd { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-bottom: 6px; }
+.trk-result-hd > b { color: #0b2f66; font-size: 15px; }
+.trk-guide { font-size: 12.5px; color: var(--ink-soft); }
+.trk-guide b { color: #0b2f66; }
+.trk-dates { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.trk-dates li { display: flex; gap: 6px; font-size: 12.5px; color: var(--ink-soft); }
+.trk-dates li b { color: #0b2f66; }
+.trk-follow { display: inline-block; margin-top: 8px; font-weight: 700; color: var(--cuba-blue); }
+.trk-note { display: block; margin-top: 8px; }
+@media (max-width: 700px) {
+  .trk-form { grid-template-columns: 1fr 1fr; }
+  .trk-form input[type=email] { grid-column: 1 / -1; grid-row: 1; }
+  .btn.btn-primary.trk-go { grid-column: 1 / -1; }
+}

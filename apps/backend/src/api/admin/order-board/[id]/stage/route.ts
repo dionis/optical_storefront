@@ -203,6 +203,17 @@ export async function POST(
     })
   );
 
+  // HISTORIAL de etapas en el pedido (metadata.stage_history): cada cambio con
+  // su instante. Es lo que alimenta el rastreo público por número de recibo
+  // (/store/order-track) con fechas reales; best-effort, nunca falla el cambio.
+  if (after && before.stage !== after.stage) {
+    try {
+      await appendStageHistory(req, orderId, after.stage, actorId);
+    } catch (error) {
+      logger.warn(`[order-board] stage history for ${orderId} not saved: ${(error as Error).message}`);
+    }
+  }
+
   // CUSTOMER EMAIL on every recorded stage change (unless the owner unticked
   // "notify"). Sent AFTER the transition committed — a notification for a move
   // that then failed would be worse than none — and never allowed to fail the
@@ -358,6 +369,35 @@ async function sendStageEmail(
   }
 
   return sent;
+}
+
+/** Añade {stage, at} a metadata.stage_history (merge, nunca reemplaza). */
+async function appendStageHistory(
+  req: AuthenticatedMedusaRequest<StageBody>,
+  orderId: string,
+  stage: OrderStage,
+  actorId: string
+): Promise<void> {
+  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+  const { data } = await query.graph({
+    entity: "order",
+    fields: ["id", "metadata"],
+    filters: { id: orderId },
+  });
+  const current = (data?.[0]?.metadata ?? {}) as Record<string, unknown>;
+  const prev = Array.isArray(current["stage_history"])
+    ? (current["stage_history"] as { stage?: string; at?: string }[])
+    : [];
+  await updateOrderWorkflow(req.scope).run({
+    input: {
+      id: orderId,
+      user_id: actorId,
+      metadata: {
+        ...current,
+        stage_history: [...prev, { stage, at: new Date().toISOString() }].slice(-20),
+      },
+    },
+  });
 }
 
 /**

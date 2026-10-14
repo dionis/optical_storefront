@@ -23,9 +23,91 @@ import {
   redeemMagicToken,
   requestMagicLink,
   sendSupportMessage,
+  trackOrder,
 } from "../data/orderAccess.js";
 
 const REASONS = ["delay", "wrong", "cancel", "other"];
+
+/**
+ * Rastreo por NÚMERO DE RECIBO (pedido del dueño): sin enlace mágico — el par
+ * (n.º de pedido, correo) basta, como en cualquier mensajería. El backend solo
+ * devuelve la traza de etapas con fechas y la guía FedEx; el detalle completo
+ * sigue viviendo bajo el enlace verificado de "Mis pedidos".
+ */
+function TrackByReceipt() {
+  const { t, lang } = useLang();
+  const [num, setNum] = useState("");
+  const [mail, setMail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [trace, setTrace] = useState(null);
+
+  const when = (iso) => iso
+    ? new Date(iso).toLocaleDateString(lang === "en" ? "en-US" : "es", { day: "numeric", month: "short" })
+    : null;
+
+  const go = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true); setErr(""); setTrace(null);
+    try {
+      const r = await trackOrder(num.trim(), mail.trim());
+      setTrace(r);
+    } catch {
+      setErr(t("trk.notFound"));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="trk-box">
+      <div className="trk-hd">
+        <img className="i3d" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
+             onError={(e) => e.currentTarget.remove()} />
+        <b>{t("trk.title")}</b>
+      </div>
+      <p className="muted trk-intro">{t("trk.intro")}</p>
+      <form className="trk-form" onSubmit={go}>
+        <input inputMode="numeric" required placeholder={t("trk.number")} value={num}
+               onChange={(e) => setNum(e.target.value)} aria-label={t("trk.number")} />
+        <input type="email" required placeholder={t("trk.email")} value={mail}
+               autoComplete="email" onChange={(e) => setMail(e.target.value)} aria-label={t("trk.email")} />
+        <button className="btn btn-primary trk-go" disabled={busy || !num.trim() || !mail.trim()}>
+          {busy ? <><span className="btn-spin" aria-hidden="true" /> …</> : t("trk.cta")}
+        </button>
+      </form>
+      {err && <div className="auth-err">{err}</div>}
+      {trace && (
+        <div className="trk-result" role="status">
+          <div className="trk-result-hd">
+            <b>{t("trk.order")} #{trace.display_id}</b>
+            {trace.tracking_number && (
+              <span className="trk-guide">
+                {t("trk.carrier")}: <b>{trace.carrier || "FedEx"}</b> · {t("trk.guide")}: <b>{trace.tracking_number}</b>
+              </span>
+            )}
+          </div>
+          <TrackingTimeline status={trace.stage} terminal={trace.terminal} hasPrescription={trace.has_prescription} />
+          {/* Fechas reales por etapa (las que el pedido ya pisó) */}
+          <ul className="trk-dates">
+            {(trace.timeline || []).filter((st) => st.done && st.at).map((st) => (
+              <li key={st.stage}>
+                <span>{t(`track.${st.stage}`)}</span>
+                <b>{when(st.at)}</b>
+              </li>
+            ))}
+          </ul>
+          {trace.tracking_url && (
+            <a className="trk-follow" href={trace.tracking_url} target="_blank" rel="noreferrer">
+              {t("trk.follow")} →
+            </a>
+          )}
+          <small className="muted trk-note">{t("trk.note")}</small>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Which sentence the cancel dialog uses for the money. The backend decides —
@@ -538,6 +620,7 @@ export default function MyOrders() {
     return (
       <div className="section mo-wrap">
         <h1>{L("title")}</h1>
+        <TrackByReceipt />
         {requested ? (
           <div className="mo-sent-box">
             <div className="mo-sent-emoji">📬</div>
@@ -585,6 +668,8 @@ export default function MyOrders() {
           <button className="mo-signout" onClick={signOut}>{L("signOut")}</button>
         </div>
       </div>
+
+      <TrackByReceipt />
 
       {err && <div className="auth-err">{err}</div>}
 

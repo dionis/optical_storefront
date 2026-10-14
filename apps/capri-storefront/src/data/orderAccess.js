@@ -167,3 +167,15 @@ export function sendSupportMessage({ orderId, reason, message, locale }) {
     body: { order_id: orderId, reason, message, locale },
   });
 }
+
+/**
+ * Rastreo público por número de recibo + correo (pedido del dueño): la pareja
+ * basta — misma mecánica que las mensajerías. Devuelve la traza mínima
+ * (etapas con fechas, guía FedEx) o lanza con reason "not_found".
+ */
+export async function trackOrder(displayId, email) {
+  return call("/store/order-track", {
+    method: "POST",
+    body: { display_id: displayId, email },
+  });
+}
