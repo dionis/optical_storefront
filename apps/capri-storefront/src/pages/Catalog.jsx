@@ -1,5 +1,6 @@
 // Dónde se usa: /catalogo (y /catalogo?tab=cases). Grid con filtros laterales, orden, scroll incremental y banner de campaña.
 import { useMemo, useState, useEffect, useRef } from "react";
+import { DISCOUNTS_ENABLED } from "../config/features.js";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
@@ -72,7 +73,8 @@ export default function Catalog() {
       if (brand && p.brand_slug !== brand.slug) return false;
       if (q && !(`${p.name} ${p.brand}`.toLowerCase().includes(q))) return false;
       if (!productMatches(p, selected)) return false;
-      if (ofertaParam && !(typeof p.originalPrice === "number" && p.originalPrice > p.price)) return false;
+      // Con los descuentos apagados el filtro "ofertas" no excluye nada (si no, quedaría vacío).
+      if (DISCOUNTS_ENABLED && ofertaParam && !(typeof p.originalPrice === "number" && p.originalPrice > p.price)) return false;
       return true;
     });
     if (sort === "price-asc") list = [...list].sort((a, b) => a.price - b.price);

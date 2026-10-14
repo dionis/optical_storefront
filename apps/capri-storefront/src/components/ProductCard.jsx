@@ -15,6 +15,7 @@ import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data
 import { viewsBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
+import { DISCOUNTS_ENABLED } from "../config/features.js";
 
 // (El descuento por hash se eliminó: el precio tachado ahora es SIEMPRE el
 // `originalPrice` real del catálogo — mostrar una rebaja inventada contradice
@@ -53,7 +54,8 @@ export default function ProductCard({ product }) {
   // Oferta: precio anterior tachado + precio en rojo + etiqueta, solo si el
   // precio anterior REAL del catálogo es mayor que el actual. El % se deriva
   // de los dos precios reales (nada de rebajas inventadas por hash).
-  const hasSale = typeof product.originalPrice === "number" && product.originalPrice > product.price;
+  // Descuentos apagados por producto (features.js): sin tachado ni % de rebaja.
+  const hasSale = DISCOUNTS_ENABLED && typeof product.originalPrice === "number" && product.originalPrice > product.price;
   const discountOff = hasSale ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
   const oldPrice = hasSale ? product.originalPrice : 0;
 

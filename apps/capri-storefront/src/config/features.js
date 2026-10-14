@@ -36,4 +36,9 @@ export const TRY_ON_ENABLED = flag(env.VITE_ENABLE_TRY_ON, false);
 // no place in front of a customer. Set VITE_ENABLE_MEDIA_REVIEW=true locally.
 export const MEDIA_REVIEW_ENABLED = flag(env.VITE_ENABLE_MEDIA_REVIEW, false);
 
-export default { TRY_ON_ENABLED, MEDIA_REVIEW_ENABLED };
+// Descuentos visuales ("compare at" del scraper): tachado + % de rebaja en
+// tarjetas y PDP. OFF por decisión de producto (pedido del cliente: "quita el
+// descuento"). Para reactivarlos: VITE_ENABLE_DISCOUNTS=true en tu .env.
+export const DISCOUNTS_ENABLED = flag(env.VITE_ENABLE_DISCOUNTS, false);
+
+export default { TRY_ON_ENABLED, MEDIA_REVIEW_ENABLED, DISCOUNTS_ENABLED };

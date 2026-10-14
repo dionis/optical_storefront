@@ -16,6 +16,7 @@ import { TRY_ON_ENABLED } from "../config/features.js";
 import { frameMatEdu } from "../data/lensEducation.js";
 import { IconMontura } from "../components/LensGraphics.jsx";
 import { IconMaterial, IconMeasures, IconGender, IconFemale, IconUnisex, IconKids, IconCamera, IconCart, Icon360 } from "../components/UiIcons.jsx";
+import { DISCOUNTS_ENABLED } from "../config/features.js";
 import GlassesLoader from "../components/GlassesLoader.jsx";
 import { useReviewSummary } from "../components/ReviewSummaryContext.jsx";
 // Vistas 3D generadas (4 ángulos) por montura. Ver docs/frame-media-generation.md §A.10.
@@ -504,10 +505,10 @@ export default function ProductDetail() {
               el cliente llegaba a las acciones sin saber cuánto cuesta. Mismo
               criterio que las tarjetas: tachado SOLO con originalPrice real. */}
           <div className="pdp-price-row">
-            {typeof product.originalPrice === "number" && product.originalPrice > product.price && (
+            {DISCOUNTS_ENABLED && typeof product.originalPrice === "number" && product.originalPrice > product.price && (
               <span className="pdp-price-old">${product.originalPrice.toFixed(2)}</span>
             )}
-            <span className={`pdp-price ${typeof product.originalPrice === "number" && product.originalPrice > product.price ? "sale" : ""}`}>
+            <span className={`pdp-price ${DISCOUNTS_ENABLED && typeof product.originalPrice === "number" && product.originalPrice > product.price ? "sale" : ""}`}>
               ${product.price.toFixed(2)}
             </span>
             <span className="pdp-price-note">{t("pdp.priceNote")}</span>
