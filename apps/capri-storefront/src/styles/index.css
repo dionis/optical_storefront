@@ -8470,3 +8470,21 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .ts2-cap2col .ts2-rv-actions { padding: 6px 8px; gap: 5px; }
   .ts2-cap2col .vm-go { padding: 9px 12px; }
 }
+
+/* ETAPA 121c — Revisión móvil: las DOS fotos UNA AL LADO DE LA OTRA (pedido
+   del cliente) para que foto frontal + lateral + acciones + ficha del
+   espejuelo salgan en la misma vista. Con las fotos en fila sobra alto: la
+   ficha respira un poco más. Los badges Material/Género van sobre pastilla
+   blanca para que el icono 3D y el texto se lean bien sobre la foto. */
+@media (max-width: 939px) {
+  .ts2-cap2col .ts2-rv-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ts2-cap2col .ts2-rvfig { height: 21vh; height: 21dvh; }
+  .ts2-cap2col .ts2-rvtools { top: 6px; right: 6px; gap: 4px; }
+  .ts2-cap2col .ts2-rvbtn .ts2-rvbtn-tx { display: none; } /* en columna estrecha: solo icono */
+  .ts2-cap2col .ts2-rvbadge { top: 6px; left: 6px; }
+  .ts2-cap2col .ts2-frame .ts2-fr-photo img { max-height: 13vh; max-height: 13dvh; }
+}
+.ts2-fr-badge {
+  background: rgba(255, 255, 255, .92); border: 1px solid #e4e9f2;
+  border-radius: 999px; padding: 3px 10px; box-shadow: 0 2px 8px -3px rgba(8, 30, 84, .25);
+}
