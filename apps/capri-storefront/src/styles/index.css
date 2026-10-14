@@ -9360,3 +9360,39 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .trk-form input[type=email] { grid-column: 1 / -1; grid-row: 1; }
   .btn.btn-primary.trk-go { grid-column: 1 / -1; }
 }
+
+/* ===================================================================
+   ETAPA 138 — MISMO ESTILO en web y móvil (pedido del cliente):
+   1) El TOTAL del resumen SIEMPRE en navy sobre la raya dorada — fuera
+      el rojo, en cualquier resumen (receta, revisión, checkout).
+   2) "Comprar ahora" en barra navy/oro 9-slice: estirada al ancho de la
+      columna web se deformaba (100%/100%); el 9-slice nunca se deforma.
+   3) WEB, paso de RESUMEN: el "Resumen del pedido" quedaba bajo el
+      pliegue — la foto generada y la ficha se compactan para que la
+      columna derecha muestre ficha + resumen SIN scroll.
+   =================================================================== */
+.zlx-summary-total { border-top: 2px solid #d9b85c !important; }
+.zlx-summary-total b { color: #0b2f66 !important; }
+.btn.btn-primary.zlx-buy {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 52px; padding: 0 14px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.btn.btn-primary.zlx-buy:hover:not(:disabled) {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}
+@media (min-width: 960px) {
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-rx-summary-left .zlx-gen-img { max-height: 38vh; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-rx-summary-left .zlx-gen-img img {
+    max-height: 38vh; object-fit: cover; object-position: 50% 22%;
+  }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-page-side .zlx-frameside .ts2-fr-photo.fs-photo { height: 185px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-page-side .zlx-frameside .fs-mcell .fs-mic { height: 24px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-page-side .zlx-frameside .fs-mval { font-size: 13.5px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-page-side .zlx-frameside .fs-mcell { padding: 6px 4px 8px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 8px 14px 10px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 2px 0; }
+}
