@@ -8514,11 +8514,13 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
    probador y proceso de receta): la marca oficial RUBI LENS en placa blanca
    en vez del dibujo de línea; el svg queda de respaldo. */
 .fs-hd-mark {
+  /* Tipo FAVICON (pedido del cliente): placa blanca CUADRADA y compacta. */
   display: inline-flex; align-items: center; justify-content: center;
-  background: #fff; border-radius: 8px; padding: 2px 7px; flex: 0 0 auto;
+  width: 26px; height: 26px;
+  background: #fff; border-radius: 6px; padding: 2px; flex: 0 0 auto;
   box-shadow: 0 1px 4px rgba(0, 10, 35, .35);
 }
-.fs-hd-mark img { height: 18px; width: auto; display: block; }
+.fs-hd-mark img { max-height: 20px; max-width: 22px; width: auto; display: block; }
 .fs-hd-mark:not(.no-img) .fs-hd-ic { display: none; }
 .fs-hd-mark.no-img { background: none; padding: 0; box-shadow: none; }
 
@@ -8535,4 +8537,18 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .ts2-cap2col .ts2-frame .ts2-fr-photo img,
   .ts2-cap2col .ts2-frame .fs-photo img { max-height: 15vh; max-height: 15dvh; }
   .ts2-rvlayout .ts2-frame .ts2-fr-photo img { max-height: 19vh; max-height: 19dvh; }
+}
+
+
+/* ETAPA 121h — Marca de agua del logo (pedido del cliente): el lockup oficial
+   MUY transparente (PNG pre-atenuado al 7%) centrado al fondo del área de
+   foto de la ficha del espejuelo, detrás de la montura. */
+.fs-card.ts2-frame .fs-photo,
+.fs-card.ts2-frame .ts2-fr-photo { position: relative; }
+/* La foto de producto es un JPG con fondo blanco opaco que taparía un fondo:
+   la marca de agua va en un ::after POR ENCIMA (al 7% es imperceptible sobre
+   la montura y se funde con el blanco), sin robar clics. */
+.fs-card.ts2-frame .fs-photo::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: url("/logo-watermark.png") center / 68% auto no-repeat;
 }
