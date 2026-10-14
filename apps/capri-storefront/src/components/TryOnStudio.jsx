@@ -200,6 +200,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     if (g === "male" || g === "female") setGender(g);
     setGenderPhase("done");
   }, []);
+  // ELECCIÓN DE ENTRADA: al abrir el probador sale una ventana emergente DELANTE
+  // (fondo congelado) con dos caminos: "Tomar las fotos con la cámara" (el proceso
+  // guiado de siempre) o "Subir mis fotos" (SIN cámara: solo subir archivo).
+  //   null = eligiendo · "camera" = proceso con cámara · "upload" = solo subir.
+  // La cámara NO se enciende hasta que el cliente elige "camera". En los modos de
+  // demo (?vmdemo=…) no hay elección: se entra directo como siempre.
+  const [entryMode, setEntryMode] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("vmdemo") ? "camera" : null; }
+    catch { return null; }
+  });
   const [frontImg, setFrontImg] = useState(null);
   const [sideImg, setSideImg] = useState(null);
   const [guide, setGuide] = useState("");
@@ -411,8 +421,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     rafRef.current = requestAnimationFrame(loop);
   }
 
-  // Arranca cámara + FaceLandmarker (una vez, al montar).
+  // Arranca cámara + FaceLandmarker — SOLO cuando el cliente eligió "con cámara"
+  // en la ventana de entrada. En modo "subir" la cámara queda congelada: nunca se
+  // pide getUserMedia y las cajas de captura solo aceptan subir archivo.
   useEffect(() => {
+    if (entryMode !== "camera") return undefined;
     camKillRef.current = false;
     acquireCamera(true);
     return () => {
@@ -423,7 +436,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       streamRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [entryMode]);
 
   // DESOCUPAR LA CÁMARA en cuanto están las DOS fotos (revisión/resultado): no tiene
   // sentido mantener la webcam encendida (luz, batería, privacidad). Si el cliente
@@ -437,20 +450,22 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       streamRef.current = null;
       if (videoRef.current) { try { videoRef.current.srcObject = null; } catch { /* nada */ } }
       camReleasedRef.current = true;
-    } else if (camReleasedRef.current) {
+    } else if (camReleasedRef.current && entryMode === "camera") {
+      // Re-adquirir SOLO en modo cámara: en modo "subir" un retake es otra subida.
       camReleasedRef.current = false;
       acquireCamera(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bothShots]);
+  }, [bothShots, entryMode]);
 
   // Red de seguridad: la ventana NUNCA se queda en "preparando…". Pase lo que pase con
   // la cámara o la detección, a los ~3,8 s se revela con el ejemplo que haya (por
   // defecto hombre). Así el "cargando" es breve e imperceptible, no un bloqueo.
   useEffect(() => {
+    if (!entryMode) return undefined;          // eligiendo entrada: aún no corre el reloj
     const id = setTimeout(() => finishGender(), 3800);
     return () => clearTimeout(id);
-  }, [finishGender]);
+  }, [finishGender, entryMode]);
 
   // En cuanto existe la foto FRONTAL, se van calculando POR DETRÁS nuestras medidas
   // (MediaPipe, en el navegador — lo que ya tenemos estable) para que estén listas
@@ -1331,8 +1346,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                 </>
               ) : (
                 <div className="ts2-drop-ph">
-                  <span className="ts2-drop-cam"><IconCamera className="ts2-drop-cam-ic" /></span>
-                  <b>{camMsg || t("tryon2.drop")}</b>
+                  <span className="ts2-drop-cam">
+                    {entryMode === "upload"
+                      ? <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+                      : <IconCamera className="ts2-drop-cam-ic" />}
+                  </span>
+                  {/* En modo "subir" la cámara está congelada a propósito: nada de
+                      "encendiendo cámara…", directo a la invitación de subir. */}
+                  <b>{entryMode === "upload" ? t("tryon2.drop") : (camMsg || t("tryon2.drop"))}</b>
                   <small>{t("tryon2.dropHint")}</small>
                 </div>
               )}
@@ -1787,10 +1808,38 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       <input ref={sideInput} type="file" accept="image/*" hidden
              onChange={(e) => onUpload("side", e.target.files && e.target.files[0])} />
 
+      {/* ELECCIÓN DE ENTRADA: emergente DELANTE con el fondo congelado. "Subir mis
+          fotos" congela la cámara (no se enciende nunca); "Tomar con cámara" sigue
+          el proceso guiado de siempre. */}
+      {entryMode === null && (
+        <div className="ts2-entry" role="dialog" aria-modal="true" aria-label={t("vm.entry.title")}>
+          <div className="ts2-entry-card">
+            <b className="ts2-entry-tt">{t("vm.entry.title")}</b>
+            <p className="ts2-entry-sub">{t("vm.entry.sub")}</p>
+            <div className="ts2-entry-opts">
+              <button type="button" className="ts2-entry-opt ts2-entry-cam" data-sfx="select"
+                      onClick={() => setEntryMode("camera")}>
+                <span className="ts2-entry-ic"><IconCamera className="ts2-entry-ic-svg" /></span>
+                <b>{t("vm.entry.cam")}</b>
+                <small>{t("vm.entry.camSub")}</small>
+              </button>
+              <button type="button" className="ts2-entry-opt ts2-entry-up" data-sfx="select"
+                      onClick={() => { setEntryMode("upload"); finishGender(); }}>
+                <span className="ts2-entry-ic">
+                  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+                </span>
+                <b>{t("vm.entry.up")}</b>
+                <small>{t("vm.entry.upSub")}</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Preparación: mientras la cámara arranca y se detecta el perfil, se muestra un
           "preparando…" breve (nunca más de ~3,8 s) y luego se revela la ventana ya con
-          las fotos de ejemplo adecuadas. */}
-      {genderPhase === "detecting" && mState === "idle" && !frontImg && !sideImg && (
+          las fotos de ejemplo adecuadas. Solo aplica al camino CON cámara. */}
+      {entryMode === "camera" && genderPhase === "detecting" && mState === "idle" && !frontImg && !sideImg && (
         <div className="ts2-prep" role="status" aria-live="polite">
           <div className="ts2-prep-card">
             <span className="ts2-prep-spin" aria-hidden="true" />

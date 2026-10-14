@@ -7156,3 +7156,94 @@ button.card-genre {
   .vm-addrx-row { flex-direction: column; }
   .vm-buyframe { width: 100%; padding: 12px 16px; }
 }
+
+
+/* ===================================================================
+   ETAPA 97 - Resumen final (ya con material + tratamiento), vista web:
+   · IZQUIERDA: imagen IA del probador (reducida para que los pasos +
+     "Comprar ahora" quepan en la MISMA vista) + pasos + compra.
+   · DERECHA: la MISMA ficha del espejuelo de siempre (encabezado navy)
+     ARRIBA y, debajo, el "Resumen del pedido" con el mismo encabezado navy.
+   =================================================================== */
+/* Columna derecha: montura arriba, resumen debajo */
+.zlx-rx-summary-right { display: flex; flex-direction: column; gap: 16px; }
+
+/* "Resumen del pedido" con el mismo look de la ficha del espejuelo: tarjeta
+   blanca, encabezado navy en mayúsculas con icono. */
+.zlx-summary.zlx-summary-navy {
+  padding: 0; overflow: hidden; border: 1px solid #e7eaf0; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, .08); background: #fff;
+}
+.zlx-summary-navyhd {
+  display: flex; align-items: center; gap: 10px; padding: 13px 16px;
+  background: linear-gradient(180deg, #26456f, #182a4e);
+  color: #fff; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; font-size: 13px;
+}
+.zlx-summary-navyhd .fs-hd-ic { width: 22px; height: auto; color: #fff; flex: 0 0 auto; }
+.zlx-summary-navybody { padding: 15px 16px 16px; }
+.zlx-summary.zlx-summary-navy .zlx-summary-list { margin: 0 0 10px; }
+.zlx-summary.zlx-summary-navy .zlx-summary-total { margin-top: 0; }
+
+/* La imagen IA, a la izquierda, acotada en alto para que TODO (imagen + 3 pasos
+   + botón de compra) entre en una sola pantalla en escritorio. */
+.zlx-rx-summary-left .zlx-gen-img { max-height: 340px; }
+.zlx-rx-summary-left .zlx-gen-img img {
+  width: 100%; max-height: 340px; object-fit: cover; object-position: center 26%; display: block;
+}
+@media (min-width: 960px) {
+  /* En escritorio aún más compacta: deja sitio holgado a los pasos + compra. */
+  .zlx-rx-summary-left .zlx-gen-img,
+  .zlx-rx-summary-left .zlx-gen-img img { max-height: 300px; }
+}
+
+/* ETAPA 97b - Compactado para que el botón de compra (izquierda) y el total
+   (derecha) entren SIN scroll en un portátil (≈768px de alto). */
+@media (min-width: 960px) {
+  .zlx-rx-summary-left { gap: 12px; }
+  .zlx-rx-summary-left .zlx-gen-img,
+  .zlx-rx-summary-left .zlx-gen-img img { max-height: 252px; }
+  .zlx-rx-stage-summary .zlx-page-side .zlx-frameside .ts2-fr-photo.fs-photo { aspect-ratio: 2.2 / 1; }
+  .zlx-rx-stage-summary .zlx-page-side .zlx-frameside .fs-foot { display: none; }
+  .zlx-rx-stage-summary .zlx-rx-summary-right { gap: 12px; }
+  .zlx-rx-stage-summary .zlx-page-side .zlx-summary-navybody { padding: 12px 16px 13px; }
+}
+
+/* ===================================================================
+   ETAPA 98 - Entrada del probador: ventana emergente DELANTE (fondo
+   congelado con desenfoque) para elegir "Tomar con cámara" o "Subir mis
+   fotos". En modo subir, la cámara queda congelada (nunca se enciende).
+   =================================================================== */
+.ts2-entry {
+  position: absolute; inset: 0; z-index: 60; display: flex; align-items: center;
+  justify-content: center; padding: 18px;
+  background: rgba(10, 16, 28, .52); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.ts2-entry-card {
+  width: min(560px, 100%); background: #fff; border-radius: 18px; padding: 24px 24px 22px;
+  box-shadow: 0 24px 70px -18px rgba(10, 16, 28, .5); text-align: center;
+  animation: ts2entry-in .22s ease;
+}
+@keyframes ts2entry-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+.ts2-entry-tt { display: block; font-family: var(--display); font-size: 21px; color: var(--ink); }
+.ts2-entry-sub { margin: 7px 0 18px; font-size: 13.5px; color: var(--muted); }
+.ts2-entry-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ts2-entry-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 14px 15px;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 14px; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .06s; text-align: center;
+}
+.ts2-entry-opt:hover { border-color: var(--cuba-blue); box-shadow: 0 10px 26px -10px rgba(0, 42, 143, .35); }
+.ts2-entry-opt:active { transform: translateY(1px); }
+.ts2-entry-opt b { font-size: 14.5px; color: var(--ink); line-height: 1.25; }
+.ts2-entry-opt small { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.ts2-entry-ic {
+  display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px;
+  border-radius: 50%; background: var(--blue-soft, #eef4ff); color: var(--cuba-blue); margin-bottom: 4px;
+}
+.ts2-entry-ic .ts2-entry-ic-svg, .ts2-entry-ic svg { width: 26px; height: 26px; }
+/* La opción con cámara es la principal (primero en el ojo) */
+.ts2-entry-cam { border-color: var(--cuba-blue); background: linear-gradient(180deg, #f7faff, #fff); }
+@media (max-width: 560px) {
+  .ts2-entry-opts { grid-template-columns: 1fr; }
+  .ts2-entry-card { padding: 20px 16px 16px; }
+}

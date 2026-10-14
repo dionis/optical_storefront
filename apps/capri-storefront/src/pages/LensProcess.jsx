@@ -1163,11 +1163,14 @@ export default function LensProcess() {
   // material + tratamiento). IZQUIERDA: imagen (IA si existe, si no la montura) +
   // pasos elegidos (editables, reabren su ventana emergente). DERECHA: resumen de
   // precios + "Comprar ahora". Así NO se cae a la página de lentes.
+  // La imagen generada (IA del probador) va a la IZQUIERDA, en tamaño reducido para
+  // que los pasos + "Comprar ahora" quepan en la MISMA vista. La ficha del espejuelo
+  // (frameSide) ya NO cae aquí: ahora vive a la DERECHA, encima del resumen.
   const generatedImg = tryOnImage ? (
     <figure className="zlx-gen-img">
       <img src={tryOnImage} alt={product.name} referrerPolicy="no-referrer" />
     </figure>
-  ) : frameSide;
+  ) : null;
 
   const summarySteps = (
     <div className="zlx-steps zlx-summary-steps">
@@ -1218,13 +1221,28 @@ export default function LensProcess() {
     </div>
   );
 
-  // Columna DERECHA del resumen: la ficha "Resumen del pedido".
+  // Ficha "Resumen del pedido": MISMO estilo que la ficha del espejuelo —
+  // encabezado navy con icono. Va DEBAJO de la montura, en la columna derecha.
   const orderSummaryCard = (
-    <aside className="zlx-summary zlx-summary-inpage">
-      <h3 className="zlx-summary-h">{t("lens.summary")}</h3>
-      {summaryInner}
-      <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
+    <aside className="zlx-summary zlx-summary-inpage zlx-summary-navy">
+      <div className="zlx-summary-navyhd">
+        <IconMontura className="fs-hd-ic" />
+        <span>{t("lens.summary")}</span>
+      </div>
+      <div className="zlx-summary-navybody">
+        {summaryInner}
+        <div className="zlx-summary-total"><span>{t("lens.total")}</span><b>${total.toFixed(2)}</b></div>
+      </div>
     </aside>
+  );
+
+  // Columna DERECHA del resumen: la montura (misma ficha de siempre, encabezado
+  // navy) ARRIBA y, debajo, el "Resumen del pedido" con el mismo encabezado navy.
+  const summaryRight = (
+    <div className="zlx-rx-summary-right">
+      {frameSide}
+      {orderSummaryCard}
+    </div>
   );
 
   return (
@@ -1444,7 +1462,7 @@ export default function LensProcess() {
       {(pop === "rx" || pop === "mat" || pop === "treat") && rxStage === "summary" && (
         <ZlxPop title={t("lens.summary")} icon={<IconMontura className="zlx-ic" />} onClose={() => setPop(null)}
                 onBack={() => setRxStage("fill")} backLabel={t("lens.back")} closeLabel={closeLabel}
-                fullpage side={orderSummaryCard} className={`zlx-pop-rx zlx-rx-stage-summary ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
+                fullpage side={summaryRight} className={`zlx-pop-rx zlx-rx-stage-summary ${pop !== "rx" ? "zlx-pop-rx-behind" : ""}`}>
           {summaryLeft}
         </ZlxPop>
       )}
@@ -1838,7 +1856,7 @@ export default function LensProcess() {
                 <Ic name="edit" /> {t("lens.edit")}
               </button>
               <button type="button" className="btn btn-primary zlx-rxconfirm-go" data-sfx="success"
-                      onClick={() => { setConfirmRx(false); setRxDirty(false); setMatId((cur) => cur || (recommendedMat ? recommendedMat.id : cur)); setPop("mat"); }}>
+                      onClick={() => { setConfirmRx(false); setRxDirty(false); setOcr((o) => (o.status === "done" && !o.confirmed) ? { ...o, confirmed: true } : o); setMatId((cur) => cur || (recommendedMat ? recommendedMat.id : cur)); setPop("mat"); }}>
                 <Ic name="check" /> {t("lens.rx.confirmGo")}
               </button>
             </div>
