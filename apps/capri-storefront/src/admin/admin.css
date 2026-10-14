@@ -416,3 +416,8 @@
   .exec-pipe-k { font-size: 10px; }
   .adm-cat-row { flex-wrap: wrap; }
 }
+
+/* Logo REAL de la empresa en el panel (antes /logo.svg, un placeholder con
+   "RUBI_LENS"). En la barra oscura va sobre su placa blanca ya existente. */
+.adm-login-logo { height: 54px; width: auto; object-fit: contain; }
+.adm-topbar .adm-brand img { height: 30px; padding: 3px 8px; }
