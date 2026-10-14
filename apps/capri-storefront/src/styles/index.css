@@ -8941,3 +8941,88 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-pop-rx .zlx-rx-eye-h { min-width: 0; text-align: center; margin-bottom: 0; }
   .zlx-pop-rx .zlx-rx-grid .zlx-stepper-ctl { width: 74px; }
 }
+
+/* ===================================================================
+   ETAPA 130 — "Confirma tu receta" y "Elige el material" a juego con el
+   resto de las ventanas (pedido del cliente): cristal + dorado, ningún
+   botón deformado y tipografía consistente.
+   =================================================================== */
+/* ── Confirmación de receta ─────────────────────────────────────────── */
+/* Velo igual al de los demás diálogos (blur 7px). */
+.zlx-review-overlay { backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+/* Botones SIN deformar: barras 9-slice (extremos fijos, centro estirado). */
+.btn.btn-outline.zlx-rxconfirm-edit {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #0b2f66 !important; font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+.btn.btn-primary.zlx-rxconfirm-go {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 12px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.btn.btn-outline.zlx-rxconfirm-edit:hover,
+.btn.btn-primary.zlx-rxconfirm-go:hover {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}
+.zlx-rxconfirm-actions { align-items: stretch; gap: 8px; }
+/* Tipografía consistente: título en la fuente display, secciones iguales
+   (mayúsculas pequeñas azul marca) y valores en números tabulares. */
+.zlx-rxconfirm-body { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 13px; }
+.zlx-rxconfirm-body .zlx-summary-rx-h,
+.zlx-rxconfirm-body .zlx-meas-h {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--cuba-blue); display: flex; align-items: center; gap: 6px; margin: 0 0 6px;
+}
+.zlx-rxconfirm-body .zlx-summary-rx-h .zlx-ic { width: 14px; height: 14px; color: #b98a2c; }
+.zlx-rxconfirm-body .zlx-meas-h { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.zlx-rxconfirm-body .zlx-rx-table tbody td { font-weight: 800; color: #0b2f66; }
+.zlx-rxconfirm-body .zlx-meas-cell b, .zlx-rxconfirm-body .zlx-meas-add b {
+  color: #0b2f66; font-variant-numeric: tabular-nums;
+}
+
+/* ── Elige el material ──────────────────────────────────────────────── */
+/* Cabecera navy LEGIBLE: título, icono y botones en dorado claro. */
+.zlx-pop-head b, .zlx-pop-head .zlx-ic { color: #f3e3b3; }
+.zlx-pop-head .zlx-pop-back, .zlx-pop-head .zlx-pop-help, .zlx-pop-head .zlx-pop-close { color: #f3e3b3; }
+/* Filas de material en cristal 9-slice: blanco/oro, y navy/oro la elegida. */
+.zlx-pop-mat .zlx-choice {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 56px; padding: 2px 10px;
+}
+.zlx-pop-mat .zlx-choice.sel {
+  border-image-source: url("/ui/glass/bar-navy-gold.png") !important;
+}
+.zlx-pop-mat .zlx-choice-title { color: #0b2f66; }
+.zlx-pop-mat .zlx-choice.sel .zlx-choice-title,
+.zlx-pop-mat .zlx-choice.sel .zlx-choice-price { color: #f3e3b3; text-shadow: 0 1px 2px rgba(0, 0, 0, .38); }
+.zlx-pop-mat .zlx-choice-main { flex-direction: row; align-items: center; gap: 8px; }
+.zlx-pop-mat .reco-badge { margin-left: 6px; }
+/* Icono 3D de capas (el svg de línea solo si el PNG no carga). */
+.i3d-mat { height: 22px; width: auto; flex: 0 0 auto; }
+.zlx-pop-mat .zlx-choice-main:not(.no-i3d) .zlx-choice-ic { display: none; }
+/* El CTA largo ("Confirmar y elegir material") en una sola línea. */
+.btn.btn-primary.zlx-rxconfirm-go { font-size: 12.5px; letter-spacing: 0; white-space: nowrap; gap: 6px; }
+.btn.btn-outline.zlx-rxconfirm-edit { flex: 0 0 auto; font-size: 13px; padding: 0 10px; }
+/* ── Tratamientos (antirreflejo + fotocromático): mismas filas de cristal ── */
+.zlx-pop-treat .zlx-choice {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 52px; padding: 2px 10px;
+}
+.zlx-pop-treat .zlx-choice.sel { border-image-source: url("/ui/glass/bar-navy-gold.png") !important; }
+.zlx-pop-treat .zlx-choice-title { color: #0b2f66; }
+.zlx-pop-treat .zlx-choice-ic { color: #0b2f66; }
+.zlx-pop-treat .zlx-choice.sel .zlx-choice-title,
+.zlx-pop-treat .zlx-choice.sel .zlx-choice-price,
+.zlx-pop-treat .zlx-choice.sel .zlx-choice-ic { color: #f3e3b3; text-shadow: 0 1px 2px rgba(0, 0, 0, .38); }
+.zlx-pop-treat .zlx-choice-main { flex-direction: row; align-items: center; gap: 8px; }

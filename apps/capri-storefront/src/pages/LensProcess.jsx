@@ -1802,6 +1802,9 @@ export default function LensProcess() {
                 <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
                   <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
                     <span className="zlx-choice-main">
+                      {/* Icono 3D de la lámina (capas de lente); el svg queda de respaldo. */}
+                      <img className="i3d i3d-mat" src={matId === m.id ? "/ui/icons3d/white-layers.png" : "/ui/icons3d/navy-layers.png"} alt="" aria-hidden="true"
+                           onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                       <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
                       <span className="zlx-choice-title">
                         {L(m.label, lang)}
