@@ -1005,7 +1005,9 @@ export default function LensProcess() {
   const notLbl = t("lens.notFor");
 
   // Abre la ayuda educativa como globo aparte (no inline).
-  const openInfo = (title, edu, diagKeys, note) => setInfoPop({ title, edu, diagKeys: diagKeys || [], note: note || null });
+  // `img`: lámina de ayuda del dueño (arte con el texto ya rotulado). Solo se
+  // usa en ES — en EN seguimos con los diagramas SVG, cuyo copy pasa por t().
+  const openInfo = (title, edu, diagKeys, note, img) => setInfoPop({ title, edu, diagKeys: diagKeys || [], note: note || null, img: img || null });
 
   // Agrupa los fotocromáticos por FAMILIA (presentación): en vez de una tarjeta
   // por color con el mismo nombre y precio, se muestra el nombre UNA vez y las
@@ -1669,7 +1671,7 @@ export default function LensProcess() {
                         </button>
                         {hasDiag && rxStage === "fill" && (
                           <button type="button" className="zlx-use-info"
-                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d))}>
+                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : null)}>
                             <Ic name="info" />
                           </button>
                         )}
@@ -1915,7 +1917,10 @@ export default function LensProcess() {
         <ZlxInfoPop title={infoPop.title} onClose={() => setInfoPop(null)} closeLabel={closeLabel}>
           {infoPop.edu && <EduBlock edu={infoPop.edu} goodLbl={goodLbl} notLbl={notLbl} />}
           {infoPop.note && <p className="zlx-infopop-note">{infoPop.note}</p>}
-          <DiagHelp keys={infoPop.diagKeys} t={t} />
+          {infoPop.img
+            ? <img className="zlx-infopop-img" src={infoPop.img} alt="" aria-hidden="true"
+                   onError={(e) => { e.currentTarget.remove(); }} />
+            : <DiagHelp keys={infoPop.diagKeys} t={t} />}
         </ZlxInfoPop>
       )}
 
