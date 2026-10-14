@@ -92,9 +92,12 @@ export default function ProductCard({ product }) {
       <div className="card-media">
         {/* Sello 360°: la montura ya tiene las 4 vistas 3D generadas. */}
         {hasViews && (
-          <span className="card-badge-360" title={t("pdp.has3d")}>
+          <span className="card-badge-360 has-i3d" title={t("pdp.has3d")} aria-label="360°">
+            {/* Icono 3D navy de la lámina; respaldo: svg + texto. */}
+            <img className="i3d i3d-360" src="/ui/icons3d/navy-360.png" alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.remove("has-i3d"); e.currentTarget.remove(); }} />
             <Icon360 />
-            360°
+            <span className="b360-tx">360°</span>
           </span>
         )}
         {/* Única acción sobre la foto: favorito. Todo lo demás va debajo. */}
@@ -104,6 +107,9 @@ export default function ProductCard({ product }) {
             onClick={() => toggleFav({ slug: product.slug, name: product.name, price: product.price, image: color.image, brand: product.brand, variantId: color.variantId })}
             aria-label={t("a11y.fav")} title={t("a11y.fav")}
           >
+            {/* Corazón 3D de la lámina: blanco libre, navy marcado. */}
+            <img className="i3d i3d-heart" src={`/ui/icons3d/${fav ? "navy" : "white"}-heart.png`} alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
           {GenderIcon && (
@@ -114,6 +120,11 @@ export default function ProductCard({ product }) {
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setGenreTip((v) => !v); }}
               onMouseLeave={() => setGenreTip(false)}
             >
+              {(isKids || genderVal === "Hombres" || genderVal === "Señoras") && (
+                <img className="i3d i3d-genre"
+                     src={`/ui/icons3d/${isKids ? "navy-kid" : genderVal === "Hombres" ? "navy2-man" : "navy2-woman"}.png`}
+                     alt="" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+              )}
               <GenderIcon className="card-genre-ic" />
               <span className="card-genre-tip" role="tooltip">{genderLabel}</span>
             </button>
@@ -202,12 +213,10 @@ export default function ProductCard({ product }) {
         {TRY_ON_ENABLED && (
           <button type="button" className="card-tryon btn-glass" onClick={() => openTryOn(product)}
                   aria-label={t("card.tryOn")} title={t("card.tryOn")}>
-            {/* Botón de CRISTAL completo de la lámina del dueño (idioma activo):
-                la obra entera como imagen para conservar todo el detalle; hover
-                con elevación, contorno y sombra (ETAPA 110). Respaldo: cámara
-                dorada + texto sobre el botón navy clásico. */}
-            <img className="btn-glass-img" src={`/ui/btn-${lang}-tryon.png`} alt="" loading="lazy"
-                 onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+            {/* Cristal 9-slice del CSS (ETAPA 115): el fondo es la barra vacía
+                de la lámina estirada sin deformar los extremos, y el contenido
+                (cámara dorada + texto) es HTML vivo es/en — mismo tamaño SIEMPRE
+                y a todo el ancho de la tarjeta. */}
             <span className="btn-glass-fb">
               <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
                    onError={(e) => e.currentTarget.remove()} />
@@ -226,10 +235,6 @@ export default function ProductCard({ product }) {
             <>✓ {t("case.added")}</>
           ) : (
             <>
-              {/* Botón de CRISTAL claro de la lámina (idioma activo); respaldo:
-                  carrito navy + texto en el botón outline clásico. */}
-              <img className="btn-glass-img" src={`/ui/btn-${lang}-addcart.png`} alt="" loading="lazy"
-                   onError={(e) => { e.currentTarget.closest(".card-add-cart").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
               <span className="btn-glass-fb">
                 <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
                      onError={(e) => e.currentTarget.remove()} />

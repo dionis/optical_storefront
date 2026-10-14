@@ -112,8 +112,15 @@ export default function CatalogManager() {
       <div className="adm-head-row">
         <h3>{t("adm.cat.title")}</h3>
         <div className="adm-cat-tools">
-          <button className="btn-sm" disabled={busy === "export"} onClick={() => doExport("xls")}>⬇ {t("adm.cat.exportXls")}</button>
-          <button className="btn-sm" disabled={busy === "export"} onClick={() => doExport("csv")}>⬇ {t("adm.cat.exportCsv")}</button>
+          {/* Icono de descarga 3D navy de la lámina (respaldo: flecha unicode). */}
+          <button className="btn-sm adm-export" disabled={busy === "export"} onClick={() => doExport("xls")}>
+            <img className="i3d-dl" src="/ui/icons3d/navy-download.png" alt="" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+            <span className="adm-export-fb">⬇</span> {t("adm.cat.exportXls")}
+          </button>
+          <button className="btn-sm adm-export" disabled={busy === "export"} onClick={() => doExport("csv")}>
+            <img className="i3d-dl" src="/ui/icons3d/navy-download.png" alt="" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+            <span className="adm-export-fb">⬇</span> {t("adm.cat.exportCsv")}
+          </button>
         </div>
       </div>
       {demo && <p className="adm-sub">{t("adm.cat.demoNote")}</p>}

@@ -1324,12 +1324,16 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               <div className="ts2-rvtools">
                 <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}
                         title={t("cap.retake")} aria-label={t("cap.retake")}>
+                  <img className="i3d i3d-rv" src="/ui/icons3d/white-retry.png" alt=""
+                       onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
                   <span className="ts2-rvbtn-tx">{t("cap.retake")}</span>
                 </button>
                 <button type="button" className="ts2-rvbtn" onClick={() => inputRef.current?.click()}
                         title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
                         aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
+                  <img className="i3d i3d-rv" src="/ui/icons3d/white-upload.png" alt=""
+                       onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
                   <span className="ts2-rvbtn-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
                 </button>

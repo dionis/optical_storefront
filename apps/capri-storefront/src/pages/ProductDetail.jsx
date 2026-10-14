@@ -438,20 +438,27 @@ export default function ProductDetail() {
                    aria-expanded={frameEdu ? matHelp : undefined}
                    onClick={() => { if (frameEdu) setMatHelp((v) => !v); }}
                    onKeyDown={(e) => { if (frameEdu && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setMatHelp((v) => !v); } }}>
-                <IconMaterial className="pdp-fact-ic" />
+                <span className="i3d-wrap"><img className="i3d i3d-fact" src="/ui/icons3d/navy-layers.png" alt=""
+                      onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><IconMaterial className="pdp-fact-ic" /></span>
                 <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.material")}</span><b>{frameMaterials.map(tv).join(" · ")}</b></div>
                 {frameEdu && <span className="pdp-fact-help" aria-hidden="true">ⓘ</span>}
               </div>
             )}
             {measures && (
               <div className="pdp-fact">
-                <IconMeasures className="pdp-fact-ic" />
+                <span className="i3d-wrap"><img className="i3d i3d-fact" src="/ui/icons3d/navy-eyewidth.png" alt=""
+                      onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><IconMeasures className="pdp-fact-ic" /></span>
                 <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("pdp.metaMeasures")}</span><b>{measures}</b></div>
               </div>
             )}
             {genderLabel && (
               <div className="pdp-fact">
-                <GenderIcon className="pdp-fact-ic" />
+                <span className="i3d-wrap">{(() => {
+                  const a = product.attributes || {};
+                  const k = a.age === "Niños" ? "navy-kid" : a.gender === "Hombres" ? "navy2-man" : a.gender === "Señoras" ? "navy2-woman" : null;
+                  return k ? <img className="i3d i3d-fact" src={`/ui/icons3d/${k}.png`} alt=""
+                                  onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /> : null;
+                })()}<GenderIcon className="pdp-fact-ic" /></span>
                 <div className="pdp-fact-tx"><span className="pdp-fact-k">{t("spec.gender")}</span><b>{genderLabel}</b></div>
               </div>
             )}
@@ -510,10 +517,8 @@ export default function ProductDetail() {
             {TRY_ON_ENABLED && (
               <button type="button" className="btn btn-primary big pdp-cta btn-glass" onClick={() => setTryOnSlug(slug)}
                       aria-label={t("tryon.cta")} title={t("tryon.cta")}>
-                {/* Botón de CRISTAL completo de la lámina (idioma activo), con
-                    hover de elevación+contorno+sombra; respaldo clásico. */}
-                <img className="btn-glass-img" src={`/ui/btn-${lang}-tryon.png`} alt="" loading="lazy"
-                     onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+                {/* Cristal 9-slice (ETAPA 115): barra vacía de la lámina como
+                    fondo sin deformar; contenido vivo es/en encima. */}
                 <span className="btn-glass-fb">
                   <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
                        onError={(e) => e.currentTarget.remove()} />
@@ -525,8 +530,6 @@ export default function ProductDetail() {
                     disabled={!color?.variantId}
                     aria-label={t("card.addToCart")} title={t("card.addToCart")}
                     onClick={() => addFrame(color?.variantId)}>
-              <img className="btn-glass-img" src={`/ui/btn-${lang}-addcart.png`} alt="" loading="lazy"
-                   onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
               <span className="btn-glass-fb">
                 <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
                      onError={(e) => e.currentTarget.remove()} />

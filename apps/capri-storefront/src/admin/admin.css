@@ -466,3 +466,8 @@
 .ord-row, .adm-cat-row { transition: background .2s; }
 .ord-row:hover, .adm-cat-row:hover { background: #f2f5fa; }
 @media (prefers-reduced-motion: reduce) { .adm-login-card { animation: none; } }
+
+/* Iconos 3D en los botones de export (lámina del dueño); respaldo unicode. */
+.adm-export { display: inline-flex; align-items: center; gap: 6px; }
+.adm-export .i3d-dl { height: 15px; width: auto; }
+.adm-export:not(.no-i3d) .adm-export-fb { display: none; }

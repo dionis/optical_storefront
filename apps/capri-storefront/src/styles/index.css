@@ -7961,3 +7961,116 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
 .pdp-cta.btn-outline.btn-glass .btn-glass-img { height: 42px; }
 @media (max-width: 760px) { .pdp-cta.btn-glass .btn-glass-img { height: 42px; }
   .pdp-cta.btn-outline.btn-glass .btn-glass-img { height: 38px; } }
+
+/* ═══ ETAPA 115 — Botonería de cristal 9-SLICE + iconografía 3D ═══════════
+   Dónde se usa: ProductCard, CaseCard (botón que faltaba) y PDP.
+   ANTES los botones eran la obra con texto estirada: tamaños desiguales y
+   deformación al ancho de la tarjeta. AHORA el fondo es la BARRA VACÍA de la
+   lámina en border-image 9-slice — los extremos redondeados se dibujan a
+   escala fija y solo se estira el tramo central, así el botón va a TODO el
+   ancho, siempre del MISMO tamaño y sin deformar nada. El contenido (icono +
+   texto) es HTML vivo: nítido y en el idioma activo. */
+.card-tryon.btn-glass, .card-add-cart.btn-glass, .pdp-cta.btn-glass {
+  display: block; width: 100%; position: relative;
+  background: none !important; padding: 0 !important; box-shadow: none !important;
+  border-radius: 0; height: 48px;
+  border: 17px solid transparent;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch;
+  transition: transform var(--dur-1) var(--ease), filter var(--dur-2) var(--ease);
+}
+.card-add-cart.btn-glass {
+  border-image-source: url("/ui/glass/bar-white-gold.png");
+}
+.pdp-cta.btn-glass { height: 54px; border-width: 19px; }
+.pdp-cta.btn-outline.btn-glass { border-image-source: url("/ui/glass/bar-white-gold.png"); }
+/* El contenido cubre TODO el botón (bordes incluidos), centrado. */
+.btn-glass .btn-glass-fb {
+  position: absolute; inset: -17px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 800; font-size: 13.5px; letter-spacing: .05em; text-transform: uppercase;
+  white-space: nowrap; pointer-events: none;
+}
+.pdp-cta.btn-glass .btn-glass-fb { inset: -19px; font-size: 14.5px; }
+.card-tryon.btn-glass .btn-glass-fb,
+.pdp-cta.btn-primary.btn-glass .btn-glass-fb { color: #f3e3b3; text-shadow: 0 1px 2px rgba(0, 0, 0, .40); }
+.card-add-cart.btn-glass .btn-glass-fb,
+.pdp-cta.btn-outline.btn-glass .btn-glass-fb { color: #0b2f66; text-shadow: 0 1px 0 rgba(255, 255, 255, .5); }
+.btn-glass .btn-glass-fb .ic-raster { height: 18px; }
+/* El arte con texto de la etapa anterior ya no se usa aquí. */
+.btn-glass .btn-glass-img { display: none; }
+.btn-glass:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.07) drop-shadow(0 12px 22px rgba(1, 50, 107, .35)); }
+.btn-glass:active:not(:disabled) { transform: translateY(0) scale(.99); }
+.btn-glass:disabled { filter: grayscale(.45) opacity(.55); }
+.btn-glass:focus-visible { outline: 3px solid rgba(26, 75, 150, .55); outline-offset: 3px; }
+
+/* ── Iconografía 3D de la lámina (public/ui/icons3d) ──────────────────────
+   Dónde se usa: badge 360° y género + corazón de favorito (ProductCard),
+   ficha técnica del PDP (material/género), botones Repetir/Subir del
+   probador. Cada img lleva su SVG de línea como respaldo (clase no-i3d). */
+.i3d { width: auto; object-fit: contain; display: block; }
+.i3d-360 { height: 17px; }
+.i3d-heart { height: 18px; }
+.i3d-genre { height: 16px; }
+.i3d-fact { height: 24px; }
+.i3d-rv { height: 16px; }
+/* con icono 3D presente, el svg de línea (y el texto del badge 360) se ocultan */
+.card-badge-360.has-i3d svg, .card-badge-360.has-i3d .b360-tx { display: none; }
+.card-badge-360.has-i3d { background: #fff; border: 1px solid var(--line); color: var(--blue); padding: 4px 8px; }
+.card-ic-fav:not(.no-i3d) .card-fav-ic { display: none; }
+.card-genre:not(.no-i3d) .card-genre-ic { display: none; }
+.card-genre.no-i3d .i3d-genre { display: none; }
+.i3d-wrap { display: inline-flex; align-items: center; }
+.i3d-wrap:not(.no-i3d) .pdp-fact-ic { display: none; }
+.ts2-rvbtn:not(.no-i3d) svg { display: none; }
+
+@media (max-width: 760px) {
+  .card-tryon.btn-glass, .card-add-cart.btn-glass { height: 42px; border-width: 15px; }
+  .btn-glass .btn-glass-fb { inset: -15px; font-size: 12.5px; gap: 6px; }
+  .btn-glass .btn-glass-fb .ic-raster { height: 15px; }
+  .pdp-cta.btn-glass { height: 48px; border-width: 17px; }
+  .pdp-cta.btn-glass .btn-glass-fb { inset: -17px; font-size: 13.5px; }
+}
+
+/* ETAPA 115b — Precedencias: la 110 ponía border:none !important (el 9-slice
+   no pintaba y los botones colapsaban uno sobre otro), y `.card-media img`
+   width:100% agrandaba los iconos 3D. Se fija todo con la misma artillería. */
+.card-tryon.btn-glass, .card-add-cart.btn-glass, .pdp-cta.btn-glass {
+  border: 17px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+}
+.card-add-cart.btn-glass,
+.pdp-cta.btn-outline.btn-glass {
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+}
+.pdp-cta.btn-glass { border-width: 19px !important; }
+@media (max-width: 760px) {
+  .card-tryon.btn-glass, .card-add-cart.btn-glass { border-width: 15px !important; }
+  .pdp-cta.btn-glass { border-width: 17px !important; }
+}
+/* Iconos 3D: tamaño propio SIEMPRE, pese a reglas genéricas de img. */
+img.i3d { width: auto !important; }
+img.i3d-360 { height: 17px !important; }
+img.i3d-heart { height: 18px !important; }
+img.i3d-genre { height: 16px !important; }
+img.i3d-fact { height: 24px !important; }
+img.i3d-rv { height: 16px !important; }
+
+/* ETAPA 115c — Contraste del texto navy sobre el cristal claro. */
+.card-add-cart.btn-glass .btn-glass-fb,
+.pdp-cta.btn-outline.btn-glass .btn-glass-fb {
+  color: #08264d; font-weight: 900; text-shadow: none;
+}
+.card-add-cart.btn-glass .btn-glass-fb .ic-raster,
+.pdp-cta.btn-outline.btn-glass .btn-glass-fb .ic-raster {
+  filter: contrast(1.15) saturate(1.1);
+}
+
+/* ETAPA 115d — tamaño de los iconos 3D de medida en sus sitios de uso. */
+img.i3d-measure { width: auto !important; object-fit: contain; }
+.spec-ic.i3d-measure, img.i3d-measure.spec-ic { height: 26px !important; }
+.ms-ic.i3d-measure, img.i3d-measure.ms-ic { height: 22px !important; }
+img.i3d-measure { max-height: 28px; }
+
+/* ETAPA 115e — toggle grid/lista del catálogo con iconos 3D de la lámina. */
+img.i3d-view { height: 17px !important; width: auto !important; }
+.fb-vbtn:not(.no-i3d) .fb-ic { display: none; }

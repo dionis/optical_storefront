@@ -238,10 +238,16 @@ export default function Catalog() {
           <div className="fb-view" role="group" aria-label={t("sort.title")}>
             <button type="button" className={`fb-vbtn ${view === "grid" ? "on" : ""}`}
                     onClick={() => setView("grid")} aria-label={t("view.grid")} title={t("view.grid")}>
+              {/* Icono 3D de la lámina: navy en reposo, blanco cuando el botón
+                  está activo (fondo navy); respaldo: svg de línea. */}
+              <img className="i3d i3d-view" src={`/ui/icons3d/${view === "grid" ? "white" : "navy"}-grid.png`} alt=""
+                   onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
               <IconGrid className="fb-ic" />
             </button>
             <button type="button" className={`fb-vbtn ${view === "list" ? "on" : ""}`}
                     onClick={() => setView("list")} aria-label={t("view.list")} title={t("view.list")}>
+              <img className="i3d i3d-view" src={`/ui/icons3d/${view === "list" ? "white" : "navy"}-list.png`} alt=""
+                   onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
               <IconList className="fb-ic" />
             </button>
           </div>

@@ -81,17 +81,20 @@ export default function CaseCard({ item }) {
 
         <button
           type="button"
-          className={`card-add-cart ${added ? "done" : ""}`}
+          className={`card-add-cart ${added ? "done" : "btn-glass"}`}
           disabled={busy || !color.variantId}
           onClick={add}
+          aria-label={t("card.addToCart")}
         >
+          {/* Mismo botón de cristal claro que las monturas (ETAPA 115). */}
           {added ? (
             <>✓ {t("case.added")}</>
           ) : (
-            <>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+            <span className="btn-glass-fb">
+              <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
               {t("card.addToCart")}
-            </>
+            </span>
           )}
         </button>
       </div>
