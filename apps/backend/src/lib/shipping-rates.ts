@@ -34,9 +34,10 @@ const CARRIERS: Array<Omit<CarrierQuote, "amount" | "free"> & { rate: number }> 
   {
     carrier: "fedex",
     label: "FedEx Home Delivery",
-    rate: num(process.env.SHIPPING_FEDEX_RATE, 9.95),
-    eta_min_days: 3,
-    eta_max_days: 5,
+    // Pedido del dueño (14-oct-2026): $30 de envío con 4 días de demora.
+    rate: num(process.env.SHIPPING_FEDEX_RATE, 30),
+    eta_min_days: num(process.env.SHIPPING_FEDEX_ETA_DAYS, 4),
+    eta_max_days: num(process.env.SHIPPING_FEDEX_ETA_DAYS, 4),
   },
   {
     carrier: "dhl",
