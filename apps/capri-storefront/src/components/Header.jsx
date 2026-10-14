@@ -68,7 +68,7 @@ export default function Header() {
           <img src="/logo-oficial.png" alt="RUBI LENS" className="logo-img" />
           {/* Versión móvil (sobre la barra azul): icono + texto en blanco. */}
           <span className="logo-mobile" aria-hidden="true">
-            <img src="/logo-oficial.png" alt="RUBI LENS" className="logo-mobile-img" />
+            <img src="/logo-oficial-mark.png" alt="RUBI LENS" className="logo-mobile-img" />
           </span>
         </Link>
 

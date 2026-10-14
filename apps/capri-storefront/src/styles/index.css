@@ -8240,3 +8240,58 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-badge-360 .i3d-360 { height: 13px; }
   .pdp .pdp-360 img { height: 22px; }
 }
+
+/* ETAPA 118c — Ajustes responsive (pedido del cliente):
+   1) Logo móvil: la MARCA oficial completa (gafas con estrella) dentro de la
+      placa blanca, sin recorte lateral — la versión anterior recortaba el
+      lockup y se veía mal.
+   2) Si el espejuelo tiene descuento, el sello 360° se quita en móvil: el
+      % de rebaja ocupa esa zona y se pisaban. */
+@media (max-width: 860px) {
+  .header-main .logo-mobile {
+    width: auto; max-width: 76px; height: 36px; padding: 3px 7px;
+    overflow: visible; justify-content: center;
+  }
+  .header-main .logo-mobile .logo-mobile-img {
+    height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: center;
+  }
+  .card.has-sale .card-badge-360 { display: none; }
+}
+
+/* ETAPA 118d — Filtros y Ordenar de CRISTAL (pedido del cliente): la píldora
+   blanca con borde dorado de la lámina en 9-slice (extremos a escala fija,
+   solo se estira el centro), texto e icono vivos encima. Dónde se usa: la
+   barra del catálogo (web y móvil). Activo (filtros con conteo): navy/oro. */
+.fb-pill {
+  position: relative; background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/pill-white-gold.png") 40 fill stretch !important;
+  border-radius: 0; height: 44px; color: #0b2f66; font-weight: 800;
+}
+.fb-pill .fb-ic { color: #0b2f66; }
+.fb-pill.act {
+  border-image-source: url("/ui/glass/pill-navy-gold.png") !important;
+  color: #f3e3b3; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.fb-pill.act .fb-ic { color: #f3e3b3; }
+.fb-pill:hover { filter: brightness(1.05) drop-shadow(0 9px 14px rgba(8, 30, 84, .32)); }
+.fb-caret { border-top-color: currentColor; }
+@media (max-width: 860px) {
+  .fb-pill { height: 40px; border-width: 13px !important; font-size: 13px; }
+}
+
+/* ETAPA 118e — Catálogo responsive, remate (pedido del cliente):
+   el favorito marcado pinta ROJO (corazón 3D rojo + respaldo svg en rojo) y
+   los iconos circulares sobre la foto se reducen un poco más en móvil. */
+.card-ic-fav.on { color: var(--red, #d6123e); }
+@media (max-width: 860px) {
+  .card-actions { gap: 5px; }
+  .card-ic { width: 25px; height: 25px; }
+  .card-ic .i3d-heart { height: 11px; }
+  .card-ic svg, .card-ic .card-fav-ic { width: 12px; height: 12px; }
+  .card-genre { width: 24px !important; height: 24px !important; }
+  .card-genre .i3d-genre { height: 10px; }
+  .card-genre-ic { width: 13px !important; height: 13px !important; }
+  .card-badge-360 { padding: 2px 6px; }
+  .card-badge-360 .i3d-360 { height: 11px; }
+}

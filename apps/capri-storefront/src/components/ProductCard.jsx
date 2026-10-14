@@ -88,7 +88,7 @@ export default function ProductCard({ product }) {
   const pickColor = (e, i) => { e.preventDefault(); e.stopPropagation(); setActive(i); };
 
   return (
-    <div className="card">
+    <div className={`card ${hasSale ? "has-sale" : ""}`}>
       <div className="card-media">
         {/* Sello 360°: la montura ya tiene las 4 vistas 3D generadas. */}
         {hasViews && (
@@ -108,7 +108,8 @@ export default function ProductCard({ product }) {
             aria-label={t("a11y.fav")} title={t("a11y.fav")}
           >
             {/* Corazón 3D de la lámina: blanco libre, navy marcado. */}
-            <img className="i3d i3d-heart" src={`/ui/icons3d/${fav ? "navy" : "white"}-heart.png`} alt=""
+            {/* Corazón 3D: blanco libre, ROJO al marcar (pedido del cliente). */}
+            <img className="i3d i3d-heart" src={`/ui/icons3d/${fav ? "red" : "white"}-heart.png`} alt=""
                  onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <IconHeart className="card-fav-ic" filled={fav} />
           </button>
