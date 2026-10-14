@@ -69,7 +69,12 @@ export default function AdminPage() {
   return (
     <div className="adm-shell">
       <header className="adm-topbar">
-        <div className="adm-brand"><img src="/logo.svg" alt="RUBI LENS" /><span>{t("adm.title")}</span></div>
+        <div className="adm-brand">
+          <img src="/logo.svg" alt="RUBI LENS" />
+          <span>{t("adm.title")}</span>
+          {/* Sello que DIFERENCIA el panel de la tienda al primer vistazo. */}
+          <em className="adm-badge">ADMIN</em>
+        </div>
         <div className="adm-user">
           <Link to="/" className="adm-link">{t("adm.viewStore")}</Link>
           <span className="adm-who">👤 {session.user}</span>

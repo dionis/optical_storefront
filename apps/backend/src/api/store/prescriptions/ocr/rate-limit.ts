@@ -1,4 +1,5 @@
 import { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { clientIp } from "../../../../lib/client-ip";
 
 /**
  * Rate limit for the public OCR endpoint.
@@ -34,12 +35,7 @@ function sweep(now: number): void {
 let lastSweep = 0;
 
 function clientKey(req: MedusaRequest): string {
-  // Behind Coolify's proxy the socket address is the proxy, so prefer the
-  // forwarded chain's first entry (the original client).
-  const forwarded = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (raw) return raw.split(",")[0].trim();
-  return req.ip || req.socket.remoteAddress || "unknown";
+  return clientIp(req);
 }
 
 export function ocrRateLimit(

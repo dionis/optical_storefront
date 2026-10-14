@@ -156,6 +156,31 @@ const fileProviders = hasR2Credentials
       },
     ];
 
+// ── Guardia de secretos en producción ────────────────────────────────────────
+// Con el JWT/cookie secret en su valor por defecto se pueden FORJAR sesiones de
+// administrador. En producción: si falta o vale el default se grita un banner
+// CRITICAL en el arranque; con SECURITY_STRICT=1 el proceso directamente no
+// arranca (opt-in para no tumbar un despliegue existente sin aviso).
+if (process.env.NODE_ENV === "production") {
+  const weak: string[] = [];
+  for (const name of ["JWT_SECRET", "COOKIE_SECRET", "ORDER_ACCESS_SECRET"]) {
+    const v = (process.env[name] || "").trim();
+    if (!v || v === "change-me-in-production" || v.length < 16) weak.push(name);
+  }
+  if (!process.env.R2_PRESCRIPTION_BUCKET) weak.push("R2_PRESCRIPTION_BUCKET");
+  if (!process.env.VISION_INTERNAL_SECRET) weak.push("VISION_INTERNAL_SECRET");
+  if (weak.length) {
+    const banner = `[SECURITY] CRITICAL: weak or missing in production: ${weak.join(", ")}. ` +
+      `Admin JWTs can be forged / health data may be exposed until these are set.`;
+    console.error("=".repeat(100));
+    console.error(banner);
+    console.error("=".repeat(100));
+    if (process.env.SECURITY_STRICT === "1") {
+      throw new Error(banner);
+    }
+  }
+}
+
 export default defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,

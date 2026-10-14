@@ -105,16 +105,19 @@ export async function fetchOrders({
  * note, fulfillment, shipment, delivery) and answers with the re-read order, so
  * the caller repaints from the truth rather than from what it hoped happened.
  */
-export async function setOrderStage(id, stage, { trackingNumber = "", noNotification = false } = {}) {
+export async function setOrderStage(id, stage, { trackingNumber = "", trackingUrl = "", noNotification = false } = {}) {
   const data = await adminFetch(`/admin/order-board/${encodeURIComponent(id)}/stage`, {
     method: "POST",
     body: {
       stage,
       tracking_number: trackingNumber || undefined,
+      tracking_url: trackingUrl || undefined,
       no_notification: noNotification || undefined,
     },
   });
-  return data?.order ?? null;
+  // `notified` dice si el email al cliente salió: el panel lo muestra como
+  // confirmación de que el aviso automático del cambio de etapa se envió.
+  return data?.order ? { ...data.order, __notified: data.notified === true } : null;
 }
 
 /**

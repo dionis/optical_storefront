@@ -95,6 +95,27 @@ export async function POST(
     { usage_type: body.usage_type, eye_size: body.eye_size }
   );
 
+  // Una receta NO FABRICABLE no se guarda: antes `validation` se calculaba y
+  // se insertaba igual, así que el laboratorio podía recibir valores que la
+  // propia validación declara imposibles de tallar.
+  if (validation && validation.fulfillable === false) {
+    res.status(422).json({
+      error_code: "invalid_prescription",
+      error: "The prescription failed validation and was not stored.",
+      validation,
+    });
+    return;
+  }
+
+  // `file_url` lo escribe el OCR de ESTA tienda como una CLAVE de objeto del
+  // bucket privado ("rx/<uuid>.<ext>", ver ocr/route.ts). Aceptar aquí
+  // cualquier cadena del cliente permitía presignar después un objeto
+  // arbitrario del bucket. Solo se admite esa forma; lo demás se descarta.
+  const safeFileKey =
+    typeof rx.file_url === "string" && /^rx\/[A-Za-z0-9._-]{1,200}$/.test(rx.file_url)
+      ? rx.file_url
+      : null;
+
   const num = (v: unknown): number | null =>
     v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
 
@@ -116,7 +137,7 @@ export async function POST(
       seg_height: num(rx.seg_height),
       source,
       verified_by_user: verifiedByUser,
-      file_url: rx.file_url ?? null,
+      file_url: safeFileKey,
       tryon_image_url: tryonImageKey,
       // Para quién son (elegido en el probador). Solo se guarda el nombre cuando es
       // "other"; se recorta a 120 caracteres.

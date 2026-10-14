@@ -1,4 +1,5 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import type { Logger } from "@medusajs/framework/types";
 import {
   ContainerRegistrationKeys,
   QueryContext,
@@ -121,6 +122,14 @@ export async function POST(
   // customer's line, or guessing a price for it, is worse than flagging it.
   const stale: Array<{ item_id: string; title: string | null }> = [];
 
+  // Todo el repricing va en try/catch: en producción este endpoint corría en
+  // paralelo con otros workflows del MISMO carrito (añadir línea, refresh del
+  // panel) y el control de versiones de Medusa tumbaba la petición con un 500.
+  // Un revalidate que no pudo correr NO es un error del cliente: se responde
+  // el carrito tal cual con `degraded: true` y se reintentará en la próxima
+  // entrada al checkout.
+  let degraded = false;
+  try {
   if (!locked) {
     const settings = await resolveStoreSettings(req.scope);
 
@@ -216,6 +225,11 @@ export async function POST(
       input: { cart_id, force_refresh: true },
     });
   }
+  } catch (error) {
+    degraded = true;
+    const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+    logger.warn(`[revalidate] cart ${cart_id} reprice skipped: ${(error as Error).message}`);
+  }
 
   const { data: updated } = await query.graph({
     entity: "cart",
@@ -228,5 +242,6 @@ export async function POST(
     repriced,
     stale,
     locked,
+    degraded,
   });
 }

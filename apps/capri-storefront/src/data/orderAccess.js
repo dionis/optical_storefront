@@ -36,6 +36,21 @@ function setSession(session) {
   }
 }
 
+/**
+ * Adopta una sesión de seguimiento emitida por el backend fuera del enlace
+ * mágico — hoy, el login con contraseña (/store/account/login|register), que
+ * devuelve exactamente el mismo token. Guardarla aquí enciende a la vez
+ * /my-orders y las pestañas reales de "Mi cuenta".
+ */
+export function adoptSession({ token, email, expires_in }) {
+  if (!token) return;
+  setSession({
+    token,
+    email: email || null,
+    expires_at: expires_in ? Date.now() + Number(expires_in) : null,
+  });
+}
+
 export function clearSession() {
   try {
     localStorage.removeItem(KEY);

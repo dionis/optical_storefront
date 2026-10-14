@@ -46,8 +46,8 @@
     <tr><td>Probador virtual (cámara + medidas IA)</td><td><span class="tag ok">Funcional</span></td><td>Entrada con elección cámara / subir fotos; imagen generada; medidas DIP/altura</td></tr>
     <tr><td>Flujo receta → material → tratamiento → resumen</td><td><span class="tag ok">Funcional</span></td><td>Popups delante con fondo desenfocado; resumen 2 columnas; "Comprar solo el marco"</td></tr>
     <tr><td>Checkout + entrega (teléfono, email, dirección)</td><td><span class="tag ok">Funcional</span></td><td><code>MedusaCheckout.jsx</code>: Stripe, datos del paciente, confirmaciones email/SMS</td></tr>
-    <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Datos reales</span></td><td>Pedidos (gestión de etapas), Resumen/Ventas/Precios con pedidos reales del order board</td></tr>
-    <tr><td>Seguimiento de pedidos del cliente</td><td><span class="tag ok">Funcional</span></td><td><code>/my-orders</code> con enlace mágico por email; cancelación con política de plazos</td></tr>
+    <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Completo</span></td><td>Dashboard EJECUTIVO (KPIs, alertas, pipeline), Pedidos (etapas + tracking con URL + email automático al cliente), catálogo (precios, descontinuar monturas/marcas, exportar a Excel/CSV), identidad propia navy/ADMIN</td></tr>
+    <tr><td>Cuentas y seguimiento del cliente</td><td><span class="tag ok">Funcional</span></td><td>Cuentas con email+contraseña (auth de Medusa) que abren TODOS los pedidos de ese correo; enlace mágico como acceso sin contraseña; cancelación con política de plazos</td></tr>
   </table>
 </section>
 
@@ -58,7 +58,9 @@
     <tr><td><code>ef459a2</code></td><td><b>"Comprar solo el marco"</b> en el resultado del probador → directo al resumen del pedido (solo montura). Fix StrictMode: el resumen ya no se resetea a "pick" al llegar.</td></tr>
     <tr><td><code>17cb862</code></td><td><b>Resumen final</b>: derecha = ficha del espejuelo (encabezado navy) + "Resumen del pedido" con el mismo estilo; izquierda = imagen IA reducida + pasos + compra, todo en una vista. <b>Fix compra</b>: confirmar la receta marca la lectura OCR como confirmada (el botón "Comprar ahora" se habilita). <b>Entrada del probador</b>: emergente con fondo desenfocado para elegir "Tomar con cámara" o "Subir mis fotos" (cámara congelada en modo subir).</td></tr>
     <tr><td><code>1243048</code> + <code>b9dbace</code></td><td><b>Panel admin con datos reales</b>: Resumen/Ventas/Precios se alimentan del order board de Medusa (capa <code>realAnalytics.js</code>: ventana de escaneo con caché, mapeo pedido→analítica, marca/tipo vía catálogo). Demo solo con login demo. Nota de fuente y aviso de ventana (300 pedidos). <b>Responsive</b>: chips de especificaciones de la receta ya no se montan en móvil; contador de reseñas oculto en pantallas estrechas.</td></tr>
-  </table>
+    <tr><td><code>97738fb</code>…</td><td><b>Sistema visual unificado</b> (un navy, un rojo, 2 fuentes, ventanas estándar), catálogo incremental, contexts memoizados, logos −85%, precio tachado real, auditoría senior completa (front+back) y prueba E2E con Stripe test (pedido #37).</td></tr>
+  <tr><td><i>madrugada</i></td><td><b>Admin profesional + cuentas</b>: dashboard Ejecutivo con alertas y pipeline; email automático al cliente en CADA cambio de etapa con URL de tracking; gestión de catálogo (precios reales vía Admin API, descontinuar montura/marca, export Excel/CSV); cuentas cliente con contraseña; seguridad backend: relay de notificaciones cerrado (fail-closed + timingSafeEqual), cuotas por IP real en todos los límites, proxy IA con cuota, bucket de recetas fail-closed, PayPal/Square bloqueados, revalidate sin 500, recetas inválidas rechazadas y file_url saneado.</td></tr>
+</table>
   <h3>Verificación realizada</h3>
   <ul>
     <li>Playwright (Chromium cloud): probador → elección de entrada (cámara nunca arranca en modo subir: <code>getUserMedia</code> sin llamadas), flujo receta completo hasta el resumen con compra habilitada, "comprar solo el marco" → resumen.</li>

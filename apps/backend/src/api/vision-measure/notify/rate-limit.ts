@@ -1,4 +1,5 @@
 import { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { clientIp } from "../../../lib/client-ip";
 
 /**
  * Rate limit for POST /vision-measure/notify.
@@ -31,10 +32,7 @@ function sweep(now: number): void {
 let lastSweep = 0;
 
 function clientKey(req: MedusaRequest): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (raw) return raw.split(",")[0].trim();
-  return req.ip || req.socket.remoteAddress || "unknown";
+  return clientIp(req);
 }
 
 export function visionNotifyRateLimit(

@@ -1,6 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import type { Logger } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import {
   createOrderFulfillmentWorkflow,
   createOrderShipmentWorkflow,
@@ -9,6 +9,8 @@ import {
 } from "@medusajs/medusa/core-flows";
 import { ORDER_STAGES, type OrderStage } from "../../../../../lib/order-status";
 import { fetchBoardOrder, isOrderStage, liveFulfillments } from "../../../../../lib/order-board";
+import { resolveEmailLocale } from "../../../../../lib/email/copy";
+import { renderOrderStageUpdate } from "../../../../../lib/email/order-stage-update";
 
 /**
  * POST /admin/order-board/:id/stage — move an order to the next stage.
@@ -37,8 +39,23 @@ interface StageBody {
   stage?: string;
   /** Courier reference, recorded when moving to `in_transit`. */
   tracking_number?: string;
+  /** Courier tracking PAGE (https URL) — goes in the customer email button. */
+  tracking_url?: string;
   /** Skip the customer email/SMS for this transition. */
   no_notification?: boolean;
+}
+
+/** Only an http(s) URL may travel to the customer as a tracking link. */
+function sanitizeTrackingUrl(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+  } catch {
+    /* not a URL */
+  }
+  return "";
 }
 
 /**
@@ -92,6 +109,7 @@ export async function POST(
   const target = body.stage;
   const noNotification = body.no_notification === true;
   const tracking = String(body.tracking_number ?? "").trim();
+  const trackingUrl = sanitizeTrackingUrl(body.tracking_url);
 
   if (!isOrderStage(target)) {
     fail(res, 400, "unknown_stage", `Unknown stage '${target}'. Allowed: ${ORDER_STAGES.join(", ")}.`);
@@ -137,7 +155,7 @@ export async function POST(
         break;
 
       case "in_transit":
-        await createShipment(req, before, actorId, noNotification, tracking);
+        await createShipment(req, before, actorId, noNotification, tracking, trackingUrl);
         break;
 
       case "delivered":
@@ -184,7 +202,74 @@ export async function POST(
     })
   );
 
-  res.status(200).json({ order: after });
+  // CUSTOMER EMAIL on every recorded stage change (unless the owner unticked
+  // "notify"). Sent AFTER the transition committed — a notification for a move
+  // that then failed would be worse than none — and never allowed to fail the
+  // request: the stage change already happened; an email hiccup is a log line.
+  let notified = false;
+  if (!noNotification && after && before.stage !== after.stage) {
+    notified = await sendStageEmail(req, logger, {
+      email: after.email ? String(after.email) : null,
+      displayId: after.display_id != null ? String(after.display_id) : orderId,
+      orderId,
+      stage: after.stage,
+      locale: (after as unknown as { locale?: string | null }).locale ?? null,
+      frameOnly: !after.items?.some((i) => i.lens && i.lens.design_code),
+      trackingNumber: tracking || after.tracking_number || null,
+      trackingUrl: trackingUrl || null,
+    });
+  }
+
+  res.status(200).json({ order: after, notified });
+}
+
+/** Composes and queues the stage-change email; true when it was handed to the
+ *  notification module. Any failure is logged and swallowed on purpose. */
+async function sendStageEmail(
+  req: AuthenticatedMedusaRequest<StageBody>,
+  logger: Logger,
+  input: {
+    email: string | null;
+    displayId: string | number;
+    orderId: string;
+    stage: OrderStage;
+    locale: string | null;
+    frameOnly: boolean;
+    trackingNumber: string | null;
+    trackingUrl: string | null;
+  }
+): Promise<boolean> {
+  if (!input.email) {
+    logger.warn(`[order-board] order ${input.orderId} has no email — stage notification skipped.`);
+    return false;
+  }
+  try {
+    const locale = resolveEmailLocale(input.locale);
+    const content = renderOrderStageUpdate(locale, {
+      displayId: input.displayId,
+      stage: input.stage,
+      frameOnly: input.frameOnly,
+      trackingNumber: input.trackingNumber,
+      trackingUrl: input.trackingUrl,
+    });
+    const notifications = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION);
+    await notifications.createNotifications({
+      to: input.email,
+      channel: "email",
+      template: "order-stage-update",
+      trigger_type: "order_board.stage_changed",
+      resource_id: input.orderId,
+      resource_type: "order",
+      content,
+      data: { order_id: input.orderId, stage: input.stage },
+    });
+    return true;
+  } catch (error) {
+    logger.error(
+      `[order-board] stage email for order ${input.orderId} failed: ${(error as Error).message}`
+    );
+    return false;
+  }
 }
 
 /**
@@ -259,7 +344,8 @@ async function createShipment(
   order: NonNullable<Awaited<ReturnType<typeof fetchBoardOrder>>>,
   actorId: string,
   noNotification: boolean,
-  tracking: string
+  tracking: string,
+  trackingUrl = ""
 ): Promise<void> {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
   const { data } = await query.graph({
@@ -295,22 +381,26 @@ async function createShipment(
       items: (pending.items ?? [])
         .filter((i) => i.line_item_id)
         .map((i) => ({ id: i.line_item_id as string, quantity: Number(i.quantity ?? 1) })),
-      // Medusa requires all three label fields; the owner only ever has the
-      // number, so the URLs go out empty exactly as its own admin sends them.
+      // Medusa requires all three label fields; the URL viaja cuando el dueño
+      // la puso (va también en el botón del email al cliente).
       labels: tracking
-        ? [{ tracking_number: tracking, tracking_url: "", label_url: "" }]
+        ? [{ tracking_number: tracking, tracking_url: trackingUrl || "", label_url: "" }]
         : [],
       no_notification: noNotification,
     },
   });
 
-  if (tracking) {
+  if (tracking || trackingUrl) {
     const current = (raw?.["metadata"] ?? {}) as Record<string, unknown>;
     await updateOrderWorkflow(req.scope).run({
       input: {
         id: order.id,
         user_id: actorId,
-        metadata: { ...current, tracking_number: tracking },
+        metadata: {
+          ...current,
+          ...(tracking ? { tracking_number: tracking } : {}),
+          ...(trackingUrl ? { tracking_url: trackingUrl } : {}),
+        },
       },
     });
   }

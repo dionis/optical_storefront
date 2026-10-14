@@ -36,11 +36,18 @@ export function createStorageClient(): S3Client {
  * the bucket differently, so deletions silently missed the stored object.
  */
 export function prescriptionBucket(): string {
-  return (
-    process.env.R2_PRESCRIPTION_BUCKET ??
-    process.env.R2_BUCKET ??
-    "eyewear-assets"
-  );
+  const dedicated = process.env.R2_PRESCRIPTION_BUCKET;
+  if (dedicated) return dedicated;
+  // FAIL CLOSED en producción: las recetas son datos de salud y el fallback al
+  // bucket PÚBLICO del catálogo las dejaba servidas a cualquiera que supiera
+  // la clave. En desarrollo (sin NODE_ENV=production) se mantiene el bucket
+  // único para que el setup local siga funcionando.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "R2_PRESCRIPTION_BUCKET is not configured. Refusing to store/serve health data from the public assets bucket."
+    );
+  }
+  return process.env.R2_BUCKET ?? "eyewear-assets";
 }
 
 /** True when the storage backend has everything it needs to be reachable. */

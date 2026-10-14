@@ -1,4 +1,5 @@
 import { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { clientIp } from "../../../lib/client-ip";
 
 /**
  * Rate limit for the unauthenticated order-access endpoints (magic-link request
@@ -32,14 +33,6 @@ function sweep(now: number): void {
 
 let lastSweep = 0;
 
-function clientIp(req: MedusaRequest): string {
-  // Behind Coolify's proxy the socket address is the proxy, so prefer the
-  // forwarded chain's first entry (the original client).
-  const forwarded = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (raw) return raw.split(",")[0].trim();
-  return req.ip || req.socket.remoteAddress || "unknown";
-}
 
 /** Keys this request is metered against: the caller, and the address targeted. */
 function keysFor(req: MedusaRequest): string[] {

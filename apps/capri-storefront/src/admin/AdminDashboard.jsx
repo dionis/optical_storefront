@@ -6,6 +6,8 @@ import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalyt
 // the demo login and the error fallback. See realAnalytics.js.
 import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
 import { isDemoLogin } from "./adminAuth.js";
+import Executive from "./Executive.jsx";
+import CatalogManager from "./CatalogManager.jsx";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
 // tabs still use. `money` is aliased because this file already has its own,
@@ -690,6 +692,7 @@ function StageControl({ order, busy, onMove }) {
   const { t } = useLang();
   const [asking, setAsking] = useState(null);
   const [tracking, setTracking] = useState("");
+  const [trackUrl, setTrackUrl] = useState("");
   const next = order.next_stages || [];
 
   if (!next.length) {
@@ -703,9 +706,10 @@ function StageControl({ order, busy, onMove }) {
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
-          onMove(asking, { trackingNumber: tracking.trim() });
+          onMove(asking, { trackingNumber: tracking.trim(), trackingUrl: trackUrl.trim() });
           setAsking(null);
           setTracking("");
+          setTrackUrl("");
         }}
       >
         <input
@@ -714,8 +718,16 @@ function StageControl({ order, busy, onMove }) {
           value={tracking}
           onChange={(e) => setTracking(e.target.value)}
         />
+        {/* URL de seguimiento del transportista: viaja en el botón del email
+            automático que recibe el cliente al pasar a "en camino". */}
+        <input
+          type="url"
+          placeholder={t("adm.ord.trackingUrlPh")}
+          value={trackUrl}
+          onChange={(e) => setTrackUrl(e.target.value)}
+        />
         <button className="btn-sm primary" disabled={busy}>{t("adm.ord.confirm")}</button>
-        <button type="button" className="btn-sm" onClick={() => { setAsking(null); setTracking(""); }}>{t("adm.ord.cancel")}</button>
+        <button type="button" className="btn-sm" onClick={() => { setAsking(null); setTracking(""); setTrackUrl(""); }}>{t("adm.ord.cancel")}</button>
       </form>
     );
   }
@@ -955,6 +967,8 @@ function Orders() {
           order: orderLabel(order),
           stage: reached ? t(reached.label) : target,
         }),
+        // El backend confirma si el email automático al cliente salió.
+        message: updated?.__notified ? t("adm.ord.notified") : undefined,
       });
       // Re-read the page rather than patching the row: a transition can change
       // the order's stage AND drop it out of the current filter, and only the
@@ -1124,11 +1138,11 @@ function Orders() {
   );
 }
 
-const TABS = ["overview", "sales", "orders", "products", "prices"];
+const TABS = ["exec", "overview", "sales", "orders", "products", "prices"];
 
 export default function AdminDashboard() {
   const { t } = useLang();
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("exec");
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
   // Demo seed ONLY for the demo login: a real store owner must never see
@@ -1146,10 +1160,16 @@ export default function AdminDashboard() {
           <input placeholder={t("adm.findPrice")} value={find} onChange={(e) => onFind(e.target.value)} />
         </div>
       </div>
+      {tab === "exec" && <Executive preset={preset} setPreset={setPreset} onGoOrders={() => setTab("orders")} />}
       {tab === "overview" && <Overview preset={preset} setPreset={setPreset} />}
       {tab === "sales" && <Sales preset={preset} setPreset={setPreset} />}
       {tab === "orders" && <Orders />}
-      {tab === "products" && <Products preset={preset} setPreset={setPreset} />}
+      {tab === "products" && (
+        <>
+          <div className="adm-section adm-section-top"><CatalogManager /></div>
+          <Products preset={preset} setPreset={setPreset} />
+        </>
+      )}
       {tab === "prices" && <Prices preQ={find} />}
     </div>
   );

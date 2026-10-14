@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
@@ -27,10 +28,19 @@ interface NotifyBody {
 
 function checkSharedSecret(req: MedusaRequest): boolean {
   const expected = (process.env.VISION_INTERNAL_SECRET || "").trim();
-  if (!expected) return true; // not configured: same "degrade, don't crash" contract as Resend/Twilio
+  // FAIL CLOSED: sin secreto configurado esta ruta era un relay abierto de
+  // email/WhatsApp con la identidad de la tienda (cualquiera en Internet podía
+  // mandar correos arbitrarios "desde" RUBI LENS). Sin secreto → 401 siempre;
+  // el .env.example lo documenta como OBLIGATORIO en producción.
+  if (!expected) return false;
   const header = req.headers["x-vision-internal-key"];
   const provided = Array.isArray(header) ? header[0] : header;
-  return provided === expected;
+  if (typeof provided !== "string" || !provided) return false;
+  // Comparación en tiempo constante: `===` filtra el secreto byte a byte.
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /** Twilio's WhatsApp channel is the SMS endpoint with a `whatsapp:` prefix on `to`. */

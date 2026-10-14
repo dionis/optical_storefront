@@ -7335,3 +7335,5 @@ button.card-genre {
   background: linear-gradient(180deg, #0b54b5, #022f63);
   border-color: #01326b;
 }
+/* Enlace de recuperación en el panel de acceso (el enlace mágico de pedidos). */
+.auth-forgot { display: block; text-align: center; margin-top: 10px; font-size: 13px; color: var(--blue); text-decoration: underline; }

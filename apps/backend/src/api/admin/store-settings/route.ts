@@ -124,6 +124,17 @@ export async function POST(
       `Unknown payment provider '${provider}'. Allowed: ${KNOWN_PAYMENT_PROVIDERS.join(", ")}.`
     );
   }
+  // PayPal y Square quedan BLOQUEADOS hasta corregir sus proveedores: hoy
+  // mandan los importes en la unidad equivocada (PayPal cobraría 1/100 del
+  // total; Square manda decimales donde esperan centavos), sin claves de
+  // idempotencia estables y con webhooks que fallan en abierto (auditoría
+  // 14-oct-2026, sección 4.3). Activarlos cobraría MAL a clientes reales.
+  if (provider && /paypal|square/i.test(provider)) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      `Payment provider '${provider}' is disabled: its integration sends wrong amount units and must be fixed before it can charge real customers. Use Stripe.`
+    );
+  }
 
   const svc = req.scope.resolve<StoreSettingsModuleService>(STORE_SETTINGS_MODULE);
   const existing = (await svc.listStoreSettings({

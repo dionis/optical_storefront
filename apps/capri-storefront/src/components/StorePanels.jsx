@@ -78,14 +78,23 @@ export function AuthPanel({ open, onClose }) {
   const user = useUser();
   const [mode, setMode] = useState("login"); // 'login' | 'register'
   const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setErr("");
-    const r = (mode === "login" ? login : register)(email, phone);
-    if (r.ok) { setEmail(""); setPhone(""); } else setErr(r.error || "Error");
+    setBusy(true);
+    const [firstName, ...rest] = name.trim().split(/\s+/);
+    const r = mode === "login"
+      ? await login(email, pass)
+      : await register(email, pass, { firstName: firstName || "", lastName: rest.join(" "), phone });
+    setBusy(false);
+    if (r.ok) { setEmail(""); setPass(""); setName(""); setPhone(""); } else setErr(r.error || "auth.err.generic");
   };
 
   return (
@@ -103,10 +112,20 @@ export function AuthPanel({ open, onClose }) {
             <button type="button" className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>{t("auth.login")}</button>
             <button type="button" className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>{t("auth.register")}</button>
           </div>
+          {mode === "register" && (
+            <label>{t("auth.name")}<input value={name} placeholder={t("auth.namePh")} autoComplete="name" onChange={(e) => setName(e.target.value)} /></label>
+          )}
           <label>{t("auth.email")}<input type="email" value={email} placeholder={t("auth.emailPh")} autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
-          <label>{t("auth.phone")}<input type="tel" value={phone} placeholder="+1 281 555 0100" autoComplete="tel" onChange={(e) => setPhone(e.target.value)} /></label>
-          {err && <div className="auth-err">{err}</div>}
-          <button className="btn btn-primary big" type="submit">{mode === "login" ? t("auth.login") : t("auth.register")}</button>
+          <label>{t("auth.pass")}<input type="password" value={pass} placeholder={mode === "register" ? t("auth.passPh") : "••••••••"} autoComplete={mode === "login" ? "current-password" : "new-password"} onChange={(e) => setPass(e.target.value)} /></label>
+          {mode === "register" && (
+            <label>{t("auth.phone")}<input type="tel" value={phone} placeholder="+1 281 555 0100" autoComplete="tel" onChange={(e) => setPhone(e.target.value)} /></label>
+          )}
+          {err && <div className="auth-err">{t(err)}</div>}
+          <button className="btn btn-primary big" type="submit" disabled={busy}>
+            {busy ? "…" : mode === "login" ? t("auth.login") : t("auth.register")}
+          </button>
+          {/* Recuperación sin contraseña: el enlace mágico de pedidos. */}
+          <Link to="/my-orders" className="auth-forgot" onClick={onClose}>{t("auth.forgot")}</Link>
           <p className="auth-note">{t("auth.note")}</p>
         </form>
       )}
