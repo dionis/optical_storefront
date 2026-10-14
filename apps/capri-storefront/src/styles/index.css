@@ -7886,3 +7886,21 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
   box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--blue), 0 20px 40px -14px rgba(1, 50, 107, .45);
 }
 @media (prefers-reduced-motion: reduce) { .brand-circle img { transition: none; } }
+
+/* ═══ ETAPA 113 — Botones de cristal: tamaño contenido en las tarjetas ═════
+   Dónde se usa: ProductCard (catálogo/portada/favoritos) y PDP. Los botones
+   imagen salían demasiado grandes y pegados uno sobre otro: ahora se acotan
+   por ALTURA (no por ancho), centrados, con aire vertical entre ambos. */
+.card .btn-glass .btn-glass-img { width: auto; max-width: 92%; height: 46px; }
+.card .card-add-cart.btn-glass .btn-glass-img { height: 42px; }
+.card .card-tryon.btn-glass { margin: 10px 0 2px; }
+.card .card-add-cart.btn-glass { margin: 4px 0 2px; }
+.card .card-tryon.btn-glass, .card .card-add-cart.btn-glass { height: auto; }
+/* PDP: un punto más grandes que en tarjeta, también acotados por altura. */
+.pdp-cta.btn-glass .btn-glass-img { width: auto; max-width: 94%; height: 54px; }
+.pdp-actions2 { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 760px) {
+  .card .btn-glass .btn-glass-img { height: 40px; }
+  .card .card-add-cart.btn-glass .btn-glass-img { height: 37px; }
+  .pdp-cta.btn-glass .btn-glass-img { height: 48px; }
+}
