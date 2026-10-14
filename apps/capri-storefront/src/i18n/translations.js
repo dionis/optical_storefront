@@ -1045,6 +1045,7 @@ export const T = {
     "footer.admin": "Panel corporativo",
     // Ventanas emergentes del pie (fi.*): cada enlace explicado en detalle.
     "fi.close": "Cerrar",
+    "resume.title": "Retoma donde lo dejaste", "resume.cta": "Continuar",
     "fi.choose.title": "Cómo elegir tu montura",
     "fi.choose.intro": "Elegir bien es cuestión de tres cosas: la forma de tu rostro, las medidas correctas y el uso que le vas a dar. Aquí te lo explicamos paso a paso.",
     "fi.choose.s1t": "Según la forma de tu rostro",
@@ -2374,6 +2375,7 @@ export const T = {
     "footer.admin": "Admin panel",
     // Footer pop-ups (fi.*): every link explained in detail.
     "fi.close": "Close",
+    "resume.title": "Pick up where you left off", "resume.cta": "Continue",
     "fi.choose.title": "How to choose your frame",
     "fi.choose.intro": "Choosing well comes down to three things: your face shape, the right measurements and how you will use them. Here it is, step by step.",
     "fi.choose.s1t": "By face shape",

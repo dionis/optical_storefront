@@ -1,7 +1,7 @@
 // Dónde se usa: /producto/:slug (PDP). Galería 360/color, ficha técnica, precio, CTAs (probador + carrito), pestañas de detalles/medidas/opiniones y recomendados.
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
 import { useCatalog, recommendedCases, matchProduct } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
@@ -9,6 +9,7 @@ import CaseCard from "../components/CaseCard.jsx";
 import Reviews from "../components/Reviews.jsx";
 // Probador: el switch elige la interfaz (prod / dev-respaldo / legacy). Ver TryOnSwitch.jsx.
 import TryOn from "../components/TryOnSwitch.jsx";
+import { openTryOn } from "../data/tryOnState.js";
 import { useCart } from "../components/CartContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -80,6 +81,17 @@ export default function ProductDetail() {
   const { slug } = useParams();
   const { products: PRODUCTS, productBySlug, loading } = useCatalog();
   const product = matchProduct(slug, productBySlug, PRODUCTS);
+  // Retomar el probador: la franja de "retoma donde lo dejaste" llega con
+  // ?tryon=1 y aquí se reabre el estudio sobre este producto (una sola vez).
+  const { search: _plSearch } = useLocation();
+  const _tryonReopened = useRef(false);
+  useEffect(() => {
+    if (_tryonReopened.current || !product) return;
+    if (new URLSearchParams(_plSearch).get("tryon") === "1") {
+      _tryonReopened.current = true;
+      openTryOn(product);
+    }
+  }, [_plSearch, product]);
   const [active, setActive] = useState(0);
   // Re-pinta cuando llega el manifiesto en vivo de medios generados (frameMediaLive.js).
   const mediaVersion = useFrameMediaVersion();

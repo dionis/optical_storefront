@@ -714,6 +714,13 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   // ¿Para quién son los espejuelos? "me" = para el propio cliente; "other" = referencia
   // para un familiar/amigo (con nombre opcional). Se guarda junto con la medición.
   // Caché de la app: "¿para quién son?" se recuerda entre sesiones.
+  // Punto de retorno global: con el probador abierto, "Retoma donde lo
+  // dejaste" vuelve a este producto y lo reabre (?tryon=1 en ProductDetail).
+  useEffect(() => {
+    if (!product?.slug) return;
+    saveCache("rl_resume", { type: "tryon", url: `/producto/${product.slug}?color=${colorIdx || 0}&tryon=1`, name: product.name, at: Date.now() });
+  }, [product?.slug, product?.name, colorIdx]);
+
   const [forWhom, setForWhom] = useState(() => loadCache("rl_whofor", "me"));    // "me" | "other"
   const [otherName, setOtherName] = useState(() => loadCache("rl_whofor_name", ""));
   useEffect(() => { saveCache("rl_whofor", forWhom); }, [forWhom]);

@@ -6,6 +6,7 @@ import { initSfx } from "./lib/sfx.js";
 import { checkBuildVersion } from "./lib/buildVersion.js";
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Header from "./components/Header.jsx";
+import ResumeBanner from "./components/ResumeBanner.jsx";
 import Footer from "./components/Footer.jsx";
 import BottomNav from "./components/BottomNav.jsx";
 import TrustStrip from "./components/TrustStrip.jsx";
@@ -70,6 +71,7 @@ export default function App() {
           <ScrollToTop />
           <Header />
           <main className="site-main">
+            <ResumeBanner />
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<Home />} />

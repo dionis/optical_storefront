@@ -57,6 +57,9 @@ export default function MedusaCheckout() {
   // Cómo recibir la confirmación del pedido (el envío real es del backend).
   const [notify, setNotify] = useState(() => loadCache("rl_checkout_notify", { email: true, sms: false }));
   useEffect(() => { saveCache("rl_checkout_form", f); }, [f]);
+  // Punto de retorno global; al completar el pedido se limpia.
+  useEffect(() => { saveCache("rl_resume", { type: "checkout", url: "/checkout", name: null, at: Date.now() }); }, []);
+  useEffect(() => { if (step === "done") { try { localStorage.removeItem("rl_resume"); } catch { /* nada */ } } }, [step]);
   useEffect(() => { saveCache("rl_checkout_notify", notify); }, [notify]);
   // ¿La dirección de facturación de la tarjeta es la misma del paciente? Si sí,
   // autorellenamos los datos de facturación de Stripe con los del paciente.

@@ -578,6 +578,12 @@ export default function LensProcess() {
   // recupera al volver (tipo de lente, material, tratamientos, receta escrita,
   // modo de DIP y para quién son). La foto de la receta no se re-sube: solo
   // quedan sus valores ya leídos. ──
+  // Punto de retorno global: si el cliente se va (llamada, atrás, cierre),
+  // la franja "Retoma donde lo dejaste" lo trae de vuelta A ESTE marco.
+  useEffect(() => {
+    saveCache("rl_resume", { type: "lens", url: `/recetas/${slug}?color=${colorIdx}`, name: product?.name || slug, at: Date.now() });
+  }, [slug, colorIdx, product?.name]);
+
   const lensCacheKey = `rl_lens_${slug}`;
   const cacheRestored = useRef(false);
   useEffect(() => {
