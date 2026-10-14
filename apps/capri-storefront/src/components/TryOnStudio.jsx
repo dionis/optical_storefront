@@ -1467,12 +1467,17 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         <span className="ts2-rvbadge"><IconCheck className="ts2-rvbadge-ic" /> {t("cap.ready")}</span>
         <div className="ts2-rvtools">
           <button type="button" className="ts2-rvbtn" onClick={() => retake(which)}>
+            {/* Icono 3D navy de la lámina (pastilla blanca); respaldo: svg. */}
+            <img className="i3d i3d-rv" src="/ui/icons3d/navy-retry.png" alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
             <span>{t("cap.retake")}</span>
           </button>
           <button type="button" className="ts2-rvbtn" onClick={() => inputRef.current?.click()}
                   title={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}
                   aria-label={t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}>
+            <img className="i3d i3d-rv" src="/ui/icons3d/navy-upload.png" alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
             <span className="ts2-rvbtn-tx">{t(which === "front" ? "tryon2.upFront" : "tryon2.upSide")}</span>
           </button>
@@ -1489,6 +1494,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           <div className="ts2-step-tt"><b>{t("tryon2.reviewTitle")}</b><span>{t("tryon2.reviewSub")}</span></div>
           <button type="button" className="ts2-step-up ts2-retake-all" onClick={retakeAll}
                   title={t("tryon2.retakeAll")} aria-label={t("tryon2.retakeAll")}>
+            <img className="i3d i3d-rv" src="/ui/icons3d/navy-retry.png" alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L2.5 9" /><path d="M2.5 3.5V9H8" /></svg>
             <span className="ts2-step-up-tx">{t("tryon2.retakeAll")}</span>
           </button>
@@ -1527,6 +1534,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             ) : (
               <div className="vm-go-wrap">
                 <button type="button" className="vm-go" onClick={doMeasure} disabled={!frontImg || !sideImg}>
+                  <img className="i3d i3d-go" src="/ui/icons3d/white-ruler.png" alt=""
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5 8.5 3 21 15.5 15.5 21z" /><path d="M8 8l1.5 1.5M11 5l2 2M14.5 8.5l1.5 1.5M6 11l2 2" /></svg>
                   {t("vm.calc")}
                 </button>
@@ -1634,11 +1643,29 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
                        onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />
                 : <div className="fs-photo-ph" aria-hidden="true">👓</div>}
               <div className="ts2-fr-badges">
+                {/* Iconos 3D de la lámina (capas = material; figura = género),
+                    con el svg de línea como respaldo. */}
                 {materialText && (
-                  <span className="ts2-fr-badge"><IconMaterial className="ts2-fr-badge-ic" />{materialText}</span>
+                  <span className="ts2-fr-badge">
+                    <img className="i3d i3d-frb" src="/ui/icons3d/navy-layers.png" alt=""
+                         onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+                    <IconMaterial className="ts2-fr-badge-ic" />{materialText}
+                  </span>
                 )}
                 {genderLabel && (
-                  <span className="ts2-fr-badge"><IconGender className="ts2-fr-badge-ic" />{genderLabel}</span>
+                  <span className="ts2-fr-badge">
+                    {(() => {
+                      const g = String(a.gender || "");
+                      const img = /ni.o|kid|child/i.test(g) ? "navy-kid"
+                        : /hombre|men|male/i.test(g) && !/women|mujer|se.ora/i.test(g) ? "navy2-man"
+                        : /se.ora|mujer|women|female/i.test(g) ? "navy2-woman" : null;
+                      return img ? (
+                        <img className="i3d i3d-frb" src={`/ui/icons3d/${img}.png`} alt=""
+                             onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+                      ) : null;
+                    })()}
+                    <IconGender className="ts2-fr-badge-ic" />{genderLabel}
+                  </span>
                 )}
               </div>
               {colors.length > 1 && (
@@ -1848,13 +1875,20 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
             <div className="ts2-entry-opts">
               <button type="button" className="ts2-entry-opt ts2-entry-cam" data-sfx="select"
                       onClick={() => setEntryMode("camera")}>
-                <span className="ts2-entry-ic"><IconCamera className="ts2-entry-ic-svg" /></span>
+                <span className="ts2-entry-ic">
+                  {/* Icono 3D de la lámina; respaldo: svg de línea. */}
+                  <img className="i3d i3d-entry" src="/ui/icons3d/navy-camera.png" alt=""
+                       onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+                  <IconCamera className="ts2-entry-ic-svg" />
+                </span>
                 <b>{t("vm.entry.cam")}</b>
                 <small>{t("vm.entry.camSub")}</small>
               </button>
               <button type="button" className="ts2-entry-opt ts2-entry-up" data-sfx="select"
                       onClick={() => { setEntryMode("upload"); finishGender(); }}>
                 <span className="ts2-entry-ic">
+                  <img className="i3d i3d-entry" src="/ui/icons3d/navy-upload.png" alt=""
+                       onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                   <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
                 </span>
                 <b>{t("vm.entry.up")}</b>
