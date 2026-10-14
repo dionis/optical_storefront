@@ -69,6 +69,22 @@ export async function checkBuildVersion(pathname) {
     // Re-check: the fetch was async and the shopper may have walked into
     // checkout while it was in flight.
     if (!safeToReload(window.location.pathname)) return;
+    // CORTACIRCUITOS (pantalla en blanco reportada por el dueño): tras un
+    // deploy el edge puede servir el HTML viejo cacheado junto al
+    // build-id.json nuevo. Recargar entonces no avanza de versión y la
+    // página entraba en bucle de recargas (blanco). Si ya intentamos
+    // recargar hacia ESTE build hace poco y seguimos en el viejo, nos
+    // quedamos funcionando con la versión actual y se reintenta más tarde.
+    const ATTEMPT_KEY = "oer_build_reload_attempt";
+    try {
+      const prev = JSON.parse(sessionStorage.getItem(ATTEMPT_KEY) || "null");
+      if (prev && prev.target === build_id && Date.now() - prev.at < 10 * 60 * 1000) return;
+      sessionStorage.setItem(ATTEMPT_KEY, JSON.stringify({ target: build_id, at: Date.now() }));
+    } catch {
+      // Sin sessionStorage no hay memoria entre recargas: mejor no recargar
+      // nunca a arriesgar el bucle.
+      return;
+    }
     reloading = true;
     window.location.reload();
   } catch {
