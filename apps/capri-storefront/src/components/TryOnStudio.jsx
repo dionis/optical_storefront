@@ -1,5 +1,6 @@
 // Dónde se usa: probador virtual con IA — se abre desde Probármelos (tarjetas y PDP). Captura frontal+lateral guiada (MediaPipe), medidas locales (opticalMeasure.js) y simulación: TODAS las fotos de la montura viajan a la IA con el rostro como verdad de base.
 import { useEffect, useRef, useState, useCallback } from "react";
+import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
@@ -1638,10 +1639,10 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return (
       <aside className="fs-card ts2-frame">
         <div className="fs-hd">
-          {/* Marca oficial en placa blanca (elemento reutilizable de la card);
-              respaldo: el svg de gafas de siempre. */}
+          {/* Favicon de LA MARCA DEL ESPEJUELO (Peachtree, Di Caprio…) en placa
+              blanca; si no hay medallón, cae a la marca RUBI y al svg. */}
           <span className="fs-hd-mark">
-            <img src="/logo-oficial-mark.png" alt="" aria-hidden="true"
+            <img src={brandByName(product.brand)?.logo || "/logo-oficial-mark.png"} alt="" aria-hidden="true"
                  onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
             <IconGlasses className="fs-hd-ic" />
           </span>
@@ -1654,6 +1655,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               medidas debajo. */}
           <div className="ts2-fr-main">
             <div className="fs-photo ts2-fr-photo">
+              {/* Marca de agua: logo PLANO de la marca del espejuelo, muy tenue. */}
+              {brandByName(product.brand)?.logoWide && (
+                <img className="fs-photo-wm" src={brandByName(product.brand).logoWide} alt="" aria-hidden="true"
+                     onError={(e) => e.currentTarget.remove()} />
+              )}
               {color?.image
                 ? <img src={color.image} referrerPolicy="no-referrer" style={{ cursor: "zoom-in" }}
                        alt={`${product.name} ${color?.name || ""}`}

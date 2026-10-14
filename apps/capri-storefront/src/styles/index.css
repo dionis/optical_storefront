@@ -8545,10 +8545,12 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
    foto de la ficha del espejuelo, detrás de la montura. */
 .fs-card.ts2-frame .fs-photo,
 .fs-card.ts2-frame .ts2-fr-photo { position: relative; }
-/* La foto de producto es un JPG con fondo blanco opaco que taparía un fondo:
-   la marca de agua va en un ::after POR ENCIMA (al 7% es imperceptible sobre
-   la montura y se funde con el blanco), sin robar clics. */
-.fs-card.ts2-frame .fs-photo::after {
-  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: url("/logo-watermark.png") center / 68% auto no-repeat;
+/* Marca de agua POR MARCA DEL ESPEJUELO (corrección del cliente): el logo
+   plano de la marca (Peachtree, Di Caprio…) como <img> al 7%, por encima del
+   JPG blanco de producto, centrado y sin robar clics. */
+.fs-photo-wm {
+  position: absolute !important; inset: 0 !important; margin: auto !important;
+  width: 68% !important; height: auto !important; max-height: 78% !important;
+  object-fit: contain !important; opacity: .07 !important;
+  pointer-events: none; z-index: 1; padding: 0 !important;
 }

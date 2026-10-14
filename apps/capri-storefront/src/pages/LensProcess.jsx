@@ -1,5 +1,6 @@
 // Dónde se usa: /recetas/:slug — flujo de lentes graduados (receta → tipo → material → tratamientos → resumen) en ventanas ZlxPop con fondo desenfocado.
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import Header from "../components/Header.jsx";
@@ -1107,9 +1108,9 @@ export default function LensProcess() {
   const frameSide = (
     <aside className="fs-card ts2-frame zlx-frameside">
       <div className="fs-hd">
-        {/* Marca oficial en placa blanca (mismo elemento que la card del probador). */}
+        {/* Favicon de LA MARCA DEL ESPEJUELO (misma card que el probador). */}
         <span className="fs-hd-mark">
-            <img src="/logo-oficial-mark.png" alt="" aria-hidden="true"
+            <img src={brandByName(product.brand)?.logo || "/logo-oficial-mark.png"} alt="" aria-hidden="true"
                  onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
             <IconGlassesFs className="fs-hd-ic" />
           </span>
@@ -1118,6 +1119,10 @@ export default function LensProcess() {
       <div className="ts2-fr ts2-fr-solo">
         <div className="ts2-fr-main">
           <div className="fs-photo ts2-fr-photo">
+            {brandByName(product.brand)?.logoWide && (
+              <img className="fs-photo-wm" src={brandByName(product.brand).logoWide} alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
+            )}
             {color?.image
               ? <img src={color.image} referrerPolicy="no-referrer" alt={`${product.name} ${color?.name || ""}`}
                      onError={(e) => { e.currentTarget.style.opacity = 0.15; }} />

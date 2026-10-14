@@ -20,3 +20,10 @@ export const BRANDS = [
 ];
 
 export const BRAND_BY_SLUG = Object.fromEntries(BRANDS.map((b) => [b.slug, b]));
+
+// Busca la marca por su NOMBRE visible ("Peachtree", "Di Caprio"…): lo que
+// llevan los productos en product.brand. Para sellos/marcas de agua por marca.
+export function brandByName(name) {
+  const n = String(name || "").trim().toLowerCase();
+  return BRANDS.find((x) => x.name.toLowerCase() === n) || null;
+}
