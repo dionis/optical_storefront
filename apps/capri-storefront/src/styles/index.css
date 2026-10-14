@@ -8914,14 +8914,19 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-step-next { margin-top: 6px; }
   /* Los OTROS tipos de lente: mini-tarjetas en UNA fila de tres (se puede
      seguir cambiando de tipo sin volver atrás). */
-  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-rows { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-rows { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item.open { grid-column: 1 / -1; }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main {
     flex-direction: column; align-items: center; text-align: center; gap: 2px;
     padding: 6px 4px 5px; position: relative;
   }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt { align-items: center; gap: 0; }
-  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt b { font-size: 10.5px; line-height: 1.15; }
+  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt b {
+    font-size: 11.5px; line-height: 1.15; white-space: normal; max-width: 100%;
+  }
+  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) { min-width: 0; }
+  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main { overflow: visible; min-width: 0; }
+  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { height: 15px; }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt small { display: none !important; }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { height: 13px; width: auto; }
   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-radio {
@@ -9067,3 +9072,71 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .zlx-review-card .zlx-summary-total { border-top: 2px solid #d9b85c !important; }
 .zlx-review-card .zlx-summary-total span { color: var(--cuba-blue); }
 .zlx-review-card .zlx-summary-total b { color: #0b2f66; }
+
+/* ===================================================================
+   ETAPA 132 — FINALIZAR COMPRA en móvil en UNA SOLA VISTA (pedido del
+   cliente): título y "Seguir comprando" compactos, resumen apretado,
+   campos del paciente más bajos, confirmación en una línea y botón
+   "Calcular envío" en cristal 9-slice (sin deformar). Solo móvil.
+   =================================================================== */
+/* Botones grandes del checkout SIEMPRE en barra 9-slice (todas las vistas). */
+.checkout .btn.btn-outline.big {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #0b2f66 !important; font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+.checkout .btn.btn-primary.big {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+}
+.checkout .btn.btn-outline.big:hover:not(:disabled),
+.checkout .btn.btn-primary.big:hover:not(:disabled) {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}
+@media (max-width: 939px) {
+  .section.checkout { padding-top: 8px; }
+  /* Título y "Seguir comprando" en la MISMA línea. */
+  .checkout h1 { font-size: 22px; margin: 0 0 4px; display: inline-block; }
+  .checkout .co-backlink { display: inline-block; font-size: 13px; margin: 0 0 4px 12px; vertical-align: baseline; }
+  .checkout .co-summary { padding: 9px 12px 10px; margin: 6px 0; }
+  .checkout .co-summary-h { margin: 0 0 4px; }
+  .checkout .co-summary .panel-item { padding: 3px 0; }
+  .checkout .co-totals { margin-top: 4px; }
+  .checkout .co-totals > div { padding: 2px 0; }
+  .checkout .panel-total { padding-top: 5px; font-size: 17px; }
+  .checkout .co-form { padding: 9px 12px 11px; margin: 6px 0; }
+  .checkout .co-h { margin: 0 0 6px; }
+  .checkout .co-form .co-fields { gap: 6px; margin-bottom: 4px; }
+  .checkout .co-form .co-fields input { padding: 6px 11px; font-size: 13.5px; border-radius: 9px; }
+  /* Los pares (nombre|apellido, celular|país, ciudad|CP) SÍ van a dos columnas
+     también en móvil: ahorran tres filas y el paso cabe en una vista. */
+  .checkout .co-two { grid-template-columns: 1fr 1fr; }
+  /* Confirmación del pedido: rótulo y las dos casillas en UNA línea. */
+  .checkout .co-notify { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 8px; }
+  .checkout .co-notify-h { margin: 0; flex: 0 0 100%; }
+  .checkout .co-check { font-size: 12.5px; gap: 6px; }
+}
+
+/* ===================================================================
+   ETAPA 133 — Lámina nueva de MEDIDAS e INFO (pedido del cliente: "mira
+   dónde van estos iconos y úsalos"): ancho de lente, puente (montura con
+   flechas a la nariz), largo de varilla (perfil de cabeza) e (i) de
+   información, en navy/oro sobre claro y blanco/oro sobre navy. Van en
+   la franja de medidas de la ficha del espejuelo (receta + probador) y
+   en todos los botones (i) del flujo. El svg de línea queda de respaldo.
+   =================================================================== */
+/* La franja de medidas usa los iconos nuevos vía measureIcons.jsx (I3D). */
+.i3d-info { height: 22px; width: auto; display: block; }
+.zlx-use-info:not(.no-i3d) svg { display: none; }
+.zlx-pop-help:not(.no-i3d) svg { display: none; }
+.zlx-height-i:not(.no-i3d) svg { display: none; }
+.zlx-height-i .i3d-info { height: 16px; }
+.zlx-infopop-head b:not(.no-i3d) > svg { display: none; }
+.zlx-infopop-head b .i3d-info { height: 20px; display: inline-block; vertical-align: -4px; margin-right: 2px; }

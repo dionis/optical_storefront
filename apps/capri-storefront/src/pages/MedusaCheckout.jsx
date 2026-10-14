@@ -485,17 +485,21 @@ export default function MedusaCheckout() {
                   <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
                 </div>
                 {/* Celular del paciente: se toma de forma orgánica junto al resto
-                    del contacto; sirve para SMS de confirmación y contacto. */}
-                <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
+                    del contacto; sirve para SMS de confirmación y contacto. Va en
+                    pareja con el país (fijo EE. UU.) para ahorrar una fila y que
+                    todo el paso quepa en una vista en el móvil. */}
+                <div className="co-two">
+                  <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
+                  <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
+                </div>
                 <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
                 {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
                 <div className="co-two">
                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
                 </div>
-                {/* Solo USA por ahora: el campo queda fijado y el backend lo
-                    verifica igualmente (422 us_only). */}
-                <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
+                {/* Solo USA por ahora (el campo fijo vive junto al celular); el
+                    backend lo verifica igualmente (422 us_only). */}
               </div>
 
               {/* ¿Cómo quiere recibir la confirmación del pedido? El envío real de

@@ -31,7 +31,7 @@ export function IconGlasses(props) {
 
 // ANCHO DE LENTE — gafas de frente + flecha de cota (trazo del cliente).
 export function IconLensWidth(props) {
-  return <I3D name="navy-eyewidth" className={props.className} fallback={<IconLensWidthSvg {...props} />} />;
+  return <I3D name="ms-navyg-lens" className={props.className} fallback={<IconLensWidthSvg {...props} />} />;
 }
 
 function IconLensWidthSvg(props) {
@@ -44,7 +44,7 @@ function IconLensWidthSvg(props) {
 
 // PUENTE — puente entre lentes + flecha de cota (trazo del cliente).
 export function IconBridge(props) {
-  return <I3D name="navy-bridge" className={props.className} fallback={<IconBridgeSvg {...props} />} />;
+  return <I3D name="ms-navyg-bridge" className={props.className} fallback={<IconBridgeSvg {...props} />} />;
 }
 
 function IconBridgeSvg(props) {
@@ -57,7 +57,7 @@ function IconBridgeSvg(props) {
 
 // LARGO DE VARILLA — patilla de perfil + flecha de cota (trazo del cliente).
 export function IconTemple(props) {
-  return <I3D name="navy-temple" className={props.className} fallback={<IconTempleSvg {...props} />} />;
+  return <I3D name="ms-navyg-temple" className={props.className} fallback={<IconTempleSvg {...props} />} />;
 }
 
 function IconTempleSvg(props) {

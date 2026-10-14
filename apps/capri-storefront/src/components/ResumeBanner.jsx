@@ -20,8 +20,10 @@ export default function ResumeBanner() {
   const r = loadCache("rl_resume", null);
   if (hidden || !r || !r.url || !r.at || Date.now() - r.at > MAX_AGE_MS) return null;
   const targetPath = String(r.url).split("?")[0];
-  // No se ofrece sobre la propia pantalla a retomar ni dentro del admin.
-  if (pathname === targetPath || pathname.startsWith("/admin")) return null;
+  // No se ofrece sobre la propia pantalla a retomar, dentro del admin ni en el
+  // checkout: ahí el cliente YA está terminando la compra (es la continuación
+  // natural del flujo guardado) y la franja solo roba la primera vista.
+  if (pathname === targetPath || pathname.startsWith("/admin") || pathname.startsWith("/checkout")) return null;
 
   return (
     <div className="resume-bar" role="region" aria-label={t("resume.title")}>

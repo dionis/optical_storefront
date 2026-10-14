@@ -392,7 +392,7 @@ function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, ba
           </b>
           <span className="zlx-pop-head-actions">
             {onHelp && (
-              <button type="button" className="zlx-pop-help" onClick={onHelp} aria-label={helpLabel || "?"}><Ic name="info" /></button>
+              <button type="button" className="zlx-pop-help" onClick={onHelp} aria-label={helpLabel || "?"}><img className="i3d-info" src="/ui/icons3d/ms-whiteg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /></button>
             )}
             <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
           </span>
@@ -417,7 +417,7 @@ function ZlxInfoPop({ title, onClose, closeLabel, children }) {
       <div className="zlx-infopop-backdrop" onClick={onClose} />
       <div className="zlx-infopop" role="dialog" aria-modal="true" aria-label={title}>
         <div className="zlx-infopop-head">
-          <b><Ic name="info" /> {title}</b>
+          <b><img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /> {title}</b>
           <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
         </div>
         <div className="zlx-infopop-body">{children}</div>
@@ -1672,7 +1672,7 @@ export default function LensProcess() {
                         {hasDiag && rxStage === "fill" && (
                           <button type="button" className="zlx-use-info"
                                   aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : "/rx/ayuda-progresivos-en.png")}>
-                            <Ic name="info" />
+                            <img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" />
                           </button>
                         )}
                       </div>
@@ -1739,7 +1739,7 @@ export default function LensProcess() {
                             <p className={`zlx-height-note ${heightMissing ? "req" : ""}`}>
                               {heightMissing && <span>{t("lens.height.required")}</span>}
                               <button type="button" className="zlx-height-i" aria-label={t("lens.help")}
-                                      onClick={() => openInfo(t("lens.height"), null, ["fittingHeight"], t("lens.height.note"))}><Ic name="info" /></button>
+                                      onClick={() => openInfo(t("lens.height"), null, ["fittingHeight"], t("lens.height.note"))}><img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /></button>
                             </p>
                           )}
                           {/* Botón "Material del lente": primero pide confirmar TODA la
@@ -1848,7 +1848,7 @@ export default function LensProcess() {
                       </button>
                       <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
                               onClick={() => openInfo(L(a.label, lang), arEdu(a.id, lang), arDiagKeys(a.id))}>
-                        <Ic name="info" />
+                        <img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" />
                       </button>
                     </div>
                   );
