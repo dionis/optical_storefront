@@ -7386,3 +7386,22 @@ button.card-genre {
   .zlx-rx-summary-left .zlx-gen-img,
   .zlx-rx-summary-left .zlx-gen-img img { max-height: 240px; }
 }
+
+/* ETAPA 104 - Transportistas en el checkout (FedEx/DHL) */
+.co-carriers .choice-sub { display: block; font-size: 12px; color: var(--muted); }
+.co-carriers .choice-price.free { color: #116633; font-weight: 800; }
+.co-freehint { color: #116633; font-weight: 600; }
+
+/* ═══ ETAPA 105 — Checkout: siempre se puede volver y quitar del carrito ═══ */
+.co-backlink {
+  display: inline-block;
+  margin: -6px 0 14px;
+  font-size: 0.9rem;
+  color: var(--navy, #01326b);
+  text-decoration: none;
+  font-weight: 600;
+}
+.co-backlink:hover { text-decoration: underline; }
+.co-summary .panel-item { align-items: center; gap: 8px; }
+.co-item-x { flex: 0 0 auto; margin-left: 4px; }
+.co-back { margin-top: 10px; width: 100%; }

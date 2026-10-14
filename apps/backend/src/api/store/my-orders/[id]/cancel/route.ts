@@ -23,6 +23,7 @@ import {
   type CancelWindow,
 } from "../../../../../lib/order-status";
 import { resolveStoreSettings } from "../../../../../lib/store-settings";
+import { syncOrderToSheet } from "../../../../../lib/gsheet-sync";
 
 /**
  * POST /store/my-orders/:id/cancel — the shopper cancels their own order.
@@ -312,6 +313,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
       timestamp: now.toISOString(),
     })
   );
+
+  // Réplica en la hoja de Google del dueño: la cancelación es parte del
+  // proceso de venta tanto como la compra (best-effort, jamás falla la petición).
+  await syncOrderToSheet(req.scope, order.id, `cancelado (${status})`);
 
   res.status(200).json({
     ok: true,

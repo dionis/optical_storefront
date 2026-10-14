@@ -28,6 +28,7 @@ import { loadPrescriptionRecords } from "../lib/prescription-read";
 import type { Knex } from "@mikro-orm/knex";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 import { notificationHealth, undeliverableReason } from "../lib/notification-health";
+import { syncOrderToSheet } from "../lib/gsheet-sync";
 import { resolveStoreSettings } from "../lib/store-settings";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
@@ -363,6 +364,12 @@ export default async function orderPlacedSubscriber({
       );
     }
   }
+
+  // ── Réplica en Google Sheets ────────────────────────────────────────────
+  // Espejo de la venta completa (cliente, artículos, totales, estado) en la
+  // hoja del dueño. Best-effort y al final a propósito: nunca retrasa ni
+  // tumba las notificaciones; sin credenciales es un no-op logueado.
+  await syncOrderToSheet(container, order.id, "compra_confirmada");
 }
 
 export const config: SubscriberConfig = {

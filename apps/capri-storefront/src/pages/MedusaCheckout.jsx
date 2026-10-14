@@ -4,6 +4,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import {
   getCart, updateContact, listShippingOptions, setShippingMethod,
+  quoteShipping, selectCarrier,
   startPayment, DEFAULT_PROVIDER, completeCart, revalidateCart,
 } from "../data/medusaCart.js";
 import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
@@ -34,7 +35,7 @@ const DESIGN_LBL = {
 
 export default function MedusaCheckout() {
   const { t, tv, lang } = useLang();
-  const { clearCart } = useCart();
+  const { clearCart, removeItem } = useCart();
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
   const money = (n) => "$" + Number(n || 0).toFixed(2);
@@ -53,6 +54,11 @@ export default function MedusaCheckout() {
   const [cardMatches, setCardMatches] = useState(true);
   const [ship, setShip] = useState([]);
   const [shipId, setShipId] = useState("");
+  // Cotización FedEx/DHL del servidor. null = aún sin pedir o backend sin la
+  // ruta (se usa el flujo clásico de opciones Medusa como respaldo).
+  const [carriers, setCarriers] = useState(null);
+  const [carrierSel, setCarrierSel] = useState("");
+  const [freeThreshold, setFreeThreshold] = useState(100);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [order, setOrder] = useState(null);
@@ -184,9 +190,38 @@ export default function MedusaCheckout() {
         // Preferencias que el backend usará para notificar (email/SMS) + idioma.
         metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang },
       });
-      const opts = await listShippingOptions();
-      setShip(opts);
-      if (opts[0]) setShipId(opts[0].id);
+      // Cotización FedEx/DHL del servidor (gratis desde el umbral). Si la ruta
+      // aún no está desplegada, quoteShipping() devuelve null y caemos al flujo
+      // clásico de opciones Medusa — el checkout nunca se queda sin envío.
+      const q = await quoteShipping();
+      if (q && Array.isArray(q.quotes) && q.quotes.length) {
+        setCarriers(q.quotes);
+        setFreeThreshold(q.free_threshold || 100);
+        setCarrierSel(q.quotes[0].carrier);
+        // Para la puerta del paso de envío el flujo clásico usa `ship`:
+        setShip([{ id: "__carriers__" }]);
+      } else {
+        const opts = await listShippingOptions();
+        setShip(opts);
+        if (opts[0]) setShipId(opts[0].id);
+      }
+    } catch (e) {
+      if (e && e.reason === "us_only") setErr(t("ship.usOnly"));
+      else setErr(e.message || String(e));
+    }
+    setBusy(false);
+  };
+
+  // Quitar una línea del carrito SIN salir del checkout (siempre debe poder
+  // quitarse un elemento). El subtotal cambia, así que la cotización de envío
+  // (gratis desde $100, tarifas FedEx/DHL) queda invalidada y se vuelve a pedir.
+  const removeLine = async (lineId) => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    try {
+      const c = await removeItem(lineId);
+      if (c) setCart(c);
+      setShip([]); setShipId(""); setCarriers(null); setCarrierSel("");
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
   };
@@ -203,7 +238,10 @@ export default function MedusaCheckout() {
       await updateContact({
         metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang },
       });
-      await setShippingMethod(shipId);
+      // Transportista elegido (FedEx/DHL, re-cotizado en servidor) o, de
+      // respaldo, la opción Medusa clásica.
+      if (carriers && carrierSel) await selectCarrier(carrierSel);
+      else await setShippingMethod(shipId);
       const { clientSecret } = await startPayment(DEFAULT_PROVIDER);
       setCart(await getCart());
       const stripe = await loadStripe(PK);
@@ -342,6 +380,11 @@ export default function MedusaCheckout() {
   return (
     <div className="section checkout" style={{ maxWidth: 680, margin: "0 auto" }}>
       <h1>{L("title")}</h1>
+      {/* Siempre hay vuelta atrás: a la tienda desde los datos, y al paso de
+          datos desde el pago (botón dentro de la sección de pago). */}
+      {step !== "done" && (
+        <Link to="/catalogo" className="co-backlink">← {L("keepShopping")}</Link>
+      )}
 
       {step === "done" ? (
         <div className="checkout-done">
@@ -390,6 +433,16 @@ export default function MedusaCheckout() {
                       {i.metadata?.prescription_id && <small className="co-rx">✓ {L("withRx")}</small>}
                     </div>
                     <span className="panel-item-price">{money(i.total ?? i.unit_price)}</span>
+                    {step === "contact" && (
+                      <button
+                        type="button"
+                        className="panel-x co-item-x"
+                        onClick={() => removeLine(i.id)}
+                        disabled={busy}
+                        aria-label={t("common.remove")}
+                        title={t("common.remove")}
+                      >×</button>
+                    )}
                   </li>
                 );
               })}
@@ -428,7 +481,9 @@ export default function MedusaCheckout() {
                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
                 </div>
-                <input placeholder={L("country")} value={f.country} onChange={set("country")} autoComplete="country-name" />
+                {/* Solo USA por ahora: el campo queda fijado y el backend lo
+                    verifica igualmente (422 us_only). */}
+                <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
               </div>
 
               {/* ¿Cómo quiere recibir la confirmación del pedido? El envío real de
@@ -452,6 +507,29 @@ export default function MedusaCheckout() {
               ) : (
                 <>
                   <div className="co-h">🚚 {L("shipping")}</div>
+                  {carriers ? (
+                    <>
+                      {/* FedEx / DHL cotizados por el SERVIDOR; el cliente elige. */}
+                      <div className="opt-list co-carriers">
+                        {carriers.map((q) => (
+                          <label key={q.carrier} className={`choice ${carrierSel === q.carrier ? "sel" : ""}`}>
+                            <input type="radio" name="ship" checked={carrierSel === q.carrier} onChange={() => setCarrierSel(q.carrier)} />
+                            <span className="choice-main">
+                              <span className="choice-title">{q.label}</span>
+                              <small className="choice-sub">{t("ship.eta", { min: q.eta_min_days, max: q.eta_max_days })}</small>
+                            </span>
+                            <span className={`choice-price ${q.free ? "free" : ""}`}>{q.free ? L("free") : money(q.amount)}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <small className="co-hint co-freehint">
+                        {carriers[0]?.free
+                          ? `🎉 ${t("ship.freeApplied", { n: freeThreshold })}`
+                          : `💡 ${t("ship.freeHint", { n: freeThreshold })}`}
+                      </small>
+                      <small className="co-hint">🇺🇸 {t("ship.usOnlyNote")}</small>
+                    </>
+                  ) : (
                   <div className="opt-list">
                     {ship.map((o) => (
                       <label key={o.id} className={`choice ${shipId === o.id ? "sel" : ""}`}>
@@ -461,12 +539,13 @@ export default function MedusaCheckout() {
                       </label>
                     ))}
                   </div>
+                  )}
                   {/* El plazo del transportista no es el plazo del pedido: antes hay
                       que fabricar los lentes. Se dice aquí, donde se elige entrega. */}
                   {labDays > 0 && (
                     <small className="co-hint">🔬 {t("ship.labNote", { days: labDays })}</small>
                   )}
-                  <button className="btn btn-primary big" disabled={busy || !shipId} onClick={goToPay}>
+                  <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
                     {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("toPay")}
                   </button>
                 </>
@@ -504,6 +583,16 @@ export default function MedusaCheckout() {
               )}
               <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
+              </button>
+              {/* Volver a los datos de contacto/envío sin perder nada: el
+                  Payment Element se desmonta y se vuelve a crear al regresar. */}
+              <button
+                type="button"
+                className="btn btn-outline big co-back"
+                disabled={busy}
+                onClick={() => { setPayState("idle"); setStep("contact"); }}
+              >
+                ← {L("backToData")}
               </button>
             </div>
           )}

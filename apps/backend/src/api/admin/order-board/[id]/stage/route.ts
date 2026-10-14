@@ -11,6 +11,7 @@ import { ORDER_STAGES, type OrderStage } from "../../../../../lib/order-status";
 import { fetchBoardOrder, isOrderStage, liveFulfillments } from "../../../../../lib/order-board";
 import { resolveEmailLocale } from "../../../../../lib/email/copy";
 import { renderOrderStageUpdate } from "../../../../../lib/email/order-stage-update";
+import { sheetStageEvent, syncOrderToSheet } from "../../../../../lib/gsheet-sync";
 
 /**
  * POST /admin/order-board/:id/stage — move an order to the next stage.
@@ -208,19 +209,75 @@ export async function POST(
   // request: the stage change already happened; an email hiccup is a log line.
   let notified = false;
   if (!noNotification && after && before.stage !== after.stage) {
+    // Opt-in de SMS + teléfono + idioma viven en el pedido, no en la proyección
+    // del tablero: una consulta mínima aparte.
+    let notifySms = false;
+    let phone: string | null = null;
+    let locale: string | null = null;
+    try {
+      const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+      const { data } = await query.graph({
+        entity: "order",
+        fields: ["id", "metadata", "locale", "shipping_address.phone"],
+        filters: { id: orderId },
+      });
+      const raw = data?.[0] as { metadata?: Record<string, unknown> | null; locale?: string | null; shipping_address?: { phone?: string | null } | null } | undefined;
+      const md = (raw?.metadata ?? {}) as Record<string, unknown>;
+      notifySms = md["notify_sms"] === true || md["notify_sms"] === "true";
+      phone =
+        (typeof md["phone"] === "string" && md["phone"].trim()) ||
+        (raw?.shipping_address?.phone ? String(raw.shipping_address.phone).trim() : "") ||
+        null;
+      locale = raw?.locale ?? null;
+    } catch { /* sin metadata no hay SMS; el email sale igual */ }
+
     notified = await sendStageEmail(req, logger, {
       email: after.email ? String(after.email) : null,
       displayId: after.display_id != null ? String(after.display_id) : orderId,
       orderId,
       stage: after.stage,
-      locale: (after as unknown as { locale?: string | null }).locale ?? null,
+      locale,
       frameOnly: !after.items?.some((i) => i.lens && i.lens.design_code),
       trackingNumber: tracking || after.tracking_number || null,
       trackingUrl: trackingUrl || null,
+      notifySms,
+      phone,
+    });
+  }
+
+  // Réplica del cambio de etapa en la hoja de Google del dueño (best-effort,
+  // jamás falla la petición; sin credenciales es un no-op logueado).
+  if (after && before.stage !== after.stage) {
+    await syncOrderToSheet(req.scope, orderId, sheetStageEvent(after.stage), {
+      number: tracking || after.tracking_number || null,
+      url: trackingUrl || null,
     });
   }
 
   res.status(200).json({ order: after, notified });
+}
+
+/** Texto corto del SMS de etapa (es/en), con tracking cuando existe. */
+function stageSmsText(
+  locale: "es" | "en",
+  stage: OrderStage,
+  displayId: string,
+  tracking: string | null,
+  trackingUrl: string | null
+): string {
+  const names: Record<OrderStage, { es: string; en: string }> = {
+    confirmed: { es: "confirmado", en: "confirmed" },
+    in_lab: { es: "en el laboratorio", en: "in the lab" },
+    shipped: { es: "empaquetado y listo para salir", en: "packed and ready to ship" },
+    in_transit: { es: "en camino", en: "on its way" },
+    delivered: { es: "entregado", en: "delivered" },
+  };
+  const base = locale === "es"
+    ? `RUBI LENS: tu pedido #${displayId} está ${names[stage].es}.`
+    : `RUBI LENS: your order #${displayId} is ${names[stage].en}.`;
+  const track = tracking ? (locale === "es" ? ` Guía: ${tracking}.` : ` Tracking: ${tracking}.`) : "";
+  const url = trackingUrl ? ` ${trackingUrl}` : "";
+  return (base + track + url).slice(0, 320);
 }
 
 /** Composes and queues the stage-change email; true when it was handed to the
@@ -237,39 +294,70 @@ async function sendStageEmail(
     frameOnly: boolean;
     trackingNumber: string | null;
     trackingUrl: string | null;
+    notifySms?: boolean;
+    phone?: string | null;
   }
 ): Promise<boolean> {
-  if (!input.email) {
-    logger.warn(`[order-board] order ${input.orderId} has no email — stage notification skipped.`);
-    return false;
+  const notifications = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION);
+  const locale = resolveEmailLocale(input.locale);
+  let sent = false;
+
+  if (input.email) {
+    try {
+      const content = renderOrderStageUpdate(locale, {
+        displayId: input.displayId,
+        stage: input.stage,
+        frameOnly: input.frameOnly,
+        trackingNumber: input.trackingNumber,
+        trackingUrl: input.trackingUrl,
+      });
+      await notifications.createNotifications({
+        to: input.email,
+        channel: "email",
+        template: "order-stage-update",
+        trigger_type: "order_board.stage_changed",
+        resource_id: input.orderId,
+        resource_type: "order",
+        content,
+        data: { order_id: input.orderId, stage: input.stage },
+      });
+      sent = true;
+    } catch (error) {
+      logger.error(
+        `[order-board] stage email for order ${input.orderId} failed: ${(error as Error).message}`
+      );
+    }
+  } else {
+    logger.warn(`[order-board] order ${input.orderId} has no email — stage email skipped.`);
   }
-  try {
-    const locale = resolveEmailLocale(input.locale);
-    const content = renderOrderStageUpdate(locale, {
-      displayId: input.displayId,
-      stage: input.stage,
-      frameOnly: input.frameOnly,
-      trackingNumber: input.trackingNumber,
-      trackingUrl: input.trackingUrl,
-    });
-    const notifications = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION);
-    await notifications.createNotifications({
-      to: input.email,
-      channel: "email",
-      template: "order-stage-update",
-      trigger_type: "order_board.stage_changed",
-      resource_id: input.orderId,
-      resource_type: "order",
-      content,
-      data: { order_id: input.orderId, stage: input.stage },
-    });
-    return true;
-  } catch (error) {
-    logger.error(
-      `[order-board] stage email for order ${input.orderId} failed: ${(error as Error).message}`
-    );
-    return false;
+
+  // SMS SOLO si el cliente lo marcó al comprar (notify_sms) y dejó teléfono.
+  // Mismo canal Twilio del pedido confirmado; si Twilio no está configurado,
+  // el provider de logs lo registra y no rompe nada.
+  if (input.notifySms && input.phone) {
+    try {
+      await notifications.createNotifications({
+        to: input.phone,
+        channel: "sms",
+        template: "order-stage-update-sms",
+        trigger_type: "order_board.stage_changed",
+        resource_id: input.orderId,
+        resource_type: "order",
+        content: {
+          subject: "",
+          text: stageSmsText(locale, input.stage, String(input.displayId), input.trackingNumber, input.trackingUrl),
+        },
+        data: { order_id: input.orderId, stage: input.stage },
+      });
+      sent = true;
+    } catch (error) {
+      logger.error(
+        `[order-board] stage SMS for order ${input.orderId} failed: ${(error as Error).message}`
+      );
+    }
   }
+
+  return sent;
 }
 
 /**

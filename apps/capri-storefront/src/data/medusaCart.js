@@ -307,6 +307,34 @@ export async function setShippingMethod(optionId) {
 }
 
 /**
+ * Cotización FedEx/DHL del SERVIDOR (tabla de tarifas + gratis desde el umbral).
+ * Devuelve { quotes, free_threshold } — o null si el backend aún no expone la
+ * ruta (despliegue pendiente), y el checkout cae a las opciones Medusa clásicas.
+ * Un 422 us_only se relanza con reason para que la pantalla lo explique.
+ */
+export async function quoteShipping() {
+  const id = readId();
+  if (!id) return null;
+  try {
+    return await medusa.client.fetch(`/store/carts/${id}/shipping-quote`, { method: "POST" });
+  } catch (e) {
+    const reason = e && (e.reason || (e.payload && e.payload.reason));
+    if (reason === "us_only") { const err = new Error("us_only"); err.reason = "us_only"; throw err; }
+    return null; // ruta ausente u otro fallo: el caller usa el flujo clásico
+  }
+}
+
+/** Fija el transportista ELEGIDO (fedex|dhl); el importe lo re-cotiza el servidor. */
+export async function selectCarrier(carrier) {
+  const id = readId();
+  const res = await medusa.client.fetch(`/store/carts/${id}/shipping-select`, {
+    method: "POST",
+    body: { carrier },
+  });
+  return res;
+}
+
+/**
  * Initialize the payment session with the chosen provider. Returns the Stripe
  * PaymentIntent client_secret (for Stripe.js) plus the payment collection.
  */
