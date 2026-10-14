@@ -191,9 +191,16 @@ export default function Home() {
         </div>
         <div className="chip-row">
           {STYLE_CHIPS.map((c) => (
-            <Link key={c.key} to={chipHref(c)} className="style-chip">
-              {/* Icono bronce de la lámina de marca (public/chips/, recortado con
-                  fondo transparente); si el PNG faltara, cae al SVG de línea. */}
+            <Link key={c.key} to={chipHref(c)} className="style-chip style-chip-glass"
+                  aria-label={t(c.key)} title={t(c.key)}>
+              {/* Píldora de CRISTAL completa de la lámina del dueño, en el idioma
+                  activo (public/chips/pill-<lang>-*.png): se usa la obra entera
+                  como imagen para no perder el detalle gráfico, y el hover le da
+                  elevación, contorno y sombra (ETAPA 110). Si el PNG faltara,
+                  cae al chip clásico (icono bronce + texto). */}
+              <img className="chip-pill" src={`/chips/pill-${lang}-${c.key.split(".").pop()}.png`}
+                   alt={t(c.key)} loading="lazy"
+                   onError={(e) => { e.currentTarget.closest(".style-chip").classList.remove("style-chip-glass"); e.currentTarget.remove(); }} />
               <span className="style-chip-ic">
                 <img className="style-chip-img" src={`/chips/chip-${c.key.split(".").pop()}.png`} alt=""
                      loading="lazy"
@@ -243,10 +250,14 @@ export default function Home() {
           </aside>
           <div className="shape-row">
             {SHAPES.map((s) => (
-              <Link key={s.value} to={`/catalogo?shape=${encodeURIComponent(s.value)}`} className="shape-tile">
-                {/* Foto real de la forma (recorte PNG transparente en /shapes/,
-                    derivado de la lámina de marca) sobre azulejo blanco del
-                    sistema; el icono de línea queda de respaldo si no carga. */}
+              <Link key={s.value} to={`/catalogo?shape=${encodeURIComponent(s.value)}`} className="shape-tile shape-tile-glass"
+                    aria-label={t(s.key)} title={t(s.key)}>
+                {/* Azulejo de CRISTAL completo de la lámina (idioma activo): la
+                    obra entera como imagen, con hover de elevación + contorno +
+                    sombra (ETAPA 110). Respaldo: foto recortada + nombre. */}
+                <img className="shape-tile-img" src={`/shapes/tile-${lang}-${s.lens}.png`}
+                     alt={t(s.key)} loading="lazy"
+                     onError={(e) => { e.currentTarget.closest(".shape-tile").classList.remove("shape-tile-glass"); e.currentTarget.remove(); }} />
                 <span className="shape-ico shape-ico-photo">
                   <img src={`/shapes/shape-${s.lens}.png`} alt="" loading="lazy"
                        onError={(e) => { e.currentTarget.closest(".shape-ico").classList.remove("shape-ico-photo"); e.currentTarget.remove(); }} />

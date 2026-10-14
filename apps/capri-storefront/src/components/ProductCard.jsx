@@ -33,7 +33,7 @@ export default function ProductCard({ product }) {
   const tryOn = tryOnOpenKey !== null && tryOnOpenKey === productTryOnKey(product);
   const [added, setAdded] = useState(false);
   const [genreTip, setGenreTip] = useState(false);
-  const { t, tv } = useLang();
+  const { t, tv, lang } = useLang();
   const { toggleFav, isFav, addVariant, busy } = useCart();
   const { toast } = useFeedback();
   const color = product.colors[active];
@@ -200,18 +200,25 @@ export default function ProductCard({ product }) {
         {/* Acción principal: probador con cámara. Diferencia la tienda — primero
             invitamos a verse la montura, después a comprar. */}
         {TRY_ON_ENABLED && (
-          <button type="button" className="card-tryon" onClick={() => openTryOn(product)}>
-            {/* Cámara dorada de la lámina de botones de la marca (recorte PNG
-                transparente en public/ui/); el texto sigue vivo para es/en. */}
-            <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
-                 onError={(e) => e.currentTarget.remove()} />
-            {t("card.tryOn")}
+          <button type="button" className="card-tryon btn-glass" onClick={() => openTryOn(product)}
+                  aria-label={t("card.tryOn")} title={t("card.tryOn")}>
+            {/* Botón de CRISTAL completo de la lámina del dueño (idioma activo):
+                la obra entera como imagen para conservar todo el detalle; hover
+                con elevación, contorno y sombra (ETAPA 110). Respaldo: cámara
+                dorada + texto sobre el botón navy clásico. */}
+            <img className="btn-glass-img" src={`/ui/btn-${lang}-tryon.png`} alt="" loading="lazy"
+                 onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+            <span className="btn-glass-fb">
+              <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
+              {t("card.tryOn")}
+            </span>
           </button>
         )}
         {/* Acción secundaria: añadir SOLO la montura al carrito. */}
         <button
           type="button"
-          className={`card-add-cart ${added ? "done" : ""}`}
+          className={`card-add-cart ${added ? "done" : "btn-glass"}`}
           disabled={busy || !color.variantId}
           onClick={addFrameOnly}
         >
@@ -219,11 +226,15 @@ export default function ProductCard({ product }) {
             <>✓ {t("case.added")}</>
           ) : (
             <>
-              {/* Carrito navy de la lámina de botones de la marca (PNG
-                  transparente); va sobre el botón claro, como en la lámina. */}
-              <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
-                   onError={(e) => e.currentTarget.remove()} />
-              {t("card.addToCart")}
+              {/* Botón de CRISTAL claro de la lámina (idioma activo); respaldo:
+                  carrito navy + texto en el botón outline clásico. */}
+              <img className="btn-glass-img" src={`/ui/btn-${lang}-addcart.png`} alt="" loading="lazy"
+                   onError={(e) => { e.currentTarget.closest(".card-add-cart").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+              <span className="btn-glass-fb">
+                <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
+                     onError={(e) => e.currentTarget.remove()} />
+                {t("card.addToCart")}
+              </span>
             </>
           )}
         </button>

@@ -508,20 +508,30 @@ export default function ProductDetail() {
               como en las tarjetas). El flujo de lentes graduados sigue a un clic. */}
           <div className="pdp-actions2">
             {TRY_ON_ENABLED && (
-              <button type="button" className="btn btn-primary big pdp-cta" onClick={() => setTryOnSlug(slug)}>
-                {/* Cámara dorada de la lámina de botones (igual que en las
-                    tarjetas del catálogo); texto vivo para es/en. */}
-                <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
-                     onError={(e) => e.currentTarget.remove()} />
-                {t("tryon.cta")}
+              <button type="button" className="btn btn-primary big pdp-cta btn-glass" onClick={() => setTryOnSlug(slug)}
+                      aria-label={t("tryon.cta")} title={t("tryon.cta")}>
+                {/* Botón de CRISTAL completo de la lámina (idioma activo), con
+                    hover de elevación+contorno+sombra; respaldo clásico. */}
+                <img className="btn-glass-img" src={`/ui/btn-${lang}-tryon.png`} alt="" loading="lazy"
+                     onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+                <span className="btn-glass-fb">
+                  <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
+                       onError={(e) => e.currentTarget.remove()} />
+                  {t("tryon.cta")}
+                </span>
               </button>
             )}
-            <button type="button" className="btn btn-outline big pdp-cta"
+            <button type="button" className="btn btn-outline big pdp-cta btn-glass"
                     disabled={!color?.variantId}
+                    aria-label={t("card.addToCart")} title={t("card.addToCart")}
                     onClick={() => addFrame(color?.variantId)}>
-              <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
-                   onError={(e) => e.currentTarget.remove()} />
-              {t("card.addToCart")}
+              <img className="btn-glass-img" src={`/ui/btn-${lang}-addcart.png`} alt="" loading="lazy"
+                   onError={(e) => { e.currentTarget.closest(".btn-glass").classList.remove("btn-glass"); e.currentTarget.remove(); }} />
+              <span className="btn-glass-fb">
+                <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
+                     onError={(e) => e.currentTarget.remove()} />
+                {t("card.addToCart")}
+              </span>
             </button>
           </div>
           <button type="button" className="pdp-lensflow"

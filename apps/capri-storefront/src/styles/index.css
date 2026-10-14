@@ -7717,7 +7717,9 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
    cualquier .brand-circle. El medallón trae su propio acabado: el círculo del
    sistema deja de pintar fondo/borde y el PNG llena el aro completo. */
 .brand-circle { background: transparent; border-color: transparent; padding: 0; overflow: hidden; }
-.brand-circle img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.brand-circle img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+/* contain: el disco ya viene centrado y cuadrado en el PNG; cover rebanaba el
+   aro cuando la sombra del render descentraba el bbox (columnas laterales). */
 .brand-circle:hover { border-color: transparent; box-shadow: 0 14px 30px -12px rgba(10, 25, 60, .35); }
 .brand-circle.is-active { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--blue), 0 14px 30px -12px rgba(10,25,60,.35); }
 
@@ -7767,3 +7769,65 @@ h1, h2, .section-title { letter-spacing: -0.022em; }
 .flag-btn.on { box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
 .icon-btn:hover .hdr-img { transform: translateY(-1px); }
 .hdr-img { transition: transform var(--dur-1) var(--ease); }
+
+/* ═══ ETAPA 110 — Botonería de CRISTAL de la lámina del dueño ═════════════
+   La obra completa (píldora/azulejo/botón) se usa COMO IMAGEN ajustada a su
+   hueco, para conservar todo el detalle gráfico. La interacción la pone el
+   CSS: al pasar el cursor, elevación + CONTORNO navy que sigue la silueta
+   real (4 drop-shadows de 1px sobre el alpha) + sombra profunda; al pulsar,
+   leve compresión. Teclado: mismo contorno con :focus-visible.
+   Dónde se usa: chips de estilo y azulejos de forma (Home), botones
+   Probármelos / Añadir al carrito (ProductCard y PDP). */
+
+/* — contorno + sombra reutilizables — */
+.chip-pill, .shape-tile-img, .btn-glass-img {
+  display: block;
+  transition: transform var(--dur-2) var(--ease), filter var(--dur-2) var(--ease);
+  filter: drop-shadow(0 6px 14px rgba(10, 25, 60, .14));
+  will-change: transform, filter;
+}
+.style-chip-glass:hover .chip-pill,
+.shape-tile-glass:hover .shape-tile-img,
+.btn-glass:hover:not(:disabled) .btn-glass-img,
+.style-chip-glass:focus-visible .chip-pill,
+.shape-tile-glass:focus-visible .shape-tile-img,
+.btn-glass:focus-visible .btn-glass-img {
+  transform: translateY(-3px) scale(1.02);
+  filter:
+    drop-shadow(1px 0 0 var(--royal)) drop-shadow(-1px 0 0 var(--royal))
+    drop-shadow(0 1px 0 var(--royal)) drop-shadow(0 -1px 0 var(--royal))
+    drop-shadow(0 16px 28px rgba(1, 50, 107, .32));
+}
+.style-chip-glass:active .chip-pill,
+.shape-tile-glass:active .shape-tile-img,
+.btn-glass:active:not(:disabled) .btn-glass-img { transform: translateY(-1px) scale(.99); }
+
+/* — chips de estilo: la píldora manda; el contenido clásico queda de respaldo — */
+.style-chip.style-chip-glass {
+  background: transparent; border: none; padding: 0; box-shadow: none; border-radius: 999px;
+}
+.style-chip-glass > *:not(.chip-pill) { display: none; }
+.chip-pill { height: 58px; width: auto; }
+
+/* — azulejos de forma: el azulejo de cristal completo — */
+.shape-tile.shape-tile-glass { background: transparent; border: none; padding: 0; box-shadow: none; border-radius: 22px; }
+.shape-tile-glass > *:not(.shape-tile-img) { display: none; }
+.shape-tile-glass:hover { transform: none; box-shadow: none; border-color: transparent; }
+.shape-tile-img { width: 100%; max-width: 250px; height: auto; }
+
+/* — botones Probármelos / Añadir al carrito — */
+.card-tryon.btn-glass, .card-add-cart.btn-glass, .pdp-cta.btn-glass {
+  background: transparent !important; border: none !important; padding: 0 !important;
+  box-shadow: none !important; display: grid; place-items: center;
+}
+.btn-glass .btn-glass-fb { display: none; }
+.btn-glass .btn-glass-img { width: 100%; max-width: 340px; height: auto; }
+.pdp-cta.btn-glass .btn-glass-img { max-width: 420px; }
+.btn-glass:disabled .btn-glass-img { opacity: .45; filter: grayscale(.4); }
+
+@media (max-width: 760px) {
+  .chip-pill { height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip-pill, .shape-tile-img, .btn-glass-img { transition: none; }
+}
