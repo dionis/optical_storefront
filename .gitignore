@@ -81,3 +81,4 @@ apps/scraper/scripts/.shape_truth.json
 _to_delete/ 
 change.patch
 __commitmsg.txt 
+.fuse_hidden* 
