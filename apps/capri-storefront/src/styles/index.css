@@ -8192,3 +8192,51 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
     scale: none !important; translate: none !important;
   }
 }
+
+/* ===================================================================
+   ETAPA 118 — Catálogo responsive (pedido del cliente):
+   1) El sello 360° pasa a la esquina inferior derecha de la foto, justo
+      encima del precio, para no tapar la montura.
+   2) Corazón, sexo y 360° un poco más pequeños en móvil.
+   3) Barra inferior tipo app con los iconos 3D de la lámina (champán en
+      reposo, borde dorado al estar activa — preferencia por el dorado
+      sobre el navy). Dónde se usa: /catalogo y toda la tienda en móvil.
+   =================================================================== */
+.bn-ic { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.bn-ic .bn-img { height: 24px; width: auto; display: block; filter: drop-shadow(0 1px 3px rgba(0, 12, 40, .4)); }
+.bn-ic:not(.no-img) svg { display: none; }
+.bn-item.on .bn-img { transform: scale(1.08); }
+@media (max-width: 860px) {
+  /* 360°: abajo a la derecha de la foto, encima del precio. */
+  .card-badge-360 { top: auto; left: auto; bottom: 6px; right: 8px; padding: 3px 7px; }
+  .card-badge-360 .i3d-360 { height: 13px; }
+  /* Acciones sobre la foto más discretas. */
+  .card-actions { top: 8px; right: 8px; gap: 6px; }
+  .card-ic { width: 29px; height: 29px; }
+  .card-ic .i3d-heart { height: 13px; }
+  .card-ic svg, .card-ic .card-fav-ic { width: 14px; height: 14px; }
+  .card-genre { width: 28px !important; height: 28px !important; }
+  .card-genre .i3d-genre { height: 12px; }
+  /* Sexo a la esquina inferior izquierda de la foto: deja libre la esquina
+     derecha para el sello 360° (que queda justo encima del precio). La columna
+     de acciones se estira a toda la foto (sin robar clics) para poder anclar
+     el sexo abajo-izquierda con el corazón arriba-derecha. */
+  .card-actions { top: 8px; right: 8px; bottom: 6px; left: 8px; pointer-events: none; }
+  .card-actions > * { pointer-events: auto; }
+  button.card-genre { position: absolute; bottom: 0; left: 0; }
+}
+
+/* ETAPA 118b — Mismo botón 360° en toda la app (pedido del cliente): el
+   icono 3D navy de la lámina sobre placa blanca, idéntico en la tarjeta
+   del catálogo, el visor del PDP y la ficha del proceso de receta. */
+.zlx-badge-360.has-i3d svg, .zlx-badge-360.has-i3d .b360-tx { display: none; }
+.zlx-badge-360.has-i3d {
+  background: #fff; border: 1px solid var(--line); color: var(--blue);
+  padding: 4px 8px; border-radius: 999px;
+}
+.zlx-badge-360 .i3d-360 { height: 17px; }
+.pdp .pdp-360 { background: #fff; border: 1px solid var(--line); }
+@media (max-width: 860px) {
+  .zlx-badge-360 .i3d-360 { height: 13px; }
+  .pdp .pdp-360 img { height: 22px; }
+}

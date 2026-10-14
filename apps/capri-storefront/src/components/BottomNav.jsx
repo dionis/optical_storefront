@@ -22,6 +22,21 @@ const ICONS = {
   ),
 };
 
+// Iconos 3D de la lámina del cliente (public/ui/bn): champán (gold) en reposo,
+// con borde dorado (goldr) cuando la pestaña está activa — preferencia del
+// cliente por los elementos dorados sobre el navy de la barra. El svg de línea
+// queda como respaldo si el PNG no carga (clase no-img en .bn-ic).
+const BN_IMG = {
+  off: { home: "gold-home", brands: "gold-brands", fav: "gold-heart", offers: "gold-deals", account: "gold-account" },
+  on:  { home: "goldr-home", brands: "goldr-brands", fav: "goldr-heart", offers: "goldr-deals", account: "goldr-headset" },
+};
+function BnImg({ k, on }) {
+  return (
+    <img className="bn-img" src={`/ui/bn/bn-${BN_IMG[on ? "on" : "off"][k]}.png`} alt="" aria-hidden="true"
+         onError={(e) => { e.currentTarget.parentElement.classList.add("no-img"); e.currentTarget.remove(); }} />
+  );
+}
+
 export default function BottomNav() {
   const { t } = useLang();
   const { pathname, search } = useLocation();
@@ -49,23 +64,23 @@ export default function BottomNav() {
   return (
     <nav className="bottomnav" aria-label={t("bn.aria")}>
       <a href="/" onClick={goTop} className={`bn-item ${pathname === "/" || pathname === "/catalogo" ? "on" : ""}`}>
-        <span className="bn-ic">{ICONS.home}</span>
+        <span className="bn-ic"><BnImg k="home" on={pathname === "/" || pathname === "/catalogo"} />{ICONS.home}</span>
         <span className="bn-tx">{t("bn.home")}</span>
       </a>
       <a href="/#marcas" onClick={goBrands} className="bn-item">
-        <span className="bn-ic">{ICONS.brands}</span>
+        <span className="bn-ic"><BnImg k="brands" on={false} />{ICONS.brands}</span>
         <span className="bn-tx">{t("nav.brands")}</span>
       </a>
       <button type="button" onClick={openFav} className="bn-item">
-        <span className="bn-ic">{ICONS.fav}{favCount > 0 && <span className="bn-badge">{favCount}</span>}</span>
+        <span className="bn-ic"><BnImg k="fav" on={false} />{ICONS.fav}{favCount > 0 && <span className="bn-badge">{favCount}</span>}</span>
         <span className="bn-tx">{t("bn.fav")}</span>
       </button>
       <Link to="/catalogo?oferta=1" className={`bn-item ${search.includes("oferta") ? "on" : ""}`}>
-        <span className="bn-ic">{ICONS.offers}</span>
+        <span className="bn-ic"><BnImg k="offers" on={search.includes("oferta")} />{ICONS.offers}</span>
         <span className="bn-tx">{t("bn.offers")}</span>
       </Link>
       <Link to="/cuenta" className={`bn-item ${pathname.startsWith("/cuenta") || pathname.startsWith("/my-orders") ? "on" : ""}`}>
-        <span className="bn-ic">{ICONS.account}</span>
+        <span className="bn-ic"><BnImg k="account" on={pathname.startsWith("/cuenta") || pathname.startsWith("/my-orders")} />{ICONS.account}</span>
         <span className="bn-tx">{t("bn.account")}</span>
       </Link>
     </nav>

@@ -390,7 +390,9 @@ export default function ProductDetail() {
                         onPointerDown={start360} onPointerUp={stop360}
                         onPointerLeave={stop360} onPointerCancel={stop360}
                         onClick={(e) => e.stopPropagation()}>
-                  <img src="/icon-360.png" alt="360°" />
+                  {/* Mismo icono 360° 3D de la lámina en toda la app (card, PDP, receta). */}
+                  <img src="/ui/icons3d/navy-360.png" alt="360°"
+                       onError={(e) => { e.currentTarget.src = "/icon-360.png"; }} />
                 </button>
               )}
               {/* Selector de color (solo circulos) centrado, en la linea del boton 360.

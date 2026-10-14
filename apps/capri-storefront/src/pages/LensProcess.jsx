@@ -1301,9 +1301,12 @@ export default function LensProcess() {
                 )}
                 {/* Sello 360°: esta montura tiene las 4 vistas 3D generadas. */}
                 {hasViews && !showingVideo && (
-                  <span className="zlx-badge-360" title={t("pdp.has3d")}>
+                  <span className="zlx-badge-360 has-i3d" title={t("pdp.has3d")}>
+                    {/* Mismo icono 360° 3D de la lámina en toda la app (card, PDP, receta). */}
+                    <img className="i3d i3d-360" src="/ui/icons3d/navy-360.png" alt=""
+                         onError={(e) => { e.currentTarget.parentElement.classList.remove("has-i3d"); e.currentTarget.remove(); }} />
                     <Icon360 />
-                    360°
+                    <span className="b360-tx">360°</span>
                   </span>
                 )}
               </div>
