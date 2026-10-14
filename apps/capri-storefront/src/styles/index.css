@@ -8707,3 +8707,80 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-txt { align-items: center; gap: 1px; }
 .zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-txt small { font-size: 11px; line-height: 1.3; }
 .zlx-pop-rx .zlx-use-row:not(.sel) .zlx-use-radio { position: absolute; top: 8px; right: 8px; }
+
+/* ===================================================================
+   ETAPA 126 — "Añadir receta" TODO en UNA VISTA móvil (pedido del
+   cliente): foto 50/50 con mejor encuadre, bloque de subir receta
+   compacto, tarjetas de tipo TODAS cuadradas (también la elegida en el
+   paso de selección) sin subtítulos, y Continuar + nota de seguridad
+   dentro de la misma vista.
+   =================================================================== */
+/* 1) 50/50 con mejor aspecto: la generada encuadra el rostro (un pelín por
+   debajo del borde superior) y la montura respira con un pequeño margen. */
+.fs-photo.has-gen .fs-photo-gen { object-position: center 25%; border-right: 2px solid #fff; }
+.fs-photo.has-gen > img:not(.fs-photo-gen):not(.fs-photo-wm) { padding: 6px !important; }
+/* 3) En el paso de SELECCIÓN todas las tarjetas son cuadradas, dos por fila
+   (la elegida ya no se estira); el panel desplegado del paso de valores sí
+   ocupa las dos columnas. */
+.zlx-pop-rx:not(.zlx-rx-stage-fill) .zlx-use-item:has(.zlx-use-row.sel) { grid-column: auto; }
+.zlx-pop-rx:not(.zlx-rx-stage-fill) .zlx-use-row .zlx-use-main {
+  flex-direction: column; align-items: center; text-align: center; gap: 4px;
+  padding: 10px 8px 9px; position: relative;
+}
+.zlx-pop-rx:not(.zlx-rx-stage-fill) .zlx-use-row .zlx-use-txt { align-items: center; gap: 0; }
+.zlx-pop-rx:not(.zlx-rx-stage-fill) .zlx-use-row .zlx-use-radio { position: absolute; top: 7px; right: 7px; }
+.zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:has(.zlx-use-row.sel) { grid-column: 1 / -1; }
+/* 4) Subtítulos no-negrita fuera (tarjetas y cabecera de la pregunta). */
+.zlx-pop-rx .zlx-use-txt small { display: none; }
+.zlx-use-sep small { display: none; }
+@media (max-width: 939px) {
+  /* Ficha compacta del popup */
+  .zlx-pop-rx .fs-card.ts2-frame .fs-photo,
+  .zlx-pop-rx .fs-card.ts2-frame .fs-photo.has-gen { height: 13vh; height: 13dvh; }
+  /* 2) Subir receta compacto para que el resto suba */
+  .zlx-pop-rx .zlx-upload-box { padding: 8px 10px; gap: 8px; }
+  .zlx-upload-tx b { font-size: 13px; }
+  .zlx-upload-tx small { font-size: 10.5px; }
+  .zlx-upload-ic .i3d-up { height: 18px; }
+  .zlx-upload-btn { font-size: 12px; }
+  .zlx-upload-manual { min-height: 36px; border-width: 11px !important; font-size: 12.5px; }
+  .zlx-rx-upload-row { gap: 6px; }
+  .zlx-pop-rx .zlx-rx-tips { padding: 6px 9px; }
+  .zlx-pop-rx .zlx-rx-tips ul li { font-size: 10.5px; }
+  .zlx-pop-rx .zlx-rx-tips-h { font-size: 11px; }
+  .zlx-rx-tips-ex img { max-height: 56px; }
+  .zlx-use-sep span { font-size: 13px; }
+  .zlx-pop-rx .zlx-use-ic-img { width: 40px; height: 26px; }
+  .zlx-pop-rx .zlx-use-txt b { font-size: 12.5px; }
+  .zlx-pop-rx .zlx-use-rows { gap: 6px; }
+  .btn.btn-primary.zlx-rx-continue { min-height: 44px; margin-top: 6px; }
+  .zlx-rx-secure { font-size: 11px; margin: 6px 0 0; }
+}
+
+/* ETAPA 126b — Especificidad: las reglas de compactación del paso de receta
+   perdían contra las de .zlx-pop-rx (p. ej. el subtítulo de la pregunta y el
+   wrap de la caja de subir). Se reafirman con el mismo prefijo. */
+.zlx-pop-rx .zlx-use-sep small { display: none !important; }
+@media (max-width: 939px) {
+  .zlx-pop-rx .zlx-page-sub, .zlx-pop-rx .zlx-pop-sub { display: none; } /* subtítulo no-negrita del título */
+  .zlx-pop-rx .zlx-upload-box { flex-wrap: nowrap !important; padding: 7px 10px !important; gap: 8px !important; }
+  .zlx-pop-rx .zlx-upload-tx { flex: 1 1 auto; min-width: 0; }
+  .zlx-pop-rx .zlx-upload-tx b { font-size: 12.5px; line-height: 1.25; }
+  .zlx-pop-rx .zlx-upload-tx small { font-size: 10px; }
+  .zlx-pop-rx .zlx-upload-btn { padding: 7px 11px !important; white-space: nowrap; flex: 0 0 auto; font-size: 11.5px; }
+  .zlx-pop-rx .zlx-upload-ic { width: 30px !important; height: 30px !important; }
+  .zlx-upload-manual { min-height: 0 !important; border-width: 10px !important; padding: 3px 8px !important; line-height: 1.15; }
+  .zlx-pop-rx .zlx-rx-tips-ex { display: none; } /* el ejemplo no cabe en el tercio móvil */
+  .zlx-pop-rx .zlx-rx-tips ul { margin: 2px 0 0; }
+  .zlx-pop-rx .zlx-rx-tips ul li { font-size: 10.5px; line-height: 1.3; margin: 2px 0; }
+  .zlx-pop-rx .zlx-rx-upload { margin-bottom: 4px; }
+  .zlx-pop-rx .zlx-use-sep { margin: 8px 0 6px; }
+  .zlx-pop-rx .zlx-use-rows { gap: 6px !important; }
+}
+
+/* ETAPA 126c — La píldora "Seleccionar archivo" se tragaba el ancho de la
+   caja (texto a una palabra por línea): tamaño propio y el texto respira. */
+@media (max-width: 939px) {
+  .zlx-pop-rx .zlx-upload-btn { flex: 0 0 auto !important; width: auto !important; max-width: 132px; }
+  .zlx-pop-rx .zlx-upload-tx { flex: 1 1 auto !important; }
+}
