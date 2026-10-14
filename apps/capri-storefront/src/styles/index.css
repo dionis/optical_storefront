@@ -6489,8 +6489,11 @@ button.card-genre {
   border-radius: 999px; font-size: 22px; line-height: 1; cursor: pointer; }
 .tryon-pagebar .tryon-x:hover { background: #ececea; }
 
-/* Los paneles y el menu lateral del header deben salir POR ENCIMA del probador */
-.drawer, .drawer-backdrop, .panel-backdrop, .side-panel { z-index: 320 !important; }
+/* Los paneles y el menu lateral del header deben salir POR ENCIMA del probador.
+   OJO: el fondo oscuro un escalón POR DEBAJO de su panel — con el mismo z-index
+   el fondo (que va después en el DOM) tapaba el menú y no dejaba hacer clic. */
+.drawer, .side-panel { z-index: 320 !important; }
+.drawer-backdrop, .panel-backdrop { z-index: 318 !important; }
 
 /* Captura (movil): ya no se fuerza 50/50 del viewport; camara y ficha fluyen y
    la pagina scrollea (asi se ve el footer). */
