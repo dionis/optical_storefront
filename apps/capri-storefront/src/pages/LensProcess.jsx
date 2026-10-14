@@ -809,6 +809,18 @@ export default function LensProcess() {
     }
   };
 
+  // "Insertar manual": en vez de subir la foto (OCR), el cliente escribe los valores
+  // de la receta a mano (como antes). Pasa directo al paso de VALORES. Como los
+  // campos dependen del tipo de lente, si no eligió uno usamos Visión Sencilla por
+  // defecto (se puede cambiar en el propio paso de valores).
+  const goManualRx = () => {
+    if (!designId || designId === FRAME_ONLY.id) {
+      const def = NON_PROG_DESIGNS.find((d) => d.id === "sv") || NON_PROG_DESIGNS[0] || DESIGNS[0];
+      if (def) setDesignId(def.id);
+    }
+    setRxStage("fill");
+  };
+
   const finish = async () => {
     // The cart is server-side. Without Medusa or without a variant there is no way
     // to add a real, server-priced line — surface it instead of silently pretending.
@@ -1341,23 +1353,32 @@ export default function LensProcess() {
           {/* Subir receta — la OCR sugiere y preselecciona el tipo de lente */}
           {rxStage === "pick" && USE_MEDUSA && (
                 <div className="zlx-rx-upload">
-                  <label className="zlx-upload-box">
-                    {/* Visually hidden en vez de `hidden` (display:none): algunos
-                        navegadores móviles no abren el selector de archivos si el
-                        input está en display:none, aunque esté dentro del label. */}
-                    <input type="file" accept="image/*,application/pdf" className="zlx-upload-input"
-                           disabled={ocr.status === "loading"} onChange={handleRxUpload} />
-                    <span className="zlx-upload-ic"><Ic name="upload" /></span>
-                    <span className="zlx-upload-tx">
-                      <b>{t("lens.upload")}</b>
-                      <small>
-                        {ocr.status === "loading" ? t("lens.upload.reading")
-                          : ocr.fileName ? `${t("lens.upload.file")}: ${ocr.fileName}`
-                          : t("lens.upload.types")}
-                      </small>
-                    </span>
-                    <span className="zlx-upload-btn">{t("lens.upload.choose")}</span>
-                  </label>
+                  <div className="zlx-rx-upload-row">
+                    <label className="zlx-upload-box">
+                      {/* Visually hidden en vez de `hidden` (display:none): algunos
+                          navegadores móviles no abren el selector de archivos si el
+                          input está en display:none, aunque esté dentro del label. */}
+                      <input type="file" accept="image/*,application/pdf" className="zlx-upload-input"
+                             disabled={ocr.status === "loading"} onChange={handleRxUpload} />
+                      <span className="zlx-upload-ic"><Ic name="upload" /></span>
+                      <span className="zlx-upload-tx">
+                        <b>{t("lens.upload")}</b>
+                        <small>
+                          {ocr.status === "loading" ? t("lens.upload.reading")
+                            : ocr.fileName ? `${t("lens.upload.file")}: ${ocr.fileName}`
+                            : t("lens.upload.types")}
+                        </small>
+                      </span>
+                      <span className="zlx-upload-btn">{t("lens.upload.choose")}</span>
+                    </label>
+                    {/* Insertar MANUAL: en vez de la foto (OCR), escribir los valores a
+                        mano (como antes). Va al lado de "Subir receta". */}
+                    <button type="button" className="zlx-upload-manual" onClick={goManualRx}
+                            disabled={ocr.status === "loading"}>
+                      <Ic name="edit" />
+                      <span>{t("lens.upload.manual")}</span>
+                    </button>
+                  </div>
                   {/* Cómo debe ser la foto. Va ANTES de subirla, no como consejo
                       tras el fallo: casi todas las lecturas que fallan lo hacen
                       por la foto (recortada, con brillo del flash, el papel
