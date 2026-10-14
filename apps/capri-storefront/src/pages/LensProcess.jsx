@@ -1247,7 +1247,10 @@ export default function LensProcess() {
       </button>
       {design && !frameOnly && (
         <>
-          <button type="button" className={`zlx-fab ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
+          <button type="button" className={`zlx-fab has-i3d ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
+            {/* Capas 3D de la lámina de materiales; el svg queda de respaldo. */}
+            <img className="i3d i3d-fab" src="/ui/icons3d/lm-navyg-stack.png" alt="" aria-hidden="true"
+                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
             <IconMaterial className="zlx-ic" />
             <span className="zlx-fab-txt">
               <b>{t("lens.material")}</b>
@@ -1802,8 +1805,10 @@ export default function LensProcess() {
                 <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
                   <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
                     <span className="zlx-choice-main">
-                      {/* Icono 3D de la lámina (capas de lente); el svg queda de respaldo. */}
-                      <img className="i3d i3d-mat" src={matId === m.id ? "/ui/icons3d/white-layers.png" : "/ui/icons3d/navy-layers.png"} alt="" aria-hidden="true"
+                      {/* Icono 3D por material (lámina del dueño): menos aros = lente
+                          más delgado (1.74 un aro fino ... CR-39 las capas clásicas).
+                          Blanco/oro en la fila elegida (navy); el svg queda de respaldo. */}
+                      <img className="i3d i3d-mat" src={`/ui/icons3d/lm-${matId === m.id ? "whiteg" : "navyg"}-${({ cr39: "stack", poly: "t3", "1.67": "t2", "1.74": "t1" })[m.id] || "stack"}.png`} alt="" aria-hidden="true"
                            onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
                       <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
                       <span className="zlx-choice-title">

@@ -19,6 +19,12 @@ export function hasGooglePlaces() {
   return !!GOOGLE_KEY;
 }
 
+/** El checkout SIEMPRE tiene autocompletado: Google si hay llave, y si no el
+ * respaldo abierto (Photon/OpenStreetMap) de más abajo. */
+export function hasAddressAutocomplete() {
+  return true;
+}
+
 let scriptPromise = null;
 
 // Load the Google Maps JS API (Places library) exactly once. Resolves with the
@@ -101,7 +107,10 @@ function parsePlace(place) {
  */
 export function attachAddressAutocomplete(inputEl, onSelect) {
   let cleanup = () => {};
-  if (!inputEl || !GOOGLE_KEY) return cleanup;
+  if (!inputEl) return cleanup;
+  // Sin llave de Google: respaldo profesional con Photon (OpenStreetMap) —
+  // mismas partes (calle, ciudad, CP) al elegir una sugerencia, solo EE. UU.
+  if (!GOOGLE_KEY) return attachPhoton(inputEl, onSelect);
 
   let cancelled = false;
   let listener = null;
@@ -138,4 +147,83 @@ export function attachAddressAutocomplete(inputEl, onSelect) {
     } catch { /* ignore */ }
   };
   return cleanup;
+}
+
+
+// ── Respaldo sin llave: Photon (OpenStreetMap) ──────────────────────────────
+// Autocompletado de direcciones de EE. UU. con número y calle. Sugerencias en
+// un desplegable propio bajo el campo; al elegir, se rellenan calle, ciudad y
+// código postal de una vez. Si la red falla, el campo manual sigue funcionando.
+function attachPhoton(inputEl, onSelect) {
+  const host = inputEl.parentElement;
+  const prevPos = host.style.position;
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+  const box = document.createElement("div");
+  box.className = "addr-sugg";
+  box.style.display = "none";
+  host.appendChild(box);
+  inputEl.setAttribute("autocomplete", "off");
+
+  let timer = null;
+  let ctrl = null;
+  const close = () => { box.style.display = "none"; box.innerHTML = ""; };
+  const onInput = () => {
+    const q = inputEl.value.trim();
+    clearTimeout(timer);
+    if (q.length < 4) { close(); return; }
+    timer = setTimeout(async () => {
+      try {
+        if (ctrl) ctrl.abort();
+        ctrl = new AbortController();
+        const r = await fetch(
+          "https://photon.komoot.io/api/?limit=6&lang=en&q=" + encodeURIComponent(q),
+          { signal: ctrl.signal }
+        );
+        const j = await r.json();
+        const feats = (j.features || []).filter((ft) => {
+          const pr = ft.properties || {};
+          return pr.countrycode === "US" && pr.street;
+        }).slice(0, 5);
+        if (!feats.length) { close(); return; }
+        box.innerHTML = "";
+        feats.forEach((ft) => {
+          const pr = ft.properties;
+          const street = [pr.housenumber, pr.street].filter(Boolean).join(" ");
+          const cityName = pr.city || pr.town || pr.village || pr.district || "";
+          const it = document.createElement("button");
+          it.type = "button";
+          it.className = "addr-sugg-it";
+          it.textContent = [street, cityName, pr.state, pr.postcode].filter(Boolean).join(", ");
+          // pointerdown (no click): gana al blur del input y la elección entra.
+          it.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            onSelect({
+              address_1: street,
+              city: cityName,
+              postal_code: pr.postcode || "",
+              country: "United States",
+              country_code: "us",
+            });
+            close();
+          });
+          box.appendChild(it);
+        });
+        box.style.display = "block";
+      } catch { /* red caída o bloqueada: el campo manual sigue */ }
+    }, 320);
+  };
+  const onBlur = () => setTimeout(close, 160);
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  inputEl.addEventListener("input", onInput);
+  inputEl.addEventListener("blur", onBlur);
+  inputEl.addEventListener("keydown", onKey);
+  return () => {
+    clearTimeout(timer);
+    if (ctrl) ctrl.abort();
+    inputEl.removeEventListener("input", onInput);
+    inputEl.removeEventListener("blur", onBlur);
+    inputEl.removeEventListener("keydown", onKey);
+    box.remove();
+    host.style.position = prevPos;
+  };
 }

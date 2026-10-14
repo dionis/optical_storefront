@@ -9140,3 +9140,143 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .zlx-height-i .i3d-info { height: 16px; }
 .zlx-infopop-head b:not(.no-i3d) > svg { display: none; }
 .zlx-infopop-head b .i3d-info { height: 20px; display: inline-block; vertical-align: -4px; margin-right: 2px; }
+
+/* ===================================================================
+   ETAPA 134 — Lámina de MATERIALES (aros 3D) + RESUMEN móvil más
+   compacto (el cliente seguía sin verlo en una sola vista con la línea
+   de Transitions). Los materiales cuentan su historia: menos aros =
+   lente más delgado (1.74 un aro fino, 1.67 dos, policarbonato tres,
+   CR-39 las capas clásicas); blanco/oro en la fila elegida.
+   =================================================================== */
+.i3d-fab { height: 22px; width: auto; flex: 0 0 auto; }
+.zlx-fab.has-i3d:not(.no-i3d) > svg.zlx-ic { display: none; }
+@media (max-width: 939px) {
+  /* Pasos del resumen en FILA (icono · rótulo · check): más bajos y legibles. */
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab {
+    flex-direction: row; justify-content: center; align-items: center; gap: 8px;
+    min-height: 44px; padding: 4px 12px;
+  }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab-txt { flex: 0 1 auto; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab-txt b { font-size: 13px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps { gap: 5px; margin-top: 6px; }
+  /* Ficha y resumen un punto más bajos para absorber líneas extra
+     (Transitions/antirreflejo) sin perder la vista única. */
+  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo,
+  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo.has-gen { height: 9vh; height: 9dvh; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navyhd { padding: 7px 12px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 6px 12px 8px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 2px 0; font-size: 13.5px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-total { font-size: 18px; margin-top: 4px; padding-top: 4px; }
+  .zlx-pop-rx.zlx-rx-stage-summary .zlx-buy-left { margin-top: 6px; }
+}
+
+/* ===================================================================
+   ETAPA 135 — CHECKOUT rediseñado + CARRITO vistoso (pedidos del
+   cliente): números en navy (fuera el rojo), título centrado con la
+   tarjeta dorada y "Seguir comprando" a la izquierda, resumen con la
+   ficha COMPLETA (foto del espejuelo, cristal, tratamientos, receta),
+   envío SIN botón (aparece al poner la dirección; el botón es PAGAR),
+   dirección con autocompletado (Google o el respaldo abierto), y el
+   carrito con marca de agua del logo y mensajes de confianza.
+   =================================================================== */
+/* Cabecera del checkout */
+.co-head { display: grid; gap: 2px; margin-bottom: 6px; }
+.co-head .co-backlink { justify-self: start; margin: 0; font-size: 13px; }
+.co-head .co-title {
+  justify-self: center; display: flex; align-items: center; gap: 10px;
+  margin: 0; font-size: 24px; text-align: center;
+}
+.co-title-ic { height: 30px; width: auto; }
+/* Números del pedido en NAVY (el rojo no es del estilo de la casa). */
+.checkout .panel-item-price { color: #0b2f66; }
+.checkout .panel-total { border-top: 2px solid #d9b85c; }
+.checkout .panel-total span { color: var(--cuba-blue); }
+.checkout .panel-total b { color: #0b2f66; }
+.checkout .co-totals > div b { color: #0b2f66; }
+/* Resumen con cabecera navy (como la ficha del espejuelo) */
+.co-summary2 { padding: 0; overflow: hidden; border-radius: 14px; }
+.co-sum-navyhd {
+  display: flex; align-items: center; gap: 8px; background: var(--cuba-blue);
+  color: #f3e3b3; font-weight: 800; font-size: 13.5px; letter-spacing: .02em;
+  padding: 9px 14px; text-transform: uppercase;
+}
+.co-sum-ic { height: 20px; width: auto; }
+.co-summary2 .panel-list, .co-summary2 .co-totals { padding: 0 14px; }
+.co-summary2 .panel-list { padding-top: 8px; }
+.co-summary2 .panel-total { margin: 4px 14px 12px; padding-top: 6px; }
+.co-item2 { align-items: center; gap: 10px; }
+.co-item-ph {
+  width: 74px; height: 48px; object-fit: contain; background: #f4f6fa;
+  border-radius: 10px; border: 1px solid var(--line); flex: 0 0 auto;
+}
+.co-item2 .panel-item-info small { display: block; line-height: 1.35; }
+.co-dt { color: var(--muted); font-weight: 700; }
+/* Línea sutil de envío */
+.co-shipline {
+  display: flex; align-items: center; gap: 10px; margin: 8px 0 2px;
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: #f7f9fc;
+}
+.co-shipline .i3d-co { height: 24px; width: auto; flex: 0 0 auto; }
+.co-shipline-tx { display: flex; flex-direction: column; min-width: 0; }
+.co-shipline-tx b { font-size: 13.5px; color: #0b2f66; }
+.co-shipline-tx small { font-size: 11.5px; color: var(--muted); }
+.co-shipline-wait { color: var(--muted); font-size: 13px; }
+.co-ship-alt { margin-left: auto; display: flex; gap: 4px; }
+.co-ship-chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 3px 9px; font-size: 11.5px; font-weight: 700; color: #0b2f66; cursor: pointer; }
+.co-ship-chip.on { background: var(--cuba-blue); color: #f3e3b3; border-color: var(--cuba-blue); }
+.co-ship-pend { display: block; margin: 8px 0 2px; }
+.co-h-ship { margin-top: 10px; }
+.co-h-ship .i3d-co { height: 20px; width: auto; }
+/* Desplegable del autocompletado (respaldo abierto) */
+.co-addr-wrap { position: relative; }
+.addr-sugg {
+  position: absolute; left: 0; right: 0; top: calc(100% + 3px); z-index: 60;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 16px 36px -14px rgba(10, 16, 28, .35); overflow: hidden;
+}
+.addr-sugg-it {
+  display: block; width: 100%; text-align: left; background: #fff; border: none;
+  padding: 9px 12px; font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.addr-sugg-it:hover { background: var(--blue-soft); color: #0b2f66; }
+.addr-sugg-it + .addr-sugg-it { border-top: 1px solid var(--line); }
+/* Carrito: marca de agua del logo + mensajes de confianza + precios navy */
+.side-panel .side-panel-body { position: relative; }
+.side-panel .side-panel-body::before {
+  content: ""; position: absolute; inset: 20% 6% auto 6%; height: 46%;
+  background: url("/logo-oficial.png") center / contain no-repeat;
+  opacity: .055; pointer-events: none;
+}
+.side-panel .panel-item-price { color: #0b2f66; }
+.side-panel .panel-total { border-top: 2px solid #d9b85c; }
+.side-panel .panel-total b { color: #0b2f66; }
+.panel-trust { display: grid; gap: 7px; margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.panel-trust span { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+.panel-trust img { height: 20px; width: auto; }
+
+/* ETAPA 135b — Auditoría de distorsión (Playwright, móvil+web): los botones
+   GRANDES (.btn.big) de toda la app estiraban la píldora de cristal al doble
+   de su proporción (cuenta, pedidos, checkout…). TODOS pasan a la barra
+   9-slice, que no se deforma a ningún ancho. Los logos de cabecera/pie dieron
+   falso positivo (el padding entra en la caja; el dibujo mantiene proporción). */
+.btn.btn-primary.big {
+  background: none !important; box-shadow: none !important;
+  border: 15px solid transparent !important;
+  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.btn.btn-outline.big {
+  background: none !important; box-shadow: none !important;
+  border: 14px solid transparent !important;
+  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
+  border-radius: 0; min-height: 50px; padding: 0 14px;
+  color: #0b2f66 !important; font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.btn.btn-primary.big:hover:not(:disabled), .btn.btn-outline.big:hover:not(:disabled) {
+  background: none !important;
+  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+}

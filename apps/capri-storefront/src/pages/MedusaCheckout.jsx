@@ -11,6 +11,7 @@ import {
 } from "../data/medusaCart.js";
 import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
 import { shipping as shippingConfig } from "../admin/priceStore.js";
+import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
 
@@ -192,6 +193,26 @@ export default function MedusaCheckout() {
     bd.address = address;
     return bd;
   };
+
+  // ENVÍO SIN BOTÓN (pedido del cliente): en cuanto el correo y el domicilio
+  // de entrega están completos, la cotización se pide sola (con un respiro de
+  // 800 ms para no cotizar a cada tecla). Si el cliente corrige la dirección,
+  // la línea de envío vuelve a "—" hasta re-cotizar.
+  const quoteSigRef = useRef("");
+  useEffect(() => {
+    if (step !== "contact" || loading || !cart) return undefined;
+    const emailOk = /\S+@\S+\.\S+/.test(f.email);
+    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.postal_code.trim().length >= 5;
+    const sig = [f.email, f.address_1, f.city, f.postal_code].join("|");
+    if (!ready) { quoteSigRef.current = ""; setShip([]); setCarriers(null); setCarrierSel(""); return undefined; }
+    if (sig === quoteSigRef.current) return undefined;
+    const tm = setTimeout(() => {
+      quoteSigRef.current = sig;
+      calcShipping();
+    }, 800);
+    return () => clearTimeout(tm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loading, cart, f.email, f.address_1, f.city, f.postal_code]);
 
   const calcShipping = async () => {
     setErr(""); setBusy(true);
@@ -391,12 +412,18 @@ export default function MedusaCheckout() {
 
   return (
     <div className="section checkout" style={{ maxWidth: 680, margin: "0 auto" }}>
-      <h1>{L("title")}</h1>
-      {/* Siempre hay vuelta atrás: a la tienda desde los datos, y al paso de
-          datos desde el pago (botón dentro de la sección de pago). */}
-      {step !== "done" && (
-        <Link to="/catalogo" className="co-backlink">← {L("keepShopping")}</Link>
-      )}
+      {/* Cabecera (pedido del cliente): "Seguir comprando" alineado a la
+          izquierda y el título CENTRADO, con la tarjeta dorada de la lámina. */}
+      <div className="co-head">
+        {step !== "done" && (
+          <Link to="/catalogo" className="co-backlink">← {L("keepShopping")}</Link>
+        )}
+        <h1 className="co-title">
+          <img className="co-title-ic" src="/ui/bn/bn-goldr-card.png" alt="" aria-hidden="true"
+               onError={(e) => e.currentTarget.remove()} />
+          {L("title")}
+        </h1>
+      </div>
 
       {step === "done" ? (
         <div className="checkout-done">
@@ -415,8 +442,12 @@ export default function MedusaCheckout() {
       ) : (
         <>
           {/* Resumen del pedido COMPLETO, siempre visible arriba de "Finalizar compra" */}
-          <div className="co-summary">
-            <div className="co-summary-h">🧾 {L("summary")}</div>
+          <div className="co-summary co-summary2">
+            <div className="co-sum-navyhd">
+              <img className="co-sum-ic" src="/ui/bn/bn-gold-deals.png" alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
+              <span>{L("summary")}</span>
+            </div>
             {/* El carrito se revalidó al abrir esta página. Si algún precio se
                 movió respecto al que el cliente vio, se dice — no se pregunta. */}
             {repriced.length > 0 && (
@@ -437,11 +468,20 @@ export default function MedusaCheckout() {
                 const lc = i.metadata?.lens_config || {};
                 const dl = DESIGN_LBL[lc.design_code];
                 const parts = [dl ? (dl[lang] || dl.es) : lc.design_code, lc.material_code, lc.photo_code, lc.ar_code].filter(Boolean);
+                // Ficha CLARA del pedido (pedido del cliente): espejuelo con su
+                // foto, el cristal y los tratamientos con nombre legible.
+                const mat = materialById(lc.material_code);
+                const photoOpt = PHOTO.find((o) => o.id === lc.photo_code) || null;
+                const arOpt = AR_OPTIONS.find((o) => o.id === lc.ar_code) || null;
+                const treats = [photoOpt && LBL(photoOpt.label, lang), arOpt && LBL(arOpt.label, lang)].filter(Boolean);
                 return (
-                  <li key={i.id} className="panel-item">
+                  <li key={i.id} className="panel-item co-item2">
+                    {i.thumbnail && <img className="co-item-ph" src={i.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" />}
                     <div className="panel-item-info">
                       <b>{i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
-                      {parts.length > 0 && <small>{parts.join(" · ")}</small>}
+                      {dl && <small><span className="co-dt">{L("frameLine")}:</span> {dl[lang] || dl.es}</small>}
+                      {mat && <small><span className="co-dt">{L("lensLine")}:</span> {LBL(mat.label, lang)}</small>}
+                      {treats.length > 0 && <small><span className="co-dt">{L("treatLine")}:</span> {treats.join(" · ")}</small>}
                       {i.metadata?.prescription_id && <small className="co-rx">✓ {L("withRx")}</small>}
                     </div>
                     <span className="panel-item-price">{money(i.total ?? i.unit_price)}</span>
@@ -461,7 +501,19 @@ export default function MedusaCheckout() {
             </ul>
             <div className="co-totals">
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
-              <div><span>{L("shippingLine")}</span><b>{cart.shipping_total > 0 ? money(cart.shipping_total) : L("free")}</b></div>
+              {(() => {
+                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+                const shipAmt = cart.shipping_total > 0 ? cart.shipping_total
+                  : sel ? (sel.free ? 0 : sel.amount)
+                  : shipId ? (ship.find((o) => o.id === shipId)?.amount ?? null)
+                  : null;
+                return (
+                  <div>
+                    <span>{L("shippingLine")}{sel ? ` · ${sel.label}` : ""}</span>
+                    <b>{shipAmt == null ? "—" : shipAmt > 0 ? money(shipAmt) : L("free")}</b>
+                  </div>
+                );
+              })()}
               {cart.tax_total > 0 && <div><span>{L("tax")}</span><b>{money(cart.tax_total)}</b></div>}
               {(() => {
                 // Impuesto de montura sola horneado en el precio (server-side);
@@ -470,7 +522,14 @@ export default function MedusaCheckout() {
                 return inc > 0 ? <div><span>{L("taxIncluded")}</span><b>{money(inc)}</b></div> : null;
               })()}
             </div>
-            <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
+            {(() => {
+              const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+              const pend = cart.shipping_total > 0 ? 0
+                : sel ? (sel.free ? 0 : Number(sel.amount || 0))
+                : shipId ? Number(ship.find((o) => o.id === shipId)?.amount || 0)
+                : 0;
+              return <div className="panel-total"><span>{L("total")}</span><b>{money(Number(cart.total || 0) + pend)}</b></div>;
+            })()}
           </div>
 
           {err && <div className="auth-err" style={{ margin: "10px 0" }}>{err}</div>}
@@ -492,8 +551,20 @@ export default function MedusaCheckout() {
                   <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
                   <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
                 </div>
-                <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
-                {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
+              </div>
+
+              {/* Domicilio de entrega (pedido del cliente): sin botón de envío —
+                  la cotización llega sola al completar la dirección. */}
+              <div className="co-h co-h-ship">
+                <img className="i3d i3d-co" src="/ui/icons3d/navy-truck.png" alt="" aria-hidden="true"
+                     onError={(e) => { e.currentTarget.remove(); }} />
+                {L("shipTo")}
+              </div>
+              <div className="co-fields">
+                <div className="co-addr-wrap">
+                  <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                </div>
+                <small className="co-hint">📍 {L("addrHint")}</small>
                 <div className="co-two">
                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
@@ -516,53 +587,46 @@ export default function MedusaCheckout() {
                 </label>
               </div>
 
-              {!ship.length ? (
-                <button className="btn btn-outline big" disabled={busy || !f.email || !f.address_1} onClick={calcShipping}>
-                  {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("calcShip")}
-                </button>
-              ) : (
-                <>
-                  <div className="co-h">🚚 {L("shipping")}</div>
-                  {carriers ? (
-                    <>
-                      {/* FedEx / DHL cotizados por el SERVIDOR; el cliente elige. */}
-                      <div className="opt-list co-carriers">
+              {/* Línea SUTIL de envío: aparece sola al completar la dirección
+                  (cotizada en el servidor); mientras, una nota tranquila. Si el
+                  servidor devolviera varias mensajerías, se elige aquí mismo. */}
+              {(() => {
+                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+                const opt = !carriers && shipId ? ship.find((o) => o.id === shipId) : null;
+                if (busy && !sel && !opt) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
+                if (sel) return (
+                  <div className="co-shipline" role="status">
+                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
+                         onError={(e) => e.currentTarget.remove()} />
+                    <span className="co-shipline-tx">
+                      <b>{sel.label} · {sel.free ? L("free") : money(sel.amount)}</b>
+                      <small>{t("ship.eta", { min: sel.eta_min_days, max: sel.eta_max_days })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
+                    </span>
+                    {carriers.length > 1 && (
+                      <span className="co-ship-alt">
                         {carriers.map((q) => (
-                          <label key={q.carrier} className={`choice ${carrierSel === q.carrier ? "sel" : ""}`}>
-                            <input type="radio" name="ship" checked={carrierSel === q.carrier} onChange={() => setCarrierSel(q.carrier)} />
-                            <span className="choice-main">
-                              <span className="choice-title">{q.label}</span>
-                              <small className="choice-sub">{t("ship.eta", { min: q.eta_min_days, max: q.eta_max_days })}</small>
-                            </span>
-                            <span className={`choice-price ${q.free ? "free" : ""}`}>{q.free ? L("free") : money(q.amount)}</span>
-                          </label>
+                          <button key={q.carrier} type="button" className={`co-ship-chip ${carrierSel === q.carrier ? "on" : ""}`}
+                                  onClick={() => setCarrierSel(q.carrier)}>{q.label}</button>
                         ))}
-                      </div>
-                      {/* Promo de envío gratis RETIRADA por completo (pedido del dueño):
-                          sin avisos de gratis en el checkout. */}
-                      <small className="co-hint">🇺🇸 {t("ship.usOnlyNote")}</small>
-                    </>
-                  ) : (
-                  <div className="opt-list">
-                    {ship.map((o) => (
-                      <label key={o.id} className={`choice ${shipId === o.id ? "sel" : ""}`}>
-                        <input type="radio" name="ship" checked={shipId === o.id} onChange={() => setShipId(o.id)} />
-                        <span className="choice-main"><span className="choice-title">{tv(o.name)}</span></span>
-                        <span className="choice-price">{o.amount > 0 ? money(o.amount) : L("free")}</span>
-                      </label>
-                    ))}
+                      </span>
+                    )}
                   </div>
-                  )}
-                  {/* El plazo del transportista no es el plazo del pedido: antes hay
-                      que fabricar los lentes. Se dice aquí, donde se elige entrega. */}
-                  {labDays > 0 && (
-                    <small className="co-hint">🔬 {t("ship.labNote", { days: labDays })}</small>
-                  )}
-                  <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
-                    {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("toPay")}
-                  </button>
-                </>
-              )}
+                );
+                if (opt) return (
+                  <div className="co-shipline" role="status">
+                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
+                         onError={(e) => e.currentTarget.remove()} />
+                    <span className="co-shipline-tx">
+                      <b>{tv(opt.name)} · {opt.amount > 0 ? money(opt.amount) : L("free")}</b>
+                      {labDays > 0 && <small>{t("ship.labNote", { days: labDays })}</small>}
+                    </span>
+                  </div>
+                );
+                return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
+              })()}
+              <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
+                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("pay")}
+              </button>
             </div>
           )}
 

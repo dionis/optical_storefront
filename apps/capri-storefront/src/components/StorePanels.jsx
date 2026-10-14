@@ -69,6 +69,12 @@ export function CartPanel({ open, onClose }) {
 
           <Link to="/checkout" className="btn btn-primary big" onClick={onClose}>{t("cart.checkout")}</Link>
           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
+          {/* Mensajes de confianza (pedido del cliente): el carrito también vende. */}
+          <div className="panel-trust" role="note">
+            <span><img src="/ui/icons3d/navy-shield.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.secure")}</span>
+            <span><img src="/ui/icons3d/navy-truck.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.ship")}</span>
+            <span><img src="/ui/icons3d/navy-card.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.pay")}</span>
+          </div>
         </>
       )}
     </SidePanel>
