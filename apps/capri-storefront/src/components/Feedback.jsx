@@ -1,3 +1,4 @@
+// Dónde se usa: toda la app — sistema estándar de avisos (toasts) y diálogos confirm/alert con la estética de la marca. Sustituye a window.confirm/alert.
 import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

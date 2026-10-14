@@ -1,3 +1,4 @@
+// Dónde se usa: pestaña Equipo de /admin — alta de administradores con contraseña temporal de un solo primer uso; el super admin no puede eliminarse.
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";

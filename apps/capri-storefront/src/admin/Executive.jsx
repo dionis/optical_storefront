@@ -1,3 +1,4 @@
+// Dónde se usa: pestaña Ejecutivo de /admin — KPIs, series por día, mezcla por marca y alertas operativas.
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart } from "./charts.jsx";
 import { summarize, summarizeOrders, rangeFor, subscribe as onAnalytics } from "./analytics.js";

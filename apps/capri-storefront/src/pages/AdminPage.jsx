@@ -1,3 +1,4 @@
+// Dónde se usa: /admin — envoltorio del panel corporativo: login (fondo navy de marca), gate de primera contraseña y montaje del dashboard.
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout } from "../admin/adminAuth.js";

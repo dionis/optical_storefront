@@ -1,3 +1,4 @@
+// Dónde se usa: /catalogo (y /catalogo?tab=cases). Grid con filtros laterales, orden, scroll incremental y banner de campaña.
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
@@ -146,7 +147,7 @@ export default function Catalog() {
           </div>
           <div className="brand-hero-inner">
             <div className="brand-hero-logo">
-              <img src={brand.logo} alt={brand.name}
+              <img src={brand.logoWide || brand.logo} alt={brand.name}
                    onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
             </div>
             <h1>{brand.name}</h1>

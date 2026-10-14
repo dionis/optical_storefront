@@ -1,3 +1,4 @@
+// Dónde se usa: /my-orders — seguimiento de pedidos del cliente (enlace mágico o cuenta), línea de tiempo de etapas y cancelación con política de plazos.
 // Order tracking for guests: one page listing every order the shopper made,
 // reached with a passwordless emailed link and remembered afterwards so they
 // never have to dig through their inbox again.

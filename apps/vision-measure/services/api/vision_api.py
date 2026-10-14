@@ -88,6 +88,14 @@ class MeasureRequest(BaseModel):
     faceImage: str = Field(..., description="Foto frontal del paciente (data URL)")
     sideImage: Optional[str] = Field(None, description="Foto lateral/perfil del paciente (data URL)")
     glassesImage: str = Field(..., description="Foto de la montura (data URL)")
+    glassesImages: Optional[List[str]] = Field(
+        None,
+        description=(
+            "TODAS las fotos de la montura elegida (data URLs): frente, laterales, "
+            "detalle. Van completas tanto a la medición como al montaje, declaradas en "
+            "el prompt como UN MISMO producto. Vacío o ausente usa glassesImage."
+        ),
+    )
     provider: str = Field("openai", description="Identificador del proveedor multimodal")
     model: Optional[str] = Field(None, description="Modelo concreto; vacío usa el de por defecto")
     apiKey: Optional[str] = Field(None, description="Clave introducida en la UI; vacío usa el entorno")
@@ -251,11 +259,25 @@ def _build_measure_payload(
     # One id per run, shared by every proposal inside it and stamped on every log line.
     request_id = new_request_id()
 
+    # Todas las vistas de la montura, deduplicadas y acotadas: más de 5 fotos no
+    # añade fidelidad y sí bytes y latencia.
+    seen = set()
+    glasses_all: List[str] = []
+    for g in [*(request.glassesImages or []), request.glassesImage]:
+        g = (g or "").strip()
+        if g and g not in seen:
+            seen.add(g)
+            glasses_all.append(g)
+        if len(glasses_all) >= 5:
+            break
+    primary_glasses = glasses_all[0] if glasses_all else request.glassesImage
+
     common = {
         "request_id": request_id,
         "provider_id": request.provider,
         "face_image": request.faceImage,
-        "glasses_image": request.glassesImage,
+        "glasses_image": primary_glasses,
+        "glasses_images": glasses_all,
         "model": request.model,
         "api_key": request.apiKey,
         "context": request.context,
@@ -296,15 +318,15 @@ def _build_measure_payload(
         # perfil (antes el perfil se inventaba a partir de la frontal — de ahí que se
         # perdiera el entorno y a veces no saliera la montura). El montaje solo AÑADE la
         # montura sobre la foto; no regenera la escena (ver prompts en compositor.py).
-        glasses = request.glassesImage
         side_src = request.sideImage or request.faceImage
-        front_prepared = prepare_render_images(request.faceImage, glasses)
+        front_prepared = prepare_render_images(request.faceImage, glasses_all)
         side_prepared = (
-            prepare_render_images(side_src, glasses) if request.renderProfile else None
+            prepare_render_images(side_src, glasses_all) if request.renderProfile else None
         )
         base_render = {
             "engine": request.imageEngine,
-            "glasses_image": glasses,
+            "glasses_image": primary_glasses,
+            "glasses_images": glasses_all,
             "context": request.context,
             "model": request.imageModel,
             "api_key": request.imageApiKey or request.apiKey,

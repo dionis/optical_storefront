@@ -1,3 +1,4 @@
+// Dónde se usa: /admin/media — revisión interna de las vistas generadas del catálogo.
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

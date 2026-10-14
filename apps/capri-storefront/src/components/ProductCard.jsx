@@ -1,3 +1,4 @@
+// Dónde se usa: catálogo (grid), portada (Best sellers), PDP (Más de la marca) y favoritos. Tarjeta reutilizable por props (product); botones Probármelos (cámara dorada de la lámina de marca) y Añadir al carrito (carrito navy).
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -200,7 +201,10 @@ export default function ProductCard({ product }) {
             invitamos a verse la montura, después a comprar. */}
         {TRY_ON_ENABLED && (
           <button type="button" className="card-tryon" onClick={() => openTryOn(product)}>
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+            {/* Cámara dorada de la lámina de botones de la marca (recorte PNG
+                transparente en public/ui/); el texto sigue vivo para es/en. */}
+            <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
+                 onError={(e) => e.currentTarget.remove()} />
             {t("card.tryOn")}
           </button>
         )}
@@ -215,7 +219,10 @@ export default function ProductCard({ product }) {
             <>✓ {t("case.added")}</>
           ) : (
             <>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></svg>
+              {/* Carrito navy de la lámina de botones de la marca (PNG
+                  transparente); va sobre el botón claro, como en la lámina. */}
+              <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
               {t("card.addToCart")}
             </>
           )}

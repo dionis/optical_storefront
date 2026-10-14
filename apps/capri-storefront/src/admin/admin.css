@@ -437,3 +437,32 @@
 .adm-team-tag.temp { background: #fff7e6; color: #7a5b00; }
 .adm-team-note { margin-top: 10px; }
 @media (max-width: 860px) { .adm-team-form { grid-template-columns: 1fr 1fr; } .adm-team-form button { grid-column: 1 / -1; } }
+
+/* ═══ ETAPA 106 (admin) — marca RUBI LENS en el panel corporativo ═════════
+   admin.css carga DESPUÉS de index.css en el chunk del panel, así que las
+   reglas de marca del admin viven aquí (en index.css serían pisadas).
+   Login: de un degradado azul→rojo estridente a navy profundo con dos focos
+   radiales sobrios (azul del logo + un asomo de rojo de marca). La tarjeta
+   entra con rl-pop. Identidad diferenciada (topbar oscuro + badge) intacta. */
+@keyframes rl-pop-adm { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+.adm-login {
+  background:
+    radial-gradient(1100px 600px at 70% 15%, rgba(26, 75, 150, .38), transparent 60%),
+    radial-gradient(900px 500px at 12% 88%, rgba(214, 18, 62, .16), transparent 55%),
+    linear-gradient(160deg, #02112a 0%, #01326b 100%);
+}
+.adm-login-card {
+  animation: rl-pop-adm .5s cubic-bezier(.22,.61,.36,1) both;
+  border: 1px solid #e6eaf2;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .55);
+}
+.adm-login-card .btn-primary, .adm-login-card button[type="submit"] { background: #01326b; }
+/* Tarjetas y tablas: borde fino + sombra solo al pasar (mismo lenguaje que la
+   tienda). Filas con hover suave para leer tablas largas sin perderse. */
+.adm-card { border: 1px solid #e6eaf2; box-shadow: none; transition: box-shadow .26s cubic-bezier(.22,.61,.36,1); }
+.adm-card:hover { box-shadow: 0 1px 2px rgba(10,25,60,.04), 0 8px 22px -16px rgba(10,25,60,.14); }
+.adm-kpis .adm-card { transition: transform .26s cubic-bezier(.22,.61,.36,1), box-shadow .26s; }
+.adm-kpis .adm-card:hover { transform: translateY(-2px); }
+.ord-row, .adm-cat-row { transition: background .2s; }
+.ord-row:hover, .adm-cat-row:hover { background: #f2f5fa; }
+@media (prefers-reduced-motion: reduce) { .adm-login-card { animation: none; } }

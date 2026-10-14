@@ -1,3 +1,4 @@
+// Dónde se usa: interior de /admin. Pestañas Ejecutivo/Resumen/Ventas/Pedidos/Productos/Precios/Equipo; identidad diferenciada (topbar navy + badge ADMIN) con los tokens de la tienda.
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
 import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalytics, clearDemo, productSales, productSalesFrom } from "./analytics.js";

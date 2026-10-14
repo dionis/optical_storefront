@@ -1,3 +1,4 @@
+// Dónde se usa: TODAS las páginas de la tienda (layout raíz en App). Topbar de anuncio + navegación + buscador + accesos (idioma, cuenta, favoritos, carrito). En móvil colapsa a hamburguesa + barra inferior fija.
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useCart } from "./CartContext.jsx";

@@ -1,3 +1,4 @@
+// Dónde se usa: lanzador del probador 3D (vto-web) en iframe a pantalla completa; alternativa al estudio IA cuando hay modelo .glb.
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

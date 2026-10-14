@@ -1,3 +1,4 @@
+// Dónde se usa: /cuenta — registro/acceso del cliente y resumen de su actividad.
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useUser, logout } from "../components/userAuth.js";

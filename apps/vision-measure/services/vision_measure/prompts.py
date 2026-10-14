@@ -196,12 +196,34 @@ def sanitize_extra_instructions(text: Optional[str]) -> str:
         return cleaned
     return cleaned[:MAX_EXTRA_INSTRUCTIONS] + "\n[…nota recortada por longitud]"
 
+def _frame_images_line(frame_image_count: int) -> str:
+    """
+    The closing sentence that tells the model what each attached image is.
+
+    With one frame photo it is the classic pair. With several, every extra image is
+    ANOTHER VIEW OF THE SAME FRAME — said explicitly, because a model left to guess
+    tends to read a second frame photo as a second product and averages the two.
+    """
+    n = max(1, int(frame_image_count or 1))
+    if n == 1:
+        return "IMAGE 1 is the patient's face, IMAGE 2 is the frame. "
+    return (
+        f"IMAGE 1 is the patient's face. IMAGES 2 to {n + 1} are the SAME eyewear "
+        "frame photographed from different angles (front, sides, detail). They are one "
+        "single product, not alternatives: read the frame's boxing dimensions, printed "
+        "size code, brand, colour, material and construction details using ALL the "
+        "views together — a size code is usually printed inside a temple and only "
+        "legible in a side view. "
+    )
+
+
 def build_prompt(
     strategy: str,
     lang: str = "es",
     context: Optional[Dict[str, Any]] = None,
     extra_instructions: Optional[str] = None,
     frame_id: Optional[str] = None,
+    frame_image_count: int = 1,
 ) -> Dict[str, Any]:
     """
     Returns {"system": ..., "user": ...} for the requested strategy.
@@ -209,6 +231,9 @@ def build_prompt(
     `context` is the locally measured snapshot; it is required by strategy B and
     ignored by strategy A. `extra_instructions` is the optician's own note, appended to
     the system prompt after everything else and explicitly ranked below it.
+    `frame_image_count` is how many photographs of the frame ride along after the face
+    (several angles of the SAME frame improve both the size-code reading and the fit
+    judgement).
     """
     strategy = (strategy or "A").strip().upper()
     if strategy not in STRATEGY_IDS:
@@ -235,7 +260,7 @@ def build_prompt(
     if strategy == "A":
         user = (
             f"{_STRATEGY_A_BODY}\n"
-            "IMAGE 1 is the patient's face, IMAGE 2 is the frame. "
+            f"{_frame_images_line(frame_image_count)}"
             "Answer with the JSON object only."
         )
         return {"system": system, "user": user, "browseUrls": browse_urls}
@@ -251,7 +276,7 @@ def build_prompt(
         "MEASURED CONTEXT (JSON, produced locally by MediaPipe FaceLandmarker and the "
         "optical calculator at the exact instant IMAGE 1 was captured):\n"
         f"{json.dumps(context, ensure_ascii=False, indent=2)}\n\n"
-        "IMAGE 1 is the patient's face, IMAGE 2 is the frame. "
+        f"{_frame_images_line(frame_image_count)}"
         "Answer with the JSON object only."
     )
     return {"system": system, "user": user, "browseUrls": browse_urls}

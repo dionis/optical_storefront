@@ -1,3 +1,4 @@
+// Dónde se usa: /recetas/:slug — flujo de lentes graduados (receta → tipo → material → tratamientos → resumen) en ventanas ZlxPop con fondo desenfocado.
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";

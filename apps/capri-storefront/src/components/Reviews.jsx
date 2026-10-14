@@ -1,3 +1,4 @@
+// Dónde se usa: pestaña Opiniones del PDP. Listado + modal de reseña con el sistema de ventanas estándar.
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

@@ -161,54 +161,105 @@ _REMBG_SESSION = None
 # wording here can guarantee the face comes back untouched. This asks for it as plainly as
 # it can be asked — and the panel says, next to the engine selector, that the only option
 # which cannot alter the patient is the deterministic local composite.
-TRY_ON_PROMPT = (
-    "IMAGE 1 is a photograph of a person. IMAGE 2 is a photograph of an eyewear frame. "
-    "Produce ONE photorealistic image of the SAME person from IMAGE 1 wearing the EXACT "
-    "frame from IMAGE 2.\n"
-    "THE MOST IMPORTANT CONSTRAINT: this is a medical fitting record, not a portrait. "
-    "The person must remain recognisably, verifiably the SAME individual. Treat IMAGE 1 "
-    "as the ground truth and change NOTHING about it except adding the frame. If you "
-    "cannot add the frame without altering the face, return the face unaltered and place "
-    "the frame imperfectly — a slightly misplaced frame is correctable, a changed face "
-    "makes the whole record useless.\n"
-    "Hard constraints:\n"
-    "- Do NOT alter: facial proportions, the shape or spacing of the eyes, the nose, the "
-    "mouth, the jaw, skin texture, wrinkles, blemishes, age, hair, expression, head pose "
-    "or the background. No beautifying, no smoothing, no slimming, no straightening, no "
-    "makeup, no lighting cleanup.\n"
-    "- Keep the person's face, identity, expression, skin, hair, pose and background "
-    "unchanged. Do not retouch or beautify them.\n"
-    "- Keep the frame's shape, colour, material and proportions exactly as in IMAGE 2. "
-    "Do not restyle it.\n"
-    "- Seat the frame as it would really sit: bridge on the nasal saddle, rims level with "
-    "the pupil line, temples running to the ears.\n"
-    "- Match the lighting and perspective of IMAGE 1, with a plausible shadow on the face.\n"
-    "- Keep the EXACT same framing, crop and camera distance as IMAGE 1. Do not zoom in, "
-    "do not re-compose the shot, do not change the background.\n"
-    "Return only the image."
-)
+#
+# Built per request rather than kept as constants because the number of frame photos
+# varies: the storefront now sends EVERY view it has of the chosen colourway (front,
+# left, right), and the prompt must say they are ONE frame, or the model reads the
+# second photo as a second product and invents an average of the two.
 
 
-PROFILE_PROMPT = (
-    "IMAGE 1 is a SIDE (profile) photograph of a real person. IMAGE 2 is a photograph of "
-    "an eyewear frame. Produce ONE photorealistic image that is IMAGE 1 UNCHANGED with "
-    "the EXACT frame from IMAGE 2 added onto the person's face, worn from the side.\n"
-    "THE MOST IMPORTANT CONSTRAINT: this is a medical fitting record, not a portrait. "
-    "Treat IMAGE 1 as the ground truth and change NOTHING about it except adding the "
-    "frame. Keep the SAME person, the SAME background and room, the SAME lighting, the "
-    "SAME head pose and the SAME framing/crop. If you cannot add the frame without "
-    "altering the person or the scene, add it imperfectly rather than change them.\n"
-    "Hard constraints:\n"
-    "- Do NOT alter: the person's identity, face, skin, wrinkles, hair, ear, expression, "
-    "head pose, OR the background. No beautifying, smoothing, slimming or rejuvenating. "
-    "Do NOT turn the head to another angle and do NOT re-frame or zoom the shot.\n"
-    "- Keep the frame's shape, colour, material and proportions exactly as in IMAGE 2.\n"
-    "- This view shows the FIT AT THE SIDE, so it must read clearly: the temple running "
-    "from the hinge back over the ear, the pantoscopic tilt of the front, and the gap "
-    "between the rim and the cheek.\n"
-    "- Match the lighting and perspective of IMAGE 1.\n"
-    "Return only the image."
-)
+def _frame_refs(n_frames: int) -> str:
+    """ 'IMAGE 2' or 'IMAGES 2–N' — how the prompt names the frame photographs."""
+    return "IMAGE 2" if n_frames <= 1 else f"IMAGES 2 to {n_frames + 1}"
+
+
+def build_tryon_prompt(n_frames: int = 1) -> str:
+    refs = _frame_refs(n_frames)
+    multi = (
+        ""
+        if n_frames <= 1
+        else (
+            f"{refs} are photographs of the SAME eyewear frame from different angles "
+            "(front, left, right). They are ONE product: cross-reference all of them "
+            "to reproduce the frame exactly.\n"
+        )
+    )
+    return (
+        f"IMAGE 1 is a photograph of a person. {refs} "
+        + ("is a photograph of an eyewear frame. " if n_frames <= 1 else "show an eyewear frame. ")
+        + multi
+        + "Produce ONE photorealistic image of the SAME person from IMAGE 1 wearing "
+        f"the EXACT frame from {refs}.\n"
+        "THE TWO NON-NEGOTIABLE CONSTRAINTS, in order:\n"
+        "1) THE FACE IS GROUND TRUTH. This is a medical fitting record, not a portrait. "
+        "The person must remain recognisably, verifiably the SAME individual, with ZERO "
+        "variation: treat IMAGE 1 as a finished photograph you are EDITING by adding "
+        "glasses, never as a reference to repaint. If you cannot add the frame without "
+        "altering the face, return the face unaltered and place the frame imperfectly — "
+        "a slightly misplaced frame is correctable, a changed face makes the whole "
+        "record useless.\n"
+        "2) THE FRAME IS A REAL PRODUCT THE PERSON IS BUYING. Reproduce it faithfully "
+        "from the photographs: the exact front shape and rim profile, the exact colour "
+        "and finish (glossy/matte, gradients, tortoise pattern), the material texture "
+        "(acetate grain, metal sheen), the bridge and nose-pad design, hinge details, "
+        "temple shape and any logo or decoration, and the lens tint if the photos show "
+        "one. Do NOT substitute a similar frame, do NOT restyle, recolour, thin, "
+        "thicken or simplify it. The frame's front details must stay clearly visible "
+        "in the result.\n"
+        "Hard constraints:\n"
+        "- Do NOT alter: facial proportions, the shape or spacing of the eyes, the "
+        "nose, the mouth, the jaw, skin texture, wrinkles, blemishes, age, hair, "
+        "expression, head pose or the background. No beautifying, no smoothing, no "
+        "slimming, no straightening, no makeup, no lighting cleanup.\n"
+        "- Keep the frame's proportions true to its published size relative to the "
+        "face: do not widen or shrink it to 'fit better'.\n"
+        "- Seat the frame as it would really sit: bridge on the nasal saddle, rims "
+        "level with the pupil line, temples running to the ears, lenses in front of "
+        "the eyes (the eyes stay visible through them).\n"
+        "- Match the lighting and perspective of IMAGE 1, with a plausible soft shadow "
+        "from the frame on the face.\n"
+        "- Keep the EXACT same framing, crop and camera distance as IMAGE 1. Do not "
+        "zoom in, do not re-compose the shot, do not change the background.\n"
+        "Return only the image."
+    )
+
+
+def build_profile_prompt(n_frames: int = 1) -> str:
+    refs = _frame_refs(n_frames)
+    multi = (
+        ""
+        if n_frames <= 1
+        else (
+            f"{refs} show the SAME eyewear frame from different angles; use the side "
+            "views especially to reproduce the temple design, hinge and colour exactly.\n"
+        )
+    )
+    return (
+        f"IMAGE 1 is a SIDE (profile) photograph of a real person. {refs} "
+        + ("is a photograph of an eyewear frame. " if n_frames <= 1 else "show an eyewear frame. ")
+        + multi
+        + "Produce ONE photorealistic image that is IMAGE 1 UNCHANGED with the EXACT "
+        f"frame from {refs} added onto the person's face, worn from the side.\n"
+        "THE MOST IMPORTANT CONSTRAINT: this is a medical fitting record, not a "
+        "portrait. Treat IMAGE 1 as the ground truth and change NOTHING about it except "
+        "adding the frame. Keep the SAME person, the SAME background and room, the SAME "
+        "lighting, the SAME head pose and the SAME framing/crop. If you cannot add the "
+        "frame without altering the person or the scene, add it imperfectly rather than "
+        "change them.\n"
+        "Hard constraints:\n"
+        "- Do NOT alter: the person's identity, face, skin, wrinkles, hair, ear, "
+        "expression, head pose, OR the background. No beautifying, smoothing, slimming "
+        "or rejuvenating. Do NOT turn the head to another angle and do NOT re-frame or "
+        "zoom the shot.\n"
+        "- Keep the frame's shape, colour, finish, material texture and proportions "
+        "exactly as photographed. Do not substitute a similar frame or simplify its "
+        "details.\n"
+        "- This view shows the FIT AT THE SIDE, so it must read clearly: the temple "
+        "running from the hinge back over the ear, the pantoscopic tilt of the front, "
+        "and the gap between the rim and the cheek.\n"
+        "- Match the lighting and perspective of IMAGE 1.\n"
+        "Return only the image."
+    )
 
 
 
@@ -496,13 +547,19 @@ def render_local_overlay(
 def render_ai_tryon(
     provider_id: str,
     face: Tuple[str, str],
-    glasses: Tuple[str, str],
+    glasses,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     view: str = "front",
 ) -> Dict[str, Any]:
     """
-    Asks an image model to edit the two photographs into one worn shot.
+    Asks an image model to edit the photographs into one worn shot.
+
+    `glasses` is ONE (media, b64) pair or a LIST of them — every available view of the
+    chosen colourway (front, left, right). All of them travel to the model, with a
+    prompt that says they are one single frame: the extra angles are what let the model
+    reproduce the temple design, the acetate texture and the exact colour instead of
+    inventing a lookalike.
 
     `view` is "front" or "profile". The profile view is a genuine extrapolation — there
     is no side photograph of the patient anywhere in this flow — so it is useful for
@@ -516,10 +573,14 @@ def render_ai_tryon(
             f"imagen: {', '.join(IMAGE_CAPABLE)} (o la composición local)."
         )
 
+    glasses_list = list(glasses) if isinstance(glasses, list) else [glasses]
+    glasses_list = [g for g in glasses_list if g] or [glasses]
+
     chosen = (model or "").strip() or IMAGE_CAPABLE[spec.id]
     key = resolve_api_key(spec, api_key)
     started = time.time()
-    prompt = PROFILE_PROMPT if view == "profile" else TRY_ON_PROMPT
+    n = len(glasses_list)
+    prompt = build_profile_prompt(n) if view == "profile" else build_tryon_prompt(n)
 
     renderer = {
         "gemini": _render_gemini,
@@ -527,7 +588,7 @@ def render_ai_tryon(
     }.get(spec.id, _render_openrouter)
 
     try:
-        image_b64, media = renderer(spec, chosen, key, face, glasses, prompt)
+        image_b64, media = renderer(spec, chosen, key, face, glasses_list, prompt)
     except RuntimeError as exc:
         # The defaults above are preview ids, and a retired one comes back as a 404 in
         # the middle of a fitting with nobody to retype it. Retry once on the previous
@@ -544,7 +605,7 @@ def render_ai_tryon(
             raise
         reason = "no disponible" if retired else "saturado"
         print(f"[VISION] {spec.label}: '{chosen}' {reason}; se reintenta con '{spare}'.")
-        image_b64, media = renderer(spec, spare, key, face, glasses, prompt)
+        image_b64, media = renderer(spec, spare, key, face, glasses_list, prompt)
         chosen = spare
 
     image_b64, media = _recompress(image_b64, media)
@@ -587,6 +648,7 @@ def _looks_like_missing_model(message: str) -> bool:
 
 
 def _render_gemini(spec: ProviderSpec, model: str, key: str, face, glasses, prompt: str):
+    frames = glasses if isinstance(glasses, list) else [glasses]
     payload = {
         "contents": [
             {
@@ -594,7 +656,7 @@ def _render_gemini(spec: ProviderSpec, model: str, key: str, face, glasses, prom
                 "parts": [
                     {"text": prompt},
                     {"inlineData": {"mimeType": face[0], "data": face[1]}},
-                    {"inlineData": {"mimeType": glasses[0], "data": glasses[1]}},
+                    *[{"inlineData": {"mimeType": g[0], "data": g[1]}} for g in frames],
                 ],
             }
         ],
@@ -630,9 +692,10 @@ def _render_gemini(spec: ProviderSpec, model: str, key: str, face, glasses, prom
 
 def _render_openai(spec: ProviderSpec, model: str, key: str, face, glasses, prompt: str):
     # The edits endpoint takes the reference images as multipart files, not as JSON.
-    files = [
-        ("image[]", ("face.jpg", base64.b64decode(face[1]), face[0])),
-        ("image[]", ("frame.jpg", base64.b64decode(glasses[1]), glasses[0])),
+    frames = glasses if isinstance(glasses, list) else [glasses]
+    files = [("image[]", ("face.jpg", base64.b64decode(face[1]), face[0]))] + [
+        ("image[]", (f"frame{i + 1}.jpg", base64.b64decode(g[1]), g[0]))
+        for i, g in enumerate(frames)
     ]
     data = {
         "model": model,
@@ -677,7 +740,10 @@ def _render_openrouter(spec: ProviderSpec, model: str, key: str, face, glasses, 
                 "content": [
                     {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": f"data:{face[0]};base64,{face[1]}"}},
-                    {"type": "image_url", "image_url": {"url": f"data:{glasses[0]};base64,{glasses[1]}"}},
+                    *[
+                        {"type": "image_url", "image_url": {"url": f"data:{g[0]};base64,{g[1]}"}}
+                        for g in (glasses if isinstance(glasses, list) else [glasses])
+                    ],
                 ],
             }
         ],

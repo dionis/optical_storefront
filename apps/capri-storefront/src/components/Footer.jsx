@@ -1,3 +1,4 @@
+// Dónde se usa: todas las páginas de la tienda, bajo el contenido. Columnas Shop/Help/Service + franja de confianza (TrustStrip).
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 

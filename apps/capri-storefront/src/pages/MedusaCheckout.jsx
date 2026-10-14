@@ -1,3 +1,4 @@
+// Dónde se usa: /checkout. Resumen con quitar-línea (×), datos del paciente, envío FedEx/DHL (gratis desde $100, solo EE.UU.), pago Stripe con vuelta atrás garantizada.
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

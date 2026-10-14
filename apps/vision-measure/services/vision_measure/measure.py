@@ -311,6 +311,7 @@ def run_measurement(
     strategy: str,
     face_image: str,
     glasses_image: str,
+    glasses_images: Optional[List[str]] = None,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
@@ -372,19 +373,28 @@ def run_measurement(
 
     try:
         key = resolve_api_key(spec, api_key)
+        # Todas las vistas de la montura (o la única que haya). El prompt declara
+        # cuántas van y que son EL MISMO producto.
+        frame_sources = [g for g in (glasses_images or []) if (g or "").strip()] or [glasses_image]
+        if prepared is not None:
+            face, glasses_views = prepared
+            if not isinstance(glasses_views, list):
+                glasses_views = [glasses_views]
+        else:
+            edge, byte_cap = limits_for(spec.adapter)
+            face = prepare_image(face_image, "rostro", edge, byte_cap)
+            glasses_views = [
+                prepare_image(g, f"montura {i + 1}", edge, byte_cap)
+                for i, g in enumerate(frame_sources)
+            ]
         prompt = build_prompt(
             strategy,
             lang=lang,
             context=context,
             extra_instructions=extra_instructions,
             frame_id=frame_id,
+            frame_image_count=len(glasses_views),
         )
-        if prepared is not None:
-            face, glasses = prepared
-        else:
-            edge, byte_cap = limits_for(spec.adapter)
-            face = prepare_image(face_image, "rostro", edge, byte_cap)
-            glasses = prepare_image(glasses_image, "montura", edge, byte_cap)
     except MissingApiKeyError as exc:
         envelope["envKeys"] = exc.env_keys
         envelope["docsUrl"] = exc.docs_url
@@ -399,7 +409,7 @@ def run_measurement(
             key,
             prompt["system"],
             prompt["user"],
-            images=[face, glasses],
+            images=[face, *glasses_views],
             browse_urls=prompt.get("browseUrls") or (),
             on_retry=on_retry,
         )
@@ -453,6 +463,7 @@ def run_comparison(
     provider_id: str,
     face_image: str,
     glasses_image: str,
+    glasses_images: Optional[List[str]] = None,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
@@ -479,12 +490,16 @@ def run_comparison(
     # A failure here is not fatal: fall back to letting each call prepare its own, which
     # is what used to happen, so a surprise in the image path costs speed and not the run.
     prepared = None
+    frame_sources = [g for g in (glasses_images or []) if (g or "").strip()] or [glasses_image]
     try:
         spec = get_provider(provider_id)
         edge, byte_cap = limits_for(spec.adapter)
         prepared = (
             prepare_image(face_image, "rostro", edge, byte_cap),
-            prepare_image(glasses_image, "montura", edge, byte_cap),
+            [
+                prepare_image(g, f"montura {i + 1}", edge, byte_cap)
+                for i, g in enumerate(frame_sources)
+            ],
         )
     except (ValueError, MeasurementError) as exc:
         print(f"[VISION] [{request_id}] preparación compartida no disponible: {exc}")
@@ -501,6 +516,7 @@ def run_comparison(
                 strategy=strategy,
                 face_image=face_image,
                 glasses_image=glasses_image,
+                glasses_images=glasses_images,
                 model=model,
                 api_key=api_key,
                 context=context,
@@ -520,26 +536,31 @@ def run_comparison(
 
 
 def prepare_render_images(
-    face_image: str, glasses_image: str
-) -> Optional[Tuple[Tuple[str, str], Tuple[str, str]]]:
+    face_image: str, glasses_images
+) -> Optional[Tuple[Tuple[str, str], List[Tuple[str, str]]]]:
     """
     Prepares the render-sized copies once, for however many views are wanted.
 
-    Front and profile are the same two photographs at the same limits, so preparing them
-    per view meant decoding and re-encoding a 2048px pair twice, concurrently. Returns
-    None when it cannot, which sends each view back to preparing its own -- slower, but
-    never a lost render.
+    `glasses_images` is one data URL or a list of them (every photographed angle of the
+    chosen colourway). Front and profile renders share the same prepared set, so this
+    runs once per request instead of once per view. Returns None when it cannot, which
+    sends each view back to preparing its own -- slower, but never a lost render.
     """
+    sources = glasses_images if isinstance(glasses_images, list) else [glasses_images]
+    sources = [g for g in sources if (g or "").strip()]
     try:
         return (
             prepare_image(
                 face_image, "rostro",
                 RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
             ),
-            prepare_image(
-                glasses_image, "montura",
-                RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
-            ),
+            [
+                prepare_image(
+                    g, f"montura {i + 1}",
+                    RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
+                )
+                for i, g in enumerate(sources)
+            ],
         )
     except (ValueError, MeasurementError) as exc:
         print(f"[VISION] preparación compartida del render no disponible: {exc}")
@@ -550,12 +571,13 @@ def run_try_on(
     engine: str,
     face_image: str,
     glasses_image: str,
+    glasses_images: Optional[List[str]] = None,
     context: Optional[Dict[str, Any]] = None,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     frame_total_width_mm: Optional[float] = None,
     view: str = "front",
-    prepared: Optional[Tuple[Tuple[str, str], Tuple[str, str]]] = None,
+    prepared: Optional[Tuple[Tuple[str, str], List[Tuple[str, str]]]] = None,
 ) -> Dict[str, Any]:
     """
     Renders the patient wearing the frame.
@@ -566,18 +588,24 @@ def run_try_on(
     """
     engine = (engine or "local").strip().lower()
 
+    frame_sources = [g for g in (glasses_images or []) if (g or "").strip()] or [glasses_image]
     try:
         if prepared is not None:
-            face, glasses = prepared
+            face, glasses_views = prepared
+            if not isinstance(glasses_views, list):
+                glasses_views = [glasses_views]
         else:
             face = prepare_image(
                 face_image, "rostro",
                 RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
             )
-            glasses = prepare_image(
-                glasses_image, "montura",
-                RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
-            )
+            glasses_views = [
+                prepare_image(
+                    g, f"montura {i + 1}",
+                    RENDER_MAX_IMAGE_EDGE_PX, RENDER_MAX_IMAGE_BYTES, RENDER_JPEG_QUALITY,
+                )
+                for i, g in enumerate(frame_sources)
+            ]
     except MeasurementError as exc:
         return {"ok": False, "method": engine, "error": str(exc)}
 
@@ -599,10 +627,10 @@ def run_try_on(
                     ),
                 }
             return render_local_overlay(
-                face[0], face[1], glasses[1], context or {}, frame_total_width_mm
+                face[0], face[1], glasses_views[0][1], context or {}, frame_total_width_mm
             )
         return render_ai_tryon(
-            engine, face, glasses, model=model, api_key=api_key, view=view
+            engine, face, glasses_views, model=model, api_key=api_key, view=view
         )
     except MissingApiKeyError as exc:
         return {

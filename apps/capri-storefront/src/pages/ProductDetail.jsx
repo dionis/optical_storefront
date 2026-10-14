@@ -1,3 +1,4 @@
+// Dónde se usa: /producto/:slug (PDP). Galería 360/color, ficha técnica, precio, CTAs (probador + carrito), pestañas de detalles/medidas/opiniones y recomendados.
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, Link, useNavigate } from "react-router-dom";
@@ -248,7 +249,7 @@ export default function ProductDetail() {
   // Sello de calidad = logo REAL de la marca (el mismo del catálogo/sección Marcas).
   // Si no hay logo para esta marca, cae al monograma de iniciales.
   const brandInfo = BRAND_BY_SLUG[product.brand_slug];
-  const brandLogo = brandInfo ? brandInfo.logo : null;
+  const brandLogo = brandInfo ? (brandInfo.logoWide || brandInfo.logo) : null; // sello plano de la lámina de marca
   const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
     .map(oneMeasure).filter((x) => x != null && x !== "").join(" - ");
   // Medidas con diagrama de referencia + ayuda (que significa / como se mide).
@@ -508,13 +509,19 @@ export default function ProductDetail() {
           <div className="pdp-actions2">
             {TRY_ON_ENABLED && (
               <button type="button" className="btn btn-primary big pdp-cta" onClick={() => setTryOnSlug(slug)}>
-                <IconCamera className="pdp-cta-ic" /> {t("tryon.cta")}
+                {/* Cámara dorada de la lámina de botones (igual que en las
+                    tarjetas del catálogo); texto vivo para es/en. */}
+                <img className="ic-raster" src="/ui/ic-camera-gold.png" alt="" aria-hidden="true"
+                     onError={(e) => e.currentTarget.remove()} />
+                {t("tryon.cta")}
               </button>
             )}
             <button type="button" className="btn btn-outline big pdp-cta"
                     disabled={!color?.variantId}
                     onClick={() => addFrame(color?.variantId)}>
-              <IconCart className="pdp-cta-ic" /> {t("card.addToCart")}
+              <img className="ic-raster ic-raster-sm" src="/ui/ic-cart-navy.png" alt="" aria-hidden="true"
+                   onError={(e) => e.currentTarget.remove()} />
+              {t("card.addToCart")}
             </button>
           </div>
           <button type="button" className="pdp-lensflow"

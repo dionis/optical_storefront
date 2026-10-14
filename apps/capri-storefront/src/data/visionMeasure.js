@@ -205,6 +205,10 @@ export async function startMeasurementJob({
   faceImage,
   sideImage = null,
   glassesImage = null,
+  // TODAS las fotos de la montura (frente + laterales). El servicio las declara en el
+  // prompt como un mismo producto: más vistas = montaje fiel (color, textura, varillas)
+  // y mejor lectura del código de talla impreso en la varilla.
+  glassesImages = null,
   frameSpec = null,
   lang = "es",
   withReferenceCard = false,
@@ -220,15 +224,18 @@ export async function startMeasurementJob({
       ].filter(Boolean).join(", ")}. Usa estas dimensiones como referencia del marco.`
     : "";
 
-  const [faceSmall, sideSmall, glassesSmall] = await Promise.all([
+  const [faceSmall, sideSmall, glassesSmall, glassesListSmall] = await Promise.all([
     shrink(faceImage),
     shrink(sideImage, 800, 0.82),
     shrink(glassesImage, 640, 0.82),
+    Promise.all((glassesImages || []).filter(Boolean).map((g) => shrink(g, 640, 0.82))),
   ]);
 
+  const framesSmall = (glassesListSmall || []).filter(Boolean);
   const payload = {
     faceImage: faceSmall,
-    glassesImage: glassesSmall || TINY_PX,
+    glassesImage: glassesSmall || framesSmall[0] || TINY_PX,
+    glassesImages: framesSmall.length ? framesSmall : undefined,
     sideImage: sideSmall || undefined,
     provider: "gemini",
     // Números con el modelo rápido; la IMAGEN con el modelo de imagen por defecto del

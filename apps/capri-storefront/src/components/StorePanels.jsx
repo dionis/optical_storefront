@@ -1,3 +1,4 @@
+// Dónde se usa: paneles laterales de toda la tienda — carrito, favoritos y cuenta (SidePanel reutilizable por props). Se abren desde los iconos del Header; × por línea SIEMPRE disponible (regla: poder quitar del carrito en todo momento).
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";

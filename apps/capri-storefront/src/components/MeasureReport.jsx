@@ -1,3 +1,4 @@
+// Dónde se usa: informe de medidas dentro del probador (TryOnStudio) — PD lejos/cerca, alturas, calidad de la toma y encaje de la montura.
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";

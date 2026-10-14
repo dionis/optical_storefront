@@ -1,3 +1,4 @@
+// Dónde se usa: pie de todas las páginas (dentro de Footer) — 4 garantías de la tienda. En móvil se reparte en 2×2.
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { IconTruck, IconShield, IconCard, IconHeadset } from "./UiIcons.jsx";
 

@@ -1,3 +1,4 @@
+// Dónde se usa: catálogo de ESTUCHES (/catalogo?tab=cases) y recomendados del PDP. Variante simplificada de ProductCard para estuches.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "./CartContext.jsx";

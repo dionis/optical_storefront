@@ -1,3 +1,4 @@
+// Dónde se usa: pestaña Productos de /admin — precios reales vía Admin API, descontinuar monturas/marcas y export a Excel/CSV.
 import { useEffect, useMemo, useState } from "react";
 import { useCatalog, loadLive } from "../data/catalogStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";

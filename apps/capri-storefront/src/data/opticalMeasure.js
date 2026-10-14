@@ -32,6 +32,22 @@ const MODEL =
 
 // Diámetro horizontal visible del iris (media adulta), en mm. Es la "regla".
 const HVID_MM = 11.7;
+// ── Corrección de CONVERGENCIA (PD de cerca → PD de lejos) ───────────────────
+// En la toma el cliente MIRA la cámara/pantalla a un brazo de distancia, así que
+// los ojos convergen y el PD medido es el PD DE CERCA. La receta usa por defecto
+// el PD DE LEJOS (mirada al infinito), ~2 mm mayor. Geometría estándar: la pupila
+// gira alrededor del centro de rotación ocular (~13.5 mm tras la córnea), de modo
+// que PD_lejos = PD_cerca × (D + r) / D, con D = distancia de fijación.
+// D se asume (no se conoce la focal de la cámara): 450 mm ≈ selfie a un brazo.
+// Un error de ±100 mm en D mueve la corrección menos de 0.5 mm — aceptable.
+const FIXATION_DISTANCE_MM = 450;
+const EYE_ROTATION_CENTER_MM = 13.5;
+
+/** PD de cerca (medido mirando la cámara) → PD de lejos (el de la receta). */
+export function nearToFarPD(pdNear, fixationMm = FIXATION_DISTANCE_MM) {
+  if (pdNear == null || !(pdNear > 0)) return pdNear;
+  return (pdNear * (fixationMm + EYE_ROTATION_CENTER_MM)) / fixationMm;
+}
 // Fracción de B a la que queda el asiento del puente respecto al TOP de la lente.
 // 0.5 = el puente está en el centro vertical de la caja (aprox. estándar). Subir
 // hacia 0.35-0.45 si la montura monta más alta; ajustable sin tocar el resto.
@@ -190,8 +206,14 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
   const pd = pdFromLandmarks(L, W, H);
   if (!pd) return { ok: false, error: "no-iris" };
   const { irisA, irisB, irisPx, mmPerPx } = pd;
-  const pdTotal = pd.pdTotal;
-  let pdRight = pd.pdRight, pdLeft = pd.pdLeft;
+  // Lo MEDIDO es el PD de cerca (mirada convergida en la cámara); lo que pide la
+  // receta es el de lejos. Se corrige aquí y los monoculares escalan con el mismo
+  // factor, así OD + OS sigue sumando el binocular exacto.
+  const pdNearTotal = pd.pdTotal;
+  const pdTotal = nearToFarPD(pdNearTotal);
+  const farFactor = pdNearTotal > 0 ? pdTotal / pdNearTotal : 1;
+  let pdRight = pd.pdRight != null ? pd.pdRight * farFactor : null;
+  let pdLeft = pd.pdLeft != null ? pd.pdLeft * farFactor : null;
 
   // Alturas (necesitan B). A/DBL se devuelven como referencia aunque no se usen aquí.
   const A = midMM(frame.eye);
@@ -259,9 +281,12 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
 
   return {
     ok: true,
+    // PD de LEJOS (el de la receta), ya corregido de convergencia.
     pdTotal: round1(pdTotal),
     pdRight: round1(pdRight),
     pdLeft: round1(pdLeft),
+    // PD de CERCA tal cual se midió (útil para lentes de lectura).
+    pdNearTotal: round1(pdNearTotal),
     corridor: round1(corridor),
     bifocal: round1(bifocal),
     frame: { A, DBL, B },

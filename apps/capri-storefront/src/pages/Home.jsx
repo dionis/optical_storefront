@@ -1,3 +1,4 @@
+// Dónde se usa: portada (/). Hero editorial, chips de estilo y azulejos de forma con los iconos/fotos recortados de las láminas de marca, moods, collage, best sellers y beneficios.
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BRANDS } from "../data/brands.js";
@@ -191,7 +192,14 @@ export default function Home() {
         <div className="chip-row">
           {STYLE_CHIPS.map((c) => (
             <Link key={c.key} to={chipHref(c)} className="style-chip">
-              {CHIP_ICONS[c.key] && <span className="style-chip-ic">{CHIP_ICONS[c.key]}</span>}
+              {/* Icono bronce de la lámina de marca (public/chips/, recortado con
+                  fondo transparente); si el PNG faltara, cae al SVG de línea. */}
+              <span className="style-chip-ic">
+                <img className="style-chip-img" src={`/chips/chip-${c.key.split(".").pop()}.png`} alt=""
+                     loading="lazy"
+                     onError={(e) => { e.currentTarget.parentElement.classList.add("chip-ic-fallback"); e.currentTarget.remove(); }} />
+                {CHIP_ICONS[c.key]}
+              </span>
               <span>{t(c.key)}</span>
             </Link>
           ))}
@@ -236,7 +244,14 @@ export default function Home() {
           <div className="shape-row">
             {SHAPES.map((s) => (
               <Link key={s.value} to={`/catalogo?shape=${encodeURIComponent(s.value)}`} className="shape-tile">
-                <span className="shape-ico"><GlassesIcon type={s.lens} /></span>
+                {/* Foto real de la forma (recorte PNG transparente en /shapes/,
+                    derivado de la lámina de marca) sobre azulejo blanco del
+                    sistema; el icono de línea queda de respaldo si no carga. */}
+                <span className="shape-ico shape-ico-photo">
+                  <img src={`/shapes/shape-${s.lens}.png`} alt="" loading="lazy"
+                       onError={(e) => { e.currentTarget.closest(".shape-ico").classList.remove("shape-ico-photo"); e.currentTarget.remove(); }} />
+                  <GlassesIcon type={s.lens} />
+                </span>
                 <span className="shape-name">{t(s.key)}</span>
               </Link>
             ))}

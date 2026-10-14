@@ -1,3 +1,4 @@
+// Dónde se usa: /estuche/:slug — ficha de estuche (variante compacta del PDP).
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";

@@ -1,3 +1,4 @@
+// Dónde se usa: probador virtual con IA — se abre desde Probármelos (tarjetas y PDP). Captura frontal+lateral guiada (MediaPipe), medidas locales (opticalMeasure.js) y simulación: TODAS las fotos de la montura viajan a la IA con el rostro como verdad de base.
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -8,7 +9,7 @@ import Header from "./Header.jsx";
 import Footer from "./Footer.jsx";
 // Medición propia (sin IA): PD + altura de corredor con iris + landmarks + dims del
 // marco. Sustituye los números de Gemini; la IA solo hace el montaje de las gafas.
-import { measureFromFrontal, pdFromLandmarks } from "../data/opticalMeasure.js";
+import { measureFromFrontal, pdFromLandmarks, nearToFarPD } from "../data/opticalMeasure.js";
 import { predictGender } from "../data/genderDetect.js";
 import {
   startMeasurementJob,
@@ -19,6 +20,8 @@ import {
   saveTryOnResult,
 } from "../data/visionMeasure.js";
 import { USE_MEDUSA } from "../data/medusa.js";
+import { GENERATED_VIEWS, handleForSku } from "../data/frameMediaSample.js";
+import { resolveImage } from "../data/imageUrl.js";
 import {
   getMeasureJob, setMeasureJob, clearMeasureJob,
   saveMeasureResult, getMeasureResult, clearMeasureResult,
@@ -639,10 +642,17 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       if (S.length >= 5) {
         const rights = S.map((s) => s.pdRight).filter((x) => x != null);
         const lefts = S.map((s) => s.pdLeft).filter((x) => x != null);
+        // La mediana se mide con la mirada convergida en la cámara (PD de cerca);
+        // la receta usa el PD de LEJOS → misma corrección de convergencia que
+        // measureFromFrontal, con el factor compartido para que OD+OS sume igual.
+        const nearPd = median(S.map((s) => s.pdTotal));
+        const farPd = nearToFarPD(nearPd);
+        const k = nearPd > 0 ? farPd / nearPd : 1;
         capturedPdRef.current = {
-          pd: median(S.map((s) => s.pdTotal)),
-          pdRight: rights.length > S.length * 0.5 ? median(rights) : null,
-          pdLeft: lefts.length > S.length * 0.5 ? median(lefts) : null,
+          pd: farPd,
+          pdNear: nearPd,
+          pdRight: rights.length > S.length * 0.5 ? median(rights) * k : null,
+          pdLeft: lefts.length > S.length * 0.5 ? median(lefts) * k : null,
         };
       } else {
         capturedPdRef.current = null;
@@ -857,14 +867,28 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       // En paralelo: descargamos la foto del marco Y calculamos NUESTRAS medidas
       // (MediaPipe) desde la frontal, para tenerlas listas antes de que termine el
       // trabajo. Los números saldrán de aquí; la IA solo monta las gafas.
-      const [glassesImage] = await Promise.all([
-        color?.image ? frameImageDataUrl(color.image) : Promise.resolve(null),
+      // TODAS las fotos de la montura elegida (frente + laterales del colorway, si
+      // existen vistas generadas), no solo la del catálogo: la IA las recibe como UN
+      // MISMO producto y así reproduce fielmente forma, color, textura y detalles del
+      // frente — y respeta el rostro, que viaja como verdad de base (ver prompts del
+      // servicio vision-measure).
+      const gvSet = (GENERATED_VIEWS[handleForSku(product?.sku)] || {})[color?.name] || null;
+      const frameUrls = [
+        color?.image,
+        gvSet?.front && resolveImage(gvSet.front),
+        gvSet?.left && resolveImage(gvSet.left),
+        gvSet?.right && resolveImage(gvSet.right),
+      ].filter(Boolean).filter((u, i, a) => a.indexOf(u) === i).slice(0, 4);
+      const [glassesImages] = await Promise.all([
+        Promise.all(frameUrls.map((u) => frameImageDataUrl(u))),
         computeOurMeasurement(frontImg),
       ]);
+      const frames = (glassesImages || []).filter(Boolean);
       const jobId = await startMeasurementJob({
         faceImage: frontImg,
         sideImage: sideImg,
-        glassesImage,
+        glassesImage: frames[0] || null,
+        glassesImages: frames,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
         lang, withReferenceCard: true, render: true,
         signal: ctrl.signal,
