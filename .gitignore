@@ -3,29 +3,24 @@
 # Dependencies
 node_modules/
 .pnpm-store/
-
 # Build outputs
 dist/
 build/
 .next/
 out/
-
 # Stray tsc output next to sources (happens when tsc runs without the project tsconfig)
 packages/*/src/**/*.js
 packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
-
 # Environment files — NEVER commit real env files
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-
 # Medusa
 .medusa/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -36,61 +31,37 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
 # Scraper state
 apps/scraper/state.db
-
 # Logs
 *.log
 logs/
-
 # OS
 .DS_Store
 Thumbs.db
-
 # Editor
 .vscode/settings.json
 .idea/
-
 # Docker volumes (local)
 infra/volumes/
-
 node_modules
 dist
 .medusa
 _transfer
-*.log
-.env
-.DS_Store
-
 # Real prescription samples used for testing the OCR pipeline. These are actual
 # patient records (PHI) — they must never reach the repository, and the rule is
 # duplicated in docs/data/.gitignore so it travels with the directory.
 docs/data/
-
 # Regenerable caches and backups — no aportan nada al repo y se rehacen solos
 # .shape_truth.json  → mapa SKU→forma; lo reconstruye measure_shape_classifier.py
 #                      con ~11 peticiones a las facetas del proveedor
 # *.json.bak         → copia que deja backfill_geometry_attrs.py antes de escribir
 apps/scraper/scripts/.shape_truth.json
 *.json.bak
-
 # Artefactos de sesion del MCP de Playwright — snapshots de accesibilidad
 # generados en cada navegacion; no aportan nada al repo
 .playwright-mcp/
 _to_delete/ 
 change.patch
 __commitmsg.txt 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
-.fuse_hidden* 
 .fuse_hidden* 
