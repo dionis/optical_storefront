@@ -253,6 +253,13 @@ export default defineConfig({
               webhook_signature_key: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
             },
           },
+          // Manual / test payment — always available, no credentials needed.
+          // Lets the owner test checkout + email flow end-to-end, or accept
+          // cash-on-delivery / bank-transfer orders.
+          {
+            resolve: "./src/modules/payment-manual",
+            id: "manual",
+          },
         ],
       },
     },

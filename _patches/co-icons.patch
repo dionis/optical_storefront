@@ -1,0 +1,226 @@
+diff --git a/apps/capri-storefront/src/components/ResumeBanner.jsx b/apps/capri-storefront/src/components/ResumeBanner.jsx
+index 7ec1ce3..8ec4145 100644
+--- a/apps/capri-storefront/src/components/ResumeBanner.jsx
++++ b/apps/capri-storefront/src/components/ResumeBanner.jsx
+@@ -20,8 +20,10 @@ export default function ResumeBanner() {
+   const r = loadCache("rl_resume", null);
+   if (hidden || !r || !r.url || !r.at || Date.now() - r.at > MAX_AGE_MS) return null;
+   const targetPath = String(r.url).split("?")[0];
+-  // No se ofrece sobre la propia pantalla a retomar ni dentro del admin.
+-  if (pathname === targetPath || pathname.startsWith("/admin")) return null;
++  // No se ofrece sobre la propia pantalla a retomar, dentro del admin ni en el
++  // checkout: ahí el cliente YA está terminando la compra (es la continuación
++  // natural del flujo guardado) y la franja solo roba la primera vista.
++  if (pathname === targetPath || pathname.startsWith("/admin") || pathname.startsWith("/checkout")) return null;
+ 
+   return (
+     <div className="resume-bar" role="region" aria-label={t("resume.title")}>
+diff --git a/apps/capri-storefront/src/components/measureIcons.jsx b/apps/capri-storefront/src/components/measureIcons.jsx
+index c51c817..bac25ab 100644
+--- a/apps/capri-storefront/src/components/measureIcons.jsx
++++ b/apps/capri-storefront/src/components/measureIcons.jsx
+@@ -31,7 +31,7 @@ export function IconGlasses(props) {
+ 
+ // ANCHO DE LENTE — gafas de frente + flecha de cota (trazo del cliente).
+ export function IconLensWidth(props) {
+-  return <I3D name="navy-eyewidth" className={props.className} fallback={<IconLensWidthSvg {...props} />} />;
++  return <I3D name="ms-navyg-lens" className={props.className} fallback={<IconLensWidthSvg {...props} />} />;
+ }
+ 
+ function IconLensWidthSvg(props) {
+@@ -44,7 +44,7 @@ function IconLensWidthSvg(props) {
+ 
+ // PUENTE — puente entre lentes + flecha de cota (trazo del cliente).
+ export function IconBridge(props) {
+-  return <I3D name="navy-bridge" className={props.className} fallback={<IconBridgeSvg {...props} />} />;
++  return <I3D name="ms-navyg-bridge" className={props.className} fallback={<IconBridgeSvg {...props} />} />;
+ }
+ 
+ function IconBridgeSvg(props) {
+@@ -57,7 +57,7 @@ function IconBridgeSvg(props) {
+ 
+ // LARGO DE VARILLA — patilla de perfil + flecha de cota (trazo del cliente).
+ export function IconTemple(props) {
+-  return <I3D name="navy-temple" className={props.className} fallback={<IconTempleSvg {...props} />} />;
++  return <I3D name="ms-navyg-temple" className={props.className} fallback={<IconTempleSvg {...props} />} />;
+ }
+ 
+ function IconTempleSvg(props) {
+diff --git a/apps/capri-storefront/src/pages/LensProcess.jsx b/apps/capri-storefront/src/pages/LensProcess.jsx
+index 909d95d..0a65662 100644
+--- a/apps/capri-storefront/src/pages/LensProcess.jsx
++++ b/apps/capri-storefront/src/pages/LensProcess.jsx
+@@ -392,7 +392,7 @@ function ZlxPop({ title, subtitle, icon, onClose, onBack, onHelp, closeLabel, ba
+           </b>
+           <span className="zlx-pop-head-actions">
+             {onHelp && (
+-              <button type="button" className="zlx-pop-help" onClick={onHelp} aria-label={helpLabel || "?"}><Ic name="info" /></button>
++              <button type="button" className="zlx-pop-help" onClick={onHelp} aria-label={helpLabel || "?"}><img className="i3d-info" src="/ui/icons3d/ms-whiteg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /></button>
+             )}
+             <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
+           </span>
+@@ -417,7 +417,7 @@ function ZlxInfoPop({ title, onClose, closeLabel, children }) {
+       <div className="zlx-infopop-backdrop" onClick={onClose} />
+       <div className="zlx-infopop" role="dialog" aria-modal="true" aria-label={title}>
+         <div className="zlx-infopop-head">
+-          <b><Ic name="info" /> {title}</b>
++          <b><img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /> {title}</b>
+           <button type="button" className="zlx-pop-close" onClick={onClose} aria-label={closeLabel}><Ic name="close" /></button>
+         </div>
+         <div className="zlx-infopop-body">{children}</div>
+@@ -1672,7 +1672,7 @@ export default function LensProcess() {
+                         {hasDiag && rxStage === "fill" && (
+                           <button type="button" className="zlx-use-info"
+                                   aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : "/rx/ayuda-progresivos-en.png")}>
+-                            <Ic name="info" />
++                            <img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" />
+                           </button>
+                         )}
+                       </div>
+@@ -1739,7 +1739,7 @@ export default function LensProcess() {
+                             <p className={`zlx-height-note ${heightMissing ? "req" : ""}`}>
+                               {heightMissing && <span>{t("lens.height.required")}</span>}
+                               <button type="button" className="zlx-height-i" aria-label={t("lens.help")}
+-                                      onClick={() => openInfo(t("lens.height"), null, ["fittingHeight"], t("lens.height.note"))}><Ic name="info" /></button>
++                                      onClick={() => openInfo(t("lens.height"), null, ["fittingHeight"], t("lens.height.note"))}><img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" /></button>
+                             </p>
+                           )}
+                           {/* Botón "Material del lente": primero pide confirmar TODA la
+@@ -1848,7 +1848,7 @@ export default function LensProcess() {
+                       </button>
+                       <button type="button" className="zlx-use-info" aria-label={t("lens.help")}
+                               onClick={() => openInfo(L(a.label, lang), arEdu(a.id, lang), arDiagKeys(a.id))}>
+-                        <Ic name="info" />
++                        <img className="i3d-info" src="/ui/icons3d/ms-navyg-info.png" alt="" aria-hidden="true" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} /><Ic name="info" />
+                       </button>
+                     </div>
+                   );
+diff --git a/apps/capri-storefront/src/pages/MedusaCheckout.jsx b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+index 55e2120..5de2ea7 100644
+--- a/apps/capri-storefront/src/pages/MedusaCheckout.jsx
++++ b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+@@ -485,17 +485,21 @@ export default function MedusaCheckout() {
+                   <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
+                 </div>
+                 {/* Celular del paciente: se toma de forma orgánica junto al resto
+-                    del contacto; sirve para SMS de confirmación y contacto. */}
+-                <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
++                    del contacto; sirve para SMS de confirmación y contacto. Va en
++                    pareja con el país (fijo EE. UU.) para ahorrar una fila y que
++                    todo el paso quepa en una vista en el móvil. */}
++                <div className="co-two">
++                  <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
++                  <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
++                </div>
+                 <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                 {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
+                 <div className="co-two">
+                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
+                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
+                 </div>
+-                {/* Solo USA por ahora: el campo queda fijado y el backend lo
+-                    verifica igualmente (422 us_only). */}
+-                <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
++                {/* Solo USA por ahora (el campo fijo vive junto al celular); el
++                    backend lo verifica igualmente (422 us_only). */}
+               </div>
+ 
+               {/* ¿Cómo quiere recibir la confirmación del pedido? El envío real de
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index 241eef4..b0a81ab 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -8914,14 +8914,19 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-step-next { margin-top: 6px; }
+   /* Los OTROS tipos de lente: mini-tarjetas en UNA fila de tres (se puede
+      seguir cambiando de tipo sin volver atrás). */
+-  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-rows { grid-template-columns: repeat(3, 1fr); gap: 6px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-rows { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item.open { grid-column: 1 / -1; }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main {
+     flex-direction: column; align-items: center; text-align: center; gap: 2px;
+     padding: 6px 4px 5px; position: relative;
+   }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt { align-items: center; gap: 0; }
+-  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt b { font-size: 10.5px; line-height: 1.15; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt b {
++    font-size: 11.5px; line-height: 1.15; white-space: normal; max-width: 100%;
++  }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) { min-width: 0; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main { overflow: visible; min-width: 0; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { height: 15px; }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt small { display: none !important; }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { height: 13px; width: auto; }
+   .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-radio {
+@@ -9067,3 +9072,71 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+ .zlx-review-card .zlx-summary-total { border-top: 2px solid #d9b85c !important; }
+ .zlx-review-card .zlx-summary-total span { color: var(--cuba-blue); }
+ .zlx-review-card .zlx-summary-total b { color: #0b2f66; }
++
++/* ===================================================================
++   ETAPA 132 — FINALIZAR COMPRA en móvil en UNA SOLA VISTA (pedido del
++   cliente): título y "Seguir comprando" compactos, resumen apretado,
++   campos del paciente más bajos, confirmación en una línea y botón
++   "Calcular envío" en cristal 9-slice (sin deformar). Solo móvil.
++   =================================================================== */
++/* Botones grandes del checkout SIEMPRE en barra 9-slice (todas las vistas). */
++.checkout .btn.btn-outline.big {
++  background: none !important; box-shadow: none !important;
++  border: 14px solid transparent !important;
++  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 14px;
++  color: #0b2f66 !important; font-weight: 800;
++  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
++}
++.checkout .btn.btn-primary.big {
++  background: none !important; box-shadow: none !important;
++  border: 15px solid transparent !important;
++  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 14px;
++  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
++}
++.checkout .btn.btn-outline.big:hover:not(:disabled),
++.checkout .btn.btn-primary.big:hover:not(:disabled) {
++  background: none !important;
++  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
++}
++@media (max-width: 939px) {
++  .section.checkout { padding-top: 8px; }
++  /* Título y "Seguir comprando" en la MISMA línea. */
++  .checkout h1 { font-size: 22px; margin: 0 0 4px; display: inline-block; }
++  .checkout .co-backlink { display: inline-block; font-size: 13px; margin: 0 0 4px 12px; vertical-align: baseline; }
++  .checkout .co-summary { padding: 9px 12px 10px; margin: 6px 0; }
++  .checkout .co-summary-h { margin: 0 0 4px; }
++  .checkout .co-summary .panel-item { padding: 3px 0; }
++  .checkout .co-totals { margin-top: 4px; }
++  .checkout .co-totals > div { padding: 2px 0; }
++  .checkout .panel-total { padding-top: 5px; font-size: 17px; }
++  .checkout .co-form { padding: 9px 12px 11px; margin: 6px 0; }
++  .checkout .co-h { margin: 0 0 6px; }
++  .checkout .co-form .co-fields { gap: 6px; margin-bottom: 4px; }
++  .checkout .co-form .co-fields input { padding: 6px 11px; font-size: 13.5px; border-radius: 9px; }
++  /* Los pares (nombre|apellido, celular|país, ciudad|CP) SÍ van a dos columnas
++     también en móvil: ahorran tres filas y el paso cabe en una vista. */
++  .checkout .co-two { grid-template-columns: 1fr 1fr; }
++  /* Confirmación del pedido: rótulo y las dos casillas en UNA línea. */
++  .checkout .co-notify { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 8px; }
++  .checkout .co-notify-h { margin: 0; flex: 0 0 100%; }
++  .checkout .co-check { font-size: 12.5px; gap: 6px; }
++}
++
++/* ===================================================================
++   ETAPA 133 — Lámina nueva de MEDIDAS e INFO (pedido del cliente: "mira
++   dónde van estos iconos y úsalos"): ancho de lente, puente (montura con
++   flechas a la nariz), largo de varilla (perfil de cabeza) e (i) de
++   información, en navy/oro sobre claro y blanco/oro sobre navy. Van en
++   la franja de medidas de la ficha del espejuelo (receta + probador) y
++   en todos los botones (i) del flujo. El svg de línea queda de respaldo.
++   =================================================================== */
++/* La franja de medidas usa los iconos nuevos vía measureIcons.jsx (I3D). */
++.i3d-info { height: 22px; width: auto; display: block; }
++.zlx-use-info:not(.no-i3d) svg { display: none; }
++.zlx-pop-help:not(.no-i3d) svg { display: none; }
++.zlx-height-i:not(.no-i3d) svg { display: none; }
++.zlx-height-i .i3d-info { height: 16px; }
++.zlx-infopop-head b:not(.no-i3d) > svg { display: none; }
++.zlx-infopop-head b .i3d-info { height: 20px; display: inline-block; vertical-align: -4px; margin-right: 2px; }

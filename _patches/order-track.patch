@@ -1,0 +1,471 @@
+diff --git a/apps/backend/src/api/admin/order-board/[id]/stage/route.ts b/apps/backend/src/api/admin/order-board/[id]/stage/route.ts
+index 372a75b..0f044e5 100644
+--- a/apps/backend/src/api/admin/order-board/[id]/stage/route.ts
++++ b/apps/backend/src/api/admin/order-board/[id]/stage/route.ts
+@@ -203,6 +203,17 @@ export async function POST(
+     })
+   );
+ 
++  // HISTORIAL de etapas en el pedido (metadata.stage_history): cada cambio con
++  // su instante. Es lo que alimenta el rastreo público por número de recibo
++  // (/store/order-track) con fechas reales; best-effort, nunca falla el cambio.
++  if (after && before.stage !== after.stage) {
++    try {
++      await appendStageHistory(req, orderId, after.stage, actorId);
++    } catch (error) {
++      logger.warn(`[order-board] stage history for ${orderId} not saved: ${(error as Error).message}`);
++    }
++  }
++
+   // CUSTOMER EMAIL on every recorded stage change (unless the owner unticked
+   // "notify"). Sent AFTER the transition committed — a notification for a move
+   // that then failed would be worse than none — and never allowed to fail the
+@@ -360,6 +371,35 @@ async function sendStageEmail(
+   return sent;
+ }
+ 
++/** Añade {stage, at} a metadata.stage_history (merge, nunca reemplaza). */
++async function appendStageHistory(
++  req: AuthenticatedMedusaRequest<StageBody>,
++  orderId: string,
++  stage: OrderStage,
++  actorId: string
++): Promise<void> {
++  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
++  const { data } = await query.graph({
++    entity: "order",
++    fields: ["id", "metadata"],
++    filters: { id: orderId },
++  });
++  const current = (data?.[0]?.metadata ?? {}) as Record<string, unknown>;
++  const prev = Array.isArray(current["stage_history"])
++    ? (current["stage_history"] as { stage?: string; at?: string }[])
++    : [];
++  await updateOrderWorkflow(req.scope).run({
++    input: {
++      id: orderId,
++      user_id: actorId,
++      metadata: {
++        ...current,
++        stage_history: [...prev, { stage, at: new Date().toISOString() }].slice(-20),
++      },
++    },
++  });
++}
++
+ /**
+  * The manual lab note.
+  *
+diff --git a/apps/backend/src/api/store/order-track/route.ts b/apps/backend/src/api/store/order-track/route.ts
+new file mode 100644
+index 0000000..c627e93
+--- /dev/null
++++ b/apps/backend/src/api/store/order-track/route.ts
+@@ -0,0 +1,115 @@
++import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
++import { getOrdersListWorkflow } from "@medusajs/medusa/core-flows";
++import { deriveOrderProgress, stageIndex, ORDER_STAGES, type OrderStage } from "../../../lib/order-status";
++
++/**
++ * POST /store/order-track — rastreo PÚBLICO por número de recibo + correo.
++ *
++ * Pedido del dueño: el cliente pone el número de su recibo (el display_id que
++ * llega en el correo de confirmación) y ve la traza del pedido desde la compra
++ * hasta la entrega, con todos los estados. Sin enlace mágico: la pareja
++ * (número de pedido, correo) basta — es el mismo estándar de las mensajerías.
++ *
++ * Por eso la respuesta es una PROYECCIÓN MÍNIMA: etapas y fechas, el número de
++ * guía FedEx si existe, y nada más. Ni dirección, ni artículos, ni receta, ni
++ * ids internos — para eso está /my-orders con su enlace verificado. Un número
++ * de pedido es adivinable (es secuencial); lo que no es adivinable es el par
++ * con el correo, y aun acertándolo lo único visible es "va en camino".
++ *
++ * La combinación equivocada responde SIEMPRE igual (404 not_found), exista o
++ * no el pedido: no confirmamos números de recibo ajenos.
++ */
++
++interface TrackBody {
++  display_id?: string | number;
++  email?: string;
++}
++
++const ORDER_FIELDS = [
++  "id",
++  "display_id",
++  "email",
++  "status",
++  "created_at",
++  "metadata",
++  "fulfillments.created_at",
++  "fulfillments.packed_at",
++  "fulfillments.shipped_at",
++  "fulfillments.canceled_at",
++  "items.id",
++  "items.metadata",
++];
++
++export async function POST(req: MedusaRequest<TrackBody>, res: MedusaResponse): Promise<void> {
++  const body = (req.body ?? {}) as TrackBody;
++  const displayId = Number(String(body.display_id ?? "").replace(/[^0-9]/g, ""));
++  const email = String(body.email ?? "").trim().toLowerCase();
++
++  if (!displayId || !email || !/\S+@\S+\.\S+/.test(email)) {
++    res.status(400).json({ reason: "bad_request" });
++    return;
++  }
++
++  const { result } = await getOrdersListWorkflow(req.scope).run({
++    input: {
++      fields: ORDER_FIELDS,
++      variables: {
++        filters: { display_id: displayId, is_draft_order: false },
++        skip: 0,
++        take: 2,
++      },
++    },
++  });
++
++  const rows = (Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows ?? []) as Record<string, unknown>[];
++  const order = rows.find((o) => String(o["email"] ?? "").trim().toLowerCase() === email);
++  if (!order) {
++    // Misma respuesta exista o no: un recibo ajeno no se confirma.
++    res.status(404).json({ reason: "not_found" });
++    return;
++  }
++
++  const progress = deriveOrderProgress(order as Parameters<typeof deriveOrderProgress>[0]);
++  const md = (order["metadata"] ?? {}) as Record<string, unknown>;
++
++  // Fechas por etapa: primero el historial escrito por el panel del dueño
++  // (metadata.stage_history, cada cambio con su instante); de respaldo, lo que
++  // Medusa sí registra solo (creación y fulfillment).
++  const history = Array.isArray(md["stage_history"]) ? (md["stage_history"] as { stage?: string; at?: string }[]) : [];
++  const firstAt = (stage: OrderStage): string | null => {
++    const hit = history.find((h) => h && h.stage === stage && typeof h.at === "string");
++    return hit ? String(hit.at) : null;
++  };
++  const fulfillments = (order["fulfillments"] ?? []) as { packed_at?: string | null; shipped_at?: string | null; canceled_at?: string | null }[];
++  const live = fulfillments.filter((f) => !f.canceled_at);
++  const packedAt = live.map((f) => f.packed_at).filter(Boolean).sort()[0] ?? null;
++  const shippedAt = live.map((f) => f.shipped_at).filter(Boolean).sort()[0] ?? null;
++
++  const fallbackAt: Record<OrderStage, string | null> = {
++    confirmed: order["created_at"] ? String(order["created_at"]) : null,
++    in_lab: null,
++    shipped: packedAt ? String(packedAt) : null,
++    in_transit: shippedAt ? String(shippedAt) : null,
++    delivered: null,
++  };
++
++  const currentIdx = stageIndex(progress.stage);
++  const timeline = ORDER_STAGES.map((stage) => ({
++    stage,
++    done: stageIndex(stage) <= currentIdx && !progress.terminal,
++    current: stage === progress.stage && !progress.terminal,
++    at: firstAt(stage) ?? fallbackAt[stage],
++  }));
++
++  res.status(200).json({
++    display_id: displayId,
++    created_at: order["created_at"] ?? null,
++    stage: progress.stage,
++    terminal: progress.terminal,
++    has_prescription: progress.has_prescription,
++    carrier: "FedEx",
++    tracking_number: typeof md["tracking_number"] === "string" ? md["tracking_number"] : null,
++    tracking_url: typeof md["tracking_url"] === "string" ? md["tracking_url"] : null,
++    timeline,
++  });
++}
+diff --git a/apps/capri-storefront/src/data/orderAccess.js b/apps/capri-storefront/src/data/orderAccess.js
+index eeb3d7e..5984c09 100644
+--- a/apps/capri-storefront/src/data/orderAccess.js
++++ b/apps/capri-storefront/src/data/orderAccess.js
+@@ -167,3 +167,15 @@ export function sendSupportMessage({ orderId, reason, message, locale }) {
+     body: { order_id: orderId, reason, message, locale },
+   });
+ }
++
++/**
++ * Rastreo público por número de recibo + correo (pedido del dueño): la pareja
++ * basta — misma mecánica que las mensajerías. Devuelve la traza mínima
++ * (etapas con fechas, guía FedEx) o lanza con reason "not_found".
++ */
++export async function trackOrder(displayId, email) {
++  return call("/store/order-track", {
++    method: "POST",
++    body: { display_id: displayId, email },
++  });
++}
+diff --git a/apps/capri-storefront/src/i18n/translations.js b/apps/capri-storefront/src/i18n/translations.js
+index b31e569..bd43ce6 100644
+--- a/apps/capri-storefront/src/i18n/translations.js
++++ b/apps/capri-storefront/src/i18n/translations.js
+@@ -1067,9 +1067,9 @@ export const T = {
+     "fi.rx.s4t": "Vigencia y dudas",
+     "fi.rx.s4b": "Usa una receta de menos de dos años. Si notas cambios de visión, dolores de cabeza o la receta es antigua, visita primero a tu optometrista. Esta guía es informativa y no sustituye el consejo de un profesional de la salud visual.",
+     "fi.ship.title": "Envíos y devoluciones",
+-    "fi.ship.intro": "Trabajamos con mensajerías de primera línea y te mantenemos informado en cada etapa del pedido, del laboratorio a tu puerta.",
+-    "fi.ship.s1t": "Cobertura y mensajerías",
+-    "fi.ship.s1b": "Por ahora enviamos solo dentro de Estados Unidos. En el checkout verás la cotización real de FedEx y DHL para tu dirección y eliges la que prefieras.",
++    "fi.ship.intro": "Enviamos con FedEx y te mantenemos informado en cada etapa del pedido, del laboratorio a tu puerta.",
++    "fi.ship.s1t": "Cobertura y mensajería (FedEx)",
++    "fi.ship.s1b": "Por ahora enviamos solo dentro de Estados Unidos, siempre con FedEx. Al poner tu dirección en el checkout verás el costo y el plazo de entrega de FedEx para tu pedido.",
+     "fi.ship.s2t": "Tarifa clara, sin sorpresas",
+     "fi.ship.s2b": "El costo del envío se muestra en el checkout antes de pagar, con el desglose de cada mensajería (FedEx llega en unos 4 días). Lo que ves ahí es exactamente lo que se cobra.",
+     "fi.ship.s3t": "Tiempos y seguimiento",
+@@ -1319,7 +1319,18 @@ export const T = {
+     "checkout.first": "Nombre", "checkout.last": "Apellido", "checkout.address": "Calle y número",
+     "checkout.country": "País", "checkout.addrHint": "Empieza a escribir y elige tu dirección",
+     "checkout.city": "Ciudad", "checkout.zip": "Código postal", "checkout.calcShip": "Calcular envío",
+-    "checkout.shipTo": "Domicilio de entrega", "checkout.shipPending": "El envío se calcula al poner tu dirección",
++    "checkout.shipTo": "Domicilio de entrega",
++    "trk.title": "Rastrea tu pedido",
++    "trk.intro": "Pon el número de tu recibo y el correo de la compra: verás cada paso, de la compra a la entrega.",
++    "trk.number": "N.º de pedido (recibo)",
++    "trk.email": "Correo de la compra",
++    "trk.cta": "Ver la traza",
++    "trk.notFound": "No encontramos ese pedido con ese correo. Revisa el número del recibo y el correo usado en la compra.",
++    "trk.order": "Pedido",
++    "trk.carrier": "Mensajería",
++    "trk.guide": "N.º de guía",
++    "trk.follow": "Seguir el paquete en FedEx",
++    "trk.note": "Además te avisamos por correo (y SMS si lo marcaste) con cada cambio de estado.", "checkout.shipPending": "El envío se calcula al poner tu dirección",
+     "checkout.lensLine": "Cristal", "checkout.treatLine": "Tratamientos", "checkout.frameLine": "Espejuelo",
+     "checkout.shipping": "Método de envío", "checkout.toPay": "Continuar al pago",
+     "checkout.payment": "Pago", "checkout.pay": "Pagar", "checkout.paying": "Procesando…",
+@@ -2399,9 +2410,9 @@ export const T = {
+     "fi.rx.s4t": "Validity and doubts",
+     "fi.rx.s4b": "Use a prescription under two years old. If you notice vision changes, headaches, or your prescription is old, see your optometrist first. This guide is informational and does not replace professional eye-care advice.",
+     "fi.ship.title": "Shipping & returns",
+-    "fi.ship.intro": "We work with first-class carriers and keep you posted at every stage, from the lab to your door.",
+-    "fi.ship.s1t": "Coverage and carriers",
+-    "fi.ship.s1b": "For now we ship within the United States only. At checkout you will see live FedEx and DHL quotes for your address and you pick the one you prefer.",
++    "fi.ship.intro": "We ship with FedEx and keep you posted at every stage, from the lab to your door.",
++    "fi.ship.s1t": "Coverage and carrier (FedEx)",
++    "fi.ship.s1b": "For now we ship within the United States only, always with FedEx. Enter your address at checkout and you will see the FedEx cost and delivery time for your order.",
+     "fi.ship.s2t": "Clear rates, no surprises",
+     "fi.ship.s2b": "Shipping cost shows at checkout before you pay, itemized per carrier (FedEx arrives in about 4 days). What you see there is exactly what you are charged.",
+     "fi.ship.s3t": "Times and tracking",
+@@ -2650,7 +2661,18 @@ export const T = {
+     "checkout.first": "First name", "checkout.last": "Last name", "checkout.address": "Street address",
+     "checkout.country": "Country", "checkout.addrHint": "Start typing and pick your address",
+     "checkout.city": "City", "checkout.zip": "ZIP code", "checkout.calcShip": "Get shipping",
+-    "checkout.shipTo": "Delivery address", "checkout.shipPending": "Shipping appears once you enter your address",
++    "checkout.shipTo": "Delivery address",
++    "trk.title": "Track your order",
++    "trk.intro": "Enter your receipt number and purchase email to see every step, from purchase to delivery.",
++    "trk.number": "Order no. (receipt)",
++    "trk.email": "Purchase email",
++    "trk.cta": "View trace",
++    "trk.notFound": "We could not find that order with that email. Check the receipt number and the email used at purchase.",
++    "trk.order": "Order",
++    "trk.carrier": "Carrier",
++    "trk.guide": "Tracking no.",
++    "trk.follow": "Follow the package on FedEx",
++    "trk.note": "We also email you (and text you if you opted in) on every status change.", "checkout.shipPending": "Shipping appears once you enter your address",
+     "checkout.lensLine": "Lens", "checkout.treatLine": "Treatments", "checkout.frameLine": "Frame",
+     "checkout.shipping": "Shipping method", "checkout.toPay": "Continue to payment",
+     "checkout.payment": "Payment", "checkout.pay": "Pay", "checkout.paying": "Processing…",
+diff --git a/apps/capri-storefront/src/pages/MyOrders.jsx b/apps/capri-storefront/src/pages/MyOrders.jsx
+index 3af97c4..1791084 100644
+--- a/apps/capri-storefront/src/pages/MyOrders.jsx
++++ b/apps/capri-storefront/src/pages/MyOrders.jsx
+@@ -23,10 +23,92 @@ import {
+   redeemMagicToken,
+   requestMagicLink,
+   sendSupportMessage,
++  trackOrder,
+ } from "../data/orderAccess.js";
+ 
+ const REASONS = ["delay", "wrong", "cancel", "other"];
+ 
++/**
++ * Rastreo por NÚMERO DE RECIBO (pedido del dueño): sin enlace mágico — el par
++ * (n.º de pedido, correo) basta, como en cualquier mensajería. El backend solo
++ * devuelve la traza de etapas con fechas y la guía FedEx; el detalle completo
++ * sigue viviendo bajo el enlace verificado de "Mis pedidos".
++ */
++function TrackByReceipt() {
++  const { t, lang } = useLang();
++  const [num, setNum] = useState("");
++  const [mail, setMail] = useState("");
++  const [busy, setBusy] = useState(false);
++  const [err, setErr] = useState("");
++  const [trace, setTrace] = useState(null);
++
++  const when = (iso) => iso
++    ? new Date(iso).toLocaleDateString(lang === "en" ? "en-US" : "es", { day: "numeric", month: "short" })
++    : null;
++
++  const go = async (e) => {
++    e.preventDefault();
++    if (busy) return;
++    setBusy(true); setErr(""); setTrace(null);
++    try {
++      const r = await trackOrder(num.trim(), mail.trim());
++      setTrace(r);
++    } catch {
++      setErr(t("trk.notFound"));
++    }
++    setBusy(false);
++  };
++
++  return (
++    <div className="trk-box">
++      <div className="trk-hd">
++        <img className="i3d" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
++             onError={(e) => e.currentTarget.remove()} />
++        <b>{t("trk.title")}</b>
++      </div>
++      <p className="muted trk-intro">{t("trk.intro")}</p>
++      <form className="trk-form" onSubmit={go}>
++        <input inputMode="numeric" required placeholder={t("trk.number")} value={num}
++               onChange={(e) => setNum(e.target.value)} aria-label={t("trk.number")} />
++        <input type="email" required placeholder={t("trk.email")} value={mail}
++               autoComplete="email" onChange={(e) => setMail(e.target.value)} aria-label={t("trk.email")} />
++        <button className="btn btn-primary trk-go" disabled={busy || !num.trim() || !mail.trim()}>
++          {busy ? <><span className="btn-spin" aria-hidden="true" /> …</> : t("trk.cta")}
++        </button>
++      </form>
++      {err && <div className="auth-err">{err}</div>}
++      {trace && (
++        <div className="trk-result" role="status">
++          <div className="trk-result-hd">
++            <b>{t("trk.order")} #{trace.display_id}</b>
++            {trace.tracking_number && (
++              <span className="trk-guide">
++                {t("trk.carrier")}: <b>{trace.carrier || "FedEx"}</b> · {t("trk.guide")}: <b>{trace.tracking_number}</b>
++              </span>
++            )}
++          </div>
++          <TrackingTimeline status={trace.stage} terminal={trace.terminal} hasPrescription={trace.has_prescription} />
++          {/* Fechas reales por etapa (las que el pedido ya pisó) */}
++          <ul className="trk-dates">
++            {(trace.timeline || []).filter((st) => st.done && st.at).map((st) => (
++              <li key={st.stage}>
++                <span>{t(`track.${st.stage}`)}</span>
++                <b>{when(st.at)}</b>
++              </li>
++            ))}
++          </ul>
++          {trace.tracking_url && (
++            <a className="trk-follow" href={trace.tracking_url} target="_blank" rel="noreferrer">
++              {t("trk.follow")} →
++            </a>
++          )}
++          <small className="muted trk-note">{t("trk.note")}</small>
++        </div>
++      )}
++    </div>
++  );
++}
++
+ /**
+  * Which sentence the cancel dialog uses for the money. The backend decides —
+  * `refund_outcome` reflects what the payment provider will actually be asked to
+@@ -538,6 +620,7 @@ export default function MyOrders() {
+     return (
+       <div className="section mo-wrap">
+         <h1>{L("title")}</h1>
++        <TrackByReceipt />
+         {requested ? (
+           <div className="mo-sent-box">
+             <div className="mo-sent-emoji">📬</div>
+@@ -586,6 +669,8 @@ export default function MyOrders() {
+         </div>
+       </div>
+ 
++      <TrackByReceipt />
++
+       {err && <div className="auth-err">{err}</div>}
+ 
+       {loading && orders === null ? (
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index 6b39c71..52d9f23 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -9280,3 +9280,83 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+   background: none !important;
+   filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
+ }
++
++/* ===================================================================
++   ETAPA 136 — Botones de las ventanas del footer + envíos SOLO FedEx +
++   RASTREO del pedido por número de recibo (pedidos del cliente).
++   =================================================================== */
++/* "Cerrar" (y cualquier botón a todo lo ancho de los globos del footer)
++   en barra 9-slice: no se deforma. */
++.btn.btn-primary.fi-ok {
++  background: none !important; box-shadow: none !important;
++  border: 15px solid transparent !important;
++  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 14px;
++  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
++}
++.btn.btn-primary.fi-ok:hover {
++  background: none !important;
++  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
++}
++.co-pay-err .btn.btn-outline {
++  background: none !important; box-shadow: none !important;
++  border: 14px solid transparent !important;
++  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 48px; color: #0b2f66 !important; font-weight: 800;
++}
++/* WEB: Finalizar compra en UNA PANTALLA SIN SCROLL — dos columnas: el
++   resumen (con más aire para el espejuelo) a la izquierda y los datos a
++   la derecha. Solo cuando hay resumen (no en vacío/confirmación). */
++@media (min-width: 960px) {
++  .section.checkout:has(.co-summary2) {
++    max-width: 1120px !important;
++    display: grid; grid-template-columns: 1fr 1.05fr; gap: 0 28px;
++    align-items: start; padding-top: 14px;
++  }
++  .section.checkout:has(.co-summary2) .co-head { grid-column: 1 / -1; margin-bottom: 2px; }
++  .section.checkout:has(.co-summary2) .co-summary2 { grid-column: 1; position: sticky; top: 86px; margin: 8px 0; }
++  .section.checkout:has(.co-summary2) > .co-form,
++  .section.checkout:has(.co-summary2) > .auth-err { grid-column: 2; }
++  .section.checkout:has(.co-summary2) > .co-form { margin: 8px 0; }
++  /* Más espacio al espejuelo y al resumen */
++  .section.checkout:has(.co-summary2) .co-item-ph { width: 180px; height: 120px; }
++  .section.checkout:has(.co-summary2) .co-item2 { padding: 12px 0; gap: 14px; }
++  .section.checkout:has(.co-summary2) .co-item2 .panel-item-info b { font-size: 16px; }
++  .section.checkout:has(.co-summary2) .co-item2 .panel-item-info small { font-size: 13px; line-height: 1.5; }
++  .section.checkout:has(.co-summary2) .panel-item-price { font-size: 17px; }
++  .section.checkout:has(.co-summary2) .co-totals > div { padding: 3px 0; font-size: 14.5px; }
++  .section.checkout:has(.co-summary2) .panel-total { font-size: 21px; }
++  .section.checkout:has(.co-summary2) .co-sum-navyhd { padding: 11px 16px; font-size: 14.5px; }
++  /* Confirmación en una línea también en web */
++  .section.checkout:has(.co-summary2) .co-notify { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
++  .section.checkout:has(.co-summary2) .co-notify-h { margin: 0; flex: 0 0 100%; }
++}
++/* Caja de rastreo por recibo (/my-orders) */
++.trk-box { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 15px; margin: 10px 0 18px; background: #fff; }
++.trk-hd { display: flex; align-items: center; gap: 9px; font-size: 15.5px; color: var(--cuba-blue); }
++.trk-hd .i3d { height: 24px; width: auto; }
++.trk-intro { font-size: 13px; margin: 4px 0 10px; }
++.trk-form { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; align-items: stretch; }
++.trk-form input { border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 14px; min-width: 0; }
++.btn.btn-primary.trk-go {
++  background: none !important; box-shadow: none !important;
++  border: 14px solid transparent !important;
++  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 46px; padding: 0 14px;
++  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38); white-space: nowrap;
++}
++.trk-result { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
++.trk-result-hd { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-bottom: 6px; }
++.trk-result-hd > b { color: #0b2f66; font-size: 15px; }
++.trk-guide { font-size: 12.5px; color: var(--ink-soft); }
++.trk-guide b { color: #0b2f66; }
++.trk-dates { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
++.trk-dates li { display: flex; gap: 6px; font-size: 12.5px; color: var(--ink-soft); }
++.trk-dates li b { color: #0b2f66; }
++.trk-follow { display: inline-block; margin-top: 8px; font-weight: 700; color: var(--cuba-blue); }
++.trk-note { display: block; margin-top: 8px; }
++@media (max-width: 700px) {
++  .trk-form { grid-template-columns: 1fr 1fr; }
++  .trk-form input[type=email] { grid-column: 1 / -1; grid-row: 1; }
++  .btn.btn-primary.trk-go { grid-column: 1 / -1; }
++}

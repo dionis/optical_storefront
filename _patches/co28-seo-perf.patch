@@ -1,0 +1,648 @@
+diff --git a/apps/capri-storefront/src/admin/priceStore.js b/apps/capri-storefront/src/admin/priceStore.js
+index 602a885..df79ca5 100644
+--- a/apps/capri-storefront/src/admin/priceStore.js
++++ b/apps/capri-storefront/src/admin/priceStore.js
+@@ -8,6 +8,10 @@ const KEY = "oer_price_overrides";
+ 
+ const DEFAULT_SHIPPING = {
+   standard: 4.95, express: 12.95, freeThreshold: 59,
++  // ENVÍO FEDEX FIJO (pedido del dueño): $28 a todo EE. UU., 4 días de
++  // tránsito. Es lo que el checkout MUESTRA siempre; el servidor cobra lo
++  // mismo vía SHIPPING_FEDEX_RATE (=28) en Coolify. Editable aquí (admin).
++  fedexRate: 28, fedexEtaDays: 4,
+   // Días HÁBILES que el laboratorio tarda en tallar y montar los lentes. Es el
+   // tiempo previo a recoger en tienda o a que salga el envío — no incluye el
+   // tránsito del transportista (eso son etaMin/etaMax por zona).
+diff --git a/apps/capri-storefront/src/components/StorePanels.jsx b/apps/capri-storefront/src/components/StorePanels.jsx
+index 373f8d0..533a8b0 100644
+--- a/apps/capri-storefront/src/components/StorePanels.jsx
++++ b/apps/capri-storefront/src/components/StorePanels.jsx
+@@ -5,6 +5,7 @@ import { useCart } from "./CartContext.jsx";
+ import { useFeedback } from "./Feedback.jsx";
+ import { useLang } from "../i18n/LanguageContext.jsx";
+ import { useUser, login, register, logout } from "./userAuth.js";
++import { resolveImage } from "../data/imageUrl.js";
+ 
+ const money = (n) => "$" + (Number(n) || 0).toFixed(2);
+ 
+@@ -54,11 +55,16 @@ export function CartPanel({ open, onClose }) {
+           <ul className="panel-list">
+             {items.map((i) => (
+               <li key={i.id} className="panel-item">
+-                {i.thumbnail && <img className="panel-item-thumb" src={i.thumbnail} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+-                <div className="panel-item-info">
+-                  <b>{i.title}</b>
+-                  <small>{[i.metadata?.lens_summary, i.quantity > 1 ? `× ${i.quantity}` : null].filter(Boolean).join(" · ")}</small>
+-                </div>
++                {/* Clic en el espejuelo → su ficha (pedido del dueño). La miniatura
++                    pasa por resolveImage: el carrito guarda claves R2 desnudas. */}
++                <Link className="panel-item-link" to={i.product_handle ? `/producto/${i.product_handle}` : "#"}
++                      onClick={(e) => { if (!i.product_handle) { e.preventDefault(); return; } onClose(); }}>
++                  {i.thumbnail && <img className="panel-item-thumb" src={resolveImage(i.thumbnail)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
++                  <div className="panel-item-info">
++                    <b>{i.title}</b>
++                    <small>{[i.metadata?.lens_summary, i.quantity > 1 ? `× ${i.quantity}` : null].filter(Boolean).join(" · ")}</small>
++                  </div>
++                </Link>
+                 <span className="panel-item-price">{money(i.total)}</span>
+                 <button className="panel-x" onClick={() => removeItem(i.id)} disabled={busy} aria-label={t("common.remove")}>×</button>
+               </li>
+diff --git a/apps/capri-storefront/src/data/medusaCart.js b/apps/capri-storefront/src/data/medusaCart.js
+index ac6ed08..0ea06ae 100644
+--- a/apps/capri-storefront/src/data/medusaCart.js
++++ b/apps/capri-storefront/src/data/medusaCart.js
+@@ -14,7 +14,7 @@ export const DEFAULT_PROVIDER =
+ 
+ const CART_FIELDS =
+   "id,email,currency_code,region_id,total,item_total,shipping_total,tax_total,completed_at,locale," +
+-  "items.id,items.title,items.quantity,items.unit_price,items.total,items.thumbnail,items.metadata," +
++  "items.id,items.title,items.quantity,items.unit_price,items.total,items.thumbnail,items.metadata,items.product_handle," +
+   "shipping_methods.id,shipping_methods.amount,shipping_address.*";
+ 
+ // Key LanguageContext persists the active UI language under. Read directly rather
+@@ -343,6 +343,10 @@ export async function startPayment(providerId = DEFAULT_PROVIDER) {
+   const { cart } = await medusa.store.cart.retrieve(id, { fields: CART_FIELDS });
+   const { payment_collection } = await medusa.store.payment.initiatePaymentSession(cart, {
+     provider_id: providerId,
++    // SOLO tarjeta en el PaymentIntent: sin Link ni Banco/Affirm/Amazon. El
++    // formulario de pago queda corto (cabe en una vista) y sin el bloque de
++    // "guardar mi información" de Link. Métodos extra: decisión futura.
++    data: { payment_method_types: ["card"] },
+   });
+   const session = (payment_collection.payment_sessions || []).find((s) => s.provider_id === providerId);
+   return { clientSecret: session?.data?.client_secret || null, paymentCollection: payment_collection, providerId };
+diff --git a/apps/capri-storefront/src/i18n/translations.js b/apps/capri-storefront/src/i18n/translations.js
+index bd43ce6..b752d6f 100644
+--- a/apps/capri-storefront/src/i18n/translations.js
++++ b/apps/capri-storefront/src/i18n/translations.js
+@@ -1334,6 +1334,10 @@ export const T = {
+     "checkout.lensLine": "Cristal", "checkout.treatLine": "Tratamientos", "checkout.frameLine": "Espejuelo",
+     "checkout.shipping": "Método de envío", "checkout.toPay": "Continuar al pago",
+     "checkout.payment": "Pago", "checkout.pay": "Pagar", "checkout.paying": "Procesando…",
++    "checkout.testTitle": "Modo de PRUEBA — no se cobra nada",
++    "checkout.testBody": "Usa la tarjeta de prueba: no pongas datos reales hasta conectar la cuenta final de Stripe.",
++    "checkout.testCard": "Tarjeta", "checkout.testExp": "Fecha", "checkout.testCvc": "CVC", "checkout.testZip": "ZIP",
++    "checkout.testAny": "cualquiera futura",
+     "checkout.free": "Gratis", "checkout.total": "Total", "checkout.done": "¡Pago completado!",
+     "checkout.orderNo": "Tu pedido", "checkout.thanks": "Gracias por tu compra. Te enviaremos la confirmación por correo.",
+     "checkout.trackHint": "Puedes seguir el estado de este y de todos tus pedidos desde un mismo lugar.",
+@@ -2676,6 +2680,10 @@ export const T = {
+     "checkout.lensLine": "Lens", "checkout.treatLine": "Treatments", "checkout.frameLine": "Frame",
+     "checkout.shipping": "Shipping method", "checkout.toPay": "Continue to payment",
+     "checkout.payment": "Payment", "checkout.pay": "Pay", "checkout.paying": "Processing…",
++    "checkout.testTitle": "TEST mode — nothing is charged",
++    "checkout.testBody": "Use the test card: do not enter real details until the final Stripe account is connected.",
++    "checkout.testCard": "Card", "checkout.testExp": "Expiry", "checkout.testCvc": "CVC", "checkout.testZip": "ZIP",
++    "checkout.testAny": "any future date",
+     "checkout.free": "Free", "checkout.total": "Total", "checkout.done": "Payment complete!",
+     "checkout.orderNo": "Your order", "checkout.thanks": "Thanks for your order. We'll email your confirmation.",
+     "checkout.trackHint": "You can follow this and all your other orders in one place.",
+diff --git a/apps/capri-storefront/src/lib/seo.js b/apps/capri-storefront/src/lib/seo.js
+new file mode 100644
+index 0000000..d4fb761
+--- /dev/null
++++ b/apps/capri-storefront/src/lib/seo.js
+@@ -0,0 +1,111 @@
++// SEO por página (pedido del dueño): la app es una SPA, así que el <head> se
++// actualiza desde JS al navegar — Google ejecuta JS y lee esto. Cada página
++// llama a setSeo() con su título, descripción, imagen y (en las fichas) el
++// JSON-LD de Producto; al salir no hace falta limpiar porque la siguiente
++// página escribe lo suyo encima. Base estática (idioma, OG por defecto,
++// favicon, preconnects) vive en index.html.
++const ensure = (selector, create) => {
++  let el = document.head.querySelector(selector);
++  if (!el) { el = create(); document.head.appendChild(el); }
++  return el;
++};
++
++const meta = (attr, name, content) => {
++  if (content == null) return;
++  const el = ensure(`meta[${attr}="${name}"]`, () => {
++    const m = document.createElement("meta");
++    m.setAttribute(attr, name);
++    return m;
++  });
++  el.setAttribute("content", content);
++};
++
++/**
++ * Escribe título, descripción, canónica, Open Graph/Twitter y (opcional) el
++ * JSON-LD de la página. `path` es la ruta canónica ("/producto/dc406"); la
++ * imagen puede ser relativa o absoluta.
++ */
++export function setSeo({ title, description, path, image, type = "website", jsonLd = null }) {
++  const origin = window.location.origin;
++  const url = path ? origin + path : window.location.href.split("?")[0];
++  const img = image ? (/^https?:/i.test(image) ? image : origin + image) : origin + "/og-image.jpg";
++
++  if (title) document.title = title;
++  meta("name", "description", description);
++  meta("property", "og:title", title);
++  meta("property", "og:description", description);
++  meta("property", "og:url", url);
++  meta("property", "og:image", img);
++  meta("property", "og:type", type);
++  meta("name", "twitter:title", title);
++  meta("name", "twitter:description", description);
++  meta("name", "twitter:image", img);
++
++  const canon = ensure('link[rel="canonical"]', () => {
++    const l = document.createElement("link");
++    l.setAttribute("rel", "canonical");
++    return l;
++  });
++  canon.setAttribute("href", url);
++
++  let ld = document.getElementById("seo-jsonld");
++  if (jsonLd) {
++    if (!ld) {
++      ld = document.createElement("script");
++      ld.id = "seo-jsonld";
++      ld.type = "application/ld+json";
++      document.head.appendChild(ld);
++    }
++    ld.textContent = JSON.stringify(jsonLd);
++  } else if (ld) {
++    ld.remove();
++  }
++}
++
++/** JSON-LD de Producto para la ficha del espejuelo (precio, marca, foto). */
++export function productJsonLd({ name, brand, description, image, path, price, currency = "USD", inStock = true }) {
++  const origin = window.location.origin;
++  return {
++    "@context": "https://schema.org",
++    "@type": "Product",
++    name,
++    brand: brand ? { "@type": "Brand", name: brand } : undefined,
++    description,
++    image: image ? [/^https?:/i.test(image) ? image : origin + image] : undefined,
++    url: origin + path,
++    offers: {
++      "@type": "Offer",
++      url: origin + path,
++      priceCurrency: currency,
++      price: typeof price === "number" ? price.toFixed(2) : String(price || ""),
++      availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
++      itemCondition: "https://schema.org/NewCondition",
++    },
++  };
++}
++
++/** Preconexiones en caliente a los hosts reales (backend e imágenes R2): el
++ *  navegador abre TLS antes de la primera petición y el catálogo pinta antes. */
++export function initPerfHints() {
++  const hosts = new Set();
++  try {
++    const api = import.meta.env && import.meta.env.VITE_MEDUSA_URL;
++    if (api) hosts.add(new URL(api).origin);
++  } catch { /* nada */ }
++  try {
++    const r2 = import.meta.env && import.meta.env.VITE_R2_PUBLIC_URL;
++    if (r2) hosts.add(new URL(r2).origin);
++  } catch { /* nada */ }
++  for (const origin of hosts) {
++    if (document.head.querySelector(`link[rel="preconnect"][href="${origin}"]`)) continue;
++    const l = document.createElement("link");
++    l.rel = "preconnect";
++    l.href = origin;
++    l.crossOrigin = "anonymous";
++    document.head.appendChild(l);
++    const d = document.createElement("link");
++    d.rel = "dns-prefetch";
++    d.href = origin;
++    document.head.appendChild(d);
++  }
++}
+diff --git a/apps/capri-storefront/src/main.jsx b/apps/capri-storefront/src/main.jsx
+index 8cc5697..8845a2d 100644
+--- a/apps/capri-storefront/src/main.jsx
++++ b/apps/capri-storefront/src/main.jsx
+@@ -1,3 +1,4 @@
++import { initPerfHints } from "./lib/seo.js";
+ import React from "react";
+ import ReactDOM from "react-dom/client";
+ import { BrowserRouter } from "react-router-dom";
+@@ -16,6 +17,10 @@ purgeStaleStorage();
+ // render, en vez de esperar a que una ficha las necesite.
+ loadLiveFrameMedia();
+ 
++// Preconexiones al backend y al host de imágenes (R2): TLS abierto antes de la
++// primera petición — el catálogo y las fichas pintan antes.
++initPerfHints();
++
+ ReactDOM.createRoot(document.getElementById("root")).render(
+   <React.StrictMode>
+     <BrowserRouter>
+diff --git a/apps/capri-storefront/src/pages/Catalog.jsx b/apps/capri-storefront/src/pages/Catalog.jsx
+index 99c7602..01a0392 100644
+--- a/apps/capri-storefront/src/pages/Catalog.jsx
++++ b/apps/capri-storefront/src/pages/Catalog.jsx
+@@ -10,12 +10,22 @@ import ProductCard from "../components/ProductCard.jsx";
+ import CaseCard from "../components/CaseCard.jsx";
+ import { IconFilter, IconSort, IconGrid, IconList, IconCheck } from "../components/UiIcons.jsx";
+ import { useLang } from "../i18n/LanguageContext.jsx";
++import { setSeo } from "../lib/seo.js";
+ import { fetchReviewSummaries } from "../data/reviews.js";
+ 
+ export default function Catalog() {
+   const { slug } = useParams();
+   const [params] = useSearchParams();
+   const { t, tv, lang } = useLang();
++  useEffect(() => {
++    setSeo({
++      title: lang === "es" ? "Catálogo de espejuelos | RUBI LENS" : "Eyeglasses catalog | RUBI LENS",
++      description: lang === "es"
++        ? "Más de 500 monturas de Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy. Filtra por forma, material, sexo y estilo; pruébatelas online con tu cámara."
++        : "500+ frames from Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy. Filter by shape, material, gender and style; try them on online with your camera.",
++      path: "/catalogo",
++    });
++  }, [lang]);
+   const { products: PRODUCTS, cases: CASES } = useCatalog();
+   const brand = slug ? BRAND_BY_SLUG[slug] : null;
+   const q = (params.get("q") || "").toLowerCase().trim();
+diff --git a/apps/capri-storefront/src/pages/Home.jsx b/apps/capri-storefront/src/pages/Home.jsx
+index 9346083..a16fde9 100644
+--- a/apps/capri-storefront/src/pages/Home.jsx
++++ b/apps/capri-storefront/src/pages/Home.jsx
+@@ -7,6 +7,7 @@ import { LOOKBOOK_BY_ID, lookbookTag } from "../data/lookbook.js";
+ import { useCatalog } from "../data/catalogStore.js";
+ import ProductCard from "../components/ProductCard.jsx";
+ import { useLang } from "../i18n/LanguageContext.jsx";
++import { setSeo } from "../lib/seo.js";
+ 
+ const IMG = "https://caprioptics.com/wp-content/uploads/";
+ 
+@@ -114,6 +115,15 @@ function GlassesIcon({ type }) {
+ 
+ export default function Home() {
+   const { t, lang } = useLang();
++  useEffect(() => {
++    setSeo({
++      title: lang === "es" ? "RUBI LENS — Espejuelos de marca online con probador virtual" : "RUBI LENS — Designer eyeglasses online with virtual try-on",
++      description: lang === "es"
++        ? "Espejuelos Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy con lentes de receta, probador virtual con tu cámara y envío FedEx a todo EE. UU."
++        : "Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy eyeglasses with prescription lenses, camera try-on and FedEx shipping across the US.",
++      path: "/",
++    });
++  }, [lang]);
+   const { products: PRODUCTS } = useCatalog();
+   const featured = PRODUCTS.slice(0, 12);
+ 
+diff --git a/apps/capri-storefront/src/pages/MedusaCheckout.jsx b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+index 83afc0e..3e682f8 100644
+--- a/apps/capri-storefront/src/pages/MedusaCheckout.jsx
++++ b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+@@ -10,6 +10,7 @@ import {
+   startPayment, DEFAULT_PROVIDER, completeCart, revalidateCart,
+ } from "../data/medusaCart.js";
+ import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
++import { resolveImage } from "../data/imageUrl.js";
+ import { shipping as shippingConfig } from "../admin/priceStore.js";
+ import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
+ 
+@@ -45,6 +46,10 @@ export default function MedusaCheckout() {
+   // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
+   // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
+   const labDays = Number(shippingConfig().labDays) || 0;
++  // Tarifa FIJA de FedEx (pedido del dueño): $28 siempre, 4 días — lo que el
++  // cliente ve. El servidor cobra lo mismo (SHIPPING_FEDEX_RATE en Coolify).
++  const FEDEX_RATE = Number(shippingConfig().fedexRate) || 28;
++  const FEDEX_ETA = Number(shippingConfig().fedexEtaDays) || 4;
+ 
+   const [cart, setCart] = useState(null);
+   const [loading, setLoading] = useState(true);
+@@ -279,7 +284,22 @@ export default function MedusaCheckout() {
+       setCart(await getCart());
+       const stripe = await loadStripe(PK);
+       stripeRef.current = stripe;
+-      const elements = stripe.elements({ clientSecret });
++      // Apariencia de la casa para el formulario de Stripe: navy, compacto y en
++      // el idioma elegido — el paso de pago cabe en una vista y se ve propio.
++      const elements = stripe.elements({
++        clientSecret,
++        locale: lang === "en" ? "en" : "es",
++        appearance: {
++          theme: "stripe",
++          variables: {
++            colorPrimary: "#0b2f66",
++            colorText: "#17233a",
++            fontSizeBase: "14px",
++            spacingUnit: "3px",
++            borderRadius: "10px",
++          },
++        },
++      });
+       elementsRef.current = elements;
+       setStep("pay"); // el Payment Element se monta en el useEffect de abajo
+     } catch (e) { setErr(e.message || String(e)); }
+@@ -303,7 +323,15 @@ export default function MedusaCheckout() {
+     // `fields.billingDetails.email: "never"` evita que Stripe muestre el campo de
+     // email de Link, que es el que dispara la verificación fallida (401). El email
+     // ya lo capturamos en los datos del paciente.
+-    const opts = { fields: { billingDetails: { email: "never" } } };
++    const opts = {
++      // Pestañas (una fila horizontal de métodos) + SIN Link: el bloque de
++      // "guardar mi información" de Link medía ~260px y sacaba el pago de la
++      // vista única; el email/celular ya viven en los datos del paciente.
++      layout: { type: "tabs", defaultCollapsed: false },
++      terms: { card: "never" },
++      wallets: { applePay: "never", googlePay: "never" },
++      fields: { billingDetails: { email: "never" } },
++    };
+     if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
+     let el;
+     try {
+@@ -476,9 +504,20 @@ export default function MedusaCheckout() {
+                 const treats = [photoOpt && LBL(photoOpt.label, lang), arOpt && LBL(arOpt.label, lang)].filter(Boolean);
+                 return (
+                   <li key={i.id} className="panel-item co-item2">
+-                    {i.thumbnail && <img className="co-item-ph" src={i.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" />}
++                    {/* Clic en el espejuelo → su ficha; la miniatura pasa por
++                        resolveImage (clave R2 → URL pública, ya no sale rota). */}
++                    {i.thumbnail && (
++                      <Link to={i.product_handle ? `/producto/${i.product_handle}` : "#"}
++                            onClick={(e) => { if (!i.product_handle) e.preventDefault(); }}
++                            className="co-item-phlink" aria-label={i.title}>
++                        <img className="co-item-ph" src={resolveImage(i.thumbnail)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
++                             onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
++                      </Link>
++                    )}
+                     <div className="panel-item-info">
+-                      <b>{i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
++                      <b>{i.product_handle
++                        ? <Link className="co-item-title" to={`/producto/${i.product_handle}`}>{i.title}</Link>
++                        : i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
+                       {dl && <small><span className="co-dt">{L("frameLine")}:</span> {dl[lang] || dl.es}</small>}
+                       {mat && <small><span className="co-dt">{L("lensLine")}:</span> {LBL(mat.label, lang)}</small>}
+                       {treats.length > 0 && <small><span className="co-dt">{L("treatLine")}:</span> {treats.join(" · ")}</small>}
+@@ -502,15 +541,13 @@ export default function MedusaCheckout() {
+             <div className="co-totals">
+               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
+               {(() => {
+-                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+-                const shipAmt = cart.shipping_total > 0 ? cart.shipping_total
+-                  : sel ? (sel.free ? 0 : sel.amount)
+-                  : shipId ? (ship.find((o) => o.id === shipId)?.amount ?? null)
+-                  : null;
++                // Tarifa FIJA: en cuanto hay método de envío (cotizado solo al
++                // completar la dirección), la línea dice FedEx · $28 — siempre.
++                const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
+                 return (
+                   <div>
+-                    <span>{L("shippingLine")}{sel ? ` · ${sel.label}` : ""}</span>
+-                    <b>{shipAmt == null ? "—" : shipAmt > 0 ? money(shipAmt) : L("free")}</b>
++                    <span>{L("shippingLine")}{ready ? " · FedEx" : ""}</span>
++                    <b>{ready ? money(FEDEX_RATE) : "—"}</b>
+                   </div>
+                 );
+               })()}
+@@ -523,11 +560,11 @@ export default function MedusaCheckout() {
+               })()}
+             </div>
+             {(() => {
+-              const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+-              const pend = cart.shipping_total > 0 ? 0
+-                : sel ? (sel.free ? 0 : Number(sel.amount || 0))
+-                : shipId ? Number(ship.find((o) => o.id === shipId)?.amount || 0)
+-                : 0;
++              // Total con la tarifa fija: lo que Medusa aún no haya sumado del
++              // envío se completa hasta los $28 fijos para que el cliente vea
++              // el número final real desde el principio.
++              const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
++              const pend = ready ? Math.max(0, FEDEX_RATE - Number(cart.shipping_total || 0)) : 0;
+               return <div className="panel-total"><span>{L("total")}</span><b>{money(Number(cart.total || 0) + pend)}</b></div>;
+             })()}
+           </div>
+@@ -591,38 +628,19 @@ export default function MedusaCheckout() {
+                   (cotizada en el servidor); mientras, una nota tranquila. Si el
+                   servidor devolviera varias mensajerías, se elige aquí mismo. */}
+               {(() => {
+-                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
+-                const opt = !carriers && shipId ? ship.find((o) => o.id === shipId) : null;
+-                if (busy && !sel && !opt) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
+-                if (sel) return (
+-                  <div className="co-shipline" role="status">
+-                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
+-                         onError={(e) => e.currentTarget.remove()} />
+-                    <span className="co-shipline-tx">
+-                      <b>{sel.label} · {sel.free ? L("free") : money(sel.amount)}</b>
+-                      <small>{t("ship.eta", { min: sel.eta_min_days, max: sel.eta_max_days })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
+-                    </span>
+-                    {carriers.length > 1 && (
+-                      <span className="co-ship-alt">
+-                        {carriers.map((q) => (
+-                          <button key={q.carrier} type="button" className={`co-ship-chip ${carrierSel === q.carrier ? "on" : ""}`}
+-                                  onClick={() => setCarrierSel(q.carrier)}>{q.label}</button>
+-                        ))}
+-                      </span>
+-                    )}
+-                  </div>
+-                );
+-                if (opt) return (
++                const ready = (carriers && carrierSel) || shipId;
++                if (busy && !ready) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
++                if (!ready) return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
++                return (
+                   <div className="co-shipline" role="status">
+                     <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
+                          onError={(e) => e.currentTarget.remove()} />
+                     <span className="co-shipline-tx">
+-                      <b>{tv(opt.name)} · {opt.amount > 0 ? money(opt.amount) : L("free")}</b>
+-                      {labDays > 0 && <small>{t("ship.labNote", { days: labDays })}</small>}
++                      <b>FedEx · {money(FEDEX_RATE)}</b>
++                      <small>{t("ship.eta", { min: FEDEX_ETA, max: FEDEX_ETA })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
+                     </span>
+                   </div>
+                 );
+-                return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
+               })()}
+               <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
+                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("pay")}
+@@ -631,8 +649,13 @@ export default function MedusaCheckout() {
+           )}
+ 
+           {step === "pay" && (
+-            <div className="co-form" ref={paySecRef}>
+-              <div className="co-h">💳 {L("payment")}</div>
++            <div className="co-form co-payform" ref={paySecRef}>
++              <div className="co-sum-navyhd co-pay-navyhd">
++                <img className="co-sum-ic" src="/ui/icons3d/white-shield.png" alt="" aria-hidden="true"
++                     onError={(e) => e.currentTarget.remove()} />
++                <span>{L("payment")}</span>
++                <small className="co-pay-safe">🔒 {t("trust.secure")}</small>
++              </div>
+               {/* Si la tarjeta es del paciente, autorellenamos los datos de
+                   facturación de Stripe con los del paciente. Al cambiar, el
+                   useEffect vuelve a montar el Payment Element. */}
+@@ -642,6 +665,22 @@ export default function MedusaCheckout() {
+               </label>
+               {/* El contenedor se pinta SIEMPRE: es el destino de `mount()`, así
+                   que ocultarlo mientras carga dejaría a Stripe sin dónde montar. */}
++              {/* TARJETA DE PRUEBA (pedido del dueño): mientras la llave de
++                  Stripe sea de test (pk_test_), se enseña la tarjeta 4242 para
++                  que nadie teclee datos reales. Al poner la llave live de la
++                  cuenta final, esta cajita desaparece sola. */}
++              {PK.startsWith("pk_test_") && (
++                <div className="co-testcard" role="note">
++                  <b>🧪 {L("testTitle")}</b>
++                  <p>{L("testBody")}</p>
++                  <div className="co-testcard-row">
++                    <span>{L("testCard")}: <b>4242 4242 4242 4242</b></span>
++                    <span>{L("testExp")}: <b>12/34</b> ({L("testAny")})</span>
++                    <span>{L("testCvc")}: <b>123</b></span>
++                    <span>{L("testZip")}: <b>77449</b></span>
++                  </div>
++                </div>
++              )}
+               <div ref={payElRef} className="co-pay-el" />
+               {payState === "loading" && (
+                 <div className="co-pay-note" role="status">
+@@ -658,19 +697,21 @@ export default function MedusaCheckout() {
+                   </button>
+                 </div>
+               )}
+-              <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
+-                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
+-              </button>
+-              {/* Volver a los datos de contacto/envío sin perder nada: el
+-                  Payment Element se desmonta y se vuelve a crear al regresar. */}
+-              <button
+-                type="button"
+-                className="btn btn-outline big co-back"
+-                disabled={busy}
+-                onClick={() => { setPayState("idle"); setStep("contact"); }}
+-              >
+-                ← {L("backToData")}
+-              </button>
++              <div className="co-pay-actions">
++                <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
++                  {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
++                </button>
++                {/* Volver a los datos sin perder nada: el Payment Element se
++                    desmonta y se vuelve a crear al regresar. */}
++                <button
++                  type="button"
++                  className="btn btn-outline big co-back"
++                  disabled={busy}
++                  onClick={() => { setPayState("idle"); setStep("contact"); }}
++                >
++                  ← {L("backToData")}
++                </button>
++              </div>
+             </div>
+           )}
+         </>
+diff --git a/apps/capri-storefront/src/pages/ProductDetail.jsx b/apps/capri-storefront/src/pages/ProductDetail.jsx
+index 0676cd0..3657980 100644
+--- a/apps/capri-storefront/src/pages/ProductDetail.jsx
++++ b/apps/capri-storefront/src/pages/ProductDetail.jsx
+@@ -1,5 +1,6 @@
+ // Dónde se usa: /producto/:slug (PDP). Galería 360/color, ficha técnica, precio, CTAs (probador + carrito), pestañas de detalles/medidas/opiniones y recomendados.
+ import { useState, useEffect, useRef } from "react";
++import { setSeo, productJsonLd } from "../lib/seo.js";
+ import { createPortal } from "react-dom";
+ import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+ import { trackView } from "../admin/analytics.js";
+@@ -214,6 +215,34 @@ export default function ProductDetail() {
+ 
+   const color = product.colors[active];
+ 
++  // SEO de la FICHA (pedido del dueño): título, descripción, canónica, Open
++  // Graph y el JSON-LD de Producto (marca, precio, foto) para el posicionamiento.
++  useEffect(() => {
++    if (!product) return;
++    const a = product.attributes || {};
++    const img = product.colors?.[0]?.image || null;
++    const bits = [tv(a.shape), (a.material || [])[0] && tv((a.material || [])[0]), a.gender && tv(a.gender)].filter(Boolean);
++    const desc = lang === "es"
++      ? `Espejuelos ${product.name} de ${product.brand}${bits.length ? " — " + bits.join(", ") : ""}. Pruébatelos online con tu cámara y pídelos con tus lentes de receta. Envío FedEx a todo EE. UU.`
++      : `${product.name} eyeglasses by ${product.brand}${bits.length ? " — " + bits.join(", ") : ""}. Try them on online with your camera and order them with prescription lenses. FedEx shipping across the US.`;
++    const path = `/producto/${slug}`;
++    setSeo({
++      title: `${product.name} · ${product.brand} | RUBI LENS`,
++      description: desc,
++      path,
++      image: img,
++      type: "product",
++      jsonLd: productJsonLd({
++        name: `${product.name} — ${product.brand}`,
++        brand: product.brand,
++        description: desc,
++        image: img,
++        path,
++        price: product.price,
++      }),
++    });
++  }, [product, slug, lang]); // eslint-disable-line react-hooks/exhaustive-deps
++
+   // Vistas generadas (4 ángulos) de ESTE color, si existen para este SKU. Los
+   // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,
+   // cae a la imagen actual del color (nunca un recuadro roto). Sin vistas: ficha
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index d2b751c..f641437 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -9396,3 +9396,39 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+   .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 8px 14px 10px; }
+   .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 2px 0; }
+ }
++
++/* ===================================================================
++   ETAPA 139 — PAGO en una sola vista y llamativo (web y móvil), tarifa
++   FedEx FIJA visible, SEO por página y rendimiento (pedidos del
++   cliente). El formulario de Stripe va en acordeón compacto con la
++   paleta navy de la casa; la ficha de pago lleva cabecera navy/oro.
++   =================================================================== */
++.co-payform { padding: 0 !important; overflow: hidden; border-radius: 14px; }
++.co-pay-navyhd { border-radius: 0; }
++.co-pay-safe { margin-left: auto; font-size: 11px; color: #cfe0f5; font-weight: 600; text-transform: none; letter-spacing: 0; }
++.co-payform .co-cardmatch { margin: 10px 14px 4px; }
++.co-payform .co-pay-el { margin: 4px 14px; }
++.co-pay-actions { display: grid; gap: 8px; padding: 8px 14px 14px; }
++.co-payform .co-pay-actions .btn.big { width: 100%; margin: 0; }
++@media (min-width: 960px) {
++  .co-pay-actions { grid-template-columns: 1.4fr 1fr; }
++}
++.co-payform .co-pay-note, .co-payform .co-pay-err { margin: 6px 14px; }
++@media (min-width: 960px) {
++  .section.checkout:has(.co-summary2) > .co-payform { grid-column: 2; margin: 8px 0; }
++}
++/* Móvil: en el checkout fuera la franja de confianza fija — roba 70px justo
++   donde el pago necesita caber en una vista (los mensajes ya están en la página). */
++@media (max-width: 939px) {
++  body:has(.section.checkout) .truststrip { display: none; }
++}
++/* Cajita de la tarjeta de PRUEBA (solo con llave pk_test_): dorada suave. */
++.co-testcard {
++  margin: 8px 14px 2px; padding: 7px 11px 8px; border-radius: 12px;
++  background: #fdf8ec; border: 1px solid #e7cf96;
++}
++.co-testcard b { color: #7a5b12; }
++.co-testcard > b { font-size: 12.5px; }
++.co-testcard p { margin: 1px 0 4px; font-size: 11.5px; line-height: 1.3; color: #6b5a30; }
++.co-testcard-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #4b3f22; }
++.co-testcard-row b { font-variant-numeric: tabular-nums; user-select: all; }
+diff --git a/apps/capri-storefront/vite.config.js b/apps/capri-storefront/vite.config.js
+index 66b581d..fca927e 100644
+--- a/apps/capri-storefront/vite.config.js
++++ b/apps/capri-storefront/vite.config.js
+@@ -42,6 +42,18 @@ export default defineConfig(({ mode }) => {
+       __BUILD_ID__: JSON.stringify(mode === "production" ? id : "dev"),
+     },
+     plugins: [react(), emitBuildId(id)],
++    build: {
++      rollupOptions: {
++        output: {
++          // RENDIMIENTO: separar el vendor (React + router) del código de la
++          // tienda. El index pasaba de 1 MB en un solo fichero; partido, el
++          // navegador cachea el vendor entre deploys y el resto baja en paralelo.
++          manualChunks: {
++            vendor: ["react", "react-dom", "react-router-dom"],
++          },
++        },
++      },
++    },
+     server: {
+       port: 5198,
+       host: true,

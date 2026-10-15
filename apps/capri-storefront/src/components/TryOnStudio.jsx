@@ -315,6 +315,14 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
     return () => window.removeEventListener("keydown", onKey);
   }, [showMeas]);
 
+  // Modal de entrada: cierra con Escape (además del nuevo ✕).
+  useEffect(() => {
+    if (entryMode !== null) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [entryMode, onClose]);
+
   // Zoom con la RUEDA del ratón (hacia arriba acerca). Al volver a 1x se recentra.
   function zoomWheel(e) {
     try { e.preventDefault(); } catch { /* listener pasivo: el fondo ya está bloqueado */ }
@@ -1943,6 +1951,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       {entryMode === null && (
         <div className="ts2-entry" role="dialog" aria-modal="true" aria-label={t("vm.entry.title")}>
           <div className="ts2-entry-card">
+            <button type="button" className="ts2-entry-x" onClick={onClose}
+                    aria-label={t("tryon.close")}>×</button>
             <b className="ts2-entry-tt">{t("vm.entry.title")}</b>
             <p className="ts2-entry-sub">{t("vm.entry.sub")}</p>
             <div className="ts2-entry-opts">

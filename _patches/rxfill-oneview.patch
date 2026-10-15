@@ -1,0 +1,132 @@
+diff --git a/apps/capri-storefront/src/pages/LensProcess.jsx b/apps/capri-storefront/src/pages/LensProcess.jsx
+index a3bbab9..d70e2a7 100644
+--- a/apps/capri-storefront/src/pages/LensProcess.jsx
++++ b/apps/capri-storefront/src/pages/LensProcess.jsx
+@@ -1005,7 +1005,9 @@ export default function LensProcess() {
+   const notLbl = t("lens.notFor");
+ 
+   // Abre la ayuda educativa como globo aparte (no inline).
+-  const openInfo = (title, edu, diagKeys, note) => setInfoPop({ title, edu, diagKeys: diagKeys || [], note: note || null });
++  // `img`: lámina de ayuda del dueño (arte con el texto ya rotulado). Solo se
++  // usa en ES — en EN seguimos con los diagramas SVG, cuyo copy pasa por t().
++  const openInfo = (title, edu, diagKeys, note, img) => setInfoPop({ title, edu, diagKeys: diagKeys || [], note: note || null, img: img || null });
+ 
+   // Agrupa los fotocromáticos por FAMILIA (presentación): en vez de una tarjeta
+   // por color con el mismo nombre y precio, se muestra el nombre UNA vez y las
+@@ -1669,7 +1671,7 @@ export default function LensProcess() {
+                         </button>
+                         {hasDiag && rxStage === "fill" && (
+                           <button type="button" className="zlx-use-info"
+-                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d))}>
++                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : null)}>
+                             <Ic name="info" />
+                           </button>
+                         )}
+@@ -1915,7 +1917,10 @@ export default function LensProcess() {
+         <ZlxInfoPop title={infoPop.title} onClose={() => setInfoPop(null)} closeLabel={closeLabel}>
+           {infoPop.edu && <EduBlock edu={infoPop.edu} goodLbl={goodLbl} notLbl={notLbl} />}
+           {infoPop.note && <p className="zlx-infopop-note">{infoPop.note}</p>}
+-          <DiagHelp keys={infoPop.diagKeys} t={t} />
++          {infoPop.img
++            ? <img className="zlx-infopop-img" src={infoPop.img} alt="" aria-hidden="true"
++                   onError={(e) => { e.currentTarget.remove(); }} />
++            : <DiagHelp keys={infoPop.diagKeys} t={t} />}
+         </ZlxInfoPop>
+       )}
+ 
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index 7cad534..136c10f 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -8853,3 +8853,91 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+   object-position: 50% 22% !important;
+   background: #eef2f8;
+ }
++
++/* ===================================================================
++   ETAPA 129 — Paso de VALORES de la receta (pedido del cliente):
++   1) "Confirmar receta" salía DISTORSIONADO: la píldora de cristal
++      (pill-navy-gold estirada 100%/100% del botón primario genérico) se
++      deformaba a lo ancho. Pasa a la BARRA navy/oro en 9-slice (como
++      "Continuar"): extremos a escala fija, centro estirado — nunca se
++      deforma. Aplica a todos los CTA "done" del flujo (Confirmar receta,
++      Material del lente, Listo).
++   2) Ayuda de Lentes Progresivos: lámina del dueño (ayuda-progresivos,
++      pasillo tradicional vs alta gama + zonas lejos/intermedia/cerca).
++      Solo en ES (el texto va rotulado en el arte); EN sigue con los
++      diagramas SVG traducidos.
++   3) MÓVIL: TODO el paso de valores en UNA SOLA VISTA — ficha más baja,
++      OD y OI lado a lado con ruedas compactas, fuera la frase-guía, y
++      los otros tipos de lente quedan como mini-tarjetas en una fila de
++      tres (siguen sirviendo para cambiar de tipo).
++   =================================================================== */
++/* 1) CTA "done" en barra 9-slice (no se distorsiona a ningún ancho). */
++.btn.btn-primary.zlx-pop-done {
++  background: none !important; box-shadow: none !important;
++  border: 15px solid transparent !important;
++  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 12px;
++  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
++}
++.btn.btn-primary.zlx-pop-done:hover:not(:disabled) {
++  background: none !important;
++  filter: brightness(1.08) drop-shadow(0 12px 22px rgba(1, 50, 107, .40));
++}
++/* 2) Lámina de ayuda a todo el ancho del globo. */
++.zlx-infopop-img { display: block; width: 100%; height: auto; border-radius: 12px; }
++
++/* 3) Una sola vista en móvil para el paso de valores. */
++@media (max-width: 939px) {
++  /* Ficha del espejuelo más baja (la foto generada sigue 50/50 con cover). */
++  .zlx-pop-rx.zlx-rx-stage-fill .fs-card.ts2-frame .fs-photo,
++  .zlx-pop-rx.zlx-rx-stage-fill .fs-card.ts2-frame .fs-photo.has-gen { height: 10vh; height: 10dvh; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-page-head { margin: 0 0 4px; }
++  /* Fuera la frase-guía: las ruedas se explican solas y roban una línea. */
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-fill > p.muted.small { display: none !important; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-fill { padding: 2px 10px 10px; }
++  /* OD y OI LADO A LADO con ruedas compactas. */
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-grid { grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 8px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-eye { padding: 7px 3px 6px; border-radius: 12px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-eye-h { font-size: 12.5px; margin-bottom: 2px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-fields { gap: 3px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-stepper { gap: 2px; min-width: 0; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-stepper-lbl { font-size: 8.5px; letter-spacing: .02em; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-grid .zlx-stepper-ctl { width: 100%; min-width: 44px; max-width: 56px; border-radius: 9px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-stepper-btn { height: 19px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-stepper-btn .zlx-ic { width: 12px; height: 12px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-stepper-val { padding: 3px 1px; font-size: 12.5px; }
++  /* DP / ADD / ALTURA en la misma rejilla compacta. */
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-pdmode { margin: 2px 0 4px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-extra { gap: 8px; margin-bottom: 2px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-extra .zlx-stepper-ctl { width: 72px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-height-note { margin: 2px 0 0; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-step-next { margin-top: 6px; }
++  /* Los OTROS tipos de lente: mini-tarjetas en UNA fila de tres (se puede
++     seguir cambiando de tipo sin volver atrás). */
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-rows { grid-template-columns: repeat(3, 1fr); gap: 6px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item.open { grid-column: 1 / -1; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-main {
++    flex-direction: column; align-items: center; text-align: center; gap: 2px;
++    padding: 6px 4px 5px; position: relative;
++  }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt { align-items: center; gap: 0; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt b { font-size: 10.5px; line-height: 1.15; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-txt small { display: none !important; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-ic-img { height: 13px; width: auto; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item:not(.open) .zlx-use-radio {
++    position: absolute; top: 4px; right: 4px; transform: scale(.72);
++  }
++  /* Cabecera de la tarjeta seleccionada y pestañas de gama, compactas. */
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-use-item.open .zlx-use-main { padding: 8px 10px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-gama { margin: 4px 0 6px; }
++  .zlx-pop-rx.zlx-rx-stage-fill .zlx-rx-secure { margin: 6px 0 0; }
++}
++/* WEB: OD y OI también lado a lado — deshace el "una columna" global de una
++   etapa anterior. A media columna el bloque-fila (rótulo a la izquierda) no
++   cabe: el rótulo vuelve ARRIBA y las ruedas se aprietan un punto. */
++@media (min-width: 960px) {
++  .zlx-pop-rx .zlx-rx-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
++  .zlx-pop-rx .zlx-rx-eye { flex-direction: column; align-items: center; gap: 4px; padding: 9px 5px 10px; }
++  .zlx-pop-rx .zlx-rx-eye-h { min-width: 0; text-align: center; margin-bottom: 0; }
++  .zlx-pop-rx .zlx-rx-grid .zlx-stepper-ctl { width: 74px; }
++}

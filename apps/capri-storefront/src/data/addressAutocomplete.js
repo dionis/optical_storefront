@@ -69,6 +69,7 @@ function parsePlace(place) {
     address_1: "",
     postal_code: "",
     city: "",
+    state: "",
     country: "",
     country_code: "",
   };
@@ -83,6 +84,7 @@ function parsePlace(place) {
     else if (types.includes("locality") || types.includes("postal_town")) out.city = c.long_name;
     else if (!out.city && types.includes("sublocality")) out.city = c.long_name;
     else if (!out.city && types.includes("administrative_area_level_2")) out.city = c.long_name;
+    else if (types.includes("administrative_area_level_1")) out.state = c.short_name || c.long_name;
     else if (types.includes("country")) {
       out.country = c.long_name;
       out.country_code = (c.short_name || "").toLowerCase();
@@ -200,6 +202,7 @@ function attachPhoton(inputEl, onSelect) {
             onSelect({
               address_1: street,
               city: cityName,
+              state: pr.state || "",
               postal_code: pr.postcode || "",
               country: "United States",
               country_code: "us",

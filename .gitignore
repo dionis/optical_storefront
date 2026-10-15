@@ -65,3 +65,6 @@ _to_delete/
 change.patch
 __commitmsg.txt 
 .fuse_hidden* 
+
+# Capturas y artefactos de sesiones de Claude (solo locales, no se publican)
+Claude outputs/

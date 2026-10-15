@@ -1,0 +1,581 @@
+diff --git a/apps/capri-storefront/src/components/StorePanels.jsx b/apps/capri-storefront/src/components/StorePanels.jsx
+index 94917fb..373f8d0 100644
+--- a/apps/capri-storefront/src/components/StorePanels.jsx
++++ b/apps/capri-storefront/src/components/StorePanels.jsx
+@@ -69,6 +69,12 @@ export function CartPanel({ open, onClose }) {
+ 
+           <Link to="/checkout" className="btn btn-primary big" onClick={onClose}>{t("cart.checkout")}</Link>
+           <button className="panel-clear" onClick={clearCart}>{t("cart.clear")}</button>
++          {/* Mensajes de confianza (pedido del cliente): el carrito también vende. */}
++          <div className="panel-trust" role="note">
++            <span><img src="/ui/icons3d/navy-shield.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.secure")}</span>
++            <span><img src="/ui/icons3d/navy-truck.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.ship")}</span>
++            <span><img src="/ui/icons3d/navy-card.png" alt="" aria-hidden="true" onError={(e) => e.currentTarget.remove()} /> {t("trust.pay")}</span>
++          </div>
+         </>
+       )}
+     </SidePanel>
+diff --git a/apps/capri-storefront/src/data/addressAutocomplete.js b/apps/capri-storefront/src/data/addressAutocomplete.js
+index 114d5b9..4afb511 100644
+--- a/apps/capri-storefront/src/data/addressAutocomplete.js
++++ b/apps/capri-storefront/src/data/addressAutocomplete.js
+@@ -19,6 +19,12 @@ export function hasGooglePlaces() {
+   return !!GOOGLE_KEY;
+ }
+ 
++/** El checkout SIEMPRE tiene autocompletado: Google si hay llave, y si no el
++ * respaldo abierto (Photon/OpenStreetMap) de más abajo. */
++export function hasAddressAutocomplete() {
++  return true;
++}
++
+ let scriptPromise = null;
+ 
+ // Load the Google Maps JS API (Places library) exactly once. Resolves with the
+@@ -101,7 +107,10 @@ function parsePlace(place) {
+  */
+ export function attachAddressAutocomplete(inputEl, onSelect) {
+   let cleanup = () => {};
+-  if (!inputEl || !GOOGLE_KEY) return cleanup;
++  if (!inputEl) return cleanup;
++  // Sin llave de Google: respaldo profesional con Photon (OpenStreetMap) —
++  // mismas partes (calle, ciudad, CP) al elegir una sugerencia, solo EE. UU.
++  if (!GOOGLE_KEY) return attachPhoton(inputEl, onSelect);
+ 
+   let cancelled = false;
+   let listener = null;
+@@ -139,3 +148,82 @@ export function attachAddressAutocomplete(inputEl, onSelect) {
+   };
+   return cleanup;
+ }
++
++
++// ── Respaldo sin llave: Photon (OpenStreetMap) ──────────────────────────────
++// Autocompletado de direcciones de EE. UU. con número y calle. Sugerencias en
++// un desplegable propio bajo el campo; al elegir, se rellenan calle, ciudad y
++// código postal de una vez. Si la red falla, el campo manual sigue funcionando.
++function attachPhoton(inputEl, onSelect) {
++  const host = inputEl.parentElement;
++  const prevPos = host.style.position;
++  if (getComputedStyle(host).position === "static") host.style.position = "relative";
++  const box = document.createElement("div");
++  box.className = "addr-sugg";
++  box.style.display = "none";
++  host.appendChild(box);
++  inputEl.setAttribute("autocomplete", "off");
++
++  let timer = null;
++  let ctrl = null;
++  const close = () => { box.style.display = "none"; box.innerHTML = ""; };
++  const onInput = () => {
++    const q = inputEl.value.trim();
++    clearTimeout(timer);
++    if (q.length < 4) { close(); return; }
++    timer = setTimeout(async () => {
++      try {
++        if (ctrl) ctrl.abort();
++        ctrl = new AbortController();
++        const r = await fetch(
++          "https://photon.komoot.io/api/?limit=6&lang=en&q=" + encodeURIComponent(q),
++          { signal: ctrl.signal }
++        );
++        const j = await r.json();
++        const feats = (j.features || []).filter((ft) => {
++          const pr = ft.properties || {};
++          return pr.countrycode === "US" && pr.street;
++        }).slice(0, 5);
++        if (!feats.length) { close(); return; }
++        box.innerHTML = "";
++        feats.forEach((ft) => {
++          const pr = ft.properties;
++          const street = [pr.housenumber, pr.street].filter(Boolean).join(" ");
++          const cityName = pr.city || pr.town || pr.village || pr.district || "";
++          const it = document.createElement("button");
++          it.type = "button";
++          it.className = "addr-sugg-it";
++          it.textContent = [street, cityName, pr.state, pr.postcode].filter(Boolean).join(", ");
++          // pointerdown (no click): gana al blur del input y la elección entra.
++          it.addEventListener("pointerdown", (e) => {
++            e.preventDefault();
++            onSelect({
++              address_1: street,
++              city: cityName,
++              postal_code: pr.postcode || "",
++              country: "United States",
++              country_code: "us",
++            });
++            close();
++          });
++          box.appendChild(it);
++        });
++        box.style.display = "block";
++      } catch { /* red caída o bloqueada: el campo manual sigue */ }
++    }, 320);
++  };
++  const onBlur = () => setTimeout(close, 160);
++  const onKey = (e) => { if (e.key === "Escape") close(); };
++  inputEl.addEventListener("input", onInput);
++  inputEl.addEventListener("blur", onBlur);
++  inputEl.addEventListener("keydown", onKey);
++  return () => {
++    clearTimeout(timer);
++    if (ctrl) ctrl.abort();
++    inputEl.removeEventListener("input", onInput);
++    inputEl.removeEventListener("blur", onBlur);
++    inputEl.removeEventListener("keydown", onKey);
++    box.remove();
++    host.style.position = prevPos;
++  };
++}
+diff --git a/apps/capri-storefront/src/i18n/translations.js b/apps/capri-storefront/src/i18n/translations.js
+index 9963500..b31e569 100644
+--- a/apps/capri-storefront/src/i18n/translations.js
++++ b/apps/capri-storefront/src/i18n/translations.js
+@@ -1319,6 +1319,8 @@ export const T = {
+     "checkout.first": "Nombre", "checkout.last": "Apellido", "checkout.address": "Calle y número",
+     "checkout.country": "País", "checkout.addrHint": "Empieza a escribir y elige tu dirección",
+     "checkout.city": "Ciudad", "checkout.zip": "Código postal", "checkout.calcShip": "Calcular envío",
++    "checkout.shipTo": "Domicilio de entrega", "checkout.shipPending": "El envío se calcula al poner tu dirección",
++    "checkout.lensLine": "Cristal", "checkout.treatLine": "Tratamientos", "checkout.frameLine": "Espejuelo",
+     "checkout.shipping": "Método de envío", "checkout.toPay": "Continuar al pago",
+     "checkout.payment": "Pago", "checkout.pay": "Pagar", "checkout.paying": "Procesando…",
+     "checkout.free": "Gratis", "checkout.total": "Total", "checkout.done": "¡Pago completado!",
+@@ -2648,6 +2650,8 @@ export const T = {
+     "checkout.first": "First name", "checkout.last": "Last name", "checkout.address": "Street address",
+     "checkout.country": "Country", "checkout.addrHint": "Start typing and pick your address",
+     "checkout.city": "City", "checkout.zip": "ZIP code", "checkout.calcShip": "Get shipping",
++    "checkout.shipTo": "Delivery address", "checkout.shipPending": "Shipping appears once you enter your address",
++    "checkout.lensLine": "Lens", "checkout.treatLine": "Treatments", "checkout.frameLine": "Frame",
+     "checkout.shipping": "Shipping method", "checkout.toPay": "Continue to payment",
+     "checkout.payment": "Payment", "checkout.pay": "Pay", "checkout.paying": "Processing…",
+     "checkout.free": "Free", "checkout.total": "Total", "checkout.done": "Payment complete!",
+diff --git a/apps/capri-storefront/src/pages/LensProcess.jsx b/apps/capri-storefront/src/pages/LensProcess.jsx
+index 0a65662..0804368 100644
+--- a/apps/capri-storefront/src/pages/LensProcess.jsx
++++ b/apps/capri-storefront/src/pages/LensProcess.jsx
+@@ -1247,7 +1247,10 @@ export default function LensProcess() {
+       </button>
+       {design && !frameOnly && (
+         <>
+-          <button type="button" className={`zlx-fab ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
++          <button type="button" className={`zlx-fab has-i3d ${matId ? "on" : ""}`} onClick={() => setPop("mat")}>
++            {/* Capas 3D de la lámina de materiales; el svg queda de respaldo. */}
++            <img className="i3d i3d-fab" src="/ui/icons3d/lm-navyg-stack.png" alt="" aria-hidden="true"
++                 onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+             <IconMaterial className="zlx-ic" />
+             <span className="zlx-fab-txt">
+               <b>{t("lens.material")}</b>
+@@ -1802,8 +1805,10 @@ export default function LensProcess() {
+                 <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
+                   <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
+                     <span className="zlx-choice-main">
+-                      {/* Icono 3D de la lámina (capas de lente); el svg queda de respaldo. */}
+-                      <img className="i3d i3d-mat" src={matId === m.id ? "/ui/icons3d/white-layers.png" : "/ui/icons3d/navy-layers.png"} alt="" aria-hidden="true"
++                      {/* Icono 3D por material (lámina del dueño): menos aros = lente
++                          más delgado (1.74 un aro fino ... CR-39 las capas clásicas).
++                          Blanco/oro en la fila elegida (navy); el svg queda de respaldo. */}
++                      <img className="i3d i3d-mat" src={`/ui/icons3d/lm-${matId === m.id ? "whiteg" : "navyg"}-${({ cr39: "stack", poly: "t3", "1.67": "t2", "1.74": "t1" })[m.id] || "stack"}.png`} alt="" aria-hidden="true"
+                            onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
+                       <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
+                       <span className="zlx-choice-title">
+diff --git a/apps/capri-storefront/src/pages/MedusaCheckout.jsx b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+index 5de2ea7..83afc0e 100644
+--- a/apps/capri-storefront/src/pages/MedusaCheckout.jsx
++++ b/apps/capri-storefront/src/pages/MedusaCheckout.jsx
+@@ -11,6 +11,7 @@ import {
+ } from "../data/medusaCart.js";
+ import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
+ import { shipping as shippingConfig } from "../admin/priceStore.js";
++import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
+ 
+ const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
+ 
+@@ -193,6 +194,26 @@ export default function MedusaCheckout() {
+     return bd;
+   };
+ 
++  // ENVÍO SIN BOTÓN (pedido del cliente): en cuanto el correo y el domicilio
++  // de entrega están completos, la cotización se pide sola (con un respiro de
++  // 800 ms para no cotizar a cada tecla). Si el cliente corrige la dirección,
++  // la línea de envío vuelve a "—" hasta re-cotizar.
++  const quoteSigRef = useRef("");
++  useEffect(() => {
++    if (step !== "contact" || loading || !cart) return undefined;
++    const emailOk = /\S+@\S+\.\S+/.test(f.email);
++    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.postal_code.trim().length >= 5;
++    const sig = [f.email, f.address_1, f.city, f.postal_code].join("|");
++    if (!ready) { quoteSigRef.current = ""; setShip([]); setCarriers(null); setCarrierSel(""); return undefined; }
++    if (sig === quoteSigRef.current) return undefined;
++    const tm = setTimeout(() => {
++      quoteSigRef.current = sig;
++      calcShipping();
++    }, 800);
++    return () => clearTimeout(tm);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [step, loading, cart, f.email, f.address_1, f.city, f.postal_code]);
++
+   const calcShipping = async () => {
+     setErr(""); setBusy(true);
+     try {
+@@ -391,12 +412,18 @@ export default function MedusaCheckout() {
+ 
+   return (
+     <div className="section checkout" style={{ maxWidth: 680, margin: "0 auto" }}>
+-      <h1>{L("title")}</h1>
+-      {/* Siempre hay vuelta atrás: a la tienda desde los datos, y al paso de
+-          datos desde el pago (botón dentro de la sección de pago). */}
+-      {step !== "done" && (
+-        <Link to="/catalogo" className="co-backlink">← {L("keepShopping")}</Link>
+-      )}
++      {/* Cabecera (pedido del cliente): "Seguir comprando" alineado a la
++          izquierda y el título CENTRADO, con la tarjeta dorada de la lámina. */}
++      <div className="co-head">
++        {step !== "done" && (
++          <Link to="/catalogo" className="co-backlink">← {L("keepShopping")}</Link>
++        )}
++        <h1 className="co-title">
++          <img className="co-title-ic" src="/ui/bn/bn-goldr-card.png" alt="" aria-hidden="true"
++               onError={(e) => e.currentTarget.remove()} />
++          {L("title")}
++        </h1>
++      </div>
+ 
+       {step === "done" ? (
+         <div className="checkout-done">
+@@ -415,8 +442,12 @@ export default function MedusaCheckout() {
+       ) : (
+         <>
+           {/* Resumen del pedido COMPLETO, siempre visible arriba de "Finalizar compra" */}
+-          <div className="co-summary">
+-            <div className="co-summary-h">🧾 {L("summary")}</div>
++          <div className="co-summary co-summary2">
++            <div className="co-sum-navyhd">
++              <img className="co-sum-ic" src="/ui/bn/bn-gold-deals.png" alt="" aria-hidden="true"
++                   onError={(e) => e.currentTarget.remove()} />
++              <span>{L("summary")}</span>
++            </div>
+             {/* El carrito se revalidó al abrir esta página. Si algún precio se
+                 movió respecto al que el cliente vio, se dice — no se pregunta. */}
+             {repriced.length > 0 && (
+@@ -437,11 +468,20 @@ export default function MedusaCheckout() {
+                 const lc = i.metadata?.lens_config || {};
+                 const dl = DESIGN_LBL[lc.design_code];
+                 const parts = [dl ? (dl[lang] || dl.es) : lc.design_code, lc.material_code, lc.photo_code, lc.ar_code].filter(Boolean);
++                // Ficha CLARA del pedido (pedido del cliente): espejuelo con su
++                // foto, el cristal y los tratamientos con nombre legible.
++                const mat = materialById(lc.material_code);
++                const photoOpt = PHOTO.find((o) => o.id === lc.photo_code) || null;
++                const arOpt = AR_OPTIONS.find((o) => o.id === lc.ar_code) || null;
++                const treats = [photoOpt && LBL(photoOpt.label, lang), arOpt && LBL(arOpt.label, lang)].filter(Boolean);
+                 return (
+-                  <li key={i.id} className="panel-item">
++                  <li key={i.id} className="panel-item co-item2">
++                    {i.thumbnail && <img className="co-item-ph" src={i.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+                     <div className="panel-item-info">
+                       <b>{i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
+-                      {parts.length > 0 && <small>{parts.join(" · ")}</small>}
++                      {dl && <small><span className="co-dt">{L("frameLine")}:</span> {dl[lang] || dl.es}</small>}
++                      {mat && <small><span className="co-dt">{L("lensLine")}:</span> {LBL(mat.label, lang)}</small>}
++                      {treats.length > 0 && <small><span className="co-dt">{L("treatLine")}:</span> {treats.join(" · ")}</small>}
+                       {i.metadata?.prescription_id && <small className="co-rx">✓ {L("withRx")}</small>}
+                     </div>
+                     <span className="panel-item-price">{money(i.total ?? i.unit_price)}</span>
+@@ -461,7 +501,19 @@ export default function MedusaCheckout() {
+             </ul>
+             <div className="co-totals">
+               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
+-              <div><span>{L("shippingLine")}</span><b>{cart.shipping_total > 0 ? money(cart.shipping_total) : L("free")}</b></div>
++              {(() => {
++                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
++                const shipAmt = cart.shipping_total > 0 ? cart.shipping_total
++                  : sel ? (sel.free ? 0 : sel.amount)
++                  : shipId ? (ship.find((o) => o.id === shipId)?.amount ?? null)
++                  : null;
++                return (
++                  <div>
++                    <span>{L("shippingLine")}{sel ? ` · ${sel.label}` : ""}</span>
++                    <b>{shipAmt == null ? "—" : shipAmt > 0 ? money(shipAmt) : L("free")}</b>
++                  </div>
++                );
++              })()}
+               {cart.tax_total > 0 && <div><span>{L("tax")}</span><b>{money(cart.tax_total)}</b></div>}
+               {(() => {
+                 // Impuesto de montura sola horneado en el precio (server-side);
+@@ -470,7 +522,14 @@ export default function MedusaCheckout() {
+                 return inc > 0 ? <div><span>{L("taxIncluded")}</span><b>{money(inc)}</b></div> : null;
+               })()}
+             </div>
+-            <div className="panel-total"><span>{L("total")}</span><b>{money(cart.total)}</b></div>
++            {(() => {
++              const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
++              const pend = cart.shipping_total > 0 ? 0
++                : sel ? (sel.free ? 0 : Number(sel.amount || 0))
++                : shipId ? Number(ship.find((o) => o.id === shipId)?.amount || 0)
++                : 0;
++              return <div className="panel-total"><span>{L("total")}</span><b>{money(Number(cart.total || 0) + pend)}</b></div>;
++            })()}
+           </div>
+ 
+           {err && <div className="auth-err" style={{ margin: "10px 0" }}>{err}</div>}
+@@ -492,8 +551,20 @@ export default function MedusaCheckout() {
+                   <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
+                   <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
+                 </div>
+-                <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+-                {hasGooglePlaces() && <small className="co-hint">📍 {L("addrHint")}</small>}
++              </div>
++
++              {/* Domicilio de entrega (pedido del cliente): sin botón de envío —
++                  la cotización llega sola al completar la dirección. */}
++              <div className="co-h co-h-ship">
++                <img className="i3d i3d-co" src="/ui/icons3d/navy-truck.png" alt="" aria-hidden="true"
++                     onError={(e) => { e.currentTarget.remove(); }} />
++                {L("shipTo")}
++              </div>
++              <div className="co-fields">
++                <div className="co-addr-wrap">
++                  <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
++                </div>
++                <small className="co-hint">📍 {L("addrHint")}</small>
+                 <div className="co-two">
+                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
+                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
+@@ -516,53 +587,46 @@ export default function MedusaCheckout() {
+                 </label>
+               </div>
+ 
+-              {!ship.length ? (
+-                <button className="btn btn-outline big" disabled={busy || !f.email || !f.address_1} onClick={calcShipping}>
+-                  {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("calcShip")}
+-                </button>
+-              ) : (
+-                <>
+-                  <div className="co-h">🚚 {L("shipping")}</div>
+-                  {carriers ? (
+-                    <>
+-                      {/* FedEx / DHL cotizados por el SERVIDOR; el cliente elige. */}
+-                      <div className="opt-list co-carriers">
++              {/* Línea SUTIL de envío: aparece sola al completar la dirección
++                  (cotizada en el servidor); mientras, una nota tranquila. Si el
++                  servidor devolviera varias mensajerías, se elige aquí mismo. */}
++              {(() => {
++                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
++                const opt = !carriers && shipId ? ship.find((o) => o.id === shipId) : null;
++                if (busy && !sel && !opt) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
++                if (sel) return (
++                  <div className="co-shipline" role="status">
++                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
++                         onError={(e) => e.currentTarget.remove()} />
++                    <span className="co-shipline-tx">
++                      <b>{sel.label} · {sel.free ? L("free") : money(sel.amount)}</b>
++                      <small>{t("ship.eta", { min: sel.eta_min_days, max: sel.eta_max_days })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
++                    </span>
++                    {carriers.length > 1 && (
++                      <span className="co-ship-alt">
+                         {carriers.map((q) => (
+-                          <label key={q.carrier} className={`choice ${carrierSel === q.carrier ? "sel" : ""}`}>
+-                            <input type="radio" name="ship" checked={carrierSel === q.carrier} onChange={() => setCarrierSel(q.carrier)} />
+-                            <span className="choice-main">
+-                              <span className="choice-title">{q.label}</span>
+-                              <small className="choice-sub">{t("ship.eta", { min: q.eta_min_days, max: q.eta_max_days })}</small>
+-                            </span>
+-                            <span className={`choice-price ${q.free ? "free" : ""}`}>{q.free ? L("free") : money(q.amount)}</span>
+-                          </label>
++                          <button key={q.carrier} type="button" className={`co-ship-chip ${carrierSel === q.carrier ? "on" : ""}`}
++                                  onClick={() => setCarrierSel(q.carrier)}>{q.label}</button>
+                         ))}
+-                      </div>
+-                      {/* Promo de envío gratis RETIRADA por completo (pedido del dueño):
+-                          sin avisos de gratis en el checkout. */}
+-                      <small className="co-hint">🇺🇸 {t("ship.usOnlyNote")}</small>
+-                    </>
+-                  ) : (
+-                  <div className="opt-list">
+-                    {ship.map((o) => (
+-                      <label key={o.id} className={`choice ${shipId === o.id ? "sel" : ""}`}>
+-                        <input type="radio" name="ship" checked={shipId === o.id} onChange={() => setShipId(o.id)} />
+-                        <span className="choice-main"><span className="choice-title">{tv(o.name)}</span></span>
+-                        <span className="choice-price">{o.amount > 0 ? money(o.amount) : L("free")}</span>
+-                      </label>
+-                    ))}
++                      </span>
++                    )}
+                   </div>
+-                  )}
+-                  {/* El plazo del transportista no es el plazo del pedido: antes hay
+-                      que fabricar los lentes. Se dice aquí, donde se elige entrega. */}
+-                  {labDays > 0 && (
+-                    <small className="co-hint">🔬 {t("ship.labNote", { days: labDays })}</small>
+-                  )}
+-                  <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
+-                    {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("toPay")}
+-                  </button>
+-                </>
+-              )}
++                );
++                if (opt) return (
++                  <div className="co-shipline" role="status">
++                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
++                         onError={(e) => e.currentTarget.remove()} />
++                    <span className="co-shipline-tx">
++                      <b>{tv(opt.name)} · {opt.amount > 0 ? money(opt.amount) : L("free")}</b>
++                      {labDays > 0 && <small>{t("ship.labNote", { days: labDays })}</small>}
++                    </span>
++                  </div>
++                );
++                return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
++              })()}
++              <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
++                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("pay")}
++              </button>
+             </div>
+           )}
+ 
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index b0a81ab..6b39c71 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -9140,3 +9140,143 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+ .zlx-height-i .i3d-info { height: 16px; }
+ .zlx-infopop-head b:not(.no-i3d) > svg { display: none; }
+ .zlx-infopop-head b .i3d-info { height: 20px; display: inline-block; vertical-align: -4px; margin-right: 2px; }
++
++/* ===================================================================
++   ETAPA 134 — Lámina de MATERIALES (aros 3D) + RESUMEN móvil más
++   compacto (el cliente seguía sin verlo en una sola vista con la línea
++   de Transitions). Los materiales cuentan su historia: menos aros =
++   lente más delgado (1.74 un aro fino, 1.67 dos, policarbonato tres,
++   CR-39 las capas clásicas); blanco/oro en la fila elegida.
++   =================================================================== */
++.i3d-fab { height: 22px; width: auto; flex: 0 0 auto; }
++.zlx-fab.has-i3d:not(.no-i3d) > svg.zlx-ic { display: none; }
++@media (max-width: 939px) {
++  /* Pasos del resumen en FILA (icono · rótulo · check): más bajos y legibles. */
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab {
++    flex-direction: row; justify-content: center; align-items: center; gap: 8px;
++    min-height: 44px; padding: 4px 12px;
++  }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab-txt { flex: 0 1 auto; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps .zlx-fab-txt b { font-size: 13px; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-steps { gap: 5px; margin-top: 6px; }
++  /* Ficha y resumen un punto más bajos para absorber líneas extra
++     (Transitions/antirreflejo) sin perder la vista única. */
++  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo,
++  .zlx-pop-rx.zlx-rx-stage-summary .fs-card.ts2-frame .fs-photo.has-gen { height: 9vh; height: 9dvh; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navyhd { padding: 7px 12px; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 6px 12px 8px; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 2px 0; font-size: 13.5px; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-total { font-size: 18px; margin-top: 4px; padding-top: 4px; }
++  .zlx-pop-rx.zlx-rx-stage-summary .zlx-buy-left { margin-top: 6px; }
++}
++
++/* ===================================================================
++   ETAPA 135 — CHECKOUT rediseñado + CARRITO vistoso (pedidos del
++   cliente): números en navy (fuera el rojo), título centrado con la
++   tarjeta dorada y "Seguir comprando" a la izquierda, resumen con la
++   ficha COMPLETA (foto del espejuelo, cristal, tratamientos, receta),
++   envío SIN botón (aparece al poner la dirección; el botón es PAGAR),
++   dirección con autocompletado (Google o el respaldo abierto), y el
++   carrito con marca de agua del logo y mensajes de confianza.
++   =================================================================== */
++/* Cabecera del checkout */
++.co-head { display: grid; gap: 2px; margin-bottom: 6px; }
++.co-head .co-backlink { justify-self: start; margin: 0; font-size: 13px; }
++.co-head .co-title {
++  justify-self: center; display: flex; align-items: center; gap: 10px;
++  margin: 0; font-size: 24px; text-align: center;
++}
++.co-title-ic { height: 30px; width: auto; }
++/* Números del pedido en NAVY (el rojo no es del estilo de la casa). */
++.checkout .panel-item-price { color: #0b2f66; }
++.checkout .panel-total { border-top: 2px solid #d9b85c; }
++.checkout .panel-total span { color: var(--cuba-blue); }
++.checkout .panel-total b { color: #0b2f66; }
++.checkout .co-totals > div b { color: #0b2f66; }
++/* Resumen con cabecera navy (como la ficha del espejuelo) */
++.co-summary2 { padding: 0; overflow: hidden; border-radius: 14px; }
++.co-sum-navyhd {
++  display: flex; align-items: center; gap: 8px; background: var(--cuba-blue);
++  color: #f3e3b3; font-weight: 800; font-size: 13.5px; letter-spacing: .02em;
++  padding: 9px 14px; text-transform: uppercase;
++}
++.co-sum-ic { height: 20px; width: auto; }
++.co-summary2 .panel-list, .co-summary2 .co-totals { padding: 0 14px; }
++.co-summary2 .panel-list { padding-top: 8px; }
++.co-summary2 .panel-total { margin: 4px 14px 12px; padding-top: 6px; }
++.co-item2 { align-items: center; gap: 10px; }
++.co-item-ph {
++  width: 74px; height: 48px; object-fit: contain; background: #f4f6fa;
++  border-radius: 10px; border: 1px solid var(--line); flex: 0 0 auto;
++}
++.co-item2 .panel-item-info small { display: block; line-height: 1.35; }
++.co-dt { color: var(--muted); font-weight: 700; }
++/* Línea sutil de envío */
++.co-shipline {
++  display: flex; align-items: center; gap: 10px; margin: 8px 0 2px;
++  padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: #f7f9fc;
++}
++.co-shipline .i3d-co { height: 24px; width: auto; flex: 0 0 auto; }
++.co-shipline-tx { display: flex; flex-direction: column; min-width: 0; }
++.co-shipline-tx b { font-size: 13.5px; color: #0b2f66; }
++.co-shipline-tx small { font-size: 11.5px; color: var(--muted); }
++.co-shipline-wait { color: var(--muted); font-size: 13px; }
++.co-ship-alt { margin-left: auto; display: flex; gap: 4px; }
++.co-ship-chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 3px 9px; font-size: 11.5px; font-weight: 700; color: #0b2f66; cursor: pointer; }
++.co-ship-chip.on { background: var(--cuba-blue); color: #f3e3b3; border-color: var(--cuba-blue); }
++.co-ship-pend { display: block; margin: 8px 0 2px; }
++.co-h-ship { margin-top: 10px; }
++.co-h-ship .i3d-co { height: 20px; width: auto; }
++/* Desplegable del autocompletado (respaldo abierto) */
++.co-addr-wrap { position: relative; }
++.addr-sugg {
++  position: absolute; left: 0; right: 0; top: calc(100% + 3px); z-index: 60;
++  background: #fff; border: 1px solid var(--line); border-radius: 12px;
++  box-shadow: 0 16px 36px -14px rgba(10, 16, 28, .35); overflow: hidden;
++}
++.addr-sugg-it {
++  display: block; width: 100%; text-align: left; background: #fff; border: none;
++  padding: 9px 12px; font-size: 13px; color: var(--ink); cursor: pointer;
++}
++.addr-sugg-it:hover { background: var(--blue-soft); color: #0b2f66; }
++.addr-sugg-it + .addr-sugg-it { border-top: 1px solid var(--line); }
++/* Carrito: marca de agua del logo + mensajes de confianza + precios navy */
++.side-panel .side-panel-body { position: relative; }
++.side-panel .side-panel-body::before {
++  content: ""; position: absolute; inset: 20% 6% auto 6%; height: 46%;
++  background: url("/logo-oficial.png") center / contain no-repeat;
++  opacity: .055; pointer-events: none;
++}
++.side-panel .panel-item-price { color: #0b2f66; }
++.side-panel .panel-total { border-top: 2px solid #d9b85c; }
++.side-panel .panel-total b { color: #0b2f66; }
++.panel-trust { display: grid; gap: 7px; margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
++.panel-trust span { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
++.panel-trust img { height: 20px; width: auto; }
++
++/* ETAPA 135b — Auditoría de distorsión (Playwright, móvil+web): los botones
++   GRANDES (.btn.big) de toda la app estiraban la píldora de cristal al doble
++   de su proporción (cuenta, pedidos, checkout…). TODOS pasan a la barra
++   9-slice, que no se deforma a ningún ancho. Los logos de cabecera/pie dieron
++   falso positivo (el padding entra en la caja; el dibujo mantiene proporción). */
++.btn.btn-primary.big {
++  background: none !important; box-shadow: none !important;
++  border: 15px solid transparent !important;
++  border-image: url("/ui/glass/bar-navy-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 14px;
++  color: #f3e3b3 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .38);
++  display: inline-flex; align-items: center; justify-content: center;
++}
++.btn.btn-outline.big {
++  background: none !important; box-shadow: none !important;
++  border: 14px solid transparent !important;
++  border-image: url("/ui/glass/bar-white-gold.png") 34 fill stretch !important;
++  border-radius: 0; min-height: 50px; padding: 0 14px;
++  color: #0b2f66 !important; font-weight: 800;
++  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
++  display: inline-flex; align-items: center; justify-content: center;
++}
++.btn.btn-primary.big:hover:not(:disabled), .btn.btn-outline.big:hover:not(:disabled) {
++  background: none !important;
++  filter: brightness(1.07) drop-shadow(0 10px 18px rgba(8, 30, 84, .30));
++}

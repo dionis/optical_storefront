@@ -585,6 +585,7 @@ button { font-family: inherit; cursor: pointer; }
 .co-form .co-fields input { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; width: 100%; }
 .co-form .co-fields input:focus { outline: 2px solid #0E5AD0aa; border-color: var(--blue); }
 .co-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.co-three { display: grid; grid-template-columns: 1fr .7fr .6fr; gap: 8px; }
 
 /* Full order summary shown above "Finalizar compra" (mirror of the funnel resumen). */
 .co-summary { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; margin: 10px 0; background: #fafbfc; }
@@ -632,6 +633,7 @@ button { font-family: inherit; cursor: pointer; }
 /* Req 16: responsive — stack paired fields on narrow screens, no overflow. */
 @media (max-width: 480px) {
   .co-two { grid-template-columns: 1fr; }
+  .co-three { grid-template-columns: 1fr 1fr; }
   .section.checkout { padding-left: 12px; padding-right: 12px; }
   .co-form { padding: 10px; }
   .co-form .co-fields input { font-size: 16px; } /* avoids iOS zoom-on-focus */
@@ -7222,10 +7224,19 @@ button.card-genre {
   background: rgba(10, 16, 28, .52); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .ts2-entry-card {
+  position: relative;
   width: min(560px, 100%); background: #fff; border-radius: 18px; padding: 24px 24px 22px;
   box-shadow: 0 24px 70px -18px rgba(10, 16, 28, .5); text-align: center;
   animation: ts2entry-in .22s ease;
 }
+.ts2-entry-x {
+  position: absolute; top: 10px; right: 10px; width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: #f7f6f3; color: #17191f; border: 1px solid #ececea;
+  border-radius: 999px; font-size: 20px; line-height: 1; cursor: pointer;
+  transition: background .15s, box-shadow .15s;
+}
+.ts2-entry-x:hover { background: #eee; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 @keyframes ts2entry-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
 .ts2-entry-tt { display: block; font-family: var(--display); font-size: 21px; color: var(--ink); }
 .ts2-entry-sub { margin: 7px 0 18px; font-size: 13.5px; color: var(--muted); }
@@ -8306,8 +8317,9 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
    explicado en detalle. Dónde se usa: Footer → FooterInfo.jsx.
    =================================================================== */
 .footer-link {
-  background: none; border: none; padding: 0; text-align: left; cursor: pointer;
-  color: inherit; font: inherit; display: block;
+  background: none; border: none; padding: 4px 0; text-align: left; cursor: pointer;
+  color: #b3bdd0; font-size: 14px; font-family: inherit; display: block;
+  line-height: inherit; letter-spacing: inherit;
 }
 .footer-link:hover { color: #fff; text-decoration: underline; }
 .fi-backdrop {
@@ -9115,9 +9127,12 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .checkout .co-h { margin: 0 0 6px; }
   .checkout .co-form .co-fields { gap: 6px; margin-bottom: 4px; }
   .checkout .co-form .co-fields input { padding: 6px 11px; font-size: 13.5px; border-radius: 9px; }
-  /* Los pares (nombre|apellido, celular|país, ciudad|CP) SÍ van a dos columnas
-     también en móvil: ahorran tres filas y el paso cabe en una vista. */
+  /* Los pares (nombre|apellido, celular|país) SÍ van a dos columnas
+     también en móvil: ahorran filas y el paso cabe en una vista. */
   .checkout .co-two { grid-template-columns: 1fr 1fr; }
+  /* Ciudad|Estado|CP: tres columnas en desktop, dos en móvil (CP cae a segunda
+     fila); los tres caben sin que el campo quede microscópico. */
+  .checkout .co-three { grid-template-columns: 1fr 1fr; }
   /* Confirmación del pedido: rótulo y las dos casillas en UNA línea. */
   .checkout .co-notify { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 8px; }
   .checkout .co-notify-h { margin: 0; flex: 0 0 100%; }

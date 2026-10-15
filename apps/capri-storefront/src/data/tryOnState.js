@@ -87,7 +87,8 @@ export function clearMeasureJob(product) {
 // Las imágenes son data URLs (base64) y pesan; localStorage ronda los ~5 MB por
 // origen, así que guardamos como mucho MAX_RESULTS entradas (las más recientes) y,
 // si el navegador rechaza por cuota, vamos descartando la más vieja y reintentando.
-const RESULTS_LS_KEY = "rubi.tryon.results.v1";
+// v2: invalida resultados cacheados del motor "gemini" que generaba caras genéricas.
+const RESULTS_LS_KEY = "rubi.tryon.results.v2";
 const MAX_RESULTS = 4;
 
 function readResults() {
@@ -187,7 +188,8 @@ export function clearMeasureResult(product) {
 // una sola vez (globales, no por producto) y se reutilizan hasta que el cliente
 // pida "Tomar las fotos de nuevo". Son data URLs; se reducen antes de guardar para
 // no reventar la cuota de localStorage.
-const FACE_LS_KEY = "rubi.tryon.face.v1";
+// v2: invalida fotos cacheadas junto con la generación gemini.
+const FACE_LS_KEY = "rubi.tryon.face.v2";
 
 export async function saveFacePhotos({ frontImg, sideImg }) {
   try {
@@ -223,7 +225,8 @@ export function clearFacePhotos() {
 // resultado sería idéntico: no hay que re-generar, se devuelve lo guardado.
 // La clave es una FIRMA estable derivada de (sku, color, hash de cada foto).
 // Guardamos varias (LRU) para que alternar entre colores tampoco re-genere.
-const GEN_LS_KEY = "rubi.tryon.gen.v1";
+// v2: invalida generaciones cacheadas del motor "gemini" (cara genérica).
+const GEN_LS_KEY = "rubi.tryon.gen.v2";
 const MAX_GEN = 8;
 
 // Hash rápido y estable (djb2) de una cadena larga (la data URL de una foto).
@@ -290,6 +293,12 @@ export function clearCachedGenerations() {
   try { localStorage.removeItem(GEN_LS_KEY); } catch { /* nada */ }
 }
 
+// ── Limpieza de cachés v1 (obsoletas, contenían caras genéricas de Gemini) ───
+try {
+  localStorage.removeItem("rubi.tryon.results.v1");
+  localStorage.removeItem("rubi.tryon.gen.v1");
+  localStorage.removeItem("rubi.tryon.face.v1");
+} catch { /* nada */ }
 
 // ── Límite de pruebas por SESIÓN ─────────────────────────────────────────────
 //

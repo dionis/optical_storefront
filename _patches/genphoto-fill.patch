@@ -1,0 +1,25 @@
+diff --git a/apps/capri-storefront/src/styles/index.css b/apps/capri-storefront/src/styles/index.css
+index 6ea5d42..7cad534 100644
+--- a/apps/capri-storefront/src/styles/index.css
++++ b/apps/capri-storefront/src/styles/index.css
+@@ -8836,3 +8836,20 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
+   width: 100% !important; height: 100% !important; max-height: none !important;
+   align-self: stretch; min-height: 0;
+ }
++
++/* ===================================================================
++   ETAPA 128 — Ficha 50/50 del paso de receta (pedido del cliente): la
++   foto generada quedaba pequeña con el ajuste "completa" (contain
++   dejaba franjas de fondo a los lados). Ahora LLENA toda su mitad
++   (cover) con la CARA EN EL MEDIO: anclamos el encuadre arriba-centro
++   (la cara vive en la mitad superior de la foto del probador, guiada
++   por el óvalo de captura), así los ojos y los espejuelos quedan
++   centrados en el recorte en cualquier tamaño. La fila de la rejilla ya
++   mide el 100% de la caja (etapa 127c), por lo que el cover recorta
++   dentro de la caja y no puede volver a desbordarse.
++   =================================================================== */
++.fs-photo.has-gen .fs-photo-gen {
++  object-fit: cover !important;
++  object-position: 50% 22% !important;
++  background: #eef2f8;
++}

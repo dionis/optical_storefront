@@ -57,7 +57,7 @@ export default function MedusaCheckout() {
   // Caché de la app: los datos del cliente (contacto y dirección, NUNCA el
   // pago) se recuperan si vuelve al checkout.
   const [f, setF] = useState(() => ({
-    email: "", phone: "", first_name: "", last_name: "", address_1: "", city: "", postal_code: "", country: "", country_code: "us",
+    email: "", phone: "", first_name: "", last_name: "", address_1: "", city: "", state: "", postal_code: "", country: "", country_code: "us",
     ...loadCache("rl_checkout_form", {}),
   }));
   // Cómo recibir la confirmación del pedido (el envío real es del backend).
@@ -112,6 +112,7 @@ export default function MedusaCheckout() {
         address_1: parts.address_1 || p.address_1,
         postal_code: parts.postal_code || p.postal_code,
         city: parts.city || p.city,
+        state: parts.state || p.state,
         country: parts.country || p.country,
         // Only adopt a resolved country code when present; keep the US default
         // otherwise so the Medusa region/shipping never breaks.
@@ -173,7 +174,7 @@ export default function MedusaCheckout() {
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const shippingAddress = () => ({
     first_name: f.first_name, last_name: f.last_name, address_1: f.address_1,
-    city: f.city, postal_code: f.postal_code,
+    city: f.city, province: f.state, postal_code: f.postal_code,
     phone: f.phone || null, // celular del paciente (para SMS y contacto)
     // Region is US-only; fall back to "us" so an unrecognized autocomplete
     // country can never break shipping-option lookup or completion.
@@ -193,6 +194,7 @@ export default function MedusaCheckout() {
     const address = {};
     if (f.address_1) address.line1 = f.address_1;
     if (f.city) address.city = f.city;
+    if (f.state) address.state = f.state;
     if (f.postal_code) address.postal_code = f.postal_code;
     address.country = (f.country_code || "us").toUpperCase();
     bd.address = address;
@@ -207,8 +209,8 @@ export default function MedusaCheckout() {
   useEffect(() => {
     if (step !== "contact" || loading || !cart) return undefined;
     const emailOk = /\S+@\S+\.\S+/.test(f.email);
-    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.postal_code.trim().length >= 5;
-    const sig = [f.email, f.address_1, f.city, f.postal_code].join("|");
+    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.state.trim().length >= 2 && f.postal_code.trim().length >= 5;
+    const sig = [f.email, f.address_1, f.city, f.state, f.postal_code].join("|");
     if (!ready) { quoteSigRef.current = ""; setShip([]); setCarriers(null); setCarrierSel(""); return undefined; }
     if (sig === quoteSigRef.current) return undefined;
     const tm = setTimeout(() => {
@@ -217,7 +219,7 @@ export default function MedusaCheckout() {
     }, 800);
     return () => clearTimeout(tm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, loading, cart, f.email, f.address_1, f.city, f.postal_code]);
+  }, [step, loading, cart, f.email, f.address_1, f.city, f.state, f.postal_code]);
 
   const calcShipping = async () => {
     setErr(""); setBusy(true);
@@ -264,8 +266,32 @@ export default function MedusaCheckout() {
     setBusy(false);
   };
 
+  // ── Pago manual (sin Stripe): inicia sesión con el proveedor manual,
+  // completa el carrito y genera la orden en un solo clic. ──
+  const payManual = async () => {
+    setErr(""); setBusy(true);
+    try {
+      await updateContact({
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang },
+      });
+      if (carriers && carrierSel) await selectCarrier(carrierSel);
+      else if (shipId) await setShippingMethod(shipId);
+      await startPayment("pp_manual_manual");
+      const r = await completeCart();
+      if (r.ok) {
+        setOrder(r.order);
+        try { clearCart(); } catch {}
+        setStep("done");
+      } else {
+        setErr(r.error?.message || L("failed"));
+      }
+    } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  };
+
   const goToPay = async () => {
-    if (!PK) { setErr(L("noStripe")); return; }
+    // Sin llave Stripe → pago manual directo (un clic, sin tarjeta).
+    if (!PK) { await payManual(); return; }
     setErr(""); setBusy(true);
     try {
       // Re-send the notification preferences before leaving this step.
@@ -329,7 +355,7 @@ export default function MedusaCheckout() {
       // vista única; el email/celular ya viven en los datos del paciente.
       layout: { type: "tabs", defaultCollapsed: false },
       terms: { card: "never" },
-      wallets: { applePay: "never", googlePay: "never" },
+      wallets: { applePay: "never", googlePay: "never", link: "never" },
       fields: { billingDetails: { email: "never" } },
     };
     if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
@@ -602,8 +628,9 @@ export default function MedusaCheckout() {
                   <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
                 </div>
                 <small className="co-hint">📍 {L("addrHint")}</small>
-                <div className="co-two">
+                <div className="co-three">
                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
+                  <input placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" />
                   <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
                 </div>
                 {/* Solo USA por ahora (el campo fijo vive junto al celular); el
@@ -649,7 +676,7 @@ export default function MedusaCheckout() {
                 );
               })()}
               <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
-                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("pay")}
+                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : (PK ? L("pay") : L("payNow"))}
               </button>
             </div>
           )}

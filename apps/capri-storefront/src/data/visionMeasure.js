@@ -244,11 +244,14 @@ export async function startMeasurementJob({
     strategy: "A",
     lang,
     renderTryOn: render,
-    renderProfile: render && Boolean(sideSmall),
-    imageEngine: render ? "gemini" : "local",
-    // Modelo de imagen RÁPIDO para el montaje (el pro tardaba demasiado). La calidad del
-    // montaje es suficiente y las medidas no dependen de esta imagen.
-    imageModel: render ? "gemini-2.5-flash-image" : undefined,
+    // Perfil deshabilitado: el motor local no puede generar vistas de perfil y el
+    // motor IA (Gemini) generaba un rostro genérico en vez de respetar la foto real.
+    renderProfile: false,
+    // SIEMPRE local: composición determinista (Pillow) que PRESERVA la foto real del
+    // paciente y superpone la montura recortada. El motor "gemini" generaba una cara
+    // nueva con IA, destruyendo la identidad del rostro — exactamente lo contrario
+    // de lo que el cliente espera al tomarse una foto.
+    imageEngine: "local",
     extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };
 

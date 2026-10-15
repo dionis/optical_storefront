@@ -1,0 +1,24 @@
+diff --git a/apps/capri-storefront/src/pages/LensProcess.jsx b/apps/capri-storefront/src/pages/LensProcess.jsx
+index d70e2a7..6ff6bbc 100644
+--- a/apps/capri-storefront/src/pages/LensProcess.jsx
++++ b/apps/capri-storefront/src/pages/LensProcess.jsx
+@@ -1005,8 +1005,8 @@ export default function LensProcess() {
+   const notLbl = t("lens.notFor");
+ 
+   // Abre la ayuda educativa como globo aparte (no inline).
+-  // `img`: lámina de ayuda del dueño (arte con el texto ya rotulado). Solo se
+-  // usa en ES — en EN seguimos con los diagramas SVG, cuyo copy pasa por t().
++  // `img`: lámina de ayuda del dueño (arte con el texto ya rotulado). Hay una
++  // versión por idioma (-en para inglés); los diagramas SVG quedan de respaldo.
+   const openInfo = (title, edu, diagKeys, note, img) => setInfoPop({ title, edu, diagKeys: diagKeys || [], note: note || null, img: img || null });
+ 
+   // Agrupa los fotocromáticos por FAMILIA (presentación): en vez de una tarjeta
+@@ -1671,7 +1671,7 @@ export default function LensProcess() {
+                         </button>
+                         {hasDiag && rxStage === "fill" && (
+                           <button type="button" className="zlx-use-info"
+-                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : null)}>
++                                  aria-label={t("lens.help")} onClick={() => openInfo(L(d.label, lang), null, designDiagKeys(d), null, lang === "es" ? "/rx/ayuda-progresivos.png" : "/rx/ayuda-progresivos-en.png")}>
+                             <Ic name="info" />
+                           </button>
+                         )}
