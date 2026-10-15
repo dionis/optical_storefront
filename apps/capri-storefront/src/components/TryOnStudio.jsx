@@ -944,6 +944,11 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
         glassesImage: frames[0] || null,
         glassesImages: frames,
         frameSpec: { name: product?.name, eye: at.eye_size, bridge: at.bridge_size, temple: at.temple_length },
+        // Contexto de landmarks (pupilas + escala) medido con MediaPipe en el
+        // navegador — es lo que el compositor LOCAL del backend necesita para
+        // pegar la montura sobre la foto real. Sin él, el resultado llega sin
+        // montaje (las medidas sí, pero la cara sale "sin gafas").
+        context: ourMeasureRef.current?.context || null,
         lang, withReferenceCard: true, render: true,
         signal: ctrl.signal,
       });

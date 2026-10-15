@@ -217,6 +217,9 @@ export async function startMeasurementJob({
   // y mejor lectura del código de talla impreso en la varilla.
   glassesImages = null,
   frameSpec = null,
+  // Landmarks + escala medidos en el navegador (opticalMeasure.measureFromFrontal
+  // → .context). El compositor local los exige para montar la montura.
+  context = null,
   lang = "es",
   withReferenceCard = false,
   render = true,
@@ -259,6 +262,9 @@ export async function startMeasurementJob({
     // nueva con IA, destruyendo la identidad del rostro — exactamente lo contrario
     // de lo que el cliente espera al tomarse una foto.
     imageEngine: "local",
+    // Pupilas + escala medidas en el navegador: sin esto el compositor local
+    // no sabe DÓNDE ni A QUÉ TAMAÑO pegar la montura y devuelve tryOn.ok=false.
+    context: context || undefined,
     extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };
 

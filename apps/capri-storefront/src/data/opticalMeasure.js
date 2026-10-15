@@ -299,5 +299,22 @@ export async function measureFromFrontal(frontDataUrl, frame = {}) {
     quality: { level, score: Math.round(score * 100) / 100, estErrorMm, reasons },
     // Aviso de encaje montura↔rostro (orientativo).
     fit,
+    // Contexto para el compositor LOCAL del servicio vision-measure (ver
+    // render_local_overlay en compositor.py): posiciones de pupila NORMALIZADAS
+    // (0..1 — invariantes al reencogido de la foto antes de enviarla) y la
+    // escala como "mm por unidad X normalizada" (= ancho de la imagen en mm).
+    // Sin esto el backend no puede pegar la montura sobre la foto real y el
+    // resultado llega sin montaje (tryOn.ok=false, "necesita una captura…").
+    context: {
+      landmarksNormalized: {
+        rightPupil: { x: L[IRIS_L_CENTER].x, y: L[IRIS_L_CENTER].y },
+        leftPupil: { x: L[IRIS_R_CENTER].x, y: L[IRIS_R_CENTER].y },
+      },
+      scale: { millimetresPerNormalizedXUnit: W * mmPerPx },
+      measuredFacial: { pdTotalMM: round1(pdTotal) },
+      ...(A != null && DBL != null
+        ? { catalogFrameOnScreen: { totalFrontWidthMM: 2 * A + DBL } }
+        : {}),
+    },
   };
 }
