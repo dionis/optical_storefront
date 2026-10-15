@@ -45,11 +45,33 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          // RENDIMIENTO: separar el vendor (React + router) del código de la
-          // tienda. El index pasaba de 1 MB en un solo fichero; partido, el
-          // navegador cachea el vendor entre deploys y el resto baja en paralelo.
-          manualChunks: {
-            vendor: ["react", "react-dom", "react-router-dom"],
+          // RENDIMIENTO: partir el bundle en piezas que cambian a ritmos
+          // distintos, para que un deploy solo invalide lo que de verdad cambió:
+          //   vendor        React + router (casi nunca cambia)
+          //   deps          resto de node_modules (SDK de Medusa, etc.)
+          //   catalog-data  frames-extra + frameMediaSample (~450 KB de datos
+          //                 del catálogo que solo cambian al re-scrapear)
+          //   i18n          diccionario completo es/en (~165 KB)
+          // Antes todo eso viajaba dentro de index.js (869 KB): cada deploy
+          // obligaba a re-bajarlo entero. Partido, el navegador reutiliza los
+          // chunks cacheados (assets/* es immutable) y solo baja el código
+          // nuevo; además los trozos bajan en paralelo en la primera visita.
+          manualChunks(id) {
+            const p = id.replace(/\\/g, "/");
+            if (p.includes("/node_modules/")) {
+              if (/\/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(p)) {
+                return "vendor";
+              }
+              // three (y MediaPipe si algún día se empaqueta) solo los usan
+              // componentes LAZY (TryOn de respaldo): dejarlos sin asignar para
+              // que Rollup los guarde en el chunk perezoso de su importador —
+              // metidos en "deps" viajarían en la carga inicial de TODA visita.
+              if (/\/node_modules\/(three|@mediapipe)\//.test(p)) return undefined;
+              return "deps";
+            }
+            if (/\/src\/data\/(frames-extra|frameMediaSample)\.js/.test(p)) return "catalog-data";
+            if (/\/src\/i18n\/translations\.js/.test(p)) return "i18n";
+            return undefined;
           },
         },
       },

@@ -18,7 +18,22 @@
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://storage.googleapis.com" crossorigin />
     <link rel="dns-prefetch" href="https://storage.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Fotos del catálogo (Supabase Storage) y Store API en modo directo:
+         precalentar DNS+TLS ahorra ~100-300 ms en la PRIMERA imagen y la
+         primera llamada de datos, que son el LCP del catálogo. -->
+    <link rel="preconnect" href="https://svuuuobjgrkscsjgpwkx.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://svuuuobjgrkscsjgpwkx.supabase.co" />
+    <link rel="preconnect" href="https://api.rubilens.com" crossorigin />
+    <link rel="dns-prefetch" href="https://api.rubilens.com" />
+    <!-- Fuentes SIN bloquear el primer pintado: la hoja llega como "print"
+         (no bloquea render) y al cargar se promociona a "all". display=swap ya
+         garantiza texto visible con la fuente del sistema mientras tanto. -->
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
+            rel="stylesheet" />
+    </noscript>
     <title>RUBI LENS — Espejuelos de marca online</title>
     <meta name="description" content="RUBI LENS: bienestar y estilo para tu visión. Espejuelos de marca online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) con probador virtual y lentes con receta. Español / English." />
 

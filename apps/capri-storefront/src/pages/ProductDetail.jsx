@@ -424,6 +424,7 @@ export default function ProductDetail() {
                 </div>
               ) : (
                 <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
+                     fetchPriority="high" decoding="async"
                      style={fits.single ? { transform: (mainMirror ? "scaleX(-1) " : "") + fits.single.transform, transformOrigin: fits.single.transformOrigin } : undefined}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}

@@ -140,7 +140,7 @@ export default function ProductCard({ product }) {
           )}
         </div>
         <Link to={`/producto/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
-          <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy"
+          <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy" decoding="async"
                onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
         </Link>
       </div>

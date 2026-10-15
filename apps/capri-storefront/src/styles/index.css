@@ -9453,3 +9453,12 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
    no se recrea aquí). Sin el archivo, queda el camión 3D de la lámina. */
 .co-fedex, .trk-fedex { height: 20px; width: auto; object-fit: contain; }
 .trk-fedex { height: 22px; }
+
+/* ── RENDIMIENTO: el grid del catálogo solo renderiza lo visible ─────────────
+   content-visibility:auto permite al navegador saltarse el layout y el pintado
+   de las tarjetas fuera del viewport (con 48+ montadas, el primer pintado del
+   catálogo baja de forma medible y el scroll va más fluido).
+   contain-intrinsic-size reserva el alto aproximado de la tarjeta para que la
+   barra de scroll no salte cuando entran en pantalla. */
+.product-grid > .card { content-visibility: auto; contain-intrinsic-size: auto 430px; }
+.product-grid.list > .card { contain-intrinsic-size: auto 190px; }
