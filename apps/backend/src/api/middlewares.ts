@@ -166,8 +166,49 @@ function reviewPhotosUpload(
   });
 }
 
+/**
+ * CORS for the /vision-measure proxy routes. They live OUTSIDE /store and
+ * /admin on purpose (no publishable key, no session), which also means Medusa's
+ * built-in CORS middleware never covers them: a storefront configured in
+ * "direct mode" (VITE_MEDUSA_URL = https://api...) got its preflight answered
+ * with no Access-Control-Allow-Origin and every job POST died in the browser
+ * as "Failed to fetch". Allow exactly the origins STORE_CORS already trusts.
+ */
+const VISION_CORS_ORIGINS = new Set(
+  (process.env.STORE_CORS ?? "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean)
+);
+
+function visionMeasureCors(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  const origin = (req.headers.origin as string | undefined)?.replace(/\/$/, "");
+  if (origin && VISION_CORS_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "86400");
+  }
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+}
+
 export default defineMiddlewares({
   routes: [
+    {
+      // CORS for every vision-measure route (see visionMeasureCors above) —
+      // health, providers, models, job, job/:id, image-proxy, result, …
+      matcher: "/vision-measure*",
+      middlewares: [visionMeasureCors],
+    },
     {
       // Two photos travel here as base64 data URLs (JSON, not multipart) — the
       // client caps each at 1568px/JPEG q0.9, but that still runs well past

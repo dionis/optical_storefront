@@ -4,9 +4,16 @@
 // Capri, medición PD/alturas y render de la montura con Gemini). La tienda le pega
 // a través del proxy `/medusa` (ver src/data/medusa.js), así el navegador solo habla
 // con su propio origen y la clave del proveedor nunca cruza a un tercer origen.
-import { MEDUSA_URL } from "./medusa.js";
+// SIEMPRE same-origin, aunque VITE_MEDUSA_URL apunte directo al backend (modo
+// directo del Store API). Las rutas /vision-measure del backend viven FUERA de
+// /store y Medusa no les pone cabeceras CORS, así que llamarlas cross-origin
+// termina en "Failed to fetch" (el preflight pasa pero el POST se bloquea).
+// Por el proxy /medusa del propio origen no hay CORS que configurar, y además
+// las fotos en base64 (varios MB) viajan mejor por el rewrite de Vercel.
+const SAME_ORIGIN =
+  typeof window !== "undefined" && window.location ? window.location.origin : "";
 
-const API = `${MEDUSA_URL}/vision-measure`;
+const API = `${SAME_ORIGIN}/medusa/vision-measure`;
 const JOB_API = `${API}/job`;
 
 // Guarda la salida de una prueba con IA (imagen frontal con los espejuelos +
