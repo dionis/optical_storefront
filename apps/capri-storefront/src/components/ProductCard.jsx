@@ -12,6 +12,9 @@ import TryOn from "./TryOnSwitch.jsx";
 // card cuando el catálogo pasa de seed a Medusa a mitad de sesión (ver tryOnState.js).
 import { openTryOn, closeTryOn, useTryOnOpenKey, productTryOnKey } from "../data/tryOnState.js";
 // Indicador "360°": esta montura ya tiene las 4 vistas 3D generadas (galería).
+// Derivadas redimensionadas de la foto de producto (ver imageUrl.js): la
+// rejilla no necesita el original de 35 KB por tarjeta.
+import { resolveImageSized, imageSrcSet } from "../data/imageUrl.js";
 import { viewsBySku } from "../data/frameMediaSample.js";
 import { useFrameMediaVersion } from "../data/frameMediaLive.js";
 import { Icon360, IconHeart, IconDiscount, IconGender, IconFemale, IconUnisex, IconKids } from "./UiIcons.jsx";
@@ -140,8 +143,25 @@ export default function ProductCard({ product }) {
           )}
         </div>
         <Link to={`/producto/${product.slug}?color=${active}`} className="card-img-link" aria-label={product.name}>
-          <img src={color.image} alt={`${product.name} ${color.name}`} loading="lazy" decoding="async"
-               onError={(e) => { e.currentTarget.style.opacity = 0.25; }} />
+          {/* La rejilla muestra la foto a ~280 px (560 en retina). Pedirle al
+              bucket esa medida en vez del original ahorra ~25 KB POR TARJETA;
+              con 48 en pantalla es más de 1 MB menos. `srcset` deja que el
+              navegador elija según densidad; si el origen no admite
+              redimensionado, `srcSet` llega vacío y se usa `src` como hoy. */}
+          <img src={resolveImageSized(color.image, 560) || color.image}
+               srcSet={imageSrcSet(color.image)}
+               sizes="(max-width: 640px) 50vw, (max-width: 1100px) 33vw, 280px"
+               alt={`${product.name} ${color.name}`} loading="lazy" decoding="async"
+               onError={(e) => {
+                 // Si la derivada falla por lo que sea, se vuelve al original
+                 // antes de dar la imagen por perdida.
+                 if (e.currentTarget.src !== color.image) {
+                   e.currentTarget.srcset = "";
+                   e.currentTarget.src = color.image;
+                 } else {
+                   e.currentTarget.style.opacity = 0.25;
+                 }
+               }} />
         </Link>
       </div>
       {TRY_ON_ENABLED && tryOn && (
