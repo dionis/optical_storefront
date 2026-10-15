@@ -5,6 +5,7 @@ import { useCart } from "./CartContext.jsx";
 import { useFeedback } from "./Feedback.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useUser, login, register, logout } from "./userAuth.js";
+import { resolveImage } from "../data/imageUrl.js";
 
 const money = (n) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -54,11 +55,16 @@ export function CartPanel({ open, onClose }) {
           <ul className="panel-list">
             {items.map((i) => (
               <li key={i.id} className="panel-item">
-                {i.thumbnail && <img className="panel-item-thumb" src={i.thumbnail} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                <div className="panel-item-info">
-                  <b>{i.title}</b>
-                  <small>{[i.metadata?.lens_summary, i.quantity > 1 ? `× ${i.quantity}` : null].filter(Boolean).join(" · ")}</small>
-                </div>
+                {/* Clic en el espejuelo → su ficha (pedido del dueño). La miniatura
+                    pasa por resolveImage: el carrito guarda claves R2 desnudas. */}
+                <Link className="panel-item-link" to={i.product_handle ? `/producto/${i.product_handle}` : "#"}
+                      onClick={(e) => { if (!i.product_handle) { e.preventDefault(); return; } onClose(); }}>
+                  {i.thumbnail && <img className="panel-item-thumb" src={resolveImage(i.thumbnail)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                  <div className="panel-item-info">
+                    <b>{i.title}</b>
+                    <small>{[i.metadata?.lens_summary, i.quantity > 1 ? `× ${i.quantity}` : null].filter(Boolean).join(" · ")}</small>
+                  </div>
+                </Link>
                 <span className="panel-item-price">{money(i.total)}</span>
                 <button className="panel-x" onClick={() => removeItem(i.id)} disabled={busy} aria-label={t("common.remove")}>×</button>
               </li>

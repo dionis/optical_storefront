@@ -7,6 +7,7 @@ import { LOOKBOOK_BY_ID, lookbookTag } from "../data/lookbook.js";
 import { useCatalog } from "../data/catalogStore.js";
 import ProductCard from "../components/ProductCard.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { setSeo } from "../lib/seo.js";
 
 const IMG = "https://caprioptics.com/wp-content/uploads/";
 
@@ -114,6 +115,15 @@ function GlassesIcon({ type }) {
 
 export default function Home() {
   const { t, lang } = useLang();
+  useEffect(() => {
+    setSeo({
+      title: lang === "es" ? "RUBI LENS — Espejuelos de marca online con probador virtual" : "RUBI LENS — Designer eyeglasses online with virtual try-on",
+      description: lang === "es"
+        ? "Espejuelos Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy con lentes de receta, probador virtual con tu cámara y envío FedEx a todo EE. UU."
+        : "Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy eyeglasses with prescription lenses, camera try-on and FedEx shipping across the US.",
+      path: "/",
+    });
+  }, [lang]);
   const { products: PRODUCTS } = useCatalog();
   const featured = PRODUCTS.slice(0, 12);
 

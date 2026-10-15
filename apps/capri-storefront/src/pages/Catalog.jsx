@@ -10,12 +10,22 @@ import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
 import { IconFilter, IconSort, IconGrid, IconList, IconCheck } from "../components/UiIcons.jsx";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { setSeo } from "../lib/seo.js";
 import { fetchReviewSummaries } from "../data/reviews.js";
 
 export default function Catalog() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const { t, tv, lang } = useLang();
+  useEffect(() => {
+    setSeo({
+      title: lang === "es" ? "Catálogo de espejuelos | RUBI LENS" : "Eyeglasses catalog | RUBI LENS",
+      description: lang === "es"
+        ? "Más de 500 monturas de Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy. Filtra por forma, material, sexo y estilo; pruébatelas online con tu cámara."
+        : "500+ frames from Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy. Filter by shape, material, gender and style; try them on online with your camera.",
+      path: "/catalogo",
+    });
+  }, [lang]);
   const { products: PRODUCTS, cases: CASES } = useCatalog();
   const brand = slug ? BRAND_BY_SLUG[slug] : null;
   const q = (params.get("q") || "").toLowerCase().trim();

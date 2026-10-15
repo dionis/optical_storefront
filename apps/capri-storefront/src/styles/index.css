@@ -9396,3 +9396,39 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
   .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-navybody { padding: 8px 14px 10px; }
   .zlx-pop-rx.zlx-rx-stage-summary .zlx-summary-list li { padding: 2px 0; }
 }
+
+/* ===================================================================
+   ETAPA 139 — PAGO en una sola vista y llamativo (web y móvil), tarifa
+   FedEx FIJA visible, SEO por página y rendimiento (pedidos del
+   cliente). El formulario de Stripe va en acordeón compacto con la
+   paleta navy de la casa; la ficha de pago lleva cabecera navy/oro.
+   =================================================================== */
+.co-payform { padding: 0 !important; overflow: hidden; border-radius: 14px; }
+.co-pay-navyhd { border-radius: 0; }
+.co-pay-safe { margin-left: auto; font-size: 11px; color: #cfe0f5; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.co-payform .co-cardmatch { margin: 10px 14px 4px; }
+.co-payform .co-pay-el { margin: 4px 14px; }
+.co-pay-actions { display: grid; gap: 8px; padding: 8px 14px 14px; }
+.co-payform .co-pay-actions .btn.big { width: 100%; margin: 0; }
+@media (min-width: 960px) {
+  .co-pay-actions { grid-template-columns: 1.4fr 1fr; }
+}
+.co-payform .co-pay-note, .co-payform .co-pay-err { margin: 6px 14px; }
+@media (min-width: 960px) {
+  .section.checkout:has(.co-summary2) > .co-payform { grid-column: 2; margin: 8px 0; }
+}
+/* Móvil: en el checkout fuera la franja de confianza fija — roba 70px justo
+   donde el pago necesita caber en una vista (los mensajes ya están en la página). */
+@media (max-width: 939px) {
+  body:has(.section.checkout) .truststrip { display: none; }
+}
+/* Cajita de la tarjeta de PRUEBA (solo con llave pk_test_): dorada suave. */
+.co-testcard {
+  margin: 8px 14px 2px; padding: 7px 11px 8px; border-radius: 12px;
+  background: #fdf8ec; border: 1px solid #e7cf96;
+}
+.co-testcard b { color: #7a5b12; }
+.co-testcard > b { font-size: 12.5px; }
+.co-testcard p { margin: 1px 0 4px; font-size: 11.5px; line-height: 1.3; color: #6b5a30; }
+.co-testcard-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #4b3f22; }
+.co-testcard-row b { font-variant-numeric: tabular-nums; user-select: all; }

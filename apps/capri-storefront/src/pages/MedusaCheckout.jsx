@@ -10,6 +10,7 @@ import {
   startPayment, DEFAULT_PROVIDER, completeCart, revalidateCart,
 } from "../data/medusaCart.js";
 import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutocomplete.js";
+import { resolveImage } from "../data/imageUrl.js";
 import { shipping as shippingConfig } from "../admin/priceStore.js";
 import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
 
@@ -45,6 +46,10 @@ export default function MedusaCheckout() {
   // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
   // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
   const labDays = Number(shippingConfig().labDays) || 0;
+  // Tarifa FIJA de FedEx (pedido del dueño): $28 siempre, 4 días — lo que el
+  // cliente ve. El servidor cobra lo mismo (SHIPPING_FEDEX_RATE en Coolify).
+  const FEDEX_RATE = Number(shippingConfig().fedexRate) || 28;
+  const FEDEX_ETA = Number(shippingConfig().fedexEtaDays) || 4;
 
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -279,7 +284,22 @@ export default function MedusaCheckout() {
       setCart(await getCart());
       const stripe = await loadStripe(PK);
       stripeRef.current = stripe;
-      const elements = stripe.elements({ clientSecret });
+      // Apariencia de la casa para el formulario de Stripe: navy, compacto y en
+      // el idioma elegido — el paso de pago cabe en una vista y se ve propio.
+      const elements = stripe.elements({
+        clientSecret,
+        locale: lang === "en" ? "en" : "es",
+        appearance: {
+          theme: "stripe",
+          variables: {
+            colorPrimary: "#0b2f66",
+            colorText: "#17233a",
+            fontSizeBase: "14px",
+            spacingUnit: "3px",
+            borderRadius: "10px",
+          },
+        },
+      });
       elementsRef.current = elements;
       setStep("pay"); // el Payment Element se monta en el useEffect de abajo
     } catch (e) { setErr(e.message || String(e)); }
@@ -303,7 +323,15 @@ export default function MedusaCheckout() {
     // `fields.billingDetails.email: "never"` evita que Stripe muestre el campo de
     // email de Link, que es el que dispara la verificación fallida (401). El email
     // ya lo capturamos en los datos del paciente.
-    const opts = { fields: { billingDetails: { email: "never" } } };
+    const opts = {
+      // Pestañas (una fila horizontal de métodos) + SIN Link: el bloque de
+      // "guardar mi información" de Link medía ~260px y sacaba el pago de la
+      // vista única; el email/celular ya viven en los datos del paciente.
+      layout: { type: "tabs", defaultCollapsed: false },
+      terms: { card: "never" },
+      wallets: { applePay: "never", googlePay: "never" },
+      fields: { billingDetails: { email: "never" } },
+    };
     if (cardMatches) opts.defaultValues = { billingDetails: buildBilling() };
     let el;
     try {
@@ -476,9 +504,20 @@ export default function MedusaCheckout() {
                 const treats = [photoOpt && LBL(photoOpt.label, lang), arOpt && LBL(arOpt.label, lang)].filter(Boolean);
                 return (
                   <li key={i.id} className="panel-item co-item2">
-                    {i.thumbnail && <img className="co-item-ph" src={i.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+                    {/* Clic en el espejuelo → su ficha; la miniatura pasa por
+                        resolveImage (clave R2 → URL pública, ya no sale rota). */}
+                    {i.thumbnail && (
+                      <Link to={i.product_handle ? `/producto/${i.product_handle}` : "#"}
+                            onClick={(e) => { if (!i.product_handle) e.preventDefault(); }}
+                            className="co-item-phlink" aria-label={i.title}>
+                        <img className="co-item-ph" src={resolveImage(i.thumbnail)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                             onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                      </Link>
+                    )}
                     <div className="panel-item-info">
-                      <b>{i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
+                      <b>{i.product_handle
+                        ? <Link className="co-item-title" to={`/producto/${i.product_handle}`}>{i.title}</Link>
+                        : i.title}{i.quantity > 1 ? ` × ${i.quantity}` : ""}</b>
                       {dl && <small><span className="co-dt">{L("frameLine")}:</span> {dl[lang] || dl.es}</small>}
                       {mat && <small><span className="co-dt">{L("lensLine")}:</span> {LBL(mat.label, lang)}</small>}
                       {treats.length > 0 && <small><span className="co-dt">{L("treatLine")}:</span> {treats.join(" · ")}</small>}
@@ -502,15 +541,13 @@ export default function MedusaCheckout() {
             <div className="co-totals">
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
               {(() => {
-                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
-                const shipAmt = cart.shipping_total > 0 ? cart.shipping_total
-                  : sel ? (sel.free ? 0 : sel.amount)
-                  : shipId ? (ship.find((o) => o.id === shipId)?.amount ?? null)
-                  : null;
+                // Tarifa FIJA: en cuanto hay método de envío (cotizado solo al
+                // completar la dirección), la línea dice FedEx · $28 — siempre.
+                const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
                 return (
                   <div>
-                    <span>{L("shippingLine")}{sel ? ` · ${sel.label}` : ""}</span>
-                    <b>{shipAmt == null ? "—" : shipAmt > 0 ? money(shipAmt) : L("free")}</b>
+                    <span>{L("shippingLine")}{ready ? " · FedEx" : ""}</span>
+                    <b>{ready ? money(FEDEX_RATE) : "—"}</b>
                   </div>
                 );
               })()}
@@ -523,11 +560,11 @@ export default function MedusaCheckout() {
               })()}
             </div>
             {(() => {
-              const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
-              const pend = cart.shipping_total > 0 ? 0
-                : sel ? (sel.free ? 0 : Number(sel.amount || 0))
-                : shipId ? Number(ship.find((o) => o.id === shipId)?.amount || 0)
-                : 0;
+              // Total con la tarifa fija: lo que Medusa aún no haya sumado del
+              // envío se completa hasta los $28 fijos para que el cliente vea
+              // el número final real desde el principio.
+              const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
+              const pend = ready ? Math.max(0, FEDEX_RATE - Number(cart.shipping_total || 0)) : 0;
               return <div className="panel-total"><span>{L("total")}</span><b>{money(Number(cart.total || 0) + pend)}</b></div>;
             })()}
           </div>
@@ -591,38 +628,19 @@ export default function MedusaCheckout() {
                   (cotizada en el servidor); mientras, una nota tranquila. Si el
                   servidor devolviera varias mensajerías, se elige aquí mismo. */}
               {(() => {
-                const sel = carriers ? carriers.find((q) => q.carrier === carrierSel) : null;
-                const opt = !carriers && shipId ? ship.find((o) => o.id === shipId) : null;
-                if (busy && !sel && !opt) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
-                if (sel) return (
+                const ready = (carriers && carrierSel) || shipId;
+                if (busy && !ready) return <div className="co-shipline co-shipline-wait"><span className="btn-spin" aria-hidden="true" /> {L("processing")}</div>;
+                if (!ready) return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
+                return (
                   <div className="co-shipline" role="status">
                     <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
                          onError={(e) => e.currentTarget.remove()} />
                     <span className="co-shipline-tx">
-                      <b>{sel.label} · {sel.free ? L("free") : money(sel.amount)}</b>
-                      <small>{t("ship.eta", { min: sel.eta_min_days, max: sel.eta_max_days })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
-                    </span>
-                    {carriers.length > 1 && (
-                      <span className="co-ship-alt">
-                        {carriers.map((q) => (
-                          <button key={q.carrier} type="button" className={`co-ship-chip ${carrierSel === q.carrier ? "on" : ""}`}
-                                  onClick={() => setCarrierSel(q.carrier)}>{q.label}</button>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                );
-                if (opt) return (
-                  <div className="co-shipline" role="status">
-                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
-                         onError={(e) => e.currentTarget.remove()} />
-                    <span className="co-shipline-tx">
-                      <b>{tv(opt.name)} · {opt.amount > 0 ? money(opt.amount) : L("free")}</b>
-                      {labDays > 0 && <small>{t("ship.labNote", { days: labDays })}</small>}
+                      <b>FedEx · {money(FEDEX_RATE)}</b>
+                      <small>{t("ship.eta", { min: FEDEX_ETA, max: FEDEX_ETA })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>
                     </span>
                   </div>
                 );
-                return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
               })()}
               <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : L("pay")}
@@ -631,8 +649,13 @@ export default function MedusaCheckout() {
           )}
 
           {step === "pay" && (
-            <div className="co-form" ref={paySecRef}>
-              <div className="co-h">💳 {L("payment")}</div>
+            <div className="co-form co-payform" ref={paySecRef}>
+              <div className="co-sum-navyhd co-pay-navyhd">
+                <img className="co-sum-ic" src="/ui/icons3d/white-shield.png" alt="" aria-hidden="true"
+                     onError={(e) => e.currentTarget.remove()} />
+                <span>{L("payment")}</span>
+                <small className="co-pay-safe">🔒 {t("trust.secure")}</small>
+              </div>
               {/* Si la tarjeta es del paciente, autorellenamos los datos de
                   facturación de Stripe con los del paciente. Al cambiar, el
                   useEffect vuelve a montar el Payment Element. */}
@@ -642,6 +665,22 @@ export default function MedusaCheckout() {
               </label>
               {/* El contenedor se pinta SIEMPRE: es el destino de `mount()`, así
                   que ocultarlo mientras carga dejaría a Stripe sin dónde montar. */}
+              {/* TARJETA DE PRUEBA (pedido del dueño): mientras la llave de
+                  Stripe sea de test (pk_test_), se enseña la tarjeta 4242 para
+                  que nadie teclee datos reales. Al poner la llave live de la
+                  cuenta final, esta cajita desaparece sola. */}
+              {PK.startsWith("pk_test_") && (
+                <div className="co-testcard" role="note">
+                  <b>🧪 {L("testTitle")}</b>
+                  <p>{L("testBody")}</p>
+                  <div className="co-testcard-row">
+                    <span>{L("testCard")}: <b>4242 4242 4242 4242</b></span>
+                    <span>{L("testExp")}: <b>12/34</b> ({L("testAny")})</span>
+                    <span>{L("testCvc")}: <b>123</b></span>
+                    <span>{L("testZip")}: <b>77449</b></span>
+                  </div>
+                </div>
+              )}
               <div ref={payElRef} className="co-pay-el" />
               {payState === "loading" && (
                 <div className="co-pay-note" role="status">
@@ -658,19 +697,21 @@ export default function MedusaCheckout() {
                   </button>
                 </div>
               )}
-              <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
-                {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
-              </button>
-              {/* Volver a los datos de contacto/envío sin perder nada: el
-                  Payment Element se desmonta y se vuelve a crear al regresar. */}
-              <button
-                type="button"
-                className="btn btn-outline big co-back"
-                disabled={busy}
-                onClick={() => { setPayState("idle"); setStep("contact"); }}
-              >
-                ← {L("backToData")}
-              </button>
+              <div className="co-pay-actions">
+                <button className="btn btn-primary big" disabled={busy || payState !== "ready"} onClick={pay}>
+                  {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("paying")}</> : `${L("pay")} · ${money(cart.total)}`}
+                </button>
+                {/* Volver a los datos sin perder nada: el Payment Element se
+                    desmonta y se vuelve a crear al regresar. */}
+                <button
+                  type="button"
+                  className="btn btn-outline big co-back"
+                  disabled={busy}
+                  onClick={() => { setPayState("idle"); setStep("contact"); }}
+                >
+                  ← {L("backToData")}
+                </button>
+              </div>
             </div>
           )}
         </>

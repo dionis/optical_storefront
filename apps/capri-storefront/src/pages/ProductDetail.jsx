@@ -1,5 +1,6 @@
 // Dónde se usa: /producto/:slug (PDP). Galería 360/color, ficha técnica, precio, CTAs (probador + carrito), pestañas de detalles/medidas/opiniones y recomendados.
 import { useState, useEffect, useRef } from "react";
+import { setSeo, productJsonLd } from "../lib/seo.js";
 import { createPortal } from "react-dom";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { trackView } from "../admin/analytics.js";
@@ -213,6 +214,34 @@ export default function ProductDetail() {
   }
 
   const color = product.colors[active];
+
+  // SEO de la FICHA (pedido del dueño): título, descripción, canónica, Open
+  // Graph y el JSON-LD de Producto (marca, precio, foto) para el posicionamiento.
+  useEffect(() => {
+    if (!product) return;
+    const a = product.attributes || {};
+    const img = product.colors?.[0]?.image || null;
+    const bits = [tv(a.shape), (a.material || [])[0] && tv((a.material || [])[0]), a.gender && tv(a.gender)].filter(Boolean);
+    const desc = lang === "es"
+      ? `Espejuelos ${product.name} de ${product.brand}${bits.length ? " — " + bits.join(", ") : ""}. Pruébatelos online con tu cámara y pídelos con tus lentes de receta. Envío FedEx a todo EE. UU.`
+      : `${product.name} eyeglasses by ${product.brand}${bits.length ? " — " + bits.join(", ") : ""}. Try them on online with your camera and order them with prescription lenses. FedEx shipping across the US.`;
+    const path = `/producto/${slug}`;
+    setSeo({
+      title: `${product.name} · ${product.brand} | RUBI LENS`,
+      description: desc,
+      path,
+      image: img,
+      type: "product",
+      jsonLd: productJsonLd({
+        name: `${product.name} — ${product.brand}`,
+        brand: product.brand,
+        description: desc,
+        image: img,
+        path,
+        price: product.price,
+      }),
+    });
+  }, [product, slug, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vistas generadas (4 ángulos) de ESTE color, si existen para este SKU. Los
   // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,

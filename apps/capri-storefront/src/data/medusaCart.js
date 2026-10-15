@@ -14,7 +14,7 @@ export const DEFAULT_PROVIDER =
 
 const CART_FIELDS =
   "id,email,currency_code,region_id,total,item_total,shipping_total,tax_total,completed_at,locale," +
-  "items.id,items.title,items.quantity,items.unit_price,items.total,items.thumbnail,items.metadata," +
+  "items.id,items.title,items.quantity,items.unit_price,items.total,items.thumbnail,items.metadata,items.product_handle," +
   "shipping_methods.id,shipping_methods.amount,shipping_address.*";
 
 // Key LanguageContext persists the active UI language under. Read directly rather
@@ -343,6 +343,10 @@ export async function startPayment(providerId = DEFAULT_PROVIDER) {
   const { cart } = await medusa.store.cart.retrieve(id, { fields: CART_FIELDS });
   const { payment_collection } = await medusa.store.payment.initiatePaymentSession(cart, {
     provider_id: providerId,
+    // SOLO tarjeta en el PaymentIntent: sin Link ni Banco/Affirm/Amazon. El
+    // formulario de pago queda corto (cabe en una vista) y sin el bloque de
+    // "guardar mi información" de Link. Métodos extra: decisión futura.
+    data: { payment_method_types: ["card"] },
   });
   const session = (payment_collection.payment_sessions || []).find((s) => s.provider_id === providerId);
   return { clientSecret: session?.data?.client_secret || null, paymentCollection: payment_collection, providerId };

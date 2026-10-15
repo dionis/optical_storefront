@@ -1,3 +1,4 @@
+import { initPerfHints } from "./lib/seo.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -15,6 +16,10 @@ purgeStaleStorage();
 // Vistas generadas más nuevas que el build: se piden ya, en paralelo al primer
 // render, en vez de esperar a que una ficha las necesite.
 loadLiveFrameMedia();
+
+// Preconexiones al backend y al host de imágenes (R2): TLS abierto antes de la
+// primera petición — el catálogo y las fichas pintan antes.
+initPerfHints();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

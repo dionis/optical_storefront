@@ -42,6 +42,18 @@ export default defineConfig(({ mode }) => {
       __BUILD_ID__: JSON.stringify(mode === "production" ? id : "dev"),
     },
     plugins: [react(), emitBuildId(id)],
+    build: {
+      rollupOptions: {
+        output: {
+          // RENDIMIENTO: separar el vendor (React + router) del código de la
+          // tienda. El index pasaba de 1 MB en un solo fichero; partido, el
+          // navegador cachea el vendor entre deploys y el resto baja en paralelo.
+          manualChunks: {
+            vendor: ["react", "react-dom", "react-router-dom"],
+          },
+        },
+      },
+    },
     server: {
       port: 5198,
       host: true,

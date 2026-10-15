@@ -8,6 +8,10 @@ const KEY = "oer_price_overrides";
 
 const DEFAULT_SHIPPING = {
   standard: 4.95, express: 12.95, freeThreshold: 59,
+  // ENVÍO FEDEX FIJO (pedido del dueño): $28 a todo EE. UU., 4 días de
+  // tránsito. Es lo que el checkout MUESTRA siempre; el servidor cobra lo
+  // mismo vía SHIPPING_FEDEX_RATE (=28) en Coolify. Editable aquí (admin).
+  fedexRate: 28, fedexEtaDays: 4,
   // Días HÁBILES que el laboratorio tarda en tallar y montar los lentes. Es el
   // tiempo previo a recoger en tienda o a que salga el envío — no incluye el
   // tránsito del transportista (eso son etaMin/etaMax por zona).
