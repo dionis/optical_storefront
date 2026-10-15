@@ -43,7 +43,13 @@ export function resolveImageSized(key, width, quality = 75) {
   if (!url.includes("/storage/v1/object/public/")) return url;
   const base = url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/");
   const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}width=${Math.round(width)}&quality=${quality}`;
+  // `resize=contain` NO ES OPCIONAL. El modo por defecto del bucket es "cover":
+  // con solo `width` conserva el ALTO del original y recorta el ancho, así que
+  // una montura de 1600x611 volvía como 560x611 — una franja vertical del
+  // centro, es decir SOLO LA PATA. Con `contain` respeta la proporción
+  // (560x214), se ve la montura entera y encima pesa menos (5.7 KB frente a
+  // 9.9 KB) porque no arrastra el alto de más.
+  return `${base}${sep}width=${Math.round(width)}&resize=contain&quality=${quality}`;
 }
 
 /**
