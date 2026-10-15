@@ -633,8 +633,14 @@ export default function MedusaCheckout() {
                 if (!ready) return <small className="co-hint co-ship-pend">🚚 {L("shipPending")}</small>;
                 return (
                   <div className="co-shipline" role="status">
-                    <img className="i3d i3d-co" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
-                         onError={(e) => e.currentTarget.remove()} />
+                    {/* Logo oficial de FedEx si el dueño puso el archivo
+                        (public/ui/fedex.png); si no existe, el camión 3D. */}
+                    <img className="i3d i3d-co co-fedex" src="/ui/fedex.png" alt="FedEx"
+                         onError={(e) => {
+                           const el = e.currentTarget;
+                           if (el.dataset.fb) { el.remove(); return; }
+                           el.dataset.fb = "1"; el.src = "/ui/icons3d/navy2-truck.png"; el.alt = "";
+                         }} />
                     <span className="co-shipline-tx">
                       <b>FedEx · {money(FEDEX_RATE)}</b>
                       <small>{t("ship.eta", { min: FEDEX_ETA, max: FEDEX_ETA })}{labDays > 0 ? ` · ${t("ship.labNote", { days: labDays })}` : ""}</small>

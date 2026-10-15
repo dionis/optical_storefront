@@ -62,8 +62,12 @@ function TrackByReceipt() {
   return (
     <div className="trk-box">
       <div className="trk-hd">
-        <img className="i3d" src="/ui/icons3d/navy2-truck.png" alt="" aria-hidden="true"
-             onError={(e) => e.currentTarget.remove()} />
+        <img className="i3d trk-fedex" src="/ui/fedex.png" alt="FedEx"
+             onError={(e) => {
+               const el = e.currentTarget;
+               if (el.dataset.fb) { el.remove(); return; }
+               el.dataset.fb = "1"; el.src = "/ui/icons3d/navy2-truck.png"; el.alt = "";
+             }} />
         <b>{t("trk.title")}</b>
       </div>
       <p className="muted trk-intro">{t("trk.intro")}</p>
