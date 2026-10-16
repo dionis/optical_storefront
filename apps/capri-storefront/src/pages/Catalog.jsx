@@ -4,7 +4,7 @@ import { DISCOUNTS_ENABLED } from "../config/features.js";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
-import { FILTER_GROUPS, productMatches } from "../data/filters.js";
+import { FILTER_GROUPS, productMatches, BRAND_FILTER_KEY } from "../data/filters.js";
 import { brandHeroImage, brandInfo } from "../data/brandMedia.js";
 import ProductCard from "../components/ProductCard.jsx";
 import CaseCard from "../components/CaseCard.jsx";
@@ -32,6 +32,7 @@ export default function Catalog() {
   const ageParam = params.get("age");
   const shapeParam = params.get("shape");
   const genderParam = params.get("gender");
+  const marcaParam = params.get("marca");
   const ofertaParam = params.get("oferta");
 
   const [selected, setSelected] = useState({});
@@ -50,9 +51,10 @@ export default function Catalog() {
     if (ageParam) { sel.age = [ageParam]; opens.age = true; }
     if (shapeParam) { sel.shape = [shapeParam]; opens.shape = true; }
     if (genderParam) { sel.gender = [genderParam]; opens.gender = true; }
+    if (marcaParam) { sel[BRAND_FILTER_KEY] = [marcaParam]; opens[BRAND_FILTER_KEY] = true; }
     setSelected(sel);
     if (Object.keys(opens).length) setOpenGroups((prev) => ({ ...prev, ...opens }));
-  }, [slug, ageParam, shapeParam, genderParam]);
+  }, [slug, ageParam, shapeParam, genderParam, marcaParam]);
 
   // Applying a filter, sort or search jumps back to the top of the listing.
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }, [selected, sort, q, slug]);
@@ -69,6 +71,26 @@ export default function Catalog() {
       .catch(() => { /* leave the list in its current order */ });
     return () => { cancelled = true; };
   }, [sort, PRODUCTS]);
+
+  // Grupo de filtro MARCA, derivado del catálogo cargado (no de la lista curada
+  // de brands.js): el catálogo real trae marcas que no están allí — Simplylite,
+  // con 29 monturas — y, al revés, marcas curadas sin un solo producto (ProRx).
+  // Con una lista fija las primeras no se podrían filtrar y las segundas
+  // ofrecerían una casilla que no devuelve nada.
+  const brandGroup = useMemo(() => ({
+    key: BRAND_FILTER_KEY,
+    titleKey: "filters.brand",
+    field: "brand",
+    options: [...new Set(PRODUCTS.map((p) => p.brand).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+  }), [PRODUCTS]);
+
+  // En una página de marca (/marca/:slug) el listado YA está acotado a esa
+  // marca, así que el grupo sobraría (y confundiría).
+  const groups = useMemo(
+    () => (brand || !brandGroup.options.length ? FILTER_GROUPS : [brandGroup, ...FILTER_GROUPS]),
+    [brand, brandGroup]
+  );
 
   const toggle = (key, opt) => {
     setSelected((prev) => {
@@ -177,10 +199,10 @@ export default function Catalog() {
             <button type="button" className="filters-close" onClick={() => setShowFilters(false)} aria-label="✕">✕</button>
           </div>
         </div>
-        {FILTER_GROUPS.map((g) => (
+        {groups.map((g) => (
           <div className="fgroup" key={g.key}>
             <button className="fgroup-head" onClick={() => setOpenGroups((o) => ({ ...o, [g.key]: !o[g.key] }))}>
-              {g.title[lang]}<span>{openGroups[g.key] ? "−" : "+"}</span>
+              {g.titleKey ? t(g.titleKey) : g.title[lang]}<span>{openGroups[g.key] ? "−" : "+"}</span>
             </button>
             {openGroups[g.key] && (
               <div className="fgroup-body">

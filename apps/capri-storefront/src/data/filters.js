@@ -23,7 +23,25 @@ export const FILTER_GROUPS = [
     options: ["Bisagra de resorte", "Puente Unifit"] },
 ];
 
+/**
+ * Clave del filtro de MARCA.
+ *
+ * No está en FILTER_GROUPS a propósito, por dos razones:
+ *   1. La marca vive en la RAÍZ del producto (`product.brand`), no dentro de
+ *      `attributes` como el resto de los campos de esta tabla.
+ *   2. Sus opciones NO pueden ser una lista fija aquí. El catálogo real trae
+ *      marcas que no están en la lista curada de brands.js (p. ej. Simplylite,
+ *      con 29 monturas) y, al revés, marcas curadas que hoy no tienen ni un
+ *      producto (ProRx). Una tabla fija dejaría las primeras sin filtro y
+ *      ofrecería las segundas para no devolver nada. Por eso las opciones se
+ *      derivan del catálogo cargado — ver `brandGroup` en Catalog.jsx.
+ */
+export const BRAND_FILTER_KEY = "brand";
+
 export function productMatches(product, selected) {
+  const brands = selected[BRAND_FILTER_KEY];
+  if (brands && brands.length && !brands.includes(product.brand)) return false;
+
   for (const group of FILTER_GROUPS) {
     const chosen = selected[group.key];
     if (!chosen || chosen.length === 0) continue;

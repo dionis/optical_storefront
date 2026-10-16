@@ -6990,10 +6990,16 @@ button.card-genre {
       visibles en la PRIMERA pantalla del móvil.
    =================================================================== */
 
-/* 1) Swatches a la derecha de la montura, verticales, mínimo tapado */
+/* 1) Swatches ABAJO-DERECHA y EN HORIZONTAL.
+      Antes iban en columna pegados al borde derecho y estirados de arriba abajo
+      (top+bottom a la vez). Como las insignias de material y género viven
+      arriba-derecha, la columna les pasaba por encima y tapaba el texto — se
+      veía en la ficha del resultado del probador. En fila y abajo no pueden
+      colisionar: las insignias ocupan la franja de arriba y los colores la de
+      abajo. (En móvil ya se hacía así; esto lleva el mismo criterio al resto.) */
 .ts2-fr-onphoto {
-  left: auto; right: 8px; top: 8px; bottom: 8px;
-  flex-direction: column; justify-content: center; gap: 8px;
+  left: auto; right: 8px; top: auto; bottom: 8px;
+  flex-direction: row; justify-content: flex-end; align-items: flex-end; gap: 8px;
 }
 .ts2-fr-onphoto .ts2-fr-onsw {
   box-shadow: 0 1px 6px rgba(15, 40, 90, .55), 0 0 0 2px rgba(255,255,255,.9);
