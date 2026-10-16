@@ -198,25 +198,16 @@ export default function ProductDetail() {
     catch { toast({ tone: "error", message: t("cart.addError") }); }
   };
 
-  if (!product) {
-    // Deep-link / refresh guard: the live catalog (and this slug) only exists once
-    // the startup load settles. While it's in flight, show a loader instead of a
-    // false "not found"; only reject once loading has finished and the slug is
-    // genuinely absent.
-    if (loading) {
-      return (
-        <div className="section">
-          <GlassesLoader />
-        </div>
-      );
-    }
-    return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
-  }
-
-  const color = product.colors[active];
-
   // SEO de la FICHA (pedido del dueño): título, descripción, canónica, Open
   // Graph y el JSON-LD de Producto (marca, precio, foto) para el posicionamiento.
+  //
+  // VA ANTES del `return` de abajo a propósito. Estaba después, y en una carga
+  // directa de /producto/:slug el primer render ocurre con el catálogo todavía
+  // en vuelo: salía por ese return y este efecto NO se ejecutaba; al llegar los
+  // datos el siguiente render sí lo ejecutaba, y React aborta con el error #310
+  // ("más hooks que en el render anterior") dejando la ficha en blanco. Los
+  // hooks tienen que correr SIEMPRE en el mismo orden, así que este vive aquí
+  // arriba y se protege solo con el `if (!product) return` de dentro.
   useEffect(() => {
     if (!product) return;
     const a = product.attributes || {};
@@ -242,6 +233,23 @@ export default function ProductDetail() {
       }),
     });
   }, [product, slug, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!product) {
+    // Deep-link / refresh guard: the live catalog (and this slug) only exists once
+    // the startup load settles. While it's in flight, show a loader instead of a
+    // false "not found"; only reject once loading has finished and the slug is
+    // genuinely absent.
+    if (loading) {
+      return (
+        <div className="section">
+          <GlassesLoader />
+        </div>
+      );
+    }
+    return <div className="section"><p>{t("notfound")} <Link to="/catalogo">{t("notfound.link")}</Link></p></div>;
+  }
+
+  const color = product.colors[active];
 
   // Vistas generadas (4 ángulos) de ESTE color, si existen para este SKU. Los
   // valores son claves R2 → se resuelven con resolveImage(). Si una vista no carga,
