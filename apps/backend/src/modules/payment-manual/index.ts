@@ -38,8 +38,20 @@ import type {
 } from "@medusajs/framework/types";
 import crypto from "node:crypto";
 
-class ManualPaymentProvider extends AbstractPaymentProvider {
+// Sin opciones: el proveedor no habla con ningún servicio externo.
+type ManualOptions = Record<string, unknown>;
+
+class ManualPaymentProvider extends AbstractPaymentProvider<ManualOptions> {
   static identifier = "manual";
+
+  // El constructor explícito NO es decorativo. Sin él, TypeScript infiere para la
+  // clase la firma de construcción de la base abstracta y `ModuleProvider` la
+  // rechaza ("typeof ManualPaymentProvider is not assignable to Constructor<any>").
+  // Ese error rompía `medusa build` en Coolify en cada push a main, y el
+  // contenedor viejo seguía sirviendo sin que nada lo avisara.
+  constructor(container: Record<string, unknown>, options: ManualOptions = {}) {
+    super(container, options);
+  }
 
   async initiatePayment(
     input: InitiatePaymentInput
