@@ -254,16 +254,28 @@ export async function startMeasurementJob({
     strategy: "A",
     lang,
     renderTryOn: render,
-    // Perfil deshabilitado: el motor local no puede generar vistas de perfil y el
-    // motor IA (Gemini) generaba un rostro genérico en vez de respetar la foto real.
+    // Perfil deshabilitado: no hay foto lateral del paciente, así que cualquier
+    // perfil sería una invención del modelo, no una prueba de nada.
     renderProfile: false,
-    // SIEMPRE local: composición determinista (Pillow) que PRESERVA la foto real del
-    // paciente y superpone la montura recortada. El motor "gemini" generaba una cara
-    // nueva con IA, destruyendo la identidad del rostro — exactamente lo contrario
-    // de lo que el cliente espera al tomarse una foto.
-    imageEngine: "local",
-    // Pupilas + escala medidas en el navegador: sin esto el compositor local
-    // no sabe DÓNDE ni A QUÉ TAMAÑO pegar la montura y devuelve tryOn.ok=false.
+    // Motor de IMAGEN: Gemini (edición multimodal de la foto real).
+    //
+    // HISTORIA, para que nadie repita el error: este valor estuvo un tiempo en
+    // "local" porque un comentario decía que Gemini "generaba una cara nueva".
+    // Se comprobó en producción (16-oct-2026) enviando una foto real por el
+    // pipeline completo: el modelo (gemini-3-pro-image-preview) devuelve a LA
+    // MISMA persona con la montura puesta de forma natural y a tamaño correcto;
+    // el prompt del servicio la trata como "verdad absoluta" y la edita, no la
+    // repinta. Las caras "genéricas" que se vieron venían de resultados viejos
+    // cacheados en el navegador (caché v1, ya invalidada), no del motor actual.
+    //
+    // El compositor local (Pillow) queda como RESPALDO AUTOMÁTICO en el backend
+    // si la IA falla (cuota, congestión, timeout): pega la montura sobre la foto
+    // real. Fiel al rostro, pero visiblemente peor — una foto de catálogo en
+    // ángulo pegada sobre una cara frontal nunca se ve natural.
+    imageEngine: "gemini",
+    // Pupilas + escala medidas en el navegador: es lo que necesita el respaldo
+    // local para saber DÓNDE y A QUÉ TAMAÑO pegar la montura. Se envía siempre,
+    // aunque el motor principal sea la IA, para que el respaldo esté disponible.
     context: context || undefined,
     extraInstructions: (withReferenceCard ? CARD_HINT : NOCARD_HINT) + specHint,
   };

@@ -567,6 +567,13 @@ def prepare_render_images(
         return None
 
 
+def _has_local_context(context: Optional[Dict[str, Any]]) -> bool:
+    """True si la captura trae lo que el compositor local necesita (ver render_local_overlay)."""
+    lm = (context or {}).get("landmarksNormalized") or {}
+    scale = (context or {}).get("scale") or {}
+    return bool(lm.get("rightPupil") and lm.get("leftPupil") and scale.get("millimetresPerNormalizedXUnit"))
+
+
 def run_try_on(
     engine: str,
     face_image: str,
@@ -629,11 +636,11 @@ def run_try_on(
             return render_local_overlay(
                 face[0], face[1], glasses_views[0][1], context or {}, frame_total_width_mm
             )
-        return render_ai_tryon(
+        result = render_ai_tryon(
             engine, face, glasses_views, model=model, api_key=api_key, view=view
         )
     except MissingApiKeyError as exc:
-        return {
+        result = {
             "ok": False,
             "method": engine,
             "view": view,
@@ -646,7 +653,7 @@ def run_try_on(
         # ProviderError is itself a RuntimeError; caught first so its status (quota,
         # congestion, timeout) turns into the same machine-readable codes run_measurement
         # produces, instead of falling into the generic branch below with none at all.
-        return {
+        result = {
             "ok": False,
             "method": engine,
             "view": view,
@@ -655,11 +662,42 @@ def run_try_on(
             "errorCode": _provider_error_code(exc),
         }
     except (ValueError, RuntimeError) as exc:
-        return {"ok": False, "method": engine, "provider": engine, "error": str(exc)}
+        result = {"ok": False, "method": engine, "provider": engine, "error": str(exc)}
     except Exception as exc:
-        return {
+        result = {
             "ok": False,
             "method": engine,
             "provider": engine,
             "error": f"Fallo inesperado generando la imagen: {exc}",
         }
+
+    # ── Respaldo automático ────────────────────────────────────────────────
+    # El motor de IA es el que da el resultado natural (edita la foto real del
+    # paciente y respeta su identidad — comprobado). Pero cuando falla (cuota,
+    # congestión, modelo retirado, timeout) el cliente se quedaba con la cara SIN
+    # gafas. Si la captura trae las pupilas y la escala medidas en el navegador,
+    # el compositor determinista pega la montura sobre la foto real: peor que la
+    # IA, infinitamente mejor que nada. Se deja constancia de que es un respaldo
+    # para que la ficha y el panel no lo confundan con un render de IA.
+    if (
+        not result.get("ok")
+        and view == "front"
+        and engine != "local"
+        and _has_local_context(context)
+    ):
+        try:
+            fb = render_local_overlay(
+                face[0], face[1], glasses_views[0][1], context or {}, frame_total_width_mm
+            )
+            fb["fallbackFrom"] = engine
+            fb["fallbackReason"] = result.get("error")
+            fb["note"] = (
+                "La IA no pudo generar la imagen; se muestra una composición local "
+                "sobre tu foto real (menos natural, pero fiel a tu rostro)."
+            )
+            print(f"[VISION] render IA ({engine}) falló; se usa la composición local. "
+                  f"Motivo: {str(result.get('error'))[:160]}")
+            return fb
+        except Exception as exc:
+            print(f"[VISION] el respaldo local también falló: {exc}")
+    return result

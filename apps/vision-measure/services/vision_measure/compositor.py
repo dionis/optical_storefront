@@ -359,6 +359,38 @@ def _cutout_frame(raw: bytes):
     return cut.crop(bbox) if bbox else cut
 
 
+def _front_span(frame) -> Tuple[int, int]:
+    """
+    Columnas (x0, x1) que ocupa el FRENTE del armazón dentro del recorte.
+
+    Las fotos de catálogo son tomas en ángulo: se ve el frente y, saliendo hacia
+    atrás por la parte ALTA de la imagen, las varillas. El recorte por silueta
+    abarca las dos cosas, así que escalar por su ancho total dejaba el frente a un
+    tercio de su tamaño real (medido: el frente es el 62-67 % del recorte en las
+    fotos del proveedor) y, encima, descentrado hacia la varilla.
+
+    Las lentes viven en la mitad INFERIOR de la foto y las varillas en la superior:
+    midiendo solo la banda de abajo, la extensión horizontal de la silueta es la
+    del frente (lente + puente + lente). Se trabaja sobre una miniatura para no
+    recorrer millones de píxeles (no hay numpy en producción).
+    """
+    from PIL import Image
+
+    alpha = frame.getchannel("A")
+    w, h = alpha.size
+    tw = min(w, 500)
+    th = max(1, round(h * tw / w))
+    small = alpha.resize((tw, th), Image.BILINEAR)
+    px = small.load()
+    y0 = int(th * 0.45)
+    thr = max(1, (th - y0) * 0.02)
+    cols = [x for x in range(tw) if sum(1 for y in range(y0, th) if px[x, y] > 40) >= thr]
+    if not cols:
+        return 0, w
+    scale = w / tw
+    return int(cols[0] * scale), int(min(w, (cols[-1] + 1) * scale))
+
+
 def _punch_lens_apertures(frame) -> int:
     """
     Makes the lens apertures see-through.
@@ -490,6 +522,13 @@ def render_local_overlay(
 
     target_px = float(total_mm) * px_per_mm
     frame = _cutout_frame(base64.b64decode(glasses_b64))
+    # Quedarse con el FRENTE antes de escalar y centrar: `total_mm` es el ancho
+    # del frente, y la silueta completa de una foto en ángulo incluye la varilla
+    # (ver _front_span). Un pequeño margen evita cortar el borde de una lente,
+    # que dejaría su hueco abierto y la función de abajo no podría vaciarlo.
+    fx0, fx1 = _front_span(frame)
+    margin = int((fx1 - fx0) * 0.02)
+    frame = frame.crop((max(0, fx0 - margin), 0, min(frame.width, fx1 + margin), frame.height))
     ratio = target_px / frame.width
     frame = frame.resize(
         (max(1, round(frame.width * ratio)), max(1, round(frame.height * ratio))),
