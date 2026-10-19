@@ -7,6 +7,7 @@ import { addToCartWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import { computeLensAddonCents, type LensSelection } from "../../../../../lib/lens-quote";
 import { resolveStoreSettings } from "../../../../../lib/store-settings";
+import { uploadTryonImage } from "../../../../../lib/tryon-image";
 
 /**
  * POST /store/carts/:id/configured-line
@@ -28,6 +29,12 @@ export async function POST(
     variant_id?: string;
     selection?: LensSelection;
     prescription_id?: string | null;
+    /**
+     * AI try-on render (`data:` URL) for a line WITHOUT a prescription — with one,
+     * the render travels on the prescription record instead. Stored in the private
+     * bucket; only its key goes into the line metadata.
+     */
+    tryon_image?: string | null;
   };
 
   if (!body.variant_id || !body.selection || typeof body.selection.design_code !== "string") {
@@ -98,6 +105,10 @@ export async function POST(
     }
   }
 
+  // Un pedido de solo montura no crea receta, y era ahí donde viajaba la imagen
+  // del probador: sin esto se perdía. Mejor esfuerzo — nunca bloquea el carrito.
+  const tryonImageKey = hasRx ? null : await uploadTryonImage(body.tryon_image);
+
   await addToCartWorkflow(req.scope).run({
     input: {
       cart_id,
@@ -118,6 +129,8 @@ export async function POST(
             tax_amount: taxAmount,
             tax_rate: taxRate,
             price_pretax: preTax,
+            // Clave privada del render del probador (solo sin receta); null si no hay.
+            tryon_image_key: tryonImageKey,
           },
         },
       ],

@@ -33,6 +33,10 @@ export const PrescriptionRecord = model.define("prescription", {
   patient_for: model.text().nullable(),
   /** Name of the other person when patient_for = "other" — optional */
   patient_name: model.text().nullable(),
+  /** "ai" when PD/fitting height came from the try-on AI measurement — null otherwise */
+  measurement_source: model.text().nullable(),
+  /** Quality level the AI reported for that measurement */
+  measurement_quality: model.text().nullable(),
   /** Customer ID (Medusa customer) — nullable for guest checkout */
   customer_id: model.text().nullable(),
 });

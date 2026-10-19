@@ -24,7 +24,9 @@ import {
   type PrescriptionForEmail,
 } from "../lib/email/order-confirmation";
 import { enrichLensItems, extractPaymentInfo, extractTracking } from "../lib/email/order-enrich";
+import { loadOrderImages, type OrderImages, type OrderImageSources } from "../lib/email/order-images";
 import { loadPrescriptionRecords } from "../lib/prescription-read";
+import { TRYON_KEY_PATTERN } from "../lib/tryon-image";
 import type { Knex } from "@mikro-orm/knex";
 import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sms";
 import { notificationHealth, undeliverableReason } from "../lib/notification-health";
@@ -101,6 +103,8 @@ export default async function orderPlacedSubscriber({
   // customer gets a copy of their own). PHI stays server-side otherwise; here it
   // only goes into the order emails the customer and owner already receive.
   const prescriptions: Record<string, PrescriptionForEmail> = {};
+  // Private object keys of the images to attach (try-on render, Rx photo).
+  const imageSources: OrderImageSources = { prescriptions: {}, items: {} };
   try {
     const rxService = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
     const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
@@ -131,14 +135,19 @@ export default async function orderPlacedSubscriber({
           source: (rx as { source?: string | null }).source ?? null,
           verified_by_user: rx.verified_by_user,
           created_at: rx.created_at ?? null,
-          // Only whether a photo exists — the R2 key itself is never emailed:
-          // that bucket is private and reachable through presigned URLs only.
+          // The R2 keys themselves are never emailed (private bucket); the bytes
+          // are attached below instead, so no presigned link leaves the backend.
           has_file: Boolean(rx.file_url),
-          // Idem para el render del probador: solo la señal (la imagen se ve en el
-          // panel, autenticado). El enlace firmado no viaja por correo.
-          has_tryon: Boolean((rx as { tryon_image_url?: string | null }).tryon_image_url),
+          has_tryon: Boolean(rx.tryon_image_url),
+          patient_for: rx.patient_for ?? null,
+          patient_name: rx.patient_name ?? null,
+          measurement_source: rx.measurement_source ?? null,
+          measurement_quality: rx.measurement_quality ?? null,
           id: pid,
         };
+        // Solo el render del probador. La foto/PDF original de la receta NO se
+        // adjunta: se copian únicamente los valores leídos de ella (arriba).
+        imageSources.prescriptions[pid] = rx.tryon_image_url;
       } catch (error) {
         logger.warn(`[order-placed] could not load prescription ${pid} for order ${order.id}: ${(error as Error).message}`);
       }
@@ -152,6 +161,27 @@ export default async function orderPlacedSubscriber({
       `[order-placed] prescription values could NOT be loaded for order ${order.id} — the emails are going out without the Rx: ${(error as Error).message}`
     );
   }
+
+  // Lines without a prescription (frame only) carry their own try-on render key.
+  for (const [index, it] of (order.items ?? []).entries()) {
+    const key = it.metadata?.["tryon_image_key"];
+    if (!it.metadata?.["prescription_id"] && typeof key === "string" && TRYON_KEY_PATTERN.test(key)) {
+      imageSources.items[index] = key;
+    }
+  }
+
+  // Read the images once; the same attachments go to the customer and to every
+  // administrator. Best-effort: a missing image never holds the emails back.
+  let images: OrderImages = { attachments: [], prescriptions: {}, items: {} };
+  try {
+    images = await loadOrderImages(String(order.display_id ?? order.id), imageSources);
+    for (const [pid, ref] of Object.entries(images.prescriptions)) {
+      if (prescriptions[pid]) prescriptions[pid].tryon_image = ref;
+    }
+  } catch (error) {
+    logger.warn(`[order-placed] order ${order.id} images could not be attached: ${(error as Error).message}`);
+  }
+  const attachments = images.attachments.length ? images.attachments : undefined;
 
   // Extra email data (rich lens breakdown with names+prices, delivery method,
   // payment method for the admin, tracking). All best-effort — any failure leaves
@@ -195,10 +225,13 @@ export default async function orderPlacedSubscriber({
         ? itemsCustomer
         : await enrichLensItems(pg, orderItems, storeLocale);
 
-    customerExtras = { items: itemsCustomer, shippingMethod, tracking };
-    adminExtras = { items: itemsAdmin, shippingMethod, tracking, payment };
+    customerExtras = { items: itemsCustomer, shippingMethod, tracking, itemImages: images.items };
+    adminExtras = { items: itemsAdmin, shippingMethod, tracking, payment, itemImages: images.items };
   } catch (error) {
     logger.warn(`[order-placed] could not build email extras for order ${order.id}: ${(error as Error).message}`);
+    // The images do not depend on the enrichment that failed — keep them.
+    customerExtras = { itemImages: images.items };
+    adminExtras = { itemImages: images.items };
   }
 
   // The storefront records the shopper's email opt-in on the cart, which the
@@ -237,6 +270,7 @@ export default async function orderPlacedSubscriber({
         resource_id: order.id,
         resource_type: "order",
         content: customerEmail,
+        attachments,
         data: { order_id: order.id, display_id: order.display_id },
       });
     } catch (error) {
@@ -292,6 +326,7 @@ export default async function orderPlacedSubscriber({
             resource_id: order.id,
             resource_type: "order",
             content: adminEmail,
+            attachments,
             data: { order_id: order.id, display_id: order.display_id },
           });
         } catch (error) {

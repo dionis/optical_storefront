@@ -89,6 +89,18 @@ interface EmailCopy {
   rx_photo_on_file: string;
   rx_tryon: string;
   rx_tryon_included: string;
+  rx_tryon_attached: string;
+  rx_patient: string;
+  rx_patient_me: string;
+  rx_patient_other: string;
+  rx_measurements: string;
+  rx_measurements_ai: string;
+  rx_measurements_quality: string;
+  quality_high: string;
+  quality_medium: string;
+  quality_low: string;
+  order_tryon: string;
+  images_attached_note: string;
   rx_record_id: string;
   rx_missing_customer: string;
   rx_missing_store: string;
@@ -244,6 +256,18 @@ const es: EmailCopy = {
   rx_photo_on_file: "Guardada con el pedido",
   rx_tryon: "Prueba virtual",
   rx_tryon_included: "Incluida — verla en el panel del pedido",
+  rx_tryon_attached: "Imagen adjunta a este correo",
+  rx_patient: "Para",
+  rx_patient_me: "El comprador",
+  rx_patient_other: "Otra persona",
+  rx_measurements: "Medidas de encaje (DIP / altura)",
+  rx_measurements_ai: "Calculadas con IA en el probador virtual",
+  rx_measurements_quality: "confianza",
+  quality_high: "alta",
+  quality_medium: "media",
+  quality_low: "baja",
+  order_tryon: "Prueba virtual (cómo se ven los espejuelos)",
+  images_attached_note: "La imagen de la prueba virtual (cómo se ven los espejuelos) va adjunta a este correo.",
   rx_record_id: "Nº de registro",
   rx_missing_customer:
     "No pudimos incluir los valores de tu receta en este correo. Están guardados con el pedido: puedes verlos en el seguimiento o responder a este mensaje y te los enviamos.",
@@ -416,6 +440,18 @@ const en: EmailCopy = {
   rx_photo_on_file: "Stored with the order",
   rx_tryon: "Virtual try-on",
   rx_tryon_included: "Included — view it in the order panel",
+  rx_tryon_attached: "Image attached to this email",
+  rx_patient: "For",
+  rx_patient_me: "The buyer",
+  rx_patient_other: "Someone else",
+  rx_measurements: "Fitting measurements (PD / height)",
+  rx_measurements_ai: "Calculated by AI in the virtual try-on",
+  rx_measurements_quality: "confidence",
+  quality_high: "high",
+  quality_medium: "medium",
+  quality_low: "low",
+  order_tryon: "Virtual try-on (how the glasses look)",
+  images_attached_note: "The virtual try-on image (how the glasses look) is attached to this email.",
   rx_record_id: "Record no.",
   rx_missing_customer:
     "We couldn't include your prescription values in this email. They are stored with your order: check the tracking page, or reply to this message and we'll send them over.",

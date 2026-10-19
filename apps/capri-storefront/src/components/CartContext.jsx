@@ -67,10 +67,10 @@ export function CartProvider({ children }) {
 
   // Add a frame configured with lenses — priced entirely server-side. `selection`
   // carries the lens codes; `prescriptionId` is the PHI reference (never the values).
-  const addConfiguredFrame = useCallback(async (variantId, selection, prescriptionId = null) => {
+  const addConfiguredFrame = useCallback(async (variantId, selection, prescriptionId = null, tryonImage = null) => {
     if (!variantId) throw new Error("no-variant");
     setBusy(true);
-    try { const c = await mcart.addConfiguredFrame(variantId, selection, prescriptionId); setCart(c); try { trackAddToCart(); } catch {} return c; }
+    try { const c = await mcart.addConfiguredFrame(variantId, selection, prescriptionId, tryonImage); setCart(c); try { trackAddToCart(); } catch {} return c; }
     finally { setBusy(false); }
   }, []);
 

@@ -201,13 +201,25 @@ export async function ocrPrescription(file) {
 }
 
 /** Add a frame configured with lenses — priced entirely server-side. */
-export async function addConfiguredFrame(variantId, selection, prescriptionId = null) {
+export async function addConfiguredFrame(variantId, selection, prescriptionId = null, tryonImage = null) {
   const cart = await ensureCart();
-  const res = await medusa.client.fetch(`/store/carts/${cart.id}/configured-line`, {
-    method: "POST",
-    body: { variant_id: variantId, selection, prescription_id: prescriptionId },
-  });
-  return res.cart;
+  const base = { variant_id: variantId, selection, prescription_id: prescriptionId };
+  const post = (body) => medusa.client.fetch(`/store/carts/${cart.id}/configured-line`, { method: "POST", body });
+  // Sin receta, la imagen del probador viaja con la línea (con receta ya va en
+  // ella). Opcional: si el cuerpo con la imagen resulta demasiado grande (413), se
+  // reintenta sin ella. Solo en ese caso — otro error pudo haber añadido ya la
+  // línea, y reintentar la duplicaría en el carrito.
+  let image = null;
+  if (tryonImage && !prescriptionId) {
+    try { image = await downscaleDataUrl(tryonImage); } catch { image = tryonImage; }
+  }
+  if (!image) return (await post(base)).cart;
+  try {
+    return (await post({ ...base, tryon_image: image })).cart;
+  } catch (e) {
+    if (e?.status !== 413) throw e;
+    return (await post(base)).cart;
+  }
 }
 
 /**

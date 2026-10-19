@@ -296,3 +296,61 @@ describe("order confirmation emails", () => {
     expect(mail.html).not.toContain("Ficha técnica");
   });
 });
+
+describe("order images and AI measurements in the emails", () => {
+  const tryon = { cid: "prueba-virtual-1@rubilens", filename: "prueba-virtual-42-1.jpeg", isImage: true };
+  const withImages: Record<string, PrescriptionForEmail> = {
+    rx_01: {
+      ...prescriptions.rx_01,
+      has_tryon: true,
+      tryon_image: tryon,
+      patient_for: "other",
+      patient_name: "Luis",
+      measurement_source: "ai",
+      measurement_quality: "high",
+    },
+  };
+
+  for (const locale of ["es", "en"] as const) {
+    const customer = renderCustomerOrderConfirmation(order, locale, withImages, extras);
+    const admin = renderAdminOrderNotification(order, locale, withImages, extras);
+
+    it(`shows the try-on render inline in both copies (${locale})`, () => {
+      for (const mail of [customer, admin]) {
+        expect(mail.html).toContain(`src="cid:${tryon.cid}"`);
+        // Only the values read from the prescription travel — never the original.
+        expect(mail.html).not.toContain("cid:receta");
+        // Text-only clients still learn the images are attached.
+        expect(mail.text).toContain(locale === "es" ? "adjunta" : "attached");
+      }
+    });
+
+    it(`labels AI measurements and who the glasses are for (${locale})`, () => {
+      const ai = locale === "es" ? "Calculadas con IA" : "Calculated by AI";
+      const quality = locale === "es" ? "confianza: alta" : "confidence: high";
+      for (const mail of [customer, admin]) {
+        for (const part of [mail.html, mail.text]) {
+          expect(part).toContain(ai);
+          expect(part).toContain(quality);
+          expect(part).toContain("Luis");
+        }
+      }
+    });
+  }
+
+  it("shows the try-on of a frame-only line, which has no prescription", () => {
+    const frameOnly: OrderEmailData = {
+      ...order,
+      items: [{ ...order.items![0], metadata: { lens_config: { design_code: "frame-only" } } }],
+    };
+    const mail = renderCustomerOrderConfirmation(frameOnly, "es", {}, { ...extras, itemImages: { 0: tryon } });
+    expect(mail.html).toContain(`src="cid:${tryon.cid}"`);
+    expect(mail.text).toContain("Prueba virtual");
+  });
+
+  it("does not mention images when none were attached", () => {
+    const mail = renderCustomerOrderConfirmation(order, "es", prescriptions, extras);
+    expect(mail.html).not.toContain("cid:");
+    expect(mail.text).not.toContain("va adjunta");
+  });
+});

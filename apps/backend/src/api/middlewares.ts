@@ -248,6 +248,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "8mb" },
     },
     {
+      // A frame-only line (no prescription) carries the try-on render itself, as
+      // the same base64 `data:` URL the prescription write accepts.
+      matcher: "/store/carts/:id/configured-line",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "8mb" },
+    },
+    {
       matcher: "/store/prescriptions/ocr",
       method: ["POST"],
       // Rate limit runs before multer so a flood is rejected without buffering

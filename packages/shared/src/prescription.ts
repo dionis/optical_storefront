@@ -52,6 +52,15 @@ export interface Prescription {
   patient_for?: "me" | "other" | null;
   /** Name of the other person when `patient_for === "other"` — optional, free text. */
   patient_name?: string | null;
+  /**
+   * "ai" when the fitting measurements (PD and/or fitting height) were calculated
+   * by the try-on studio's AI and kept unchanged by the shopper; null when typed
+   * or read from the prescription. `source` describes the Rx values, this one
+   * only the measurements the lab mounts the lenses to.
+   */
+  measurement_source?: "ai" | null;
+  /** Quality level the AI reported for that measurement ("high", "medium", …). */
+  measurement_quality?: string | null;
   created_at?: string;
   updated_at?: string;
 }

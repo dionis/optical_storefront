@@ -462,7 +462,8 @@ export default function LensProcess() {
   // Probador abierto desde el espejuelo de esta página.
   const [tryOnOpen, setTryOnOpen] = useState(false);
   // Imagen generada por el probador (rostro con los espejuelos), para adjuntarla a la
-  // receta/orden al finalizar la compra (se sube a R2 en el backend, sin correo).
+  // receta/orden al finalizar la compra (se sube a R2 en el backend y va adjunta en
+  // los correos del pedido).
   const [tryOnImage, setTryOnImage] = useState(null);
   // La foto AUTOGENERADA guardada por producto (probador) se carga también al
   // entrar directo a /recetas: la ficha la muestra al 50% junto a la montura.
@@ -475,6 +476,9 @@ export default function LensProcess() {
   // con la receta al comprar.
   const [patientFor, setPatientFor] = useState(null);
   const [patientName, setPatientName] = useState("");
+  // Medidas de encaje que puso la IA del probador ({ values, quality }). Al comprar,
+  // si siguen intactas, la receta las marca como "calculadas con IA".
+  const [aiMeasure, setAiMeasure] = useState(null);
 
   // "Añadir receta" desde el probador: pre-rellena las medidas de encaje (DIP + altura
   // de montaje) en la receta, para que queden GUARDADAS al continuar la compra. El
@@ -485,13 +489,22 @@ export default function LensProcess() {
     if (!m) return;
     const oneDp = (v) => (v == null || v === "" ? "" : String(Math.round(Number(v) * 10) / 10));
     const hasDual = m.pdRight != null && m.pdLeft != null;
+    const aiValues = {
+      pd: hasDual ? "" : oneDp(m.pd),
+      pd_od: hasDual ? oneDp(m.pdRight) : "",
+      pd_os: hasDual ? oneDp(m.pdLeft) : "",
+      seg_height: oneDp(m.segHeight ?? m.corridor),
+    };
     setRx((r) => ({
       ...r,
-      pd: hasDual ? r.pd : (oneDp(m.pd) || r.pd),
-      pd_od: hasDual ? (oneDp(m.pdRight) || r.pd_od) : r.pd_od,
-      pd_os: hasDual ? (oneDp(m.pdLeft) || r.pd_os) : r.pd_os,
-      seg_height: oneDp(m.segHeight ?? m.corridor) || r.seg_height,
+      pd: aiValues.pd || r.pd,
+      pd_od: aiValues.pd_od || r.pd_od,
+      pd_os: aiValues.pd_os || r.pd_os,
+      seg_height: aiValues.seg_height || r.seg_height,
     }));
+    if (Object.values(aiValues).some(Boolean)) {
+      setAiMeasure({ values: aiValues, quality: m.quality || null });
+    }
     if (hasDual) setPdMode("dual");
     // La imagen generada se adjunta a la orden. Cuando venimos de la FICHA (PDP) NO
     // viaja en el state de navegación (podía ser varios MB a tamaño completo y hacía
@@ -904,6 +917,10 @@ export default function LensProcess() {
         // Only claim the OCR provenance once the user actually confirmed the
         // reading — the backend rejects an unconfirmed OCR prescription.
         const fromOcr = ocr.status === "done" && ocr.confirmed;
+        // Medidas de la IA: solo si el cliente no las cambió después. Una medida que
+        // el cliente corrigió a mano ya no es de la IA.
+        const aiKept = Boolean(aiMeasure) && Object.entries(aiMeasure.values)
+          .every(([k, v]) => !v || String(rx[k] ?? "") === v);
         const rxPayload = {
           od: { sph: num(rx.od_sph) ?? 0, cyl: num(rx.od_cyl) ?? 0, axis: rx.od_axis ? parseInt(rx.od_axis, 10) : null, add: addv, prism: null, base: null },
           os: { sph: num(rx.os_sph) ?? 0, cyl: num(rx.os_cyl) ?? 0, axis: rx.os_axis ? parseInt(rx.os_axis, 10) : null, add: addv, prism: null, base: null },
@@ -925,10 +942,12 @@ export default function LensProcess() {
           // ¿Para quién son? (del probador): se guarda con la receta.
           patient_for: patientFor,
           patient_name: patientFor === "other" ? (patientName || null) : null,
+          measurement_source: aiKept ? "ai" : null,
+          measurement_quality: aiKept ? aiMeasure.quality : null,
         };
         prescriptionId = await createPrescription(rxPayload, {
           // Imagen del probador (rostro con espejuelos), si el cliente la generó:
-          // el backend la sube a R2 y la guarda ligada a la orden (sin correo).
+          // el backend la sube a R2, la liga a la orden y la adjunta en los correos.
           tryon_image: tryOnImage,
         });
       }
@@ -936,7 +955,7 @@ export default function LensProcess() {
       await addConfiguredFrame(color.variantId, {
         design_code: frameOnly ? "frame-only" : designId,
         material_code: matId, photo_code: photoId, ar_code: arId,
-      }, prescriptionId);
+      }, prescriptionId, prescriptionId ? null : tryOnImage);
       // "Finalizar compra" goes straight to patient details / delivery / payment.
       navigate("/checkout");
     } catch (e) {

@@ -1,46 +1,10 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
-import { randomUUID } from "crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
-import { createStorageClient, prescriptionBucket, storageConfigured } from "../../../lib/s3";
+import { uploadTryonImage } from "../../../lib/tryon-image";
 import type { Prescription } from "@eyewear/shared";
-
-/**
- * Uploads the AI try-on render (a `data:` URL from the virtual try-on studio) to
- * the private prescription bucket and returns its R2 key, or null when there is
- * nothing to store or storage is not configured. Best-effort: a storage hiccup
- * must never fail the prescription write — the numbers are what the lab needs.
- */
-async function uploadTryonImage(dataUrl: unknown): Promise<string | null> {
-  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:") || !storageConfigured()) {
-    return null;
-  }
-  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/.exec(dataUrl);
-  if (!match) return null;
-  const mediaType = match[1];
-  const buffer = Buffer.from(match[2], "base64");
-  // Guard against an oversized payload slipping past the body limit.
-  if (!buffer.length || buffer.length > 8 * 1024 * 1024) return null;
-  const ext = mediaType.split("/")[1] || "jpg";
-  const objectKey = `tryon/${randomUUID()}.${ext}`;
-  try {
-    await createStorageClient().send(
-      new PutObjectCommand({
-        Bucket: prescriptionBucket(),
-        Key: objectKey,
-        Body: buffer,
-        ContentType: mediaType,
-        // No ACL — private bucket, read back only via presigned URLs.
-      })
-    );
-    return objectKey;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * POST /store/prescriptions
@@ -61,7 +25,7 @@ export async function POST(
     prescription?: Prescription;
     usage_type?: string;
     eye_size?: number;
-    /** AI try-on render as a base64 `data:` URL (saved with the order, not emailed). */
+    /** AI try-on render as a base64 `data:` URL (saved with the order and attached to its emails). */
     tryon_image?: string;
   };
 
@@ -145,6 +109,12 @@ export async function POST(
       patient_name:
         rx.patient_for === "other" && typeof rx.patient_name === "string"
           ? rx.patient_name.trim().slice(0, 120) || null
+          : null,
+      // Medidas de encaje calculadas por la IA del probador (y no editadas).
+      measurement_source: rx.measurement_source === "ai" ? "ai" : null,
+      measurement_quality:
+        rx.measurement_source === "ai" && typeof rx.measurement_quality === "string"
+          ? rx.measurement_quality.trim().slice(0, 40) || null
           : null,
       customer_id: null,
     })

@@ -1253,6 +1253,8 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       frontImage: mData?.frontImage || frontImg || null,
       profileImage: mData?.profileImage || sideImg || null,
       measuredBy: mData?.measuredBy || "device",
+      // Nivel de confianza de la medición: viaja con la receta y en los correos.
+      quality: mData?.quality?.level ?? null,
       savedAt: Date.now(),
     };
     // Persistimos también la última "receta de medidas" por producto, por si el

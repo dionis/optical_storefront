@@ -84,6 +84,8 @@ export default class PrescriptionModuleService extends MedusaService({
       tryon_image_url: (record["tryon_image_url"] as string | null) ?? null,
       patient_for: (record["patient_for"] as "me" | "other" | null) ?? null,
       patient_name: (record["patient_name"] as string | null) ?? null,
+      measurement_source: record["measurement_source"] === "ai" ? "ai" : null,
+      measurement_quality: (record["measurement_quality"] as string | null) ?? null,
       created_at: record["created_at"] as string | undefined,
       updated_at: record["updated_at"] as string | undefined,
     };

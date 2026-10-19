@@ -146,6 +146,9 @@ export class ResendNotificationService extends AbstractNotificationProviderServi
         filename: attachment.filename,
         content: attachment.content,
         content_type: attachment.content_type,
+        // Medusa's attachment `id` is the content id: the HTML shows the image
+        // inline with `<img src="cid:<id>">` instead of only listing the file.
+        ...(attachment.id ? { content_id: attachment.id } : {}),
       }));
     }
 

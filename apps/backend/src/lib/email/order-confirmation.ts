@@ -12,6 +12,7 @@
 
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
+import type { ImageRef } from "./order-images";
 import { storefrontOrigin } from "../order-access";
 
 /** Extra data the emails render but that isn't on OrderEmailData (built by the subscriber). */
@@ -20,6 +21,41 @@ export interface OrderEmailExtras {
   shippingMethod?: { name: string; amount: number } | null;
   payment?: PaymentInfo | null; // admin copy only
   tracking?: TrackingInfo[];
+  /**
+   * Try-on renders of lines WITHOUT a prescription, by line position (the ones
+   * with a prescription ride on PrescriptionForEmail). Attached to the message.
+   */
+  itemImages?: Record<number, ImageRef>;
+}
+
+/**
+ * Note that the order images are attached. Webmail clients that block inline
+ * images still list the attachments; this tells the reader where to look.
+ */
+function attachedImagesNote(
+  prescriptions: Record<string, PrescriptionForEmail> | undefined,
+  extras: OrderEmailExtras | undefined,
+  locale: EmailLocale
+): string | null {
+  const any =
+    Object.values(prescriptions ?? {}).some((rx) => rx.tryon_image) ||
+    Object.keys(extras?.itemImages ?? {}).length > 0;
+  return any ? t(locale, "images_attached_note") : null;
+}
+
+function renderAttachedImagesNote(note: string | null): string {
+  if (!note) return "";
+  return `<div style="margin-top:16px;padding:10px 12px;background:#eff6ff;border-radius:8px;font-size:13px;color:#1e3a8a">${esc(note)}</div>`;
+}
+
+/** Inline image (attached with a `cid`), sized for an email column. */
+function inlineImage(ref: ImageRef | undefined, caption: string): string {
+  if (!ref?.cid) return "";
+  return `
+    <div style="margin-top:12px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(caption)}</div>
+      <img src="cid:${esc(ref.cid)}" alt="${esc(caption)}" width="280" style="display:block;max-width:100%;height:auto;border-radius:8px;border:1px solid ${BORDER}" />
+    </div>`;
 }
 
 export interface OrderEmailLineItem {
@@ -189,10 +225,14 @@ function totalRows(order: OrderEmailData, locale: EmailLocale): TotalRow[] {
   return rows;
 }
 
-function renderItemsTable(order: OrderEmailData, locale: EmailLocale): string {
+function renderItemsTable(
+  order: OrderEmailData,
+  locale: EmailLocale,
+  itemImages?: Record<number, ImageRef>
+): string {
   const currency = order.currency_code;
   const rows = (order.items ?? [])
-    .map((item) => {
+    .map((item, index) => {
       const extras = lensLines(item, locale);
       const extrasHtml = extras.length
         ? `<div style="margin-top:6px;font-size:12px;color:${MUTED};line-height:1.5">` +
@@ -205,6 +245,7 @@ function renderItemsTable(order: OrderEmailData, locale: EmailLocale): string {
         <td style="padding:12px 0;border-bottom:1px solid ${BORDER};vertical-align:top">
           <div style="font-weight:600;color:#111827">${esc(itemLabel(item))}</div>
           ${extrasHtml}
+          ${inlineImage(itemImages?.[index], t(locale, "order_tryon"))}
         </td>
         <td style="padding:12px 0;border-bottom:1px solid ${BORDER};text-align:center;vertical-align:top;color:${MUTED}">
           ${esc(item.quantity ?? 1)}
@@ -301,8 +342,10 @@ function textLines(
   lines.push(`${t(locale, "items")}:`);
   // The text/plain part must carry the same detail as the HTML one: plenty of
   // clients (and forwarding to a lab) show only this half of the message.
+  const tryonLine = (index: number) =>
+    extras?.itemImages?.[index] ? [`    ${t(locale, "order_tryon")}: ${t(locale, "rx_tryon_attached")}`] : [];
   if (extras?.items?.length) {
-    for (const it of extras.items) {
+    for (const [index, it] of extras.items.entries()) {
       // Same rows, same order and same prices as the HTML block above: the frame
       // priced on its own line, then each lens component. Printing the LINE total
       // next to the frame name read as "the frame costs 276".
@@ -324,15 +367,17 @@ function textLines(
         lines.push(`    ${t(locale, "frame_specs")}:`);
         for (const [k, v] of frameSpecRows(it.specs, locale)) lines.push(`      ${k}: ${v}`);
       }
+      lines.push(...tryonLine(index));
     }
   } else {
-    for (const item of order.items ?? []) {
+    for (const [index, item] of (order.items ?? []).entries()) {
       lines.push(
         `- ${itemLabel(item)} x${item.quantity ?? 1} — ${formatMoney(item.total ?? item.unit_price, currency, locale)}`
       );
       for (const extra of lensLines(item, locale)) {
         lines.push(`    ${extra}`);
       }
+      lines.push(...tryonLine(index));
     }
   }
   lines.push("");
@@ -372,6 +417,17 @@ export interface PrescriptionForEmail {
   has_file?: boolean;
   /** An AI try-on render (face with the frame) is on file — same private bucket. */
   has_tryon?: boolean;
+  /**
+   * The try-on render, when it was read and attached to this message. The
+   * original prescription photo/PDF is never attached — only its read values.
+   */
+  tryon_image?: ImageRef;
+  /** Who the glasses are for, chosen in the try-on studio. */
+  patient_for?: "me" | "other" | null;
+  patient_name?: string | null;
+  /** "ai" when PD / fitting height came from the try-on AI measurement. */
+  measurement_source?: "ai" | null;
+  measurement_quality?: string | null;
   /** Record id. Printed in the STORE copy only, so the owner can open it. */
   id?: string | null;
 }
@@ -405,19 +461,49 @@ function rxMetaRows(
   if (rx.created_at) {
     rows.push([t(locale, "rx_captured_on"), formatDateTime(rx.created_at, locale)]);
   }
+  if (rx.patient_for === "me" || rx.patient_for === "other") {
+    rows.push([
+      t(locale, "rx_patient"),
+      rx.patient_for === "me"
+        ? t(locale, "rx_patient_me")
+        : rx.patient_name
+          ? `${t(locale, "rx_patient_other")}: ${rx.patient_name}`
+          : t(locale, "rx_patient_other"),
+    ]);
+  }
+  if (rx.measurement_source === "ai") {
+    const quality = qualityLabel(rx.measurement_quality, locale);
+    rows.push([
+      t(locale, "rx_measurements"),
+      quality
+        ? `${t(locale, "rx_measurements_ai")} (${t(locale, "rx_measurements_quality")}: ${quality})`
+        : t(locale, "rx_measurements_ai"),
+    ]);
+  }
   if (rx.has_file) {
     rows.push([t(locale, "rx_photo"), t(locale, "rx_photo_on_file")]);
   }
-  // Prueba virtual: SOLO en la copia de la tienda (como el id). No adjuntamos ni
-  // enlazamos la imagen — el enlace firmado es un token portador que no debe viajar
-  // por correo (ver lib/s3.ts). El dueño la ve autenticado en el panel por el id.
-  if (withRecordId && rx.has_tryon) {
+  // Prueba virtual: la imagen va ADJUNTA (bytes, nunca un enlace firmado — es un
+  // token portador, ver lib/s3.ts). Si no se pudo leer, la tienda al menos sabe
+  // que existe y la abre en el panel.
+  if (rx.tryon_image) {
+    rows.push([t(locale, "rx_tryon"), t(locale, "rx_tryon_attached")]);
+  } else if (withRecordId && rx.has_tryon) {
     rows.push([t(locale, "rx_tryon"), t(locale, "rx_tryon_included")]);
   }
   if (withRecordId && rx.id) {
     rows.push([t(locale, "rx_record_id"), rx.id]);
   }
   return rows;
+}
+
+/** AI confidence level, localized; an unknown level is shown as-is. */
+function qualityLabel(level: string | null | undefined, locale: EmailLocale): string | null {
+  if (!level) return null;
+  if (level === "high") return t(locale, "quality_high");
+  if (level === "medium") return t(locale, "quality_medium");
+  if (level === "low") return t(locale, "quality_low");
+  return level;
 }
 
 /** OD/OS table + measurements for a single prescription. */
@@ -492,6 +578,7 @@ function rxTable(
     <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px;font-size:12.5px">
       <tbody>${metaRows}</tbody>
     </table>
+    ${inlineImage(rx.tryon_image, t(locale, "order_tryon"))}
   </div>`;
 }
 
@@ -677,7 +764,8 @@ function renderFrameSpecs(specs: FrameSpecs | null, locale: EmailLocale): string
 function renderEnrichedItems(
   items: EnrichedItem[],
   currency: string | null | undefined,
-  locale: EmailLocale
+  locale: EmailLocale,
+  itemImages?: Record<number, ImageRef>
 ): string {
   const row = (label: string, value: string, plus = false) => `
       <tr>
@@ -685,7 +773,7 @@ function renderEnrichedItems(
         <td style="padding:6px 0;border-bottom:1px solid ${BORDER};text-align:right;white-space:nowrap;font-weight:600">${esc((plus ? "+ " : "") + value)}</td>
       </tr>`;
   return items
-    .map((it) => {
+    .map((it, index) => {
       const rows: string[] = [];
       rows.push(
         row(
@@ -711,7 +799,8 @@ function renderEnrichedItems(
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
       <tbody>${rows.join("")}</tbody>
     </table>
-    ${renderFrameSpecs(it.specs, locale)}`;
+    ${renderFrameSpecs(it.specs, locale)}
+    ${inlineImage(itemImages?.[index], t(locale, "order_tryon"))}`;
     })
     .join("");
 }
@@ -810,6 +899,7 @@ export function renderCustomerOrderConfirmation(
   const rxList = Object.values(prescriptions ?? {});
   const hasRx = rxList.length > 0;
   const hasFittingHeight = rxList.some((rx) => rx.seg_height != null);
+  const imagesNote = attachedImagesNote(prescriptions, extras, locale);
 
   const inner = `
     <p style="margin:0 0 12px;font-size:16px;font-weight:600">${esc(greeting)}</p>
@@ -819,8 +909,9 @@ export function renderCustomerOrderConfirmation(
       ${esc(t(locale, "order_number"))} <strong style="color:#111827">#${esc(displayId)}</strong>
       &nbsp;·&nbsp; ${esc(t(locale, "purchase_datetime"))}: ${esc(formatDateTime(order.created_at, locale))}
     </div>
-    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
+    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
     ${renderPrescriptions(order, prescriptions, locale)}
+    ${renderAttachedImagesNote(imagesNote)}
     ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
@@ -839,6 +930,7 @@ export function renderCustomerOrderConfirmation(
     "",
     ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale),
+    ...(imagesNote ? ["", imagesNote] : []),
     ...(hasRx
       ? [
           "",
@@ -884,6 +976,7 @@ export function renderAdminOrderNotification(
   const hasPrescription = (order.items ?? []).some(
     (item) => item.metadata?.["prescription_id"]
   );
+  const imagesNote = attachedImagesNote(prescriptions, extras, locale);
 
   const inner = `
     <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "admin_order_intro"))}</p>
@@ -907,10 +1000,11 @@ export function renderAdminOrderNotification(
     </table>
     ${renderPaymentAdmin(extras?.payment, locale)}
     ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
-    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale) : renderItemsTable(order, locale)}
+    ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
     ${/* Store copy carries the record id: it is how the owner opens the Rx — and
           the uploaded photo — in the admin. */ ""}
     ${renderPrescriptions(order, prescriptions, locale, true)}
+    ${renderAttachedImagesNote(imagesNote)}
     ${renderTotals(order, locale)}
     ${renderAddress(order, locale)}
     ${renderDeliveryTracking(extras, locale)}`;
@@ -927,6 +1021,7 @@ export function renderAdminOrderNotification(
     "",
     ...textLines(order, locale, extras),
     ...rxTextLines(order, prescriptions, locale, true),
+    ...(imagesNote ? ["", imagesNote] : []),
   ].join("\n");
 
   const subject = t(locale, "admin_order_subject", { display_id: displayId, total });
