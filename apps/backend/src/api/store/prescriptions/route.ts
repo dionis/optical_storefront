@@ -1,5 +1,6 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Logger } from "@medusajs/framework/types";
 import type { Knex } from "@mikro-orm/knex";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
@@ -89,8 +90,7 @@ export async function POST(
   const tryonImageKey = await uploadTryonImage(body.tryon_image);
 
   const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
-  const [row] = await pg("prescription")
-    .insert({
+  const record = {
       od_sph: num(rx.od.sph), od_cyl: num(rx.od.cyl), od_axis: num(rx.od.axis),
       od_add: num(rx.od.add), od_prism: num(rx.od.prism), od_base: rx.od.base ?? null,
       os_sph: num(rx.os.sph), os_cyl: num(rx.os.cyl), os_axis: num(rx.os.axis),
@@ -110,15 +110,31 @@ export async function POST(
         rx.patient_for === "other" && typeof rx.patient_name === "string"
           ? rx.patient_name.trim().slice(0, 120) || null
           : null,
-      // Medidas de encaje calculadas por la IA del probador (y no editadas).
-      measurement_source: rx.measurement_source === "ai" ? "ai" : null,
-      measurement_quality:
-        rx.measurement_source === "ai" && typeof rx.measurement_quality === "string"
-          ? rx.measurement_quality.trim().slice(0, 40) || null
-          : null,
       customer_id: null,
-    })
-    .returning("id");
+  };
+  // Medidas de encaje calculadas por la IA del probador (y no editadas).
+  const measurement = {
+    measurement_source: rx.measurement_source === "ai" ? "ai" : null,
+    measurement_quality:
+      rx.measurement_source === "ai" && typeof rx.measurement_quality === "string"
+        ? rx.measurement_quality.trim().slice(0, 40) || null
+        : null,
+  };
 
-  res.json({ prescription_id: (row as { id: string }).id, validation });
+  let row: { id: string };
+  try {
+    [row] = await pg("prescription").insert({ ...record, ...measurement }).returning("id");
+  } catch (error) {
+    // El despliegue arranca aunque `db:migrate` falle (docker-entrypoint.sh). Sin
+    // la migración AddMeasurementSourceToPrescription5 esas columnas no existen,
+    // y una receta que no se guarda es una compra que no se puede terminar: se
+    // reintenta sin ellas y solo se pierde la marca "medido con IA".
+    if (!/measurement_(source|quality)/.test((error as Error).message)) throw error;
+    req.scope
+      .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
+      .error("[prescriptions] measurement_* columns missing — run `medusa db:migrate`. Saved without them.");
+    [row] = await pg("prescription").insert(record).returning("id");
+  }
+
+  res.json({ prescription_id: row.id, validation });
 }
