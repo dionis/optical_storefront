@@ -442,6 +442,28 @@ async function createOrdersTable(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
 }
 
 /**
+ * Escribe los títulos en la fila de encabezado si están vacíos. `columnName`
+ * en addTable no siempre llega a las celdas: así quedó una tabla sin títulos en
+ * producción. Un encabezado que el dueño ya escribió (aunque lo haya renombrado)
+ * no se toca.
+ */
+async function ensureOrdersHeader(cfg: GsheetConfig, table: OrdersTable): Promise<void> {
+  const from = columnLetter(table.startCol);
+  const to = columnLetter(table.startCol + ORDER_COLUMNS.length - 1);
+  const row = table.headerRow + 1;
+  const range = `${quoteSheet(table.sheetTitle)}!${from}${row}:${to}${row}`;
+  const head = await sheetsFetch(cfg, `/values/${encodeURIComponent(range)}`);
+  if (!head.ok) throw await failure("read header", head);
+  const values = ((await head.json()) as { values?: string[][] }).values?.[0] ?? [];
+  if (values.some((v) => String(v ?? "").trim())) return;
+  const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
+    method: "PUT",
+    body: JSON.stringify({ values: [ORDER_COLUMNS.map((c) => c.name)] }),
+  });
+  if (!resp.ok) throw await failure("write header", resp);
+}
+
+/**
  * Localiza (o crea) la tabla de pedidos y la pestaña de historial. Se cachea por
  * proceso; si el dueño borra la tabla, el siguiente fallo de escritura la
  * invalida y se vuelve a crear en el siguiente pedido.
@@ -454,6 +476,7 @@ async function ensureSheets(cfg: GsheetConfig): Promise<OrdersTable> {
   const sheets = await readSheetsMeta(cfg);
 
   const table = findOrdersTable(sheets) ?? (await createOrdersTable(cfg, sheets));
+  await ensureOrdersHeader(cfg, table);
 
   if (!historyEnsured) {
     const titles = new Set(sheets.map((s) => s.properties?.title ?? ""));
