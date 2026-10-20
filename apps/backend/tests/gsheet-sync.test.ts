@@ -6,12 +6,15 @@ import {
   ORDER_COLUMNS,
   ORDER_TYPE,
   buildRows,
+  normalizePrivateKey,
   orderType,
+  privateKeyProblem,
   sheetDateSerial,
   spreadsheetIdFrom,
   STAGE_LABEL,
 } from "../src/lib/gsheet-sync";
 import { deriveOrderProgress } from "../src/lib/order-status";
+import { generateKeyPairSync } from "node:crypto";
 
 const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 
@@ -151,5 +154,39 @@ describe("buildRows", () => {
     const all = orderRow.join(" ");
     expect(all).not.toMatch(/rx\/|\.pdf|\.jpe?g|r2\./i);
     expect(String(orderRow[6])).toContain("solo en el panel");
+  });
+});
+
+describe("normalizePrivateKey", () => {
+  const pem = generateKeyPairSync("rsa", { modulusLength: 1024 })
+    .privateKey.export({ type: "pkcs8", format: "pem" })
+    .toString();
+  const escaped = pem.replace(/\n/g, "\n");
+
+  it.each([
+    ["real newlines", pem],
+    ["escaped \n", escaped],
+    ["escaped and quoted", `"${escaped}"`],
+    ["double-escaped", pem.replace(/\n/g, "\\n")],
+    ["CRLF", pem.replace(/\n/g, "\r\n")],
+    ["single line with spaces", pem.replace(/\n/g, " ")],
+    ["base64 of the PEM", Buffer.from(pem).toString("base64")],
+  ])("yields a usable key from %s", (_label, raw) => {
+    const { key } = normalizePrivateKey(raw);
+    expect(privateKeyProblem(key)).toBeNull();
+  });
+
+  it("reads key and email from the whole service-account JSON", () => {
+    const json = JSON.stringify({ client_email: "bot@p.iam.gserviceaccount.com", private_key: pem });
+    const { key, email } = normalizePrivateKey(json);
+    expect(email).toBe("bot@p.iam.gserviceaccount.com");
+    expect(privateKeyProblem(key)).toBeNull();
+  });
+
+  it("explains a value that is not a PEM key", () => {
+    expect(privateKeyProblem(normalizePrivateKey("1234567890abcdef").key)).toMatch(/BEGIN PRIVATE KEY/);
+    expect(privateKeyProblem("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")).toMatch(
+      /no es una clave PEM/
+    );
   });
 });

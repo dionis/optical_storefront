@@ -42,7 +42,7 @@
  * usar la URL del archivo convertido.
  */
 
-import { createSign } from "node:crypto";
+import { createPrivateKey, createSign } from "node:crypto";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -143,13 +143,70 @@ export function spreadsheetIdFrom(value: string | undefined | null): string | nu
   return /^[A-Za-z0-9_-]{20,}$/.test(raw) ? raw : null;
 }
 
+/** Quita comillas envolventes que Coolify/compose dejan dentro del valor. */
+function unquote(value: string): string {
+  let v = value.trim();
+  while (v.length >= 2 && /^(["'`]).*\1$/s.test(v)) v = v.slice(1, -1).trim();
+  return v;
+}
+
+/**
+ * Lo que se haya pegado en GSHEET_SERVICE_ACCOUNT_KEY, llevado a un PEM que
+ * OpenSSL acepte. Admite: el PEM con saltos reales, con `\n` literales (una o
+ * dos veces escapados), con `\r\n`, entre comillas, el JSON completo del
+ * service account, o el PEM en base64. Devuelve también el client_email si
+ * venía dentro del JSON.
+ */
+export function normalizePrivateKey(raw: string | undefined | null): { key: string; email?: string } {
+  let v = unquote(raw ?? "");
+  let email: string | undefined;
+  if (v.startsWith("{")) {
+    try {
+      const json = JSON.parse(v) as { private_key?: string; client_email?: string };
+      v = json.private_key ?? "";
+      email = json.client_email;
+    } catch {
+      // No era JSON válido: se sigue tratando como PEM.
+    }
+  }
+  if (v && !v.includes("-----BEGIN")) {
+    const decoded = Buffer.from(v, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) v = decoded;
+  }
+  v = v
+    .replace(/\\\\n/g, "\n")
+    .replace(/\\r/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "");
+  // Rearma el PEM: cabecera, cuerpo base64 sin espacios en líneas de 64, pie.
+  const m = /-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/.exec(v);
+  if (m) {
+    const body = m[2].replace(/[^A-Za-z0-9+/=]/g, "");
+    const lines = body.match(/.{1,64}/g) ?? [];
+    v = `-----BEGIN ${m[1]}-----\n${lines.join("\n")}\n-----END ${m[1]}-----\n`;
+  }
+  return { key: v.trim() ? v : "", email };
+}
+
+/** Por qué la clave no sirve, sin volcar su contenido al log. */
+export function privateKeyProblem(key: string): string | null {
+  if (!key.includes("-----BEGIN")) {
+    return "GSHEET_SERVICE_ACCOUNT_KEY no contiene un bloque '-----BEGIN PRIVATE KEY-----' (¿se pegó el client_id o el private_key_id en vez del private_key?)";
+  }
+  try {
+    createPrivateKey(key);
+    return null;
+  } catch (error) {
+    return `GSHEET_SERVICE_ACCOUNT_KEY no es una clave PEM válida (${(error as Error).message}); pega el campo private_key del JSON completo, desde -----BEGIN hasta -----END PRIVATE KEY-----`;
+  }
+}
+
 export function gsheetConfig(): GsheetConfig | null {
   const spreadsheetId =
     spreadsheetIdFrom(process.env.GSHEET_FILE_URL) ??
     spreadsheetIdFrom(process.env.GSHEET_SPREADSHEET_ID);
-  const clientEmail = (process.env.GSHEET_SERVICE_ACCOUNT_EMAIL ?? "").trim();
-  // Coolify/compose suelen guardar la clave PEM con \n literales.
-  const privateKey = (process.env.GSHEET_SERVICE_ACCOUNT_KEY ?? "").replace(/\\n/g, "\n").trim();
+  const { key: privateKey, email } = normalizePrivateKey(process.env.GSHEET_SERVICE_ACCOUNT_KEY);
+  const clientEmail = unquote(process.env.GSHEET_SERVICE_ACCOUNT_EMAIL ?? "") || (email ?? "");
   if (!spreadsheetId || !clientEmail || !privateKey) return null;
   return { spreadsheetId, clientEmail, privateKey };
 }
@@ -823,6 +880,11 @@ export async function syncOrderToSheet(
     logger.info(
       `[gsheet] not configured (GSHEET_FILE_URL / GSHEET_SERVICE_ACCOUNT_EMAIL / GSHEET_SERVICE_ACCOUNT_KEY) — order ${orderId} not mirrored.`
     );
+    return;
+  }
+  const keyProblem = privateKeyProblem(cfg.privateKey);
+  if (keyProblem) {
+    logger.error(`[gsheet] order ${orderId} (${event}) could not be mirrored: ${keyProblem}`);
     return;
   }
 
