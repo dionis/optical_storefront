@@ -10,7 +10,7 @@
  * the order's locale, inline styles only, and a plain-text alternative.
  */
 import { type EmailLocale, t } from "./copy";
-import { esc, BRAND, MUTED, BORDER } from "./order-confirmation";
+import { esc, BRAND, MUTED, BORDER, brandHeaderRow } from "./order-confirmation";
 import { storefrontOrigin } from "../order-access";
 import type { OrderStage } from "../order-status";
 
@@ -80,7 +80,7 @@ export function renderOrderStageUpdate(
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:24px 0">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif">
-        <tr><td style="background:${BRAND};color:#ffffff;padding:18px 24px;font-size:16px;font-weight:bold;letter-spacing:.04em">RUBI LENS</td></tr>
+        ${brandHeaderRow("18px 24px")}
         <tr><td style="padding:26px 24px 8px;color:#111827">
           <div style="font-size:13px;color:${MUTED};margin-bottom:6px">${locale === "es" ? "Pedido" : "Order"} #${esc(id)}</div>
           <div style="font-size:20px;font-weight:bold;color:${BRAND}">${esc(name)}</div>

@@ -106,6 +106,43 @@ export const BRAND = "#1f3a5f";
 export const MUTED = "#6b7280";
 export const BORDER = "#e5e7eb";
 
+/** Store name shown in the email header. A proper name, not copy: same in every locale. */
+export function emailStoreName(): string {
+  return process.env.STORE_NAME?.trim() || "RUBI LENS";
+}
+
+/**
+ * Absolute URL of the store icon. Hosted on the storefront (public/), never a
+ * `cid:` attachment: an inline attachment shows up as a loose file in several
+ * clients, and the header has to look the same in every message.
+ */
+export function emailLogoUrl(): string {
+  return process.env.EMAIL_LOGO_URL?.trim() || `${storefrontOrigin()}/logo-oficial-mark.png`;
+}
+
+/**
+ * Identity strip at the top of every store email: icon + store name. The name
+ * is real text, so the sender is still recognisable when the client blocks
+ * remote images. Returns a table row for the 600px content table.
+ */
+export function brandHeaderRow(padding = "20px 32px"): string {
+  const name = esc(emailStoreName());
+  return `<tr>
+              <td style="background:#ffffff;padding:${padding};border-bottom:1px solid ${BORDER}">
+                <a href="${esc(storefrontOrigin())}" style="text-decoration:none">
+                  <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                    <tr>
+                      <td style="vertical-align:middle;padding-right:12px">
+                        <img src="${esc(emailLogoUrl())}" width="74" height="40" alt="" style="display:block;border:0;outline:none;width:74px;height:40px">
+                      </td>
+                      <td style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:.04em;color:${BRAND};white-space:nowrap">${name}</td>
+                    </tr>
+                  </table>
+                </a>
+              </td>
+            </tr>`;
+}
+
 /** Escapes text destined for an HTML body. Order data is customer-supplied. */
 export function esc(value: unknown): string {
   return String(value ?? "")
@@ -302,12 +339,14 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
 export function shell(title: string, preheader: string, inner: string, locale: EmailLocale): string {
   return `<!doctype html>
 <html lang="${locale}">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
   <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827">
     <span style="display:none;font-size:0;line-height:0;max-height:0;opacity:0;overflow:hidden">${esc(preheader)}</span>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#f4f5f7">
       <tr>
         <td align="center" style="padding:32px 16px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
+            ${brandHeaderRow()}
             <tr>
               <td style="background:${BRAND};padding:24px 32px">
                 <div style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.02em">${esc(title)}</div>

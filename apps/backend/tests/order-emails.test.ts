@@ -354,3 +354,33 @@ describe("order images and AI measurements in the emails", () => {
     expect(mail.text).not.toContain("va adjunta");
   });
 });
+
+describe("store identity at the top of the emails", () => {
+  const env = { ...process.env };
+  afterEach(() => {
+    process.env = { ...env };
+  });
+
+  it("puts the store icon and name before the title in both order emails", () => {
+    process.env.STOREFRONT_URL = "https://shop.example.com";
+    delete process.env.STORE_NAME;
+    delete process.env.EMAIL_LOGO_URL;
+    for (const mail of [
+      renderCustomerOrderConfirmation(order, "es"),
+      renderAdminOrderNotification(order, "es"),
+    ]) {
+      const logoAt = mail.html.indexOf('src="https://shop.example.com/logo-oficial-mark.png"');
+      expect(logoAt).toBeGreaterThan(-1);
+      expect(logoAt).toBeLessThan(mail.html.indexOf(`background:#1f3a5f;padding:24px 32px`));
+      expect(mail.html).toContain(">RUBI LENS</td>");
+    }
+  });
+
+  it("honours STORE_NAME and EMAIL_LOGO_URL", () => {
+    process.env.STORE_NAME = "Óptica <Demo>";
+    process.env.EMAIL_LOGO_URL = "https://cdn.example.com/icon.png";
+    const mail = renderCustomerOrderConfirmation(order, "en");
+    expect(mail.html).toContain('src="https://cdn.example.com/icon.png"');
+    expect(mail.html).toContain("Óptica &lt;Demo&gt;");
+  });
+});
