@@ -245,7 +245,16 @@ async function accessToken(cfg: GsheetConfig): Promise<string> {
     }),
   });
   if (!resp.ok) {
-    throw new Error(`google token ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+    const body = (await resp.text()).slice(0, 300);
+    // "account not found": el correo no es el client_email de un service account
+    // existente (placeholder del .env.example, un Gmail, el client_id, o la cuenta
+    // se borró). Se nombra el correo usado — no es secreto — para poder compararlo.
+    const hint = /account not found/i.test(body)
+      ? ` — Google no reconoce el service account "${cfg.clientEmail}"; GSHEET_SERVICE_ACCOUNT_EMAIL debe ser el campo client_email del JSON de la clave (…@….iam.gserviceaccount.com)`
+      : /invalid_grant/i.test(body)
+        ? ` — revisa que la clave corresponda al service account "${cfg.clientEmail}" y que no esté revocada`
+        : "";
+    throw new Error(`google token ${resp.status}: ${body}${hint}`);
   }
   const data = (await resp.json()) as { access_token: string; expires_in?: number };
   cachedToken = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) };
