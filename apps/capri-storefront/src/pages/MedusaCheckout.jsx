@@ -70,6 +70,13 @@ export default function MedusaCheckout() {
   // ¿La dirección de facturación de la tarjeta es la misma del paciente? Si sí,
   // autorellenamos los datos de facturación de Stripe con los del paciente.
   const [cardMatches, setCardMatches] = useState(true);
+  // Tarjeta de prueba: qué dato se acaba de copiar al portapapeles (solo pk_test_).
+  const [testCopied, setTestCopied] = useState("");
+  const copyTest = async (key, value) => {
+    try { await navigator.clipboard.writeText(value); } catch { /* sin permiso: el valor sigue seleccionable */ }
+    setTestCopied(key);
+    setTimeout(() => setTestCopied((k) => (k === key ? "" : k)), 1600);
+  };
   const [ship, setShip] = useState([]);
   const [shipId, setShipId] = useState("");
   // Cotización FedEx/DHL del servidor. null = aún sin pedir o backend sin la
@@ -706,11 +713,26 @@ export default function MedusaCheckout() {
                 <div className="co-testcard" role="note">
                   <b>🧪 {L("testTitle")}</b>
                   <p>{L("testBody")}</p>
-                  <div className="co-testcard-row">
-                    <span>{L("testCard")}: <b>4242 4242 4242 4242</b></span>
-                    <span>{L("testExp")}: <b>12/34</b> ({L("testAny")})</span>
-                    <span>{L("testCvc")}: <b>123</b></span>
-                    <span>{L("testZip")}: <b>77449</b></span>
+                  <div className="co-testcard-grid">
+                    {[
+                      ["card", L("testCard"), "4242 4242 4242 4242", "4242424242424242", null],
+                      ["exp", L("testExp"), "12/34", "12/34", L("testAny")],
+                      ["cvc", L("testCvc"), "123", "123", null],
+                      ["zip", L("testZip"), "77449", "77449", null],
+                      ["name", L("testName"), L("testAnyName"), null, null],
+                    ].map(([k, label, shown, raw, hint]) => (
+                      <div className="co-testcard-item" key={k}>
+                        <span className="co-testcard-lbl">{label}</span>
+                        <b>{shown}</b>
+                        {hint && <small>({hint})</small>}
+                        {raw && (
+                          <button type="button" className="co-testcard-copy" onClick={() => copyTest(k, raw)}
+                                  aria-label={`${L("testCopy")} ${label}`}>
+                            {testCopied === k ? L("testCopied") : L("testCopy")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

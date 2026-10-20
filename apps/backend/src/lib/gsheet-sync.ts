@@ -97,8 +97,8 @@ interface ColumnSpec {
 export const ORDER_COLUMNS: ColumnSpec[] = [
   { name: "Pedido", type: "TEXT", width: 110 },
   { name: "Tipo", type: "DROPDOWN", options: Object.values(ORDER_TYPE), width: 150 },
-  { name: "Detalles", type: "TEXT", width: 340, wrap: true },
-  { name: "Cliente", type: "TEXT", width: 260, wrap: true },
+  { name: "Detalles", type: "TEXT", width: 400, wrap: true },
+  { name: "Cliente", type: "TEXT", width: 300, wrap: true },
   {
     name: "Estado",
     type: "DROPDOWN",
@@ -106,14 +106,35 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
     width: 150,
   },
   { name: "Fecha de compra", type: "DATE", width: 130 },
-  { name: "Archivo", type: "TEXT", width: 220, wrap: true },
-  { name: "Notas", type: "TEXT", width: 300, wrap: true },
+  { name: "Archivo", type: "TEXT", width: 240, wrap: true },
+  { name: "Notas", type: "TEXT", width: 320, wrap: true },
 ];
 
-/** Colores de la plantilla: encabezado granate, filas alternas blanco / gris. */
-const HEADER_COLOR = { red: 158 / 255, green: 53 / 255, blue: 65 / 255 };
-const BAND_1 = { red: 1, green: 1, blue: 1 };
-const BAND_2 = { red: 246 / 255, green: 247 / 255, blue: 249 / 255 };
+// ── Estilo de marca (el de la tienda: azul marino + dorado) ──────────────────
+const rgb = (hex: string) => {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return { red: ((n >> 16) & 255) / 255, green: ((n >> 8) & 255) / 255, blue: (n & 255) / 255 };
+};
+const NAVY = rgb("#0b2f66");
+const GOLD = rgb("#b8921e");
+const WHITE = rgb("#ffffff");
+/** Encabezado azul marino con letra blanca; filas alternas blanco / azul muy claro. */
+const HEADER_COLOR = NAVY;
+const BAND_1 = WHITE;
+const BAND_2 = rgb("#f3f6fb");
+/** Chips de color de la columna "Estado" (fondo, texto). */
+const STATUS_COLORS: Array<[string, string, string]> = [
+  [STAGE_LABEL.confirmed, "#f6efd9", "#7a5b12"],
+  [STAGE_LABEL.in_lab, "#e3ecf9", "#0b2f66"],
+  [STAGE_LABEL.shipped, "#e8f1ff", "#0b2f66"],
+  [STAGE_LABEL.in_transit, "#e8f1ff", "#0b2f66"],
+  [STAGE_LABEL.delivered, "#e3f5e9", "#1e6b3a"],
+  [TERMINAL_LABEL.canceled, "#fbe5e5", "#8a1c1c"],
+  [TERMINAL_LABEL.refunded, "#fbe5e5", "#8a1c1c"],
+  [TERMINAL_LABEL.payment_pending, "#fff1d6", "#8a5a00"],
+];
+/** Anchos de la pestaña Historial, en el orden de HISTORY_HEADERS. */
+const HISTORY_WIDTHS = [150, 90, 240, 160, 140, 90, 70, 200, 440];
 
 /** Columnas de la pestaña Historial (una fila por evento, append). */
 const HISTORY_HEADERS = [
@@ -318,12 +339,14 @@ interface SheetMeta {
     name?: string;
     range?: { startRowIndex?: number; startColumnIndex?: number };
   }>;
+  /** Solo se usa para contar las reglas y reemplazarlas (estilo idempotente). */
+  conditionalFormats?: Array<unknown>;
 }
 
 async function readSheetsMeta(cfg: GsheetConfig): Promise<SheetMeta[]> {
   const resp = await sheetsFetch(
     cfg,
-    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range))")}`
+    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges))")}`
   );
   if (!resp.ok) throw await failure("spreadsheet meta", resp);
   return ((await resp.json()) as { sheets?: SheetMeta[] }).sheets ?? [];
@@ -470,9 +493,10 @@ async function ensureOrdersHeader(cfg: GsheetConfig, table: OrdersTable): Promis
  */
 let cachedTable: OrdersTable | null = null;
 let historyEnsured = false;
+let styleApplied = false;
 
-async function ensureSheets(cfg: GsheetConfig): Promise<OrdersTable> {
-  if (cachedTable && historyEnsured) return cachedTable;
+async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersTable> {
+  if (cachedTable && historyEnsured && styleApplied) return cachedTable;
   const sheets = await readSheetsMeta(cfg);
 
   const table = findOrdersTable(sheets) ?? (await createOrdersTable(cfg, sheets));
@@ -496,8 +520,193 @@ async function ensureSheets(cfg: GsheetConfig): Promise<OrdersTable> {
     historyEnsured = true;
   }
 
+  // Estilo de marca una vez por proceso, también sobre un archivo que ya
+  // existía con el estilo antiguo. Si falla, el pedido se escribe igual.
+  if (!styleApplied) {
+    try {
+      await applyBrandStyle(cfg, table, await readSheetsMeta(cfg));
+      styleApplied = true;
+    } catch (e) {
+      logger?.warn(`[gsheet] estilo no aplicado: ${(e as Error).message}`);
+    }
+  }
+
   cachedTable = table;
   return table;
+}
+
+/**
+ * Deja las dos pestañas con el aspecto de la tienda y listas para trabajar:
+ *
+ *   - Tabla "Pedidos": encabezado azul marino con letra blanca y línea dorada,
+ *     filas alternas, columnas anchas con texto ajustado, fecha d/m/yyyy, chips
+ *     de color por estado y fila de encabezado fija. Al ser una TABLA, cada
+ *     encabezado ya trae su menú de ordenar y filtrar.
+ *   - Pestaña "Historial": mismo encabezado, filtro básico sobre todas las
+ *     columnas (menú de ordenar/filtrar en cada encabezado), anchos, ajuste de
+ *     texto y filas alternas.
+ *
+ * Idempotente: las reglas de formato condicional de cada pestaña se reemplazan
+ * (nunca se acumulan) y el resto son propiedades que se sobrescriben.
+ */
+async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: SheetMeta[]): Promise<void> {
+  const cols = ORDER_COLUMNS.length;
+  const { sheetId, headerRow, startCol } = table;
+  const headerText = {
+    textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: WHITE } },
+    verticalAlignment: "MIDDLE",
+    wrapStrategy: "WRAP",
+  };
+  const rulesCount = (id: number) =>
+    (sheets.find((s) => s.properties?.sheetId === id)?.conditionalFormats ?? []).length;
+  const dropRules = (id: number) =>
+    Array.from({ length: rulesCount(id) }, (_, i) => rulesCount(id) - 1 - i).map((index) => ({
+      deleteConditionalFormatRule: { sheetId: id, index },
+    }));
+  const bandRule = (id: number, firstRow: number, lastCol: number) => ({
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges: [{ sheetId: id, startRowIndex: firstRow, startColumnIndex: 0, endColumnIndex: lastCol }],
+        booleanRule: {
+          condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: "=ISEVEN(ROW())" }] },
+          format: { backgroundColorStyle: { rgbColor: BAND_2 } },
+        },
+      },
+    },
+  });
+
+  const requests: unknown[] = [
+    // Tabla: colores de encabezado y bandas.
+    {
+      updateTable: {
+        table: {
+          tableId: table.tableId,
+          rowsProperties: {
+            headerColorStyle: { rgbColor: HEADER_COLOR },
+            firstBandColorStyle: { rgbColor: BAND_1 },
+            secondBandColorStyle: { rgbColor: BAND_2 },
+          },
+        },
+        fields: "rowsProperties",
+      },
+    },
+    // Encabezado: letra blanca en negrita, alto cómodo y línea dorada debajo.
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + cols },
+        cell: { userEnteredFormat: headerText },
+        fields: "userEnteredFormat(textFormat,verticalAlignment,wrapStrategy)",
+      },
+    },
+    {
+      updateBorders: {
+        range: { sheetId, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + cols },
+        bottom: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: GOLD } },
+      },
+    },
+    {
+      updateDimensionProperties: {
+        range: { sheetId, dimension: "ROWS", startIndex: headerRow, endIndex: headerRow + 1 },
+        properties: { pixelSize: 36 },
+        fields: "pixelSize",
+      },
+    },
+    // Columnas: ancho de la plantilla y texto ajustado y arriba en todas.
+    ...ORDER_COLUMNS.map((c, i) => ({
+      updateDimensionProperties: {
+        range: { sheetId, dimension: "COLUMNS", startIndex: startCol + i, endIndex: startCol + i + 1 },
+        properties: { pixelSize: c.width },
+        fields: "pixelSize",
+      },
+    })),
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + cols },
+        cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
+        fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat.fontSize)",
+      },
+    },
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + 5, endColumnIndex: startCol + 6 },
+        cell: { userEnteredFormat: { numberFormat: { type: "DATE", pattern: "d/m/yyyy" }, horizontalAlignment: "CENTER" } },
+        fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
+      },
+    },
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + 1 },
+        cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } } } },
+        fields: "userEnteredFormat.textFormat",
+      },
+    },
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: headerRow + 1 } }, fields: "gridProperties.frozenRowCount" } },
+    // Chips de color por estado (se reemplazan las reglas anteriores).
+    ...dropRules(sheetId),
+    ...STATUS_COLORS.map(([label, bg, fg]) => ({
+      addConditionalFormatRule: {
+        index: 0,
+        rule: {
+          ranges: [{ sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + 4, endColumnIndex: startCol + 5 }],
+          booleanRule: {
+            condition: { type: "TEXT_EQ", values: [{ userEnteredValue: label }] },
+            format: {
+              backgroundColorStyle: { rgbColor: rgb(bg) },
+              textFormat: { bold: true, foregroundColorStyle: { rgbColor: rgb(fg) } },
+            },
+          },
+        },
+      },
+    })),
+  ];
+
+  // Pestaña Historial.
+  const history = sheets.find((s) => s.properties?.title === HISTORY_SHEET);
+  const hid = history?.properties?.sheetId;
+  if (hid !== undefined) {
+    const hcols = HISTORY_HEADERS.length;
+    requests.push(
+      {
+        repeatCell: {
+          range: { sheetId: hid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: hcols },
+          cell: { userEnteredFormat: { ...headerText, backgroundColorStyle: { rgbColor: HEADER_COLOR } } },
+          fields: "userEnteredFormat(backgroundColorStyle,textFormat,verticalAlignment,wrapStrategy)",
+        },
+      },
+      {
+        updateBorders: {
+          range: { sheetId: hid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: hcols },
+          bottom: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: GOLD } },
+        },
+      },
+      { updateDimensionProperties: { range: { sheetId: hid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 36 }, fields: "pixelSize" } },
+      ...HISTORY_WIDTHS.map((w, i) => ({
+        updateDimensionProperties: { range: { sheetId: hid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: w }, fields: "pixelSize" },
+      })),
+      {
+        repeatCell: {
+          range: { sheetId: hid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: hcols },
+          cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
+          fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat.fontSize)",
+        },
+      },
+      {
+        repeatCell: {
+          range: { sheetId: hid, startRowIndex: 1, startColumnIndex: 5, endColumnIndex: 6 },
+          cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0.00" } } },
+          fields: "userEnteredFormat.numberFormat",
+        },
+      },
+      { updateSheetProperties: { properties: { sheetId: hid, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+      // Menú de ordenar/filtrar en cada encabezado del historial.
+      { setBasicFilter: { filter: { range: { sheetId: hid, startRowIndex: 0, startColumnIndex: 0, endColumnIndex: hcols } } } },
+      ...dropRules(hid),
+      bandRule(hid, 1, hcols)
+    );
+  }
+
+  await batchUpdate(cfg, requests);
 }
 
 function columnLetter(index: number): string {
@@ -933,7 +1142,7 @@ export async function syncOrderToSheet(
       return;
     }
 
-    const table = await ensureSheets(cfg);
+    const table = await ensureSheets(cfg, logger);
     const extras = await loadRowExtras(container, order, logger);
     const { orderRow, historyRow } = buildRows(order, event, {
       tracking,
