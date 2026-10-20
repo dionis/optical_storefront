@@ -68,3 +68,7 @@ __commitmsg.txt
 
 # Capturas y artefactos de sesiones de Claude (solo locales, no se publican)
 Claude outputs/
+ 
+# Secretos locales: nunca al repo 
+stripe_backup_code*.txt 
+*backup_code*
