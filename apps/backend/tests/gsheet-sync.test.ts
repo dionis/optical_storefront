@@ -3,13 +3,17 @@
  * API calls in CI.
  */
 import {
+  HISTORY_COLUMNS,
   ORDER_COLUMNS,
   ORDER_TYPE,
   buildRows,
+  eventLabel,
   normalizePrivateKey,
   orderType,
   privateKeyProblem,
   sheetDateSerial,
+  sheetDateTimeSerial,
+  sheetMonth,
   spreadsheetIdFrom,
   STAGE_LABEL,
 } from "../src/lib/gsheet-sync";
@@ -90,7 +94,11 @@ describe("buildRows", () => {
     },
   };
 
-  const { orderRow } = buildRows(order, "compra_confirmada", {
+  const { orderRow, historyRow } = buildRows(order, "compra_confirmada", {
+    lines: [
+      { frame_name: "Flexure 2043", brand: "Flexure", sku: "FX2043-BLK", color: "Negro", quantity: 1, design: "Monofocal", material: "Policarbonato", photo: null, ar: "Antirreflejo", with_rx: true, total: 200 },
+    ],
+    payment: { provider: "stripe", method: "card", brand: "visa", last4: "4242" },
     rx: [
       {
         od: { sph: 1.5, cyl: -0.5, axis: 170, add: 2, prism: null, base: null },
@@ -149,11 +157,70 @@ describe("buildRows", () => {
     expect(notas).toContain("OCR");
   });
 
+  it("carries brand, sku, lenses, prescription and payment", () => {
+    const i = (key: string) => HISTORY_COLUMNS.findIndex((c) => c.key === key);
+    const h = historyRow as unknown[];
+    expect(h[i("brand")]).toBe("Flexure");
+    expect(h[i("sku")]).toBe("FX2043-BLK");
+    expect(h[i("lenses")]).toContain("Monofocal");
+    expect(h[i("rx")]).toBe("Sí");
+    expect(h[i("rx_od")]).toContain("SPH +1.50");
+    expect(h[i("rx_pd")]).toContain("31.5");
+    expect(h[i("rx_source")]).toContain("OCR");
+    expect(h[i("tryon")]).toBe("Sí");
+    expect(h[i("payment")]).toContain("4242");
+    expect(h.join(" ")).not.toMatch(/rx\/|\.pdf|\.jpe?g/i);
+  });
+
   it("never copies the original prescription document", () => {
     // It stays in the private bucket: the sheet only says it exists.
     const all = orderRow.join(" ");
     expect(all).not.toMatch(/rx\/|\.pdf|\.jpe?g|r2\./i);
     expect(String(orderRow[6])).toContain("solo en el panel");
+  });
+});
+
+describe("history row", () => {
+  const byKey = (key: string) => {
+    const i = HISTORY_COLUMNS.findIndex((c) => c.key === key);
+    return (buildRows(order, "compra_confirmada", {}).historyRow as unknown[])[i];
+  };
+  const order = {
+    id: "order_9", display_id: 9, email: "luis@example.com", currency_code: "usd",
+    created_at: "2026-10-19T15:00:00Z", payment_status: "captured", fulfillment_status: "not_fulfilled",
+    metadata: {}, subtotal: 99, shipping_total: 6.95, tax_total: 0, discount_total: 0, total: 105.95,
+    items: [{ title: "DiCaprio DC407", product_title: "DiCaprio DC407", variant_title: "Dorado", quantity: 2, metadata: {} }],
+    shipping_address: { first_name: "Luis", last_name: "Gómez", address_1: "100 Main St", city: "Katy", province: "TX", postal_code: "77449", country_code: "us", phone: "+12815550000" },
+  };
+
+  it("has one value per history column, in order", () => {
+    const { historyRow } = buildRows(order, "compra_confirmada", {});
+    expect(historyRow).toHaveLength(HISTORY_COLUMNS.length);
+    expect(byKey("order")).toBe("#9");
+    expect(byKey("event")).toBe("Compra confirmada");
+    expect(byKey("month")).toBe("2026-10");
+    expect(byKey("customer")).toBe("Luis Gómez");
+    expect(byKey("city")).toBe("Katy");
+    expect(byKey("zip")).toBe("77449");
+    expect(byKey("model")).toBe("DiCaprio DC407");
+    expect(byKey("color")).toBe("Dorado");
+    expect(byKey("qty")).toBe(2);
+    expect(byKey("total")).toBe(105.95);
+    expect(byKey("paid")).toBe("Sí");
+    expect(byKey("rx")).toBe("No");
+    expect(byKey("order_id")).toBe("order_9");
+    expect(typeof byKey("at")).toBe("number");
+  });
+
+  it("names the event for the owner", () => {
+    expect(eventLabel("etapa: in_lab")).toBe("Etapa: En laboratorio");
+    expect(eventLabel("cancelado (canceled)")).toBe("Cancelado por el cliente");
+    expect(eventLabel("resincronizado")).toContain("resincronización");
+  });
+
+  it("serial date-time and month follow the configured time zone", () => {
+    expect(sheetMonth("2026-11-01T02:00:00Z", "America/Chicago")).toBe("2026-10");
+    expect(sheetDateTimeSerial("2026-10-19T12:00:00Z", "UTC")).toBeCloseTo(46314.5, 5);
   });
 });
 

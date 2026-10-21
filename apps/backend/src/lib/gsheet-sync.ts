@@ -47,7 +47,7 @@ import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
 import { deriveOrderProgress, type OrderStage, type OrderTerminalState } from "./order-status";
-import { enrichLensItems } from "./email/order-enrich";
+import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/order-enrich";
 import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 
@@ -133,13 +133,82 @@ const STATUS_COLORS: Array<[string, string, string]> = [
   [TERMINAL_LABEL.refunded, "#fbe5e5", "#8a1c1c"],
   [TERMINAL_LABEL.payment_pending, "#fff1d6", "#8a5a00"],
 ];
-/** Anchos de la pestaña Historial, en el orden de HISTORY_HEADERS. */
-const HISTORY_WIDTHS = [150, 90, 240, 160, 140, 90, 70, 200, 440];
+/** Pestaña del resumen ejecutivo (primera del archivo). */
+const DASHBOARD_SHEET = process.env.GSHEET_DASHBOARD_SHEET || "Resumen";
 
-/** Columnas de la pestaña Historial (una fila por evento, append). */
-const HISTORY_HEADERS = [
-  "Fecha/hora", "Pedido #", "Order ID", "Evento", "Estado", "Total", "Moneda", "Tracking", "Detalle",
+/**
+ * Columnas de la pestaña Historial: una fila POR EVENTO con TODO el pedido —
+ * lo mismo que viaja en los correos — para seguirlo y ordenarlo por cualquier
+ * columna. `key` identifica la columna en el código (fórmulas del resumen).
+ */
+interface HistoryColumn {
+  key: string;
+  name: string;
+  width: number;
+  type?: "DATETIME" | "MONEY" | "INT" | "TEXT";
+  wrap?: boolean;
+}
+export const HISTORY_COLUMNS: HistoryColumn[] = [
+  { key: "at", name: "Fecha/hora", width: 140, type: "DATETIME" },
+  { key: "month", name: "Mes", width: 70 },
+  { key: "order", name: "Pedido #", width: 80 },
+  { key: "event", name: "Evento", width: 170 },
+  { key: "status", name: "Estado", width: 130 },
+  { key: "type", name: "Tipo de pedido", width: 130 },
+  { key: "customer", name: "Cliente", width: 170 },
+  { key: "email", name: "Correo", width: 200 },
+  { key: "phone", name: "Teléfono", width: 120 },
+  { key: "address", name: "Dirección de entrega", width: 220, wrap: true },
+  { key: "city", name: "Ciudad", width: 110 },
+  { key: "province", name: "Estado/Provincia", width: 100 },
+  { key: "zip", name: "Código postal", width: 90 },
+  { key: "country", name: "País", width: 60 },
+  { key: "delivery", name: "Entrega", width: 150 },
+  { key: "tracking", name: "Tracking", width: 160 },
+  { key: "brand", name: "Marca", width: 120 },
+  { key: "model", name: "Modelo", width: 170 },
+  { key: "color", name: "Color", width: 130 },
+  { key: "sku", name: "SKU", width: 120 },
+  { key: "lenses", name: "Lentes", width: 240, wrap: true },
+  { key: "rx", name: "Con receta", width: 90 },
+  { key: "rx_od", name: "Receta OD", width: 220 },
+  { key: "rx_os", name: "Receta OS", width: 220 },
+  { key: "rx_pd", name: "DIP / Altura", width: 150 },
+  { key: "rx_source", name: "Origen de la receta", width: 190, wrap: true },
+  { key: "tryon", name: "Prueba virtual", width: 100 },
+  { key: "qty", name: "Artículos", width: 80, type: "INT" },
+  { key: "subtotal", name: "Subtotal", width: 90, type: "MONEY" },
+  { key: "discount", name: "Descuento", width: 90, type: "MONEY" },
+  { key: "shipping", name: "Envío", width: 80, type: "MONEY" },
+  { key: "tax", name: "Impuestos", width: 90, type: "MONEY" },
+  { key: "total", name: "Total", width: 100, type: "MONEY" },
+  { key: "currency", name: "Moneda", width: 70 },
+  { key: "paid", name: "Pagado", width: 80 },
+  { key: "payment", name: "Pago", width: 160 },
+  { key: "notify", name: "Avisos", width: 120 },
+  { key: "locale", name: "Idioma", width: 70 },
+  { key: "notes", name: "Notas", width: 260, wrap: true },
+  { key: "order_id", name: "Order ID", width: 230 },
 ];
+const HISTORY_HEADERS = HISTORY_COLUMNS.map((c) => c.name);
+/** Letra de columna del Historial por clave (para las fórmulas del resumen). */
+const hcol = (key: string): string => {
+  const i = HISTORY_COLUMNS.findIndex((c) => c.key === key);
+  if (i < 0) throw new Error(`history column ${key}`);
+  return columnLetter(i);
+};
+/** Evento en texto legible (lo que ve el dueño en la hoja). */
+export const EVENT_LABEL: Record<string, string> = {
+  compra_confirmada: "Compra confirmada",
+  resincronizado: "Alta en la hoja (resincronización)",
+};
+export function eventLabel(event: string): string {
+  if (EVENT_LABEL[event]) return EVENT_LABEL[event];
+  const stage = /^etapa:\s*(\w+)/.exec(event)?.[1] as OrderStage | undefined;
+  if (stage && STAGE_LABEL[stage]) return `Etapa: ${STAGE_LABEL[stage]}`;
+  if (/^cancelado/.test(event)) return "Cancelado por el cliente";
+  return event.charAt(0).toUpperCase() + event.slice(1);
+}
 
 // ── Configuración ────────────────────────────────────────────────────────────
 
@@ -341,12 +410,13 @@ interface SheetMeta {
   }>;
   /** Solo se usa para contar las reglas y reemplazarlas (estilo idempotente). */
   conditionalFormats?: Array<unknown>;
+  charts?: Array<unknown>;
 }
 
 async function readSheetsMeta(cfg: GsheetConfig): Promise<SheetMeta[]> {
   const resp = await sheetsFetch(
     cfg,
-    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges))")}`
+    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges),charts(chartId))")}`
   );
   if (!resp.ok) throw await failure("spreadsheet meta", resp);
   return ((await resp.json()) as { sheets?: SheetMeta[] }).sheets ?? [];
@@ -503,20 +573,7 @@ async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersT
   await ensureOrdersHeader(cfg, table);
 
   if (!historyEnsured) {
-    const titles = new Set(sheets.map((s) => s.properties?.title ?? ""));
-    if (!titles.has(HISTORY_SHEET)) {
-      await batchUpdate(cfg, [{ addSheet: { properties: { title: HISTORY_SHEET } } }]);
-    }
-    const head = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!1:1`)}`);
-    const rows = head.ok ? ((await head.json()) as { values?: string[][] }).values : null;
-    if (!rows?.length) {
-      const resp = await sheetsFetch(
-        cfg,
-        `/values/${encodeURIComponent(`${HISTORY_SHEET}!A1`)}?valueInputOption=RAW`,
-        { method: "PUT", body: JSON.stringify({ values: [HISTORY_HEADERS] }) }
-      );
-      if (!resp.ok) throw await failure(`headers ${HISTORY_SHEET}`, resp);
-    }
+    await ensureHistorySheet(cfg, sheets);
     historyEnsured = true;
   }
 
@@ -524,15 +581,51 @@ async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersT
   // existía con el estilo antiguo. Si falla, el pedido se escribe igual.
   if (!styleApplied) {
     try {
-      await applyBrandStyle(cfg, table, await readSheetsMeta(cfg));
+      const meta = await readSheetsMeta(cfg);
+      await applyBrandStyle(cfg, table, meta);
+      await ensureDashboard(cfg, meta);
       styleApplied = true;
     } catch (e) {
-      logger?.warn(`[gsheet] estilo no aplicado: ${(e as Error).message}`);
+      logger?.warn(`[gsheet] estilo/resumen no aplicado: ${(e as Error).message}`);
     }
   }
 
   cachedTable = table;
   return table;
+}
+
+/**
+ * Pestaña Historial con el esquema actual. Si existe una con otro encabezado
+ * (la versión corta anterior), se renombra a "Historial (anterior)" y se crea
+ * una nueva: el esquema ancho no cabe en la vieja y los datos antiguos no se
+ * pierden.
+ */
+async function ensureHistorySheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<void> {
+  const titles = new Set(sheets.map((s) => s.properties?.title ?? ""));
+  const existing = sheets.find((s) => s.properties?.title === HISTORY_SHEET);
+  if (existing) {
+    const head = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!1:1`)}`);
+    const row = head.ok ? (((await head.json()) as { values?: string[][] }).values?.[0] ?? []) : [];
+    const same = row.length === HISTORY_HEADERS.length && row.every((v, i) => v === HISTORY_HEADERS[i]);
+    if (same) return;
+    if (row.length) {
+      let old = `${HISTORY_SHEET} (anterior)`;
+      for (let n = 2; titles.has(old); n++) old = `${HISTORY_SHEET} (anterior ${n})`;
+      await batchUpdate(cfg, [
+        { updateSheetProperties: { properties: { sheetId: existing.properties?.sheetId, title: old }, fields: "title" } },
+        { addSheet: { properties: { title: HISTORY_SHEET, gridProperties: { columnCount: HISTORY_HEADERS.length + 2 } } } },
+      ]);
+    }
+  } else {
+    await batchUpdate(cfg, [
+      { addSheet: { properties: { title: HISTORY_SHEET, gridProperties: { columnCount: HISTORY_HEADERS.length + 2 } } } },
+    ]);
+  }
+  const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!A1`)}?valueInputOption=RAW`, {
+    method: "PUT",
+    body: JSON.stringify({ values: [HISTORY_HEADERS] }),
+  });
+  if (!resp.ok) throw await failure(`headers ${HISTORY_SHEET}`, resp);
 }
 
 /**
@@ -681,32 +774,241 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
         },
       },
       { updateDimensionProperties: { range: { sheetId: hid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 36 }, fields: "pixelSize" } },
-      ...HISTORY_WIDTHS.map((w, i) => ({
-        updateDimensionProperties: { range: { sheetId: hid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: w }, fields: "pixelSize" },
+      ...HISTORY_COLUMNS.map((c, i) => ({
+        updateDimensionProperties: { range: { sheetId: hid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: c.width }, fields: "pixelSize" },
       })),
       {
         repeatCell: {
           range: { sheetId: hid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: hcols },
-          cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
+          cell: { userEnteredFormat: { wrapStrategy: "CLIP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
           fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat.fontSize)",
         },
       },
+      ...HISTORY_COLUMNS.flatMap((c, i) => {
+        const fmt =
+          c.type === "DATETIME" ? { numberFormat: { type: "DATE_TIME", pattern: "d/m/yyyy hh:mm" } }
+          : c.type === "MONEY" ? { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" }
+          : c.type === "INT" ? { numberFormat: { type: "NUMBER", pattern: "0" }, horizontalAlignment: "CENTER" }
+          : c.wrap ? { wrapStrategy: "WRAP" }
+          : null;
+        return fmt
+          ? [{ repeatCell: { range: { sheetId: hid, startRowIndex: 1, startColumnIndex: i, endColumnIndex: i + 1 }, cell: { userEnteredFormat: fmt }, fields: "userEnteredFormat(" + Object.keys(fmt).join(",") + ")" } }]
+          : [];
+      }),
       {
         repeatCell: {
-          range: { sheetId: hid, startRowIndex: 1, startColumnIndex: 5, endColumnIndex: 6 },
-          cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0.00" } } },
-          fields: "userEnteredFormat.numberFormat",
+          range: { sheetId: hid, startRowIndex: 1, startColumnIndex: HISTORY_COLUMNS.findIndex((c) => c.key === "order"), endColumnIndex: HISTORY_COLUMNS.findIndex((c) => c.key === "order") + 1 },
+          cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } } } },
+          fields: "userEnteredFormat.textFormat",
         },
       },
-      { updateSheetProperties: { properties: { sheetId: hid, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+      { updateSheetProperties: { properties: { sheetId: hid, gridProperties: { frozenRowCount: 1, frozenColumnCount: 3 } }, fields: "gridProperties(frozenRowCount,frozenColumnCount)" } },
       // Menú de ordenar/filtrar en cada encabezado del historial.
       { setBasicFilter: { filter: { range: { sheetId: hid, startRowIndex: 0, startColumnIndex: 0, endColumnIndex: hcols } } } },
       ...dropRules(hid),
-      bandRule(hid, 1, hcols)
+      bandRule(hid, 1, hcols),
+      ...STATUS_COLORS.map(([label, bg, fg]) => ({
+        addConditionalFormatRule: {
+          index: 0,
+          rule: {
+            ranges: [{ sheetId: hid, startRowIndex: 1, startColumnIndex: HISTORY_COLUMNS.findIndex((c) => c.key === "status"), endColumnIndex: HISTORY_COLUMNS.findIndex((c) => c.key === "status") + 1 }],
+            booleanRule: {
+              condition: { type: "TEXT_EQ", values: [{ userEnteredValue: label }] },
+              format: { backgroundColorStyle: { rgbColor: rgb(bg) }, textFormat: { bold: true, foregroundColorStyle: { rgbColor: rgb(fg) } } },
+            },
+          },
+        },
+      }))
     );
   }
 
   await batchUpdate(cfg, requests);
+}
+
+// ── Resumen ejecutivo ────────────────────────────────────────────────────────
+
+/**
+ * Pestaña "Resumen", la primera del archivo: indicadores del mes y totales,
+ * ventas por mes (12 meses), por marca, por tipo de pedido y por estado, con
+ * dos gráficos. Todo son fórmulas sobre Historial y Pedidos, así que se
+ * recalcula solo con cada fila nueva. Se reescribe en cada arranque
+ * (idempotente); los gráficos solo se crean si la pestaña no tiene ninguno.
+ */
+async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<void> {
+  let dash = sheets.find((s) => s.properties?.title === DASHBOARD_SHEET);
+  if (!dash) {
+    const [reply] = await batchUpdate(cfg, [
+      { addSheet: { properties: { title: DASHBOARD_SHEET, index: 0, gridProperties: { rowCount: 80, columnCount: 14, hideGridlines: true } } } },
+    ]);
+    dash = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: DASHBOARD_SHEET }, charts: [] };
+  }
+  const sid = dash.properties?.sheetId ?? 0;
+  const H = quoteSheet(HISTORY_SHEET);
+  const P = quoteSheet(ORDERS_SHEET);
+  const c = (key: string) => `${H}!$${hcol(key)}:$${hcol(key)}`;
+  const sale = `${c("event")},"${EVENT_LABEL.compra_confirmada}",${c("paid")},"Sí"`;
+  const monthNow = `TEXT(TODAY(),"yyyy-mm")`;
+  const SUM = (extra = "") => `=IFERROR(SUMIFS(${c("total")},${sale}${extra}),0)`;
+  const CNT = (extra = "") => `=IFERROR(COUNTIFS(${sale}${extra}),0)`;
+
+  // Celdas: [fila, col] 0-based. La hoja es de 12 columnas útiles (A..L).
+  const V: Array<[number, number, string | number]> = [];
+  const put = (r: number, col: number, v: string | number) => V.push([r, col, v]);
+  put(0, 0, "RUBI LENS · Resumen ejecutivo");
+  put(1, 0, "Se actualiza solo con cada pedido y cada cambio de etapa. Ventas = compras confirmadas y pagadas.");
+  put(1, 9, "Actualizado:"); put(1, 10, "=NOW()");
+
+  // Indicadores (fila 3 etiquetas, fila 4 valores; 4 tiles de 3 columnas).
+  const tiles: Array<[string, string]> = [
+    ["VENTAS ESTE MES", SUM(`,${c("month")},${monthNow}`)],
+    ["PEDIDOS ESTE MES", CNT(`,${c("month")},${monthNow}`)],
+    ["TICKET MEDIO (MES)", `=IFERROR(B5/E5,0)`],
+    ["VENTAS TOTALES", SUM()],
+  ];
+  const tiles2: Array<[string, string]> = [
+    ["PEDIDOS TOTALES", CNT()],
+    ["EN LABORATORIO", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.in_lab}")+COUNTIF(${P}!$E:$E,"${STAGE_LABEL.confirmed}")`],
+    ["ENVIADOS / EN TRÁNSITO", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.shipped}")+COUNTIF(${P}!$E:$E,"${STAGE_LABEL.in_transit}")`],
+    ["ENTREGADOS", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.delivered}")`],
+  ];
+  tiles.forEach(([l, f], i) => { put(3, 1 + i * 3, l); put(4, 1 + i * 3, f); });
+  tiles2.forEach(([l, f], i) => { put(6, 1 + i * 3, l); put(7, 1 + i * 3, f); });
+
+  // Ventas por mes (últimos 12 meses), filas 10..22.
+  const M0 = 10;
+  put(M0, 1, "VENTAS POR MES");
+  ["Mes", "Pedidos", "Ventas", "Ticket medio", "Con receta", "Pruebas virtuales"].forEach((h, i) => put(M0 + 1, 1 + i, h));
+  for (let i = 0; i < 12; i++) {
+    const r = M0 + 2 + i;
+    const row = r + 1; // 1-based para las fórmulas
+    put(r, 1, `=TEXT(EDATE(DATE(YEAR(TODAY()),MONTH(TODAY()),1),${i - 11}),"yyyy-mm")`);
+    put(r, 2, CNT(`,${c("month")},$B${row}`));
+    put(r, 3, SUM(`,${c("month")},$B${row}`));
+    put(r, 4, `=IFERROR(D${row}/C${row},0)`);
+    put(r, 5, CNT(`,${c("month")},$B${row},${c("rx")},"Sí"`));
+    put(r, 6, CNT(`,${c("month")},$B${row},${c("tryon")},"Sí"`));
+  }
+
+  // Por marca (filas 26..37) y por tipo / estado (misma zona, columnas H..L).
+  const B0 = 25;
+  put(B0, 1, "VENTAS POR MARCA"); ["Marca", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 1 + i, h));
+  put(B0 + 2, 1, `=IFERROR(SORT(UNIQUE(FILTER(${H}!$${hcol("brand")}$2:$${hcol("brand")},${H}!$${hcol("event")}$2:$${hcol("event")}="${EVENT_LABEL.compra_confirmada}",${H}!$${hcol("brand")}$2:$${hcol("brand")}<>""))),"")`);
+  for (let i = 0; i < 10; i++) {
+    const row = B0 + 3 + i;
+    put(B0 + 2 + i, 2, `=IF($B${row}="","",COUNTIFS(${sale},${c("brand")},$B${row}))`);
+    put(B0 + 2 + i, 3, `=IF($B${row}="","",SUMIFS(${c("total")},${sale},${c("brand")},$B${row}))`);
+  }
+  put(B0, 7, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 7 + i, h));
+  Object.values(ORDER_TYPE).forEach((t, i) => {
+    const row = B0 + 3 + i;
+    put(B0 + 2 + i, 7, t);
+    put(B0 + 2 + i, 8, `=COUNTIFS(${sale},${c("type")},$H${row})`);
+    put(B0 + 2 + i, 9, `=SUMIFS(${c("total")},${sale},${c("type")},$H${row})`);
+  });
+  const S0 = B0 + 8;
+  put(S0, 7, "PEDIDOS POR ESTADO (AHORA)"); ["Estado", "Pedidos"].forEach((h, i) => put(S0 + 1, 7 + i, h));
+  [...Object.values(STAGE_LABEL), ...Object.values(TERMINAL_LABEL)].forEach((st, i) => {
+    put(S0 + 2 + i, 7, st);
+    put(S0 + 2 + i, 8, `=COUNTIF(${P}!$E:$E,$H${S0 + 3 + i})`);
+  });
+
+  // Escribir valores (fórmulas con USER_ENTERED).
+  const maxR = Math.max(...V.map((v) => v[0])) + 1;
+  const grid: (string | number | null)[][] = Array.from({ length: maxR }, () => Array(12).fill(null));
+  for (const [r, col, v] of V) grid[r][col] = v;
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${DASHBOARD_SHEET}!A1:L${maxR}`)}:clear`, { method: "POST", body: "{}" });
+  if (!clear.ok) throw await failure("clear dashboard", clear);
+  const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${DASHBOARD_SHEET}!A1`)}?valueInputOption=USER_ENTERED`, {
+    method: "PUT",
+    body: JSON.stringify({ values: grid.map((row) => row.map((v) => (v === null ? "" : v))) }),
+  });
+  if (!write.ok) throw await failure("write dashboard", write);
+
+  // Formato.
+  const title = { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 18, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE" };
+  const label = { textFormat: { bold: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#8a7340") } }, horizontalAlignment: "LEFT" };
+  const value = { textFormat: { bold: true, fontSize: 20, foregroundColorStyle: { rgbColor: NAVY } }, horizontalAlignment: "LEFT", verticalAlignment: "MIDDLE" };
+  const section = { textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: NAVY } } };
+  const head = { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: WHITE } } };
+  const money = { numberFormat: { type: "NUMBER", pattern: '"USD "#,##0.00' } };
+  const range = (r0: number, r1: number, c0: number, c1: number) => ({ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+  const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
+  const req: unknown[] = [
+    { unmergeCells: { range: range(0, S0 + 12, 0, 12) } },
+    { updateSheetProperties: { properties: { sheetId: sid, index: 0, gridProperties: { hideGridlines: true } }, fields: "index,gridProperties.hideGridlines" } },
+    { updateSheetProperties: { properties: { sheetId: sid, tabColorStyle: { rgbColor: GOLD } }, fields: "tabColorStyle" } },
+    fmt(range(0, 1, 0, 12), title), { mergeCells: { range: range(0, 1, 0, 12), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 48 }, fields: "pixelSize" } },
+    fmt(range(1, 2, 0, 12), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    fmt(range(1, 2, 10, 11), { numberFormat: { type: "DATE_TIME", pattern: "d/m/yyyy hh:mm" }, textFormat: { fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 24 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 1, endIndex: 12 }, properties: { pixelSize: 118 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 7, endIndex: 8 }, properties: { pixelSize: 170 }, fields: "pixelSize" } },
+  ];
+  // Tiles: etiqueta arriba, valor grande abajo, fondo dorado claro con borde.
+  for (const [r0, defs] of [[3, tiles], [6, tiles2]] as Array<[number, Array<[string, string]>]>) {
+    defs.forEach((_, i) => {
+      const c0 = 1 + i * 3;
+      req.push(
+        fmt(range(r0, r0 + 2, c0, c0 + 2), { backgroundColorStyle: { rgbColor: rgb("#f6efd9") } }),
+        fmt(range(r0, r0 + 1, c0, c0 + 1), label),
+        fmt(range(r0 + 1, r0 + 2, c0, c0 + 1), value),
+        { mergeCells: { range: range(r0, r0 + 1, c0, c0 + 2), mergeType: "MERGE_ALL" } },
+        { mergeCells: { range: range(r0 + 1, r0 + 2, c0, c0 + 2), mergeType: "MERGE_ALL" } },
+        { updateBorders: { range: range(r0, r0 + 2, c0, c0 + 2), left: { style: "SOLID_THICK", colorStyle: { rgbColor: GOLD } } } }
+      );
+    });
+    req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: r0 + 1, endIndex: r0 + 2 }, properties: { pixelSize: 40 }, fields: "pixelSize" } });
+  }
+  // Importes de los tiles de dinero.
+  req.push(fmt(range(4, 5, 1, 2), money), fmt(range(4, 5, 7, 8), money), fmt(range(4, 5, 10, 11), money));
+  // Secciones y tablas.
+  req.push(
+    fmt(range(M0, M0 + 1, 1, 7), section), fmt(range(M0 + 1, M0 + 2, 1, 7), head),
+    fmt(range(M0 + 2, M0 + 14, 3, 5), money), fmt(range(M0 + 2, M0 + 14, 1, 7), { textFormat: { fontSize: 10 } }),
+    { updateBorders: { range: range(M0 + 1, M0 + 14, 1, 7), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    fmt(range(B0, B0 + 1, 1, 4), section), fmt(range(B0 + 1, B0 + 2, 1, 4), head), fmt(range(B0 + 2, B0 + 12, 3, 4), money),
+    { updateBorders: { range: range(B0 + 1, B0 + 12, 1, 4), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    fmt(range(B0, B0 + 1, 7, 10), section), fmt(range(B0 + 1, B0 + 2, 7, 10), head), fmt(range(B0 + 2, B0 + 6, 9, 10), money),
+    { updateBorders: { range: range(B0 + 1, B0 + 6, 7, 10), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    fmt(range(S0, S0 + 1, 7, 9), section), fmt(range(S0 + 1, S0 + 2, 7, 9), head),
+    { updateBorders: { range: range(S0 + 1, S0 + 10, 7, 9), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } }
+  );
+  // Gráficos (solo si la pestaña no tiene ninguno).
+  if (!(dash.charts ?? []).length) {
+    const src = (r0: number, r1: number, col: number) => ({ sourceRange: { sources: [{ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: col, endColumnIndex: col + 1 }] } });
+    req.push(
+      {
+        addChart: {
+          chart: {
+            spec: {
+              title: "Ventas por mes (USD)",
+              titleTextFormat: { bold: true, foregroundColorStyle: { rgbColor: NAVY } },
+              basicChart: {
+                chartType: "COLUMN", legendPosition: "NO_LEGEND", headerCount: 1,
+                domains: [{ domain: src(M0 + 1, M0 + 14, 1) }],
+                series: [{ series: src(M0 + 1, M0 + 14, 3), targetAxis: "LEFT_AXIS", colorStyle: { rgbColor: NAVY } }],
+              },
+            },
+            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: S0 + 12, columnIndex: 1 }, widthPixels: 560, heightPixels: 300 } },
+          },
+        },
+      },
+      {
+        addChart: {
+          chart: {
+            spec: {
+              title: "Pedidos por estado",
+              titleTextFormat: { bold: true, foregroundColorStyle: { rgbColor: NAVY } },
+              pieChart: { legendPosition: "RIGHT_LEGEND", domain: src(S0 + 1, S0 + 10, 7), series: src(S0 + 1, S0 + 10, 8), pieHole: 0.5 },
+            },
+            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: S0 + 12, columnIndex: 7 }, widthPixels: 420, heightPixels: 300 } },
+          },
+        },
+      }
+    );
+  }
+  await batchUpdate(cfg, req);
 }
 
 function columnLetter(index: number): string {
@@ -821,6 +1123,36 @@ export function sheetDateSerial(value: string | Date, timeZone = process.env.GSH
   return Date.UTC(get("year"), get("month") - 1, get("day")) / 86_400_000 + 25_569;
 }
 
+/** Fecha y hora como número de serie de Sheets (con fracción de día) en GSHEET_TIMEZONE. */
+export function sheetDateTimeSerial(value: string | Date, timeZone = process.env.GSHEET_TIMEZONE || "UTC"): number | "" {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  let parts: Intl.DateTimeFormatPart[];
+  const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone, ...opts }).formatToParts(d);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...opts }).formatToParts(d);
+  }
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const hour = get("hour") % 24; // "24" a medianoche en algunos motores
+  return Date.UTC(get("year"), get("month") - 1, get("day"), hour, get("minute"), get("second")) / 86_400_000 + 25_569;
+}
+
+/** "yyyy-mm" del instante en GSHEET_TIMEZONE (columna Mes del Historial). */
+export function sheetMonth(value: string | Date, timeZone = process.env.GSHEET_TIMEZONE || "UTC"): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit" }).formatToParts(d);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "2-digit" }).formatToParts(d);
+  }
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}`;
+}
+
 export interface RxEyeValues {
   sph: number | null;
   cyl: number | null;
@@ -853,6 +1185,8 @@ export interface RxSheetInfo {
 
 export interface SheetLineDetail {
   frame_name: string;
+  brand?: string | null;
+  sku?: string | null;
   color: string | null;
   quantity: number;
   design: string | null;
@@ -918,6 +1252,7 @@ export function buildRows(
     lines?: SheetLineDetail[];
     rx?: RxSheetInfo[];
     adminUrl?: string;
+    payment?: PaymentInfo | null;
   } = {}
 ) {
   const md = (order.metadata ?? {}) as Record<string, unknown>;
@@ -1028,16 +1363,77 @@ export function buildRows(
     [...new Set(notes)].join("\n"),
   ];
 
-  const historyRow = [
-    now,
+  // Historial: una fila por evento con TODO el pedido, una columna por dato.
+  const lines = extra.lines ?? [];
+  const uniq = (xs: Array<string | null | undefined>) => [...new Set(xs.filter((x): x is string => Boolean(x && x.trim())))].join(" | ");
+  const lensText = lines.length
+    ? lines.map((l) => [l.design, l.material, l.photo, l.ar].filter(Boolean).join(", ") || "Solo montura").join(" | ")
+    : items.map((it) => ((it.metadata ?? {})["lens_config"] ? "Con lentes" : "Solo montura")).join(" | ");
+  const withRx = lines.length ? lines.some((l) => l.with_rx) : items.some((it) => Boolean((it.metadata ?? {})["prescription_id"]));
+  const eyeText = (e?: RxEyeValues) =>
+    e ? `SPH ${dpt(e.sph)} CYL ${dpt(e.cyl)} AXIS ${plain(e.axis)} ADD ${dpt(e.add)}` + (e.prism != null || e.base ? ` PRISMA ${dpt(e.prism)} BASE ${plain(e.base)}` : "") : "";
+  const rx0 = rx[0];
+  const pdText = rx0
+    ? [
+        rx0.pd != null ? `DIP ${plain(rx0.pd)} mm` : rx0.pd_od != null || rx0.pd_os != null ? `DIP OD ${plain(rx0.pd_od)} / OS ${plain(rx0.pd_os)} mm` : "",
+        rx0.seg_height != null ? `Altura ${plain(rx0.seg_height)} mm` : "",
+      ].filter(Boolean).join(" · ")
+    : "";
+  const rxSource = rx0
+    ? [
+        rx0.source === "ocr" ? "Leída por OCR de la foto" : "Ingresada por el cliente",
+        rx0.verified_by_user ? "confirmada por el cliente" : "",
+        rx0.measurement_source === "ai" ? `medidas por IA${rx0.measurement_quality ? ` (${rx0.measurement_quality})` : ""}` : "",
+        rx0.patient_for === "other" ? `para ${rx0.patient_name || "otra persona"}` : rx0.patient_for === "me" ? "para el comprador" : "",
+      ].filter(Boolean).join(", ")
+    : "";
+  const paid = ["captured", "partially_refunded"].includes(String(order.payment_status ?? ""));
+  const pay = extra.payment;
+  const payText = pay
+    ? [pay.provider, pay.method !== "card" ? pay.method : "", pay.brand, pay.last4 ? `•••• ${pay.last4}` : ""].filter(Boolean).join(" ")
+    : "";
+  const terminalNote = progress.terminal ? `Estado terminal: ${TERMINAL_LABEL[progress.terminal]}` : "";
+  const historyRow: Cell[] = [
+    sheetDateTimeSerial(now),
+    sheetMonth(order.created_at || now),
     displayId,
-    String(order.id ?? ""),
-    event,
+    eventLabel(event),
     status,
-    money(order.total),
+    orderType(items),
+    name,
+    String(order.email ?? ""),
+    phone,
+    [addr.address_1, addr.address_2].filter(Boolean).join(", "),
+    String(addr.city ?? ""),
+    String(addr.province ?? ""),
+    String(addr.postal_code ?? ""),
+    String(addr.country_code ?? "").toUpperCase(),
+    carrier,
+    trackingNumber ? (trackingUrl ? `${trackingNumber} ${trackingUrl}` : trackingNumber) : "",
+    uniq(lines.map((l) => l.brand)),
+    lines.length ? uniq(lines.map((l) => l.frame_name)) : uniq(items.map((it) => (it.product_title as string) || (it.title as string))),
+    lines.length ? uniq(lines.map((l) => l.color)) : uniq(items.map((it) => it.variant_title as string)),
+    uniq(lines.map((l) => l.sku)),
+    lensText,
+    withRx ? "Sí" : "No",
+    rx0 ? eyeText(rx0.od) : "",
+    rx0 ? eyeText(rx0.os) : "",
+    pdText,
+    rxSource,
+    hasTryon ? "Sí" : "No",
+    items.reduce((n, it) => n + Number(it.quantity ?? 1), 0),
+    Number(money(order.subtotal)),
+    Number(money(order.discount_total)),
+    Number(money(order.shipping_total)),
+    Number(money(order.tax_total)),
+    Number(money(order.total)),
     currency,
-    trackingNumber,
-    progress.terminal ? `terminal: ${progress.terminal}` : "",
+    paid ? "Sí" : "No",
+    payText,
+    `email ${md["notify_email"] === false || md["notify_email"] === "false" ? "no" : "sí"} · SMS ${md["notify_sms"] === true || md["notify_sms"] === "true" ? "sí" : "no"}`,
+    String(order.locale ?? md["locale"] ?? "es"),
+    [terminalNote, hasFile ? "Receta original guardada (solo en el panel)" : ""].filter(Boolean).join(" · "),
+    String(order.id ?? ""),
   ];
 
   return { orderRow, historyRow };
@@ -1048,13 +1444,28 @@ async function loadRowExtras(
   container: MedusaContainer,
   order: Record<string, any>,
   logger: Logger
-): Promise<{ lines?: SheetLineDetail[]; rx?: RxSheetInfo[] }> {
+): Promise<{ lines?: SheetLineDetail[]; rx?: RxSheetInfo[]; payment?: PaymentInfo | null }> {
+  let payment: PaymentInfo | null = null;
+  try {
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const { data } = await query.graph({
+      entity: "order",
+      fields: ["id", "payment_collections.payments.provider_id", "payment_collections.payments.data"],
+      filters: { id: order.id },
+    });
+    const payments = (((data?.[0] as any)?.payment_collections ?? []) as Array<any>).flatMap((pc) => pc?.payments ?? []);
+    payment = await extractPaymentInfo(payments, process.env.STRIPE_SECRET_KEY);
+  } catch (error) {
+    logger.warn(`[gsheet] order ${order.id}: payment info unavailable (${(error as Error).message})`);
+  }
   try {
     const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
     const items = (order.items ?? []) as Array<Record<string, any>>;
     const enriched = await enrichLensItems(pg, items, "es");
     const lines: SheetLineDetail[] = enriched.map((e) => ({
       frame_name: e.frame_name,
+      brand: e.collection,
+      sku: e.specs?.sku ?? null,
       color: e.color,
       quantity: e.quantity,
       design: e.design,
@@ -1094,10 +1505,10 @@ async function loadRowExtras(
       has_tryon: Boolean(r["tryon_image_url"]),
       has_file: Boolean(r["file_url"]),
     }));
-    return { lines, rx };
+    return { lines, rx, payment };
   } catch (error) {
     logger.warn(`[gsheet] order ${order.id}: row details unavailable (${(error as Error).message})`);
-    return {};
+    return { payment };
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -1168,4 +1579,33 @@ export async function syncOrderToSheet(
 /** Helper para cambios de etapa desde el panel. */
 export function sheetStageEvent(stage: OrderStage): string {
   return `etapa: ${stage}`;
+}
+
+/**
+ * Pone al día la hoja sin esperar a un pedido nuevo: asegura pestañas, estilo
+ * y resumen, y da de alta en la tabla "Pedidos" cualquier pedido que falte
+ * (p. ej. los que fallaron cuando la tabla no tenía títulos). Lo usa el job
+ * programado; devuelve cuántos pedidos se añadieron.
+ */
+export async function backfillOrdersToSheet(container: MedusaContainer): Promise<number> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const cfg = gsheetConfig();
+  if (!cfg || privateKeyProblem(cfg.privateKey)) return 0;
+  try {
+    const table = await ensureSheets(cfg, logger);
+    const col = columnLetter(table.startCol);
+    const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${col}:${col}`)}`);
+    const values = resp.ok ? (((await resp.json()) as { values?: string[][] }).values ?? []) : [];
+    const present = new Set(values.slice(table.headerRow + 1).map((r) => r?.[0]).filter(Boolean));
+
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const { data } = await query.graph({ entity: "order", fields: ["id", "display_id"], pagination: { take: 500, order: { created_at: "ASC" } } });
+    const missing = ((data ?? []) as Array<Record<string, any>>).filter((o) => !present.has(`#${o.display_id}`));
+    for (const o of missing) await syncOrderToSheet(container, String(o.id), "resincronizado");
+    if (missing.length) logger.info(`[gsheet] backfill: ${missing.length} pedido(s) añadidos a la hoja.`);
+    return missing.length;
+  } catch (error) {
+    logger.warn(`[gsheet] backfill no realizado: ${(error as Error).message}`);
+    return 0;
+  }
 }
