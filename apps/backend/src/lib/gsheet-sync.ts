@@ -45,6 +45,7 @@
 import { createPrivateKey, createSign } from "node:crypto";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { getOrdersListWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import { deriveOrderProgress, type OrderStage, type OrderTerminalState } from "./order-status";
 import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/order-enrich";
@@ -1089,19 +1090,33 @@ async function appendHistoryRow(cfg: GsheetConfig, row: unknown[]): Promise<void
 
 // ── Construcción de la fila desde el pedido ──────────────────────────────────
 
+/**
+ * Campos del pedido para la hoja. Se leen con `getOrdersListWorkflow`, no con
+ * `query.graph`: los totales solo salen bien cuando vienen las relaciones de
+ * las que se suman (items.detail, tax_lines, adjustments, shipping_methods,
+ * credit_lines), y `payment_status` / `fulfillment_status` NO existen en el
+ * grafo de `order` — con query.graph llegan `undefined`, que se lee como "no
+ * pagado": así salieron pedidos a 0,00 y "Pago pendiente" en la hoja.
+ */
 const ORDER_SHEET_FIELDS = [
-  "id", "display_id", "email", "currency_code", "created_at", "metadata", "locale",
-  "status", "payment_status", "fulfillment_status",
-  "subtotal", "shipping_total", "tax_total", "discount_total", "total",
-  "items.title", "items.product_title", "items.variant_title", "items.product_id",
-  "items.quantity", "items.unit_price", "items.total", "items.metadata",
-  "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone",
-  "shipping_address.address_1", "shipping_address.address_2", "shipping_address.city",
-  "shipping_address.province", "shipping_address.postal_code", "shipping_address.country_code",
-  "shipping_methods.name", "shipping_methods.amount",
-  "fulfillments.labels.tracking_number", "fulfillments.labels.tracking_url",
-  "fulfillments.created_at", "fulfillments.packed_at", "fulfillments.shipped_at", "fulfillments.canceled_at",
+  "id", "status", "display_id", "email", "currency_code", "created_at", "metadata", "locale",
+  "total", "subtotal", "discount_total", "shipping_total", "tax_total", "item_total", "item_subtotal",
+  "items.*", "items.detail.*", "items.tax_lines.*", "items.adjustments.*",
+  "shipping_methods.*", "shipping_methods.tax_lines.*", "shipping_methods.adjustments.*",
+  "credit_lines.*",
+  "shipping_address.*",
+  "fulfillments.id", "fulfillments.created_at", "fulfillments.packed_at", "fulfillments.shipped_at",
+  "fulfillments.delivered_at", "fulfillments.canceled_at", "fulfillments.labels.*",
 ];
+
+/** Pedido con totales y estados calculados (ver ORDER_SHEET_FIELDS). */
+async function loadOrderForSheet(container: MedusaContainer, orderId: string): Promise<Record<string, any> | undefined> {
+  const { result } = await getOrdersListWorkflow(container).run({
+    input: { fields: ORDER_SHEET_FIELDS, variables: { filters: { id: orderId }, skip: 0, take: 1 } },
+  });
+  const rows = (Array.isArray(result) ? result : (result as any).rows) as Array<Record<string, any>>;
+  return rows?.[0];
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function money(v: unknown): string {
@@ -1528,7 +1543,8 @@ export async function syncOrderToSheet(
   container: MedusaContainer,
   orderId: string,
   event: string,
-  tracking?: { number?: string | null; url?: string | null }
+  tracking?: { number?: string | null; url?: string | null },
+  options: { history?: boolean } = {}
 ): Promise<void> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const cfg = gsheetConfig();
@@ -1545,13 +1561,7 @@ export async function syncOrderToSheet(
   }
 
   try {
-    const query = container.resolve(ContainerRegistrationKeys.QUERY);
-    const { data } = await query.graph({
-      entity: "order",
-      fields: ORDER_SHEET_FIELDS,
-      filters: { id: orderId },
-    });
-    const order = data?.[0] as Record<string, unknown> | undefined;
+    const order = await loadOrderForSheet(container, orderId);
     if (!order) {
       logger.warn(`[gsheet] order ${orderId} not found — nothing mirrored.`);
       return;
@@ -1572,7 +1582,7 @@ export async function syncOrderToSheet(
       cachedTable = null;
       throw error;
     }
-    await appendHistoryRow(cfg, historyRow);
+    if (options.history !== false) await appendHistoryRow(cfg, historyRow);
     logger.info(`[gsheet] order ${orderId} mirrored (${event}).`);
   } catch (error) {
     // La hoja jamás tumba un pedido ni un cambio de etapa.
@@ -1604,8 +1614,15 @@ export async function backfillOrdersToSheet(container: MedusaContainer): Promise
 
     const query = container.resolve(ContainerRegistrationKeys.QUERY);
     const { data } = await query.graph({ entity: "order", fields: ["id", "display_id"], pagination: { take: 500, order: { created_at: "ASC" } } });
-    const missing = ((data ?? []) as Array<Record<string, any>>).filter((o) => !present.has(`#${o.display_id}`));
+    const all = (data ?? []) as Array<Record<string, any>>;
+    const missing = all.filter((o) => !present.has(`#${o.display_id}`));
     for (const o of missing) await syncOrderToSheet(container, String(o.id), "resincronizado");
+    // Los que ya están se refrescan en la tabla (estado, importes, tracking)
+    // sin añadir filas al historial: así la tabla nunca se queda desfasada.
+    for (const o of all) {
+      if (!present.has(`#${o.display_id}`)) continue;
+      await syncOrderToSheet(container, String(o.id), "refresco", undefined, { history: false });
+    }
     if (missing.length) logger.info(`[gsheet] backfill: ${missing.length} pedido(s) añadidos a la hoja.`);
     return missing.length;
   } catch (error) {
