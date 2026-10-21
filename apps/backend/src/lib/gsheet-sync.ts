@@ -84,7 +84,7 @@ export const TERMINAL_LABEL: Record<OrderTerminalState, string> = {
   payment_pending: "Pago pendiente",
 };
 
-type ColumnType = "TEXT" | "DROPDOWN" | "DATE";
+type ColumnType = "TEXT" | "DROPDOWN" | "DATE" | "DOUBLE";
 interface ColumnSpec {
   name: string;
   type: ColumnType;
@@ -107,9 +107,23 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
     width: 150,
   },
   { name: "Fecha de compra", type: "DATE", width: 130 },
+  // Columnas de las que se alimenta el Resumen (una fila por pedido, siempre
+  // al día): importe, si está pagado, marca y si hubo prueba virtual.
+  { name: "Total", type: "DOUBLE", width: 90 },
+  { name: "Pagado", type: "DROPDOWN", options: ["Sí", "No"], width: 80 },
+  { name: "Marca", type: "TEXT", width: 120 },
+  { name: "Prueba virtual", type: "DROPDOWN", options: ["Sí", "No"], width: 100 },
   { name: "Archivo", type: "TEXT", width: 240, wrap: true },
   { name: "Notas", type: "TEXT", width: 320, wrap: true },
 ];
+/** Índice (0-based) de una columna de la tabla por nombre. */
+const ocol = (name: string): number => {
+  const i = ORDER_COLUMNS.findIndex((c) => c.name === name);
+  if (i < 0) throw new Error(`order column ${name}`);
+  return i;
+};
+/** Pagado = lo que el panel considera cobrado (autorizado o capturado). */
+const PAID_STATUSES = new Set(["authorized", "partially_authorized", "captured", "partially_captured", "partially_refunded"]);
 
 // ── Estilo de marca (el de la tienda: azul marino + dorado) ──────────────────
 const rgb = (hex: string) => {
@@ -463,6 +477,17 @@ async function pickSheetForTable(
   return { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title };
 }
 
+function tableColumnProperties() {
+  return ORDER_COLUMNS.map((c, columnIndex) => ({
+    columnIndex,
+    columnName: c.name,
+    columnType: c.type,
+    ...(c.type === "DROPDOWN"
+      ? { dataValidationRule: { condition: { type: "ONE_OF_LIST", values: (c.options ?? []).map((v) => ({ userEnteredValue: v })) } } }
+      : {}),
+  }));
+}
+
 async function createOrdersTable(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<OrdersTable> {
   const { sheetId, title } = await pickSheetForTable(cfg, sheets);
   const cols = ORDER_COLUMNS.length;
@@ -474,21 +499,7 @@ async function createOrdersTable(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
           name: ORDERS_TABLE,
           // Encabezado + una fila vacía: appendCells rellena la primera libre.
           range: { sheetId, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: cols },
-          columnProperties: ORDER_COLUMNS.map((c, columnIndex) => ({
-            columnIndex,
-            columnName: c.name,
-            columnType: c.type,
-            ...(c.type === "DROPDOWN"
-              ? {
-                  dataValidationRule: {
-                    condition: {
-                      type: "ONE_OF_LIST",
-                      values: (c.options ?? []).map((v) => ({ userEnteredValue: v })),
-                    },
-                  },
-                }
-              : {}),
-          })),
+          columnProperties: tableColumnProperties(),
           rowsProperties: {
             headerColorStyle: { rgbColor: HEADER_COLOR },
             firstBandColorStyle: { rgbColor: BAND_1 },
@@ -587,7 +598,7 @@ async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersT
     try {
       const meta = await readSheetsMeta(cfg);
       await applyBrandStyle(cfg, table, meta);
-      await ensureDashboard(cfg, meta);
+      await ensureDashboard(cfg, meta, table);
       styleApplied = true;
     } catch (e) {
       logger?.warn(`[gsheet] estilo/resumen no aplicado: ${(e as Error).message}`);
@@ -679,13 +690,25 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
       updateTable: {
         table: {
           tableId: table.tableId,
+          // Rango con TODAS las columnas actuales (si el esquema creció, la
+          // tabla se amplía y las columnas nuevas reciben nombre y tipo).
+          range: { sheetId, startRowIndex: headerRow, endRowIndex: Math.max(table.endRow, headerRow + 2), startColumnIndex: startCol, endColumnIndex: startCol + cols },
+          columnProperties: tableColumnProperties(),
           rowsProperties: {
             headerColorStyle: { rgbColor: HEADER_COLOR },
             firstBandColorStyle: { rgbColor: BAND_1 },
             secondBandColorStyle: { rgbColor: BAND_2 },
           },
         },
-        fields: "rowsProperties",
+        fields: "range,columnProperties,rowsProperties",
+      },
+    },
+    // Los títulos de las columnas (columnName no siempre llega a las celdas).
+    {
+      updateCells: {
+        range: { sheetId, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + cols },
+        rows: [{ values: ORDER_COLUMNS.map((c) => ({ userEnteredValue: { stringValue: c.name } })) }],
+        fields: "userEnteredValue",
       },
     },
     // Encabezado: letra blanca en negrita, alto cómodo y línea dorada debajo.
@@ -726,8 +749,15 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
     },
     {
       repeatCell: {
-        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + 5, endColumnIndex: startCol + 6 },
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + ocol("Fecha de compra"), endColumnIndex: startCol + ocol("Fecha de compra") + 1 },
         cell: { userEnteredFormat: { numberFormat: { type: "DATE", pattern: "d/m/yyyy" }, horizontalAlignment: "CENTER" } },
+        fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
+      },
+    },
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + ocol("Total"), endColumnIndex: startCol + ocol("Total") + 1 },
+        cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" } },
         fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
       },
     },
@@ -745,7 +775,7 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
       addConditionalFormatRule: {
         index: 0,
         rule: {
-          ranges: [{ sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + 4, endColumnIndex: startCol + 5 }],
+          ranges: [{ sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + ocol("Estado"), endColumnIndex: startCol + ocol("Estado") + 1 }],
           booleanRule: {
             condition: { type: "TEXT_EQ", values: [{ userEnteredValue: label }] },
             format: {
@@ -838,7 +868,7 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
  * recalcula solo con cada fila nueva. Se reescribe en cada arranque
  * (idempotente); los gráficos solo se crean si la pestaña no tiene ninguno.
  */
-async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<void> {
+async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: OrdersTable): Promise<void> {
   let dash = sheets.find((s) => s.properties?.title === DASHBOARD_SHEET);
   if (!dash) {
     const [reply] = await batchUpdate(cfg, [
@@ -847,73 +877,78 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<
     dash = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: DASHBOARD_SHEET }, charts: [] };
   }
   const sid = dash.properties?.sheetId ?? 0;
-  const H = quoteSheet(HISTORY_SHEET);
-  const P = quoteSheet(ORDERS_SHEET);
-  const c = (key: string) => `${H}!$${hcol(key)}:$${hcol(key)}`;
-  const sale = `${c("event")},"${EVENT_LABEL.compra_confirmada}",${c("paid")},"Sí"`;
-  const monthNow = `TEXT(TODAY(),"yyyy-mm")`;
-  const SUM = (extra = "") => `=IFERROR(SUMIFS(${c("total")},${sale}${extra}),0)`;
-  const CNT = (extra = "") => `=IFERROR(COUNTIFS(${sale}${extra}),0)`;
+  // Todo sale de la tabla "Pedidos": una fila por pedido, refrescada cada 30
+  // minutos por el job, así que estado, importe y pago están siempre al día.
+  const P = quoteSheet(table.sheetTitle);
+  const col = (name: string) => `${P}!$${columnLetter(table.startCol + ocol(name))}:$${columnLetter(table.startCol + ocol(name))}`;
+  const paidCrit = `${col("Pagado")},"Sí"`;
+  const inMonth = (cell: string) => `${col("Fecha de compra")},">="&${cell},${col("Fecha de compra")},"<"&EDATE(${cell},1)`;
+  const SUM = (extra = "") => `=IFERROR(SUMIFS(${col("Total")},${paidCrit}${extra}),0)`;
+  const CNT = (extra = "") => `=IFERROR(COUNTIFS(${paidCrit}${extra}),0)`;
+  const thisMonth = `DATE(YEAR(TODAY()),MONTH(TODAY()),1)`;
 
   // Celdas: [fila, col] 0-based. La hoja es de 12 columnas útiles (A..L).
   const V: Array<[number, number, string | number]> = [];
   const put = (r: number, col: number, v: string | number) => V.push([r, col, v]);
   put(0, 0, "RUBI LENS · Resumen ejecutivo");
-  put(1, 0, "Se actualiza solo con cada pedido y cada cambio de etapa. Ventas = compras confirmadas y pagadas.");
+  put(1, 0, "Se actualiza solo con cada pedido, cada cambio de etapa y cada 30 minutos. Ventas = pedidos pagados (sin cancelados ni reembolsados).");
   put(1, 9, "Actualizado:"); put(1, 10, "=NOW()");
 
   // Indicadores (fila 3 etiquetas, fila 4 valores; 4 tiles de 3 columnas).
   const tiles: Array<[string, string]> = [
-    ["VENTAS ESTE MES", SUM(`,${c("month")},${monthNow}`)],
-    ["PEDIDOS ESTE MES", CNT(`,${c("month")},${monthNow}`)],
+    ["VENTAS ESTE MES", SUM(`,${inMonth(thisMonth)}`)],
+    ["PEDIDOS ESTE MES", CNT(`,${inMonth(thisMonth)}`)],
     ["TICKET MEDIO (MES)", `=IFERROR(B5/E5,0)`],
     ["VENTAS TOTALES", SUM()],
   ];
+  const E = col("Estado");
   const tiles2: Array<[string, string]> = [
-    ["PEDIDOS TOTALES", CNT()],
-    ["EN LABORATORIO", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.in_lab}")+COUNTIF(${P}!$E:$E,"${STAGE_LABEL.confirmed}")`],
-    ["ENVIADOS / EN TRÁNSITO", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.shipped}")+COUNTIF(${P}!$E:$E,"${STAGE_LABEL.in_transit}")`],
-    ["ENTREGADOS", `=COUNTIF(${P}!$E:$E,"${STAGE_LABEL.delivered}")`],
+    ["PEDIDOS TOTALES", `=COUNTA(${col("Pedido")})-1`],
+    ["EN LABORATORIO", `=COUNTIF(${E},"${STAGE_LABEL.in_lab}")+COUNTIF(${E},"${STAGE_LABEL.confirmed}")`],
+    ["ENVIADOS / EN TRÁNSITO", `=COUNTIF(${E},"${STAGE_LABEL.shipped}")+COUNTIF(${E},"${STAGE_LABEL.in_transit}")`],
+    ["ENTREGADOS", `=COUNTIF(${E},"${STAGE_LABEL.delivered}")`],
   ];
   tiles.forEach(([l, f], i) => { put(3, 1 + i * 3, l); put(4, 1 + i * 3, f); });
   tiles2.forEach(([l, f], i) => { put(6, 1 + i * 3, l); put(7, 1 + i * 3, f); });
 
-  // Ventas por mes (últimos 12 meses), filas 10..22.
+  // Ventas por mes (últimos 12 meses), filas 10..22. La columna Mes es una
+  // fecha (día 1 del mes) con formato "mmm yyyy".
   const M0 = 10;
   put(M0, 1, "VENTAS POR MES");
   ["Mes", "Pedidos", "Ventas", "Ticket medio", "Con receta", "Pruebas virtuales"].forEach((h, i) => put(M0 + 1, 1 + i, h));
   for (let i = 0; i < 12; i++) {
     const r = M0 + 2 + i;
     const row = r + 1; // 1-based para las fórmulas
-    put(r, 1, `=TEXT(EDATE(DATE(YEAR(TODAY()),MONTH(TODAY()),1),${i - 11}),"yyyy-mm")`);
-    put(r, 2, CNT(`,${c("month")},$B${row}`));
-    put(r, 3, SUM(`,${c("month")},$B${row}`));
+    put(r, 1, `=EDATE(${thisMonth},${i - 11})`);
+    put(r, 2, CNT(`,${inMonth(`$B${row}`)}`));
+    put(r, 3, SUM(`,${inMonth(`$B${row}`)}`));
     put(r, 4, `=IFERROR(D${row}/C${row},0)`);
-    put(r, 5, CNT(`,${c("month")},$B${row},${c("rx")},"Sí"`));
-    put(r, 6, CNT(`,${c("month")},$B${row},${c("tryon")},"Sí"`));
+    put(r, 5, `=IFERROR(COUNTIFS(${paidCrit},${inMonth(`$B${row}`)},${col("Tipo")},"${ORDER_TYPE.rx}")+COUNTIFS(${paidCrit},${inMonth(`$B${row}`)},${col("Tipo")},"${ORDER_TYPE.mixed}"),0)`);
+    put(r, 6, CNT(`,${inMonth(`$B${row}`)},${col("Prueba virtual")},"Sí"`));
   }
 
   // Por marca (filas 26..37) y por tipo / estado (misma zona, columnas H..L).
   const B0 = 25;
   put(B0, 1, "VENTAS POR MARCA"); ["Marca", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 1 + i, h));
-  put(B0 + 2, 1, `=IFERROR(SORT(UNIQUE(FILTER(${H}!$${hcol("brand")}$2:$${hcol("brand")},${H}!$${hcol("event")}$2:$${hcol("event")}="${EVENT_LABEL.compra_confirmada}",${H}!$${hcol("brand")}$2:$${hcol("brand")}<>""))),"")`);
+  const brandRange = `${P}!$${columnLetter(table.startCol + ocol("Marca"))}$${table.headerRow + 2}:$${columnLetter(table.startCol + ocol("Marca"))}`;
+  put(B0 + 2, 1, `=IFERROR(SORT(UNIQUE(FILTER(${brandRange},${brandRange}<>""))),"")`);
   for (let i = 0; i < 10; i++) {
     const row = B0 + 3 + i;
-    put(B0 + 2 + i, 2, `=IF($B${row}="","",COUNTIFS(${sale},${c("brand")},$B${row}))`);
-    put(B0 + 2 + i, 3, `=IF($B${row}="","",SUMIFS(${c("total")},${sale},${c("brand")},$B${row}))`);
+    put(B0 + 2 + i, 2, `=IF($B${row}="","",COUNTIFS(${paidCrit},${col("Marca")},$B${row}))`);
+    put(B0 + 2 + i, 3, `=IF($B${row}="","",SUMIFS(${col("Total")},${paidCrit},${col("Marca")},$B${row}))`);
   }
   put(B0, 7, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 7 + i, h));
   Object.values(ORDER_TYPE).forEach((t, i) => {
     const row = B0 + 3 + i;
     put(B0 + 2 + i, 7, t);
-    put(B0 + 2 + i, 8, `=COUNTIFS(${sale},${c("type")},$H${row})`);
-    put(B0 + 2 + i, 9, `=SUMIFS(${c("total")},${sale},${c("type")},$H${row})`);
+    put(B0 + 2 + i, 8, `=COUNTIFS(${paidCrit},${col("Tipo")},$H${row})`);
+    put(B0 + 2 + i, 9, `=SUMIFS(${col("Total")},${paidCrit},${col("Tipo")},$H${row})`);
   });
   const S0 = B0 + 8;
   put(S0, 7, "PEDIDOS POR ESTADO (AHORA)"); ["Estado", "Pedidos"].forEach((h, i) => put(S0 + 1, 7 + i, h));
   [...Object.values(STAGE_LABEL), ...Object.values(TERMINAL_LABEL)].forEach((st, i) => {
     put(S0 + 2 + i, 7, st);
-    put(S0 + 2 + i, 8, `=COUNTIF(${P}!$E:$E,$H${S0 + 3 + i})`);
+    put(S0 + 2 + i, 8, `=COUNTIF(${E},$H${S0 + 3 + i})`);
   });
 
   // Escribir valores (fórmulas con USER_ENTERED).
@@ -970,6 +1005,7 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<
   req.push(
     fmt(range(M0, M0 + 1, 1, 7), section), fmt(range(M0 + 1, M0 + 2, 1, 7), head),
     fmt(range(M0 + 2, M0 + 14, 3, 5), money), fmt(range(M0 + 2, M0 + 14, 1, 7), { textFormat: { fontSize: 10 } }),
+    fmt(range(M0 + 2, M0 + 14, 1, 2), { numberFormat: { type: "DATE", pattern: "mmm yyyy" }, textFormat: { bold: true, fontSize: 10 } }),
     { updateBorders: { range: range(M0 + 1, M0 + 14, 1, 7), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
     fmt(range(B0, B0 + 1, 1, 4), section), fmt(range(B0 + 1, B0 + 2, 1, 4), head), fmt(range(B0 + 2, B0 + 12, 3, 4), money),
     { updateBorders: { range: range(B0 + 1, B0 + 12, 1, 4), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
@@ -1371,6 +1407,9 @@ export function buildRows(
   if (trackingNumber) notes.push(`Tracking: ${trackingNumber}${trackingUrl ? ` ${trackingUrl}` : ""}`);
   notes.push(`Último evento: ${event} (${now})`);
 
+  const lines0 = extra.lines ?? [];
+  const brandCell = [...new Set(lines0.map((l) => l.brand).filter((b): b is string => Boolean(b && b.trim())))].join(" | ");
+  const isPaid = PAID_STATUSES.has(String(order.payment_status ?? ""));
   const orderRow: Cell[] = [
     displayId,
     orderType(items),
@@ -1378,6 +1417,10 @@ export function buildRows(
     customer,
     status,
     order.created_at ? sheetDateSerial(order.created_at) : "",
+    Number(money(order.total)),
+    isPaid ? "Sí" : "No",
+    brandCell,
+    hasTryon ? "Sí" : "No",
     fileCell,
     [...new Set(notes)].join("\n"),
   ];
@@ -1406,7 +1449,7 @@ export function buildRows(
         rx0.patient_for === "other" ? `para ${rx0.patient_name || "otra persona"}` : rx0.patient_for === "me" ? "para el comprador" : "",
       ].filter(Boolean).join(", ")
     : "";
-  const paid = ["captured", "partially_refunded"].includes(String(order.payment_status ?? ""));
+  const paid = isPaid;
   const pay = extra.payment;
   const payText = pay
     ? [pay.provider, pay.method !== "card" ? pay.method : "", pay.brand, pay.last4 ? `•••• ${pay.last4}` : ""].filter(Boolean).join(" ")
