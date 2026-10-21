@@ -1117,7 +1117,12 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   // Se conservan los valores que el dueño tenga escritos en los campos.
   const current = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!B5:I5`)}`);
   const kept = current.ok ? (((await current.json()) as { values?: unknown[][] }).values?.[0] ?? []) : [];
-  const inputs = labels.map((_, i) => (kept[i] ?? "") as string | number);
+  // (Un valor que no es un criterio — p. ej. el contador "Resultados: n" que
+  // una versión anterior dejó en esa fila — se descarta.)
+  const inputs = labels.map((_, i) => {
+    const v = kept[i];
+    return typeof v === "string" && /^Resultados:/i.test(v) ? "" : ((v ?? "") as string | number);
+  });
   if (!inputs[7]) inputs[7] = SHOW_LAST;
 
   const rows: (string | number)[][] = [];

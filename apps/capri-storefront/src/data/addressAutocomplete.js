@@ -247,14 +247,17 @@ function attachPhoton(inputEl, onSelect) {
       if (ctrl) ctrl.abort();
       ctrl = new AbortController();
       const r = await fetch(
-        "https://photon.komoot.io/api/?limit=6&lang=en&q=" + encodeURIComponent(q),
+        "https://photon.komoot.io/api/?limit=10&lang=en&q=" + encodeURIComponent(q),
         { signal: ctrl.signal }
       );
       const j = await r.json();
       const feats = (j.features || []).filter((ft) => {
         const pr = ft.properties || {};
         return pr.countrycode === "US" && pr.street;
-      }).slice(0, 5);
+      });
+      // OSM devuelve varias entidades para una misma dirección (edificio,
+      // campus, portal): se muestra cada dirección una sola vez.
+      const seen = new Set();
       ui.show(feats.map((ft) => {
         const pr = ft.properties;
         const street = [pr.housenumber, pr.street].filter(Boolean).join(" ");
@@ -270,7 +273,7 @@ function attachPhoton(inputEl, onSelect) {
             country_code: "us",
           }),
         };
-      }));
+      }).filter((it) => (seen.has(it.label) ? false : (seen.add(it.label), true))).slice(0, 5));
     } catch { /* red caída o bloqueada: el campo manual sigue */ }
   });
 
