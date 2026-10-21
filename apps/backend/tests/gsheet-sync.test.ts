@@ -123,7 +123,7 @@ describe("buildRows", () => {
   it("follows the template's column structure", () => {
     expect(orderRow).toHaveLength(ORDER_COLUMNS.length);
     expect(ORDER_COLUMNS.map((c) => c.type)).toEqual([
-      "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "TEXT", "TEXT",
+      "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT",
     ]);
   });
 
@@ -134,7 +134,7 @@ describe("buildRows", () => {
   });
 
   it("carries the buyer, the purchase and the AI/try-on facts", () => {
-    const [pedido, , detalles, cliente, estado, fecha, archivo, notas] = orderRow as string[];
+    const [pedido, , detalles, cliente, estado, fecha, total, pagado, marca, tryon, archivo, notas] = orderRow as string[];
     expect(pedido).toBe("#42");
     expect(detalles).toContain("TOTAL 210.00 USD");
     expect(cliente).toContain("Ana Pérez");
@@ -143,13 +143,17 @@ describe("buildRows", () => {
     expect(cliente).toContain("San Juan");
     expect(estado).toBe(STAGE_LABEL[deriveOrderProgress(order).stage]);
     expect(fecha).toBe(46314);
+    expect(total).toBe(210);
+    expect(pagado).toBe("Sí");
+    expect(marca).toBe("Flexure");
+    expect(tryon).toBe("Sí");
     expect(archivo).toContain("Prueba virtual");
     expect(notas).toContain("Luis");
     expect(notas).toContain("IA");
   });
 
   it("copies the values read from the prescription", () => {
-    const notas = String(orderRow[7]);
+    const notas = String(orderRow[11]);
     expect(notas).toContain("OD: SPH +1.50 CYL -0.50 AXIS 170 ADD +2.00");
     expect(notas).toContain("OS: SPH +1.25");
     expect(notas).toContain("DIP OD 31.5 / OS 31.5 mm");
@@ -176,7 +180,7 @@ describe("buildRows", () => {
     // It stays in the private bucket: the sheet only says it exists.
     const all = orderRow.join(" ");
     expect(all).not.toMatch(/rx\/|\.pdf|\.jpe?g|r2\./i);
-    expect(String(orderRow[6])).toContain("solo en el panel");
+    expect(String(orderRow[10])).toContain("solo en el panel");
   });
 });
 
