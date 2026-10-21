@@ -12,6 +12,7 @@ import {
   orderType,
   privateKeyProblem,
   richTextCell,
+  EDITABLE_ORDER_COLUMNS,
   sheetDateSerial,
   sheetDateTimeSerial,
   sheetMonth,
@@ -125,8 +126,9 @@ describe("buildRows", () => {
   it("follows the template's column structure", () => {
     expect(orderRow).toHaveLength(ORDER_COLUMNS.length);
     expect(ORDER_COLUMNS.map((c) => c.type)).toEqual([
-      "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT",
+      "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT", "TEXT",
     ]);
+    expect(ORDER_COLUMNS.map((c) => c.name)).toEqual(expect.arrayContaining(EDITABLE_ORDER_COLUMNS));
   });
 
   it("only writes dropdown values the column accepts", () => {
@@ -185,6 +187,14 @@ describe("buildRows", () => {
     const all = orderRow.join(" ");
     expect(all).not.toMatch(/rx\/|\.pdf|\.jpe?g|r2\./i);
     expect(String(orderRow[10])).toContain("Receta: ver documento original");
+  });
+
+  it("remembers what the editable columns show (mirror) and takes an owner note", () => {
+    expect(built.mirror).toEqual({ status: STAGE_LABEL[deriveOrderProgress(order).stage], tracking: "" });
+    expect(orderRow[ORDER_COLUMNS.findIndex((c) => c.name === "Guía (tracking)")]).toBe("");
+    const withNote = buildRows(order, "correccion", { note: "No se pudo cambiar a \"Entregado\": nada en camino." });
+    expect(String(withNote.orderRow[ORDER_COLUMNS.findIndex((c) => c.name === "Notas")])).toContain("⚠ No se pudo cambiar");
+    expect(withNote.historyRow[HISTORY_COLUMNS.findIndex((c) => c.key === "event")]).toBe("Cambio rechazado (hoja corregida)");
   });
 
   it("links each Archivo reference (frame → product page, receta/foto → panel)", () => {

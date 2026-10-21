@@ -1,29 +1,18 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
-import {
-  createOrderFulfillmentWorkflow,
-  createOrderShipmentWorkflow,
-  markOrderFulfillmentAsDeliveredWorkflow,
-  updateOrderWorkflow,
-} from "@medusajs/medusa/core-flows";
-import { ORDER_STAGES, type OrderStage } from "../../../../../lib/order-status";
-import { fetchBoardOrder, isOrderStage, liveFulfillments } from "../../../../../lib/order-board";
-import { resolveEmailLocale } from "../../../../../lib/email/copy";
-import { renderOrderStageUpdate } from "../../../../../lib/email/order-stage-update";
-import { sheetStageEvent, syncOrderToSheet } from "../../../../../lib/gsheet-sync";
+import { StageError, transitionOrderStage } from "../../../../../lib/order-stage-transition";
 
 /**
  * POST /admin/order-board/:id/stage — move an order to the next stage.
  *
  * One endpoint, one vocabulary. The panel says "this order is now in transit"
  * and the server works out that this means creating a shipment on a specific
- * fulfillment with specific quantities. That translation lives here rather than
- * in the browser for two reasons: it is the only place that can see the
- * fulfillment records the operation needs, and a panel that had to orchestrate
+ * fulfillment with specific quantities. That translation lives in
+ * `lib/order-stage-transition.ts` (shared with the Google Sheet watcher, which
+ * applies the same rules when the owner edits "Estado" in the sheet) rather
+ * than in the browser: it is the only place that can see the fulfillment
+ * records the operation needs, and a panel that had to orchestrate
  * `createFulfillment → createShipment → markAsDelivered` itself would be
- * reimplementing Medusa's admin API in a React component, and would drift from
- * it on the first upgrade.
+ * reimplementing Medusa's admin API in a React component.
  *
  * The stages are NOT symmetrical, and the asymmetry is the point:
  *   • `confirmed` / `in_lab` are a manual note (`metadata.lab_stage`). The lab
@@ -33,7 +22,11 @@ import { sheetStageEvent, syncOrderToSheet } from "../../../../../lib/gsheet-syn
  *     them. They only move forward. Undoing one is a cancellation or a return,
  *     which is a different (and human) conversation.
  *
- * Body: { stage, tracking_number?, no_notification? }
+ * Body: { stage, tracking_number?, tracking_url?, no_notification? }
+ *
+ * Every refusal carries a `reason` code: the panel is bilingual and this route
+ * is not, so the code is the contract and the panel owns the wording
+ * (`adm.err.stage.*`); `message` stays as an English developer note.
  */
 
 interface StageBody {
@@ -46,517 +39,29 @@ interface StageBody {
   no_notification?: boolean;
 }
 
-/** Only an http(s) URL may travel to the customer as a tracking link. */
-function sanitizeTrackingUrl(value: unknown): string {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  try {
-    const url = new URL(raw);
-    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
-  } catch {
-    /* not a URL */
-  }
-  return "";
-}
-
-/**
- * Every refusal carries a `reason` code.
- *
- * The panel is bilingual and this route is not: a Spanish sentence baked into
- * the response would be the one string on screen that ignores the language the
- * owner picked. So the code is the contract and the panel owns the wording
- * (`adm.err.stage.*` in the storefront dictionary); `message` stays as an
- * English developer note for logs and for any client that has no dictionary.
- */
-type StageErrorReason =
-  | "unknown_stage"
-  | "not_found"
-  | "terminal"
-  | "not_allowed"
-  | "no_location"
-  | "nothing_to_fulfill"
-  | "nothing_to_ship"
-  | "nothing_to_deliver";
-
-/** Thrown by the transition helpers; carries the code the panel translates. */
-class StageError extends Error {
-  constructor(
-    readonly reason: StageErrorReason,
-    message: string
-  ) {
-    super(message);
-    this.name = "StageError";
-  }
-}
-
-function fail(
-  res: MedusaResponse,
-  status: number,
-  reason: StageErrorReason,
-  message: string,
-  extra: Record<string, unknown> = {}
-): void {
-  res.status(status).json({ type: "invalid_data", reason, message, ...extra });
-}
-
 export async function POST(
   req: AuthenticatedMedusaRequest<StageBody>,
   res: MedusaResponse
 ): Promise<void> {
-  const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const orderId = String(req.params.id ?? "");
   const body = (req.body ?? {}) as StageBody;
-  const actorId = req.auth_context?.actor_id ?? "";
-  const target = body.stage;
-  const noNotification = body.no_notification === true;
-  const tracking = String(body.tracking_number ?? "").trim();
-  const trackingUrl = sanitizeTrackingUrl(body.tracking_url);
-
-  if (!isOrderStage(target)) {
-    fail(res, 400, "unknown_stage", `Unknown stage '${target}'. Allowed: ${ORDER_STAGES.join(", ")}.`);
-    return;
-  }
-
-  const before = await fetchBoardOrder(req.scope, orderId);
-  if (!before) {
-    fail(res, 404, "not_found", `Order '${orderId}' not found.`);
-    return;
-  }
-
-  // `before` was projected by the same function that fed the panel, so "the
-  // button was there" and "the server accepted it" cannot disagree.
-  if (before.terminal === "canceled" || before.terminal === "refunded") {
-    fail(res, 409, "terminal", "Order is canceled or refunded; its timeline has ended.");
-    return;
-  }
-
-  const allowed = before.next_stages;
-  if (!allowed.includes(target)) {
-    // The stage and the legal moves ride along so the panel can say what the
-    // order actually is now, in the owner's language, without a second request.
-    fail(
-      res,
-      409,
-      "not_allowed",
-      `Order is at '${before.stage}' and cannot move to '${target}'.`,
-      { stage: before.stage, next_stages: allowed }
-    );
-    return;
-  }
-
   try {
-    switch (target) {
-      case "confirmed":
-      case "in_lab":
-        await setLabStage(req, orderId, target, actorId);
-        break;
-
-      case "shipped":
-        await createFulfillment(req, before, actorId, noNotification);
-        break;
-
-      case "in_transit":
-        await createShipment(req, before, actorId, noNotification, tracking, trackingUrl);
-        break;
-
-      case "delivered":
-        await markDelivered(req, before, noNotification);
-        break;
-    }
+    const { after, notified } = await transitionOrderStage(req.scope, orderId, {
+      stage: body.stage,
+      actorId: req.auth_context?.actor_id ?? "",
+      trackingNumber: body.tracking_number,
+      trackingUrl: body.tracking_url,
+      noNotification: body.no_notification === true,
+    });
+    res.status(200).json({ order: after, notified });
   } catch (error) {
-    const message = (error as Error).message ?? "";
-    logger.error(`[order-board] ${orderId} → ${target} failed: ${message}`);
-
-    // Our own refusals already know what to call themselves.
     if (error instanceof StageError) {
-      fail(res, 409, error.reason, message);
+      res.status(error.status).json({ type: "invalid_data", reason: error.reason, message: error.message, ...error.extra });
       return;
     }
-    // The one failure the owner can actually fix themselves, and the one Medusa
-    // reports most opaquely: no stock location to fulfil from.
-    if (/location/i.test(message)) {
-      fail(res, 409, "no_location", "No stock location resolved for this order's shipping method.");
-      return;
-    }
-    // Anything else is a bug, not a workflow rule. There is no code for it, so
-    // the raw message goes through untranslated rather than being dressed up as
-    // a known condition — the panel shows it verbatim and it lands in the log.
     res.status(500).json({
       type: "error",
-      message: `Could not move order to '${target}'. ${message}`.trim(),
-    });
-    return;
-  }
-
-  const after = await fetchBoardOrder(req.scope, orderId);
-
-  console.info(
-    JSON.stringify({
-      event: "order_board.stage_changed",
-      order_id: orderId,
-      from: before.stage,
-      to: target,
-      resulting_stage: after?.stage ?? null,
-      tracking_number: tracking || null,
-      admin_user_id: actorId || null,
-      timestamp: new Date().toISOString(),
-    })
-  );
-
-  // HISTORIAL de etapas en el pedido (metadata.stage_history): cada cambio con
-  // su instante. Es lo que alimenta el rastreo público por número de recibo
-  // (/store/order-track) con fechas reales; best-effort, nunca falla el cambio.
-  if (after && before.stage !== after.stage) {
-    try {
-      await appendStageHistory(req, orderId, after.stage, actorId);
-    } catch (error) {
-      logger.warn(`[order-board] stage history for ${orderId} not saved: ${(error as Error).message}`);
-    }
-  }
-
-  // CUSTOMER EMAIL on every recorded stage change (unless the owner unticked
-  // "notify"). Sent AFTER the transition committed — a notification for a move
-  // that then failed would be worse than none — and never allowed to fail the
-  // request: the stage change already happened; an email hiccup is a log line.
-  let notified = false;
-  if (!noNotification && after && before.stage !== after.stage) {
-    // Opt-in de SMS + teléfono + idioma viven en el pedido, no en la proyección
-    // del tablero: una consulta mínima aparte.
-    let notifySms = false;
-    let phone: string | null = null;
-    let locale: string | null = null;
-    try {
-      const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
-      const { data } = await query.graph({
-        entity: "order",
-        fields: ["id", "metadata", "locale", "shipping_address.phone"],
-        filters: { id: orderId },
-      });
-      const raw = data?.[0] as { metadata?: Record<string, unknown> | null; locale?: string | null; shipping_address?: { phone?: string | null } | null } | undefined;
-      const md = (raw?.metadata ?? {}) as Record<string, unknown>;
-      notifySms = md["notify_sms"] === true || md["notify_sms"] === "true";
-      phone =
-        (typeof md["phone"] === "string" && md["phone"].trim()) ||
-        (raw?.shipping_address?.phone ? String(raw.shipping_address.phone).trim() : "") ||
-        null;
-      locale = raw?.locale ?? null;
-    } catch { /* sin metadata no hay SMS; el email sale igual */ }
-
-    notified = await sendStageEmail(req, logger, {
-      email: after.email ? String(after.email) : null,
-      displayId: after.display_id != null ? String(after.display_id) : orderId,
-      orderId,
-      stage: after.stage,
-      locale,
-      frameOnly: !after.items?.some((i) => i.lens && i.lens.design_code),
-      trackingNumber: tracking || after.tracking_number || null,
-      trackingUrl: trackingUrl || null,
-      notifySms,
-      phone,
-    });
-  }
-
-  // Réplica del cambio de etapa en la hoja de Google del dueño (best-effort,
-  // jamás falla la petición; sin credenciales es un no-op logueado).
-  if (after && before.stage !== after.stage) {
-    await syncOrderToSheet(req.scope, orderId, sheetStageEvent(after.stage), {
-      number: tracking || after.tracking_number || null,
-      url: trackingUrl || null,
-    });
-  }
-
-  res.status(200).json({ order: after, notified });
-}
-
-/** Texto corto del SMS de etapa (es/en), con tracking cuando existe. */
-function stageSmsText(
-  locale: "es" | "en",
-  stage: OrderStage,
-  displayId: string,
-  tracking: string | null,
-  trackingUrl: string | null
-): string {
-  const names: Record<OrderStage, { es: string; en: string }> = {
-    confirmed: { es: "confirmado", en: "confirmed" },
-    in_lab: { es: "en el laboratorio", en: "in the lab" },
-    shipped: { es: "empaquetado y listo para salir", en: "packed and ready to ship" },
-    in_transit: { es: "en camino", en: "on its way" },
-    delivered: { es: "entregado", en: "delivered" },
-  };
-  const base = locale === "es"
-    ? `RUBI LENS: tu pedido #${displayId} está ${names[stage].es}.`
-    : `RUBI LENS: your order #${displayId} is ${names[stage].en}.`;
-  const track = tracking ? (locale === "es" ? ` Guía: ${tracking}.` : ` Tracking: ${tracking}.`) : "";
-  const url = trackingUrl ? ` ${trackingUrl}` : "";
-  return (base + track + url).slice(0, 320);
-}
-
-/** Composes and queues the stage-change email; true when it was handed to the
- *  notification module. Any failure is logged and swallowed on purpose. */
-async function sendStageEmail(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  logger: Logger,
-  input: {
-    email: string | null;
-    displayId: string | number;
-    orderId: string;
-    stage: OrderStage;
-    locale: string | null;
-    frameOnly: boolean;
-    trackingNumber: string | null;
-    trackingUrl: string | null;
-    notifySms?: boolean;
-    phone?: string | null;
-  }
-): Promise<boolean> {
-  const notifications = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION);
-  const locale = resolveEmailLocale(input.locale);
-  let sent = false;
-
-  if (input.email) {
-    try {
-      const content = renderOrderStageUpdate(locale, {
-        displayId: input.displayId,
-        stage: input.stage,
-        frameOnly: input.frameOnly,
-        trackingNumber: input.trackingNumber,
-        trackingUrl: input.trackingUrl,
-      });
-      await notifications.createNotifications({
-        to: input.email,
-        channel: "email",
-        template: "order-stage-update",
-        trigger_type: "order_board.stage_changed",
-        resource_id: input.orderId,
-        resource_type: "order",
-        content,
-        data: { order_id: input.orderId, stage: input.stage },
-      });
-      sent = true;
-    } catch (error) {
-      logger.error(
-        `[order-board] stage email for order ${input.orderId} failed: ${(error as Error).message}`
-      );
-    }
-  } else {
-    logger.warn(`[order-board] order ${input.orderId} has no email — stage email skipped.`);
-  }
-
-  // SMS SOLO si el cliente lo marcó al comprar (notify_sms) y dejó teléfono.
-  // Mismo canal Twilio del pedido confirmado; si Twilio no está configurado,
-  // el provider de logs lo registra y no rompe nada.
-  if (input.notifySms && input.phone) {
-    try {
-      await notifications.createNotifications({
-        to: input.phone,
-        channel: "sms",
-        template: "order-stage-update-sms",
-        trigger_type: "order_board.stage_changed",
-        resource_id: input.orderId,
-        resource_type: "order",
-        content: {
-          subject: "",
-          text: stageSmsText(locale, input.stage, String(input.displayId), input.trackingNumber, input.trackingUrl),
-        },
-        data: { order_id: input.orderId, stage: input.stage },
-      });
-      sent = true;
-    } catch (error) {
-      logger.error(
-        `[order-board] stage SMS for order ${input.orderId} failed: ${(error as Error).message}`
-      );
-    }
-  }
-
-  return sent;
-}
-
-/** Añade {stage, at} a metadata.stage_history (merge, nunca reemplaza). */
-async function appendStageHistory(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  orderId: string,
-  stage: OrderStage,
-  actorId: string
-): Promise<void> {
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
-  const { data } = await query.graph({
-    entity: "order",
-    fields: ["id", "metadata"],
-    filters: { id: orderId },
-  });
-  const current = (data?.[0]?.metadata ?? {}) as Record<string, unknown>;
-  const prev = Array.isArray(current["stage_history"])
-    ? (current["stage_history"] as { stage?: string; at?: string }[])
-    : [];
-  await updateOrderWorkflow(req.scope).run({
-    input: {
-      id: orderId,
-      user_id: actorId,
-      metadata: {
-        ...current,
-        stage_history: [...prev, { stage, at: new Date().toISOString() }].slice(-20),
-      },
-    },
-  });
-}
-
-/**
- * The manual lab note.
- *
- * `updateOrderWorkflow` replaces `metadata` wholesale, so this merges rather
- * than assigns — `tracking_number`, `notify_email` and everything else the
- * checkout wrote live in the same object and would otherwise be erased by a
- * click on "in lab".
- */
-async function setLabStage(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  orderId: string,
-  stage: OrderStage,
-  actorId: string
-): Promise<void> {
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
-  const { data } = await query.graph({
-    entity: "order",
-    fields: ["id", "metadata"],
-    filters: { id: orderId },
-  });
-  const current = (data?.[0]?.metadata ?? {}) as Record<string, unknown>;
-
-  await updateOrderWorkflow(req.scope).run({
-    input: {
-      id: orderId,
-      user_id: actorId,
-      metadata: { ...current, lab_stage: stage },
-    },
-  });
-}
-
-/** Everything not yet fulfilled goes into one box. */
-async function createFulfillment(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  order: NonNullable<Awaited<ReturnType<typeof fetchBoardOrder>>>,
-  actorId: string,
-  noNotification: boolean
-): Promise<void> {
-  const items = order.items
-    .map((item) => ({
-      id: item.id as string,
-      quantity: Number(item.quantity ?? 0) - Number(item.fulfilled_quantity ?? 0),
-    }))
-    .filter((item) => item.id && item.quantity > 0);
-
-  if (!items.length) {
-    throw new StageError("nothing_to_fulfill", "No order line has quantity left to fulfill.");
-  }
-
-  await createOrderFulfillmentWorkflow(req.scope).run({
-    input: {
-      order_id: order.id,
-      created_by: actorId,
-      items,
-      no_notification: noNotification,
-    },
-  });
-}
-
-/**
- * Hand the box to the courier.
- *
- * The tracking number is written twice on purpose: as a fulfillment label (where
- * Medusa's own admin expects it) and onto order metadata, because
- * `/store/my-orders` reads `metadata.tracking_number` — that is the copy the
- * customer's tracking page actually shows.
- */
-async function createShipment(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  order: NonNullable<Awaited<ReturnType<typeof fetchBoardOrder>>>,
-  actorId: string,
-  noNotification: boolean,
-  tracking: string,
-  trackingUrl = ""
-): Promise<void> {
-  const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
-  const { data } = await query.graph({
-    entity: "order",
-    fields: [
-      "id",
-      "metadata",
-      "fulfillments.id",
-      "fulfillments.shipped_at",
-      "fulfillments.canceled_at",
-      "fulfillments.items.line_item_id",
-      "fulfillments.items.quantity",
-    ],
-    filters: { id: order.id },
-  });
-
-  const raw = data?.[0] as Record<string, unknown> | undefined;
-  const pending = liveFulfillments({
-    fulfillments: (raw?.["fulfillments"] ?? []) as never,
-  }).find((f) => !f.shipped_at);
-
-  if (!pending?.id) {
-    throw new StageError("nothing_to_ship", "No live fulfillment on this order is awaiting shipment.");
-  }
-
-  await createOrderShipmentWorkflow(req.scope).run({
-    input: {
-      order_id: order.id,
-      fulfillment_id: pending.id,
-      created_by: actorId,
-      // Only used to validate the lines belong to the order — the real shipped
-      // quantities are read back off the fulfillment by the workflow itself.
-      items: (pending.items ?? [])
-        .filter((i) => i.line_item_id)
-        .map((i) => ({ id: i.line_item_id as string, quantity: Number(i.quantity ?? 1) })),
-      // Medusa requires all three label fields; the URL viaja cuando el dueño
-      // la puso (va también en el botón del email al cliente).
-      labels: tracking
-        ? [{ tracking_number: tracking, tracking_url: trackingUrl || "", label_url: "" }]
-        : [],
-      no_notification: noNotification,
-    },
-  });
-
-  if (tracking || trackingUrl) {
-    const current = (raw?.["metadata"] ?? {}) as Record<string, unknown>;
-    await updateOrderWorkflow(req.scope).run({
-      input: {
-        id: order.id,
-        user_id: actorId,
-        metadata: {
-          ...current,
-          ...(tracking ? { tracking_number: tracking } : {}),
-          ...(trackingUrl ? { tracking_url: trackingUrl } : {}),
-        },
-      },
-    });
-  }
-}
-
-/** Everything already with the courier is now in the customer's hands. */
-async function markDelivered(
-  req: AuthenticatedMedusaRequest<StageBody>,
-  order: NonNullable<Awaited<ReturnType<typeof fetchBoardOrder>>>,
-  noNotification: boolean
-): Promise<void> {
-  const pending = order.fulfillments.filter(
-    (f) => f.id && f.shipped_at && !f.delivered_at && !f.canceled_at
-  );
-
-  if (!pending.length) {
-    throw new StageError("nothing_to_deliver", "No shipped fulfillment on this order is awaiting delivery.");
-  }
-
-  // Sequentially: each one registers a delivery against the same order, and
-  // running them in parallel races on the order's own version counter.
-  for (const fulfillment of pending) {
-    await markOrderFulfillmentAsDeliveredWorkflow(req.scope).run({
-      input: {
-        orderId: order.id,
-        fulfillmentId: fulfillment.id as string,
-        no_notification: noNotification,
-      },
+      message: `Could not move order to '${body.stage}'. ${(error as Error).message ?? ""}`.trim(),
     });
   }
 }

@@ -43,8 +43,8 @@
  */
 
 import { createPrivateKey, createSign } from "node:crypto";
-import type { Logger, MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { IOrderModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { getOrdersListWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import { deriveOrderProgress, type OrderStage, type OrderTerminalState } from "./order-status";
@@ -115,7 +115,11 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
   { name: "Prueba virtual", type: "DROPDOWN", options: ["Sí", "No"], width: 100 },
   { name: "Archivo", type: "TEXT", width: 240, wrap: true },
   { name: "Notas", type: "TEXT", width: 320, wrap: true },
+  // Editable por el dueño (igual que Estado): el número de guía del courier.
+  { name: "Guía (tracking)", type: "TEXT", width: 150 },
 ];
+/** Columnas que el dueño puede editar en la hoja; el resto se regenera. */
+export const EDITABLE_ORDER_COLUMNS = ["Estado", "Guía (tracking)"];
 /** Índice (0-based) de una columna de la tabla por nombre. */
 const ocol = (name: string): number => {
   const i = ORDER_COLUMNS.findIndex((c) => c.name === name);
@@ -218,6 +222,8 @@ const hcol = (key: string): string => {
 export const EVENT_LABEL: Record<string, string> = {
   compra_confirmada: "Compra confirmada",
   resincronizado: "Alta en la hoja (resincronización)",
+  guia: "Guía de envío actualizada (desde la hoja)",
+  correccion: "Cambio rechazado (hoja corregida)",
 };
 export function eventLabel(event: string): string {
   if (EVENT_LABEL[event]) return EVENT_LABEL[event];
@@ -430,12 +436,13 @@ interface SheetMeta {
   /** Solo se usa para contar las reglas y reemplazarlas (estilo idempotente). */
   conditionalFormats?: Array<unknown>;
   charts?: Array<unknown>;
+  protectedRanges?: Array<{ protectedRangeId?: number; description?: string }>;
 }
 
 async function readSheetsMeta(cfg: GsheetConfig): Promise<SheetMeta[]> {
   const resp = await sheetsFetch(
     cfg,
-    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges),charts(chartId))")}`
+    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges),charts(chartId),protectedRanges(protectedRangeId,description))")}`
   );
   if (!resp.ok) throw await failure("spreadsheet meta", resp);
   return ((await resp.json()) as { sheets?: SheetMeta[] }).sheets ?? [];
@@ -687,7 +694,38 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
     },
   });
 
+  // Columnas de solo lectura: aviso (no bloqueo) al editar cualquier columna
+  // que no sea Estado o Guía — se regeneran desde la tienda y el cambio se
+  // perdería. Se reemplazan en cada pasada (nunca se acumulan).
+  const PROTECT_TAG = "RUBI LENS · solo lectura";
+  const editable = new Set(EDITABLE_ORDER_COLUMNS.map((n) => ocol(n)));
+  const protectRequests: unknown[] = [];
+  for (const sh of sheets) {
+    for (const pr of sh.protectedRanges ?? []) {
+      if (pr.protectedRangeId !== undefined && (pr.description ?? "").startsWith(PROTECT_TAG)) {
+        protectRequests.push({ deleteProtectedRange: { protectedRangeId: pr.protectedRangeId } });
+      }
+    }
+  }
+  let c0 = 0;
+  while (c0 < cols) {
+    if (editable.has(c0)) { c0++; continue; }
+    let c1 = c0;
+    while (c1 + 1 < cols && !editable.has(c1 + 1)) c1++;
+    protectRequests.push({
+      addProtectedRange: {
+        protectedRange: {
+          range: { sheetId, startRowIndex: headerRow, startColumnIndex: startCol + c0, endColumnIndex: startCol + c1 + 1 },
+          description: `${PROTECT_TAG} (se regenera desde la tienda; edita solo ${EDITABLE_ORDER_COLUMNS.join(" y ")})`,
+          warningOnly: true,
+        },
+      },
+    });
+    c0 = c1 + 1;
+  }
+
   const requests: unknown[] = [
+    ...protectRequests,
     // Tabla: colores de encabezado y bandas.
     {
       updateTable: {
@@ -1533,6 +1571,8 @@ export function buildRows(
     rx?: RxSheetInfo[];
     adminUrl?: string;
     payment?: PaymentInfo | null;
+    /** Aviso para el dueño (va al final de Notas), p. ej. un cambio rechazado. */
+    note?: string;
   } = {}
 ) {
   const md = (order.metadata ?? {}) as Record<string, unknown>;
@@ -1666,8 +1706,13 @@ export function buildRows(
     brandCell,
     hasTryon ? "Sí" : "No",
     fileCell,
-    [...new Set(notes)].join("\n"),
+    [...new Set(notes), ...(extra.note ? [`⚠ ${extra.note}`] : [])].join("\n"),
+    trackingNumber,
   ];
+  // Lo que la hoja muestra en las columnas editables: la próxima pasada del
+  // vigilante compara contra esto para distinguir "lo cambió el dueño" de
+  // "lo escribimos nosotros".
+  const mirror: SheetMirror = { status, tracking: trackingNumber };
 
   // Historial: una fila por evento con TODO el pedido, una columna por dato.
   const lines = extra.lines ?? [];
@@ -1742,7 +1787,7 @@ export function buildRows(
     String(order.id ?? ""),
   ];
 
-  return { orderRow, historyRow, fileLinks };
+  return { orderRow, historyRow, fileLinks, mirror };
 }
 
 /** Datos extra de la fila (desglose de lentes, recetas sin valores). Mejor esfuerzo. */
@@ -1823,6 +1868,23 @@ async function loadRowExtras(
 
 // ── Punto de entrada único ───────────────────────────────────────────────────
 
+/** Valores de las columnas editables tal como quedaron escritos en la hoja. */
+export interface SheetMirror { status: string; tracking: string }
+
+/**
+ * Guarda en `order.metadata.gsheet_mirror` lo que acabamos de escribir en las
+ * columnas editables. Sin esto, una hoja desfasada (p. ej. un cambio hecho en
+ * el admin de Medusa que aún no se replicó) se confundiría con una edición del
+ * dueño y se "aplicaría" al revés.
+ */
+async function rememberMirror(container: MedusaContainer, order: Record<string, any>, mirror: SheetMirror): Promise<void> {
+  const current = (order.metadata ?? {}) as Record<string, unknown>;
+  const prev = current["gsheet_mirror"] as SheetMirror | undefined;
+  if (prev && prev.status === mirror.status && prev.tracking === mirror.tracking) return;
+  const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
+  await orders.updateOrders([{ id: String(order.id), metadata: { ...current, gsheet_mirror: mirror } }]);
+}
+
 /**
  * Replica el estado del pedido en la hoja. `event` describe qué acaba de pasar
  * ("compra_confirmada", "etapa: in_lab", "cancelado"...). Nunca lanza: todo
@@ -1833,7 +1895,7 @@ export async function syncOrderToSheet(
   orderId: string,
   event: string,
   tracking?: { number?: string | null; url?: string | null },
-  options: { history?: boolean } = {}
+  options: { history?: boolean; note?: string } = {}
 ): Promise<void> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const cfg = gsheetConfig();
@@ -1858,10 +1920,11 @@ export async function syncOrderToSheet(
 
     const table = await ensureSheets(cfg, logger);
     const extras = await loadRowExtras(container, order, logger);
-    const { orderRow, historyRow, fileLinks } = buildRows(order, event, {
+    const { orderRow, historyRow, fileLinks, mirror } = buildRows(order, event, {
       tracking,
       ...extras,
       adminUrl: `${storefrontOrigin()}/admin`,
+      note: options.note,
     });
     try {
       await upsertOrderRow(cfg, table, orderRow, { col: ocol("Archivo"), links: fileLinks });
@@ -1870,6 +1933,11 @@ export async function syncOrderToSheet(
       // crear) en la próxima escritura.
       cachedTable = null;
       throw error;
+    }
+    try {
+      await rememberMirror(container, order, mirror);
+    } catch (error) {
+      logger.warn(`[gsheet] order ${orderId}: mirror not saved (${(error as Error).message})`);
     }
     if (options.history !== false) await appendHistoryRow(cfg, historyRow);
     logger.info(`[gsheet] order ${orderId} mirrored (${event}).`);
@@ -1890,10 +1958,17 @@ export function sheetStageEvent(stage: OrderStage): string {
  * (p. ej. los que fallaron cuando la tabla no tenía títulos). Lo usa el job
  * programado; devuelve cuántos pedidos se añadieron.
  */
+let backfilling = false;
+/** True mientras corre el backfill (el vigilante de ediciones espera). */
+export function isBackfilling(): boolean {
+  return backfilling;
+}
+
 export async function backfillOrdersToSheet(container: MedusaContainer): Promise<number> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const cfg = gsheetConfig();
   if (!cfg || privateKeyProblem(cfg.privateKey)) return 0;
+  backfilling = true;
   try {
     const table = await ensureSheets(cfg, logger);
     const col = columnLetter(table.startCol);
@@ -1902,14 +1977,29 @@ export async function backfillOrdersToSheet(container: MedusaContainer): Promise
     const present = new Set(values.slice(table.headerRow + 1).map((r) => r?.[0]).filter(Boolean));
 
     const query = container.resolve(ContainerRegistrationKeys.QUERY);
-    const { data } = await query.graph({ entity: "order", fields: ["id", "display_id"], pagination: { take: 500, order: { created_at: "ASC" } } });
+    const { data } = await query.graph({ entity: "order", fields: ["id", "display_id", "metadata"], pagination: { take: 500, order: { created_at: "ASC" } } });
     const all = (data ?? []) as Array<Record<string, any>>;
     const missing = all.filter((o) => !present.has(`#${o.display_id}`));
     for (const o of missing) await syncOrderToSheet(container, String(o.id), "resincronizado");
     // Los que ya están se refrescan en la tabla (estado, importes, tracking)
     // sin añadir filas al historial: así la tabla nunca se queda desfasada.
+    // Una fila que el dueño acaba de editar (difiere del espejo) NO se toca:
+    // el vigilante la aplicará; refrescarla ahora borraría su cambio.
+    const pending = new Map<string, SheetRowEdit>();
+    try {
+      for (const r of await readEditableRows(cfg, table)) pending.set(r.key, r);
+    } catch (error) {
+      logger.warn(`[gsheet] backfill: no se pudieron leer las columnas editables (${(error as Error).message})`);
+    }
     for (const o of all) {
-      if (!present.has(`#${o.display_id}`)) continue;
+      const key = `#${o.display_id}`;
+      if (!present.has(key)) continue;
+      const mirror = (o.metadata ?? {})["gsheet_mirror"] as SheetMirror | undefined;
+      const row = pending.get(key);
+      if (mirror && row && (row.status !== mirror.status || row.tracking !== (mirror.tracking ?? ""))) {
+        logger.info(`[gsheet] backfill: ${key} tiene una edición pendiente en la hoja; no se refresca.`);
+        continue;
+      }
       await syncOrderToSheet(container, String(o.id), "refresco", undefined, { history: false });
     }
     if (missing.length) logger.info(`[gsheet] backfill: ${missing.length} pedido(s) añadidos a la hoja.`);
@@ -1917,5 +2007,142 @@ export async function backfillOrdersToSheet(container: MedusaContainer): Promise
   } catch (error) {
     logger.warn(`[gsheet] backfill no realizado: ${(error as Error).message}`);
     return 0;
+  } finally {
+    backfilling = false;
+  }
+}
+
+// ── Ediciones del dueño en la hoja → base de datos ───────────────────────────
+
+/** Etiqueta de Estado tal como está en el desplegable → etapa interna. */
+function stageFromLabel(label: string): OrderStage | null {
+  const hit = (Object.entries(STAGE_LABEL) as Array<[OrderStage, string]>).find(([, l]) => l === label);
+  return hit ? hit[0] : null;
+}
+function isTerminalLabel(label: string): boolean {
+  return Object.values(TERMINAL_LABEL).includes(label);
+}
+
+/** Lo que se ha leído de una fila de la tabla Pedidos. */
+export interface SheetRowEdit {
+  key: string;
+  status: string;
+  tracking: string;
+}
+
+/** Lee las columnas editables de todas las filas de la tabla. */
+export async function readEditableRows(cfg: GsheetConfig, table: OrdersTable): Promise<SheetRowEdit[]> {
+  const from = columnLetter(table.startCol);
+  const to = columnLetter(table.startCol + ORDER_COLUMNS.length - 1);
+  const range = `${quoteSheet(table.sheetTitle)}!${from}${table.headerRow + 2}:${to}`;
+  const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(range)}`);
+  if (!resp.ok) throw await failure("read editable rows", resp);
+  const values = ((await resp.json()) as { values?: unknown[][] }).values ?? [];
+  const cell = (row: unknown[], name: string) => String(row[ocol(name)] ?? "").trim();
+  return values
+    .map((row) => ({ key: cell(row, "Pedido"), status: cell(row, "Estado"), tracking: cell(row, "Guía (tracking)") }))
+    .filter((r) => /^#\d+$/.test(r.key));
+}
+
+/** Motivos de rechazo del cambio de etapa, en el idioma de la hoja. */
+const REFUSAL_TEXT: Record<string, string> = {
+  terminal: "el pedido está cancelado o reembolsado; su línea de tiempo terminó",
+  not_allowed: "ese salto no está permitido desde la etapa actual (las etapas de envío solo avanzan)",
+  no_location: "no hay ubicación de stock para el método de envío del pedido",
+  nothing_to_fulfill: "no queda nada por preparar en el pedido",
+  nothing_to_ship: "no hay ningún paquete preparado pendiente de salir",
+  nothing_to_deliver: "no hay ningún envío en camino pendiente de entrega",
+  unknown_stage: "etapa desconocida",
+  not_found: "pedido no encontrado",
+};
+
+/**
+ * Aplica a la base de datos lo que el dueño cambió en la hoja (pestaña
+ * Pedidos): el Estado se traduce al mismo cambio de etapa que hace el panel
+ * (con correo al cliente, historial y réplica en la hoja); la guía se guarda
+ * en el pedido. Un cambio que no procede se revierte en la hoja con el motivo
+ * en Notas. Lo llama el job `gsheet-watch` cada minuto.
+ */
+let watching = false;
+export async function applySheetEdits(
+  container: MedusaContainer,
+  transition: (orderId: string, stage: OrderStage, tracking: string) => Promise<void>
+): Promise<{ applied: number; refused: number }> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const cfg = gsheetConfig();
+  const result = { applied: 0, refused: 0 };
+  if (!cfg || privateKeyProblem(cfg.privateKey) || watching || backfilling) return result;
+  watching = true;
+  try {
+    const table = await ensureSheets(cfg, logger);
+    const rows = await readEditableRows(cfg, table);
+    if (!rows.length) return result;
+
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const { data } = await query.graph({ entity: "order", fields: ["id", "display_id", "metadata"], pagination: { take: 500 } });
+    const byKey = new Map<string, Record<string, any>>();
+    for (const o of (data ?? []) as Array<Record<string, any>>) byKey.set(`#${o.display_id}`, o);
+
+    let seeded = 0;
+    for (const row of rows) {
+      const order = byKey.get(row.key);
+      if (!order) continue;
+      const mirror = (order.metadata ?? {})["gsheet_mirror"] as SheetMirror | undefined;
+      if (!mirror) {
+        // Fila escrita antes de que existiera el espejo: se reescribe (y queda
+        // el espejo) en vez de adivinar quién la cambió. Pocas por pasada.
+        if (seeded < 15) { seeded++; await syncOrderToSheet(container, String(order.id), "refresco", undefined, { history: false }); }
+        continue;
+      }
+      const id = String(order.id);
+
+      if (row.status && row.status !== mirror.status) {
+        if (isTerminalLabel(row.status)) {
+          result.refused++;
+          await syncOrderToSheet(container, id, "correccion", undefined, {
+            note: `"${row.status}" no se puede poner desde la hoja: las cancelaciones y reembolsos se hacen desde el panel (y se reflejan aquí solos).`,
+          });
+          continue;
+        }
+        const stage = stageFromLabel(row.status);
+        if (!stage) {
+          result.refused++;
+          await syncOrderToSheet(container, id, "correccion", undefined, { note: `Estado "${row.status}" desconocido; se restauró el real.` });
+          continue;
+        }
+        try {
+          await transition(id, stage, row.tracking);
+          result.applied++;
+          logger.info(`[gsheet] ${row.key}: estado cambiado desde la hoja → ${stage}.`);
+        } catch (error) {
+          result.refused++;
+          const reason = (error as { reason?: string }).reason;
+          const why = (reason && REFUSAL_TEXT[reason]) || (error as Error).message || "error desconocido";
+          logger.warn(`[gsheet] ${row.key}: cambio a "${row.status}" rechazado (${why}).`);
+          await syncOrderToSheet(container, id, "correccion", undefined, { note: `No se pudo cambiar a "${row.status}": ${why}.` });
+        }
+        continue;
+      }
+
+      if (row.tracking !== (mirror.tracking ?? "")) {
+        try {
+          const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
+          const current = (order.metadata ?? {}) as Record<string, unknown>;
+          await orders.updateOrders([{ id, metadata: { ...current, tracking_number: row.tracking } }]);
+          result.applied++;
+          logger.info(`[gsheet] ${row.key}: guía actualizada desde la hoja (${row.tracking || "vacía"}).`);
+          await syncOrderToSheet(container, id, "guia", { number: row.tracking });
+        } catch (error) {
+          result.refused++;
+          await syncOrderToSheet(container, id, "correccion", undefined, { note: `No se pudo guardar la guía: ${(error as Error).message}` });
+        }
+      }
+    }
+    return result;
+  } catch (error) {
+    logger.warn(`[gsheet] vigilante de ediciones: ${(error as Error).message}`);
+    return result;
+  } finally {
+    watching = false;
   }
 }
