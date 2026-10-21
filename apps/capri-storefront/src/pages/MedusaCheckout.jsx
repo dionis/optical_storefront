@@ -109,10 +109,15 @@ export default function MedusaCheckout() {
   // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
   // configured we attach Places autocomplete to the street input and, on pick,
   // fill the separate street / ZIP / city / country fields at once. Without a
-  // key this is a no-op and the manual separate fields stay fully usable, so
-  // the build never depends on Google being reachable.
+  // key the open fallback (Photon) takes over, so the field always suggests.
+  //
+  // Depends on `loading` too: on first render the cart is still being fetched
+  // and the page shows a placeholder, so the street input does not exist yet.
+  // Keyed on `step` alone the effect ran exactly once — against a null ref —
+  // and the autocomplete never attached for anyone whose cart took more than a
+  // render to load (i.e. everyone in production).
   useEffect(() => {
-    if (step !== "contact") return;
+    if (step !== "contact" || loading || !addrRef.current) return;
     const cleanup = attachAddressAutocomplete(addrRef.current, (parts) => {
       setF((p) => ({
         ...p,
@@ -127,7 +132,7 @@ export default function MedusaCheckout() {
       }));
     });
     return cleanup;
-  }, [step]);
+  }, [step, loading]);
 
   useEffect(() => {
     (async () => {
