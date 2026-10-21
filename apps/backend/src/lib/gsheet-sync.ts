@@ -996,6 +996,9 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 11, endIndex: 12 }, properties: { pixelSize: 28 }, fields: "pixelSize" } },
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 8, endIndex: 9 }, properties: { pixelSize: 150 }, fields: "pixelSize" } },
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 12, endIndex: 13 }, properties: { pixelSize: 150 }, fields: "pixelSize" } },
+    // K es la primera columna del tile "Ventas totales" (K:L, con L como
+    // separador estrecho): ancha para que el importe no se corte.
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 10, endIndex: 11 }, properties: { pixelSize: 150 }, fields: "pixelSize" } },
   ];
   // Tiles: etiqueta arriba, valor grande abajo, fondo dorado claro con borde.
   for (const [r0, defs] of [[3, tiles], [6, tiles2]] as Array<[number, Array<[string, string]>]>) {
@@ -1123,7 +1126,9 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   rows[6] = ["", `="Resultados: "&IF(ISNUMBER(A9),COUNTA($A$9:$A),0)`];
   rows[7] = headers;
   rows[8] = [formula];
-  const grid = rows.map((r) => (r ?? []).map((v) => v ?? ""));
+  // `rows` tiene huecos a propósito (filas vacías de separación): Array.map los
+  // salta y la API los descartaría, desplazando todo hacia arriba — se rellenan.
+  const grid = Array.from({ length: 9 }, (_, i) => (rows[i] ?? []).map((v) => v ?? ""));
   const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1:T9`)}:clear`, { method: "POST", body: "{}" });
   if (!clear.ok) throw await failure("clear search", clear);
   const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1`)}?valueInputOption=USER_ENTERED`, {
