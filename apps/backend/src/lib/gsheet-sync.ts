@@ -1984,19 +1984,23 @@ export async function backfillOrdersToSheet(container: MedusaContainer): Promise
     // Los que ya están se refrescan en la tabla (estado, importes, tracking)
     // sin añadir filas al historial: así la tabla nunca se queda desfasada.
     // Una fila que el dueño acaba de editar (difiere del espejo) NO se toca:
-    // el vigilante la aplicará; refrescarla ahora borraría su cambio.
-    const pending = new Map<string, SheetRowEdit>();
-    try {
-      for (const r of await readEditableRows(cfg, table)) pending.set(r.key, r);
-    } catch (error) {
-      logger.warn(`[gsheet] backfill: no se pudieron leer las columnas editables (${(error as Error).message})`);
-    }
+    // el vigilante la aplicará; refrescarla ahora borraría su cambio. Se
+    // relee justo antes de cada fila (el refresco completo tarda más de un
+    // minuto y el dueño puede estar editando mientras tanto).
+    const pendingEdit = async (key: string, mirror: SheetMirror | undefined): Promise<boolean> => {
+      if (!mirror) return false;
+      try {
+        const row = (await readEditableRows(cfg, table)).find((r) => r.key === key);
+        return Boolean(row && (row.status !== mirror.status || row.tracking !== (mirror.tracking ?? "")));
+      } catch (error) {
+        logger.warn(`[gsheet] backfill: no se pudieron leer las columnas editables (${(error as Error).message})`);
+        return true; // ante la duda, no pisar
+      }
+    };
     for (const o of all) {
       const key = `#${o.display_id}`;
       if (!present.has(key)) continue;
-      const mirror = (o.metadata ?? {})["gsheet_mirror"] as SheetMirror | undefined;
-      const row = pending.get(key);
-      if (mirror && row && (row.status !== mirror.status || row.tracking !== (mirror.tracking ?? ""))) {
+      if (await pendingEdit(key, (o.metadata ?? {})["gsheet_mirror"] as SheetMirror | undefined)) {
         logger.info(`[gsheet] backfill: ${key} tiene una edición pendiente en la hoja; no se refresca.`);
         continue;
       }
