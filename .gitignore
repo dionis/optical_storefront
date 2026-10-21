@@ -1,74 +1,160 @@
-.opencode
+# ─────────────────────────────────────────────────────────────────────────────
+# RUBI LENS · optical_storefront — .gitignore
+# Regla de oro: al repo va el código y lo que lo reproduce; nunca secretos,
+# datos de pacientes, dependencias ni artefactos que se regeneran.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Dependencies
+# ── Secretos y credenciales (NUNCA) ──────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.env.local
+# Claves y certificados
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+# Cuentas de servicio y OAuth de Google (Sheets, Drive, Maps)
+*service-account*.json
+*service_account*.json
+*serviceaccount*.json
+*gserviceaccount*.json
+*-sa.json
+*_sa.json
+*credentials*.json
+client_secret*.json
+token.json
+# Stripe, Twilio, Resend y afines
+*backup_code*
+stripe_backup_code*.txt
+*whsec*
+*.secret
+# Carpeta local para guardar claves del proyecto (JSON de Google, códigos de
+# respaldo, notas con claves): existe solo en tu PC, nunca se sube.
+secrets/*
+!secrets/README.md
+.secrets/
+# Sesiones y tokens locales
+.npmrc
+.yarnrc.yml
+.pypirc
+.netrc
+*.tfstate
+*.tfstate.*
+
+# ── Datos de salud / clientes (PHI) ──────────────────────────────────────────
+# Recetas reales usadas para probar el OCR: jamás al repo (regla duplicada en
+# docs/data/.gitignore para que viaje con la carpeta).
+docs/data/
+apps/backend/uploads/
+apps/backend/static/
+apps/vision-measure/**/uploads/
+# (no se ignora "prescriptions/": son rutas de código fuente del backend)
+
+# ── Dependencias ─────────────────────────────────────────────────────────────
 node_modules/
 .pnpm-store/
-# Build outputs
-dist/
-build/
-.next/
-out/
-# Stray tsc output next to sources (happens when tsc runs without the project tsconfig)
-packages/*/src/**/*.js
-packages/*/src/**/*.js.map
-packages/*/src/**/*.d.ts
-packages/*/src/**/*.d.ts.map
-# Environment files — NEVER commit real env files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-# Medusa
-.medusa/
+.pnp.*
+.yarn/
 # Python
+.venv/
+venv/
+env/
 __pycache__/
 *.py[cod]
 *.egg-info/
-.venv/
-venv/
 *.egg
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-# Scraper state
+.uv-cache/
+
+# ── Builds y artefactos regenerables ─────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.medusa/
+.vercel/
+.turbo/
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+coverage/
+.nyc_output/
+# Salida suelta de tsc junto a las fuentes (cuando se ejecuta sin el tsconfig)
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+# vto-web compilado dentro del storefront (lo genera el build de Vercel)
+apps/capri-storefront/public/tryon-3d/
+# Modelos 3D pesados generados fuera del repo (se copian a mano cuando toca)
+*.glb.bak
+apps/vto-web/public/models/*.tmp
+
+# ── Scraper / cachés regenerables ────────────────────────────────────────────
 apps/scraper/state.db
-# Logs
-*.log
-logs/
-# OS
-.DS_Store
-Thumbs.db
-# Editor
-.vscode/settings.json
-.idea/
-# Docker volumes (local)
-infra/volumes/
-node_modules
-dist
-.medusa
-_transfer
-# Real prescription samples used for testing the OCR pipeline. These are actual
-# patient records (PHI) — they must never reach the repository, and the rule is
-# duplicated in docs/data/.gitignore so it travels with the directory.
-docs/data/
-# Regenerable caches and backups — no aportan nada al repo y se rehacen solos
-# .shape_truth.json  → mapa SKU→forma; lo reconstruye measure_shape_classifier.py
-#                      con ~11 peticiones a las facetas del proveedor
-# *.json.bak         → copia que deja backfill_geometry_attrs.py antes de escribir
+apps/scraper/state.db-journal
 apps/scraper/scripts/.shape_truth.json
 *.json.bak
-# Artefactos de sesion del MCP de Playwright — snapshots de accesibilidad
-# generados en cada navegacion; no aportan nada al repo
-.playwright-mcp/
-_to_delete/ 
-change.patch
-__commitmsg.txt 
-.fuse_hidden* 
+*.bak
+*.orig
+*.rej
+*.patch
+!_patches/*.patch
 
-# Capturas y artefactos de sesiones de Claude (solo locales, no se publican)
+# ── Pruebas y automatización ─────────────────────────────────────────────────
+.playwright-mcp/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+*.gif.tmp
+
+# ── Logs y temporales ────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+.fuse_hidden*
+
+# ── Sistema operativo ────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── Editores e IDEs ──────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.sublime-workspace
+.opencode
+
+# ── Infraestructura local ────────────────────────────────────────────────────
+infra/volumes/
+docker-compose.override.yml
+*.local.yml
+
+# ── Trabajo local con Claude / sesiones (no se publica) ──────────────────────
 Claude outputs/
- 
-# Secretos locales: nunca al repo 
-stripe_backup_code*.txt 
-*backup_code*
+_transfer/
+_to_delete/
+__commitmsg.txt
+change.patch
