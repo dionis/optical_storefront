@@ -136,7 +136,7 @@ const WHITE = rgb("#ffffff");
 /** Encabezado azul marino con letra blanca; filas alternas blanco / azul muy claro. */
 const HEADER_COLOR = NAVY;
 const BAND_1 = WHITE;
-const BAND_2 = rgb("#f3f6fb");
+const BAND_2 = rgb("#edf1f8");
 /** Chips de color de la columna "Estado" (fondo, texto). */
 const STATUS_COLORS: Array<[string, string, string]> = [
   [STAGE_LABEL.confirmed, "#f6efd9", "#7a5b12"],
@@ -150,6 +150,8 @@ const STATUS_COLORS: Array<[string, string, string]> = [
 ];
 /** Pestaña del resumen ejecutivo (primera del archivo). */
 const DASHBOARD_SHEET = process.env.GSHEET_DASHBOARD_SHEET || "Resumen";
+/** Pestaña del buscador de pedidos (segunda). */
+const SEARCH_SHEET = process.env.GSHEET_SEARCH_SHEET || "Buscar";
 
 /**
  * Columnas de la pestaña Historial: una fila POR EVENTO con TODO el pedido —
@@ -599,6 +601,7 @@ async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersT
       const meta = await readSheetsMeta(cfg);
       await applyBrandStyle(cfg, table, meta);
       await ensureDashboard(cfg, meta, table);
+      await ensureSearchSheet(cfg, meta);
       styleApplied = true;
     } catch (e) {
       logger?.warn(`[gsheet] estilo/resumen no aplicado: ${(e as Error).message}`);
@@ -811,11 +814,13 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
       ...HISTORY_COLUMNS.map((c, i) => ({
         updateDimensionProperties: { range: { sheetId: hid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: c.width }, fields: "pixelSize" },
       })),
+      // Filas de datos: fondo blanco y letra normal (el azul marino es SOLO del
+      // encabezado; una fila añadida heredaba antes el formato de la cabecera).
       {
         repeatCell: {
           range: { sheetId: hid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: hcols },
-          cell: { userEnteredFormat: { wrapStrategy: "CLIP", verticalAlignment: "TOP", textFormat: { fontSize: 10 } } },
-          fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat.fontSize)",
+          cell: { userEnteredFormat: { backgroundColorStyle: { rgbColor: WHITE }, wrapStrategy: "CLIP", verticalAlignment: "TOP", horizontalAlignment: "LEFT", textFormat: { bold: false, italic: false, fontSize: 10, foregroundColorStyle: { rgbColor: rgb("#1e2733") } } } },
+          fields: "userEnteredFormat(backgroundColorStyle,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)",
         },
       },
       ...HISTORY_COLUMNS.flatMap((c, i) => {
@@ -872,7 +877,7 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
   let dash = sheets.find((s) => s.properties?.title === DASHBOARD_SHEET);
   if (!dash) {
     const [reply] = await batchUpdate(cfg, [
-      { addSheet: { properties: { title: DASHBOARD_SHEET, index: 0, gridProperties: { rowCount: 80, columnCount: 14, hideGridlines: true } } } },
+      { addSheet: { properties: { title: DASHBOARD_SHEET, index: 0, gridProperties: { rowCount: 80, columnCount: 18, hideGridlines: true } } } },
     ]);
     dash = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: DASHBOARD_SHEET }, charts: [] };
   }
@@ -927,35 +932,40 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
     put(r, 6, CNT(`,${inMonth(`$B${row}`)},${col("Prueba virtual")},"Sí"`));
   }
 
-  // Por marca (filas 26..37) y por tipo / estado (misma zona, columnas H..L).
-  const B0 = 25;
-  put(B0, 1, "VENTAS POR MARCA"); ["Marca", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 1 + i, h));
+  // A la derecha de "Ventas por mes": por marca (I..K), por estado y por tipo
+  // (M..O). Así los gráficos quedan justo debajo, a la vista.
+  const B0 = M0, BC = 8; // marca: columnas I,J,K
+  put(B0, BC, "VENTAS POR MARCA"); ["Marca", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, BC + i, h));
   const brandRange = `${P}!$${columnLetter(table.startCol + ocol("Marca"))}$${table.headerRow + 2}:$${columnLetter(table.startCol + ocol("Marca"))}`;
-  put(B0 + 2, 1, `=IFERROR(SORT(UNIQUE(FILTER(${brandRange},${brandRange}<>""))),"")`);
+  const BL = columnLetter(BC);
+  put(B0 + 2, BC, `=IFERROR(SORT(UNIQUE(FILTER(${brandRange},${brandRange}<>""))),"")`);
   for (let i = 0; i < 10; i++) {
     const row = B0 + 3 + i;
-    put(B0 + 2 + i, 2, `=IF($B${row}="","",COUNTIFS(${paidCrit},${col("Marca")},$B${row}))`);
-    put(B0 + 2 + i, 3, `=IF($B${row}="","",SUMIFS(${col("Total")},${paidCrit},${col("Marca")},$B${row}))`);
+    put(B0 + 2 + i, BC + 1, `=IF($${BL}${row}="","",COUNTIFS(${paidCrit},${col("Marca")},$${BL}${row}))`);
+    put(B0 + 2 + i, BC + 2, `=IF($${BL}${row}="","",SUMIFS(${col("Total")},${paidCrit},${col("Marca")},$${BL}${row}))`);
   }
-  put(B0, 7, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(B0 + 1, 7 + i, h));
+  const S0 = M0, SC = 12, SL = columnLetter(SC); // estado: columnas M,N
+  put(S0, SC, "PEDIDOS POR ESTADO (AHORA)"); ["Estado", "Pedidos"].forEach((h, i) => put(S0 + 1, SC + i, h));
+  const STATES = [...Object.values(STAGE_LABEL), ...Object.values(TERMINAL_LABEL)];
+  STATES.forEach((st, i) => {
+    put(S0 + 2 + i, SC, st);
+    put(S0 + 2 + i, SC + 1, `=COUNTIF(${E},$${SL}${S0 + 3 + i})`);
+  });
+  const T0 = S0 + 2 + STATES.length + 1; // tipo: debajo de estado, columnas M,N,O
+  put(T0, SC, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(T0 + 1, SC + i, h));
   Object.values(ORDER_TYPE).forEach((t, i) => {
-    const row = B0 + 3 + i;
-    put(B0 + 2 + i, 7, t);
-    put(B0 + 2 + i, 8, `=COUNTIFS(${paidCrit},${col("Tipo")},$H${row})`);
-    put(B0 + 2 + i, 9, `=SUMIFS(${col("Total")},${paidCrit},${col("Tipo")},$H${row})`);
+    const row = T0 + 3 + i;
+    put(T0 + 2 + i, SC, t);
+    put(T0 + 2 + i, SC + 1, `=COUNTIFS(${paidCrit},${col("Tipo")},$${SL}${row})`);
+    put(T0 + 2 + i, SC + 2, `=SUMIFS(${col("Total")},${paidCrit},${col("Tipo")},$${SL}${row})`);
   });
-  const S0 = B0 + 8;
-  put(S0, 7, "PEDIDOS POR ESTADO (AHORA)"); ["Estado", "Pedidos"].forEach((h, i) => put(S0 + 1, 7 + i, h));
-  [...Object.values(STAGE_LABEL), ...Object.values(TERMINAL_LABEL)].forEach((st, i) => {
-    put(S0 + 2 + i, 7, st);
-    put(S0 + 2 + i, 8, `=COUNTIF(${E},$H${S0 + 3 + i})`);
-  });
+  const CH = Math.max(M0 + 15, T0 + 2 + Object.values(ORDER_TYPE).length + 1); // fila de los gráficos
 
   // Escribir valores (fórmulas con USER_ENTERED).
   const maxR = Math.max(...V.map((v) => v[0])) + 1;
-  const grid: (string | number | null)[][] = Array.from({ length: maxR }, () => Array(12).fill(null));
+  const grid: (string | number | null)[][] = Array.from({ length: maxR }, () => Array(15).fill(null));
   for (const [r, col, v] of V) grid[r][col] = v;
-  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${DASHBOARD_SHEET}!A1:L${maxR}`)}:clear`, { method: "POST", body: "{}" });
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${DASHBOARD_SHEET}!A1:O${Math.max(maxR, 60)}`)}:clear`, { method: "POST", body: "{}" });
   if (!clear.ok) throw await failure("clear dashboard", clear);
   const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${DASHBOARD_SHEET}!A1`)}?valueInputOption=USER_ENTERED`, {
     method: "PUT",
@@ -973,16 +983,19 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
   const range = (r0: number, r1: number, c0: number, c1: number) => ({ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
   const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
   const req: unknown[] = [
-    { unmergeCells: { range: range(0, S0 + 12, 0, 12) } },
+    { unmergeCells: { range: range(0, 60, 0, 15) } },
     { updateSheetProperties: { properties: { sheetId: sid, index: 0, gridProperties: { hideGridlines: true } }, fields: "index,gridProperties.hideGridlines" } },
     { updateSheetProperties: { properties: { sheetId: sid, tabColorStyle: { rgbColor: GOLD } }, fields: "tabColorStyle" } },
-    fmt(range(0, 1, 0, 12), title), { mergeCells: { range: range(0, 1, 0, 12), mergeType: "MERGE_ALL" } },
+    fmt(range(0, 1, 0, 15), title), { mergeCells: { range: range(0, 1, 0, 15), mergeType: "MERGE_ALL" } },
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 48 }, fields: "pixelSize" } },
-    fmt(range(1, 2, 0, 12), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    fmt(range(1, 2, 0, 15), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
     fmt(range(1, 2, 10, 11), { numberFormat: { type: "DATE_TIME", pattern: "d/m/yyyy hh:mm" }, textFormat: { fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 24 }, fields: "pixelSize" } },
-    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 1, endIndex: 12 }, properties: { pixelSize: 118 }, fields: "pixelSize" } },
-    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 7, endIndex: 8 }, properties: { pixelSize: 170 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 1, endIndex: 15 }, properties: { pixelSize: 112 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 7, endIndex: 8 }, properties: { pixelSize: 28 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 11, endIndex: 12 }, properties: { pixelSize: 28 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 8, endIndex: 9 }, properties: { pixelSize: 150 }, fields: "pixelSize" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: 12, endIndex: 13 }, properties: { pixelSize: 150 }, fields: "pixelSize" } },
   ];
   // Tiles: etiqueta arriba, valor grande abajo, fondo dorado claro con borde.
   for (const [r0, defs] of [[3, tiles], [6, tiles2]] as Array<[number, Array<[string, string]>]>) {
@@ -1007,15 +1020,18 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
     fmt(range(M0 + 2, M0 + 14, 3, 5), money), fmt(range(M0 + 2, M0 + 14, 1, 7), { textFormat: { fontSize: 10 } }),
     fmt(range(M0 + 2, M0 + 14, 1, 2), { numberFormat: { type: "DATE", pattern: "mmm yyyy" }, textFormat: { bold: true, fontSize: 10 } }),
     { updateBorders: { range: range(M0 + 1, M0 + 14, 1, 7), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    fmt(range(B0, B0 + 1, 1, 4), section), fmt(range(B0 + 1, B0 + 2, 1, 4), head), fmt(range(B0 + 2, B0 + 12, 3, 4), money),
-    { updateBorders: { range: range(B0 + 1, B0 + 12, 1, 4), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    fmt(range(B0, B0 + 1, 7, 10), section), fmt(range(B0 + 1, B0 + 2, 7, 10), head), fmt(range(B0 + 2, B0 + 6, 9, 10), money),
-    { updateBorders: { range: range(B0 + 1, B0 + 6, 7, 10), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    fmt(range(S0, S0 + 1, 7, 9), section), fmt(range(S0 + 1, S0 + 2, 7, 9), head),
-    { updateBorders: { range: range(S0 + 1, S0 + 10, 7, 9), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } }
+    fmt(range(B0, B0 + 1, BC, BC + 3), section), fmt(range(B0 + 1, B0 + 2, BC, BC + 3), head), fmt(range(B0 + 2, B0 + 12, BC + 2, BC + 3), money),
+    { updateBorders: { range: range(B0 + 1, B0 + 12, BC, BC + 3), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    fmt(range(S0, S0 + 1, SC, SC + 3), section), fmt(range(S0 + 1, S0 + 2, SC, SC + 2), head),
+    { updateBorders: { range: range(S0 + 1, S0 + 2 + STATES.length, SC, SC + 2), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    fmt(range(T0, T0 + 1, SC, SC + 3), section), fmt(range(T0 + 1, T0 + 2, SC, SC + 3), head), fmt(range(T0 + 2, T0 + 6, SC + 2, SC + 3), money),
+    { updateBorders: { range: range(T0 + 1, T0 + 6, SC, SC + 3), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } }
   );
-  // Gráficos (solo si la pestaña no tiene ninguno).
-  if (!(dash.charts ?? []).length) {
+  // Gráficos: se recrean en cada arranque (así siguen a la disposición actual).
+  for (const ch of (dash.charts ?? []) as Array<{ chartId?: number }>) {
+    if (ch.chartId !== undefined) req.push({ deleteEmbeddedObject: { objectId: ch.chartId } });
+  }
+  {
     const src = (r0: number, r1: number, col: number) => ({ sourceRange: { sources: [{ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: col, endColumnIndex: col + 1 }] } });
     req.push(
       {
@@ -1030,7 +1046,7 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
                 series: [{ series: src(M0 + 1, M0 + 14, 3), targetAxis: "LEFT_AXIS", colorStyle: { rgbColor: NAVY } }],
               },
             },
-            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: S0 + 12, columnIndex: 1 }, widthPixels: 560, heightPixels: 300 } },
+            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: CH, columnIndex: 1 }, widthPixels: 600, heightPixels: 320 } },
           },
         },
       },
@@ -1040,13 +1056,137 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
             spec: {
               title: "Pedidos por estado",
               titleTextFormat: { bold: true, foregroundColorStyle: { rgbColor: NAVY } },
-              pieChart: { legendPosition: "RIGHT_LEGEND", domain: src(S0 + 1, S0 + 10, 7), series: src(S0 + 1, S0 + 10, 8), pieHole: 0.5 },
+              pieChart: { legendPosition: "RIGHT_LEGEND", domain: src(S0 + 1, S0 + 2 + STATES.length, SC), series: src(S0 + 1, S0 + 2 + STATES.length, SC + 1), pieHole: 0.5 },
             },
-            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: S0 + 12, columnIndex: 7 }, widthPixels: 420, heightPixels: 300 } },
+            position: { overlayPosition: { anchorCell: { sheetId: sid, rowIndex: CH, columnIndex: 8 }, widthPixels: 460, heightPixels: 320 } },
           },
         },
       }
     );
+  }
+  await batchUpdate(cfg, req);
+}
+
+// ── Buscador ─────────────────────────────────────────────────────────────────
+
+/**
+ * Pestaña "Buscar": campos de búsqueda (pedido, cliente, teléfono, marca,
+ * estado, fechas) y una sola fórmula que filtra el Historial con todos los
+ * criterios a la vez. Por defecto muestra el ÚLTIMO evento de cada pedido (su
+ * estado actual); el selector "Mostrar" permite ver todos los eventos. Se
+ * reescribe en cada arranque; lo que el dueño teclee en los campos se conserva.
+ */
+async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<void> {
+  let sheet = sheets.find((s) => s.properties?.title === SEARCH_SHEET);
+  if (!sheet) {
+    const [reply] = await batchUpdate(cfg, [
+      { addSheet: { properties: { title: SEARCH_SHEET, index: 1, gridProperties: { rowCount: 500, columnCount: 20, hideGridlines: true } } } },
+    ]);
+    sheet = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: SEARCH_SHEET } };
+  }
+  const sid = sheet.properties?.sheetId ?? 0;
+  const H = quoteSheet(HISTORY_SHEET);
+  const hc = (key: string) => `${H}!$${hcol(key)}$2:$${hcol(key)}`;
+  const ALL = `${H}!$A$2:$${columnLetter(HISTORY_COLUMNS.length - 1)}`;
+
+  // Campos (fila 5, 1-based): B pedido, C cliente, D teléfono, E marca, F estado, G desde, H hasta, I mostrar.
+  const SHOW_LAST = "Último estado por pedido";
+  const SHOW_ALL = "Todos los eventos";
+  const RESULT_KEYS = ["at", "order", "event", "status", "type", "customer", "email", "phone", "city", "brand", "model", "color", "lenses", "rx", "delivery", "tracking", "total", "paid"];
+  const cols = RESULT_KEYS.map((k) => HISTORY_COLUMNS.findIndex((c) => c.key === k) + 1).join(",");
+  const cond =
+    `(${hc("order")}<>"")` +
+    `*(($B$5="")+(${hc("order")}="#"&SUBSTITUTE($B$5,"#","")))` +
+    `*(($C$5="")+ISNUMBER(SEARCH($C$5,${hc("customer")})))` +
+    `*(($D$5="")+ISNUMBER(SEARCH(REGEXREPLACE(TO_TEXT($D$5),"\\D",""),REGEXREPLACE(TO_TEXT(${hc("phone")}),"\\D",""))))` +
+    `*(($E$5="")+ISNUMBER(SEARCH($E$5,${hc("brand")})))` +
+    `*(($F$5="")+(${hc("status")}=$F$5))` +
+    `*(($G$5="")+(${hc("at")}>=IF($G$5="",0,$G$5)))` +
+    `*(($H$5="")+(${hc("at")}<IF($H$5="",9^9,$H$5+1)))`;
+  const sorted = `SORT(FILTER(${ALL},${cond}),1,FALSE)`;
+  const orderIdx = HISTORY_COLUMNS.findIndex((c) => c.key === "order") + 1;
+  const formula = `=IFERROR(CHOOSECOLS(IF($I$5="${SHOW_ALL}",${sorted},SORT(SORTN(${sorted},9^9,2,${orderIdx},TRUE),1,FALSE)),${cols}),"Sin resultados")`;
+
+  const labels = ["Pedido #", "Cliente", "Teléfono", "Marca", "Estado", "Desde (fecha)", "Hasta (fecha)", "Mostrar"];
+  const headers = RESULT_KEYS.map((k) => HISTORY_COLUMNS.find((c) => c.key === k)!.name);
+  // Se conservan los valores que el dueño tenga escritos en los campos.
+  const current = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!B5:I5`)}`);
+  const kept = current.ok ? (((await current.json()) as { values?: unknown[][] }).values?.[0] ?? []) : [];
+  const inputs = labels.map((_, i) => (kept[i] ?? "") as string | number);
+  if (!inputs[7]) inputs[7] = SHOW_LAST;
+
+  const rows: (string | number)[][] = [];
+  rows[0] = ["Buscar pedidos"];
+  rows[1] = ["Escribe en uno o varios campos (se combinan) y los resultados se filtran solos. Deja un campo vacío para no filtrar por él. Las fechas: d/m/aaaa."];
+  rows[3] = ["", ...labels];
+  rows[4] = ["", ...inputs];
+  rows[6] = ["", `="Resultados: "&IF(ISNUMBER(A9),COUNTA($A$9:$A),0)`];
+  rows[7] = headers;
+  rows[8] = [formula];
+  const grid = rows.map((r) => (r ?? []).map((v) => v ?? ""));
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1:T9`)}:clear`, { method: "POST", body: "{}" });
+  if (!clear.ok) throw await failure("clear search", clear);
+  const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1`)}?valueInputOption=USER_ENTERED`, {
+    method: "PUT",
+    body: JSON.stringify({ values: grid.map((r) => (r.length ? r : [""])) }),
+  });
+  if (!write.ok) throw await failure("write search", write);
+
+  const range = (r0: number, r1: number, c0: number, c1: number) => ({ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+  const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
+  const n = headers.length;
+  const list = (values: string[]) => ({ condition: { type: "ONE_OF_LIST", values: values.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false });
+  const req: unknown[] = [
+    { unmergeCells: { range: range(0, 9, 0, 20) } },
+    { updateSheetProperties: { properties: { sheetId: sid, index: 1, tabColorStyle: { rgbColor: NAVY }, gridProperties: { frozenRowCount: 8, hideGridlines: true } }, fields: "index,tabColorStyle,gridProperties(frozenRowCount,hideGridlines)" } },
+    fmt(range(0, 1, 0, n), { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 18, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE" }),
+    { mergeCells: { range: range(0, 1, 0, n), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 46 }, fields: "pixelSize" } },
+    fmt(range(1, 2, 0, n), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    { mergeCells: { range: range(1, 2, 0, n), mergeType: "MERGE_ALL" } },
+    fmt(range(3, 4, 1, 9), { textFormat: { bold: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#8a7340") } } }),
+    fmt(range(4, 5, 1, 9), { backgroundColorStyle: { rgbColor: rgb("#f6efd9") }, textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: NAVY } }, verticalAlignment: "MIDDLE", horizontalAlignment: "LEFT" }),
+    { updateBorders: { range: range(4, 5, 1, 9), top: { style: "SOLID", colorStyle: { rgbColor: GOLD } }, bottom: { style: "SOLID", colorStyle: { rgbColor: GOLD } }, left: { style: "SOLID", colorStyle: { rgbColor: GOLD } }, right: { style: "SOLID", colorStyle: { rgbColor: GOLD } }, innerVertical: { style: "SOLID", colorStyle: { rgbColor: GOLD } } } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 4, endIndex: 5 }, properties: { pixelSize: 34 }, fields: "pixelSize" } },
+    fmt(range(4, 5, 6, 8), { numberFormat: { type: "DATE", pattern: "d/m/yyyy" } }),
+    { setDataValidation: { range: range(4, 5, 5, 6), rule: list([...Object.values(STAGE_LABEL), ...Object.values(TERMINAL_LABEL)]) } },
+    { setDataValidation: { range: range(4, 5, 8, 9), rule: { ...list([SHOW_LAST, SHOW_ALL]), strict: true } } },
+    { setDataValidation: { range: range(4, 5, 6, 8), rule: { condition: { type: "DATE_IS_VALID" }, strict: false } } },
+    fmt(range(6, 7, 1, 2), { textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: NAVY } } }),
+    fmt(range(7, 8, 0, n), { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE", wrapStrategy: "WRAP" }),
+    { updateBorders: { range: range(7, 8, 0, n), bottom: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: GOLD } } } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 7, endIndex: 8 }, properties: { pixelSize: 34 }, fields: "pixelSize" } },
+    fmt(range(8, 500, 0, n), { backgroundColorStyle: { rgbColor: WHITE }, wrapStrategy: "CLIP", verticalAlignment: "TOP", textFormat: { bold: false, fontSize: 10, foregroundColorStyle: { rgbColor: rgb("#1e2733") } } }),
+    fmt(range(8, 500, 0, 1), { numberFormat: { type: "DATE_TIME", pattern: "d/m/yyyy hh:mm" } }),
+    fmt(range(8, 500, 1, 2), { textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } } }),
+    fmt(range(8, 500, 16, 17), { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" }),
+    ...RESULT_KEYS.map((k, i) => ({
+      updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: Math.max(90, HISTORY_COLUMNS.find((c) => c.key === k)!.width) }, fields: "pixelSize" },
+    })),
+  ];
+  // Bandas y chips de estado en los resultados (reglas reemplazadas, no acumuladas).
+  const rules = (sheet.conditionalFormats ?? []).length;
+  for (let i = rules - 1; i >= 0; i--) req.push({ deleteConditionalFormatRule: { sheetId: sid, index: i } });
+  req.push({
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges: [range(8, 500, 0, n)],
+        booleanRule: { condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: "=AND(ISEVEN(ROW()),$A9<>\"\")" }] }, format: { backgroundColorStyle: { rgbColor: BAND_2 } } },
+      },
+    },
+  });
+  const statusCol = RESULT_KEYS.indexOf("status");
+  for (const [label, bg, fg] of STATUS_COLORS) {
+    req.push({
+      addConditionalFormatRule: {
+        index: 0,
+        rule: {
+          ranges: [range(8, 500, statusCol, statusCol + 1)],
+          booleanRule: { condition: { type: "TEXT_EQ", values: [{ userEnteredValue: label }] }, format: { backgroundColorStyle: { rgbColor: rgb(bg) }, textFormat: { bold: true, foregroundColorStyle: { rgbColor: rgb(fg) } } } },
+        },
+      },
+    });
   }
   await batchUpdate(cfg, req);
 }
@@ -1118,7 +1258,7 @@ async function upsertOrderRow(cfg: GsheetConfig, table: OrdersTable, row: Cell[]
 async function appendHistoryRow(cfg: GsheetConfig, row: unknown[]): Promise<void> {
   const resp = await sheetsFetch(
     cfg,
-    `/values/${encodeURIComponent(`${HISTORY_SHEET}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(`${HISTORY_SHEET}!A1`)}:append?valueInputOption=RAW&insertDataOption=OVERWRITE`,
     { method: "POST", body: JSON.stringify({ values: [row] }) }
   );
   if (!resp.ok) throw await failure("append history", resp);
@@ -1385,7 +1525,7 @@ export function buildRows(
     hasTryon ? "Prueba virtual (imagen adjunta en el correo)" : "",
     hasFile ? "Receta original guardada (solo en el panel)" : "",
   ].filter(Boolean);
-  if (files.length && extra.adminUrl) files.push(`Panel: ${extra.adminUrl}`);
+  // Nunca una URL aquí: el dueño sabe dónde está el panel (pedido del dueño).
   const fileCell = files.join("\n");
 
   // Notas: valores leídos de la receta, para quién, medidas de IA, avisos,

@@ -10,9 +10,9 @@
  * the order's locale, inline styles only, and a plain-text alternative.
  */
 import { type EmailLocale, t } from "./copy";
-import { esc, BRAND, MUTED, BORDER, brandHeaderRow } from "./order-confirmation";
+import { esc, BRAND, MUTED, GOLD, GOLD_LIGHT, INK, shell, iconImg } from "./order-confirmation";
 import { storefrontOrigin } from "../order-access";
-import type { OrderStage } from "../order-status";
+import { ORDER_STAGES, type OrderStage } from "../order-status";
 
 export interface StageEmailInput {
   displayId: string | number;
@@ -76,27 +76,41 @@ export function renderOrderStageUpdate(
     : "";
   const trackingHref = (input.trackingUrl || "").trim();
 
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f6f7fb">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb;padding:24px 0">
-    <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid ${BORDER};border-radius:12px;overflow:hidden;font-family:Arial,Helvetica,sans-serif">
-        ${brandHeaderRow("18px 24px")}
-        <tr><td style="padding:26px 24px 8px;color:#111827">
-          <div style="font-size:13px;color:${MUTED};margin-bottom:6px">${locale === "es" ? "Pedido" : "Order"} #${esc(id)}</div>
-          <div style="font-size:20px;font-weight:bold;color:${BRAND}">${esc(name)}</div>
-          <p style="font-size:14px;line-height:1.6;color:#374151;margin:12px 0 0">${esc(body)}</p>
-          ${trackingLine ? `<p style="font-size:13px;color:${MUTED};margin:14px 0 0">${esc(trackingLine)}</p>` : ""}
-        </td></tr>
-        <tr><td style="padding:20px 24px 26px">
-          ${trackingHref
-            ? `<a href="${esc(trackingHref)}" style="display:inline-block;background:${BRAND};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 22px;border-radius:999px">${locale === "es" ? "Ver seguimiento del envío" : "View shipment tracking"}</a>
-               <div style="margin-top:12px"><a href="${esc(track)}" style="color:${BRAND};font-size:13px">${esc(trackLabel)}</a></div>`
-            : `<a href="${esc(track)}" style="display:inline-block;background:${BRAND};color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 22px;border-radius:999px">${esc(trackLabel)}</a>`}
-        </td></tr>
-        <tr><td style="padding:14px 24px;border-top:1px solid ${BORDER};font-size:12px;color:${MUTED}">RUBI LENS · ${locale === "es" ? "Óptica y salud visual" : "Optics & visual health"}</td></tr>
-      </table>
-    </td></tr>
-  </table></body></html>`;
+  // Línea de progreso con las cinco etapas: la actual en dorado, las pasadas
+  // en azul marino, las que faltan en gris — como la página de seguimiento.
+  const icons: Record<OrderStage, string> = {
+    confirmed: "navy-card", in_lab: "navy-ruler", shipped: "navy-layers", in_transit: "navy-truck", delivered: "navy-heart",
+  };
+  const current = ORDER_STAGES.indexOf(input.stage);
+  const steps = ORDER_STAGES.map((st, i) => {
+    const done = i < current, now = i === current;
+    const bg = now ? GOLD : done ? BRAND : "#e7eaf0";
+    const color = now ? BRAND : done ? "#ffffff" : MUTED;
+    const label = stageName(locale, st, input.frameOnly);
+    return `<td width="20%" align="center" style="vertical-align:top;padding:0 2px">
+        <div style="width:34px;height:34px;line-height:34px;margin:0 auto;border-radius:999px;background:${bg};color:${color};font-size:13px;font-weight:800;text-align:center">${done ? "✓" : i + 1}</div>
+        <div style="margin-top:6px;font-size:10px;line-height:1.3;font-weight:${now ? 800 : 600};color:${now ? BRAND : done ? INK : MUTED}">${esc(label)}</div>
+      </td>`;
+  }).join("");
+
+  const inner = `
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${MUTED}">${locale === "es" ? "Pedido" : "Order"} #${esc(id)}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>
+      <td style="padding-right:10px;vertical-align:middle">${iconImg(icons[input.stage], 36)}</td>
+      <td style="vertical-align:middle;font-size:22px;font-weight:800;color:${BRAND}">${esc(name)}</td>
+    </tr></table>
+    <p style="font-size:14px;line-height:1.7;color:${INK};margin:12px 0 0">${esc(body)}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:22px;padding:14px 0;border-top:1px dashed ${GOLD};border-bottom:1px dashed ${GOLD}">
+      <tr>${steps}</tr>
+    </table>
+    ${trackingLine ? `<div style="margin-top:18px;padding:12px 14px;background:${GOLD_LIGHT};border-radius:10px;font-size:14px;color:${BRAND}">${iconImg("navy-truck", 18)} <strong>${esc(trackingLine)}</strong></div>` : ""}
+    <div style="margin-top:22px">
+      ${trackingHref
+        ? `<a href="${esc(trackingHref)}" style="display:inline-block;background:${GOLD};color:${BRAND};text-decoration:none;font-size:14px;font-weight:800;padding:13px 26px;border-radius:999px">${locale === "es" ? "Ver seguimiento del envío" : "View shipment tracking"} →</a>
+           <div style="margin-top:12px"><a href="${esc(track)}" style="color:${BRAND};font-size:13px;font-weight:700">${esc(trackLabel)}</a></div>`
+        : `<a href="${esc(track)}" style="display:inline-block;background:${GOLD};color:${BRAND};text-decoration:none;font-size:14px;font-weight:800;padding:13px 26px;border-radius:999px">${esc(trackLabel)} →</a>`}
+    </div>`;
+  const html = shell(subject, body, inner, locale);
 
   const text = [
     `${locale === "es" ? "Pedido" : "Order"} #${id} — ${name}`,

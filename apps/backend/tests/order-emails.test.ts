@@ -369,9 +369,10 @@ describe("store identity at the top of the emails", () => {
       renderCustomerOrderConfirmation(order, "es"),
       renderAdminOrderNotification(order, "es"),
     ]) {
-      const logoAt = mail.html.indexOf('src="https://shop.example.com/logo-oficial-mark.png"');
+      const logoAt = mail.html.indexOf('src="https://shop.example.com/logo-oficial.png"');
       expect(logoAt).toBeGreaterThan(-1);
-      expect(logoAt).toBeLessThan(mail.html.indexOf(`background:#1f3a5f;padding:24px 32px`));
+      // El logo va en la banda azul marino de arriba, antes de la franja del título.
+      expect(logoAt).toBeLessThan(mail.html.indexOf(`border-left:6px solid #b8921e`));
       expect(mail.html).toContain(">RUBI LENS</td>");
     }
   });

@@ -41,6 +41,8 @@ export interface FrameSpecs {
 }
 export interface EnrichedItem {
   frame_name: string;
+  /** Foto de la montura (URL pública, ya redimensionada para correo) o null. */
+  image_url?: string | null;
   collection: string | null;
   color: string | null;
   frame_price: number;
@@ -159,6 +161,42 @@ function localizeSpecs(raw: RawFrameSpecs | null, locale: EmailLocale): FrameSpe
   };
 }
 
+/**
+ * Base pública de las imágenes del catálogo. El storefront la lleva en
+ * VITE_R2_PUBLIC_URL; el backend acepta R2_PUBLIC_URL o esa misma variable, y
+ * si no hay ninguna (o es el placeholder del .env.example) usa el bucket de la
+ * tienda, que es donde viven hoy todas las fotos.
+ */
+const DEFAULT_ASSET_BASE = "https://svuuuobjgrkscsjgpwkx.supabase.co/storage/v1/object/public/eyewear-assets";
+function assetBase(): string {
+  const raw = (process.env.R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
+  return raw && !/example\.com/.test(raw) ? raw : DEFAULT_ASSET_BASE;
+}
+
+/** URL pública de una foto de producto, redimensionada (JPEG) para correo. */
+export function productImageUrl(key: string | null | undefined, width = 480): string | null {
+  if (!key) return null;
+  const url = /^https?:\/\//i.test(key) ? key : `${assetBase()}/${key.replace(/^\//, "")}`;
+  if (!url.includes("/storage/v1/object/public/")) return url;
+  const base = url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/");
+  return `${base}${base.includes("?") ? "&" : "?"}width=${width}&resize=contain&quality=80`;
+}
+
+async function loadProductThumbnails(pg: Knex, productIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return map;
+  try {
+    const rows = await pg("product").whereIn("id", ids).select("id", "thumbnail");
+    for (const row of rows as Array<Record<string, unknown>>) {
+      if (row["thumbnail"]) map.set(String(row["id"]), String(row["thumbnail"]));
+    }
+  } catch {
+    // Sin foto no pasa nada: la tarjeta muestra el icono de montura.
+  }
+  return map;
+}
+
 /** Rich per-line lens breakdown (name + price of each component) from the matrix. */
 export async function enrichLensItems(
   pg: Knex,
@@ -172,6 +210,7 @@ export async function enrichLensItems(
     pg,
     items.map((i) => String(i["product_id"] ?? ""))
   );
+  const thumbs = await loadProductThumbnails(pg, items.map((i) => String(i["product_id"] ?? "")));
 
   for (const item of items) {
     const md = (item["metadata"] as Record<string, unknown>) || {};
@@ -230,6 +269,7 @@ export async function enrichLensItems(
 
     out.push({
       frame_name: (item["product_title"] as string) || (item["title"] as string) || "",
+      image_url: productImageUrl((item["thumbnail"] as string) || thumbs.get(String(item["product_id"] ?? "")) || null),
       // `product_collection` is null on every order in this store — the brand is
       // product metadata, not a Medusa collection — so the snapshot is only a
       // first choice, never the only one, or the row silently disappears.

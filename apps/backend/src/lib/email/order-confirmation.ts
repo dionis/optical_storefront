@@ -45,7 +45,7 @@ function attachedImagesNote(
 
 function renderAttachedImagesNote(note: string | null): string {
   if (!note) return "";
-  return `<div style="margin-top:16px;padding:10px 12px;background:#eff6ff;border-radius:8px;font-size:13px;color:#1e3a8a">${esc(note)}</div>`;
+  return `<div style="margin-top:14px;padding:10px 12px;background:${NAVY_SOFT};border-radius:8px;font-size:13px;color:${BRAND}">${iconImg("navy-camera", 16)} ${esc(note)}</div>`;
 }
 
 /** Inline image (attached with a `cid`), sized for an email column. */
@@ -54,7 +54,7 @@ function inlineImage(ref: ImageRef | undefined, caption: string): string {
   return `
     <div style="margin-top:12px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(caption)}</div>
-      <img src="cid:${esc(ref.cid)}" alt="${esc(caption)}" width="280" style="display:block;max-width:100%;height:auto;border-radius:8px;border:1px solid ${BORDER}" />
+      <img src="cid:${esc(ref.cid)}" alt="${esc(caption)}" width="280" style="display:block;max-width:100%;height:auto;border-radius:12px;border:2px solid ${GOLD}" />
     </div>`;
 }
 
@@ -102,9 +102,37 @@ export interface RenderedEmail {
   text: string;
 }
 
-export const BRAND = "#1f3a5f";
-export const MUTED = "#6b7280";
-export const BORDER = "#e5e7eb";
+/** Paleta de la tienda (azul marino + dorado), la misma de rubilens.com. */
+export const BRAND = "#0b2f66";
+export const MUTED = "#5b6472";
+export const BORDER = "#e7eaf0";
+export const GOLD = "#b8921e";
+export const GOLD_LIGHT = "#f6efd9";
+export const BONE = "#f5f2ec";
+export const INK = "#1e2733";
+export const NAVY_SOFT = "#eef2f8";
+export const GREEN = "#1e6b3a";
+export const GREEN_LIGHT = "#e3f5e9";
+
+/** Icono 3D de la tienda (public/ui/icons3d), servido desde la web. */
+export function iconImg(name: string, size = 20, alt = ""): string {
+  return `<img src="${esc(storefrontOrigin())}/ui/icons3d/${esc(name)}.png" width="${size}" height="${size}" alt="${esc(alt)}" style="display:inline-block;vertical-align:middle;border:0;width:${size}px;height:${size}px">`;
+}
+
+/** Título de sección con icono: línea dorada debajo, como las cabeceras de la web. */
+export function sectionTitle(text: string, icon?: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:26px;margin-bottom:10px">
+      <tr>
+        ${icon ? `<td style="padding-right:8px;vertical-align:middle">${iconImg(icon, 22)}</td>` : ""}
+        <td style="vertical-align:middle;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND};padding-bottom:4px;border-bottom:2px solid ${GOLD}">${esc(text)}</td>
+      </tr>
+    </table>`;
+}
+
+/** Chip de estado (pago confirmado, receta adjunta...). */
+export function chip(text: string, bg = GOLD_LIGHT, fg = "#7a5b12"): string {
+  return `<span style="display:inline-block;padding:5px 12px;border-radius:999px;background:${bg};color:${fg};font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap">${esc(text)}</span>`;
+}
 
 /** Store name shown in the email header. A proper name, not copy: same in every locale. */
 export function emailStoreName(): string {
@@ -117,7 +145,7 @@ export function emailStoreName(): string {
  * clients, and the header has to look the same in every message.
  */
 export function emailLogoUrl(): string {
-  return process.env.EMAIL_LOGO_URL?.trim() || `${storefrontOrigin()}/logo-oficial-mark.png`;
+  return process.env.EMAIL_LOGO_URL?.trim() || `${storefrontOrigin()}/logo-oficial.png`;
 }
 
 /**
@@ -125,22 +153,47 @@ export function emailLogoUrl(): string {
  * is real text, so the sender is still recognisable when the client blocks
  * remote images. Returns a table row for the 600px content table.
  */
-export function brandHeaderRow(padding = "20px 32px"): string {
+export function brandHeaderRow(padding = "18px 32px"): string {
   const name = esc(emailStoreName());
   return `<tr>
-              <td style="background:#ffffff;padding:${padding};border-bottom:1px solid ${BORDER}">
+              <td style="background:${BRAND};padding:${padding};border-bottom:3px solid ${GOLD}">
                 <a href="${esc(storefrontOrigin())}" style="text-decoration:none">
-                  <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
                     <tr>
-                      <td style="vertical-align:middle;padding-right:12px">
-                        <img src="${esc(emailLogoUrl())}" width="74" height="40" alt="" style="display:block;border:0;outline:none;width:74px;height:40px">
+                      <td style="vertical-align:middle">
+                        <img src="${esc(emailLogoUrl())}" width="190" height="54" alt="${name}" style="display:block;border:0;outline:none;width:190px;height:54px">
                       </td>
-                      <td style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:.04em;color:${BRAND};white-space:nowrap">${name}</td>
+                      <td align="right" style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${GOLD};white-space:nowrap">${name}</td>
                     </tr>
                   </table>
                 </a>
               </td>
             </tr>`;
+}
+
+/**
+ * Cabecera tipo ticket: número de pedido, fecha y estado del pago en una franja
+ * con borde discontinuo, como un recibo impreso.
+ */
+export function renderTicketHeader(
+  displayId: string,
+  dateText: string,
+  locale: EmailLocale,
+  status: { text: string; bg: string; fg: string }
+): string {
+  const cell = (label: string, value: string) => `
+        <td style="padding:12px 14px;vertical-align:top;border-right:1px dashed ${GOLD}">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${MUTED}">${esc(label)}</div>
+          <div style="margin-top:4px;font-size:15px;font-weight:800;color:${BRAND}">${value}</div>
+        </td>`;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:2px dashed ${GOLD};border-radius:12px;background:${GOLD_LIGHT};margin-top:4px">
+      <tr>
+        ${cell(t(locale, "order_number"), `#${esc(displayId)}`)}
+        ${cell(t(locale, "purchase_datetime"), `<span style="font-size:13px;font-weight:600;color:${INK}">${esc(dateText)}</span>`)}
+        <td style="padding:12px 14px;vertical-align:middle;text-align:center">${chip(status.text, status.bg, status.fg)}</td>
+      </tr>
+    </table>`;
 }
 
 /** Escapes text destined for an HTML body. Order data is customer-supplied. */
@@ -310,16 +363,23 @@ function renderItemsTable(
 function renderTotals(order: OrderEmailData, locale: EmailLocale): string {
   const rows = totalRows(order, locale)
     .map(
-      (row) => `
+      (row) => row.strong
+        ? `
       <tr>
-        <td style="padding:4px 0;color:${row.strong ? "#111827" : MUTED};font-weight:${row.strong ? 700 : 400}">${esc(row.label)}</td>
-        <td align="right" style="padding:4px 0;color:${row.strong ? "#111827" : MUTED};font-weight:${row.strong ? 700 : 400};white-space:nowrap">${esc(formatMoney(row.amount, order.currency_code, locale))}</td>
+        <td style="padding:10px 12px;background:${GOLD_LIGHT};border-top:2px solid ${GOLD};color:${BRAND};font-weight:800;font-size:15px;border-radius:0 0 0 10px">${esc(row.label)}</td>
+        <td align="right" style="padding:10px 12px;background:${GOLD_LIGHT};border-top:2px solid ${GOLD};color:${BRAND};font-weight:800;font-size:17px;white-space:nowrap;border-radius:0 0 10px 0">${esc(formatMoney(row.amount, order.currency_code, locale))}</td>
+      </tr>`
+        : `
+      <tr>
+        <td style="padding:6px 12px;color:${MUTED}">${esc(row.label)}</td>
+        <td align="right" style="padding:6px 12px;color:${INK};white-space:nowrap">${esc(formatMoney(row.amount, order.currency_code, locale))}</td>
       </tr>`
     )
     .join("");
 
   return `
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px;font-size:14px">
+  ${sectionTitle(t(locale, "total"), "navy-card")}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:1px solid ${BORDER};border-radius:10px;font-size:14px;overflow:hidden">
     <tbody>${rows}</tbody>
   </table>`;
 }
@@ -330,34 +390,40 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
     ? lines.map(esc).join("<br/>")
     : esc(t(locale, "no_shipping_address"));
   return `
-  <div style="margin-top:24px">
-    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(t(locale, "shipping_address"))}</div>
-    <div style="font-size:14px;line-height:1.6;color:#374151">${body}</div>
-  </div>`;
+  <div style="font-size:14px;line-height:1.7;color:${INK}">${body}</div>`;
 }
 
 export function shell(title: string, preheader: string, inner: string, locale: EmailLocale): string {
+  const site = storefrontOrigin().replace(/^https?:\/\//, "");
   return `<!doctype html>
 <html lang="${locale}">
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-  <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
+  <body style="margin:0;padding:0;background:${BONE};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${INK}">
     <span style="display:none;font-size:0;line-height:0;max-height:0;opacity:0;overflow:hidden">${esc(preheader)}</span>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#f4f5f7">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${BONE}">
       <tr>
-        <td align="center" style="padding:32px 16px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
+        <td align="center" style="padding:28px 12px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(11,47,102,.10)">
             ${brandHeaderRow()}
             <tr>
-              <td style="background:${BRAND};padding:24px 32px">
-                <div style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.02em">${esc(title)}</div>
+              <td style="background:${NAVY_SOFT};padding:18px 32px;border-left:6px solid ${GOLD}">
+                <div style="color:${BRAND};font-size:20px;font-weight:800;letter-spacing:.01em;line-height:1.3">${esc(title)}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:32px">${inner}</td>
+              <td style="padding:26px 32px 30px">${inner}</td>
             </tr>
             <tr>
-              <td style="padding:16px 32px 28px;border-top:1px solid ${BORDER}">
-                <div style="font-size:12px;color:${MUTED};line-height:1.6">${esc(t(locale, "footer_automatic"))}</div>
+              <td style="background:${BRAND};padding:18px 32px;border-top:3px solid ${GOLD}">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                  <tr>
+                    <td style="font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#ffffff">${esc(emailStoreName())}</td>
+                    <td align="right" style="font-size:12px"><a href="${esc(storefrontOrigin())}" style="color:${GOLD};text-decoration:none;font-weight:700">${esc(site)}</a></td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" style="padding-top:8px;font-size:11px;line-height:1.6;color:#c7d2e6">${esc(t(locale, "footer_automatic"))}</td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
@@ -592,18 +658,18 @@ function rxTable(
     .join("");
 
   return `
-  <div style="margin-top:20px;padding:14px;border:1px solid ${BORDER};border-radius:8px">
-    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:6px">${esc(t(locale, "prescription_values"))}</div>
+  ${sectionTitle(t(locale, "prescription_values"), "navy-list")}
+  <div style="padding:14px 16px;border:1px solid ${BORDER};border-radius:12px;background:#ffffff">
     ${
       forFrames.length
-        ? `<div style="font-size:13px;color:#374151;margin-bottom:8px"><strong>${esc(t(locale, "rx_for"))}:</strong> ${esc(forFrames.join(", "))}</div>`
+        ? `<div style="font-size:13px;color:${INK};margin-bottom:10px"><strong style="color:${BRAND}">${esc(t(locale, "rx_for"))}:</strong> ${esc(forFrames.join(", "))}</div>`
         : ""
     }
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;font-size:13px;border-radius:8px;overflow:hidden;border:1px solid ${BORDER}">
       <thead>
         <tr>
-          <th style="padding:6px 8px;border-bottom:2px solid ${BORDER}"></th>
-          ${head.map((h) => `<th style="padding:6px 8px;border-bottom:2px solid ${BORDER};font-size:11px;color:${MUTED};text-align:center">${esc(h)}</th>`).join("")}
+          <th style="padding:7px 8px;background:${BRAND}"></th>
+          ${head.map((h) => `<th style="padding:7px 8px;background:${BRAND};font-size:11px;letter-spacing:.06em;color:#ffffff;text-align:center">${esc(h)}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
@@ -611,8 +677,8 @@ function rxTable(
         ${row(t(locale, "left_eye"), rx.os)}
       </tbody>
     </table>
-    <div style="margin-top:8px;font-size:13px;color:#374151">
-      ${measures.join(" &nbsp;·&nbsp; ")}
+    <div style="margin-top:10px;font-size:13px;color:${INK}">
+      ${measures.map((m) => chip(m.replace(/<\/?strong>/g, ""), GOLD_LIGHT, BRAND)).join(" ")}
     </div>
     <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px;font-size:12.5px">
       <tbody>${metaRows}</tbody>
@@ -779,90 +845,127 @@ function renderFrameSpecs(specs: FrameSpecs | null, locale: EmailLocale): string
   if (!specs) return "";
   const rows = frameSpecRows(specs, locale);
   if (!rows.length) return "";
+  // Dos pares por fila, como la ficha técnica de la web.
+  const cells = rows.map(
+    ([k, v]) => `<td width="50%" style="padding:4px 8px 4px 0;vertical-align:top">
+            <span style="font-size:11px;color:${MUTED}">${esc(k)}</span><br/>
+            <span style="font-size:13px;font-weight:700;color:${INK}">${esc(v)}</span>
+          </td>`
+  );
+  const trs: string[] = [];
+  for (let i = 0; i < cells.length; i += 2) trs.push(`<tr>${cells[i]}${cells[i + 1] ?? "<td></td>"}</tr>`);
   return `
-    <div style="margin-top:10px;padding:12px 14px;background:#f9fafb;border-radius:8px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${MUTED};margin-bottom:8px">${esc(t(locale, "frame_specs"))}</div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
-        <tbody>
-          ${rows
-            .map(
-              ([k, v]) => `
-          <tr>
-            <td style="padding:3px 0;color:${MUTED};white-space:nowrap">${esc(k)}</td>
-            <td style="padding:3px 0;text-align:right;color:#374151;font-weight:600">${esc(v)}</td>
-          </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>
-      ${specs.size ? `<div style="margin-top:8px;font-size:11px;color:${MUTED}">${esc(t(locale, "frame_size_note"))}</div>` : ""}
-    </div>`;
+    <tr><td colspan="2" style="padding:0 16px 14px">
+      <div style="padding:12px 14px;background:${BONE};border-radius:10px">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:6px"><tr>
+          <td style="padding-right:6px;vertical-align:middle">${iconImg("navy-ruler", 18)}</td>
+          <td style="vertical-align:middle;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND}">${esc(t(locale, "frame_specs"))}</td>
+        </tr></table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+          <tbody>${trs.join("")}</tbody>
+        </table>
+        ${specs.size ? `<div style="margin-top:6px;font-size:11px;color:${MUTED}">${esc(t(locale, "frame_size_note"))}</div>` : ""}
+      </div>
+    </td></tr>`;
 }
 
 /** Rich per-line lens breakdown (frame, brand, color, use, material/photo/AR with prices). */
+/** Tarjeta por montura: foto, marca, modelo, color, lentes y precios — como en la web. */
 function renderEnrichedItems(
   items: EnrichedItem[],
   currency: string | null | undefined,
   locale: EmailLocale,
   itemImages?: Record<number, ImageRef>
 ): string {
-  const row = (label: string, value: string, plus = false) => `
-      <tr>
-        <td style="padding:6px 0;border-bottom:1px solid ${BORDER};color:#374151">${esc(label)}</td>
-        <td style="padding:6px 0;border-bottom:1px solid ${BORDER};text-align:right;white-space:nowrap;font-weight:600">${esc((plus ? "+ " : "") + value)}</td>
-      </tr>`;
+  const line = (icon: string | null, label: string, value: string, plus = false) => `
+        <tr>
+          <td style="padding:5px 0;color:${INK};font-size:13px;border-bottom:1px solid ${BORDER}">${icon ? iconImg(icon, 16) + " " : ""}${esc(label)}</td>
+          <td style="padding:5px 0;text-align:right;white-space:nowrap;font-weight:700;font-size:13px;color:${INK};border-bottom:1px solid ${BORDER}">${esc((plus ? "+ " : "") + value)}</td>
+        </tr>`;
   return items
     .map((it, index) => {
       const rows: string[] = [];
-      rows.push(
-        row(
-          t(locale, "order_frame") + (it.frame_name ? `: ${it.frame_name}` : "") + (it.quantity > 1 ? ` × ${it.quantity}` : ""),
-          formatMoney(it.frame_price, currency, locale)
-        )
-      );
-      if (it.collection) rows.push(row(t(locale, "order_brand"), it.collection));
-      if (it.color) rows.push(row(t(locale, "order_color"), it.color));
-      if (it.design) rows.push(row(t(locale, "order_use"), it.design));
+      rows.push(line("navy-eyewidth", t(locale, "order_frame") + (it.quantity > 1 ? ` × ${it.quantity}` : ""), formatMoney(it.frame_price, currency, locale)));
+      if (it.design) rows.push(line("navy-zoom", `${t(locale, "order_use")}: ${it.design}`, ""));
       if (it.material)
-        rows.push(row(`${t(locale, "lens_material")}: ${it.material.label}`, formatMoney(it.material.price, currency, locale)));
+        rows.push(line("ms-navy-lens", `${t(locale, "lens_material")}: ${it.material.label}`, formatMoney(it.material.price, currency, locale)));
       if (it.photo)
-        rows.push(row(`${t(locale, "lens_photochromic")}: ${it.photo.label}`, formatMoney(it.photo.price, currency, locale), true));
+        rows.push(line("navy-layers", `${t(locale, "lens_photochromic")}: ${it.photo.label}`, formatMoney(it.photo.price, currency, locale), true));
       if (it.ar)
-        rows.push(row(`${t(locale, "lens_treatment")}: ${it.ar.label}`, formatMoney(it.ar.price, currency, locale), true));
-      if (it.with_rx)
-        rows.push(row(`✓ ${t(locale, "prescription_attached")}`, ""));
-      // What this pair added up to, so a multi-item order can be reconciled line
-      // by line against the totals block below.
-      rows.push(row(t(locale, "line_total"), formatMoney(it.total, currency, locale)));
+        rows.push(line("navy-shield", `${t(locale, "lens_treatment")}: ${it.ar.label}`, formatMoney(it.ar.price, currency, locale), true));
+      const photo = it.image_url
+        ? `<img src="${esc(it.image_url)}" width="140" alt="${esc(it.frame_name)}" style="display:block;width:140px;max-width:100%;height:auto;border:0">`
+        : iconImg("navy-eyewidth", 56, "");
       return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:12px;font-size:14px">
-      <tbody>${rows.join("")}</tbody>
-    </table>
-    ${renderFrameSpecs(it.specs, locale)}
-    ${inlineImage(itemImages?.[index], t(locale, "order_tryon"))}`;
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:1px solid ${BORDER};border-radius:14px;margin-top:14px;background:#ffffff;overflow:hidden">
+      <tr>
+        <td width="168" style="background:${BONE};padding:16px 14px;vertical-align:middle;text-align:center;border-right:1px solid ${BORDER}">${photo}</td>
+        <td style="padding:14px 16px;vertical-align:top">
+          ${it.collection ? `<div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED}">${esc(t(locale, "order_brand"))}: <strong style="color:${GOLD};letter-spacing:.12em">${esc(it.collection)}</strong></div>` : ""}
+          <div style="margin-top:2px;font-size:18px;font-weight:800;color:${BRAND};line-height:1.25">${esc(it.frame_name)}</div>
+          ${it.color ? `<div style="margin-top:3px;font-size:13px;color:${MUTED}">${esc(t(locale, "order_color"))}: <strong style="color:${INK}">${esc(it.color)}</strong></div>` : ""}
+          ${it.with_rx ? `<div style="margin-top:8px">${chip("✓ " + t(locale, "prescription_attached"), GREEN_LIGHT, GREEN)}</div>` : ""}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px">
+            <tbody>${rows.join("")}</tbody>
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">
+            <tr>
+              <td style="padding:6px 0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED}">${esc(t(locale, "line_total"))}</td>
+              <td align="right" style="padding:6px 0;font-size:16px;font-weight:800;color:${BRAND};white-space:nowrap">${esc(formatMoney(it.total, currency, locale))}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      ${renderFrameSpecs(it.specs, locale)}
+      ${itemImages?.[index] ? `<tr><td colspan="2" style="padding:0 16px 16px">${inlineImage(itemImages[index], t(locale, "order_tryon"))}</td></tr>` : ""}
+    </table>`;
     })
     .join("");
 }
 
 /** Delivery method + tracking (shown in both copies). */
+/** Delivery method + tracking (shown in both copies). */
 function renderDeliveryTracking(extras: OrderEmailExtras | undefined, locale: EmailLocale): string {
   const parts: string[] = [];
   if (extras?.shippingMethod?.name) {
-    parts.push(`<div><strong>${esc(t(locale, "delivery_method"))}:</strong> ${esc(extras.shippingMethod.name)}</div>`);
+    parts.push(`<div><span style="color:${MUTED}">${esc(t(locale, "delivery_method"))}:</span> <strong style="color:${BRAND}">${esc(extras.shippingMethod.name)}</strong></div>`);
   }
   const tr = extras?.tracking ?? [];
   if (tr.length) {
     const links = tr
-      .map((x) => (x.url ? `<a href="${esc(x.url)}" style="color:#0E5AD0">${esc(x.number)}</a>` : esc(x.number)))
+      .map((x) => (x.url ? `<a href="${esc(x.url)}" style="color:${BRAND};font-weight:700">${esc(x.number)}</a>` : `<strong>${esc(x.number)}</strong>`))
       .join(", ");
-    parts.push(`<div><strong>${esc(t(locale, "tracking"))}:</strong> ${links}</div>`);
+    parts.push(`<div style="margin-top:4px"><span style="color:${MUTED}">${esc(t(locale, "tracking"))}:</span> ${links}</div>`);
   } else {
-    parts.push(`<div style="color:${MUTED}">${esc(t(locale, "tracking_pending"))}</div>`);
+    parts.push(`<div style="margin-top:4px;color:${MUTED}">${esc(t(locale, "tracking_pending"))}</div>`);
   }
-  if (!parts.length) return "";
-  return `<div style="margin-top:16px;font-size:14px;line-height:1.7;color:#374151">${parts.join("")}</div>`;
+  return `<div style="font-size:14px;line-height:1.7;color:${INK}">${parts.join("")}</div>`;
 }
 
+/** Dos tarjetas lado a lado: entrega (método + tracking) y dirección. */
+function renderDeliveryCards(order: OrderEmailData, extras: OrderEmailExtras | undefined, locale: EmailLocale): string {
+  const card = (icon: string, title: string, body: string) => `
+      <td width="50%" style="vertical-align:top;padding:0 6px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:1px solid ${BORDER};border-radius:12px;background:#ffffff">
+          <tr><td style="padding:14px 16px">
+            <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px"><tr>
+              <td style="padding-right:8px;vertical-align:middle">${iconImg(icon, 22)}</td>
+              <td style="vertical-align:middle;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${BRAND}">${esc(title)}</td>
+            </tr></table>
+            ${body}
+          </td></tr>
+        </table>
+      </td>`;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:22px -6px 0">
+      <tr>
+        ${card("navy-truck", t(locale, "delivery_method"), renderDeliveryTracking(extras, locale))}
+        ${card("navy-grid", t(locale, "shipping_address"), renderAddress(order, locale))}
+      </tr>
+    </table>`;
+}
+
+/** Payment method for the ADMIN copy: card brand + last 4, or Stripe Link. */
 /** Payment method for the ADMIN copy: card brand + last 4, or Stripe Link. */
 function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: EmailLocale): string {
   if (!payment) return "";
@@ -875,7 +978,7 @@ function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: Ema
       : t(locale, "payment_card");
     label = payment.last4 ? `${brand} ${t(locale, "card_ending")} ${payment.last4}` : brand;
   }
-  return `<div style="margin-top:12px;font-size:14px;color:#374151"><strong>${esc(t(locale, "payment_method"))}:</strong> ${esc(label)}</div>`;
+  return `<div style="margin-top:12px;font-size:14px;color:${INK}">${iconImg("navy-card", 18)} <strong style="color:${BRAND}">${esc(t(locale, "payment_method"))}:</strong> ${esc(label)}</div>`;
 }
 
 /**
@@ -893,8 +996,8 @@ function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocal
     ...(hasHeight ? [t(locale, "rx_gloss_height")] : []),
   ];
   return `
-    <div style="margin-top:16px;padding:14px;background:#f9fafb;border-radius:8px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${esc(t(locale, "rx_glossary_title"))}</div>
+    <div style="margin-top:14px;padding:14px 16px;background:${NAVY_SOFT};border-radius:10px">
+      <div style="font-size:13px;font-weight:800;color:${BRAND};margin-bottom:6px">${iconImg("ms-navy-info", 16)} ${esc(t(locale, "rx_glossary_title"))}</div>
       <div style="font-size:12.5px;line-height:1.7;color:${MUTED}">${lines.map(esc).join("<br/>")}</div>
     </div>`;
 }
@@ -916,10 +1019,14 @@ function trackingUrl(): string {
  */
 function renderTrackingCta(locale: EmailLocale): string {
   return `
-    <div style="margin-top:24px;padding-top:20px;border-top:1px solid ${BORDER}">
-      <div style="font-size:14px;line-height:1.6;color:#374151;margin-bottom:12px">${esc(t(locale, "track_link_intro"))}</div>
-      <a href="${esc(trackingUrl())}" style="display:inline-block;padding:12px 24px;background:${BRAND};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px">${esc(t(locale, "track_cta"))}</a>
-    </div>`;
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:26px">
+      <tr>
+        <td align="center" style="padding:22px 16px;background:${BRAND};border-radius:14px">
+          <div style="font-size:14px;line-height:1.6;color:#ffffff;margin-bottom:14px">${esc(t(locale, "track_link_intro"))}</div>
+          <a href="${esc(trackingUrl())}" style="display:inline-block;padding:13px 28px;background:${GOLD};color:${BRAND};font-size:14px;font-weight:800;letter-spacing:.03em;text-decoration:none;border-radius:999px">${esc(t(locale, "track_cta"))} →</a>
+        </td>
+      </tr>
+    </table>`;
 }
 
 export function renderCustomerOrderConfirmation(
@@ -941,26 +1048,22 @@ export function renderCustomerOrderConfirmation(
   const imagesNote = attachedImagesNote(prescriptions, extras, locale);
 
   const inner = `
-    <p style="margin:0 0 12px;font-size:16px;font-weight:600">${esc(greeting)}</p>
-    <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "order_confirmation_intro"))}</p>
-    <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:#ecfdf5;color:#047857;font-size:12px;font-weight:600">${esc(t(locale, "payment_confirmed"))}</div>
-    <div style="margin-top:20px;font-size:14px;color:${MUTED}">
-      ${esc(t(locale, "order_number"))} <strong style="color:#111827">#${esc(displayId)}</strong>
-      &nbsp;·&nbsp; ${esc(t(locale, "purchase_datetime"))}: ${esc(formatDateTime(order.created_at, locale))}
-    </div>
+    <p style="margin:0 0 8px;font-size:18px;font-weight:800;color:${BRAND}">${esc(greeting)}</p>
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "order_confirmation_intro"))}</p>
+    ${renderTicketHeader(displayId, formatDateTime(order.created_at, locale), locale, { text: "✓ " + t(locale, "payment_confirmed"), bg: GREEN_LIGHT, fg: GREEN })}
+    ${sectionTitle(t(locale, "items"), "navy-eyewidth")}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
     ${renderPrescriptions(order, prescriptions, locale)}
     ${renderAttachedImagesNote(imagesNote)}
     ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
     ${renderTotals(order, locale)}
-    ${renderAddress(order, locale)}
-    ${renderDeliveryTracking(extras, locale)}
-    <div style="margin-top:28px;padding:16px;background:#f9fafb;border-radius:8px">
-      <div style="font-size:14px;font-weight:600;margin-bottom:6px">${esc(t(locale, "order_confirmation_next_steps_title"))}</div>
-      <div style="font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "order_confirmation_next_steps_body"))}</div>
+    ${renderDeliveryCards(order, extras, locale)}
+    <div style="margin-top:22px;padding:16px 18px;background:${GOLD_LIGHT};border-left:4px solid ${GOLD};border-radius:10px">
+      <div style="font-size:14px;font-weight:800;color:${BRAND};margin-bottom:6px">${iconImg("navy-shield", 18)} ${esc(t(locale, "order_confirmation_next_steps_title"))}</div>
+      <div style="font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "order_confirmation_next_steps_body"))}</div>
     </div>
     ${renderTrackingCta(locale)}
-    <p style="margin:20px 0 0;font-size:13px;color:${MUTED}">${esc(t(locale, "questions"))}</p>`;
+    <p style="margin:20px 0 0;font-size:13px;color:${MUTED}">${iconImg("navy-headset", 16)} ${esc(t(locale, "questions"))}</p>`;
 
   const text = [
     greeting,
@@ -1017,36 +1120,29 @@ export function renderAdminOrderNotification(
   );
   const imagesNote = attachedImagesNote(prescriptions, extras, locale);
 
+  const phone = order.shipping_address?.phone ? ` · ${order.shipping_address.phone}` : "";
   const inner = `
-    <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151">${esc(t(locale, "admin_order_intro"))}</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "admin_order_intro"))}</p>
+    ${renderTicketHeader(displayId, formatDateTime(order.created_at, locale), locale, { text: total, bg: GREEN_LIGHT, fg: GREEN })}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin-top:14px;border:1px solid ${BORDER};border-radius:12px;font-size:14px">
       <tr>
-        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "order_number"))}</td>
-        <td style="padding:2px 0;font-weight:600">#${esc(displayId)}</td>
-      </tr>
-      <tr>
-        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "purchase_datetime"))}</td>
-        <td style="padding:2px 0">${esc(formatDateTime(order.created_at, locale))}</td>
-      </tr>
-      <tr>
-        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "customer"))}</td>
-        <td style="padding:2px 0">${esc(name ? `${name} · ${order.email ?? ""}` : order.email ?? "")}</td>
-      </tr>
-      <tr>
-        <td style="padding:2px 16px 2px 0;color:${MUTED}">${esc(t(locale, "total"))}</td>
-        <td style="padding:2px 0;font-weight:700">${esc(total)}</td>
+        <td style="padding:12px 16px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:${MUTED}">${iconImg("navy-man", 16)} ${esc(t(locale, "customer"))}</div>
+          <div style="margin-top:4px;font-size:16px;font-weight:800;color:${BRAND}">${esc(name || order.email || "")}</div>
+          <div style="font-size:13px;color:${INK}">${esc(`${order.email ?? ""}${phone}`)}</div>
+          ${renderPaymentAdmin(extras?.payment, locale)}
+          ${hasPrescription ? `<div style="margin-top:10px">${chip("✓ " + t(locale, "prescription_attached"), GOLD_LIGHT, "#7a5b12")}</div>` : ""}
+        </td>
       </tr>
     </table>
-    ${renderPaymentAdmin(extras?.payment, locale)}
-    ${hasPrescription ? `<div style="margin-top:16px;padding:10px 12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#92400e">${esc(t(locale, "prescription_attached"))}</div>` : ""}
+    ${sectionTitle(t(locale, "items"), "navy-eyewidth")}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
     ${/* Store copy carries the record id: it is how the owner opens the Rx — and
           the uploaded photo — in the admin. */ ""}
     ${renderPrescriptions(order, prescriptions, locale, true)}
     ${renderAttachedImagesNote(imagesNote)}
     ${renderTotals(order, locale)}
-    ${renderAddress(order, locale)}
-    ${renderDeliveryTracking(extras, locale)}`;
+    ${renderDeliveryCards(order, extras, locale)}`;
 
   const text = [
     t(locale, "admin_order_intro"),
