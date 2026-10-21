@@ -42,6 +42,9 @@ RUN pnpm --filter @eyewear/backend build
 # monorepo.
 # ---------------------------------------------------------------------------
 FROM manifests AS runner
+# Coolify pasa el commit desplegado como build arg; GET /version lo expone.
+ARG SOURCE_COMMIT
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 ENV NODE_ENV=production
 RUN pnpm install --frozen-lockfile --prod
 

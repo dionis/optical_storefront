@@ -399,6 +399,8 @@ interface OrdersTable {
   /** Fila (0-based) del encabezado y columna (0-based) donde empieza la tabla. */
   headerRow: number;
   startCol: number;
+  /** Fila (0-based, exclusiva) donde termina la tabla ahora mismo. */
+  endRow: number;
 }
 
 interface SheetMeta {
@@ -406,7 +408,7 @@ interface SheetMeta {
   tables?: Array<{
     tableId?: string;
     name?: string;
-    range?: { startRowIndex?: number; startColumnIndex?: number };
+    range?: { startRowIndex?: number; endRowIndex?: number; startColumnIndex?: number; endColumnIndex?: number };
   }>;
   /** Solo se usa para contar las reglas y reemplazarlas (estilo idempotente). */
   conditionalFormats?: Array<unknown>;
@@ -432,6 +434,7 @@ function findOrdersTable(sheets: SheetMeta[]): OrdersTable | null {
           sheetTitle: s.properties?.title ?? ORDERS_SHEET,
           headerRow: tbl.range?.startRowIndex ?? 0,
           startCol: tbl.range?.startColumnIndex ?? 0,
+          endRow: tbl.range?.endRowIndex ?? (tbl.range?.startRowIndex ?? 0) + 2,
         };
       }
     }
@@ -528,7 +531,7 @@ async function createOrdersTable(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
 
   const [reply] = await batchUpdate(cfg, requests);
   const tableId = reply?.addTable?.table?.tableId as string | undefined;
-  if (tableId) return { tableId, sheetId, sheetTitle: title, headerRow: 0, startCol: 0 };
+  if (tableId) return { tableId, sheetId, sheetTitle: title, headerRow: 0, startCol: 0, endRow: 2 };
   const found = findOrdersTable(await readSheetsMeta(cfg));
   if (!found) throw new Error("addTable: the table was not found after creating it");
   return found;
@@ -1024,54 +1027,55 @@ function columnLetter(index: number): string {
 
 const quoteSheet = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
-/** Fila (1-based) del pedido dentro de la tabla, buscando en la columna "Pedido". */
-async function findOrderRow(cfg: GsheetConfig, table: OrdersTable, key: string): Promise<number | null> {
-  const col = columnLetter(table.startCol);
-  const resp = await sheetsFetch(
-    cfg,
-    `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${col}:${col}`)}`
-  );
-  if (!resp.ok) return null;
-  const values = ((await resp.json()) as { values?: string[][] }).values ?? [];
-  for (let i = table.headerRow + 1; i < values.length; i++) {
-    if (values[i]?.[0] === key) return i + 1;
-  }
-  return null;
-}
-
 type Cell = string | number;
 
 async function upsertOrderRow(cfg: GsheetConfig, table: OrdersTable, row: Cell[]): Promise<void> {
   const key = String(row[0]);
-  const existing = await findOrderRow(cfg, table, key);
-  if (existing) {
-    const from = columnLetter(table.startCol);
-    const to = columnLetter(table.startCol + row.length - 1);
-    const range = `${quoteSheet(table.sheetTitle)}!${from}${existing}:${to}${existing}`;
+  const from = columnLetter(table.startCol);
+  const to = columnLetter(table.startCol + row.length - 1);
+  const write = async (rowNumber: number) => {
+    const range = `${quoteSheet(table.sheetTitle)}!${from}${rowNumber}:${to}${rowNumber}`;
     const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
       method: "PUT",
       body: JSON.stringify({ values: [row] }),
     });
-    if (!resp.ok) throw await failure("update row", resp);
-    return;
+    if (!resp.ok) throw await failure(`write row ${rowNumber}`, resp);
+  };
+
+  // Columna clave completa: localiza el pedido y, si no está, la primera fila
+  // libre bajo el encabezado (dentro o justo debajo de la tabla).
+  const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${from}:${from}`)}`);
+  if (!resp.ok) throw await failure("read key column", resp);
+  const values = ((await resp.json()) as { values?: string[][] }).values ?? [];
+  let lastUsed = table.headerRow; // 0-based, última fila con contenido en la clave
+  for (let i = table.headerRow + 1; i < values.length; i++) {
+    const v = values[i]?.[0];
+    if (v === key) {
+      await write(i + 1);
+      return;
+    }
+    if (v && String(v).trim()) lastUsed = i;
   }
-  // appendCells con tableId: la fila entra en el cuerpo de la tabla (hereda el
-  // formato, los desplegables y las bandas), no debajo de ella.
-  await batchUpdate(cfg, [
-    {
-      appendCells: {
-        tableId: table.tableId,
-        rows: [
-          {
-            values: row.map((v) => ({
-              userEnteredValue: typeof v === "number" ? { numberValue: v } : { stringValue: v },
-            })),
+  const target = lastUsed + 1; // 0-based
+  await write(target + 1);
+
+  // La tabla debe abarcar la fila nueva: así hereda bandas, desplegables y
+  // filtros. (appendCells con tableId dejaba filas fuera de la tabla o no las
+  // escribía; escribir por rango y ampliar la tabla es determinista.)
+  if (target + 1 > table.endRow) {
+    await batchUpdate(cfg, [
+      {
+        updateTable: {
+          table: {
+            tableId: table.tableId,
+            range: { sheetId: table.sheetId, startRowIndex: table.headerRow, endRowIndex: target + 1, startColumnIndex: table.startCol, endColumnIndex: table.startCol + ORDER_COLUMNS.length },
           },
-        ],
-        fields: "userEnteredValue",
+          fields: "range",
+        },
       },
-    },
-  ]);
+    ]);
+    table.endRow = target + 1;
+  }
 }
 
 async function appendHistoryRow(cfg: GsheetConfig, row: unknown[]): Promise<void> {
