@@ -986,6 +986,10 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
   const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
   const req: unknown[] = [
     { unmergeCells: { range: range(0, 60, 0, 15) } },
+    // Borrón y cuenta nueva: la disposición cambia entre versiones y, sin esto,
+    // quedaban cabeceras navy, formatos de moneda y bordes de la disposición
+    // anterior en celdas que ahora son otra cosa.
+    { repeatCell: { range: range(0, 60, 0, 15), cell: { userEnteredFormat: {} }, fields: "userEnteredFormat" } },
     { updateSheetProperties: { properties: { sheetId: sid, index: 0, gridProperties: { hideGridlines: true } }, fields: "index,gridProperties.hideGridlines" } },
     { updateSheetProperties: { properties: { sheetId: sid, tabColorStyle: { rgbColor: GOLD } }, fields: "tabColorStyle" } },
     fmt(range(0, 1, 0, 15), title), { mergeCells: { range: range(0, 1, 0, 15), mergeType: "MERGE_ALL" } },
@@ -1165,7 +1169,8 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   const n = headers.length;
   const list = (values: string[]) => ({ condition: { type: "ONE_OF_LIST", values: values.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false });
   const req: unknown[] = [
-    { unmergeCells: { range: range(0, 9, 0, 20) } },
+    { unmergeCells: { range: range(0, 9, 0, 26) } },
+    { repeatCell: { range: range(0, 9, 0, 26), cell: { userEnteredFormat: {} }, fields: "userEnteredFormat" } },
     { updateSheetProperties: { properties: { sheetId: sid, index: 1, tabColorStyle: { rgbColor: NAVY }, gridProperties: { frozenRowCount: 8, hideGridlines: true, columnCount: 26 } }, fields: "index,tabColorStyle,gridProperties(frozenRowCount,hideGridlines,columnCount)" } },
     // Listas de autocompletado (V..Y): columnas ocultas; cada campo del
     // buscador es un desplegable no estricto sobre su lista.
