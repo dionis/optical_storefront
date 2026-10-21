@@ -951,13 +951,15 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
     put(S0 + 2 + i, SC, st);
     put(S0 + 2 + i, SC + 1, `=COUNTIF(${E},$${SL}${S0 + 3 + i})`);
   });
-  const T0 = S0 + 2 + STATES.length + 1; // tipo: debajo de estado, columnas M,N,O
-  put(T0, SC, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(T0 + 1, SC + i, h));
+  // Tipo de pedido: debajo de "Ventas por marca" (mismas columnas I,J,K), así
+  // las tres tablas de arriba (mes / marca / estado) arrancan a la misma altura.
+  const T0 = B0 + 2 + 10 + 1, TC = BC, TL = BL;
+  put(T0, TC, "POR TIPO DE PEDIDO"); ["Tipo", "Pedidos", "Ventas"].forEach((h, i) => put(T0 + 1, TC + i, h));
   Object.values(ORDER_TYPE).forEach((t, i) => {
     const row = T0 + 3 + i;
-    put(T0 + 2 + i, SC, t);
-    put(T0 + 2 + i, SC + 1, `=COUNTIFS(${paidCrit},${col("Tipo")},$${SL}${row})`);
-    put(T0 + 2 + i, SC + 2, `=SUMIFS(${col("Total")},${paidCrit},${col("Tipo")},$${SL}${row})`);
+    put(T0 + 2 + i, TC, t);
+    put(T0 + 2 + i, TC + 1, `=COUNTIFS(${paidCrit},${col("Tipo")},$${TL}${row})`);
+    put(T0 + 2 + i, TC + 2, `=SUMIFS(${col("Total")},${paidCrit},${col("Tipo")},$${TL}${row})`);
   });
   const CH = Math.max(M0 + 15, T0 + 2 + Object.values(ORDER_TYPE).length + 1); // fila de los gráficos
 
@@ -1027,8 +1029,8 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
     { updateBorders: { range: range(B0 + 1, B0 + 12, BC, BC + 3), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
     fmt(range(S0, S0 + 1, SC, SC + 3), section), fmt(range(S0 + 1, S0 + 2, SC, SC + 2), head),
     { updateBorders: { range: range(S0 + 1, S0 + 2 + STATES.length, SC, SC + 2), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    fmt(range(T0, T0 + 1, SC, SC + 3), section), fmt(range(T0 + 1, T0 + 2, SC, SC + 3), head), fmt(range(T0 + 2, T0 + 6, SC + 2, SC + 3), money),
-    { updateBorders: { range: range(T0 + 1, T0 + 6, SC, SC + 3), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } }
+    fmt(range(T0, T0 + 1, TC, TC + 3), section), fmt(range(T0 + 1, T0 + 2, TC, TC + 3), head), fmt(range(T0 + 2, T0 + 6, TC + 2, TC + 3), money),
+    { updateBorders: { range: range(T0 + 1, T0 + 6, TC, TC + 3), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } }
   );
   // Gráficos: se recrean en cada arranque (así siguen a la disposición actual).
   for (const ch of (dash.charts ?? []) as Array<{ chartId?: number }>) {
@@ -1083,7 +1085,7 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   let sheet = sheets.find((s) => s.properties?.title === SEARCH_SHEET);
   if (!sheet) {
     const [reply] = await batchUpdate(cfg, [
-      { addSheet: { properties: { title: SEARCH_SHEET, index: 1, gridProperties: { rowCount: 500, columnCount: 20, hideGridlines: true } } } },
+      { addSheet: { properties: { title: SEARCH_SHEET, index: 1, gridProperties: { rowCount: 500, columnCount: 26, hideGridlines: true } } } },
     ]);
     sheet = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: SEARCH_SHEET } };
   }
@@ -1124,12 +1126,28 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   rows[3] = ["", ...labels];
   rows[4] = ["", ...inputs];
   rows[6] = ["", `="Resultados: "&IF(ISNUMBER(A9),COUNTA($A$9:$A),0)`];
-  rows[7] = headers;
-  rows[8] = [formula];
+  // Listas para el autocompletado de los campos (columnas V..Y, ocultas): se
+  // calculan solas a partir del Historial, y cada campo las usa como
+  // desplegable no estricto (se puede elegir o escribir libre).
+  const LC = 21; // V
+  const listOf = (key: string) => {
+    const r = hc(key);
+    return `=IFERROR(SORT(UNIQUE(FILTER(${r},${r}<>""))),"")`;
+  };
+  const orderList = `=IFERROR(ARRAYFORMULA("#"&SORT(UNIQUE(VALUE(SUBSTITUTE(FILTER(${hc("order")},${hc("order")}<>""),"#",""))),1,FALSE)),"")`;
+  const brandList = `=IFERROR(LET(b,TRIM(FLATTEN(SPLIT(FILTER(${hc("brand")},${hc("brand")}<>""),"|"))),SORT(UNIQUE(FILTER(b,b<>"")))),"")`;
+  const lists: Array<[string, string, number]> = [
+    ["Pedidos", orderList, 1],
+    ["Clientes", listOf("customer"), 2],
+    ["Teléfonos", listOf("phone"), 3],
+    ["Marcas", brandList, 4],
+  ];
+  rows[7] = [...headers, ...Array(LC - headers.length).fill(""), ...lists.map((l) => l[0])];
+  rows[8] = [formula, ...Array(LC - 1).fill(""), ...lists.map((l) => l[1])];
   // `rows` tiene huecos a propósito (filas vacías de separación): Array.map los
   // salta y la API los descartaría, desplazando todo hacia arriba — se rellenan.
   const grid = Array.from({ length: 9 }, (_, i) => (rows[i] ?? []).map((v) => v ?? ""));
-  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1:T9`)}:clear`, { method: "POST", body: "{}" });
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1:Z9`)}:clear`, { method: "POST", body: "{}" });
   if (!clear.ok) throw await failure("clear search", clear);
   const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!A1`)}?valueInputOption=USER_ENTERED`, {
     method: "PUT",
@@ -1143,7 +1161,16 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   const list = (values: string[]) => ({ condition: { type: "ONE_OF_LIST", values: values.map((v) => ({ userEnteredValue: v })) }, showCustomUi: true, strict: false });
   const req: unknown[] = [
     { unmergeCells: { range: range(0, 9, 0, 20) } },
-    { updateSheetProperties: { properties: { sheetId: sid, index: 1, tabColorStyle: { rgbColor: NAVY }, gridProperties: { frozenRowCount: 8, hideGridlines: true } }, fields: "index,tabColorStyle,gridProperties(frozenRowCount,hideGridlines)" } },
+    { updateSheetProperties: { properties: { sheetId: sid, index: 1, tabColorStyle: { rgbColor: NAVY }, gridProperties: { frozenRowCount: 8, hideGridlines: true, columnCount: 26 } }, fields: "index,tabColorStyle,gridProperties(frozenRowCount,hideGridlines,columnCount)" } },
+    // Listas de autocompletado (V..Y): columnas ocultas; cada campo del
+    // buscador es un desplegable no estricto sobre su lista.
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: LC, endIndex: LC + lists.length }, properties: { hiddenByUser: true }, fields: "hiddenByUser" } },
+    ...lists.map(([, , inputCol], i) => ({
+      setDataValidation: {
+        range: range(4, 5, inputCol, inputCol + 1),
+        rule: { condition: { type: "ONE_OF_RANGE", values: [{ userEnteredValue: `=${quoteSheet(SEARCH_SHEET)}!$${columnLetter(LC + i)}$9:$${columnLetter(LC + i)}` }] }, showCustomUi: true, strict: false },
+      },
+    })),
     fmt(range(0, 1, 0, n), { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 18, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE" }),
     { mergeCells: { range: range(0, 1, 0, n), mergeType: "MERGE_ALL" } },
     { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 46 }, fields: "pixelSize" } },
@@ -1211,7 +1238,33 @@ const quoteSheet = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
 type Cell = string | number;
 
-async function upsertOrderRow(cfg: GsheetConfig, table: OrdersTable, row: Cell[]): Promise<void> {
+/** Enlace dentro del texto de una celda (índices de carácter, fin excluido). */
+export interface CellLink { start: number; end: number; uri: string }
+
+/**
+ * Celda con varios enlaces: texto plano + runs de formato. Cada run fija el
+ * formato hasta el siguiente, así que los tramos sin enlace se declaran
+ * explícitamente para que el enlace anterior no "siga" hasta el final.
+ */
+export function richTextCell(text: string, links: CellLink[]): Record<string, unknown> {
+  const plainRun = (startIndex: number) => ({ startIndex, format: { underline: false, foregroundColorStyle: { rgbColor: rgb("#1e2733") } } });
+  const runs: unknown[] = [];
+  let at = 0;
+  for (const l of [...links].sort((a, b) => a.start - b.start)) {
+    if (l.start > at) runs.push(plainRun(at));
+    runs.push({ startIndex: l.start, format: { link: { uri: l.uri }, underline: true, bold: true, foregroundColorStyle: { rgbColor: NAVY } } });
+    at = l.end;
+  }
+  if (at < text.length) runs.push(plainRun(at));
+  return { userEnteredValue: { stringValue: text }, textFormatRuns: runs };
+}
+
+async function upsertOrderRow(
+  cfg: GsheetConfig,
+  table: OrdersTable,
+  row: Cell[],
+  rich?: { col: number; links: CellLink[] }
+): Promise<void> {
   const key = String(row[0]);
   const from = columnLetter(table.startCol);
   const to = columnLetter(table.startCol + row.length - 1);
@@ -1222,6 +1275,19 @@ async function upsertOrderRow(cfg: GsheetConfig, table: OrdersTable, row: Cell[]
       body: JSON.stringify({ values: [row] }),
     });
     if (!resp.ok) throw await failure(`write row ${rowNumber}`, resp);
+    // Enlaces dentro de la celda (p. ej. Archivo): texto con runs, por encima
+    // del valor plano que acaba de escribirse.
+    if (rich && rich.links.length) {
+      await batchUpdate(cfg, [
+        {
+          updateCells: {
+            range: { sheetId: table.sheetId, startRowIndex: rowNumber - 1, endRowIndex: rowNumber, startColumnIndex: table.startCol + rich.col, endColumnIndex: table.startCol + rich.col + 1 },
+            rows: [{ values: [richTextCell(String(row[rich.col] ?? ""), rich.links)] }],
+            fields: "userEnteredValue,textFormatRuns",
+          },
+        },
+      ]);
+    }
   };
 
   // Columna clave completa: localiza el pedido y, si no está, la primera fila
@@ -1387,6 +1453,10 @@ export interface SheetLineDetail {
   frame_name: string;
   brand?: string | null;
   sku?: string | null;
+  /** Medidas ópticas "52□16-140" (ojo□puente-varilla) si el catálogo las trae. */
+  size?: string | null;
+  /** Slug/handle de la ficha del producto en la tienda (/producto/<handle>). */
+  handle?: string | null;
   color: string | null;
   quantity: number;
   design: string | null;
@@ -1520,18 +1590,37 @@ export function buildRows(
 
   const status = progress.terminal ? TERMINAL_LABEL[progress.terminal] : STAGE_LABEL[progress.stage];
 
-  // Archivo: qué archivos tiene el pedido y dónde verlos. Ninguno se copia aquí:
-  // la prueba virtual va adjunta en los correos y el documento original de la
-  // receta no sale del bucket privado (solo se ve en el panel autenticado).
+  // Archivo: referencias con enlace (texto limpio, sin URL a la vista). Cada
+  // montura abre su ficha en la tienda (medidas y fotos); la receta y la foto
+  // de la prueba virtual abren el pedido en el panel, que ya las muestra.
+  // Nada se copia aquí: la receta no sale del bucket privado.
   const rx = extra.rx ?? [];
   const hasTryon = rx.some((r) => r.has_tryon) || items.some((it) => Boolean((it.metadata ?? {})["tryon_image_key"]));
   const hasFile = rx.some((r) => r.has_file);
-  const files = [
-    hasTryon ? "Prueba virtual (imagen adjunta en el correo)" : "",
-    hasFile ? "Receta original guardada (solo en el panel)" : "",
-  ].filter(Boolean);
-  // Nunca una URL aquí: el dueño sabe dónde está el panel (pedido del dueño).
-  const fileCell = files.join("\n");
+  const site = (extra.adminUrl ?? "").replace(/\/admin\/?$/, "");
+  const panelUrl = extra.adminUrl ? `${extra.adminUrl}?tab=orders&order=${encodeURIComponent(String(order.id ?? ""))}` : "";
+  const fileParts: Array<{ text: string; uri?: string }> = [];
+  const lineRefs = extra.lines?.length
+    ? extra.lines.map((l) => ({
+        text: `Montura: ${l.frame_name}${l.color ? ` · ${l.color}` : ""}${l.size ? ` · ${l.size}` : ""}`,
+        uri: site ? `${site}/producto/${encodeURIComponent((l.handle || l.frame_name).toLowerCase().replace(/\s+/g, "-"))}` : undefined,
+      }))
+    : items.map((it) => ({
+        text: `Montura: ${String(it.title ?? "?")}`,
+        uri: site && it["product_handle"] ? `${site}/producto/${encodeURIComponent(String(it["product_handle"]))}` : undefined,
+      }));
+  fileParts.push(...lineRefs);
+  if (hasFile) fileParts.push({ text: "Receta: ver documento original", uri: panelUrl || undefined });
+  if (hasTryon) fileParts.push({ text: "Foto: prueba virtual del cliente", uri: panelUrl || undefined });
+  const fileCell = fileParts.map((p) => p.text).join("\n");
+  const fileLinks: CellLink[] = [];
+  {
+    let at = 0;
+    for (const p of fileParts) {
+      if (p.uri) fileLinks.push({ start: at, end: at + p.text.length, uri: p.uri });
+      at += p.text.length + 1;
+    }
+  }
 
   // Notas: valores leídos de la receta, para quién, medidas de IA, avisos,
   // tracking y último evento.
@@ -1643,7 +1732,7 @@ export function buildRows(
     String(order.id ?? ""),
   ];
 
-  return { orderRow, historyRow };
+  return { orderRow, historyRow, fileLinks };
 }
 
 /** Datos extra de la fila (desglose de lentes, recetas sin valores). Mejor esfuerzo. */
@@ -1673,6 +1762,8 @@ async function loadRowExtras(
       frame_name: e.frame_name,
       brand: e.collection,
       sku: e.specs?.sku ?? null,
+      size: e.specs?.size ?? null,
+      handle: String((items.find((it) => it.title === e.frame_name) ?? items[enriched.indexOf(e)] ?? {})["product_handle"] ?? "") || null,
       color: e.color,
       quantity: e.quantity,
       design: e.design,
@@ -1757,13 +1848,13 @@ export async function syncOrderToSheet(
 
     const table = await ensureSheets(cfg, logger);
     const extras = await loadRowExtras(container, order, logger);
-    const { orderRow, historyRow } = buildRows(order, event, {
+    const { orderRow, historyRow, fileLinks } = buildRows(order, event, {
       tracking,
       ...extras,
       adminUrl: `${storefrontOrigin()}/admin`,
     });
     try {
-      await upsertOrderRow(cfg, table, orderRow);
+      await upsertOrderRow(cfg, table, orderRow, { col: ocol("Archivo"), links: fileLinks });
     } catch (error) {
       // La tabla pudo haber sido borrada o renombrada: se vuelve a buscar (o
       // crear) en la próxima escritura.

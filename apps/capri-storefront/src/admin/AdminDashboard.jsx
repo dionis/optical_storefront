@@ -880,15 +880,24 @@ function OrderDetail({ order }) {
   );
 }
 
+// Enlace directo a un pedido (`/admin?tab=orders&order=<id>`), tal como lo
+// enlaza la hoja de Google (Archivo → receta / foto de la prueba virtual): se
+// busca ese pedido en todo el histórico y se abre su detalle solo.
+function deepLinkedOrder() {
+  if (typeof window === "undefined") return "";
+  return (new URLSearchParams(window.location.search).get("order") || "").trim();
+}
+
 function Orders() {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
+  const [linked] = useState(deepLinkedOrder);
+  const [query, setQuery] = useState(linked);
+  const [debounced, setDebounced] = useState(linked);
   // `preset` only drives which quick-range button looks active; `from`/`to` are
   // the single source of truth for what gets requested.
-  const [preset, setPreset] = useState("30d");
-  const [from, setFrom] = useState(() => presetFrom("30d"));
+  const [preset, setPreset] = useState(linked ? "all" : "30d");
+  const [from, setFrom] = useState(() => presetFrom(linked ? "all" : "30d"));
   const [to, setTo] = useState("");
   const [stage, setStage] = useState("");
   const [terminal, setTerminal] = useState("");
@@ -931,6 +940,11 @@ function Orders() {
         if (!alive) return;
         setData(result);
         setError("");
+        // Llegó por enlace directo: abrir el pedido en cuanto aparece.
+        if (linked && debounced === linked) {
+          const hit = (result?.orders ?? []).find((o) => o.id === linked || `#${o.display_id}` === linked);
+          if (hit) setOpenId(hit.id);
+        }
       })
       .catch((e) => {
         if (!alive) return;
@@ -1144,7 +1158,11 @@ const TABS = ["exec", "overview", "sales", "orders", "products", "prices", "team
 
 export default function AdminDashboard() {
   const { t } = useLang();
-  const [tab, setTab] = useState("exec");
+  // `?tab=orders` (enlaces desde la hoja de Google) abre esa pestaña directamente.
+  const [tab, setTab] = useState(() => {
+    const want = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : "";
+    return TABS.includes(want) ? want : "exec";
+  });
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
   // Demo seed ONLY for the demo login: a real store owner must never see

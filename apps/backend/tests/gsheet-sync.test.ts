@@ -11,6 +11,7 @@ import {
   normalizePrivateKey,
   orderType,
   privateKeyProblem,
+  richTextCell,
   sheetDateSerial,
   sheetDateTimeSerial,
   sheetMonth,
@@ -94,7 +95,7 @@ describe("buildRows", () => {
     },
   };
 
-  const { orderRow, historyRow } = buildRows(order, "compra_confirmada", {
+  const built = buildRows(order, "compra_confirmada", {
     lines: [
       { frame_name: "Flexure 2043", brand: "Flexure", sku: "FX2043-BLK", color: "Negro", quantity: 1, design: "Monofocal", material: "Policarbonato", photo: null, ar: "Antirreflejo", with_rx: true, total: 200 },
     ],
@@ -119,6 +120,7 @@ describe("buildRows", () => {
     ],
     adminUrl: "https://shop.example/admin",
   });
+  const { orderRow, historyRow } = built;
 
   it("follows the template's column structure", () => {
     expect(orderRow).toHaveLength(ORDER_COLUMNS.length);
@@ -147,7 +149,9 @@ describe("buildRows", () => {
     expect(pagado).toBe("Sí");
     expect(marca).toBe("Flexure");
     expect(tryon).toBe("Sí");
-    expect(archivo).toContain("Prueba virtual");
+    expect(archivo).toContain("Montura: Flexure 2043");
+    expect(archivo).toContain("prueba virtual");
+    expect(archivo).not.toMatch(/https?:\/\//); // referencias, nunca una URL a la vista
     expect(notas).toContain("Luis");
     expect(notas).toContain("IA");
   });
@@ -180,7 +184,22 @@ describe("buildRows", () => {
     // It stays in the private bucket: the sheet only says it exists.
     const all = orderRow.join(" ");
     expect(all).not.toMatch(/rx\/|\.pdf|\.jpe?g|r2\./i);
-    expect(String(orderRow[10])).toContain("solo en el panel");
+    expect(String(orderRow[10])).toContain("Receta: ver documento original");
+  });
+
+  it("links each Archivo reference (frame → product page, receta/foto → panel)", () => {
+    const { fileLinks } = built;
+    const text = String(orderRow[10]);
+    expect(fileLinks.length).toBeGreaterThanOrEqual(3);
+    for (const l of fileLinks) expect(text.slice(l.start, l.end)).not.toContain("\n");
+    const frame = fileLinks.find((l) => text.slice(l.start, l.end).startsWith("Montura"));
+    expect(frame?.uri).toMatch(/^https:\/\/shop\.example\/producto\//);
+    const receta = fileLinks.find((l) => text.slice(l.start, l.end).startsWith("Receta"));
+    expect(receta?.uri).toBe("https://shop.example/admin?tab=orders&order=order_1");
+    const cell = richTextCell(text, fileLinks);
+    const runs = cell.textFormatRuns as Array<{ startIndex: number; format: { link?: { uri: string } } }>;
+    expect(runs[0].startIndex).toBe(0);
+    expect(runs.some((r) => r.format.link)).toBe(true);
   });
 });
 
