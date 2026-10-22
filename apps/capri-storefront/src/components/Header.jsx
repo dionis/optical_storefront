@@ -1,4 +1,5 @@
 // Dónde se usa: TODAS las páginas de la tienda (layout raíz en App). Topbar de anuncio + navegación + buscador + accesos (idioma, cuenta, favoritos, carrito). En móvil colapsa a hamburguesa + barra inferior fija.
+import { TENANT } from "../config/tenant.js";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useCart } from "./CartContext.jsx";
@@ -65,10 +66,10 @@ export default function Header() {
         </button>
 
         <Link to="/" className="logo" onClick={() => setMenu(false)}>
-          <img src="/logo-oficial.png" alt="RUBI LENS" className="logo-img" />
+          <img src={TENANT.logo} alt={TENANT.name} className="logo-img" />
           {/* Versión móvil (sobre la barra azul): icono + texto en blanco. */}
           <span className="logo-mobile" aria-hidden="true">
-            <img src="/logo-oficial-mark.png" alt="RUBI LENS" className="logo-mobile-img" />
+            <img src={TENANT.logoMark} alt={TENANT.name} className="logo-mobile-img" />
           </span>
         </Link>
 

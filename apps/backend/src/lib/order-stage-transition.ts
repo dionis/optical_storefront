@@ -11,6 +11,7 @@ import { fetchBoardOrder, isOrderStage, liveFulfillments } from "./order-board";
 import { resolveEmailLocale } from "./email/copy";
 import { renderOrderStageUpdate } from "./email/order-stage-update";
 import { sheetStageEvent, syncOrderToSheet } from "./gsheet-sync";
+import { tenant } from "./tenant";
 
 /**
  * Cambio de etapa de un pedido — la única implementación, compartida por el
@@ -90,9 +91,10 @@ function stageSmsText(
     in_transit: { es: "en camino", en: "on its way" },
     delivered: { es: "entregado", en: "delivered" },
   };
+  const prefix = tenant().smsPrefix;
   const base = locale === "es"
-    ? `RUBI LENS: tu pedido #${displayId} está ${names[stage].es}.`
-    : `RUBI LENS: your order #${displayId} is ${names[stage].en}.`;
+    ? `${prefix}: tu pedido #${displayId} está ${names[stage].es}.`
+    : `${prefix}: your order #${displayId} is ${names[stage].en}.`;
   const track = tracking ? (locale === "es" ? ` Guía: ${tracking}.` : ` Tracking: ${tracking}.`) : "";
   const url = trackingUrl ? ` ${trackingUrl}` : "";
   return (base + track + url).slice(0, 320);

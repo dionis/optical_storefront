@@ -1,4 +1,5 @@
 // Dónde se usa: /producto/:slug (PDP). Galería 360/color, ficha técnica, precio, CTAs (probador + carrito), pestañas de detalles/medidas/opiniones y recomendados.
+import { pageTitle } from "../config/tenant.js";
 import { useState, useEffect, useRef } from "react";
 import { setSeo, productJsonLd } from "../lib/seo.js";
 import { createPortal } from "react-dom";
@@ -218,7 +219,7 @@ export default function ProductDetail() {
       : `${product.name} eyeglasses by ${product.brand}${bits.length ? " — " + bits.join(", ") : ""}. Try them on online with your camera and order them with prescription lenses. FedEx shipping across the US.`;
     const path = `/producto/${slug}`;
     setSeo({
-      title: `${product.name} · ${product.brand} | RUBI LENS`,
+      title: pageTitle(`${product.name} · ${product.brand}`),
       description: desc,
       path,
       image: img,

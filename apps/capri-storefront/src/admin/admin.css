@@ -471,3 +471,16 @@
 .adm-export { display: inline-flex; align-items: center; gap: 6px; }
 .adm-export .i3d-dl { height: 15px; width: auto; }
 .adm-export:not(.no-i3d) .adm-export-fb { display: none; }
+
+/* ── Seguridad ─────────────────────────────────────────────────────────── */
+.adm-sec-kpi small { display: block; color: #6b7280; font-size: 12px; margin-bottom: 4px; }
+.adm-sec-kpi b { font-size: 18px; }
+.adm-sec-kpi.ok b { color: #1e6b3a; }
+.adm-sec-kpi.warn b { color: #9a3412; }
+.adm-sec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.adm-sec-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: #f8f9fb; }
+.adm-sec-list li.fail { background: #fff4ed; }
+.adm-sec-mark { font-weight: 800; width: 18px; text-align: center; color: #1e6b3a; }
+.adm-sec-list li.fail .adm-sec-mark { color: #b42318; }
+.adm-sec-main { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.adm-sec-hint { color: #7a4a13; font-size: 12px; line-height: 1.4; }

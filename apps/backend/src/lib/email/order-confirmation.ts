@@ -10,6 +10,7 @@
  * these templates are a read-only view of what the order module settled on.
  */
 
+import { tenantName } from "../tenant";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
 import type { ImageRef } from "./order-images";
@@ -136,7 +137,7 @@ export function chip(text: string, bg = GOLD_LIGHT, fg = "#7a5b12"): string {
 
 /** Store name shown in the email header. A proper name, not copy: same in every locale. */
 export function emailStoreName(): string {
-  return process.env.STORE_NAME?.trim() || "RUBI LENS";
+  return tenantName();
 }
 
 /**

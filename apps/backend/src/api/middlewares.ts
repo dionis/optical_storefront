@@ -6,6 +6,7 @@ import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
+import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -203,6 +204,25 @@ function visionMeasureCors(
 
 export default defineMiddlewares({
   routes: [
+    {
+      // Security headers on every response (HSTS, nosniff, no framing…). See
+      // lib/security.ts; the storefront gets its own set from vercel.json.
+      matcher: "/*",
+      middlewares: [securityHeaders],
+    },
+    {
+      // Admin login: Medusa has no throttle of its own. Per IP and per email.
+      matcher: "/auth/user/emailpass",
+      method: ["POST"],
+      middlewares: [adminLoginRateLimit],
+    },
+    {
+      // Nobody self-registers an admin identity here (admins are created with
+      // the CLI). 404 unless ADMIN_SELF_REGISTER=1.
+      matcher: "/auth/user/emailpass/register",
+      method: ["POST"],
+      middlewares: [blockAdminSelfRegister],
+    },
     {
       // CORS for every vision-measure route (see visionMeasureCors above) —
       // health, providers, models, job, job/:id, image-proxy, result, …

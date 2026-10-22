@@ -51,6 +51,7 @@ import { deriveOrderProgress, type OrderStage, type OrderTerminalState } from ".
 import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/order-enrich";
 import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
+import { tenantName } from "./tenant";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -697,7 +698,7 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
   // Columnas de solo lectura: aviso (no bloqueo) al editar cualquier columna
   // que no sea Estado o Guía — se regeneran desde la tienda y el cambio se
   // perdería. Se reemplazan en cada pasada (nunca se acumulan).
-  const PROTECT_TAG = "RUBI LENS · solo lectura";
+  const PROTECT_TAG = `${tenantName()} · solo lectura`;
   const editable = new Set(EDITABLE_ORDER_COLUMNS.map((n) => ocol(n)));
   const protectRequests: unknown[] = [];
   for (const sh of sheets) {
@@ -933,7 +934,7 @@ async function ensureDashboard(cfg: GsheetConfig, sheets: SheetMeta[], table: Or
   // Celdas: [fila, col] 0-based. La hoja es de 12 columnas útiles (A..L).
   const V: Array<[number, number, string | number]> = [];
   const put = (r: number, col: number, v: string | number) => V.push([r, col, v]);
-  put(0, 0, "RUBI LENS · Resumen ejecutivo");
+  put(0, 0, `${tenantName()} · Resumen ejecutivo`);
   put(1, 0, "Se actualiza solo con cada pedido, cada cambio de etapa y cada 30 minutos. Ventas = pedidos pagados (sin cancelados ni reembolsados).");
   put(1, 9, "Actualizado:"); put(1, 10, "=NOW()");
 

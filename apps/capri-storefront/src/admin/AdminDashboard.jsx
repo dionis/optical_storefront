@@ -10,6 +10,7 @@ import { isDemoLogin } from "./adminAuth.js";
 import Executive from "./Executive.jsx";
 import CatalogManager from "./CatalogManager.jsx";
 import Team from "./Team.jsx";
+import Security from "./Security.jsx";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
 // tabs still use. `money` is aliased because this file already has its own,
@@ -1154,7 +1155,7 @@ function Orders() {
   );
 }
 
-const TABS = ["exec", "overview", "sales", "orders", "products", "prices", "team"];
+const TABS = ["exec", "overview", "sales", "orders", "products", "prices", "team", "security"];
 
 export default function AdminDashboard() {
   const { t } = useLang();
@@ -1192,6 +1193,7 @@ export default function AdminDashboard() {
       )}
       {tab === "prices" && <Prices preQ={find} />}
       {tab === "team" && <Team />}
+      {tab === "security" && <Security />}
     </div>
   );
 }

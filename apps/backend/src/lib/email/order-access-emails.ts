@@ -6,11 +6,12 @@
  * sends looks like it came from the same place.
  */
 
+import { tenantName } from "../tenant";
 import { t, type EmailLocale } from "./copy";
 import { BORDER, BRAND, MUTED, esc, shell, type RenderedEmail } from "./order-confirmation";
 
 function storeName(): string {
-  return process.env.STORE_NAME?.trim() || "Óptica";
+  return tenantName();
 }
 
 function button(href: string, label: string): string {

@@ -1,4 +1,5 @@
 // Dónde se usa: /catalogo (y /catalogo?tab=cases). Grid con filtros laterales, orden, scroll incremental y banner de campaña.
+import { pageTitle } from "../config/tenant.js";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -19,7 +20,7 @@ export default function Catalog() {
   const { t, tv, lang } = useLang();
   useEffect(() => {
     setSeo({
-      title: lang === "es" ? "Catálogo de espejuelos | RUBI LENS" : "Eyeglasses catalog | RUBI LENS",
+      title: pageTitle(lang === "es" ? "Catálogo de espejuelos" : "Eyeglasses catalog"),
       description: lang === "es"
         ? "Más de 500 monturas de Di Caprio, Flexure, Millennial, Peachtree, Four You y Trendy. Filtra por forma, material, sexo y estilo; pruébatelas online con tu cámara."
         : "500+ frames from Di Caprio, Flexure, Millennial, Peachtree, Four You and Trendy. Filter by shape, material, gender and style; try them on online with your camera.",

@@ -1,4 +1,5 @@
 // Dónde se usa: todas las páginas de la tienda, bajo el contenido. Columnas Shop/Help/Service + franja de confianza (TrustStrip).
+import { TENANT } from "../config/tenant.js";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -12,7 +13,7 @@ export default function Footer() {
     <footer className="footer">
       <div className="footer-cols">
         <div className="footer-brand">
-          <img src="/logo-oficial.png" alt="RUBI LENS — Óptica y Salud Visual" className="footer-logo" />
+          <img src={TENANT.logo} alt={`${TENANT.name} — ${TENANT.tagline}`} className="footer-logo" />
           <p>{t("footer.about")}</p>
         </div>
         <div>
