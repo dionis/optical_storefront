@@ -2151,3 +2151,53 @@ export async function applySheetEdits(
     watching = false;
   }
 }
+
+// ── Borrado de datos (puesta a cero antes de salir en vivo) ──────────────────
+
+/**
+ * Vacía los DATOS de la hoja dejando la estructura: filas de la tabla Pedidos
+ * (la tabla se encoge a solo el encabezado), filas del Historial y el estado
+ * de los campos de Buscar. Resumen y Buscar se recalculan solos. Lo usa el
+ * script `purge-orders` después de limpiar la base de datos; nunca corre solo.
+ */
+export async function resetSheetData(logger?: Logger): Promise<{ orders: number; history: number }> {
+  const cfg = gsheetConfig();
+  if (!cfg) throw new Error("Google Sheet not configured");
+  const sheets = await readSheetsMeta(cfg);
+  const table = findOrdersTable(sheets);
+  const result = { orders: 0, history: 0 };
+
+  if (table) {
+    const from = columnLetter(table.startCol);
+    const to = columnLetter(table.startCol + ORDER_COLUMNS.length - 1);
+    const firstData = table.headerRow + 2; // 1-based
+    const keys = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${from}${firstData}:${from}`)}`);
+    const values = keys.ok ? (((await keys.json()) as { values?: string[][] }).values ?? []) : [];
+    result.orders = values.filter((r) => r?.[0] && String(r[0]).trim()).length;
+    const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${from}${firstData}:${to}`)}:clear`, { method: "POST", body: "{}" });
+    if (!clear.ok) throw await failure("clear orders", clear);
+    // La tabla vuelve a ser solo el encabezado (+1 fila vacía, mínimo de la API).
+    await batchUpdate(cfg, [
+      {
+        updateTable: {
+          table: {
+            tableId: table.tableId,
+            range: { sheetId: table.sheetId, startRowIndex: table.headerRow, endRowIndex: table.headerRow + 2, startColumnIndex: table.startCol, endColumnIndex: table.startCol + ORDER_COLUMNS.length },
+          },
+          fields: "range",
+        },
+      },
+    ]);
+    cachedTable = null;
+  }
+
+  const hist = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!A2:A`)}`);
+  const hv = hist.ok ? (((await hist.json()) as { values?: string[][] }).values ?? []) : [];
+  result.history = hv.filter((r) => r?.[0]).length;
+  const clearH = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!A2:${columnLetter(HISTORY_COLUMNS.length - 1)}`)}:clear`, { method: "POST", body: "{}" });
+  if (!clearH.ok) throw await failure("clear history", clearH);
+  const clearS = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!B5:H5`)}:clear`, { method: "POST", body: "{}" });
+  if (!clearS.ok && clearS.status !== 400) throw await failure("clear search inputs", clearS);
+  logger?.info(`[gsheet] hoja vaciada: ${result.orders} pedidos y ${result.history} filas de historial.`);
+  return result;
+}
