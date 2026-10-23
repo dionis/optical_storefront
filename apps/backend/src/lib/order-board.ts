@@ -245,6 +245,17 @@ export function normalizeSellerCodeLoose(value: unknown): string | null {
   return s ? s.slice(0, 12) : null;
 }
 
+/**
+ * Traffic source as stored on an order (`metadata.seller_source`, the `src=`
+ * of the referral link): lowercase a-z only, ≤ 20 chars, null when empty.
+ * Same function `lib/sellers` exports — kept here so the projection has no
+ * import cycle with the sellers module.
+ */
+export function normalizeSellerSourceLoose(value: unknown): string | null {
+  const s = String(value ?? "").trim().toLowerCase().replace(/[^a-z]/g, "");
+  return s ? s.slice(0, 20) : null;
+}
+
 function projectItem(item: RawItem) {
   const lens = (item.metadata?.["lens_config"] ?? {}) as Record<string, unknown>;
   const detail = item.detail ?? {};
@@ -382,6 +393,7 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     .find(Boolean);
 
   const sellerCode = normalizeSellerCodeLoose(metadata["seller_code"]);
+  const sellerSource = normalizeSellerSourceLoose(metadata["seller_source"]);
   const ownerNote = typeof metadata["owner_note"] === "string" && metadata["owner_note"].trim()
     ? String(metadata["owner_note"])
     : null;
@@ -440,6 +452,9 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     // Attribution: the referral code the storefront put on the cart
     // (`metadata.seller_code`), copied onto the order by complete-cart.
     seller_code: sellerCode,
+    // Which network the referral link was shared on (`src=` of the link →
+    // `metadata.seller_source`); null when the link had no tag.
+    seller_source: sellerSource,
     // Free-text note the owner keeps on the order (panel + sheet).
     owner_note: ownerNote,
     // Every stage change recorded by transitionOrderStage, oldest first.
@@ -475,6 +490,7 @@ function haystack(row: BoardOrder): string {
     row.tracking_number,
     row.stage,
     row.seller_code,
+    row.seller_source,
     ...row.items.map((i) => i.title),
   ]
     .filter(Boolean)

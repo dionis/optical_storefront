@@ -53,7 +53,18 @@ import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 import { tenantName } from "./tenant";
 import { projectBoardOrder } from "./order-board";
-import { costSheetForOrder, loadCostingContext } from "./costing";
+import {
+  KIND_LABEL,
+  PROFIT_TARGET_KEY,
+  costBreakdownText,
+  costSheetForOrder,
+  isProfitTargetRule,
+  listCostRules,
+  loadCostingContext,
+  profitTargetPct,
+  type CostLine,
+  type CostRule,
+} from "./costing";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -62,6 +73,8 @@ const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const ORDERS_SHEET = process.env.GSHEET_ORDERS_SHEET || "Pedidos";
 const ORDERS_TABLE = process.env.GSHEET_ORDERS_TABLE || "Pedidos";
 const HISTORY_SHEET = process.env.GSHEET_HISTORY_SHEET || "Historial";
+/** Pestaña de solo lectura con las fichas de costo (reglas) y la distribución por porcentajes. */
+const COSTS_SHEET = process.env.GSHEET_COSTS_SHEET || "Costos";
 
 // ── Estructura de la tabla (la de la plantilla) ──────────────────────────────
 
@@ -126,6 +139,9 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
   { name: "Vendedor", type: "TEXT", width: 110 },
   { name: "Costo", type: "DOUBLE", width: 90 },
   { name: "Margen", type: "DOUBLE", width: 90 },
+  // A dónde fue cada dólar: una entrada "concepto importe" por línea de la
+  // ficha ("Montura Peachtree 12.00 · Envío real 28.00 · Vendedor ANA 4.30").
+  { name: "Desglose costo", type: "TEXT", width: 320, wrap: true },
 ];
 /** Columnas que el dueño puede editar en la hoja; el resto se regenera. */
 export const EDITABLE_ORDER_COLUMNS = ["Estado", "Guía (tracking)"];
@@ -222,6 +238,7 @@ export const HISTORY_COLUMNS: HistoryColumn[] = [
   { key: "seller", name: "Vendedor", width: 110 },
   { key: "cost", name: "Costo", width: 90, type: "MONEY" },
   { key: "margin", name: "Margen", width: 90, type: "MONEY" },
+  { key: "cost_breakdown", name: "Desglose costo", width: 320, wrap: true },
 ];
 const HISTORY_HEADERS = HISTORY_COLUMNS.map((c) => c.name);
 /** Letra de columna del Historial por clave (para las fórmulas del resumen). */
@@ -767,6 +784,8 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
   const editable = new Set(EDITABLE_ORDER_COLUMNS.map((n) => ocol(n)));
   const protectRequests: unknown[] = [];
   for (const sh of sheets) {
+    // La pestaña Costos gestiona su propia protección (writeCostRulesSheet).
+    if (sh.properties?.title === COSTS_SHEET) continue;
     for (const pr of sh.protectedRanges ?? []) {
       if (pr.protectedRangeId !== undefined && (pr.description ?? "").startsWith(PROTECT_TAG)) {
         protectRequests.push({ deleteProtectedRange: { protectedRangeId: pr.protectedRangeId } });
@@ -1338,6 +1357,170 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   await batchUpdate(cfg, req);
 }
 
+// ── Fichas de costo (pestaña "Costos") ───────────────────────────────────────
+
+/** Grupo de la pestaña Costos al que pertenece cada tipo de regla. */
+export const COST_GROUP_LABEL: Record<CostRule["kind"], string> = {
+  frame_brand: "Monturas",
+  frame_sku: "Monturas",
+  lens_design: "Lentes",
+  lens_material: "Lentes",
+  lens_photo: "Lentes",
+  lens_ar: "Lentes",
+  order_fixed: "Por pedido",
+  shipping: "Por pedido",
+  order_percent: "Comisiones y distribución",
+  payment_fixed: "Comisiones y distribución",
+};
+const COST_GROUP_ORDER = ["Monturas", "Lentes", "Por pedido", "Comisiones y distribución"];
+export const COST_SHEET_HEADERS = ["Grupo", "Concepto", "Tipo", "Importe", "Unidad", "Activa", "Clave"];
+/** Fila (0-based) del encabezado de la tabla de la pestaña Costos. */
+const COST_HEADER_ROW = 3;
+
+/**
+ * Filas de la pestaña Costos: título, nota, encabezado y una fila por regla
+ * (agrupadas: monturas, lentes, por pedido, comisiones y distribución), más
+ * la fila "Ganancia objetivo" al final cuando el dueño la definió. Pura, para
+ * poder probarla sin la API.
+ */
+export function costRulesSheetRows(rules: CostRule[]): Cell[][] {
+  const rows: Cell[][] = [];
+  rows[0] = [`${tenantName()} · Fichas de costo y distribución`];
+  rows[1] = [
+    "Solo lectura: lo que cuesta cada venta (montura, lentes, laboratorio, envío) y qué porcentaje de cada pedido va a cada rubro. " +
+      "Se edita en el panel (Costos) y aquí se refresca al guardar y cada 30 minutos.",
+  ];
+  rows[2] = [];
+  rows[COST_HEADER_ROW] = [...COST_SHEET_HEADERS];
+  const groupIdx = (r: CostRule) => COST_GROUP_ORDER.indexOf(COST_GROUP_LABEL[r.kind]);
+  const sorted = rules
+    .filter((r) => !isProfitTargetRule(r))
+    .sort((a, b) => groupIdx(a) - groupIdx(b) || a.sort_order - b.sort_order || a.kind.localeCompare(b.kind) || a.match_key.localeCompare(b.match_key));
+  for (const r of sorted) {
+    rows.push([
+      COST_GROUP_LABEL[r.kind],
+      r.label,
+      KIND_LABEL[r.kind],
+      Number(money(r.amount)),
+      r.unit === "percent" ? "%" : "USD",
+      r.active ? "Sí" : "No",
+      `${r.kind}:${r.match_key}`,
+    ]);
+  }
+  const target = profitTargetPct(rules);
+  if (target !== null) {
+    rows.push(["Objetivo", "Ganancia objetivo", "Meta de ganancia (no es un costo)", target, "%", "Sí", `order_percent:${PROFIT_TARGET_KEY}`]);
+  }
+  return rows.map((r) => r ?? []);
+}
+
+/**
+ * Escribe (o crea) la pestaña Costos con las reglas actuales. Idempotente:
+ * se limpia y reescribe entera, con el estilo de las otras pestañas y una
+ * protección de aviso sobre toda la hoja — los costos se editan en el panel,
+ * no aquí.
+ */
+export async function writeCostRulesSheet(cfg: GsheetConfig, rules: CostRule[]): Promise<void> {
+  const sheets = await readSheetsMeta(cfg);
+  let sheet = sheets.find((s) => s.properties?.title === COSTS_SHEET);
+  if (!sheet) {
+    const [reply] = await batchUpdate(cfg, [
+      { addSheet: { properties: { title: COSTS_SHEET, gridProperties: { rowCount: 200, columnCount: 10, hideGridlines: true } } } },
+    ]);
+    sheet = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: COSTS_SHEET } };
+  }
+  const sid = sheet.properties?.sheetId ?? 0;
+  const rows = costRulesSheetRows(rules);
+  const n = COST_SHEET_HEADERS.length;
+  const lastRow = Math.max(rows.length, 60);
+
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${COSTS_SHEET}!A1:${columnLetter(n - 1)}${lastRow + 200}`)}:clear`, { method: "POST", body: "{}" });
+  if (!clear.ok) throw await failure("clear costs", clear);
+  const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${COSTS_SHEET}!A1`)}?valueInputOption=RAW`, {
+    method: "PUT",
+    body: JSON.stringify({ values: rows.map((r) => (r.length ? r : [""])) }),
+  });
+  if (!write.ok) throw await failure("write costs", write);
+
+  const range = (r0: number, r1: number, c0: number, c1: number) => ({ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+  const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
+  const H = COST_HEADER_ROW;
+  const PROTECT_TAG = `${tenantName()} · solo lectura`;
+  const req: unknown[] = [];
+  for (const pr of sheet.protectedRanges ?? []) {
+    if (pr.protectedRangeId !== undefined && (pr.description ?? "").startsWith(PROTECT_TAG)) {
+      req.push({ deleteProtectedRange: { protectedRangeId: pr.protectedRangeId } });
+    }
+  }
+  req.push(
+    { unmergeCells: { range: range(0, lastRow, 0, n) } },
+    { repeatCell: { range: range(0, lastRow, 0, n), cell: { userEnteredFormat: {} }, fields: "userEnteredFormat" } },
+    { updateSheetProperties: { properties: { sheetId: sid, tabColorStyle: { rgbColor: GOLD }, gridProperties: { frozenRowCount: H + 1, hideGridlines: true } }, fields: "tabColorStyle,gridProperties(frozenRowCount,hideGridlines)" } },
+    // Título y nota, como en Resumen.
+    fmt(range(0, 1, 0, n), { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 18, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE" }),
+    { mergeCells: { range: range(0, 1, 0, n), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 46 }, fields: "pixelSize" } },
+    fmt(range(1, 2, 0, n), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } }, wrapStrategy: "WRAP", verticalAlignment: "TOP" }),
+    { mergeCells: { range: range(1, 2, 0, n), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 1, endIndex: 2 }, properties: { pixelSize: 40 }, fields: "pixelSize" } },
+    // Encabezado azul marino con línea dorada.
+    fmt(range(H, H + 1, 0, n), { backgroundColorStyle: { rgbColor: HEADER_COLOR }, textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE", wrapStrategy: "WRAP" }),
+    { updateBorders: { range: range(H, H + 1, 0, n), bottom: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: GOLD } } } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: H, endIndex: H + 1 }, properties: { pixelSize: 36 }, fields: "pixelSize" } },
+    // Filas de datos: letra normal, bandas, importes a la derecha.
+    fmt(range(H + 1, lastRow, 0, n), { backgroundColorStyle: { rgbColor: WHITE }, wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { bold: false, fontSize: 10, foregroundColorStyle: { rgbColor: rgb("#1e2733") } } }),
+    fmt(range(H + 1, lastRow, 0, 1), { textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } } }),
+    fmt(range(H + 1, lastRow, 3, 4), { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" }),
+    fmt(range(H + 1, lastRow, 4, 6), { horizontalAlignment: "CENTER" }),
+    fmt(range(H + 1, lastRow, 6, 7), { textFormat: { fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    { updateBorders: { range: range(H + 1, rows.length, 0, n), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    ...[150, 260, 190, 100, 70, 70, 240].map((px, i) => ({
+      updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: px }, fields: "pixelSize" },
+    })),
+    { setBasicFilter: { filter: { range: range(H, rows.length, 0, n) } } },
+    // Aviso al editar: la hoja se regenera desde el panel.
+    {
+      addProtectedRange: {
+        protectedRange: {
+          range: { sheetId: sid },
+          description: `${PROTECT_TAG} (las fichas de costo se editan en el panel, pestaña Costos)`,
+          warningOnly: true,
+        },
+      },
+    }
+  );
+  const rulesCount = (sheet.conditionalFormats ?? []).length;
+  for (let i = rulesCount - 1; i >= 0; i--) req.push({ deleteConditionalFormatRule: { sheetId: sid, index: i } });
+  req.push({
+    addConditionalFormatRule: {
+      index: 0,
+      rule: {
+        ranges: [range(H + 1, lastRow, 0, n)],
+        booleanRule: { condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=AND(ISEVEN(ROW()),$A${H + 2}<>"")` }] }, format: { backgroundColorStyle: { rgbColor: BAND_2 } } },
+      },
+    },
+  });
+  await batchUpdate(cfg, req);
+}
+
+/**
+ * Refresca la pestaña Costos con las reglas dadas (o las vivas). Mejor
+ * esfuerzo y nunca lanza: lo llaman las rutas de reglas al guardar/borrar y
+ * el backfill — la hoja es un espejo, no una dependencia.
+ */
+export async function mirrorCostRulesToSheet(container: MedusaContainer, rules?: CostRule[]): Promise<void> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const cfg = gsheetConfig();
+  if (!cfg || privateKeyProblem(cfg.privateKey)) return;
+  try {
+    const list = rules ?? (await listCostRules(container));
+    await writeCostRulesSheet(cfg, list);
+    logger.info(`[gsheet] pestaña ${COSTS_SHEET} actualizada (${list.length} reglas).`);
+  } catch (error) {
+    logger.warn(`[gsheet] pestaña ${COSTS_SHEET} no actualizada: ${(error as Error).message}`);
+  }
+}
+
 function columnLetter(index: number): string {
   let n = index + 1;
   let s = "";
@@ -1481,13 +1664,13 @@ async function loadCostForSheet(
   container: MedusaContainer,
   order: Record<string, any>,
   logger: Logger
-): Promise<{ cost_total: number; margin: number } | null> {
+): Promise<SheetCostInfo | null> {
   try {
     const { rules, sellerByCode } = await loadCostingContext(container);
     if (!rules.length) return null;
     const projected = projectBoardOrder(order);
     const sheet = await costSheetForOrder(container, projected, rules, sellerByCode, order.metadata ?? null);
-    return { cost_total: sheet.cost_total, margin: sheet.margin };
+    return { cost_total: sheet.cost_total, margin: sheet.margin, lines: sheet.lines };
   } catch (error) {
     logger.warn(`[gsheet] order ${order.id}: cost sheet unavailable (${(error as Error).message})`);
     return null;
@@ -1587,6 +1770,13 @@ export interface RxSheetInfo {
   has_file: boolean;
 }
 
+/** Lo que la hoja muestra de la ficha de costo: totales y las líneas para el desglose. */
+export interface SheetCostInfo {
+  cost_total: number;
+  margin: number;
+  lines?: Array<Pick<CostLine, "label" | "subtotal">>;
+}
+
 export interface SheetLineDetail {
   frame_name: string;
   brand?: string | null;
@@ -1664,7 +1854,7 @@ export function buildRows(
     /** Aviso para el dueño (va al final de Notas), p. ej. un cambio rechazado. */
     note?: string;
     /** Ficha de costo calculada (lib/costing); ausente = columnas vacías. */
-    cost?: { cost_total: number; margin: number } | null;
+    cost?: SheetCostInfo | null;
   } = {}
 ) {
   const md = (order.metadata ?? {}) as Record<string, unknown>;
@@ -1786,10 +1976,14 @@ export function buildRows(
   if (ownerNote) notes.push(`Nota: ${ownerNote}`);
   notes.push(`Último evento: ${event} (${now})`);
 
-  // Vendedor (código de referido que viajó en el carrito) y ficha de costo.
+  // Vendedor (código de referido que viajó en el carrito, con la red social
+  // de la que vino la venta cuando el enlace la llevaba) y ficha de costo.
   const sellerCode = String(md["seller_code"] ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const sellerSource = String(md["seller_source"] ?? "").trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 20);
+  const sellerCell = sellerCode ? (sellerSource ? `${sellerCode} · ${sellerSource}` : sellerCode) : "";
   const costCell: Cell = extra.cost ? Number(money(extra.cost.cost_total)) : "";
   const marginCell: Cell = extra.cost ? Number(money(extra.cost.margin)) : "";
+  const breakdownCell = extra.cost ? costBreakdownText(extra.cost.lines) : "";
 
   const lines0 = extra.lines ?? [];
   const brandCell = [...new Set(lines0.map((l) => l.brand).filter((b): b is string => Boolean(b && b.trim())))].join(" | ");
@@ -1808,9 +2002,10 @@ export function buildRows(
     fileCell,
     [...new Set(notes), ...(extra.note ? [`⚠ ${extra.note}`] : [])].join("\n"),
     trackingNumber,
-    sellerCode,
+    sellerCell,
     costCell,
     marginCell,
+    breakdownCell,
   ];
   // Lo que la hoja muestra en las columnas editables: la próxima pasada del
   // vigilante compara contra esto para distinguir "lo cambió el dueño" de
@@ -1888,9 +2083,10 @@ export function buildRows(
     String(order.locale ?? md["locale"] ?? "es"),
     [terminalNote, hasFile ? "Receta original guardada (solo en el panel)" : "", ownerNote ? `Nota: ${ownerNote}` : ""].filter(Boolean).join(" · "),
     String(order.id ?? ""),
-    sellerCode,
+    sellerCell,
     costCell,
     marginCell,
+    breakdownCell,
   ];
 
   return { orderRow, historyRow, fileLinks, mirror };
@@ -2079,6 +2275,8 @@ export async function backfillOrdersToSheet(container: MedusaContainer): Promise
   backfilling = true;
   try {
     const table = await ensureSheets(cfg, logger);
+    // Las fichas de costo (reglas) van a su pestaña una vez por pasada.
+    await mirrorCostRulesToSheet(container);
     const col = columnLetter(table.startCol);
     const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${quoteSheet(table.sheetTitle)}!${col}:${col}`)}`);
     const values = resp.ok ? (((await resp.json()) as { values?: string[][] }).values ?? []) : [];

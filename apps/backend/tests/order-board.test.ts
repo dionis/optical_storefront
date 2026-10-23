@@ -168,9 +168,23 @@ describe("projectBoardOrder — seller, note, history, brand/sku", () => {
     expect(row.tracking_url).toBe("https://courier.example/t/1");
   });
 
+  it("carries the traffic source the referral link was tagged with, cleaned", () => {
+    expect(projectBoardOrder(order({ metadata: { seller_code: "ana", seller_source: " Instagram " } }) as never).seller_source).toBe("instagram");
+    expect(projectBoardOrder(order({ metadata: { seller_code: "ana", seller_source: "what's-app" } }) as never).seller_source).toBe("whatsapp");
+    expect(projectBoardOrder(order({ metadata: { seller_code: "ana", seller_source: "x".repeat(40) } }) as never).seller_source).toHaveLength(20);
+    expect(projectBoardOrder(order({ metadata: { seller_code: "ana", seller_source: "123" } }) as never).seller_source).toBeNull();
+    // The source is searchable from the board's free text, like the code.
+    const rows = [
+      projectBoardOrder(order({ id: "o1", metadata: { seller_code: "ANA", seller_source: "tiktok" } }) as never),
+      projectBoardOrder(order({ id: "o2", metadata: { seller_code: "ANA" } }) as never),
+    ];
+    expect(filterBoardRows(rows, { q: "tiktok" }).map((r) => r.id)).toEqual(["o1"]);
+  });
+
   it("defaults to null / [] when the metadata has none of it", () => {
     const row = projectBoardOrder(order() as never);
     expect(row.seller_code).toBeNull();
+    expect(row.seller_source).toBeNull();
     expect(row.owner_note).toBeNull();
     expect(row.stage_history).toEqual([]);
     expect(row.tracking_url).toBeNull();

@@ -6,9 +6,11 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney, shortDate, stageErrorText } from "./adminOrders.js";
-import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, shareLinks, copyText } from "./adminSellers.js";
+import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText } from "./adminSellers.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "./icons.jsx";
+import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
+import { Card } from "./ui.jsx";
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 const RANGES = ["30d", "90d", "ytd", "all"];
@@ -52,7 +54,6 @@ function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const text = t("adm.sel.shareText", { name: TENANT.name });
-  const links = shareLinks(s.referral_url, text);
   const copy = async (v, label) => { toast({ tone: (await copyText(v)) ? "success" : "error", title: label }); };
   return (
     <div className={`sel-card ${s.active ? "" : "off"}`}>
@@ -68,14 +69,7 @@ function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
       </div>
       {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.sel.inactive")}</span>}
       <div className="sel-link" title={s.referral_url}><Icon name="link" size={14} /><code>{s.referral_url}</code><button type="button" className="btn-xs" onClick={() => copy(s.referral_url, t("adm.sel.copied"))}><Icon name="copy" size={13} />{t("adm.sel.copy")}</button></div>
-      <div className="sel-share">
-        <a href={links.whatsapp} target="_blank" rel="noopener noreferrer"><Icon name="whatsapp" size={14} />WhatsApp</a>
-        <a href={links.facebook} target="_blank" rel="noopener noreferrer"><Icon name="facebook" size={14} />Facebook</a>
-        <button type="button" onClick={() => copy(`${text} ${s.referral_url}`, t("adm.sel.copiedPost"))}><Icon name="instagram" size={14} />Instagram</button>
-        <button type="button" onClick={() => copy(`${text} ${s.referral_url}`, t("adm.sel.copiedPost"))}><Icon name="tiktok" size={14} />TikTok</button>
-        <a href={links.telegram} target="_blank" rel="noopener noreferrer"><Icon name="message" size={14} />Telegram</a>
-        <a href={links.mail}><Icon name="mail" size={14} />Email</a>
-      </div>
+      <SocialLinks seller={s} text={text} stat={stat} onCopy={copy} />
       <div className="sel-link" title={s.dashboard_url}><Icon name="dashboard" size={14} /><code>{t("adm.sel.dashboardLink")}</code>
         <button type="button" className="btn-xs" onClick={() => copy(s.dashboard_url, t("adm.sel.copiedDash"))}><Icon name="copy" size={13} />{t("adm.sel.copy")}</button>
         <a className="btn-xs" href={s.dashboard_url} target="_blank" rel="noopener noreferrer"><Icon name="external" size={13} /></a>
@@ -91,7 +85,7 @@ function SellerCard({ s, stat, lang, onEdit, onToggle, onDelete, onRotate }) {
   );
 }
 
-export default function Sellers({ onChanged }) {
+export default function Sellers({ onChanged, go }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
@@ -147,10 +141,10 @@ export default function Sellers({ onChanged }) {
 
       {stats && (
         <div className="cost-kpi-row">
-          <div className="cost-kpi"><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active).length}</b></div>
-          <div className="cost-kpi"><small><Icon name="orders" size={13} />{t("adm.sel.attributed")}</small><b>{totals.orders}</b><em>{t("adm.sel.unattributed", { n: stats.unattributed?.orders ?? 0 })}</em></div>
-          <div className="cost-kpi"><small><Icon name="dollar" size={13} />{t("adm.sel.sales")}</small><b>{fmtMoney(totals.revenue, "usd", lang)}</b></div>
-          <div className="cost-kpi bad"><small><Icon name="percent" size={13} />{t("adm.sel.commissions")}</small><b>{fmtMoney(totals.commission, "usd", lang)}</b></div>
+          <button type="button" className="cost-kpi" onClick={() => setCreating(true)}><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active).length}</b></button>
+          <button type="button" className="cost-kpi" onClick={() => go?.("orders", { preset: "all" })}><small><Icon name="orders" size={13} />{t("adm.sel.attributed")}</small><b>{totals.orders}</b><em>{t("adm.sel.unattributed", { n: stats.unattributed?.orders ?? 0 })}</em></button>
+          <button type="button" className="cost-kpi" onClick={() => go?.("exec", { sub: "sales" })}><small><Icon name="dollar" size={13} />{t("adm.sel.sales")}</small><b>{fmtMoney(totals.revenue, "usd", lang)}</b></button>
+          <button type="button" className="cost-kpi bad" onClick={() => go?.("exec", { sub: "costs" })}><small><Icon name="percent" size={13} />{t("adm.sel.commissions")}</small><b>{fmtMoney(totals.commission, "usd", lang)}</b></button>
         </div>
       )}
 
@@ -172,8 +166,7 @@ export default function Sellers({ onChanged }) {
         )}
 
       {stats && (stats.sellers || []).length > 0 && (
-        <div className="adm-card" style={{ marginTop: 16 }}>
-          <h3><Icon name="sales" size={16} />{t("adm.sel.ranking")}</h3>
+        <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: stats.sellers }}>
           <div className="adm-table-wrap">
             <table className="adm-table responsive">
               <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
@@ -190,7 +183,12 @@ export default function Sellers({ onChanged }) {
               </tbody>
             </table>
           </div>
-        </div>
+          {(stats.sources || []).length > 0 && (
+            <div className="exec-sources" style={{ marginTop: 10 }}>
+              {stats.sources.map((x) => <span className="adm-chip neutral" key={x.source}><Icon name={SOURCE_ICON[x.source] || "link"} size={12} />{t(`adm.src.${x.source}`) === `adm.src.${x.source}` ? x.source : t(`adm.src.${x.source}`)} · {x.orders} · {fmtMoney(x.revenue, "usd", lang)}</span>)}
+            </div>
+          )}
+        </Card>
       )}
 
       <div className="adm-card" style={{ marginTop: 16 }}>

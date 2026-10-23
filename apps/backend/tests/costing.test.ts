@@ -6,11 +6,25 @@ import {
   CostRuleError,
   FALLBACK_LENS_CATALOG,
   KNOWN_BRANDS,
+  LINE_KIND_LABEL,
+  PROFIT_TARGET_KEY,
   computeCostSheet,
+  conceptKey,
+  condenseLines,
+  costBreakdownText,
+  dayKey,
   defaultCostRules,
+  lineKind,
+  normalizeMatchKey,
+  orderBrands,
+  profitTargetFor,
+  profitTargetPct,
+  summarizeCostSheets,
   undefinedCostCount,
   validateCostRules,
+  type CostLine,
   type CostRule,
+  type CostSheet,
 } from "../src/lib/costing";
 
 const rule = (kind: CostRule["kind"], match_key: string, amount: number, unit: CostRule["unit"] = "fixed", over: Partial<CostRule> = {}): CostRule => ({
@@ -123,6 +137,136 @@ describe("computeCostSheet", () => {
     const sheet = computeCostSheet({ total: 0, shipping_total: 0, items: [] }, RULES);
     expect(sheet.margin_pct).toBe(0);
   });
+
+  it("tags every line with its kind and match key", () => {
+    const sheet = computeCostSheet(ORDER, RULES, { commission_pct: 10 });
+    const by = Object.fromEntries(sheet.lines.map((l) => [l.key, l]));
+    expect(by["frame:FX2043-BLK"]).toMatchObject({ kind: "frame_sku", match_key: "FX2043-BLK" });
+    expect(by["frame:CASE-01"]).toMatchObject({ kind: "frame_brand", match_key: "case" });
+    expect(by["lens_design:sv"].kind).toBe("lens_design");
+    expect(by["lens_photo:photo-grey"]).toMatchObject({ kind: "lens_photo", match_key: "photo-grey" }); // unmatched, still typed
+    expect(by["order_fixed:lab"].kind).toBe("order_fixed");
+    expect(by["shipping:actual"].kind).toBe("shipping");
+    expect(by["order_percent:payment_fee"].kind).toBe("order_percent");
+    expect(by["payment_fixed:payment_fee_fixed"].kind).toBe("payment_fixed");
+    expect(by["order_percent:seller_commission"].kind).toBe("seller_commission");
+    expect(sheet.lines.every((l) => lineKind(l) === l.kind)).toBe(true);
+    expect(sheet.lines.every((l) => Boolean(LINE_KIND_LABEL[l.kind]))).toBe(true);
+    // Manual lines are "manual"; the key fallback still classifies old stored lines.
+    const manual = computeCostSheet(ORDER, RULES, null, { lines: [{ key: "frame:X", label: "M", amount: 1, qty: 1 }], updated_at: "", updated_by: null });
+    expect(manual.lines[0].kind).toBe("manual");
+    expect(lineKind({ key: "frame:X", source: "rule" })).toBe("frame_brand");
+    expect(lineKind({ key: "lens_ar:ar-blue", source: "rule" })).toBe("lens_ar");
+    expect(lineKind({ key: "order_percent:seller_commission", source: "seller" })).toBe("seller_commission");
+  });
+
+  it("allocates free percentages of the sale (rent, service, webmaster, taxes) as cost lines", () => {
+    const rules = [
+      ...RULES,
+      rule("order_percent", "rent", 10, "percent", { label: "Alquiler" }),
+      rule("order_percent", "customer_service", 5, "percent", { label: "Atención al cliente" }),
+    ];
+    const by = Object.fromEntries(computeCostSheet(ORDER, rules).lines.map((l) => [l.key, l]));
+    expect(by["order_percent:rent"]).toMatchObject({ label: "Alquiler", amount: 21, subtotal: 21, kind: "order_percent" });
+    expect(by["order_percent:customer_service"].amount).toBe(10.5);
+  });
+
+  it("never counts the profit target as a cost, but reports it next to the margin", () => {
+    const rules = [...RULES, rule("order_percent", PROFIT_TARGET_KEY, 30, "percent", { label: "Ganancia objetivo" })];
+    const sheet = computeCostSheet(ORDER, rules);
+    expect(sheet.lines.some((l) => l.key.includes(PROFIT_TARGET_KEY))).toBe(false);
+    expect(sheet.cost_total).toBe(68.89); // identical to the sheet without the target
+    expect(profitTargetPct(rules)).toBe(30);
+    expect(profitTargetFor(profitTargetPct(rules), sheet.revenue, sheet.margin)).toEqual({
+      profit_target_pct: 30,
+      profit_target_amount: 63, // 30 % of 210
+      profit_gap: 78.11, // 141.11 − 63: above target
+    });
+    // Below target → negative gap.
+    expect(profitTargetFor(30, 100, 20)).toEqual({ profit_target_pct: 30, profit_target_amount: 30, profit_gap: -10 });
+    // No target (absent, inactive or still 0) → nulls, never zeros that look like a goal.
+    expect(profitTargetPct(RULES)).toBeNull();
+    expect(profitTargetPct([rule("order_percent", PROFIT_TARGET_KEY, 30, "percent", { active: false })])).toBeNull();
+    expect(profitTargetPct([rule("order_percent", PROFIT_TARGET_KEY, 0, "percent")])).toBeNull();
+    expect(profitTargetFor(null, 210, 141.11)).toEqual({ profit_target_pct: null, profit_target_amount: null, profit_gap: null });
+  });
+});
+
+describe("breakdown helpers", () => {
+  const sheet = computeCostSheet(ORDER, RULES, { commission_pct: 10 });
+
+  it("groups lines per concept (kind:match_key; seller commission and manual lines by kind)", () => {
+    const keys = sheet.lines.map(conceptKey);
+    expect(keys).toEqual(expect.arrayContaining(["frame_sku:FX2043-BLK", "frame_brand:case", "lens_design:sv", "order_fixed:lab", "shipping:actual", "order_percent:payment_fee", "seller_commission"]));
+    const manual: CostLine = { key: "x", kind: "manual", label: "Extra", amount: 2, qty: 1, subtotal: 2, source: "manual" };
+    expect(conceptKey(manual)).toBe("manual");
+    const condensed = condenseLines([...sheet.lines, manual, { ...manual, subtotal: 3 }]);
+    expect(condensed[0].amount).toBeGreaterThanOrEqual(condensed[condensed.length - 1].amount);
+    expect(condensed.find((c) => c.key === "manual")).toMatchObject({ kind: "manual", label: "Ajustes manuales", amount: 5 });
+    expect(condensed.find((c) => c.key === "seller_commission")).toMatchObject({ label: "Comisión de vendedores", amount: 21 });
+    expect(condensed.find((c) => c.key === "frame_sku:FX2043-BLK")).toMatchObject({ kind: "frame_sku", amount: 22 });
+  });
+
+  it("renders the sheet's text summary as 'label amount' pairs", () => {
+    expect(costBreakdownText([{ label: "Montura Peachtree", subtotal: 12 }, { label: "Envío real", subtotal: 28 }, { label: "Vendedor ANA (10%)", subtotal: 4.3 }])).toBe(
+      "Montura Peachtree 12.00 · Envío real 28.00 · Vendedor ANA (10%) 4.30"
+    );
+    expect(costBreakdownText([])).toBe("");
+    expect(costBreakdownText(null)).toBe("");
+    expect(costBreakdownText(sheet.lines)).toContain("Comisión del vendedor (10%) 21.00");
+  });
+
+  it("sums item totals per brand and names known ones", () => {
+    const brands = orderBrands([
+      { brand_slug: "peachtree", total: 120 } as never,
+      { brand_slug: "case", total: 15 } as never,
+      { brand_slug: "Peachtree", total: 30 } as never,
+      { brand_slug: null, total: 5 } as never,
+    ]);
+    expect(brands).toEqual([
+      { slug: "peachtree", name: "Peachtree", revenue: 150 },
+      { slug: "case", name: "Cases (estuches)", revenue: 15 },
+      { slug: "?", name: "?", revenue: 5 },
+    ]);
+  });
+
+  it("keys a day in the given time zone", () => {
+    expect(dayKey("2026-10-19T02:00:00Z", "UTC")).toBe("2026-10-19");
+    expect(dayKey("2026-10-19T02:00:00Z", "America/New_York")).toBe("2026-10-18");
+    expect(dayKey("nope", "UTC")).toBe("");
+  });
+
+  it("summarizes a window per concept, seller, day and brand", () => {
+    const items = (brand: string, total: number) => [{ title: "F", quantity: 1, sku: null, brand_slug: brand, lens: {}, total } as never];
+    const mk = (id: string, created_at: string, seller_code: string | null, brand: string, total: number, pct = 0): { order: never; sheet: CostSheet } => {
+      const its = items(brand, total);
+      const sheet = computeCostSheet({ total, shipping_total: 0, paid: true, items: its }, [rule("frame_brand", "flexure", 18), rule("frame_brand", "case", 2)], pct ? { commission_pct: pct } : null);
+      return { order: { id, display_id: 1, created_at, seller_code, seller_source: null, items: its, customer_name: null } as never, sheet };
+    };
+    const entries = [
+      mk("o1", "2026-10-01T10:00:00Z", "ANA", "flexure", 100, 10),
+      mk("o2", "2026-10-01T18:00:00Z", "ANA", "flexure", 50, 10),
+      mk("o3", "2026-10-02T10:00:00Z", null, "case", 20),
+    ];
+    const out = summarizeCostSheets(entries, new Map([["ANA", { name: "Ana", commission_pct: 10 }]]), "UTC");
+    expect(out.by_kind).toEqual([
+      { kind: "frame_brand", key: "frame_brand:flexure", label: "frame_brand flexure", amount: 36 },
+      { kind: "seller_commission", key: "seller_commission", label: "Comisión de vendedores", amount: 15 },
+      { kind: "frame_brand", key: "frame_brand:case", label: "frame_brand case", amount: 2 },
+    ]);
+    expect(out.by_seller).toEqual([
+      { code: "ANA", name: "Ana", orders: 2, revenue: 150, cost: 51, margin: 99, commission: 15 },
+      { code: null, name: "none", orders: 1, revenue: 20, cost: 2, margin: 18, commission: 0 },
+    ]);
+    expect(out.by_day).toEqual([
+      { date: "2026-10-01", orders: 2, revenue: 150, cost: 51, margin: 99 },
+      { date: "2026-10-02", orders: 1, revenue: 20, cost: 2, margin: 18 },
+    ]);
+    expect(out.by_brand).toEqual([
+      { slug: "flexure", name: "Flexure", orders: 2, revenue: 150, frame_cost: 36, margin_share: 114 },
+      { slug: "case", name: "Cases (estuches)", orders: 1, revenue: 20, frame_cost: 2, margin_share: 18 },
+    ]);
+  });
 });
 
 describe("validateCostRules", () => {
@@ -136,6 +280,20 @@ describe("validateCostRules", () => {
     expect(sku.label).toContain("FX2043-BLK");
     expect(brand.match_key).toBe("flexure");
     expect(fee).toMatchObject({ match_key: "payment_fee", unit: "percent" });
+  });
+
+  it("accepts the owner's own percentage allocations and the profit target", () => {
+    const [service, rent, target] = validateCostRules([
+      { kind: "order_percent", match_key: "Atención al cliente", label: "Atención al cliente", amount: 5 },
+      { kind: "order_percent", match_key: "rent", label: "Alquiler", amount: "10", unit: "fixed" },
+      { kind: "order_percent", match_key: "profit_target", label: "Ganancia objetivo", amount: 30 },
+    ]);
+    expect(service).toMatchObject({ match_key: "atencion_al_cliente", label: "Atención al cliente", unit: "percent", amount: 5 });
+    expect(rent).toMatchObject({ match_key: "rent", unit: "percent", amount: 10 }); // order_percent is always a percent
+    expect(target).toMatchObject({ match_key: "profit_target", unit: "percent", amount: 30 });
+    expect(normalizeMatchKey("order_percent", "  Web-master / SEO ")).toBe("web_master_seo");
+    expect(() => validateCostRules([{ kind: "order_percent", match_key: "a".repeat(41), amount: 1 }])).toThrow(CostRuleError);
+    expect(() => validateCostRules([{ kind: "order_percent", match_key: "a".repeat(40), amount: 1 }])).not.toThrow();
   });
 
   it("refuses bad kinds, bad amounts, duplicates and the reserved seller key", () => {

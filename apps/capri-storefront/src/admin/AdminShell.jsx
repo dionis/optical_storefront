@@ -15,12 +15,9 @@ export const NAV_GROUPS = [
     { key: "orders", icon: "orders" },
     { key: "costs", icon: "costs" },
     { key: "sellers", icon: "sellers" },
-    { key: "overview", icon: "overview" },
-    { key: "sales", icon: "sales" },
   ] },
   { key: "catalog", items: [
     { key: "products", icon: "products" },
-    { key: "prices", icon: "prices" },
   ] },
   { key: "admin", items: [
     { key: "team", icon: "team" },

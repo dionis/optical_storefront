@@ -16,8 +16,16 @@ export const RULE_GROUPS = [
   { key: "frames", kinds: ["frame_brand", "frame_sku"], icon: "glasses" },
   { key: "lenses", kinds: ["lens_design", "lens_material", "lens_photo", "lens_ar"], icon: "layers" },
   { key: "order", kinds: ["order_fixed", "shipping"], icon: "box" },
-  { key: "fees", kinds: ["order_percent", "payment_fixed"], icon: "percent" },
+  { key: "fees", kinds: ["order_percent", "payment_fixed"], icon: "percent", only: ["payment_fee", "payment_fee_fixed"] },
 ];
+/** Claves de porcentaje que NO son "distribución" (van en Comisiones de pago). */
+export const FEE_KEYS = ["payment_fee", "payment_fee_fixed"];
+export const PROFIT_TARGET_KEY = "profit_target";
+/** Reglas de distribución por porcentaje (renta, atención al cliente, webmaster, impuestos…). */
+export const isAllocationRule = (r) => r.kind === "order_percent" && !FEE_KEYS.includes(r.match_key) && r.match_key !== PROFIT_TARGET_KEY;
+export const isProfitTarget = (r) => r.kind === "order_percent" && r.match_key === PROFIT_TARGET_KEY;
+/** Plantillas sugeridas al crear la distribución (claves de diccionario). */
+export const ALLOCATION_SUGGESTIONS = ["customer_service", "rent", "webmaster", "taxes", "marketing", "other"];
 
 /** Semáforo de margen: ≥40 % sano, 20–40 % justo, <20 % alerta. */
 export function marginTone(pct) {

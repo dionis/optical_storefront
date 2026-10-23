@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { loadCache, saveCache } from "../lib/appCache.js";
 import { Link, useNavigate } from "react-router-dom";
-import { getReferral } from "../data/referral.js";
+import { getReferral, getReferralSource } from "../data/referral.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useCart } from "../components/CartContext.jsx";
 import {
@@ -241,7 +241,7 @@ export default function MedusaCheckout() {
         email: f.email,
         shipping_address: shippingAddress(),
         // Preferencias que el backend usará para notificar (email/SMS) + idioma.
-        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined },
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined, seller_source: getReferral() ? getReferralSource() : undefined },
       });
       // Cotización FedEx/DHL del servidor (gratis desde el umbral). Si la ruta
       // aún no está desplegada, quoteShipping() devuelve null y caemos al flujo
@@ -285,7 +285,7 @@ export default function MedusaCheckout() {
     setErr(""); setBusy(true);
     try {
       await updateContact({
-        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined },
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined, seller_source: getReferral() ? getReferralSource() : undefined },
       });
       if (carriers && carrierSel) await selectCarrier(carrierSel);
       else if (shipId) await setShippingMethod(shipId);
@@ -313,7 +313,7 @@ export default function MedusaCheckout() {
       // are still on screen at that point — had the change silently dropped and
       // the order carried whatever was set on the earlier click.
       await updateContact({
-        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined },
+        metadata: { phone: f.phone || null, notify_email: notify.email, notify_sms: notify.sms, locale: lang, seller_code: getReferral() || undefined, seller_source: getReferral() ? getReferralSource() : undefined },
       });
       // Transportista elegido (FedEx/DHL, re-cotizado en servidor) o, de
       // respaldo, la opción Medusa clásica.

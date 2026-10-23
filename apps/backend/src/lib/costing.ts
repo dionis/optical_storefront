@@ -56,8 +56,43 @@ export const KIND_LABEL: Record<CostKind, string> = {
 /** `order_percent` match_key reserved for the seller's commission — never a rule. */
 export const SELLER_COMMISSION_KEY = "seller_commission";
 
+/**
+ * `order_percent` match_key for the owner's target profit ("I want to keep
+ * 30 % of every sale"). It is saved like any other percentage so the panel can
+ * edit it in the same table, but it is NOT a cost: `computeCostSheet` skips it
+ * and the routes expose it as `profit_target_pct` / `profit_target_amount` /
+ * `profit_gap` next to the margin instead.
+ */
+export const PROFIT_TARGET_KEY = "profit_target";
+
 export function isCostKind(value: unknown): value is CostKind {
   return typeof value === "string" && (COST_KINDS as readonly string[]).includes(value);
+}
+
+export function isProfitTargetRule(rule: Pick<CostRule, "kind" | "match_key">): boolean {
+  return rule.kind === "order_percent" && normalizeMatchKey("order_percent", rule.match_key) === PROFIT_TARGET_KEY;
+}
+
+/** The active profit-target percentage among the rules; null when none is defined (or it is still 0). */
+export function profitTargetPct(rules: CostRule[]): number | null {
+  const rule = rules.find((r) => r.active && isProfitTargetRule(r));
+  const pct = rule ? round2(num(rule.amount)) : 0;
+  return pct > 0 ? pct : null;
+}
+
+/** How the target compares with what a sale (or a period) actually left. */
+export interface ProfitTarget {
+  profit_target_pct: number | null;
+  /** revenue × pct / 100, 2 dp; null when no target. */
+  profit_target_amount: number | null;
+  /** margin − profit_target_amount (negative = below target); null when no target. */
+  profit_gap: number | null;
+}
+
+export function profitTargetFor(pct: number | null, revenue: number, margin: number): ProfitTarget {
+  if (pct === null) return { profit_target_pct: null, profit_target_amount: null, profit_gap: null };
+  const amount = round2((round2(num(revenue)) * pct) / 100);
+  return { profit_target_pct: pct, profit_target_amount: amount, profit_gap: round2(round2(num(margin)) - amount) };
 }
 
 export interface CostRule {
@@ -72,9 +107,14 @@ export interface CostRule {
   notes?: string | null;
 }
 
+/** What a line is, for the API and the breakdowns (`lineKind`). */
+export type CostLineKind = CostKind | "seller_commission" | "manual";
+
 export interface CostLine {
   /** Stable key, e.g. "frame:FX2043-BLK", "lens_design:sv", "order_percent:payment_fee". */
   key: string;
+  /** Concept the line belongs to — a rule kind, the seller's commission or a manual adjustment. */
+  kind: CostLineKind;
   label: string;
   /** Unit amount (currency, or the computed amount for percent lines). */
   amount: number;
@@ -82,6 +122,8 @@ export interface CostLine {
   subtotal: number;
   source: "rule" | "manual" | "order" | "seller";
   rule_id?: string;
+  /** The rule's match key (brand slug, SKU, lens code, fixed-cost slug…) — what `conceptKey` groups by. */
+  match_key?: string;
   /** True when a rule matched but its amount is 0 ("sin costo definido"). */
   undefined_cost?: boolean;
 }
@@ -223,11 +265,22 @@ export class CostRuleError extends Error {
   }
 }
 
-/** Case per kind: SKUs uppercase, slugs/codes lowercase, free labels trimmed. */
+/**
+ * Case per kind: SKUs uppercase, slugs/codes lowercase, free keys (per-order
+ * fixed costs and percentages the owner names himself: "Atención al cliente"
+ * → "atencion_al_cliente") folded to a slug.
+ */
 export function normalizeMatchKey(kind: CostKind, value: unknown): string {
   const s = String(value ?? "").trim();
   if (kind === "frame_sku") return s.toUpperCase();
-  if (kind === "order_fixed" || kind === "order_percent") return s.toLowerCase().replace(/\s+/g, "_");
+  if (kind === "order_fixed" || kind === "order_percent") {
+    return s
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
   return s.toLowerCase();
 }
 
@@ -240,7 +293,9 @@ export function validateCostRules(input: unknown[]): CostRule[] {
     const kind = r["kind"];
     if (!isCostKind(kind)) throw new CostRuleError("bad_kind", `Unknown rule kind '${String(kind)}'.`);
     const match_key = normalizeMatchKey(kind, r["match_key"]);
-    if (!match_key || match_key.length > 80) throw new CostRuleError("bad_match_key", `Rule of kind '${kind}' needs a match key.`);
+    // Percent allocations are named by the owner (slug ≤ 40); the rest match catalog codes.
+    const maxKey = kind === "order_percent" ? 40 : 80;
+    if (!match_key || match_key.length > maxKey) throw new CostRuleError("bad_match_key", `Rule of kind '${kind}' needs a match key (at most ${maxKey} characters).`);
     if (kind === "order_percent" && match_key === SELLER_COMMISSION_KEY) {
       throw new CostRuleError("bad_match_key", "The seller commission is computed from the seller, not a rule.");
     }
@@ -296,12 +351,14 @@ function lineFromRule(rule: CostRule, key: string, qty: number, amountOverride?:
   const amount = round2(amountOverride ?? rule.amount);
   return {
     key,
+    kind: rule.kind,
     label: rule.label,
     amount,
     qty,
     subtotal: round2(amount * qty),
     source: "rule",
     rule_id: rule.id,
+    match_key: normalizeMatchKey(rule.kind, rule.match_key),
     undefined_cost: amount === 0,
   };
 }
@@ -326,7 +383,7 @@ export function computeCostSheet(
     const lines: CostLine[] = manual.lines.map((l) => {
       const amount = round2(num(l.amount));
       const qty = Math.max(0, num(l.qty) || 1);
-      return { key: String(l.key ?? ""), label: String(l.label ?? ""), amount, qty, subtotal: round2(amount * qty), source: "manual" };
+      return { key: String(l.key ?? ""), kind: "manual", label: String(l.label ?? ""), amount, qty, subtotal: round2(amount * qty), source: "manual" };
     });
     const cost_total = round2(lines.reduce((a, l) => a + l.subtotal, 0));
     const margin = round2(revenue - cost_total);
@@ -348,11 +405,13 @@ export function computeCostSheet(
     } else {
       lines.push({
         key: `frame:${sku ?? brand ?? "?"}`,
+        kind: "frame_brand",
         label: `Montura ${item.title ?? sku ?? brand ?? ""}`.trim(),
         amount: 0,
         qty,
         subtotal: 0,
         source: "rule",
+        match_key: brand ?? sku ?? "?",
         undefined_cost: true,
       });
     }
@@ -367,11 +426,12 @@ export function computeCostSheet(
       if (!code || code === "frame-only") continue;
       const rule = idx.get(`${kind}:${normalizeMatchKey(kind, code)}`);
       if (rule) lines.push(lineFromRule(rule, `${kind}:${code}`, qty));
-      else lines.push({ key: `${kind}:${code}`, label: `${KIND_LABEL[kind]} ${code}`, amount: 0, qty, subtotal: 0, source: "rule", undefined_cost: true });
+      else lines.push({ key: `${kind}:${code}`, kind, label: `${KIND_LABEL[kind]} ${code}`, amount: 0, qty, subtotal: 0, source: "rule", match_key: normalizeMatchKey(kind, code), undefined_cost: true });
     }
   }
 
-  const active = rules.filter((r) => r.active);
+  // The profit target is a goal, not a cost: it never becomes a line.
+  const active = rules.filter((r) => r.active && !isProfitTargetRule(r));
   for (const r of active.filter((x) => x.kind === "order_fixed")) {
     lines.push(lineFromRule(r, `order_fixed:${r.match_key}`, 1));
   }
@@ -396,7 +456,16 @@ export function computeCostSheet(
   }
   if (seller && num(seller.commission_pct) > 0) {
     const amount = round2((revenue * num(seller.commission_pct)) / 100);
-    lines.push({ key: `order_percent:${SELLER_COMMISSION_KEY}`, label: `Comisión del vendedor (${num(seller.commission_pct)}%)`, amount, qty: 1, subtotal: amount, source: "seller" });
+    lines.push({
+      key: `order_percent:${SELLER_COMMISSION_KEY}`,
+      kind: "seller_commission",
+      label: `Comisión del vendedor (${num(seller.commission_pct)}%)`,
+      amount,
+      qty: 1,
+      subtotal: amount,
+      source: "seller",
+      match_key: SELLER_COMMISSION_KEY,
+    });
   }
 
   const cost_total = round2(lines.reduce((a, l) => a + l.subtotal, 0));
@@ -409,28 +478,173 @@ export function undefinedCostCount(sheet: CostSheet): number {
   return sheet.lines.filter((l) => l.undefined_cost).length;
 }
 
-/** Kind of a line from its key (for the by-kind breakdown). */
-export function lineKind(line: CostLine): string {
-  const [head] = line.key.split(":");
-  if (head === "frame") return "frame";
+/**
+ * Kind of a line. Lines computed here always carry `kind`; the key/source
+ * fallback covers lines read from an older stored sheet or hand-built tests.
+ */
+export function lineKind(line: Pick<CostLine, "key" | "source"> & { kind?: CostLineKind }): CostLineKind {
+  if (line.kind) return line.kind;
+  if (line.source === "manual") return "manual";
   if (line.source === "seller") return "seller_commission";
-  return head || "other";
+  const [head] = line.key.split(":");
+  if (head === "frame") return "frame_brand";
+  return isCostKind(head) ? head : "manual";
 }
 
-export const LINE_KIND_LABEL: Record<string, string> = {
-  frame: "Monturas",
-  lens_design: "Lentes (diseño)",
-  lens_material: "Lentes (material)",
-  lens_photo: "Fotocromáticos",
-  lens_ar: "Antirreflejos",
-  order_fixed: "Costos por pedido",
-  order_percent: "Comisiones de cobro",
-  payment_fixed: "Comisión fija de pago",
-  shipping: "Envío",
+export const LINE_KIND_LABEL: Record<CostLineKind, string> = {
+  ...KIND_LABEL,
   seller_commission: "Comisión de vendedores",
   manual: "Ajustes manuales",
-  other: "Otros",
 };
+
+/**
+ * Concept a line is grouped under in the summary: `${kind}:${match_key}` for
+ * rule-driven lines ("frame_brand:flexure", "order_percent:rent"), the bare
+ * kind for the seller's commission and manual adjustments.
+ */
+export function conceptKey(line: CostLine): string {
+  const kind = lineKind(line);
+  if (kind === "seller_commission" || kind === "manual") return kind;
+  const match = line.match_key ?? line.key.split(":").slice(1).join(":");
+  return `${kind}:${match}`;
+}
+
+export interface ConceptTotal {
+  kind: CostLineKind;
+  key: string;
+  label: string;
+  amount: number;
+}
+
+/** Lines of one sheet condensed per concept (same key → one row, amounts summed), biggest first. */
+export function condenseLines(lines: CostLine[]): ConceptTotal[] {
+  const map = new Map<string, ConceptTotal>();
+  for (const l of lines) {
+    const key = conceptKey(l);
+    const kind = lineKind(l);
+    const row = map.get(key) ?? { kind, key, label: kind === "seller_commission" || kind === "manual" ? LINE_KIND_LABEL[kind] : l.label, amount: 0 };
+    row.amount = round2(row.amount + l.subtotal);
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => b.amount - a.amount || a.key.localeCompare(b.key));
+}
+
+/**
+ * One line of the sheet's text summary ("Montura Peachtree 12.00 · Envío real
+ * 28.00 · Vendedor ANA (10%) 4.30"): label + subtotal per line, joined by
+ * " · ". Empty when there are no lines.
+ */
+export function costBreakdownText(lines: Array<Pick<CostLine, "label" | "subtotal">> | null | undefined): string {
+  if (!lines?.length) return "";
+  return lines.map((l) => `${String(l.label ?? "").trim() || "—"} ${round2(num(l.subtotal)).toFixed(2)}`).join(" · ");
+}
+
+// ── Summary aggregation (pure) ───────────────────────────────────────────────
+
+/** The slice of a board order + its sheet that the summary groups. */
+export interface SummaryEntry {
+  order: Pick<BoardOrder, "id" | "display_id" | "created_at" | "seller_code" | "seller_source" | "items"> & { customer_name: string | null };
+  sheet: CostSheet;
+}
+
+export interface SummaryBySeller { code: string | null; name: string; orders: number; revenue: number; cost: number; margin: number; commission: number }
+export interface SummaryByDay { date: string; orders: number; revenue: number; cost: number; margin: number }
+export interface SummaryByBrand { slug: string; name: string; orders: number; revenue: number; frame_cost: number; margin_share: number }
+export interface SummaryBrandRevenue { slug: string; name: string; revenue: number }
+
+export function brandName(slug: string): string {
+  return KNOWN_BRANDS.find((b) => b.slug === slug)?.name ?? slug;
+}
+
+/** Item totals per brand slug of one order (items without a brand go under "?"). */
+export function orderBrands(items: BoardOrder["items"]): SummaryBrandRevenue[] {
+  const map = new Map<string, number>();
+  for (const it of items ?? []) {
+    const slug = String(it.brand_slug ?? "").toLowerCase() || "?";
+    map.set(slug, round2((map.get(slug) ?? 0) + num(it.total)));
+  }
+  return [...map.entries()].map(([slug, revenue]) => ({ slug, name: brandName(slug), revenue })).sort((a, b) => b.revenue - a.revenue || a.slug.localeCompare(b.slug));
+}
+
+/** "YYYY-MM-DD" of an instant in the given IANA zone (UTC when the zone is unknown). */
+export function dayKey(value: unknown, timeZone = process.env.GSHEET_TIMEZONE || "UTC"): string {
+  const d = value instanceof Date ? value : new Date(String(value ?? ""));
+  if (Number.isNaN(d.getTime())) return "";
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+  }
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
+ * Totals of a window of sheets, per concept / seller / day / brand. Pure, so
+ * the grouping is testable on literals; the route only loads and iterates.
+ */
+export function summarizeCostSheets(
+  entries: SummaryEntry[],
+  sellers: Map<string, { name?: string; commission_pct: number }>,
+  timeZone?: string
+): { by_kind: ConceptTotal[]; by_seller: SummaryBySeller[]; by_day: SummaryByDay[]; by_brand: SummaryByBrand[] } {
+  const concepts = new Map<string, ConceptTotal>();
+  const bySeller = new Map<string, SummaryBySeller>();
+  const byDay = new Map<string, SummaryByDay>();
+  const byBrand = new Map<string, SummaryByBrand>();
+
+  for (const { order, sheet } of entries) {
+    for (const c of condenseLines(sheet.lines)) {
+      const row = concepts.get(c.key) ?? { ...c, amount: 0 };
+      row.amount = round2(row.amount + c.amount);
+      concepts.set(c.key, row);
+    }
+
+    const code = order.seller_code ?? null;
+    const sellerKey = code ?? "none";
+    const seller = code ? sellers.get(code) : undefined;
+    const s = bySeller.get(sellerKey) ?? { code, name: code ? seller?.name ?? code : "none", orders: 0, revenue: 0, cost: 0, margin: 0, commission: 0 };
+    s.orders++;
+    s.revenue = round2(s.revenue + sheet.revenue);
+    s.cost = round2(s.cost + sheet.cost_total);
+    s.margin = round2(s.margin + sheet.margin);
+    s.commission = round2(s.commission + sheet.lines.filter((l) => lineKind(l) === "seller_commission").reduce((a, l) => a + l.subtotal, 0));
+    bySeller.set(sellerKey, s);
+
+    const date = dayKey(order.created_at, timeZone);
+    const d = byDay.get(date) ?? { date, orders: 0, revenue: 0, cost: 0, margin: 0 };
+    d.orders++;
+    d.revenue = round2(d.revenue + sheet.revenue);
+    d.cost = round2(d.cost + sheet.cost_total);
+    d.margin = round2(d.margin + sheet.margin);
+    byDay.set(date, d);
+
+    // Frame cost per brand: frame lines keyed "frame:<sku|brand>" matched to
+    // the item they came from (same order as the items).
+    const frameLines = sheet.lines.filter((l) => l.key.startsWith("frame:"));
+    for (const b of orderBrands(order.items)) {
+      const row = byBrand.get(b.slug) ?? { slug: b.slug, name: b.name, orders: 0, revenue: 0, frame_cost: 0, margin_share: 0 };
+      row.orders++;
+      row.revenue = round2(row.revenue + b.revenue);
+      byBrand.set(b.slug, row);
+    }
+    (order.items ?? []).forEach((it, i) => {
+      const slug = String(it.brand_slug ?? "").toLowerCase() || "?";
+      const line = frameLines[i];
+      const row = byBrand.get(slug);
+      if (row && line) row.frame_cost = round2(row.frame_cost + line.subtotal);
+    });
+  }
+  for (const row of byBrand.values()) row.margin_share = round2(row.revenue - row.frame_cost);
+
+  return {
+    by_kind: [...concepts.values()].sort((a, b) => b.amount - a.amount || a.key.localeCompare(b.key)),
+    by_seller: [...bySeller.values()].sort((a, b) => b.revenue - a.revenue || (a.code ?? "zzz").localeCompare(b.code ?? "zzz")),
+    by_day: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    by_brand: [...byBrand.values()].sort((a, b) => b.revenue - a.revenue || a.slug.localeCompare(b.slug)),
+  };
+}
 
 // ── Container helpers ────────────────────────────────────────────────────────
 
@@ -545,17 +759,17 @@ export async function costSheetForOrder(
 /** Rules + seller commission map in one call; empty on failure (callers degrade). */
 export async function loadCostingContext(
   container: MedusaContainer
-): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number }> }> {
+): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number; name: string }> }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   let rules: CostRule[] = [];
-  const sellerByCode = new Map<string, { commission_pct: number }>();
+  const sellerByCode = new Map<string, { commission_pct: number; name: string }>();
   try {
     rules = await listCostRules(container);
   } catch (error) {
     logger.warn(`[costing] rules unavailable: ${(error as Error).message}`);
   }
   try {
-    for (const s of await listSellers(container)) sellerByCode.set(s.code, { commission_pct: s.commission_pct });
+    for (const s of await listSellers(container)) sellerByCode.set(s.code, { commission_pct: s.commission_pct, name: s.name });
   } catch (error) {
     logger.warn(`[costing] sellers unavailable: ${(error as Error).message}`);
   }

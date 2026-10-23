@@ -3,12 +3,15 @@
  * functions only — no database, no HTTP.
  */
 import {
+  SELLER_SOURCES,
   customerInitials,
   deriveSellerCode,
   groupSellerStats,
   normalizeSellerCode,
+  normalizeSellerSource,
   parseCommissionPct,
   sellerLinks,
+  sellerSourceOf,
   signSellerToken,
   verifySellerToken,
 } from "../src/lib/sellers";
@@ -38,6 +41,25 @@ describe("normalizeSellerCode", () => {
     expect(normalizeSellerCodeLoose("a")).toBe("A");
     expect(normalizeSellerCodeLoose("")).toBeNull();
     expect(normalizeSellerCodeLoose(undefined)).toBeNull();
+  });
+});
+
+describe("normalizeSellerSource", () => {
+  it("keeps a lowercase a-z token of at most 20 characters", () => {
+    expect(normalizeSellerSource("instagram")).toBe("instagram");
+    expect(normalizeSellerSource(" TikTok ")).toBe("tiktok");
+    expect(normalizeSellerSource("x")).toBe("x");
+    expect(normalizeSellerSource("what's-app 2")).toBe("whatsapp");
+    expect(normalizeSellerSource("a".repeat(30))).toHaveLength(20);
+  });
+
+  it("is null when nothing is left, and the stats fall back to the plain link", () => {
+    expect(normalizeSellerSource("")).toBeNull();
+    expect(normalizeSellerSource("123")).toBeNull();
+    expect(normalizeSellerSource(undefined)).toBeNull();
+    expect(normalizeSellerSource(null)).toBeNull();
+    expect(sellerSourceOf({ seller_source: null })).toBe("link");
+    expect(sellerSourceOf({ seller_source: "Facebook" })).toBe("facebook");
   });
 });
 
@@ -92,6 +114,16 @@ describe("seller tokens", () => {
     const token = decodeURIComponent(links.dashboard_url.split("t=")[1]);
     expect(verifySellerToken(token)).toEqual({ sid: "sel_1", v: 3, p: "seller" });
   });
+
+  it("builds one tagged referral link per network (the plain link for 'link')", () => {
+    const { social_links, referral_url } = sellerLinks({ id: "sel_1", code: "ANA", token_version: 1 });
+    expect(Object.keys(social_links).sort()).toEqual([...SELLER_SOURCES].sort());
+    expect(social_links.instagram).toBe("https://shop.example/?ref=ANA&src=instagram");
+    expect(social_links.whatsapp).toBe("https://shop.example/?ref=ANA&src=whatsapp");
+    expect(social_links.x).toBe("https://shop.example/?ref=ANA&src=x");
+    expect(social_links.link).toBe(referral_url);
+    expect(social_links.link).toBe("https://shop.example/?ref=ANA");
+  });
 });
 
 describe("parseCommissionPct", () => {
@@ -114,11 +146,11 @@ describe("groupSellerStats", () => {
     { id: "s2", code: "LUIS", name: "Luis", commission_pct: 5, active: false },
   ];
   const orders = [
-    { seller_code: "ANA", total: 100, terminal: null, created_at: "2026-10-01T10:00:00Z" },
-    { seller_code: "ana", total: 50.5, terminal: null, created_at: "2026-10-05T10:00:00Z" },
-    { seller_code: "ANA", total: 999, terminal: "canceled" as const, created_at: "2026-10-06T10:00:00Z" },
-    { seller_code: null, total: 30, terminal: null, created_at: "2026-10-02T10:00:00Z" },
-    { seller_code: "GHOST", total: 20, terminal: null, created_at: "2026-10-03T10:00:00Z" },
+    { seller_code: "ANA", total: 100, terminal: null, created_at: "2026-10-01T10:00:00Z", seller_source: "instagram" },
+    { seller_code: "ana", total: 50.5, terminal: null, created_at: "2026-10-05T10:00:00Z", seller_source: null },
+    { seller_code: "ANA", total: 999, terminal: "canceled" as const, created_at: "2026-10-06T10:00:00Z", seller_source: "instagram" },
+    { seller_code: null, total: 30, terminal: null, created_at: "2026-10-02T10:00:00Z", seller_source: "tiktok" },
+    { seller_code: "GHOST", total: 20, terminal: null, created_at: "2026-10-03T10:00:00Z", seller_source: "facebook" },
   ];
 
   it("sums revenue per seller, skips terminal orders and computes the commission", () => {
@@ -133,6 +165,34 @@ describe("groupSellerStats", () => {
     expect(luis).toMatchObject({ orders: 0, revenue: 0, commission: 0, last_order_at: null, active: false });
     // No code, or a code that belongs to nobody, is unattributed.
     expect(unattributed).toEqual({ orders: 2, revenue: 50 });
+  });
+
+  it("groups each seller's sales by the network that brought them ('link' when untagged)", () => {
+    const { sellers: rows, sources } = groupSellerStats(orders, sellers);
+    const ana = rows.find((r) => r.code === "ANA")!;
+    expect(ana.by_source).toEqual([
+      { source: "instagram", orders: 1, revenue: 100 },
+      { source: "link", orders: 1, revenue: 50.5 },
+    ]);
+    expect(rows.find((r) => r.code === "LUIS")!.by_source).toEqual([]);
+    // Across attributed orders only: the canceled one and the unattributed ones never count.
+    expect(sources).toEqual([
+      { source: "instagram", orders: 1, revenue: 100 },
+      { source: "link", orders: 1, revenue: 50.5 },
+    ]);
+  });
+
+  it("sorts sources by revenue, then orders, then name", () => {
+    const { sources } = groupSellerStats(
+      [
+        { seller_code: "ANA", total: 10, terminal: null, created_at: "2026-10-01T10:00:00Z", seller_source: "tiktok" },
+        { seller_code: "ANA", total: 10, terminal: null, created_at: "2026-10-01T10:00:00Z", seller_source: "facebook" },
+        { seller_code: "ANA", total: 5, terminal: null, created_at: "2026-10-01T10:00:00Z", seller_source: "facebook" },
+        { seller_code: "ANA", total: 15, terminal: null, created_at: "2026-10-01T10:00:00Z", seller_source: "whatsapp" },
+      ],
+      sellers
+    );
+    expect(sources.map((s) => s.source)).toEqual(["facebook", "whatsapp", "tiktok"]);
   });
 });
 

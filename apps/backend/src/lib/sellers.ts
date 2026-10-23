@@ -3,7 +3,7 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import { SELLER_MODULE } from "../modules/seller/index";
 import type SellerModuleService from "../modules/seller/service";
 import { storefrontOrigin } from "./order-access";
-import { normalizeSellerCodeLoose, scanBoardWindow, type BoardOrder } from "./order-board";
+import { normalizeSellerCodeLoose, normalizeSellerSourceLoose, scanBoardWindow, type BoardOrder } from "./order-board";
 
 /**
  * Sellers (vendedores): referral codes, dashboard links and sales stats.
@@ -35,6 +35,27 @@ export function normalizeSellerCode(value: unknown): string | null {
 
 export function isValidSellerCode(value: unknown): value is string {
   return typeof value === "string" && CODE_RE.test(value);
+}
+
+// ── Traffic source (which network brought the sale) ──────────────────────────
+
+/**
+ * Sources the storefront can tag a referral with (`?ref=CODE&src=<source>` →
+ * `cart.metadata.seller_source` → `order.metadata`). `link` is the plain
+ * referral link with no network behind it, and the fallback for orders that
+ * carry a seller code but no source.
+ */
+export const SELLER_SOURCES = ["instagram", "facebook", "tiktok", "whatsapp", "telegram", "x", "email", "link", "other"] as const;
+export type SellerSource = (typeof SELLER_SOURCES)[number];
+export const DEFAULT_SELLER_SOURCE: SellerSource = "link";
+
+/**
+ * Source token as the cart carried it: lowercase a-z only, at most 20 chars,
+ * null when empty. Lenient like `normalizeSellerCodeLoose` — unknown tokens
+ * are kept (the stats group them as they come), never rejected.
+ */
+export function normalizeSellerSource(value: unknown): string | null {
+  return normalizeSellerSourceLoose(value);
 }
 
 /**
@@ -163,16 +184,26 @@ export interface SellerRow {
   deleted_at?: string | Date | null;
 }
 
-export interface Seller extends SellerRow {
+export interface SellerLinks {
   referral_url: string;
   dashboard_url: string;
+  /** One referral link per network, tagged with `src=` so the sale is attributed to it. */
+  social_links: Record<SellerSource, string>;
 }
 
-export function sellerLinks(seller: Pick<SellerRow, "id" | "code" | "token_version">): { referral_url: string; dashboard_url: string } {
+export interface Seller extends SellerRow, SellerLinks {}
+
+export function sellerLinks(seller: Pick<SellerRow, "id" | "code" | "token_version">): SellerLinks {
   const origin = storefrontOrigin();
+  const referral_url = `${origin}/?ref=${encodeURIComponent(seller.code)}`;
+  const social_links = {} as Record<SellerSource, string>;
+  for (const source of SELLER_SOURCES) {
+    social_links[source] = source === DEFAULT_SELLER_SOURCE ? referral_url : `${referral_url}&src=${source}`;
+  }
   return {
-    referral_url: `${origin}/?ref=${encodeURIComponent(seller.code)}`,
+    referral_url,
     dashboard_url: `${origin}/vendedor?t=${encodeURIComponent(signSellerToken(seller.id, seller.token_version))}`,
+    social_links,
   };
 }
 
@@ -260,6 +291,12 @@ export function countsForRevenue(order: Pick<BoardOrder, "terminal">): boolean {
   return !order.terminal;
 }
 
+export interface SourceStatRow {
+  source: string;
+  orders: number;
+  revenue: number;
+}
+
 export interface SellerStatRow {
   id: string;
   code: string;
@@ -270,6 +307,8 @@ export interface SellerStatRow {
   revenue: number;
   commission: number;
   last_order_at: string | null;
+  /** Where this seller's sales came from (orders without a source → "link"). */
+  by_source: SourceStatRow[];
 }
 
 export interface SellerStats {
@@ -277,10 +316,30 @@ export interface SellerStats {
   to: string | null;
   sellers: SellerStatRow[];
   unattributed: { orders: number; revenue: number };
+  /** Across every attributed (seller-matched) order in the window. */
+  sources: SourceStatRow[];
   truncated: boolean;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Source of an order for the stats: the stored token, or "link" when none. */
+export function sellerSourceOf(order: { seller_source?: string | null }): string {
+  return normalizeSellerSource(order.seller_source) ?? DEFAULT_SELLER_SOURCE;
+}
+
+/** Add an order to a per-source tally (mutates the map). */
+function tallySource(map: Map<string, SourceStatRow>, source: string, total: number): void {
+  const row = map.get(source) ?? { source, orders: 0, revenue: 0 };
+  row.orders++;
+  row.revenue = round2(row.revenue + total);
+  map.set(source, row);
+}
+
+/** Map → array, biggest revenue first (then alphabetically, so ties are stable). */
+export function sortedSources(map: Map<string, SourceStatRow>): SourceStatRow[] {
+  return [...map.values()].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders || a.source.localeCompare(b.source));
+}
 
 /** ISO string of a board `created_at` (which may arrive as a Date); "" when absent. */
 export function isoAt(value: unknown): string {
@@ -295,10 +354,11 @@ export function isoAt(value: unknown): string {
  * Every seller is listed, with zeros when they sold nothing.
  */
 export function groupSellerStats(
-  orders: Array<Pick<BoardOrder, "seller_code" | "total" | "terminal" | "created_at">>,
+  orders: Array<Pick<BoardOrder, "seller_code" | "total" | "terminal" | "created_at"> & { seller_source?: string | null }>,
   sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active">>
-): { sellers: SellerStatRow[]; unattributed: { orders: number; revenue: number } } {
+): { sellers: SellerStatRow[]; unattributed: { orders: number; revenue: number }; sources: SourceStatRow[] } {
   const byCode = new Map<string, SellerStatRow>();
+  const sourcesByCode = new Map<string, Map<string, SourceStatRow>>();
   for (const s of sellers) {
     byCode.set(s.code.toUpperCase(), {
       id: s.id,
@@ -310,9 +370,12 @@ export function groupSellerStats(
       revenue: 0,
       commission: 0,
       last_order_at: null,
+      by_source: [],
     });
+    sourcesByCode.set(s.code.toUpperCase(), new Map());
   }
   const unattributed = { orders: 0, revenue: 0 };
+  const allSources = new Map<string, SourceStatRow>();
   for (const o of orders) {
     if (!countsForRevenue(o)) continue;
     const code = normalizeSellerCodeLoose(o.seller_code);
@@ -327,13 +390,18 @@ export function groupSellerStats(
     row.revenue = round2(row.revenue + total);
     const at = isoAt(o.created_at) || null;
     if (at && (!row.last_order_at || at > row.last_order_at)) row.last_order_at = at;
+    const source = sellerSourceOf(o);
+    tallySource(sourcesByCode.get(row.code)!, source, total);
+    tallySource(allSources, source, total);
   }
   for (const row of byCode.values()) {
     row.commission = round2((row.revenue * row.commission_pct) / 100);
+    row.by_source = sortedSources(sourcesByCode.get(row.code) ?? new Map());
   }
   return {
     sellers: [...byCode.values()].sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, "es")),
     unattributed,
+    sources: sortedSources(allSources),
   };
 }
 

@@ -2,15 +2,16 @@
 // su enlace de referido para compartir en redes, cuántas ventas trajo y qué
 // comisión lleva. Sin login: el enlace firmado (que le da el dueño desde el
 // panel) es la credencial; el dueño puede regenerarlo cuando quiera.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { fetchSellerDashboard } from "../data/referral.js";
-import { shareLinks, copyText } from "../admin/adminSellers.js";
+import { copyText } from "../admin/adminSellers.js";
 import { money as fmtMoney, shortDate, STAGE_BY_KEY, TERMINAL_BY_KEY } from "../admin/adminOrders.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "../admin/icons.jsx";
+import { SocialLinks, SOURCE_ICON } from "../admin/sellerShared.jsx";
 import "../admin/admin.css";
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
@@ -42,7 +43,6 @@ export default function SellerDashboard() {
 
   const seller = data?.seller;
   const text = t("adm.sel.shareText", { name: TENANT.name });
-  const links = useMemo(() => (seller ? shareLinks(seller.referral_url, text) : null), [seller, text]);
   const copy = async (v, label) => toast({ tone: (await copyText(v)) ? "success" : "error", title: label });
   const stageText = (o) => (o.terminal && o.terminal !== "payment_pending" ? t(TERMINAL_BY_KEY[o.terminal]?.label || o.terminal) : t(STAGE_BY_KEY[o.stage]?.label || o.stage));
 
@@ -67,15 +67,8 @@ export default function SellerDashboard() {
               <h3><Icon name="link" size={16} />{t("vd.yourLink")}</h3>
               <p className="adm-sub">{t("vd.linkHint")}</p>
               <div className="sel-link" style={{ fontSize: 14 }}><Icon name="link" size={15} /><code style={{ fontSize: 14 }}>{seller.referral_url}</code><button type="button" className="btn-sm primary" onClick={() => copy(seller.referral_url, t("adm.sel.copied"))}><Icon name="copy" size={14} />{t("adm.sel.copy")}</button></div>
-              <div className="sel-share" style={{ marginTop: 10 }}>
-                <a href={links.whatsapp} target="_blank" rel="noopener noreferrer"><Icon name="whatsapp" size={15} />WhatsApp</a>
-                <a href={links.facebook} target="_blank" rel="noopener noreferrer"><Icon name="facebook" size={15} />Facebook</a>
-                <button type="button" onClick={() => copy(`${text} ${seller.referral_url}`, t("adm.sel.copiedPost"))}><Icon name="instagram" size={15} />Instagram</button>
-                <button type="button" onClick={() => copy(`${text} ${seller.referral_url}`, t("adm.sel.copiedPost"))}><Icon name="tiktok" size={15} />TikTok</button>
-                <a href={links.telegram} target="_blank" rel="noopener noreferrer"><Icon name="message" size={15} />Telegram</a>
-                <a href={links.x} target="_blank" rel="noopener noreferrer"><Icon name="share" size={15} />X</a>
-                <a href={links.mail}><Icon name="mail" size={15} />Email</a>
-              </div>
+              <p className="muted" style={{ fontSize: 12.5, margin: "12px 0 6px" }}>{t("vd.perNetwork")}</p>
+              <SocialLinks seller={seller} text={text} stat={{ by_source: data?.totals?.by_source || [] }} onCopy={copy} big />
               <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}><Icon name="sparkles" size={12} /> {t("vd.codeHint", { code: seller.code })}</p>
             </div>
           )}
@@ -100,7 +93,7 @@ export default function SellerDashboard() {
                       <tr key={o.display_id}>
                         <td data-label={t("adm.col.order")}><b>#{o.display_id}</b></td>
                         <td data-label={t("adm.col.date")}>{shortDate(o.created_at, lang)}</td>
-                        <td data-label={t("vd.customer")}>{o.customer || "—"}</td>
+                        <td data-label={t("vd.customer")}>{o.customer || "—"}{o.source && <span className="adm-chip neutral" style={{ marginLeft: 6, fontSize: 10.5 }}><Icon name={SOURCE_ICON[o.source] || "link"} size={11} />{t(`adm.src.${o.source}`) === `adm.src.${o.source}` ? o.source : t(`adm.src.${o.source}`)}</span>}</td>
                         <td data-label={t("adm.col.items")} className="r num">{o.items}</td>
                         <td data-label={t("adm.col.total")} className="r num">{fmtMoney(o.total, o.currency_code, lang)}</td>
                         <td data-label={t("adm.ord.colStage")}><span className={`adm-chip ${o.terminal && o.terminal !== "payment_pending" ? "bad" : o.stage === "delivered" ? "ok" : ""}`}>{stageText(o)}</span></td>

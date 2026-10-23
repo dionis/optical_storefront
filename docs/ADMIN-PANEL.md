@@ -61,3 +61,13 @@ Estadísticas y panel público acotados a la ventana del board (300 pedidos).
 Playwright (`chromium` del sistema) con `VITE_ADMIN_DEMO_LOGIN=true` para la
 maquetación a 1440 px y 390 px; verificación funcional en producción con la
 sesión real del dueño. Backend: `npx tsc --noEmit` y `npx jest`.
+
+## Actualización 23/10/2026 (tarde): Ejecutivo en pestañas, todo clicable, exportar, distribución %
+
+- **Ejecutivo** (`ExecutiveHub.jsx`) tiene cuatro pestañas pensadas para caber en una pantalla (tamaños con `clamp()`/`vh`, `useChartHeight`): **Ventas** (`Executive.jsx`), **Costos operacionales** (`ExecutiveCosts.jsx`: ingreso/costo/margen/objetivo, reparto del ingreso, costo y margen por día, costo de monturas por marca, por vendedor, últimos pedidos con margen, partidas), **Resumen** y **Ventas** (los antiguos Resumen/Ventas, ahora embebidos). `?tab=overview|sales|prices` siguen funcionando (mapa `LEGACY_TABS`).
+- **Todo clicable**: `go(tab, params)` en `AdminDashboard.jsx` salta a cualquier pantalla con filtros (`orders` acepta `stage`, `terminal`, `preset`, `seller`, `order`, `q`; `costs` acepta `sub` y `order`). `KpiCard` admite `onClick` + `hint`; `DonutChart` admite `onSelect`; las tarjetas usan `Card` (`ui.jsx`) con título clicable (ir a), globo de ayuda (`InfoTip`) y exportación.
+- **Exportar**: `exportUtils.js` — CSV de columnas explícitas o de lo que hay en pantalla (`elementToCsv`), y PDF mediante impresión aislada del nodo (`printElement`, hoja `#adm-print-root`; "Guardar como PDF" en el diálogo). Cada tarjeta (`ExportMenu`), cada tabla, cada pestaña del Ejecutivo y de Costos.
+- **Pedidos**: lista desplegable "Cambiar estado" (`StageSelect`, mismas etapas que acepta el servidor), preset "Hoy", PDF de la tabla.
+- **Costos y precios** (`Costs.jsx`): sub-pestañas Rentabilidad, Fichas de costo (importes), **Distribución %** (partidas por porcentaje: atención al cliente, renta, webmaster, impuestos, marketing… como reglas `order_percent`; y **ganancia objetivo** = regla `order_percent:profit_target`, que NO es costo: el backend la excluye y devuelve `profit_target_pct/amount/gap`), y Precios (el antiguo Precios). `AllocationBar` pinta el reparto del ingreso con la marca ◆ del objetivo.
+- **Vendedores**: `social_links` del backend → un enlace por red (`?ref=CODIGO&src=instagram`…) con compartir/copiar y ventas por red (`by_source`); `referral.js` guarda `src` y el checkout manda `seller_source`. El panel público `/vendedor` muestra los mismos enlaces y la red de cada venta.
+- **Hoja de Google**: pestaña nueva **Costos** (fichas y distribución, solo lectura) y columna "Desglose costo" en Pedidos/Historial; Vendedor = `CODIGO · red`.

@@ -133,12 +133,19 @@ function deltaLine(value, ref, labelText) {
 
 // ---------------------------------------------------------------------------
 // 1. KpiCard
-export function KpiCard({ label, value, delta, deltaGood, icon, sub }) {
+export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hint }) {
   const good = !!deltaGood;
+  const clickable = typeof onClick === "function";
   return (
     <div
-      className="cx-kpi"
+      className={`cx-kpi ${clickable ? "clickable" : ""}`}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={hint || undefined}
+      onClick={onClick}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } } : undefined}
       style={{
+        cursor: clickable ? "pointer" : undefined,
         fontFamily: FONT,
         background: "#fff",
         border: `1px solid ${BRAND.line}`,
@@ -717,7 +724,7 @@ export function BarChart({
 
 // ---------------------------------------------------------------------------
 // 4. DonutChart
-export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
+export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSelect }) {
   const { t } = useLang();
   const [hi, setHi] = useState(-1);
 
@@ -801,6 +808,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
                   strokeLinecap="butt"
                   onMouseEnter={() => setHi(i)}
                   onMouseLeave={() => setHi(-1)}
+                  onClick={onSelect ? () => onSelect(s.label, i) : undefined}
                   style={{
                     opacity: dim ? 0.4 : 1,
                     cursor: "pointer",
@@ -890,6 +898,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel }) {
           <li
             key={i}
             onMouseEnter={() => setHi(i)}
+            onClick={onSelect ? () => onSelect(segs[i] ? segs[i].label : undefined, i) : undefined}
             onMouseLeave={() => setHi(-1)}
             className="cx-legend-row"
             style={{

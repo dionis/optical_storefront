@@ -7,7 +7,9 @@ import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalyt
 // the demo login and the error fallback. See realAnalytics.js.
 import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
 import { isDemoLogin } from "./adminAuth.js";
-import Executive from "./Executive.jsx";
+import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
+import { Card } from "./ui.jsx";
+import { printElement } from "./exportUtils.js";
 import CatalogManager from "./CatalogManager.jsx";
 import Team from "./Team.jsx";
 import Security from "./Security.jsx";
@@ -139,7 +141,7 @@ function SourceNote({ source, truncated, scanLimit }) {
 }
 
 /* ---------------- Overview ---------------- */
-function Overview({ preset, setPreset }) {
+function Overview({ preset, setPreset, go }) {
   const { t } = useLang();
   const { s, source, truncated, scanLimit } = useRealSummary(preset);
   const k = s.kpis;
@@ -151,11 +153,8 @@ function Overview({ preset, setPreset }) {
   const funnel = useMemo(() => s.funnel.map((f) => ({ ...f, label: t(f.label) })), [s.funnel, t]);
   const weekday = useMemo(() => s.weekday.map((w) => ({ ...w, label: t(w.label) })), [s.weekday, t]);
   return (
-    <div className="adm-section">
-      <div className="adm-head-row">
-        <h2>{t("adm.tab.overview")}</h2>
-        <RangePicker value={preset} onChange={setPreset} />
-      </div>
+    <div className="adm-exec">
+      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.overviewSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
       <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
       {s.hasDemo && (
         <div className="adm-demo-banner">
@@ -164,65 +163,64 @@ function Overview({ preset, setPreset }) {
         </div>
       )}
       <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(k.units) })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon={<Icon name="receipt" />} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon={<Icon name="trendUp" />} />
-        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} />
-        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} />
+        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(k.units) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
+        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "detail" })} />
+        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} hint={t("adm.kpi.h.access")} />
+        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} hint={t("adm.kpi.h.conversion")} />
       </div>
       <div className="adm-grid-2">
-        <div className="adm-card"><h3>{t("adm.chart.salesByDay")}</h3><LineChart data={s.salesSeries} valuePrefix="$" color="#0E5AD0" /></div>
-        <div className="adm-card"><h3>{t("adm.chart.funnel")}</h3><Funnel steps={funnel} /></div>
+        <Card title={t("adm.chart.salesByDay")} name="salesByDay" hint={t("adm.chart.salesByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" color="#0E5AD0" /></Card>
+        <Card title={t("adm.chart.funnel")} name="funnel" hint={t("adm.chart.funnel.h")}><Funnel steps={funnel} /></Card>
       </div>
       <div className="adm-grid-2">
-        <div className="adm-card"><h3>{t("adm.chart.salesByBrand")}</h3><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} /></div>
-        <div className="adm-card"><h3>{t("adm.chart.topProducts")}</h3><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg={t("adm.chart.noSales")} /></div>
+        <Card title={t("adm.chart.salesByBrand")} name="salesByBrand" hint={t("adm.chart.salesByBrand.h")}><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} /></Card>
+        <Card title={t("adm.chart.topProducts")} name="topProducts" hint={t("adm.chart.topProducts.h")}><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg={t("adm.chart.noSales")} /></Card>
       </div>
-      <div className="adm-card"><h3>{t("adm.chart.accessVsBuy")}</h3><p className="adm-sub">{t("adm.chart.accessVsBuySub")}</p><AccessVsBuyChart data={s.accessVsBuy} /></div>
-      <div className="adm-card"><h3>{t("adm.chart.weekday")}</h3><p className="adm-sub">{t("adm.chart.weekdaySub")}</p><WeekdayChart data={weekday} /></div>
+      <Card title={t("adm.chart.accessVsBuy")} name="accessVsBuy" hint={t("adm.chart.accessVsBuy.h")}><p className="adm-sub">{t("adm.chart.accessVsBuySub")}</p><AccessVsBuyChart data={s.accessVsBuy} /></Card>
+      <Card title={t("adm.chart.weekday")} name="weekday" hint={t("adm.chart.weekday.h")}><p className="adm-sub">{t("adm.chart.weekdaySub")}</p><WeekdayChart data={weekday} /></Card>
     </div>
   );
 }
 
 /* ---------------- Sales ---------------- */
-function Sales({ preset, setPreset }) {
+function Sales({ preset, setPreset, go }) {
   const { t, lang } = useLang();
   const { s, source, truncated, scanLimit } = useRealSummary(preset);
   const recent = s.orders.slice(0, 40);
   return (
-    <div className="adm-section">
-      <div className="adm-head-row"><h2>{t("adm.tab.sales")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
+    <div className="adm-exec">
+      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.detailSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
       <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
       <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon={<Icon name="dollar" />} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon={<Icon name="trendUp" />} />
-        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} />
+        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon={<Icon name="dollar" />} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "costs" })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
+        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
+        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} hint={t("adm.kpi.h.units")} onClick={() => go("products")} />
       </div>
       <div className="adm-grid-2">
-        <div className="adm-card"><h3>{t("adm.sales.revByDay")}</h3><LineChart data={s.salesSeries} valuePrefix="$" /></div>
-        <div className="adm-card"><h3>{t("adm.sales.ordersByDay")}</h3><BarChart data={s.ordersSeries} color="#FD0E3F" /></div>
+        <Card title={t("adm.sales.revByDay")} name="revByDay" hint={t("adm.sales.revByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" /></Card>
+        <Card title={t("adm.sales.ordersByDay")} name="ordersByDay" hint={t("adm.sales.ordersByDay.h")}><BarChart data={s.ordersSeries} color="#FD0E3F" /></Card>
       </div>
-      <div className="adm-card">
-        <h3>{t("adm.sales.recent", { n: int(s.orders.length) })}</h3>
+      <Card icon="clock" title={t("adm.sales.recent", { n: int(s.orders.length) })} name="pedidos-recientes" hint={t("adm.sales.recent.h")}>
         <div className="adm-table-wrap">
-          <table className="adm-table">
+          <table className="adm-table responsive">
             <thead><tr><th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.col.items")}</th><th className="r">{t("adm.col.total")}</th></tr></thead>
             <tbody>
               {recent.length === 0 ? <tr><td colSpan="4" className="muted">{t("adm.sales.noneInRange")}</td></tr> :
                 recent.map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.id}{o.demo && <span className="tag-demo">{t("adm.demoTag")}</span>}</td>
-                    <td>{shortDate(o.t, lang)}</td>
-                    <td>{o.items.map((i) => i.name).slice(0, 3).join(", ")}{o.items.length > 3 ? "…" : ""}</td>
+                  <tr key={o.id} className="ord-row" onClick={() => go("orders", { order: o.id })} title={t("adm.exec.openOrder")}>
+                    <td data-label={t("adm.col.order")}>{o.demo ? o.id : `#${o.display_id ?? o.id}`}{o.demo && <span className="tag-demo">{t("adm.demoTag")}</span>}</td>
+                    <td data-label={t("adm.col.date")}>{shortDate(o.t, lang)}</td>
+                    <td data-label={t("adm.col.items")}>{o.items.map((i) => i.name).slice(0, 3).join(", ")}{o.items.length > 3 ? "…" : ""}</td>
                     {/* Real orders carry their currency; demo ones fall back to USD. */}
-                    <td className="r">{fmtMoney(o.total, o.currency || "usd", lang)}</td>
+                    <td data-label={t("adm.col.total")} className="r">{fmtMoney(o.total, o.currency || "usd", lang)}</td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -657,11 +655,12 @@ function Prices({ preQ }) {
 
 const PAGE_SIZE = 20;
 
-const DATE_PRESETS = ["all", "7d", "30d", "90d"];
+const DATE_PRESETS = ["today", "7d", "30d", "90d", "all"];
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 
 function presetFrom(preset) {
+  if (preset === "today") return ymd(Date.now());
   const days = { "7d": 7, "30d": 30, "90d": 90 }[preset];
   return days ? ymd(Date.now() - days * 864e5) : "";
 }
@@ -794,7 +793,38 @@ function OrderCostMini({ orderId, onGoCosts }) {
   );
 }
 
-function OrderDetail({ order, onPatched, onGoCosts }) {
+/**
+ * "Cambiar estado": el mismo cambio que los botones de la fila, como lista
+ * desplegable con la etapa actual marcada. Solo ofrece las etapas que el
+ * servidor acepta (`next_stages`); "En camino" pide la guía antes de confirmar.
+ */
+function StageSelect({ order, busy, onMove }) {
+  const { t } = useLang();
+  const [target, setTarget] = useState("");
+  const [tracking, setTracking] = useState(order.tracking_number || "");
+  const [trackUrl, setTrackUrl] = useState(order.tracking_url || "");
+  const next = order.next_stages || [];
+  const current = order.terminal && order.terminal !== "payment_pending" ? TERMINAL_BY_KEY[order.terminal] : STAGE_BY_KEY[order.stage];
+  const submit = (e) => { e.preventDefault(); if (!target) return; onMove(target, target === "in_transit" ? { trackingNumber: tracking.trim(), trackingUrl: trackUrl.trim() } : {}); setTarget(""); };
+  return (
+    <form className="ord-edit-row ord-stage-form" onSubmit={submit}>
+      <select className="adm-sel" value={target} onChange={(e) => setTarget(e.target.value)} disabled={busy || !next.length} style={{ flex: 1, minWidth: 160 }}>
+        <option value="">{t("adm.ord.currentStage", { stage: current ? t(current.label) : order.stage })}</option>
+        {next.map((k) => <option key={k} value={k}>→ {t(STAGE_BY_KEY[k].label)}</option>)}
+      </select>
+      {target === "in_transit" && (
+        <>
+          <input value={tracking} placeholder={t("adm.ord.trackingPh")} onChange={(e) => setTracking(e.target.value)} />
+          <input type="url" value={trackUrl} placeholder={t("adm.ord.trackingUrlPh")} onChange={(e) => setTrackUrl(e.target.value)} />
+        </>
+      )}
+      <button className="btn-sm primary" disabled={!target || busy}><Icon name="check" size={14} />{t("adm.ord.applyStage")}</button>
+      {!next.length && <small className="muted">{t("adm.ord.noMoves")}</small>}
+    </form>
+  );
+}
+
+function OrderDetail({ order, onPatched, onGoCosts, onMove }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const addr = order.shipping_address;
@@ -876,7 +906,9 @@ function OrderDetail({ order, onPatched, onGoCosts }) {
             <span><Icon name="mail" size={14} />{order.customer.email || "—"}</span>
           </p>
         )}
-        {order.seller_code && <p className="ord-addr"><span><Icon name="sellers" size={14} />{t("adm.ord.seller")}: <b>{order.seller_code}</b></span></p>}
+        {order.seller_code && <p className="ord-addr"><span><Icon name="sellers" size={14} />{t("adm.ord.seller")}: <b>{order.seller_code}</b>{order.seller_source ? <span className="adm-chip neutral" style={{ marginLeft: 6 }}>{t(`adm.src.${order.seller_source}`) === `adm.src.${order.seller_source}` ? order.seller_source : t(`adm.src.${order.seller_source}`)}</span> : null}</span></p>}
+        <b style={{ display: "block", marginTop: 12 }}>{t("adm.ord.changeStage")}</b>
+        <StageSelect order={order} busy={busy === "stage"} onMove={onMove} />
         {order.lab_stage && <p className="ord-addr muted"><span><Icon name="lab" size={14} />{t("adm.ord.labPinned", { stage: t(STAGE_BY_KEY[order.lab_stage]?.label ?? order.lab_stage) })}</span></p>}
 
         <b style={{ display: "block", marginTop: 12 }}>{t("adm.ord.tracking")}</b>
@@ -903,19 +935,22 @@ function deepLinkedOrder() {
   return (new URLSearchParams(window.location.search).get("order") || "").trim();
 }
 
-export function Orders({ onGoCosts, sellers = [] }) {
+export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const [linked] = useState(deepLinkedOrder);
-  const [query, setQuery] = useState(linked);
-  const [debounced, setDebounced] = useState(linked);
-  const [preset, setPreset] = useState(linked ? "all" : "30d");
-  const [from, setFrom] = useState(() => presetFrom(linked ? "all" : "30d"));
+  // Llega desde la hoja (`?order=`) o desde otra pantalla del panel (`go("orders", {...})`).
+  const [linked] = useState(() => params.order || deepLinkedOrder());
+  const initialPreset = params.preset || (linked ? "all" : "30d");
+  const [query, setQuery] = useState(linked || params.q || "");
+  const [debounced, setDebounced] = useState(linked || params.q || "");
+  const [preset, setPreset] = useState(initialPreset);
+  const [from, setFrom] = useState(() => (initialPreset === "today" ? ymd(Date.now()) : presetFrom(initialPreset)));
   const [to, setTo] = useState("");
-  const [stage, setStage] = useState("");
-  const [terminal, setTerminal] = useState("");
+  const [stage, setStage] = useState(params.stage || "");
+  const [terminal, setTerminal] = useState(params.terminal || "");
   const [rx, setRx] = useState("");
-  const [seller, setSeller] = useState("");
+  const [seller, setSeller] = useState(params.seller || "");
+  const tableRef = useRef(null);
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -995,7 +1030,8 @@ export function Orders({ onGoCosts, sellers = [] }) {
           <div className="adm-range">
             {DATE_PRESETS.map((k) => <button key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>{t(`adm.ord.preset.${k}`)}</button>)}
           </div>
-          <button className="btn-sm" onClick={exportCsv} disabled={!orders.length} title={t("adm.ord.exportTitle")}><Icon name="download" size={14} />CSV</button>
+          <button className="btn-sm" onClick={exportCsv} disabled={!orders.length} title={t("adm.ord.exportTitle")}><Icon name="excel" size={14} />CSV</button>
+          <button className="btn-sm" onClick={() => printElement(tableRef.current, t("adm.ord.title"))} disabled={!orders.length} title={t("adm.ui.pdf")}><Icon name="printer" size={14} />PDF</button>
           <button className="btn-sm ghost" onClick={() => setReloadKey((k) => k + 1)} title={t("adm.sec.refresh")}><Icon name="refresh" size={15} /></button>
         </div>
       </div>
@@ -1037,7 +1073,7 @@ export function Orders({ onGoCosts, sellers = [] }) {
       {error && <div className="adm-login-err">{error}</div>}
       {data?.truncated && <div className="adm-find-note muted">{t("adm.ord.truncated", { n: data.scan_limit })}</div>}
 
-      <div className="adm-card">
+      <div className="adm-card" ref={tableRef}>
         <div className="adm-table-wrap">
           <table className="adm-table orders responsive">
             <thead>
@@ -1072,7 +1108,7 @@ export function Orders({ onGoCosts, sellers = [] }) {
                   </tr>,
                   open && (
                     <tr key={o.id + "-d"} className="ord-detail">
-                      <td colSpan="7" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} /></td>
+                      <td colSpan="7" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} onMove={(target, opts) => move(o, target, opts)} /></td>
                     </tr>
                   ),
                 ];
@@ -1097,55 +1133,70 @@ export function Orders({ onGoCosts, sellers = [] }) {
   );
 }
 
-/** `?tab=` en la URL: los enlaces de la hoja de Google abren la sección directa. */
-function tabFromUrl() {
-  const want = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : "";
-  return TABS.includes(want) ? want : "exec";
+/**
+ * `?tab=` en la URL: los enlaces de la hoja de Google abren la sección directa.
+ * Las pestañas antiguas (overview/sales/prices) siguen funcionando: ahora viven
+ * dentro de Ejecutivo y de Costos y precios.
+ */
+const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }] };
+function navFromUrl() {
+  const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const want = q.get("tab") || "";
+  if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
+  const params = {};
+  for (const k of ["sub", "order", "stage", "seller", "q"]) if (q.get(k)) params[k] = q.get(k);
+  return { tab: TABS.includes(want) ? want : "exec", params, n: 0 };
 }
 
 export default function AdminDashboard({ user, onLogout }) {
   const { t } = useLang();
-  const [tab, setTabState] = useState(tabFromUrl);
+  // `nav.n` cambia en cada salto para que la pantalla destino se monte con los
+  // parámetros nuevos (p. ej. Pedidos filtrado por etapa desde el Ejecutivo).
+  const [nav, setNav] = useState(navFromUrl);
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
-  const [costOrder, setCostOrder] = useState("");
   const [sellers, setSellers] = useState([]);
   const demo = isDemoLogin();
   useEffect(() => { if (demo) ensureSeed(); }, [demo]);
-  // Lista de vendedores compartida (filtro de Pedidos, etiquetas): se refresca
-  // al entrar y cuando la pestaña Vendedores avisa de un cambio.
   const loadSellers = () => { if (demo) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
   useEffect(loadSellers, [demo]);
 
-  const setTab = (k) => {
-    setTabState(k);
+  /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
+  const go = (tab, params = {}) => {
+    const target = LEGACY_TABS[tab] ? LEGACY_TABS[tab][0] : tab;
+    const p = LEGACY_TABS[tab] ? { ...LEGACY_TABS[tab][1], ...params } : params;
+    setNav((n) => ({ tab: target, params: p, n: n.n + 1 }));
     if (typeof window !== "undefined") {
-      const u = new URL(window.location.href); u.searchParams.set("tab", k); u.searchParams.delete("order");
+      const u = new URL(window.location.href);
+      [...u.searchParams.keys()].forEach((k) => u.searchParams.delete(k));
+      u.searchParams.set("tab", target);
+      if (p.sub) u.searchParams.set("sub", p.sub);
       window.history.replaceState({}, "", u.toString());
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const onFind = (v) => { setFind(v); if (v) setTab("prices"); };
-  const goCosts = (orderId) => { setCostOrder(orderId); setTab("costs"); };
+  const tab = nav.tab;
+  const onFind = (v) => { setFind(v); if (v && tab !== "costs") go("costs", { sub: "prices" }); };
+  const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={setTab} user={user} onLogout={onLogout} find={find} onFind={onFind}>
-      {tab === "exec" && <Executive preset={preset} setPreset={setPreset} onGoOrders={() => setTab("orders")} />}
-      {tab === "overview" && <Overview preset={preset} setPreset={setPreset} />}
-      {tab === "sales" && <Sales preset={preset} setPreset={setPreset} />}
-      {tab === "orders" && <Orders onGoCosts={goCosts} sellers={sellers} />}
-      {tab === "costs" && <Costs focusOrder={costOrder} onFocusDone={() => setCostOrder("")} sellers={sellers} />}
-      {tab === "sellers" && <Sellers onChanged={loadSellers} />}
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={find} onFind={onFind}>
+      {tab === "exec" && (
+        <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
+          views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />
+      )}
+      {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
+      {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} pricesView={<Prices preQ={find || nav.params.q || ""} />} />}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} />}
       {tab === "products" && (
         <>
           <div className="adm-section adm-section-top"><CatalogManager /></div>
           <Products preset={preset} setPreset={setPreset} />
         </>
       )}
-      {tab === "prices" && <Prices preQ={find} />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
-      <p className="muted" style={{ textAlign: "center", fontSize: 12, marginTop: 30 }}>{t("adm.footer", { name: TENANT.name })}</p>
+      <p className="muted adm-foot">{t("adm.footer", { name: TENANT.name })}</p>
     </AdminShell>
   );
 }

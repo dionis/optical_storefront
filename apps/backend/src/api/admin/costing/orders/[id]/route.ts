@@ -4,6 +4,8 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
   costSheetForOrder,
   loadCostingContext,
+  profitTargetFor,
+  profitTargetPct,
   readStoredSheet,
   saveStoredSheet,
   type StoredCostSheet,
@@ -49,10 +51,14 @@ async function respondWithSheet(req: AuthenticatedMedusaRequest, res: MedusaResp
     cost_total: sheet.cost_total,
     margin: sheet.margin,
     margin_pct: sheet.margin_pct,
+    // The owner's goal next to the real margin: target amount and how far
+    // this sale is from it (negative = below target). Null without a target.
+    ...profitTargetFor(profitTargetPct(ctx.rules), sheet.revenue, sheet.margin),
     manual: sheet.manual,
     updated_at: stored?.updated_at ?? null,
     updated_by: stored?.updated_by ?? null,
     seller_code: order.seller_code,
+    seller_source: order.seller_source,
   });
 }
 

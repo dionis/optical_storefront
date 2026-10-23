@@ -12,9 +12,12 @@ const TTL_MS = 30 * 864e5;
 
 export function captureReferral(search) {
   try {
-    const code = (new URLSearchParams(search || "").get("ref") || "").trim().toUpperCase();
+    const q = new URLSearchParams(search || "");
+    const code = (q.get("ref") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{3,12}$/.test(code)) return null;
-    localStorage.setItem(KEY, JSON.stringify({ code, at: Date.now() }));
+    // `src` = red social desde la que se compartió el enlace (instagram, tiktok…).
+    const src = (q.get("src") || "").trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 20) || "link";
+    localStorage.setItem(KEY, JSON.stringify({ code, src, at: Date.now() }));
     return code;
   } catch { return null; }
 }
@@ -25,6 +28,15 @@ export function getReferral() {
     if (!raw || !raw.code) return null;
     if (Date.now() - (raw.at || 0) > TTL_MS) { localStorage.removeItem(KEY); return null; }
     return raw.code;
+  } catch { return null; }
+}
+
+/** Red social que trajo al cliente (va con el código en el carrito). */
+export function getReferralSource() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (!raw || !raw.code) return null;
+    return raw.src || "link";
   } catch { return null; }
 }
 

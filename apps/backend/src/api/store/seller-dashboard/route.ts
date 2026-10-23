@@ -10,7 +10,10 @@ import {
   findSellerById,
   isoAt,
   sellerLinks,
+  sellerSourceOf,
+  sortedSources,
   verifySellerToken,
+  type SourceStatRow,
 } from "../../../lib/sellers";
 
 /**
@@ -61,18 +64,31 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
       const revenue = round2(rows.reduce((a, o) => a + (Number(o.total ?? 0) || 0), 0));
       return { orders: rows.length, revenue, commission: round2((revenue * pct) / 100) };
     };
+    // Where the period's sales came from (the `src=` of the link that was
+    // shared); orders with a code but no tag count as the plain link.
+    const bySource = new Map<string, SourceStatRow>();
+    for (const o of inPeriod) {
+      const source = sellerSourceOf(o);
+      const row = bySource.get(source) ?? { source, orders: 0, revenue: 0 };
+      row.orders++;
+      row.revenue = round2(row.revenue + (Number(o.total ?? 0) || 0));
+      bySource.set(source, row);
+    }
+    const by_source = sortedSources(bySource).map((r) => ({ ...r, commission: round2((r.revenue * pct) / 100) }));
     const currency = String(inPeriod[0]?.currency_code ?? mine[0]?.currency_code ?? "usd");
+    const links = sellerLinks(seller);
 
     res.json({
       seller: {
         name: seller.name,
         code: seller.code,
         commission_pct: pct,
-        referral_url: sellerLinks(seller).referral_url,
+        referral_url: links.referral_url,
+        social_links: links.social_links,
         social: seller.social,
       },
       period: { from, to },
-      totals: { ...sum(inPeriod), currency_code: currency },
+      totals: { ...sum(inPeriod), currency_code: currency, by_source },
       all_time: sum(mine),
       truncated: window.truncated,
       orders: inPeriod.slice(0, MAX_ROWS).map((o) => {
@@ -87,6 +103,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
           commission: round2((total * pct) / 100),
           customer: customerInitials(o.customer.name),
           items: o.items.reduce((n, it) => n + (Number(it.quantity) || 0), 0),
+          source: sellerSourceOf(o),
         };
       }),
     });

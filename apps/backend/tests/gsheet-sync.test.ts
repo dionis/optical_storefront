@@ -3,10 +3,12 @@
  * API calls in CI.
  */
 import {
+  COST_SHEET_HEADERS,
   HISTORY_COLUMNS,
   ORDER_COLUMNS,
   ORDER_TYPE,
   buildRows,
+  costRulesSheetRows,
   eventLabel,
   normalizePrivateKey,
   orderType,
@@ -20,6 +22,7 @@ import {
   STAGE_LABEL,
 } from "../src/lib/gsheet-sync";
 import { deriveOrderProgress } from "../src/lib/order-status";
+import type { CostRule } from "../src/lib/costing";
 import { generateKeyPairSync } from "node:crypto";
 
 const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
@@ -127,11 +130,13 @@ describe("buildRows", () => {
     expect(orderRow).toHaveLength(ORDER_COLUMNS.length);
     expect(ORDER_COLUMNS.map((c) => c.type)).toEqual([
       "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT", "TEXT",
-      // Vendedor, Costo, Margen
-      "TEXT", "DOUBLE", "DOUBLE",
+      // Vendedor, Costo, Margen, Desglose costo
+      "TEXT", "DOUBLE", "DOUBLE", "TEXT",
     ]);
-    expect(ORDER_COLUMNS.slice(-3).map((c) => c.name)).toEqual(["Vendedor", "Costo", "Margen"]);
-    expect(HISTORY_COLUMNS.slice(-3).map((c) => c.key)).toEqual(["seller", "cost", "margin"]);
+    expect(ORDER_COLUMNS.slice(-4).map((c) => c.name)).toEqual(["Vendedor", "Costo", "Margen", "Desglose costo"]);
+    expect(ORDER_COLUMNS[ORDER_COLUMNS.length - 1]).toMatchObject({ width: 320, wrap: true });
+    expect(HISTORY_COLUMNS.slice(-4).map((c) => c.key)).toEqual(["seller", "cost", "margin", "cost_breakdown"]);
+    expect(HISTORY_COLUMNS[HISTORY_COLUMNS.length - 1]).toMatchObject({ name: "Desglose costo", width: 320, wrap: true });
     expect(ORDER_COLUMNS.map((c) => c.name)).toEqual(expect.arrayContaining(EDITABLE_ORDER_COLUMNS));
   });
 
@@ -224,6 +229,34 @@ describe("buildRows", () => {
     expect(withSeller.historyRow[hcol("event")]).toBe("Ficha de costo actualizada");
     expect(String(withSeller.historyRow[hcol("notes")])).toContain("Nota: Llamar antes de enviar");
     expect(buildRows(order, "nota", {}).historyRow[hcol("event")]).toBe("Nota del dueño actualizada");
+    // Without lines the breakdown is empty, never "undefined".
+    expect(withSeller.orderRow[col("Desglose costo")]).toBe("");
+    expect(withSeller.historyRow[hcol("cost_breakdown")]).toBe("");
+  });
+
+  it("writes the seller with the network that brought the sale, and the cost breakdown", () => {
+    const col = (name: string) => ORDER_COLUMNS.findIndex((c) => c.name === name);
+    const hcol = (key: string) => HISTORY_COLUMNS.findIndex((c) => c.key === key);
+    const lines = [
+      { label: "Montura Peachtree", subtotal: 12 },
+      { label: "Envío real", subtotal: 28 },
+      { label: "Comisión Stripe (%)", subtotal: 1.25 },
+      { label: "Comisión del vendedor (10%)", subtotal: 4.3 },
+    ];
+    const built = buildRows(
+      { ...order, metadata: { ...order.metadata, seller_code: "ana", seller_source: "Instagram" } },
+      "costo",
+      { cost: { cost_total: 45.55, margin: 164.45, lines } }
+    );
+    expect(built.orderRow[col("Vendedor")]).toBe("ANA · instagram");
+    expect(built.historyRow[hcol("seller")]).toBe("ANA · instagram");
+    const text = "Montura Peachtree 12.00 · Envío real 28.00 · Comisión Stripe (%) 1.25 · Comisión del vendedor (10%) 4.30";
+    expect(built.orderRow[col("Desglose costo")]).toBe(text);
+    expect(built.historyRow[hcol("cost_breakdown")]).toBe(text);
+    expect(built.orderRow).toHaveLength(ORDER_COLUMNS.length);
+    expect(built.historyRow).toHaveLength(HISTORY_COLUMNS.length);
+    // A source without a code means nothing: the cell stays empty.
+    expect(buildRows({ ...order, metadata: { seller_source: "tiktok" } }, "costo", {}).orderRow[col("Vendedor")]).toBe("");
   });
 
   it("links each Archivo reference (frame → product page, receta/foto → panel)", () => {
@@ -239,6 +272,42 @@ describe("buildRows", () => {
     const runs = cell.textFormatRuns as Array<{ startIndex: number; format: { link?: { uri: string } } }>;
     expect(runs[0].startIndex).toBe(0);
     expect(runs.some((r) => r.format.link)).toBe(true);
+  });
+});
+
+describe("costRulesSheetRows", () => {
+  const rule = (kind: CostRule["kind"], match_key: string, label: string, amount: number, unit: CostRule["unit"] = "fixed", over: Partial<CostRule> = {}): CostRule => ({
+    kind, match_key, label, amount, unit, active: true, sort_order: 0, ...over,
+  });
+
+  it("lays out title, note, header and one row per rule grouped, with the profit target last", () => {
+    const rows = costRulesSheetRows([
+      rule("order_percent", "payment_fee", "Comisión del cobro", 2.9, "percent", { sort_order: 0 }),
+      rule("order_percent", "rent", "Alquiler", 10, "percent", { sort_order: 1 }),
+      rule("order_percent", "profit_target", "Ganancia objetivo", 30, "percent", { sort_order: 2 }),
+      rule("frame_brand", "flexure", "Montura Flexure", 18, "fixed", { sort_order: 5 }),
+      rule("lens_design", "sv", "Lente Visión Sencilla", 6, "fixed", { sort_order: 6, active: false }),
+      rule("shipping", "actual", "Envío", 0, "fixed", { sort_order: 2 }),
+    ]);
+    expect(String(rows[0][0])).toMatch(/Fichas de costo y distribución$/);
+    expect(String(rows[1][0])).toMatch(/panel/);
+    expect(rows[3]).toEqual(COST_SHEET_HEADERS);
+    const body = rows.slice(4);
+    expect(body.map((r) => r[0])).toEqual(["Monturas", "Lentes", "Por pedido", "Comisiones y distribución", "Comisiones y distribución", "Objetivo"]);
+    expect(body[0]).toEqual(["Monturas", "Montura Flexure", "Montura (por marca)", 18, "USD", "Sí", "frame_brand:flexure"]);
+    expect(body[1]).toEqual(["Lentes", "Lente Visión Sencilla", "Lente (diseño)", 6, "USD", "No", "lens_design:sv"]);
+    expect(body[3]).toEqual(["Comisiones y distribución", "Comisión del cobro", "Porcentaje del pedido", 2.9, "%", "Sí", "order_percent:payment_fee"]);
+    expect(body[4][6]).toBe("order_percent:rent");
+    expect(body[5]).toEqual(["Objetivo", "Ganancia objetivo", "Meta de ganancia (no es un costo)", 30, "%", "Sí", "order_percent:profit_target"]);
+    // The target never appears twice (it is not a regular row).
+    expect(body.filter((r) => String(r[6]).includes("profit_target"))).toHaveLength(1);
+  });
+
+  it("omits the target row when none is defined and never leaves holes", () => {
+    const rows = costRulesSheetRows([rule("order_fixed", "lab", "Laboratorio", 12)]);
+    expect(rows).toHaveLength(5);
+    expect(rows.every(Array.isArray)).toBe(true);
+    expect(rows[4][0]).toBe("Por pedido");
   });
 });
 

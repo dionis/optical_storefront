@@ -2,8 +2,9 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { costingService, listCostRules } from "../../../../../lib/costing";
+import { mirrorCostRulesToSheet } from "../../../../../lib/gsheet-sync";
 
-/** DELETE /admin/costing/rules/:id — soft delete → { id, deleted: true }. */
+/** DELETE /admin/costing/rules/:id — soft delete → { id, deleted: true }. Refreshes the sheet's "Costos" tab (best effort). */
 export async function DELETE(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const id = String(req.params.id ?? "");
@@ -14,6 +15,7 @@ export async function DELETE(req: AuthenticatedMedusaRequest, res: MedusaRespons
       return;
     }
     await costingService(req.scope).softDeleteCostRules([id]);
+    await mirrorCostRulesToSheet(req.scope, live.filter((r) => r.id !== id));
     res.json({ id, deleted: true });
   } catch (error) {
     logger.error(`[costing] rule delete ${id} failed: ${(error as Error).message}`);
