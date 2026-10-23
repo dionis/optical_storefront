@@ -634,6 +634,39 @@ async function ensureSheets(cfg: GsheetConfig, logger?: Logger): Promise<OrdersT
 }
 
 /**
+ * Recupera las filas de una pestaña "Historial (anterior…)" creada por una
+ * versión previa (cuya cabecera era un prefijo de la actual) copiándolas al
+ * Historial vigente y borrando la pestaña vieja. Idempotente y best-effort:
+ * cualquier fallo deja las pestañas como estaban.
+ */
+async function adoptPreviousHistory(cfg: GsheetConfig, sheets: SheetMeta[]): Promise<void> {
+  const olds = sheets.filter((s) => (s.properties?.title ?? "").startsWith(`${HISTORY_SHEET} (anterior`));
+  for (const old of olds) {
+    const title = old.properties?.title ?? "";
+    try {
+      const resp = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${title}!A1:ZZ`)}?valueRenderOption=UNFORMATTED_VALUE`);
+      if (!resp.ok) continue;
+      const values = (((await resp.json()) as { values?: unknown[][] }).values ?? []) as unknown[][];
+      const header = (values[0] ?? []).map((v) => String(v ?? ""));
+      const isPrefix = header.length > 0 && header.length <= HISTORY_HEADERS.length && header.every((v, i) => v === HISTORY_HEADERS[i]);
+      if (!isPrefix) continue;
+      const rows = values.slice(1).filter((r) => r.some((v) => String(v ?? "").trim() !== ""));
+      if (rows.length) {
+        const append = await sheetsFetch(
+          cfg,
+          `/values/${encodeURIComponent(`${HISTORY_SHEET}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+          { method: "POST", body: JSON.stringify({ values: rows }) }
+        );
+        if (!append.ok) continue;
+      }
+      await batchUpdate(cfg, [{ deleteSheet: { sheetId: old.properties?.sheetId } }]);
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
+/**
  * Pestaña Historial con el esquema actual. Si existe una con otro encabezado
  * (la versión corta anterior), se renombra a "Historial (anterior)" y se crea
  * una nueva: el esquema ancho no cabe en la vieja y los datos antiguos no se
@@ -646,13 +679,18 @@ async function ensureHistorySheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promi
     const head = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!1:1`)}`);
     const row = head.ok ? (((await head.json()) as { values?: string[][] }).values?.[0] ?? []) : [];
     const same = row.length === HISTORY_HEADERS.length && row.every((v, i) => v === HISTORY_HEADERS[i]);
-    if (same) return;
-    // Sin filas de datos (solo cabecera, p. ej. tras una puesta a cero): se
-    // reescribe la cabecera en sitio, ensanchando la pestaña si hace falta,
-    // en vez de dejar una pestaña "(anterior)" vacía colgando.
+    if (same) {
+      await adoptPreviousHistory(cfg, sheets);
+      return;
+    }
+    // Cabecera antigua que es PREFIJO de la actual (solo se añadieron columnas
+    // al final) o pestaña sin filas de datos: se ensancha y se reescribe la
+    // cabecera en sitio — las filas existentes siguen alineadas y no queda
+    // ninguna pestaña "(anterior)" colgando.
     const probe = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!A2:A3`)}`);
     const hasData = probe.ok && ((((await probe.json()) as { values?: string[][] }).values ?? []).some((r) => r.some((v) => String(v ?? "").trim() !== "")));
-    if (row.length && !hasData) {
+    const isPrefix = row.length > 0 && row.length <= HISTORY_HEADERS.length && row.every((v, i) => v === HISTORY_HEADERS[i]);
+    if (row.length && (!hasData || isPrefix)) {
       const columnCount = existing.properties?.gridProperties?.columnCount ?? 0;
       if (columnCount < HISTORY_HEADERS.length + 2) {
         await batchUpdate(cfg, [

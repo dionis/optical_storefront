@@ -168,8 +168,8 @@
 .adm-range button { border: none; background: transparent; padding: 6px 12px; border-radius: 999px; font: 600 13px var(--adm-font); color: var(--adm-muted); cursor: pointer; transition: background .15s, color .15s; }
 .adm-range button:not(.on):hover { color: var(--adm-blue); background: var(--adm-blue-soft); }
 .adm-range button.on { background: var(--adm-navy); color: #fff; }
-.adm-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--adm-line); margin-bottom: 16px; overflow-x: auto; }
-.adm-subtabs button { border: none; background: transparent; padding: 10px 14px; font: 600 13.5px var(--adm-font); color: var(--adm-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: color .15s; }
+.adm-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--adm-line); margin-bottom: 16px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.adm-subtabs button { border: none; background: transparent; padding: 10px 14px; font: 600 13.5px var(--adm-font); color: var(--adm-muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: color .15s; }
 .adm-subtabs button:hover { color: var(--adm-blue); }
 .adm-subtabs button.on { color: var(--adm-navy); border-bottom-color: var(--adm-gold); }
 
