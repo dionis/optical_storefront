@@ -116,7 +116,7 @@ function RulesEditor({ data, onSaved }) {
                     <div className={`cost-rule ${undefinedAmt ? "undefined" : ""} ${r.active ? "" : "off"}`} key={r.id}>
                       <div className="cost-rule-name">
                         <b>{ruleLabel(r, catalog, t)}</b>
-                        <small>{t(`adm.cost.kind.${r.kind}`)}{r.kind === "frame_sku" ? <> · <a href={capriUrl(r.match_key)} target="_blank" rel="noopener noreferrer">{t("adm.cost.capriRef")}</a></> : null}</small>
+                        <small>{t(isAllocationRule(r) ? "adm.cost.kind.order_percent_net" : `adm.cost.kind.${r.kind}`)}{r.kind === "frame_sku" ? <> · <a href={capriUrl(r.match_key)} target="_blank" rel="noopener noreferrer">{t("adm.cost.capriRef")}</a></> : null}</small>
                       </div>
                       {isActual ? <span className="cost-unit">{t("adm.cost.shippingActual")}</span> : (
                         <NumInput value={r.amount} onCommit={(v) => patch(r.id, { amount: Number(v) || 0 })} step={r.unit === "percent" ? "0.1" : "0.01"} />
@@ -346,7 +346,7 @@ export function OrderCostSheet({ orderId, onClose, onChanged, go }) {
             {lines.map((l, i) => (
               <div className={`cost-line ${l.source === "manual" ? "manual" : ""}`} key={l.key + i}>
                 <span className="cost-line-name">
-                  {l.source === "manual" ? <input className="adm-input" value={l.label} placeholder={t("adm.cost.linePh")} onChange={(e) => setLine(i, { label: e.target.value })} style={{ width: "100%" }} /> : <>{l.label}<small className="muted"> · {t(`adm.cost.kind.${l.kind || "manual"}`) !== `adm.cost.kind.${l.kind || "manual"}` ? t(`adm.cost.kind.${l.kind || "manual"}`) : t(`adm.cost.src.${l.source}`)}</small></>}
+                  {l.source === "manual" ? <input className="adm-input" value={l.label} placeholder={t("adm.cost.linePh")} onChange={(e) => setLine(i, { label: e.target.value })} style={{ width: "100%" }} /> : <>{l.label}<small className="muted"> · {l.kind === "order_percent" && l.group === "percent" ? t("adm.cost.kind.order_percent_net") : t(`adm.cost.kind.${l.kind || "manual"}`) !== `adm.cost.kind.${l.kind || "manual"}` ? t(`adm.cost.kind.${l.kind || "manual"}`) : t(`adm.cost.src.${l.source}`)}</small></>}
                 </span>
                 <NumInput value={l.amount} onCommit={(v) => setLine(i, { amount: Number(v) || 0 })} />
                 <NumInput value={l.qty ?? 1} onCommit={(v) => setLine(i, { qty: Number(v) || 1 })} step="1" placeholder="1" />
