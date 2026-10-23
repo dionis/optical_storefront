@@ -1,4 +1,4 @@
-// Dónde se usa: interior de /admin. Pestañas Ejecutivo/Resumen/Ventas/Pedidos/Productos/Precios/Equipo; identidad diferenciada (topbar navy + badge ADMIN) con los tokens de la tienda.
+// Dónde se usa: interior de /admin. Secciones Ejecutivo/Pedidos/Costos/Vendedores/Resumen/Ventas/Productos/Precios/Equipo/Seguridad dentro del armazón AdminShell (barra lateral de iconos).
 import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
 import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalytics, clearDemo, productSales, productSalesFrom } from "./analytics.js";
@@ -17,9 +17,16 @@ import Security from "./Security.jsx";
 // which assumes dollars and knows nothing about an order's currency.
 import {
   STAGES, STAGE_BY_KEY, TERMINALS, TERMINAL_BY_KEY,
-  fetchOrders, setOrderStage, orderLabel, stageErrorText,
-  money as fmtMoney, shortDate, fetchPrescription,
+  fetchOrders, setOrderStage, setOrderTracking, setOrderNote, ordersToCsv, downloadText,
+  orderLabel, stageErrorText, money as fmtMoney, shortDate, fetchPrescription,
 } from "./adminOrders.js";
+import { fetchOrderCost, marginTone } from "./adminCosting.js";
+import { fetchSellers } from "./adminSellers.js";
+import AdminShell, { TABS } from "./AdminShell.jsx";
+import Icon from "./icons.jsx";
+import Costs from "./Costs.jsx";
+import Sellers from "./Sellers.jsx";
+import { TENANT } from "../config/tenant.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
@@ -157,11 +164,11 @@ function Overview({ preset, setPreset }) {
         </div>
       )}
       <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon="💵" sub={t("adm.kpi.unitsSub", { n: int(k.units) })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon="🧾" />
-        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon="📈" />
-        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon="👣" sub={source === "real" ? t("adm.real.funnelLocal") : undefined} />
-        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon="🎯" sub={t("adm.kpi.convSub")} />
+        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(k.units) })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon={<Icon name="receipt" />} />
+        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon={<Icon name="trendUp" />} />
+        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} />
+        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} />
       </div>
       <div className="adm-grid-2">
         <div className="adm-card"><h3>{t("adm.chart.salesByDay")}</h3><LineChart data={s.salesSeries} valuePrefix="$" color="#0E5AD0" /></div>
@@ -187,10 +194,10 @@ function Sales({ preset, setPreset }) {
       <div className="adm-head-row"><h2>{t("adm.tab.sales")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
       <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
       <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon="💵" />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon="🧾" />
-        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon="📈" />
-        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon="📦" />
+        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon={<Icon name="dollar" />} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} />
+        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon={<Icon name="trendUp" />} />
+        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} />
       </div>
       <div className="adm-grid-2">
         <div className="adm-card"><h3>{t("adm.sales.revByDay")}</h3><LineChart data={s.salesSeries} valuePrefix="$" /></div>
@@ -267,10 +274,10 @@ function Products({ preset, setPreset }) {
       <div className="adm-head-row"><h2>{t("adm.tab.products")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
       {!history && <div className="adm-demo-banner" dangerouslySetInnerHTML={{ __html: t("adm.prod.noHistory") }} />}
       <div className="adm-kpis">
-        <KpiCard label={t("adm.prod.frames")} value={int(products.length)} icon="🕶️" />
-        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon="📦" />
-        <KpiCard label={t("adm.prod.added")} value={int(added.length)} icon="🆕" deltaGood />
-        <KpiCard label={t("adm.prod.removed")} value={int(removed.length)} icon="🚫" />
+        <KpiCard label={t("adm.prod.frames")} value={int(products.length)} icon={<Icon name="glasses" />} />
+        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon={<Icon name="box" />} />
+        <KpiCard label={t("adm.prod.added")} value={int(added.length)} icon={<Icon name="sparkles" />} deltaGood />
+        <KpiCard label={t("adm.prod.removed")} value={int(removed.length)} icon={<Icon name="alert" />} />
       </div>
       <div className="adm-grid-2">
         <div className="adm-card">
@@ -337,7 +344,7 @@ function ShippingConfig({ ov }) {
       <h3>{t("adm.ship.title")}</h3>
       <div className="adm-grid-2">
         <div className="ship-block">
-          <div className="ship-h"><span>🏬</span> {t("adm.ship.pickup")}
+          <div className="ship-h"><Icon name="store" size={16} /> {t("adm.ship.pickup")}
             <label className="ship-toggle"><input type="checkbox" checked={!!pk.enabled} onChange={(e) => PS.setPickup({ enabled: e.target.checked })} /> {t("adm.ship.active")}</label>
           </div>
           <div className="ship-fields">
@@ -353,13 +360,13 @@ function ShippingConfig({ ov }) {
           <p className="muted">{t("adm.ship.labDaysHint")}</p>
         </div>
         <div className="ship-block">
-          <div className="ship-h"><span>📦</span> {t("adm.ship.origin")}</div>
+          <div className="ship-h"><Icon name="box" size={16} /> {t("adm.ship.origin")}</div>
           <div className="ship-fields">
             <label>{t("adm.ship.name")}<TxtInput value={og.name} onCommit={(v) => PS.setOrigin({ name: v })} wide /></label>
             <label>{t("adm.ship.address")}<TxtInput value={og.address} onCommit={(v) => PS.setOrigin({ address: v })} wide /></label>
             <label>{t("adm.ship.city")}<TxtInput value={og.city} onCommit={(v) => PS.setOrigin({ city: v })} wide /></label>
           </div>
-          <div className="ship-h" style={{ marginTop: 12 }}><span>💵</span> {t("adm.ship.baseCost")}</div>
+          <div className="ship-h" style={{ marginTop: 12 }}><Icon name="dollar" size={16} /> {t("adm.ship.baseCost")}</div>
           <div className="ship-fields r3">
             <label>{t("adm.ship.standard")}<PriceInput value={sh.standard} placeholder="4.95" onCommit={(v) => PS.setShipping({ standard: Number(v) || 0 })} /></label>
             <label>{t("adm.ship.express")}<PriceInput value={sh.express} placeholder="12.95" onCommit={(v) => PS.setShipping({ express: Number(v) || 0 })} /></label>
@@ -367,8 +374,8 @@ function ShippingConfig({ ov }) {
           </div>
         </div>
       </div>
-      <div className="ship-h" style={{ marginTop: 14 }}><span>🌎</span> {t("adm.ship.zones")}
-        <button className="btn-sm" onClick={PS.addZone}>{t("adm.ship.addZone")}</button></div>
+      <div className="ship-h" style={{ marginTop: 14 }}><Icon name="globe" size={16} /> {t("adm.ship.zones")}
+        <button className="btn-sm" onClick={PS.addZone}><Icon name="plus" size={14} />{t("adm.ship.addZone")}</button></div>
       <div className="adm-table-wrap">
         <table className="adm-table zones">
           <thead><tr><th>{t("adm.ship.destination")}</th><th>{t("adm.ship.carrier")}</th><th>{t("adm.ship.cost")}</th><th>{t("adm.ship.days")}</th><th></th></tr></thead>
@@ -380,7 +387,7 @@ function ShippingConfig({ ov }) {
                   {[...new Set([z.carrier, ...carriers])].filter(Boolean).map((c) => <option key={c} value={c}>{c}</option>)}</select></td>
                 <td><PriceInput value={z.cost} onCommit={(v) => PS.updateZone(z.id, { cost: Number(v) || 0 })} /></td>
                 <td className="eta"><PriceInput value={z.etaMin} onCommit={(v) => PS.updateZone(z.id, { etaMin: Number(v) || 0 })} /><span>–</span><PriceInput value={z.etaMax} onCommit={(v) => PS.updateZone(z.id, { etaMax: Number(v) || 0 })} /></td>
-                <td><button className="btn-sm danger" title={t("adm.ship.removeZone")} onClick={() => PS.removeZone(z.id)}>✕</button></td>
+                <td><button className="btn-sm danger" title={t("adm.ship.removeZone")} onClick={() => PS.removeZone(z.id)}><Icon name="trash" size={13} /></button></td>
               </tr>
             ))}
           </tbody>
@@ -531,7 +538,7 @@ function Prices({ preQ }) {
         <div className="adm-pp-right">
           {ev === 0
             ? <span className="pp-tag never" title={t("adm.prices.neverSoldTitle")}>{t("adm.prices.neverSold")}</span>
-            : <span className="pp-tag sold">🛒 {m} <em>{t("adm.prices.thisMonth")}</em></span>}
+            : <span className="pp-tag sold"><Icon name="orders" size={12} /> {m} <em>{t("adm.prices.thisMonth")}</em></span>}
           <PriceInput value={value} placeholder={String(p.basePrice ?? p.price)} onCommit={onCommit} />
         </div>
       </div>
@@ -571,10 +578,10 @@ function Prices({ preQ }) {
       <div className="adm-head-row">
         <h2>{t("adm.prices.title")}</h2>
         <div className="adm-actions">
-          <button className="btn-sm" onClick={PS.exportJSON}>{t("adm.prices.export")}</button>
-          <button className="btn-sm" onClick={() => fileRef.current?.click()}>{t("adm.prices.import")}</button>
+          <button className="btn-sm" onClick={PS.exportJSON}><Icon name="download" size={14} />{t("adm.prices.export")}</button>
+          <button className="btn-sm" onClick={() => fileRef.current?.click()}><Icon name="upload" size={14} />{t("adm.prices.import")}</button>
           <input ref={fileRef} type="file" accept="application/json" hidden onChange={doImport} />
-          <button className="btn-sm danger" onClick={doReset}>{t("adm.prices.reset")}</button>
+          <button className="btn-sm danger" onClick={doReset}><Icon name="rotate" size={14} />{t("adm.prices.reset")}</button>
         </div>
       </div>
       <p className="muted">{t("adm.prices.hint")}</p>
@@ -641,22 +648,16 @@ function Prices({ preQ }) {
  * comes from the server: `stage` is what the customer's tracking page shows, and
  * `next_stages` is what the API will actually accept — the panel never decides
  * for itself which move is legal, so a button that exists always works.
+ *
+ * Paridad con la hoja de Google: lo que el dueño puede tocar allí (Estado y
+ * Guía) se puede tocar aquí, y además la nota interna y la ficha de costo; cada
+ * cambio se replica a la hoja en el acto, y lo que se edite en la hoja llega
+ * aquí en ≤1 min (job gsheet-watch).
  */
 
 const PAGE_SIZE = 20;
 
-/**
- * Quick ranges. They resolve to an absolute `from` date immediately rather than
- * being sent as "30d", so the server never has to guess which clock the window
- * was measured against — and so the date inputs below can show what a preset
- * actually selected.
- */
-const DATE_PRESETS = [
-  ["all", "Todo"],
-  ["7d", "7 días"],
-  ["30d", "30 días"],
-  ["90d", "90 días"],
-];
+const DATE_PRESETS = ["all", "7d", "30d", "90d"];
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 
@@ -665,42 +666,38 @@ function presetFrom(preset) {
   return days ? ymd(Date.now() - days * 864e5) : "";
 }
 
+/** Icono profesional por etapa / estado terminal (sustituye a los emojis). */
+const STAGE_ICON = { confirmed: "receipt", in_lab: "lab", shipped: "box", in_transit: "truck", delivered: "checkCircle", payment_pending: "clock", canceled: "alert", refunded: "undo" };
+
 /** Coloured pill for the stage, or for the terminal state that replaced it. */
 function StageBadge({ order }) {
   const { t } = useLang();
   const term = order.terminal && TERMINAL_BY_KEY[order.terminal];
-  // A canceled or refunded order is not "somewhere on the timeline" — showing a
-  // stage for it would be a lie, exactly as TrackingTimeline decides.
   if (term && order.terminal !== "payment_pending") {
-    return <span className="ord-badge" style={{ background: term.bg, color: term.color }}>{term.icon} {t(term.label)}</span>;
+    return <span className="ord-badge" style={{ background: term.bg, color: term.color }}><Icon name={STAGE_ICON[order.terminal]} size={13} /> {t(term.label)}</span>;
   }
   const st = STAGE_BY_KEY[order.stage] || STAGE_BY_KEY.confirmed;
   return (
     <span className="ord-badge" style={{ background: st.bg, color: st.color }}>
-      {st.icon} {t(st.label)}
-      {term && <span className="ord-badge-sub" title={t("adm.ord.paymentPending")}> · ⏳</span>}
+      <Icon name={STAGE_ICON[st.key]} size={13} /> {t(st.label)}
+      {term && <span className="ord-badge-sub" title={t("adm.ord.paymentPending")}> · <Icon name="clock" size={12} /></span>}
     </span>
   );
 }
 
 /**
- * The "advance" control.
- *
- * Only `order.next_stages` is offered. Moving to `in_transit` asks for the
- * courier reference first, because that number is what the customer's tracking
- * page renders — collecting it after the fact means an email that says "on its
- * way" with nothing to track.
+ * The "advance" control. Only `order.next_stages` is offered. Moving to
+ * `in_transit` asks for the courier reference first, because that number is
+ * what the customer's tracking page renders.
  */
 function StageControl({ order, busy, onMove }) {
   const { t } = useLang();
   const [asking, setAsking] = useState(null);
-  const [tracking, setTracking] = useState("");
-  const [trackUrl, setTrackUrl] = useState("");
+  const [tracking, setTracking] = useState(order.tracking_number || "");
+  const [trackUrl, setTrackUrl] = useState(order.tracking_url || "");
   const next = order.next_stages || [];
 
-  if (!next.length) {
-    return <span className="muted ord-nomove">{t("adm.ord.noMoves")}</span>;
-  }
+  if (!next.length) return <span className="muted ord-nomove">{t("adm.ord.noMoves")}</span>;
 
   if (asking) {
     return (
@@ -711,26 +708,12 @@ function StageControl({ order, busy, onMove }) {
           e.preventDefault();
           onMove(asking, { trackingNumber: tracking.trim(), trackingUrl: trackUrl.trim() });
           setAsking(null);
-          setTracking("");
-          setTrackUrl("");
         }}
       >
-        <input
-          autoFocus
-          placeholder={t("adm.ord.trackingPh")}
-          value={tracking}
-          onChange={(e) => setTracking(e.target.value)}
-        />
-        {/* URL de seguimiento del transportista: viaja en el botón del email
-            automático que recibe el cliente al pasar a "en camino". */}
-        <input
-          type="url"
-          placeholder={t("adm.ord.trackingUrlPh")}
-          value={trackUrl}
-          onChange={(e) => setTrackUrl(e.target.value)}
-        />
-        <button className="btn-sm primary" disabled={busy}>{t("adm.ord.confirm")}</button>
-        <button type="button" className="btn-sm" onClick={() => { setAsking(null); setTracking(""); setTrackUrl(""); }}>{t("adm.ord.cancel")}</button>
+        <input autoFocus placeholder={t("adm.ord.trackingPh")} value={tracking} onChange={(e) => setTracking(e.target.value)} />
+        <input type="url" placeholder={t("adm.ord.trackingUrlPh")} value={trackUrl} onChange={(e) => setTrackUrl(e.target.value)} />
+        <button className="btn-sm primary" disabled={busy}><Icon name="check" size={14} />{t("adm.ord.confirm")}</button>
+        <button type="button" className="btn-sm" onClick={() => setAsking(null)}>{t("adm.ord.cancel")}</button>
       </form>
     );
   }
@@ -740,14 +723,9 @@ function StageControl({ order, busy, onMove }) {
       {next.map((key) => {
         const st = STAGE_BY_KEY[key];
         return (
-          <button
-            key={key}
-            className="btn-sm ord-move"
-            disabled={busy}
-            title={t(st.action)}
-            onClick={() => (key === "in_transit" ? setAsking(key) : onMove(key, {}))}
-          >
-            {st.icon} {t(st.label)}
+          <button key={key} className="btn-sm ord-move" disabled={busy} title={t(st.action)}
+            onClick={() => (key === "in_transit" ? setAsking(key) : onMove(key, {}))}>
+            <Icon name={STAGE_ICON[key]} size={14} /> {t(st.label)}
           </button>
         );
       })}
@@ -755,40 +733,25 @@ function StageControl({ order, busy, onMove }) {
   );
 }
 
-// Visor bajo demanda de la receta de una línea: valores clave (para quién, DIP,
-// altura) + imágenes (prueba virtual y receta subida) desde /admin/prescriptions/:id.
-// Se carga solo al pulsar, para no pedir un enlace firmado por cada pedido listado.
+// Visor bajo demanda de la receta de una línea: valores clave + imágenes
+// (prueba virtual y receta subida) desde /admin/prescriptions/:id.
 function RxImages({ prescriptionId }) {
   const { t } = useLang();
-  const [state, setState] = useState("idle"); // idle | loading | done | error
+  const [state, setState] = useState("idle");
   const [data, setData] = useState(null);
   const load = async () => {
     if (state === "loading") return;
     setState("loading");
-    try {
-      const res = await fetchPrescription(prescriptionId);
-      setData(res);
-      setState("done");
-    } catch {
-      setState("error");
-    }
+    try { setData(await fetchPrescription(prescriptionId)); setState("done"); } catch { setState("error"); }
   };
-  if (state === "idle") {
-    return <button type="button" className="ord-rxbtn" onClick={load}>{t("adm.ord.viewRx")}</button>;
-  }
-  if (state === "loading") {
-    return <p className="ord-rxnote muted">{t("adm.ord.rxLoading")}</p>;
-  }
-  if (state === "error") {
-    return <button type="button" className="ord-rxbtn" onClick={load}>{t("adm.ord.rxRetry")}</button>;
-  }
+  if (state === "idle") return <button type="button" className="ord-rxbtn" onClick={load}><Icon name="eye" size={14} />{t("adm.ord.viewRx")}</button>;
+  if (state === "loading") return <p className="ord-rxnote muted">{t("adm.ord.rxLoading")}</p>;
+  if (state === "error") return <button type="button" className="ord-rxbtn" onClick={load}><Icon name="refresh" size={14} />{t("adm.ord.rxRetry")}</button>;
   const rx = data?.prescription || {};
   const tryon = data?.tryon_download_url;
   const file = data?.file_download_url;
   const mm = (v) => (v == null ? "—" : `${v} mm`);
-  const patient =
-    rx.patient_for === "other" ? (rx.patient_name || t("adm.ord.rxOther"))
-      : rx.patient_for === "me" ? t("adm.ord.rxMe") : null;
+  const patient = rx.patient_for === "other" ? (rx.patient_name || t("adm.ord.rxOther")) : rx.patient_for === "me" ? t("adm.ord.rxMe") : null;
   const pdText = rx.pd != null ? mm(rx.pd) : `OD ${mm(rx.pd_od)} · OS ${mm(rx.pd_os)}`;
   return (
     <div className="ord-rxview">
@@ -799,31 +762,68 @@ function RxImages({ prescriptionId }) {
       </div>
       {(tryon || file) ? (
         <div className="ord-rximgs">
-          {tryon && (
-            <a href={tryon} target="_blank" rel="noopener noreferrer">
-              <img src={tryon} alt={t("adm.ord.rxTryon")} loading="lazy" />
-              <span>{t("adm.ord.rxTryon")}</span>
-            </a>
-          )}
-          {file && (
-            <a href={file} target="_blank" rel="noopener noreferrer">
-              <img src={file} alt={t("adm.ord.rxPhotoImg")} loading="lazy" />
-              <span>{t("adm.ord.rxPhotoImg")}</span>
-            </a>
-          )}
+          {tryon && <a href={tryon} target="_blank" rel="noopener noreferrer"><img src={tryon} alt={t("adm.ord.rxTryon")} loading="lazy" /><span>{t("adm.ord.rxTryon")}</span></a>}
+          {file && <a href={file} target="_blank" rel="noopener noreferrer"><img src={file} alt={t("adm.ord.rxPhotoImg")} loading="lazy" /><span>{t("adm.ord.rxPhotoImg")}</span></a>}
         </div>
-      ) : (
-        <p className="ord-rxnote muted">{t("adm.ord.rxNoImages")}</p>
-      )}
+      ) : <p className="ord-rxnote muted">{t("adm.ord.rxNoImages")}</p>}
     </div>
   );
 }
 
-function OrderDetail({ order }) {
+/** Mini ficha de costo del pedido (lectura; la edición vive en Costos). */
+function OrderCostMini({ orderId, onGoCosts }) {
   const { t, lang } = useLang();
-  const addr = order.shipping_address;
+  const [sheet, setSheet] = useState(null);
+  const [state, setState] = useState("loading");
+  useEffect(() => {
+    let on = true;
+    fetchOrderCost(orderId).then((s) => { if (on) { setSheet(s); setState("ok"); } }).catch(() => { if (on) setState("error"); });
+    return () => { on = false; };
+  }, [orderId]);
+  if (state === "loading") return <div className="adm-skel" style={{ height: 36, marginTop: 8 }} />;
+  if (state === "error" || !sheet) return null;
+  const tone = marginTone(sheet.margin_pct);
   return (
-    <div className="ord-detail-grid">
+    <div className="ord-cost-mini">
+      <span>{t("adm.cost.revenue")}: <b>{fmtMoney(sheet.revenue, sheet.currency_code, lang)}</b></span>
+      <span>{t("adm.cost.cost")}: <b className="bad">{fmtMoney(sheet.cost_total, sheet.currency_code, lang)}</b></span>
+      <span>{t("adm.cost.margin")}: <b className={tone === "bad" ? "bad" : "good"}>{fmtMoney(sheet.margin, sheet.currency_code, lang)}</b> <span className={`margin-pct ${tone}`}>{sheet.margin_pct == null ? "" : `${Math.round(sheet.margin_pct)}%`}</span></span>
+      {sheet.manual && <span className="adm-chip gold"><Icon name="edit" size={12} />{t("adm.cost.manual")}</span>}
+      <button type="button" className="btn-xs" onClick={(e) => { e.stopPropagation(); onGoCosts(orderId); }}><Icon name="costs" size={13} />{t("adm.cost.openSheet")}</button>
+    </div>
+  );
+}
+
+function OrderDetail({ order, onPatched, onGoCosts }) {
+  const { t, lang } = useLang();
+  const { toast } = useFeedback();
+  const addr = order.shipping_address;
+  const [tracking, setTracking] = useState(order.tracking_number || "");
+  const [trackUrl, setTrackUrl] = useState(order.tracking_url || "");
+  const [note, setNote] = useState(order.owner_note || "");
+  const [busy, setBusy] = useState("");
+  useEffect(() => { setTracking(order.tracking_number || ""); setTrackUrl(order.tracking_url || ""); setNote(order.owner_note || ""); }, [order]);
+
+  const saveTracking = async () => {
+    setBusy("tracking");
+    try {
+      const o = await setOrderTracking(order.id, { trackingNumber: tracking.trim(), trackingUrl: trackUrl.trim() });
+      toast({ tone: "success", title: t("adm.ord.trackingSaved") });
+      onPatched(o);
+    } catch (e) { toast({ tone: "error", title: stageErrorText(t, e, "adm.ord.saveFailed") }); } finally { setBusy(""); }
+  };
+  const saveNote = async () => {
+    setBusy("note");
+    try {
+      const o = await setOrderNote(order.id, note.trim());
+      toast({ tone: "success", title: t("adm.ord.noteSaved") });
+      onPatched(o);
+    } catch (e) { toast({ tone: "error", title: stageErrorText(t, e, "adm.ord.saveFailed") }); } finally { setBusy(""); }
+  };
+  const history = order.stage_history || [];
+
+  return (
+    <div className="ord-detail-grid" onClick={(e) => e.stopPropagation()}>
       <div>
         <b>{t("adm.ord.itemsTitle")}</b>
         <ul>
@@ -833,13 +833,11 @@ function OrderDetail({ order }) {
                 <span>
                   {it.quantity > 1 && <em className="ord-qty">{it.quantity}× </em>}
                   {it.title}
-                  {it.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>{t("adm.ord.rx")}</span>}
+                  {it.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}><Icon name="glasses" size={12} />{t("adm.ord.rx")}</span>}
                 </span>
                 <b>{fmtMoney(it.total, order.currency_code, lang)}</b>
               </div>
-              {it.has_prescription && it.prescription_id && (
-                <RxImages prescriptionId={it.prescription_id} />
-              )}
+              {it.has_prescription && it.prescription_id && <RxImages prescriptionId={it.prescription_id} />}
             </li>
           ))}
         </ul>
@@ -850,98 +848,92 @@ function OrderDetail({ order }) {
             tax: fmtMoney(order.tax_total, order.currency_code, lang),
           })}
         </p>
+        <OrderCostMini orderId={order.id} onGoCosts={onGoCosts} />
+        {history.length > 0 && (
+          <>
+            <b style={{ display: "block", marginTop: 12 }}>{t("adm.ord.timeline")}</b>
+            <ul className="ord-timeline">
+              {history.slice().reverse().map((h, i) => (
+                <li className="ord-tl" key={i}><b>{STAGE_BY_KEY[h.stage] ? t(STAGE_BY_KEY[h.stage].label) : h.stage}</b><span>{new Date(h.at).toLocaleString(lang === "en" ? "en-US" : "es")}</span></li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
       <div>
         <b>{addr ? t("adm.ord.deliveryTitle") : t("adm.ord.pickupTitle")}</b>
         {addr ? (
           <p className="ord-addr">
-            📍 {[addr.address_1, addr.address_2].filter(Boolean).join(", ")}
-            {addr.city ? `, ${addr.city}` : ""}
-            {addr.postal_code ? ` (${addr.postal_code})` : ""}
-            <br />
-            👤 {order.customer.name || "—"}
-            {order.customer.phone ? ` · 📞 ${order.customer.phone}` : ""}
-            <br />
-            ✉️ {order.customer.email || "—"}
-            {order.shipping_method ? ` · 🏷️ ${order.shipping_method}` : ""}
+            <span><Icon name="mapPin" size={14} />{[addr.address_1, addr.address_2].filter(Boolean).join(", ")}{addr.city ? `, ${addr.city}` : ""}{addr.postal_code ? ` (${addr.postal_code})` : ""}</span>
+            <span><Icon name="user" size={14} />{order.customer.name || "—"}{order.customer.phone ? ` · ${order.customer.phone}` : ""}</span>
+            <span><Icon name="mail" size={14} />{order.customer.email || "—"}</span>
+            {order.shipping_method && <span><Icon name="truck" size={14} />{order.shipping_method}</span>}
           </p>
         ) : (
-          <p className="ord-addr muted">{t("adm.ord.noAddress")}</p>
-        )}
-        {order.tracking_number && (
-          <p className="ord-addr">{t("adm.ord.tracking")} <b>{order.tracking_number}</b></p>
-        )}
-        {order.lab_stage && (
           <p className="ord-addr muted">
-            {t("adm.ord.labPinned", { stage: t(STAGE_BY_KEY[order.lab_stage]?.label ?? order.lab_stage) })}
+            <span><Icon name="store" size={14} />{t("adm.ord.noAddress")}</span>
+            <span><Icon name="user" size={14} />{order.customer.name || "—"}{order.customer.phone ? ` · ${order.customer.phone}` : ""}</span>
+            <span><Icon name="mail" size={14} />{order.customer.email || "—"}</span>
           </p>
         )}
+        {order.seller_code && <p className="ord-addr"><span><Icon name="sellers" size={14} />{t("adm.ord.seller")}: <b>{order.seller_code}</b></span></p>}
+        {order.lab_stage && <p className="ord-addr muted"><span><Icon name="lab" size={14} />{t("adm.ord.labPinned", { stage: t(STAGE_BY_KEY[order.lab_stage]?.label ?? order.lab_stage) })}</span></p>}
+
+        <b style={{ display: "block", marginTop: 12 }}>{t("adm.ord.tracking")}</b>
+        <div className="ord-edit-row">
+          <input value={tracking} placeholder={t("adm.ord.trackingPh")} onChange={(e) => setTracking(e.target.value)} />
+          <input type="url" value={trackUrl} placeholder={t("adm.ord.trackingUrlPh")} onChange={(e) => setTrackUrl(e.target.value)} />
+          <button type="button" className="btn-sm primary" disabled={busy === "tracking" || (tracking.trim() === (order.tracking_number || "") && trackUrl.trim() === (order.tracking_url || ""))} onClick={saveTracking}><Icon name="save" size={14} />{t("adm.ord.save")}</button>
+        </div>
+        <b style={{ display: "block", marginTop: 12 }}>{t("adm.ord.note")}</b>
+        <div className="ord-edit-row">
+          <textarea value={note} maxLength={1000} placeholder={t("adm.ord.notePh")} onChange={(e) => setNote(e.target.value)} />
+          <button type="button" className="btn-sm primary" disabled={busy === "note" || note.trim() === (order.owner_note || "")} onClick={saveNote}><Icon name="save" size={14} />{t("adm.ord.save")}</button>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 6 }}><Icon name="sheet" size={12} /> {t("adm.ord.sheetSync")}</p>
       </div>
     </div>
   );
 }
 
 // Enlace directo a un pedido (`/admin?tab=orders&order=<id>`), tal como lo
-// enlaza la hoja de Google (Archivo → receta / foto de la prueba virtual): se
-// busca ese pedido en todo el histórico y se abre su detalle solo.
+// enlaza la hoja de Google (Archivo → receta / foto de la prueba virtual).
 function deepLinkedOrder() {
   if (typeof window === "undefined") return "";
   return (new URLSearchParams(window.location.search).get("order") || "").trim();
 }
 
-function Orders() {
+export function Orders({ onGoCosts, sellers = [] }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const [linked] = useState(deepLinkedOrder);
   const [query, setQuery] = useState(linked);
   const [debounced, setDebounced] = useState(linked);
-  // `preset` only drives which quick-range button looks active; `from`/`to` are
-  // the single source of truth for what gets requested.
   const [preset, setPreset] = useState(linked ? "all" : "30d");
   const [from, setFrom] = useState(() => presetFrom(linked ? "all" : "30d"));
   const [to, setTo] = useState("");
   const [stage, setStage] = useState("");
   const [terminal, setTerminal] = useState("");
   const [rx, setRx] = useState("");
+  const [seller, setSeller] = useState("");
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState(null);
   const [busyId, setBusyId] = useState(null);
-
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  // Bumped after a transition so the effect re-runs without duplicating its body.
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Typing shouldn't fire a request per keystroke against a route that reads
-  // hundreds of orders with all their relations.
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(query.trim()), 300);
-    return () => clearTimeout(id);
-  }, [query]);
-
-  // Any change to the filters invalidates the page number — staying on page 4
-  // of a result set that now has one page shows an empty table.
-  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx]);
+  useEffect(() => { const id = setTimeout(() => setDebounced(query.trim()), 300); return () => clearTimeout(id); }, [query]);
+  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx, seller]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchOrders({
-      q: debounced,
-      from,
-      to,
-      stage,
-      terminal,
-      hasPrescription: rx,
-      limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
-    })
+    fetchOrders({ q: debounced, from, to, stage, terminal, hasPrescription: rx, seller, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((result) => {
         if (!alive) return;
-        setData(result);
-        setError("");
-        // Llegó por enlace directo: abrir el pedido en cuanto aparece.
+        setData(result); setError("");
         if (linked && debounced === linked) {
           const hit = (result?.orders ?? []).find((o) => o.id === linked || `#${o.display_id}` === linked);
           if (hit) setOpenId(hit.id);
@@ -949,141 +941,105 @@ function Orders() {
       })
       .catch((e) => {
         if (!alive) return;
-        setError(
-          e.status === 401
-            ? t("adm.err.sessionExpired")
-            : stageErrorText(t, e, "adm.err.orders.loadFailed")
-        );
-        // Drop the rows too: leaving the previous page on screen behind an error
-        // banner offers "avanzar" buttons that are already going to fail, and
-        // makes a dead session look like a working one.
+        setError(e.status === 401 ? t("adm.err.sessionExpired") : stageErrorText(t, e, "adm.err.orders.loadFailed"));
         if (e.status === 401) setData(null);
       })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [debounced, from, to, stage, terminal, rx, page, reloadKey]);
+  }, [debounced, from, to, stage, terminal, rx, seller, page, reloadKey]);
 
-  function applyPreset(key) {
-    setPreset(key);
-    setFrom(presetFrom(key));
-    setTo("");
-  }
+  function applyPreset(key) { setPreset(key); setFrom(presetFrom(key)); setTo(""); }
 
   const orders = data?.orders ?? [];
   const count = data?.count ?? 0;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const hasFilters = stage || terminal || rx || seller || debounced || preset === "custom";
 
   async function move(order, target, opts) {
     setBusyId(order.id);
     try {
       const updated = await setOrderStage(order.id, target, opts);
       const reached = STAGE_BY_KEY[updated?.stage ?? target];
-      toast({
-        tone: "success",
-        title: t("adm.ord.moved", {
-          order: orderLabel(order),
-          stage: reached ? t(reached.label) : target,
-        }),
-        // El backend confirma si el email automático al cliente salió.
-        message: updated?.__notified ? t("adm.ord.notified") : undefined,
-      });
-      // Re-read the page rather than patching the row: a transition can change
-      // the order's stage AND drop it out of the current filter, and only the
-      // server knows which.
+      toast({ tone: "success", title: t("adm.ord.moved", { order: orderLabel(order), stage: reached ? t(reached.label) : target }), message: updated?.__notified ? t("adm.ord.notified") : undefined });
       setReloadKey((k) => k + 1);
     } catch (e) {
       toast({ tone: "error", title: stageErrorText(t, e), duration: 8000 });
-    } finally {
-      setBusyId(null);
-    }
+    } finally { setBusyId(null); }
   }
+
+  // Un pedido editado (guía/nota) se repinta en sitio: el servidor devolvió la verdad.
+  const patch = (o) => { if (o) setData((d) => d ? { ...d, orders: d.orders.map((x) => (x.id === o.id ? o : x)) } : d); };
+
+  const exportCsv = () => {
+    const stageText = (o) => o.terminal && o.terminal !== "payment_pending" ? t(TERMINAL_BY_KEY[o.terminal].label) : t(STAGE_BY_KEY[o.stage]?.label || o.stage);
+    const csv = ordersToCsv(orders, [
+      [t("adm.col.order"), (o) => orderLabel(o)], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)],
+      [t("adm.ord.colCustomer"), (o) => o.customer.name || ""], [t("adm.login.email"), (o) => o.customer.email || ""], [t("adm.sel.phone"), (o) => o.customer.phone || ""],
+      [t("adm.ord.colDelivery"), (o) => o.shipping_address?.city || t("adm.ord.pickup")], [t("adm.col.total"), (o) => Number(o.total || 0).toFixed(2)],
+      [t("adm.ord.colStage"), stageText], [t("adm.ord.tracking"), (o) => o.tracking_number || ""], [t("adm.ord.seller"), (o) => o.seller_code || ""],
+      [t("adm.col.items"), (o) => o.items.map((i) => `${i.quantity}× ${i.title}`).join(" | ")], [t("adm.ord.note"), (o) => o.owner_note || ""],
+    ]);
+    downloadText(`pedidos-${ymd(Date.now())}.csv`, csv);
+  };
 
   return (
     <div className="adm-section">
       <div className="adm-head-row">
         <h2>{t("adm.ord.title")}</h2>
         <div className="adm-orders-tools">
-          <div className="adm-find compact" title={t("adm.ord.searchTitle")}>
-            <span aria-hidden="true">🔎</span>
-            <input
-              placeholder={t("adm.ord.search")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && <button className="adm-find-x" title={t("adm.ord.clear")} onClick={() => setQuery("")}>×</button>}
-          </div>
+          <label className="adm-find compact" title={t("adm.ord.searchTitle")}>
+            <Icon name="search" size={15} />
+            <input placeholder={t("adm.ord.search")} value={query} onChange={(e) => setQuery(e.target.value)} />
+            {query && <button type="button" className="adm-find-x" title={t("adm.ord.clear")} onClick={() => setQuery("")}><Icon name="close" size={12} /></button>}
+          </label>
           <div className="adm-range">
-            {DATE_PRESETS.map(([k, l]) => (
-              <button key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>{l}</button>
-            ))}
+            {DATE_PRESETS.map((k) => <button key={k} className={preset === k ? "on" : ""} onClick={() => applyPreset(k)}>{t(`adm.ord.preset.${k}`)}</button>)}
           </div>
+          <button className="btn-sm" onClick={exportCsv} disabled={!orders.length} title={t("adm.ord.exportTitle")}><Icon name="download" size={14} />CSV</button>
+          <button className="btn-sm ghost" onClick={() => setReloadKey((k) => k + 1)} title={t("adm.sec.refresh")}><Icon name="refresh" size={15} /></button>
         </div>
       </div>
 
       <div className="adm-orders-filters">
-        <label>
-          {t("adm.ord.from")}
-          <input
-            type="date"
-            className="adm-sel"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => { setFrom(e.target.value); setPreset("custom"); }}
-          />
-        </label>
-        <label>
-          {t("adm.ord.to")}
-          <input
-            type="date"
-            className="adm-sel"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => { setTo(e.target.value); setPreset("custom"); }}
-          />
-        </label>
-        <label>
-          {t("adm.ord.stage")}
+        <label>{t("adm.ord.from")}<input type="date" className="adm-sel" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); setPreset("custom"); }} /></label>
+        <label>{t("adm.ord.to")}<input type="date" className="adm-sel" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); setPreset("custom"); }} /></label>
+        <label>{t("adm.ord.stage")}
           <select className="adm-sel" value={stage} onChange={(e) => setStage(e.target.value)}>
             <option value="">{t("adm.ord.allF")}</option>
-            {STAGES.map((s) => <option key={s.key} value={s.key}>{s.icon} {t(s.label)}</option>)}
+            {STAGES.map((s) => <option key={s.key} value={s.key}>{t(s.label)}</option>)}
           </select>
         </label>
-        <label>
-          {t("adm.ord.state")}
+        <label>{t("adm.ord.state")}
           <select className="adm-sel" value={terminal} onChange={(e) => setTerminal(e.target.value)}>
             <option value="">{t("adm.ord.allM")}</option>
-            {TERMINALS.map((s) => <option key={s.key} value={s.key}>{s.icon} {t(s.label)}</option>)}
+            {TERMINALS.map((s) => <option key={s.key} value={s.key}>{t(s.label)}</option>)}
           </select>
         </label>
-        <label>
-          {t("adm.ord.kind")}
+        <label>{t("adm.ord.kind")}
           <select className="adm-sel" value={rx} onChange={(e) => setRx(e.target.value)}>
             <option value="">{t("adm.ord.allM")}</option>
             <option value="true">{t("adm.ord.withRx")}</option>
             <option value="false">{t("adm.ord.withoutRx")}</option>
           </select>
         </label>
-        {(stage || terminal || rx || debounced || preset === "custom") && (
-          <button
-            className="btn-sm"
-            onClick={() => { setStage(""); setTerminal(""); setRx(""); setQuery(""); applyPreset("30d"); }}
-          >
-            {t("adm.ord.clearFilters")}
-          </button>
+        <label>{t("adm.ord.seller")}
+          <select className="adm-sel" value={seller} onChange={(e) => setSeller(e.target.value)}>
+            <option value="">{t("adm.ord.allM")}</option>
+            <option value="none">{t("adm.ord.noSeller")}</option>
+            {sellers.map((s) => <option key={s.code} value={s.code}>{s.code} · {s.name}</option>)}
+          </select>
+        </label>
+        {hasFilters && (
+          <button className="btn-sm ghost" onClick={() => { setStage(""); setTerminal(""); setRx(""); setSeller(""); setQuery(""); applyPreset("30d"); }}><Icon name="close" size={14} />{t("adm.ord.clearFilters")}</button>
         )}
       </div>
 
       {error && <div className="adm-login-err">{error}</div>}
-
-      {data?.truncated && (
-        <div className="adm-find-note muted">
-          {t("adm.ord.truncated", { n: data.scan_limit })}
-        </div>
-      )}
+      {data?.truncated && <div className="adm-find-note muted">{t("adm.ord.truncated", { n: data.scan_limit })}</div>}
 
       <div className="adm-card">
         <div className="adm-table-wrap">
-          <table className="adm-table orders">
+          <table className="adm-table orders responsive">
             <thead>
               <tr>
                 <th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.ord.colCustomer")}</th><th>{t("adm.ord.colDelivery")}</th>
@@ -1092,39 +1048,31 @@ function Orders() {
             </thead>
             <tbody>
               {loading && !orders.length ? (
-                <tr><td colSpan="7" className="muted">{t("adm.ord.loading")}</td></tr>
+                <tr><td colSpan="7" className="full"><div className="adm-skel-rows"><div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" /></div></td></tr>
               ) : error && !orders.length ? (
-                // Never say "no orders" when the truth is "we could not ask".
-                <tr><td colSpan="7" className="muted">{t("adm.ord.loadFailed")}</td></tr>
+                <tr><td colSpan="7" className="muted full">{t("adm.ord.loadFailed")}</td></tr>
               ) : !orders.length ? (
-                <tr><td colSpan="7" className="muted">
-                  {debounced || stage || terminal || rx ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}
-                </td></tr>
+                <tr><td colSpan="7" className="full"><div className="adm-empty"><Icon name="orders" size={36} /><b>{hasFilters ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}</b><p>{t("adm.ord.emptyHint")}</p></div></td></tr>
               ) : orders.map((o) => {
                 const open = openId === o.id;
                 return [
-                  <tr key={o.id} className="ord-row" onClick={() => setOpenId(open ? null : o.id)}>
-                    <td>
+                  <tr key={o.id} className={`ord-row ${open ? "open" : ""}`} onClick={() => setOpenId(open ? null : o.id)}>
+                    <td data-label={t("adm.col.order")}>
                       <b>{orderLabel(o)}</b>
-                      {o.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}>👓</span>}
-                      {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}>📷</span>}
+                      {o.has_prescription && <span className="ord-rx" title={t("adm.ord.rxTitle")}><Icon name="glasses" size={13} /></span>}
+                      {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}><Icon name="camera" size={13} /></span>}
+                      {o.owner_note && <span className="ord-tryon" title={o.owner_note}><Icon name="clipboard" size={13} /></span>}
                     </td>
-                    <td>{shortDate(o.created_at, lang)}</td>
-                    <td><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span></td>
-                    <td>{o.shipping_address?.city ? `🚚 ${o.shipping_address.city}` : t("adm.ord.pickup")}</td>
-                    <td className="r">{fmtMoney(o.total, o.currency_code, lang)}</td>
-                    <td><StageBadge order={o} /></td>
-                    <td>
-                      <StageControl
-                        order={o}
-                        busy={busyId === o.id}
-                        onMove={(target, opts) => move(o, target, opts)}
-                      />
-                    </td>
+                    <td data-label={t("adm.col.date")}>{shortDate(o.created_at, lang)}</td>
+                    <td data-label={t("adm.ord.colCustomer")}><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span>{o.seller_code && <span className="adm-chip gold" style={{ marginLeft: 6, fontSize: 10.5 }}>{o.seller_code}</span>}</td>
+                    <td data-label={t("adm.ord.colDelivery")}>{o.shipping_address?.city ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="truck" size={13} />{o.shipping_address.city}</span> : <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="store" size={13} />{t("adm.ord.pickup")}</span>}</td>
+                    <td data-label={t("adm.col.total")} className="r num">{fmtMoney(o.total, o.currency_code, lang)}</td>
+                    <td data-label={t("adm.ord.colStage")}><StageBadge order={o} /></td>
+                    <td data-label={t("adm.ord.colAdvance")}><StageControl order={o} busy={busyId === o.id} onMove={(target, opts) => move(o, target, opts)} /></td>
                   </tr>,
                   open && (
                     <tr key={o.id + "-d"} className="ord-detail">
-                      <td colSpan="7"><OrderDetail order={o} /></td>
+                      <td colSpan="7" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} /></td>
                     </tr>
                   ),
                 ];
@@ -1135,13 +1083,7 @@ function Orders() {
 
         <div className="adm-pager">
           <span className="muted">
-            {count === 0
-              ? t("adm.ord.pagerEmpty")
-              : t("adm.ord.pagerRange", {
-                  first: page * PAGE_SIZE + 1,
-                  last: Math.min((page + 1) * PAGE_SIZE, count),
-                  total: int(count),
-                })}
+            {count === 0 ? t("adm.ord.pagerEmpty") : t("adm.ord.pagerRange", { first: page * PAGE_SIZE + 1, last: Math.min((page + 1) * PAGE_SIZE, count), total: int(count) })}
             {loading && orders.length ? t("adm.ord.updating") : ""}
           </span>
           <div>
@@ -1155,36 +1097,45 @@ function Orders() {
   );
 }
 
-const TABS = ["exec", "overview", "sales", "orders", "products", "prices", "team", "security"];
+/** `?tab=` en la URL: los enlaces de la hoja de Google abren la sección directa. */
+function tabFromUrl() {
+  const want = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : "";
+  return TABS.includes(want) ? want : "exec";
+}
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ user, onLogout }) {
   const { t } = useLang();
-  // `?tab=orders` (enlaces desde la hoja de Google) abre esa pestaña directamente.
-  const [tab, setTab] = useState(() => {
-    const want = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : "";
-    return TABS.includes(want) ? want : "exec";
-  });
+  const [tab, setTabState] = useState(tabFromUrl);
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
-  // Demo seed ONLY for the demo login: a real store owner must never see
-  // invented orders mixed into (or underneath) their real numbers.
-  useEffect(() => { if (isDemoLogin()) ensureSeed(); }, []);
+  const [costOrder, setCostOrder] = useState("");
+  const [sellers, setSellers] = useState([]);
+  const demo = isDemoLogin();
+  useEffect(() => { if (demo) ensureSeed(); }, [demo]);
+  // Lista de vendedores compartida (filtro de Pedidos, etiquetas): se refresca
+  // al entrar y cuando la pestaña Vendedores avisa de un cambio.
+  const loadSellers = () => { if (demo) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
+  useEffect(loadSellers, [demo]);
+
+  const setTab = (k) => {
+    setTabState(k);
+    if (typeof window !== "undefined") {
+      const u = new URL(window.location.href); u.searchParams.set("tab", k); u.searchParams.delete("order");
+      window.history.replaceState({}, "", u.toString());
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const onFind = (v) => { setFind(v); if (v) setTab("prices"); };
+  const goCosts = (orderId) => { setCostOrder(orderId); setTab("costs"); };
+
   return (
-    <div className="adm-body">
-      <div className="adm-navbar">
-        <nav className="adm-tabs">
-          {TABS.map((k) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{t(`adm.tab.${k}`)}</button>)}
-        </nav>
-        <div className="adm-find" title={t("adm.findPriceTitle")}>
-          <span aria-hidden="true">🔎</span>
-          <input placeholder={t("adm.findPrice")} value={find} onChange={(e) => onFind(e.target.value)} />
-        </div>
-      </div>
+    <AdminShell tab={tab} onTab={setTab} user={user} onLogout={onLogout} find={find} onFind={onFind}>
       {tab === "exec" && <Executive preset={preset} setPreset={setPreset} onGoOrders={() => setTab("orders")} />}
       {tab === "overview" && <Overview preset={preset} setPreset={setPreset} />}
       {tab === "sales" && <Sales preset={preset} setPreset={setPreset} />}
-      {tab === "orders" && <Orders />}
+      {tab === "orders" && <Orders onGoCosts={goCosts} sellers={sellers} />}
+      {tab === "costs" && <Costs focusOrder={costOrder} onFocusDone={() => setCostOrder("")} sellers={sellers} />}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} />}
       {tab === "products" && (
         <>
           <div className="adm-section adm-section-top"><CatalogManager /></div>
@@ -1194,6 +1145,7 @@ export default function AdminDashboard() {
       {tab === "prices" && <Prices preQ={find} />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
-    </div>
+      <p className="muted" style={{ textAlign: "center", fontSize: 12, marginTop: 30 }}>{t("adm.footer", { name: TENANT.name })}</p>
+    </AdminShell>
   );
 }

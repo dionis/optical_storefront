@@ -27,6 +27,8 @@ const MyOrders = lazy(() => import("./pages/MyOrders.jsx"));
 // along in the bundle a customer downloads.
 const MediaReview = lazy(() => import("./pages/MediaReview.jsx"));
 const MedusaCheckout = lazy(() => import("./pages/MedusaCheckout.jsx"));
+const SellerDashboard = lazy(() => import("./pages/SellerDashboard.jsx"));
+import { captureReferral } from "./data/referral.js";
 import { CartProvider } from "./components/CartContext.jsx";
 import { FeedbackProvider } from "./components/Feedback.jsx";
 import { LanguageProvider } from "./i18n/LanguageContext.jsx";
@@ -39,7 +41,10 @@ const RouteFallback = () => (
 );
 
 export default function App() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  // Enlace de referido de un vendedor (`?ref=CODIGO`): se guarda 30 días y
+  // viaja con la compra para atribuirle la venta.
+  useEffect(() => { captureReferral(search); }, [search]);
   const isAdmin = pathname.startsWith("/admin");
   useEffect(() => { loadLive(); trackAccess(); initSfx(); }, []);
   // El catálogo se revalida solo al volver a la pestaña o al recuperar la red.
@@ -89,6 +94,7 @@ export default function App() {
               <Route path="/checkout" element={<MedusaCheckout />} />
               <Route path="/cuenta" element={<AccountPage />} />
               <Route path="/my-orders" element={<MyOrders />} />
+              <Route path="/vendedor" element={<SellerDashboard />} />
             </Routes>
             </Suspense>
           </main>

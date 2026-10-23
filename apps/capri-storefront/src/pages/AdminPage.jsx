@@ -111,7 +111,6 @@ function FirstPasswordGate({ onDone }) {
 }
 
 export default function AdminPage() {
-  const { t, lang, toggle } = useLang();
   const [session, setSession] = useState(() => getSession());
   // null = comprobando · false = contraseña propia · true = temporal pendiente
   const [mustChange, setMustChange] = useState(null);
@@ -129,28 +128,7 @@ export default function AdminPage() {
   if (!session) return <Login onOk={() => { setMustChange(null); setSession(getSession()); }} />;
   if (mustChange === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
   if (mustChange) return <FirstPasswordGate onDone={() => setMustChange(false)} />;
-  return (
-    <div className="adm-shell">
-      <header className="adm-topbar">
-        <div className="adm-brand">
-          <img src={TENANT.logo} alt={TENANT.name} />
-          <span>{t("adm.title")}</span>
-          {/* Sello que DIFERENCIA el panel de la tienda al primer vistazo. */}
-          <em className="adm-badge">ADMIN</em>
-        </div>
-        <div className="adm-user">
-          <Link to="/" className="adm-link">{t("adm.viewStore")}</Link>
-          <span className="adm-who">👤 {session.user}</span>
-          {/* The panel is its own shell — the storefront header (and its language
-              toggle) is not on screen here, so the switch has to live in this bar
-              or the owner has no way to change language while working. */}
-          <button className="btn-sm" onClick={toggle} title={t("lang.switch")}>
-            {lang === "es" ? "EN" : "ES"}
-          </button>
-          <button className="btn-sm" onClick={() => { logout(); setSession(null); }}>{t("adm.logout")}</button>
-        </div>
-      </header>
-      <AdminDashboard />
-    </div>
-  );
+  // El armazón (barra lateral, barra superior, idioma, sesión) vive en
+  // AdminShell, montado por AdminDashboard; aquí solo se decide si hay sesión.
+  return <AdminDashboard user={session.user} onLogout={() => { logout(); setSession(null); }} />;
 }

@@ -9,7 +9,9 @@ import { fetchDiscontinued } from "./catalogAdmin.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS } from "../data/brands.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import Icon from "./icons.jsx";
 
+const STAGE_ICON = { confirmed: "receipt", in_lab: "lab", shipped: "box", in_transit: "truck", delivered: "checkCircle", payment_pending: "clock", canceled: "alert", refunded: "undo" };
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 const int = (n) => (Number(n) || 0).toLocaleString("es");
 const usd = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -114,18 +116,18 @@ export default function Executive({ preset = "30d", setPreset, onGoOrders }) {
       {state === "real" && (
         <div className="adm-exec-alerts">
           {alerts.length === 0
-            ? <span className="exec-alert ok">✓ {t("adm.exec.allClear")}</span>
+            ? <span className="exec-alert ok"><Icon name="checkCircle" size={14} /> {t("adm.exec.allClear")}</span>
             : alerts.map((a, i) => <span key={i} className={`exec-alert ${a.tone}`}>{a.txt}</span>)}
         </div>
       )}
 
       <div className="adm-kpis adm-exec-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue)} icon="💵" sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units) })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon="🧾" />
-        <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov)} icon="📈" />
-        <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN)} · ${usd(ops.todayV)}`} icon="🗓️" />
-        <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare)} icon="🛠️" sub={t("adm.exec.toPrepareSub")} />
-        <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery)} icon="🚚" />
+        <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units) })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} />
+        <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov)} icon={<Icon name="trendUp" />} />
+        <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN)} · ${usd(ops.todayV)}`} icon={<Icon name="calendar" />} />
+        <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare)} icon={<Icon name="lab" />} sub={t("adm.exec.toPrepareSub")} />
+        <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery)} icon={<Icon name="truck" />} />
       </div>
 
       {/* Pipeline operativo por etapa */}
@@ -139,7 +141,7 @@ export default function Executive({ preset = "30d", setPreset, onGoOrders }) {
                 <button type="button" key={key} className="exec-pipe-col" onClick={onGoOrders} title={t("adm.exec.goOrders")}>
                   <span className="exec-pipe-n">{int(v.n)}</span>
                   <span className="exec-pipe-bar"><i style={{ height: `${Math.max(8, (v.n / maxStage) * 100)}%` }} /></span>
-                  <span className="exec-pipe-k">{st ? `${st.icon} ${t(st.label)}` : key}</span>
+                  <span className="exec-pipe-k"><Icon name={STAGE_ICON[key] || "box"} size={13} />{st ? t(st.label) : key}</span>
                   <span className="exec-pipe-v">{usd(v.v)}</span>
                 </button>
               );
@@ -168,7 +170,7 @@ export default function Executive({ preset = "30d", setPreset, onGoOrders }) {
                         <td><b>{orderLabel(o)}</b></td>
                         <td>{shortDate(o.created_at, lang)}</td>
                         <td>{o.customer?.name || o.email || "—"}</td>
-                        <td><span className={`exec-chip ${o.terminal ? "term" : o.stage}`}>{st ? `${st.icon} ${t(st.label)}` : o.stage}</span></td>
+                        <td><span className={`exec-chip ${o.terminal ? "term" : o.stage}`}><Icon name={STAGE_ICON[o.terminal || o.stage] || "box"} size={12} />{st ? t(st.label) : o.stage}</span></td>
                         <td className="r"><b>{fmtMoney(o.total, o.currency_code, lang)}</b></td>
                       </tr>
                     );
@@ -182,10 +184,10 @@ export default function Executive({ preset = "30d", setPreset, onGoOrders }) {
 
       {/* Salud del catálogo */}
       <div className="adm-kpis adm-exec-cat">
-        <KpiCard label={t("adm.exec.activeFrames")} value={int(products.length)} icon="👓" />
-        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon="🧰" />
-        <KpiCard label={t("adm.exec.discontinued")} value={discontinued == null ? "—" : int(discontinued)} icon="📦" />
-        <KpiCard label={t("adm.exec.brands")} value={int(new Set(products.map((p) => p.brand)).size)} icon="🏷️" />
+        <KpiCard label={t("adm.exec.activeFrames")} value={int(products.length)} icon={<Icon name="glasses" />} />
+        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon={<Icon name="box" />} />
+        <KpiCard label={t("adm.exec.discontinued")} value={discontinued == null ? "—" : int(discontinued)} icon={<Icon name="layers" />} />
+        <KpiCard label={t("adm.exec.brands")} value={int(new Set(products.map((p) => p.brand)).size)} icon={<Icon name="tagIcon" />} />
       </div>
     </div>
   );

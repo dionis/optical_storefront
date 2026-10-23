@@ -1,0 +1,63 @@
+# Panel corporativo (`/admin`) — guía de diseño y funcionamiento
+
+Rediseño del 23/10/2026: el panel pasa de pestañas horizontales a un **panel de
+operaciones** (barra lateral de iconos contraíble, cajón hamburguesa en móvil,
+100 % responsive) con el mismo lenguaje visual que la tienda y la hoja de Google
+(Fraunces + Inter, azul marino `#0b2f66`, dorado `#b8921e`, azul `#0e5ad0`, rojo
+`#d6123e`). Dos secciones nuevas: **Costos** (ficha de costo por venta) y
+**Vendedores** (enlaces de referido y panel propio).
+
+## Estructura (storefront)
+
+| Archivo | Papel |
+| --- | --- |
+| `src/admin/AdminShell.jsx` | Armazón: barra lateral (`NAV_GROUPS`, `TABS`), barra superior (buscador global `/`, idioma, usuario, salir), cajón móvil. Estado contraído en `localStorage.adm_nav_collapsed`. |
+| `src/admin/icons.jsx` | Iconografía profesional (trazos estilo Lucide, SVG inline, `currentColor`). `<Icon name="orders" size={18} />`. Nombre desconocido → círculo. |
+| `src/admin/admin.css` | Sistema visual completo con tokens `--adm-*`. Tablas con `className="responsive"` + `data-label` en cada `td` se convierten en tarjetas en móvil (≤768 px). |
+| `src/admin/AdminDashboard.jsx` | Secciones y enrutado `?tab=` (los enlaces de la hoja abren `?tab=orders&order=<id>`). Pedidos: filtros (texto, fechas, etapa, estado, receta, vendedor), CSV, detalle con receta, línea de tiempo, guía y nota editables, mini ficha de costo. |
+| `src/admin/Costs.jsx` | Rentabilidad (por pedido, por concepto, semáforo de margen) y Fichas de costo (reglas por grupo). `OrderCostSheet` edita la ficha de un pedido. |
+| `src/admin/Sellers.jsx` | Alta/edición/baja de vendedores, enlace de referido con botones de compartir, enlace privado al panel del vendedor, ranking y comisiones. |
+| `src/pages/SellerDashboard.jsx` | Página pública `/vendedor?t=TOKEN` para el vendedor (sin login): su enlace, ventas, comisión; solo iniciales del cliente. |
+| `src/data/referral.js` | Captura `?ref=CODIGO` (30 días en `localStorage.rl_ref`) y `fetchSellerDashboard`. El checkout manda `cart.metadata.seller_code`. |
+| `src/admin/adminCosting.js`, `src/admin/adminSellers.js`, `src/admin/adminOrders.js` | Clientes del API (`/admin/costing/*`, `/admin/sellers*`, `/admin/order-board/:id/{tracking,note}`), CSV, compartir/copiar. Devuelven claves, nunca prosa. |
+
+Todo el copy va por `t()` (`adm.nav.*`, `adm.cost.*`, `adm.sel.*`, `vd.*`) en
+`es` y `en`; `pnpm check:i18n` lo vigila. Sin emojis: los KPI reciben un
+`<Icon>` como `icon`.
+
+## Paridad con la hoja de Google
+
+| Acción | Panel | Hoja | Réplica |
+| --- | --- | --- | --- |
+| Cambiar etapa | botones "Avanzar" | columna Estado | ambos sentidos (`transitionOrderStage`) |
+| Guía del courier | detalle → Guía | columna Guía (tracking) | ambos sentidos |
+| Nota interna | detalle → Nota interna | columna Notas (`Nota: …`) | panel → hoja |
+| Ficha de costo | Costos → ficha del pedido | columnas Costo / Margen | panel → hoja |
+| Vendedor | automático por `?ref=` | columna Vendedor | tienda → ambos |
+| Buscar/filtrar | filtros de Pedidos, CSV | pestaña Buscar | — |
+
+## Costos (ficha de costo por venta)
+
+Reglas (`cost_rule`) por tipo: `frame_brand` (precio mayorista Capri por marca),
+`frame_sku` (manda sobre la marca; enlace "ver en Capri"), `lens_design`,
+`lens_material`, `lens_photo`, `lens_ar`, `order_fixed` (laboratorio, embalaje,
+estuche, otros), `shipping` (`actual` = lo cobrado al cliente, o fijo),
+`order_percent` (comisión Stripe %), `payment_fixed` (fijo por cobro). La
+comisión del vendedor sale de su ficha (`commission_pct`), no es una regla.
+Importe 0 = sin definir (el panel lo marca). Un pedido puede tener su ficha
+ajustada a mano (`order.metadata.cost_sheet`) y volver a las reglas cuando se
+quiera. Capri Optics no publica precios sin login: el dueño los introduce.
+
+## Vendedores
+
+`seller` (código único A-Z0-9 3–12, comisión %, activo, redes, `token_version`).
+Enlace de referido `https://www.rubilens.com/?ref=CODIGO`; enlace privado del
+panel `https://www.rubilens.com/vendedor?t=<token HMAC>` (se invalida con
+"Nuevo enlace"). Atribución: `cart.metadata.seller_code` → `order.metadata`.
+Estadísticas y panel público acotados a la ventana del board (300 pedidos).
+
+## QA
+
+Playwright (`chromium` del sistema) con `VITE_ADMIN_DEMO_LOGIN=true` para la
+maquetación a 1440 px y 390 px; verificación funcional en producción con la
+sesión real del dueño. Backend: `npx tsc --noEmit` y `npx jest`.

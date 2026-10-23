@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCatalog, loadLive } from "../data/catalogStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import {
@@ -115,11 +116,11 @@ export default function CatalogManager() {
           {/* Icono de descarga 3D navy de la lámina (respaldo: flecha unicode). */}
           <button className="btn-sm adm-export" disabled={busy === "export"} onClick={() => doExport("xls")}>
             <img className="i3d-dl" src="/ui/icons3d/navy-download.png" alt="" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
-            <span className="adm-export-fb">⬇</span> {t("adm.cat.exportXls")}
+            <span className="adm-export-fb"><Icon name="download" size={14} /></span> {t("adm.cat.exportXls")}
           </button>
           <button className="btn-sm adm-export" disabled={busy === "export"} onClick={() => doExport("csv")}>
             <img className="i3d-dl" src="/ui/icons3d/navy-download.png" alt="" onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
-            <span className="adm-export-fb">⬇</span> {t("adm.cat.exportCsv")}
+            <span className="adm-export-fb"><Icon name="download" size={14} /></span> {t("adm.cat.exportCsv")}
           </button>
         </div>
       </div>
@@ -139,7 +140,7 @@ export default function CatalogManager() {
 
       {/* Buscador + filas editables */}
       <div className="adm-find compact adm-cat-find">
-        <span aria-hidden="true">🔎</span>
+        <Icon name="search" size={15} />
         <input placeholder={t("adm.cat.search")} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="adm-cat-rows">

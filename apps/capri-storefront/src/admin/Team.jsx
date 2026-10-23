@@ -1,6 +1,7 @@
 // Dónde se usa: pestaña Equipo de /admin — alta de administradores con contraseña temporal de un solo primer uso; el super admin no puede eliminarse.
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
@@ -97,7 +98,7 @@ export default function Team() {
                 <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email}</b>
                 <small className="muted">{m.email} · {shortDate(m.created_at, lang)}</small>
               </span>
-              {m.is_super && <span className="adm-team-tag super">★ {t("adm.team.super")}</span>}
+              {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
               {!m.is_super && m.id !== meId && (

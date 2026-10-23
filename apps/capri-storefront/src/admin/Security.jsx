@@ -1,6 +1,7 @@
 // Dónde se usa: pestaña Seguridad de /admin — checklist de seguridad y configuración del backend (GET /admin/security-status).
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { adminFetch } from "./adminApi.js";
@@ -53,10 +54,10 @@ function DangerZone({ t, lang, demo }) {
       {(state === "ready" || state === "running") && report && (
         <>
           <ul className="adm-sec-list">
-            <li className="fail"><span className="adm-sec-mark" aria-hidden="true">!</span><span className="adm-sec-main"><b>{t("adm.sec.purge.rows", { n: report.total_rows })}</b>
+            <li className="fail"><span className="adm-sec-mark" aria-hidden="true"><Icon name="alert" size={15} /></span><span className="adm-sec-main"><b>{t("adm.sec.purge.rows", { n: report.total_rows })}</b>
               <small className="muted">{report.tables.filter((x) => x.rows > 0).map((x) => `${x.table}: ${x.rows}`).join(" · ") || "—"}</small></span></li>
-            <li className="fail"><span className="adm-sec-mark" aria-hidden="true">!</span><span className="adm-sec-main"><b>{t("adm.sec.purge.files", { n: report.private_files })}</b></span></li>
-            <li><span className="adm-sec-mark" aria-hidden="true">✓</span><span className="adm-sec-main"><b>{t("adm.sec.purge.keeps")}</b></span></li>
+            <li className="fail"><span className="adm-sec-mark" aria-hidden="true"><Icon name="alert" size={15} /></span><span className="adm-sec-main"><b>{t("adm.sec.purge.files", { n: report.private_files })}</b></span></li>
+            <li><span className="adm-sec-mark" aria-hidden="true"><Icon name="check" size={15} /></span><span className="adm-sec-main"><b>{t("adm.sec.purge.keeps")}</b></span></li>
           </ul>
           <label className="adm-sec-phrase">
             {t("adm.sec.purge.type", { phrase: PURGE_PHRASE })}
@@ -164,7 +165,7 @@ export default function Security() {
                 <ul className="adm-sec-list">
                   {items.map((c) => (
                     <li key={c.key} className={c.ok ? "ok" : "fail"}>
-                      <span className="adm-sec-mark" aria-hidden="true">{c.ok ? "✓" : "✕"}</span>
+                      <span className="adm-sec-mark" aria-hidden="true"><Icon name={c.ok ? "check" : "close"} size={15} /></span>
                       <span className="adm-sec-main">
                         <b>{label(c.key)}</b>
                         {c.detail ? <small className="muted"> · {c.detail}</small> : null}

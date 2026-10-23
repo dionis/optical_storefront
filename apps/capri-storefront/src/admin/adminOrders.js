@@ -81,6 +81,7 @@ export async function fetchOrders({
   stage = "",
   terminal = "",
   hasPrescription = "",
+  seller = "",
   limit = 20,
   offset = 0,
 } = {}) {
@@ -92,10 +93,54 @@ export async function fetchOrders({
       stage,
       terminal,
       has_prescription: hasPrescription,
+      seller,
       limit,
       offset,
     },
   });
+}
+
+/**
+ * Guía del courier sin cambiar la etapa (la hoja de Google permite lo mismo en
+ * su columna "Guía (tracking)"; aquí es el mismo dato, y se replica a la hoja).
+ */
+export async function setOrderTracking(id, { trackingNumber = "", trackingUrl = "" } = {}) {
+  const data = await adminFetch(`/admin/order-board/${encodeURIComponent(id)}/tracking`, {
+    method: "POST",
+    body: { tracking_number: trackingNumber, tracking_url: trackingUrl || undefined },
+  });
+  return data?.order ?? null;
+}
+
+/** Nota interna del dueño sobre el pedido (va a Notas en la hoja). Vacía = borrar. */
+export async function setOrderNote(id, note) {
+  const data = await adminFetch(`/admin/order-board/${encodeURIComponent(id)}/note`, {
+    method: "POST",
+    body: { note: String(note ?? "") },
+  });
+  return data?.order ?? null;
+}
+
+/**
+ * CSV con lo que el dueño ve en pantalla (misma vista que la hoja de Google),
+ * para abrirlo en Excel sin pasar por Drive. `cols` = [[cabecera, fn(order)]].
+ */
+export function ordersToCsv(orders, cols) {
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [cols.map(([h]) => esc(h)).join(",")];
+  for (const o of orders) lines.push(cols.map(([, fn]) => esc(fn(o))).join(","));
+  return "\ufeff" + lines.join("\n");
+}
+
+export function downloadText(filename, text, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
 }
 
 /**
