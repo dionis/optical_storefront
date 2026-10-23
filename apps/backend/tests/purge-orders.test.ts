@@ -1,4 +1,4 @@
-import { ORDER_DATA_TABLES } from "../src/scripts/purge-orders";
+import { ORDER_DATA_TABLES } from "../src/lib/purge-orders";
 
 /**
  * The purge wipes order DATA only. Configuration tables (reasons, providers,

@@ -1,9 +1,84 @@
 // Dónde se usa: pestaña Seguridad de /admin — checklist de seguridad y configuración del backend (GET /admin/security-status).
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { adminFetch } from "./adminApi.js";
 import { shortDate } from "./adminOrders.js";
+
+/** Frase exacta que exige el servidor (POST /admin/maintenance/purge-orders). */
+const PURGE_PHRASE = "BORRAR PEDIDOS";
+
+/**
+ * ZONA DE PELIGRO — puesta a cero de pedidos (base de datos + bucket privado +
+ * hoja de Google). Pensada para dejar atrás los pedidos de desarrollo justo
+ * antes de la primera venta real. El servidor exige la frase exacta; aquí
+ * además se enseña primero el informe (qué se va a borrar) y el botón solo se
+ * activa con la frase escrita. Configuración, catálogo y clientes no se tocan.
+ */
+function DangerZone({ t, lang, demo }) {
+  const { toast } = useFeedback();
+  const [report, setReport] = useState(null);
+  const [state, setState] = useState("idle"); // idle | loading | ready | running | done | error
+  const [phrase, setPhrase] = useState("");
+  const [result, setResult] = useState(null);
+
+  const preview = () => {
+    setState("loading");
+    adminFetch("/admin/maintenance/purge-orders")
+      .then((r) => { setReport(r); setState("ready"); })
+      .catch(() => setState("error"));
+  };
+  const run = async () => {
+    if (phrase.trim() !== PURGE_PHRASE || state === "running") return;
+    setState("running");
+    try {
+      const r = await adminFetch("/admin/maintenance/purge-orders", { method: "POST", body: { confirm: PURGE_PHRASE } });
+      setResult(r);
+      setState("done");
+      toast({ tone: "success", title: t("adm.sec.purge.done", { n: r.total_rows }) });
+    } catch (err) {
+      setState("error");
+      toast({ tone: "error", title: t(err.message) });
+    }
+  };
+
+  return (
+    <div className="adm-card adm-danger">
+      <h3>{t("adm.sec.purge.title")}</h3>
+      <p className="adm-sub">{t("adm.sec.purge.intro")}</p>
+      {state === "idle" && <button className="btn-sm" disabled={demo} onClick={preview}>{t("adm.sec.purge.preview")}</button>}
+      {state === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
+      {state === "error" && <div className="adm-demo-banner">{t("adm.err.security.purgeFailed")}</div>}
+      {(state === "ready" || state === "running") && report && (
+        <>
+          <ul className="adm-sec-list">
+            <li className="fail"><span className="adm-sec-mark" aria-hidden="true">!</span><span className="adm-sec-main"><b>{t("adm.sec.purge.rows", { n: report.total_rows })}</b>
+              <small className="muted">{report.tables.filter((x) => x.rows > 0).map((x) => `${x.table}: ${x.rows}`).join(" · ") || "—"}</small></span></li>
+            <li className="fail"><span className="adm-sec-mark" aria-hidden="true">!</span><span className="adm-sec-main"><b>{t("adm.sec.purge.files", { n: report.private_files })}</b></span></li>
+            <li><span className="adm-sec-mark" aria-hidden="true">✓</span><span className="adm-sec-main"><b>{t("adm.sec.purge.keeps")}</b></span></li>
+          </ul>
+          <label className="adm-sec-phrase">
+            {t("adm.sec.purge.type", { phrase: PURGE_PHRASE })}
+            <input value={phrase} onChange={(e) => setPhrase(e.target.value)} autoComplete="off" spellCheck={false} />
+          </label>
+          <button className="btn-sm warn" disabled={phrase.trim() !== PURGE_PHRASE || state === "running"} onClick={run}>
+            {state === "running" ? "…" : t("adm.sec.purge.run")}
+          </button>
+        </>
+      )}
+      {state === "done" && result && (
+        <div className="adm-sec-done">
+          <b>{t("adm.sec.purge.done", { n: result.total_rows })}</b>
+          <small className="muted">
+            {t("adm.sec.purge.doneDetail", { files: result.private_files_deleted ?? 0, sheet: result.sheet ? `${result.sheet.orders} / ${result.sheet.history}` : (result.sheet_error || "—") })}
+            {" · "}{shortDate(new Date().toISOString(), lang)}
+          </small>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * SEGURIDAD — lo que el dueño necesita saber sin leer logs.
@@ -77,6 +152,8 @@ export default function Security() {
               <b>{audit.strict_mode ? t("adm.sec.on") : t("adm.sec.off")}</b>
             </div>
           </div>
+
+          <DangerZone t={t} lang={lang} demo={demo} />
 
           {GROUPS.map(([group, match]) => {
             const items = audit.checks.filter((c) => match(c.key));

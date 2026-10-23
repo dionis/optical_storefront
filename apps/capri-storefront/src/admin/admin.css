@@ -484,3 +484,8 @@
 .adm-sec-list li.fail .adm-sec-mark { color: #b42318; }
 .adm-sec-main { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .adm-sec-hint { color: #7a4a13; font-size: 12px; line-height: 1.4; }
+.adm-danger { border-color: #f3c3b5; background: #fffaf8; }
+.adm-danger h3 { color: #b42318; }
+.adm-sec-phrase { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font-size: 13px; color: #7a4a13; }
+.adm-sec-phrase input { padding: 8px 10px; border: 1px solid #e6b8a8; border-radius: 8px; font-size: 14px; letter-spacing: .04em; }
+.adm-sec-done { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: #e3f5e9; color: #1e6b3a; }
