@@ -4,8 +4,6 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
   costSheetForOrder,
   loadCostingContext,
-  profitTargetFor,
-  profitTargetPct,
   readStoredSheet,
   saveStoredSheet,
   type StoredCostSheet,
@@ -18,6 +16,11 @@ import { syncOrderToSheet } from "../../../../../lib/gsheet-sync";
  *
  *   GET /admin/costing/orders/:id — computed from the rules (plus the seller's
  *                                   commission), or the owner's stored lines.
+ *                                   The body is the `CostSheet` itself (gross,
+ *                                   deductions, net base, materials, percent
+ *                                   items, commission, cost, margin, target
+ *                                   and suggested price — see lib/costing)
+ *                                   plus the order's identity.
  *   PUT /admin/costing/orders/:id — { lines: [{key,label,amount,qty}] } stores
  *                                   a manual override; { reset: true } removes
  *                                   it. Either way the Google Sheet row is
@@ -46,15 +49,9 @@ async function respondWithSheet(req: AuthenticatedMedusaRequest, res: MedusaResp
     order_id: order.id,
     display_id: order.display_id,
     currency_code: order.currency_code,
-    revenue: sheet.revenue,
-    lines: sheet.lines,
-    cost_total: sheet.cost_total,
-    margin: sheet.margin,
-    margin_pct: sheet.margin_pct,
-    // The owner's goal next to the real margin: target amount and how far
-    // this sale is from it (negative = below target). Null without a target.
-    ...profitTargetFor(profitTargetPct(ctx.rules), sheet.revenue, sheet.margin),
-    manual: sheet.manual,
+    // The sheet is the single source: `computeCostSheet` already carries the
+    // target (over the net base) and the cost-based suggested price.
+    ...sheet,
     updated_at: stored?.updated_at ?? null,
     updated_by: stored?.updated_by ?? null,
     seller_code: order.seller_code,

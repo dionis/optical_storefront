@@ -781,12 +781,14 @@ function OrderCostMini({ orderId, onGoCosts }) {
   }, [orderId]);
   if (state === "loading") return <div className="adm-skel" style={{ height: 36, marginTop: 8 }} />;
   if (state === "error" || !sheet) return null;
-  const tone = marginTone(sheet.margin_pct);
+  const good = sheet.profit_gap == null ? marginTone(sheet.margin_pct) !== "bad" : sheet.profit_gap >= 0;
   return (
     <div className="ord-cost-mini">
-      <span>{t("adm.cost.revenue")}: <b>{fmtMoney(sheet.revenue, sheet.currency_code, lang)}</b></span>
+      <span>{t("adm.cost.gross")}: <b>{fmtMoney(sheet.gross ?? sheet.revenue, sheet.currency_code, lang)}</b></span>
+      <span>{t("adm.cost.netBase")}: <b>{fmtMoney(sheet.net_base, sheet.currency_code, lang)}</b></span>
       <span>{t("adm.cost.cost")}: <b className="bad">{fmtMoney(sheet.cost_total, sheet.currency_code, lang)}</b></span>
-      <span>{t("adm.cost.margin")}: <b className={tone === "bad" ? "bad" : "good"}>{fmtMoney(sheet.margin, sheet.currency_code, lang)}</b> <span className={`margin-pct ${tone}`}>{sheet.margin_pct == null ? "" : `${Math.round(sheet.margin_pct)}%`}</span></span>
+      <span>{t("adm.cost.ownerProfit")}: <b className={good ? "good" : "bad"}>{fmtMoney(sheet.margin, sheet.currency_code, lang)}</b> <span className={`margin-pct ${good ? "good" : "bad"}`}>{sheet.profit_pct_net == null ? "" : `${Math.round(sheet.profit_pct_net)}% ${t("adm.cost.ofNetShort")}`}</span></span>
+      {sheet.profit_target_pct != null && <span className={`adm-chip ${good ? "ok" : "bad"}`}><Icon name="gauge" size={12} />{t("adm.cost.targetLine", { pct: sheet.profit_target_pct })} · {good ? "+" : "−"}{fmtMoney(Math.abs(sheet.profit_gap || 0), sheet.currency_code, lang)}</span>}
       {sheet.manual && <span className="adm-chip gold"><Icon name="edit" size={12} />{t("adm.cost.manual")}</span>}
       <button type="button" className="btn-xs" onClick={(e) => { e.stopPropagation(); onGoCosts(orderId); }}><Icon name="costs" size={13} />{t("adm.cost.openSheet")}</button>
     </div>

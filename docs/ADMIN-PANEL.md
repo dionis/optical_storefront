@@ -71,3 +71,17 @@ sesión real del dueño. Backend: `npx tsc --noEmit` y `npx jest`.
 - **Costos y precios** (`Costs.jsx`): sub-pestañas Rentabilidad, Fichas de costo (importes), **Distribución %** (partidas por porcentaje: atención al cliente, renta, webmaster, impuestos, marketing… como reglas `order_percent`; y **ganancia objetivo** = regla `order_percent:profit_target`, que NO es costo: el backend la excluye y devuelve `profit_target_pct/amount/gap`), y Precios (el antiguo Precios). `AllocationBar` pinta el reparto del ingreso con la marca ◆ del objetivo.
 - **Vendedores**: `social_links` del backend → un enlace por red (`?ref=CODIGO&src=instagram`…) con compartir/copiar y ventas por red (`by_source`); `referral.js` guarda `src` y el checkout manda `seller_source`. El panel público `/vendedor` muestra los mismos enlaces y la red de cada venta.
 - **Hoja de Google**: pestaña nueva **Costos** (fichas y distribución, solo lectura) y columna "Desglose costo" en Pedidos/Historial; Vendedor = `CODIGO · red`.
+
+## Actualización 23/10/2026 (noche): modelo de costos "deducciones primero", seguridad de dependencias, Node 22
+
+**Modelo de dinero de cada venta** (`apps/backend/src/lib/costing.ts`, `computeCostSheet` es la única fuente):
+1. `gross` = lo que pagó el cliente (`order.total`).
+2. Deducciones (no son del dueño): envío (`shipping:actual` = `shipping_total`, o fijo), impuestos (`tax:order` = `tax_total`), comisión de Stripe (`order_percent:payment_fee` sobre el bruto + `payment_fixed`). `net_base = gross − deducciones`.
+3. Materiales en importe fijo (montura por SKU/marca, lentes, laboratorio, embalaje…).
+4. Partidas por porcentaje (`order_percent` salvo `payment_fee`/`profit_target`) y comisión del vendedor: **% del neto**.
+5. `cost_total` = 2 + 3 + 4; `margin` (ganancia del dueño) = gross − cost_total; `profit_pct_net` = margin / net_base.
+6. Objetivo `profit_target` (30 % por defecto, sembrado): `profit_target_amount = net_base × pct`, `profit_gap = margin − objetivo`.
+7. Precio sugerido (solo informativo, los precios de la web no cambian): `net* = M / (1 − p − g)`, `suggested_price = (net* + S + F) / (1 − f)` (M materiales, p partidas+vendedor, g objetivo, S envío+impuestos, F fijo Stripe, f % Stripe).
+Cada línea lleva `kind` y `group` (`deduction|material|percent|seller|manual`). El panel pinta la cascada (`Waterfall` en `Costs.jsx`) y el reparto por grupos (`AllocationBar`), y Rentabilidad muestra neto, % del neto y precio sugerido por pedido.
+
+**Seguridad de dependencias**: `pnpm.overrides` en el `package.json` raíz fuerzan versiones parcheadas de paquetes transitivos con CVE (proxy-addr, qs, compression, multer, axios, handlebars, shell-quote, follow-redirects, lodash, nanoid, browserslist, source-map-js, postcss, uuid, react-router, ajv, morgan, @graphql-tools/utils…); `sharp` subido a ^0.35.5. Lo que queda en `pnpm audit` es solo de desarrollo (vite/esbuild del admin-bundler de Medusa, js-yaml/brace-expansion de jest/eslint, otel/grpc sin usar). Node 20 llegó a fin de vida sin parches (la tanda de seguridad de Node de octubre 2026 —Brotli RCE CVE-2026-111497 y TLS— solo cubre 22/24/26): Dockerfiles, CI y `engines` pasan a **Node 22**. En Vercel, comprobar que el proyecto compila con Node 22 (Settings → General → Node.js Version). No hay PHP en este proyecto (caprioptics.com es WordPress del proveedor y solo se lee con el scraper).

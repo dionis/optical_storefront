@@ -28,7 +28,7 @@ storefronts don't handle out of the box:
 ```
 eyewear-store/
 ├── apps/
-│   ├── backend/           # Medusa.js v2, Node 20, TypeScript strict
+│   ├── backend/           # Medusa.js v2, Node 22, TypeScript strict
 │   ├── capri-storefront/  # React + Vite storefront (own catalog sync, admin dashboard)
 │   └── scraper/           # Python 3.12 catalog ingestion
 ├── packages/

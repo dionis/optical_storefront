@@ -2,6 +2,9 @@
   "name": "@eyewear/backend",
   "version": "0.0.1",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --filter @eyewear/shared build && medusa develop",
     "build": "pnpm --filter @eyewear/shared build && medusa build",
@@ -34,7 +37,7 @@
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "square": "^39.0.0",
     "stripe": "^16.12.0",
     "zod": "^4.2.0"

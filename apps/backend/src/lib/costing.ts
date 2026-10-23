@@ -11,6 +11,21 @@ import { listSellers } from "./sellers";
  * Ficha de costo por venta — what each order cost the shop, so the panel can
  * show a margin next to the revenue.
  *
+ * The owner's rule: "if the customer paid 100, first take out shipping,
+ * taxes and the gateway's fee, and THEN distribute the rest". So:
+ *
+ *   gross        = order.total (what the customer paid)
+ *   deductions   = shipping + taxes + payment fee (% of gross) + fixed fee
+ *                  — money that passes through, never the shop's
+ *   net_base     = gross − deductions (floored at 0)
+ *   materials    = frame + lens codes + per-order fixed items
+ *   percent      = every `order_percent` rule (except the payment fee and the
+ *                  profit target) applied to net_base
+ *   commission   = the seller's % of net_base
+ *   cost_total   = deductions + materials + percent + commission
+ *   margin       = gross − cost_total (the owner's profit)
+ *   target       = net_base × profit_target_pct — a goal, never a cost line
+ *
  * Two layers:
  *   - RULES (`cost_rule` table): the owner's template. "A Flexure frame costs
  *     me 18", "the lab charges 12 per order", "Stripe keeps 2.9% + 0.30".
@@ -57,13 +72,23 @@ export const KIND_LABEL: Record<CostKind, string> = {
 export const SELLER_COMMISSION_KEY = "seller_commission";
 
 /**
+ * `order_percent` match_key of the gateway's percentage fee. It is the one
+ * percentage computed on the GROSS (the processor takes its cut of what the
+ * customer paid), and it is a deduction, not a distribution.
+ */
+export const PAYMENT_FEE_KEY = "payment_fee";
+
+/**
  * `order_percent` match_key for the owner's target profit ("I want to keep
  * 30 % of every sale"). It is saved like any other percentage so the panel can
  * edit it in the same table, but it is NOT a cost: `computeCostSheet` skips it
- * and the routes expose it as `profit_target_pct` / `profit_target_amount` /
- * `profit_gap` next to the margin instead.
+ * as a line and reports it as `profit_target_pct` / `profit_target_amount` /
+ * `profit_gap` (over the NET base) next to the margin instead.
  */
 export const PROFIT_TARGET_KEY = "profit_target";
+
+/** The owner's default target: keep 30 % of the net base of every sale. */
+export const DEFAULT_PROFIT_TARGET_PCT = 30;
 
 export function isCostKind(value: unknown): value is CostKind {
   return typeof value === "string" && (COST_KINDS as readonly string[]).includes(value);
@@ -71,6 +96,10 @@ export function isCostKind(value: unknown): value is CostKind {
 
 export function isProfitTargetRule(rule: Pick<CostRule, "kind" | "match_key">): boolean {
   return rule.kind === "order_percent" && normalizeMatchKey("order_percent", rule.match_key) === PROFIT_TARGET_KEY;
+}
+
+export function isPaymentFeeRule(rule: Pick<CostRule, "kind" | "match_key">): boolean {
+  return rule.kind === "order_percent" && normalizeMatchKey("order_percent", rule.match_key) === PAYMENT_FEE_KEY;
 }
 
 /** The active profit-target percentage among the rules; null when none is defined (or it is still 0). */
@@ -83,15 +112,16 @@ export function profitTargetPct(rules: CostRule[]): number | null {
 /** How the target compares with what a sale (or a period) actually left. */
 export interface ProfitTarget {
   profit_target_pct: number | null;
-  /** revenue × pct / 100, 2 dp; null when no target. */
+  /** net_base × pct / 100, 2 dp; null when no target. */
   profit_target_amount: number | null;
   /** margin − profit_target_amount (negative = below target); null when no target. */
   profit_gap: number | null;
 }
 
-export function profitTargetFor(pct: number | null, revenue: number, margin: number): ProfitTarget {
+/** Target over a NET base (gross minus deductions) against the margin it left. */
+export function profitTargetFor(pct: number | null, netBase: number, margin: number): ProfitTarget {
   if (pct === null) return { profit_target_pct: null, profit_target_amount: null, profit_gap: null };
-  const amount = round2((round2(num(revenue)) * pct) / 100);
+  const amount = round2((round2(num(netBase)) * pct) / 100);
   return { profit_target_pct: pct, profit_target_amount: amount, profit_gap: round2(round2(num(margin)) - amount) };
 }
 
@@ -107,14 +137,25 @@ export interface CostRule {
   notes?: string | null;
 }
 
-/** What a line is, for the API and the breakdowns (`lineKind`). */
-export type CostLineKind = CostKind | "seller_commission" | "manual";
+/** What a line is, for the API and the breakdowns (`lineKind`). `tax` is never a rule: it comes from the order. */
+export type CostLineKind = CostKind | "tax" | "seller_commission" | "manual";
+
+/**
+ * Which block of the model a line sits in:
+ *   deduction — taken out of the gross before anything is distributed
+ *   material  — fixed amounts (frame, lens codes, per-order items)
+ *   percent   — the owner's % allocations of the net base
+ *   seller    — the seller's commission (% of the net base)
+ *   manual    — a line of the owner's stored override
+ */
+export type CostLineGroup = "deduction" | "material" | "percent" | "seller" | "manual";
 
 export interface CostLine {
-  /** Stable key, e.g. "frame:FX2043-BLK", "lens_design:sv", "order_percent:payment_fee". */
+  /** Stable key, e.g. "frame:FX2043-BLK", "lens_design:sv", "order_percent:payment_fee", "tax:order". */
   key: string;
-  /** Concept the line belongs to — a rule kind, the seller's commission or a manual adjustment. */
+  /** Concept the line belongs to — a rule kind, the order's tax, the seller's commission or a manual adjustment. */
   kind: CostLineKind;
+  group: CostLineGroup;
   label: string;
   /** Unit amount (currency, or the computed amount for percent lines). */
   amount: number;
@@ -130,10 +171,43 @@ export interface CostLine {
 
 export interface CostSheet {
   lines: CostLine[];
-  cost_total: number;
+  /** What the customer paid (`order.total`). */
+  gross: number;
+  /** Same as `gross`, kept for the panel and the sheet. */
   revenue: number;
+  /** Shipping + taxes + payment fees: pass-through money, out before distributing. */
+  deductions_total: number;
+  /** gross − deductions, floored at 0 — what the percentages and the target apply to. */
+  net_base: number;
+  /** Frame + lens codes + per-order fixed items. */
+  materials_total: number;
+  /** The owner's % allocations (rent, service…) of the net base. */
+  percent_total: number;
+  /** The seller's commission (% of the net base). */
+  commission_total: number;
+  /** deductions + materials + percent + commission (all lines; the manual lines when overridden). */
+  cost_total: number;
+  /** gross − cost_total: the owner's profit. */
   margin: number;
+  /** margin / gross × 100. */
   margin_pct: number;
+  /** margin / net_base × 100. */
+  profit_pct_net: number;
+  profit_target_pct: number | null;
+  /** net_base × profit_target_pct / 100; null without a target. */
+  profit_target_amount: number | null;
+  /** margin − profit_target_amount (negative = below target); null without a target. */
+  profit_gap: number | null;
+  /**
+   * Cost-based price that would leave exactly the target: with S = shipping +
+   * tax, f = payment fee fraction (of gross), F = fixed fee, M = materials,
+   * p = percent items + commission (fractions of net), g = target fraction:
+   * net* = M / (1 − p − g) and price = (net* + S + F) / (1 − f). Null when
+   * there is no target, no materials, or 1 − p − g ≤ 0.
+   */
+  suggested_price: number | null;
+  /** suggested_price − gross; null when no suggestion. */
+  suggested_delta: number | null;
   /** True when the lines come from the owner's override, not the rules. */
   manual: boolean;
 }
@@ -243,11 +317,13 @@ export function defaultCostRules(catalog: CostCatalog): CostRule[] {
     notes: null,
   });
   return [
-    rule("order_percent", "payment_fee", "Comisión del cobro (porcentaje)", 2.9, "percent"),
+    rule("order_percent", PAYMENT_FEE_KEY, "Comisión del cobro (porcentaje)", 2.9, "percent"),
     rule("payment_fixed", "payment_fee_fixed", "Comisión del cobro (fija por pedido)", 0.3),
     rule("shipping", "actual", "Envío (lo que pagó el cliente)", 0),
     rule("order_fixed", "lab", "Laboratorio (montaje)", 0),
     rule("order_fixed", "packaging", "Empaque", 0),
+    // A goal, not a cost: computeCostSheet never turns it into a line.
+    rule("order_percent", PROFIT_TARGET_KEY, "Ganancia objetivo", DEFAULT_PROFIT_TARGET_PCT, "percent"),
     ...catalog.brands.map((b) => rule("frame_brand", b.slug, `Montura ${b.name}`)),
     ...catalog.designs.map((d) => rule("lens_design", d.code, `Lente ${d.label}`)),
     ...catalog.materials.map((m) => rule("lens_material", m.code, `Material ${m.label}`)),
@@ -328,6 +404,7 @@ export function validateCostRules(input: unknown[]): CostRule[] {
 export interface CostOrderLike {
   total?: unknown;
   shipping_total?: unknown;
+  tax_total?: unknown;
   paid?: boolean;
   items: Array<{
     title?: string;
@@ -347,11 +424,19 @@ function ruleIndex(rules: CostRule[]): Map<string, CostRule> {
   return idx;
 }
 
+/** Block of the model a rule-driven line belongs to (the seller and manual lines are tagged where they are built). */
+function groupForRule(rule: Pick<CostRule, "kind" | "match_key">): CostLineGroup {
+  if (rule.kind === "shipping" || rule.kind === "payment_fixed") return "deduction";
+  if (rule.kind === "order_percent") return isPaymentFeeRule(rule) ? "deduction" : "percent";
+  return "material";
+}
+
 function lineFromRule(rule: CostRule, key: string, qty: number, amountOverride?: number): CostLine {
   const amount = round2(amountOverride ?? rule.amount);
   return {
     key,
     kind: rule.kind,
+    group: groupForRule(rule),
     label: rule.label,
     amount,
     qty,
@@ -363,36 +448,177 @@ function lineFromRule(rule: CostRule, key: string, qty: number, amountOverride?:
   };
 }
 
+/** Shared tail of the sheet: totals, net base, target and the suggested price. */
+interface SheetModel {
+  gross: number;
+  /** Fixed pass-through deductions (shipping + tax), i.e. not proportional to the gross. */
+  fixed_deductions: number;
+  /** Payment fee fraction of the gross (0.029 for 2.9 %). */
+  fee_fraction: number;
+  /** Fixed payment fee (0 when none / unpaid). */
+  fee_fixed: number;
+  materials: number;
+  /** Percent items + seller commission, as a fraction of the net base. */
+  net_fraction: number;
+  deductions_total: number;
+  net_base: number;
+  percent_total: number;
+  commission_total: number;
+  cost_total: number;
+  target_pct: number | null;
+}
+
+function finishSheet(lines: CostLine[], m: SheetModel, manual: boolean): CostSheet {
+  const margin = round2(m.gross - m.cost_total);
+  const target = profitTargetFor(m.target_pct, m.net_base, margin);
+  const suggested = suggestedPrice(m, manual);
+  return {
+    lines,
+    gross: m.gross,
+    revenue: m.gross,
+    deductions_total: m.deductions_total,
+    net_base: m.net_base,
+    materials_total: m.materials,
+    percent_total: m.percent_total,
+    commission_total: m.commission_total,
+    cost_total: m.cost_total,
+    margin,
+    margin_pct: m.gross > 0 ? round2((margin / m.gross) * 100) : 0,
+    profit_pct_net: m.net_base > 0 ? round2((margin / m.net_base) * 100) : 0,
+    ...target,
+    suggested_price: suggested,
+    suggested_delta: suggested === null ? null : round2(suggested - m.gross),
+    manual,
+  };
+}
+
+/**
+ * Price that leaves exactly the target profit (see `CostSheet.suggested_price`).
+ * For a manual sheet the stored lines ARE the whole cost (they usually carry
+ * the shipping the owner typed), so the target is solved against them:
+ * price − M = g × (price − S)  ⇒  price = (M − g·S) / (1 − g).
+ */
+function suggestedPrice(m: SheetModel, manual: boolean): number | null {
+  if (m.target_pct === null || m.materials <= 0) return null;
+  const g = m.target_pct / 100;
+  if (manual) {
+    const denom = 1 - g;
+    if (denom <= 0) return null;
+    const price = (m.materials - g * m.fixed_deductions) / denom;
+    return price > 0 ? round2(price) : null;
+  }
+  const denom = 1 - m.net_fraction - g;
+  const feeDenom = 1 - m.fee_fraction;
+  if (denom <= 0 || feeDenom <= 0) return null;
+  const netStar = m.materials / denom;
+  const price = (netStar + m.fixed_deductions + m.fee_fixed) / feeDenom;
+  return price > 0 ? round2(price) : null;
+}
+
 /**
  * Cost sheet of one order from the rules (or from the owner's stored lines).
  *
- * Per item: frame cost (`frame_sku` by SKU beats `frame_brand` by brand; a
- * case/estuche only ever matches by SKU or the "case" brand), then one line
- * per lens code the item carries. Per order: fixed items, shipping (actual =
- * what the customer paid, or a fixed figure), percent of the total, the
- * gateway's fixed fee, and the seller's commission when a seller is attached.
+ * Deductions first (shipping: actual = what the customer paid, or a fixed
+ * figure; the order's taxes; the gateway's % of the gross and its fixed fee),
+ * which gives the net base. Then materials per item (`frame_sku` by SKU beats
+ * `frame_brand` by brand; a case/estuche only ever matches by SKU or the
+ * "case" brand; one line per lens code the item carries) and per order
+ * (`order_fixed`). Then the owner's percentages and the seller's commission,
+ * both of the NET base. The profit target (`profitTargetPct` of the rules,
+ * or `targetPct` when given) is reported, never charged.
  */
 export function computeCostSheet(
   order: CostOrderLike,
   rules: CostRule[],
   seller?: { commission_pct: number } | null,
-  manual?: StoredCostSheet | null
+  manual?: StoredCostSheet | null,
+  targetPct?: number | null
 ): CostSheet {
-  const revenue = round2(num(order.total));
+  const gross = round2(num(order.total));
+  const target_pct = targetPct === undefined ? profitTargetPct(rules) : targetPct !== null && targetPct > 0 ? round2(targetPct) : null;
+  const orderShipping = round2(Math.max(0, num(order.shipping_total)));
+  const orderTax = round2(Math.max(0, num(order.tax_total)));
+
   if (manual && Array.isArray(manual.lines)) {
     const lines: CostLine[] = manual.lines.map((l) => {
       const amount = round2(num(l.amount));
       const qty = Math.max(0, num(l.qty) || 1);
-      return { key: String(l.key ?? ""), kind: "manual", label: String(l.label ?? ""), amount, qty, subtotal: round2(amount * qty), source: "manual" };
+      return { key: String(l.key ?? ""), kind: "manual", group: "manual", label: String(l.label ?? ""), amount, qty, subtotal: round2(amount * qty), source: "manual" };
     });
     const cost_total = round2(lines.reduce((a, l) => a + l.subtotal, 0));
-    const margin = round2(revenue - cost_total);
-    return { lines, cost_total, revenue, margin, margin_pct: revenue > 0 ? round2((margin / revenue) * 100) : 0, manual: true };
+    // The stored lines are the whole cost; the net base still comes from the
+    // order's own pass-through fields so the target means the same thing.
+    const deductions_total = round2(orderShipping + orderTax);
+    return finishSheet(
+      lines,
+      {
+        gross,
+        fixed_deductions: deductions_total,
+        fee_fraction: 0,
+        fee_fixed: 0,
+        materials: cost_total,
+        net_fraction: 0,
+        deductions_total,
+        net_base: round2(Math.max(0, gross - deductions_total)),
+        percent_total: 0,
+        commission_total: 0,
+        cost_total,
+        target_pct,
+      },
+      true
+    );
   }
 
   const idx = ruleIndex(rules);
-  const lines: CostLine[] = [];
+  // The profit target is a goal, not a cost: it never becomes a line.
+  const active = rules.filter((r) => r.active && !isProfitTargetRule(r));
+  const deductions: CostLine[] = [];
+  const materials: CostLine[] = [];
+  const percents: CostLine[] = [];
+  let fee_fraction = 0;
+  let fee_fixed = 0;
 
+  // ── 1. Deductions (pass-through money, out of the gross first) ──
+  for (const r of active.filter((x) => x.kind === "shipping")) {
+    const key = normalizeMatchKey("shipping", r.match_key);
+    if (key === "actual") {
+      deductions.push({ ...lineFromRule(r, "shipping:actual", 1, orderShipping), source: "order", undefined_cost: false });
+    } else {
+      deductions.push(lineFromRule(r, `shipping:${key}`, 1));
+    }
+  }
+  if (orderTax > 0) {
+    deductions.push({
+      key: "tax:order",
+      kind: "tax",
+      group: "deduction",
+      label: "Impuestos (lo que pagó el cliente)",
+      amount: orderTax,
+      qty: 1,
+      subtotal: orderTax,
+      source: "order",
+      match_key: "order",
+      undefined_cost: false,
+    });
+  }
+  for (const r of active.filter((x) => isPaymentFeeRule(x))) {
+    const amount = round2((gross * r.amount) / 100);
+    const line = lineFromRule(r, `order_percent:${r.match_key}`, 1, amount);
+    line.undefined_cost = r.amount === 0;
+    deductions.push(line);
+    fee_fraction += r.amount / 100;
+  }
+  for (const r of active.filter((x) => x.kind === "payment_fixed")) {
+    if (order.paid === false) continue;
+    const line = lineFromRule(r, `payment_fixed:${r.match_key}`, 1);
+    deductions.push(line);
+    fee_fixed = round2(fee_fixed + line.subtotal);
+  }
+  const fixed_deductions = round2(deductions.filter((l) => l.kind === "shipping" || l.kind === "tax").reduce((a, l) => a + l.subtotal, 0));
+  const deductions_total = round2(deductions.reduce((a, l) => a + l.subtotal, 0));
+  const net_base = round2(Math.max(0, gross - deductions_total));
+
+  // ── 2. Materials (fixed amounts) ──
   for (const item of order.items ?? []) {
     const qty = Math.max(1, Math.floor(num(item.quantity)) || 1);
     const sku = item.sku ? String(item.sku).toUpperCase() : null;
@@ -401,11 +627,12 @@ export function computeCostSheet(
     const byBrand = brand ? idx.get(`frame_brand:${brand}`) : undefined;
     const frame = bySku ?? byBrand;
     if (frame) {
-      lines.push(lineFromRule(frame, `frame:${sku ?? brand}`, qty));
+      materials.push(lineFromRule(frame, `frame:${sku ?? brand}`, qty));
     } else {
-      lines.push({
+      materials.push({
         key: `frame:${sku ?? brand ?? "?"}`,
         kind: "frame_brand",
+        group: "material",
         label: `Montura ${item.title ?? sku ?? brand ?? ""}`.trim(),
         amount: 0,
         qty,
@@ -425,52 +652,51 @@ export function computeCostSheet(
     for (const [kind, code] of lensParts) {
       if (!code || code === "frame-only") continue;
       const rule = idx.get(`${kind}:${normalizeMatchKey(kind, code)}`);
-      if (rule) lines.push(lineFromRule(rule, `${kind}:${code}`, qty));
-      else lines.push({ key: `${kind}:${code}`, kind, label: `${KIND_LABEL[kind]} ${code}`, amount: 0, qty, subtotal: 0, source: "rule", match_key: normalizeMatchKey(kind, code), undefined_cost: true });
+      if (rule) materials.push(lineFromRule(rule, `${kind}:${code}`, qty));
+      else materials.push({ key: `${kind}:${code}`, kind, group: "material", label: `${KIND_LABEL[kind]} ${code}`, amount: 0, qty, subtotal: 0, source: "rule", match_key: normalizeMatchKey(kind, code), undefined_cost: true });
     }
   }
-
-  // The profit target is a goal, not a cost: it never becomes a line.
-  const active = rules.filter((r) => r.active && !isProfitTargetRule(r));
   for (const r of active.filter((x) => x.kind === "order_fixed")) {
-    lines.push(lineFromRule(r, `order_fixed:${r.match_key}`, 1));
+    materials.push(lineFromRule(r, `order_fixed:${r.match_key}`, 1));
   }
-  for (const r of active.filter((x) => x.kind === "shipping")) {
-    const key = normalizeMatchKey("shipping", r.match_key);
-    if (key === "actual") {
-      const amount = round2(num(order.shipping_total));
-      lines.push({ ...lineFromRule(r, "shipping:actual", 1, amount), source: "order", undefined_cost: false });
-    } else {
-      lines.push(lineFromRule(r, `shipping:${key}`, 1));
-    }
-  }
-  for (const r of active.filter((x) => x.kind === "order_percent")) {
-    const amount = round2((revenue * r.amount) / 100);
+  const materials_total = round2(materials.reduce((a, l) => a + l.subtotal, 0));
+
+  // ── 3. Distribution of the net base: the owner's percentages, then the seller ──
+  let net_fraction = 0;
+  for (const r of active.filter((x) => x.kind === "order_percent" && !isPaymentFeeRule(x))) {
+    const amount = round2((net_base * r.amount) / 100);
     const line = lineFromRule(r, `order_percent:${r.match_key}`, 1, amount);
     line.undefined_cost = r.amount === 0;
-    lines.push(line);
+    percents.push(line);
+    net_fraction += r.amount / 100;
   }
-  for (const r of active.filter((x) => x.kind === "payment_fixed")) {
-    if (order.paid === false) continue;
-    lines.push(lineFromRule(r, `payment_fixed:${r.match_key}`, 1));
-  }
+  const percent_total = round2(percents.reduce((a, l) => a + l.subtotal, 0));
+  const sellerLines: CostLine[] = [];
   if (seller && num(seller.commission_pct) > 0) {
-    const amount = round2((revenue * num(seller.commission_pct)) / 100);
-    lines.push({
+    const pct = num(seller.commission_pct);
+    const amount = round2((net_base * pct) / 100);
+    sellerLines.push({
       key: `order_percent:${SELLER_COMMISSION_KEY}`,
       kind: "seller_commission",
-      label: `Comisión del vendedor (${num(seller.commission_pct)}%)`,
+      group: "seller",
+      label: `Comisión del vendedor (${pct}%)`,
       amount,
       qty: 1,
       subtotal: amount,
       source: "seller",
       match_key: SELLER_COMMISSION_KEY,
     });
+    net_fraction += pct / 100;
   }
+  const commission_total = round2(sellerLines.reduce((a, l) => a + l.subtotal, 0));
 
-  const cost_total = round2(lines.reduce((a, l) => a + l.subtotal, 0));
-  const margin = round2(revenue - cost_total);
-  return { lines, cost_total, revenue, margin, margin_pct: revenue > 0 ? round2((margin / revenue) * 100) : 0, manual: false };
+  const lines = [...deductions, ...materials, ...percents, ...sellerLines];
+  const cost_total = round2(deductions_total + materials_total + percent_total + commission_total);
+  return finishSheet(
+    lines,
+    { gross, fixed_deductions, fee_fraction, fee_fixed, materials: materials_total, net_fraction, deductions_total, net_base, percent_total, commission_total, cost_total, target_pct },
+    false
+  );
 }
 
 /** Lines that matched a rule whose amount is still 0. */
@@ -488,14 +714,27 @@ export function lineKind(line: Pick<CostLine, "key" | "source"> & { kind?: CostL
   if (line.source === "seller") return "seller_commission";
   const [head] = line.key.split(":");
   if (head === "frame") return "frame_brand";
+  if (head === "tax") return "tax";
   return isCostKind(head) ? head : "manual";
 }
 
 export const LINE_KIND_LABEL: Record<CostLineKind, string> = {
   ...KIND_LABEL,
+  tax: "Impuestos",
   seller_commission: "Comisión de vendedores",
   manual: "Ajustes manuales",
 };
+
+/** Group of a line; lines computed here carry it, older stored lines fall back on the kind. */
+export function lineGroup(line: Pick<CostLine, "key" | "source"> & { kind?: CostLineKind; group?: CostLineGroup }): CostLineGroup {
+  if (line.group) return line.group;
+  const kind = lineKind(line);
+  if (kind === "manual") return "manual";
+  if (kind === "seller_commission") return "seller";
+  if (kind === "tax" || kind === "shipping" || kind === "payment_fixed") return "deduction";
+  if (kind === "order_percent") return line.key.endsWith(`:${PAYMENT_FEE_KEY}`) ? "deduction" : "percent";
+  return "material";
+}
 
 /**
  * Concept a line is grouped under in the summary: `${kind}:${match_key}` for
@@ -552,6 +791,29 @@ export interface SummaryByDay { date: string; orders: number; revenue: number; c
 export interface SummaryByBrand { slug: string; name: string; orders: number; revenue: number; frame_cost: number; margin_share: number }
 export interface SummaryBrandRevenue { slug: string; name: string; revenue: number }
 
+/** The window's totals in the same shape as one sheet (sums, then the derived percentages). */
+export interface SummaryTotals {
+  orders: number;
+  /** = revenue: what the customers paid. */
+  gross: number;
+  revenue: number;
+  deductions: number;
+  net_base: number;
+  materials: number;
+  percent_items: number;
+  commission: number;
+  cost: number;
+  /** = margin: what the owner kept. */
+  profit: number;
+  margin: number;
+  margin_pct: number;
+  profit_pct_net: number;
+  profit_target_pct: number | null;
+  /** Sum of every order's target; null when no order had one. */
+  profit_target_amount: number | null;
+  profit_gap: number | null;
+}
+
 export function brandName(slug: string): string {
   return KNOWN_BRANDS.find((b) => b.slug === slug)?.name ?? slug;
 }
@@ -588,13 +850,30 @@ export function summarizeCostSheets(
   entries: SummaryEntry[],
   sellers: Map<string, { name?: string; commission_pct: number }>,
   timeZone?: string
-): { by_kind: ConceptTotal[]; by_seller: SummaryBySeller[]; by_day: SummaryByDay[]; by_brand: SummaryByBrand[] } {
+): { totals: SummaryTotals; by_kind: ConceptTotal[]; by_seller: SummaryBySeller[]; by_day: SummaryByDay[]; by_brand: SummaryByBrand[] } {
   const concepts = new Map<string, ConceptTotal>();
   const bySeller = new Map<string, SummaryBySeller>();
   const byDay = new Map<string, SummaryByDay>();
   const byBrand = new Map<string, SummaryByBrand>();
+  const totals: SummaryTotals = {
+    orders: 0, gross: 0, revenue: 0, deductions: 0, net_base: 0, materials: 0, percent_items: 0, commission: 0, cost: 0,
+    profit: 0, margin: 0, margin_pct: 0, profit_pct_net: 0, profit_target_pct: null, profit_target_amount: null, profit_gap: null,
+  };
 
   for (const { order, sheet } of entries) {
+    totals.orders++;
+    totals.gross = round2(totals.gross + sheet.gross);
+    totals.deductions = round2(totals.deductions + sheet.deductions_total);
+    totals.net_base = round2(totals.net_base + sheet.net_base);
+    totals.materials = round2(totals.materials + sheet.materials_total);
+    totals.percent_items = round2(totals.percent_items + sheet.percent_total);
+    totals.commission = round2(totals.commission + sheet.commission_total);
+    totals.cost = round2(totals.cost + sheet.cost_total);
+    if (sheet.profit_target_amount !== null) {
+      totals.profit_target_amount = round2((totals.profit_target_amount ?? 0) + sheet.profit_target_amount);
+      totals.profit_target_pct = totals.profit_target_pct ?? sheet.profit_target_pct;
+    }
+
     for (const c of condenseLines(sheet.lines)) {
       const row = concepts.get(c.key) ?? { ...c, amount: 0 };
       row.amount = round2(row.amount + c.amount);
@@ -638,7 +917,15 @@ export function summarizeCostSheets(
   }
   for (const row of byBrand.values()) row.margin_share = round2(row.revenue - row.frame_cost);
 
+  totals.revenue = totals.gross;
+  totals.margin = round2(totals.gross - totals.cost);
+  totals.profit = totals.margin;
+  totals.margin_pct = totals.gross > 0 ? round2((totals.margin / totals.gross) * 100) : 0;
+  totals.profit_pct_net = totals.net_base > 0 ? round2((totals.margin / totals.net_base) * 100) : 0;
+  totals.profit_gap = totals.profit_target_amount === null ? null : round2(totals.margin - totals.profit_target_amount);
+
   return {
+    totals,
     by_kind: [...concepts.values()].sort((a, b) => b.amount - a.amount || a.key.localeCompare(b.key)),
     by_seller: [...bySeller.values()].sort((a, b) => b.revenue - a.revenue || (a.code ?? "zzz").localeCompare(b.code ?? "zzz")),
     by_day: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
@@ -749,7 +1036,7 @@ export async function costSheetForOrder(
   const seller = order.seller_code ? sellerByCode.get(order.seller_code) ?? null : null;
   const stored = readStoredSheet(metadata);
   return computeCostSheet(
-    { total: order.total, shipping_total: order.shipping_total, paid: order.paid, items: order.items },
+    { total: order.total, shipping_total: order.shipping_total, tax_total: order.tax_total, paid: order.paid, items: order.items },
     rules,
     seller,
     stored

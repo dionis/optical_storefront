@@ -163,12 +163,11 @@ function AllocationEditor({ data, onSaved, lang, go }) {
   const ref = useRef(null);
   const alloc = rules.filter(isAllocationRule);
   const target = rules.find(isProfitTarget);
-  const fees = rules.filter((r) => r.kind === "order_percent" && ["payment_fee"].includes(r.match_key) && r.active);
   const sumAlloc = alloc.filter((r) => r.active).reduce((a, r) => a + (Number(r.amount) || 0), 0);
-  const sumFees = fees.reduce((a, r) => a + (Number(r.amount) || 0), 0);
   const targetPct = target && target.active ? Number(target.amount) || 0 : 0;
+  // Ejemplo: 100 USD netos (ya descontados envío, impuestos y Stripe).
   const sampleRevenue = 100;
-  const sample = [...alloc.filter((r) => r.active).map((r) => ({ key: r.id, label: r.label || r.match_key, amount: (sampleRevenue * (Number(r.amount) || 0)) / 100 })), ...fees.map((r) => ({ key: r.id, label: r.label || t("adm.cost.key.payment_fee"), amount: (sampleRevenue * (Number(r.amount) || 0)) / 100 }))];
+  const sample = alloc.filter((r) => r.active).map((r) => ({ key: r.id, label: r.label || r.match_key, amount: (sampleRevenue * (Number(r.amount) || 0)) / 100, group: "percent" }));
   const setTarget = (v) => {
     const n = Math.max(0, Math.min(100, Number(v) || 0));
     if (target) patch(target.id, { amount: n, active: true, unit: "percent" });
@@ -178,7 +177,7 @@ function AllocationEditor({ data, onSaved, lang, go }) {
     const label = name.trim(); if (!label) return;
     add({ kind: "order_percent", match_key: slug(label), label, amount: Number(p) || 0, unit: "percent", active: true });
   };
-  const free = 100 - sumAlloc - sumFees - targetPct;
+  const free = 100 - sumAlloc - targetPct;
 
   return (
     <div ref={ref}>
@@ -225,16 +224,66 @@ function AllocationEditor({ data, onSaved, lang, go }) {
               <span className="cost-unit">%</span>
             </div>
             <div className={`alloc-sum ${free < 0 ? "bad" : ""}`}>
-              <span>{t("adm.cost.allocSum", { alloc: pct(sumAlloc), fees: pct(sumFees), target: pct(targetPct) })}</span>
+              <span>{t("adm.cost.allocSum", { alloc: pct(sumAlloc), target: pct(targetPct) })}</span>
               <b>{free < 0 ? t("adm.cost.allocOver", { pct: pct(-free) }) : t("adm.cost.allocFree", { pct: pct(free) })}</b>
             </div>
           </Card>
           <Card icon="layers" title={t("adm.cost.allocSample")} hint={t("adm.cost.allocSampleHint")} exportable={false} className="tight">
-            <AllocationBar byKind={sample} revenue={sampleRevenue} profitTargetPct={targetPct || null} lang={lang} go={go || (() => {})} />
+            <AllocationBar byKind={sample} revenue={sampleRevenue} targetAmount={targetPct ? sampleRevenue * targetPct / 100 : null} lang={lang} go={go || (() => {})} compact />
             <p className="muted" style={{ fontSize: 12, margin: "8px 0 0" }}>{t("adm.cost.allocSampleNote")}</p>
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Cascada del dinero de UN pedido: lo que pagó el cliente → se descuenta lo
+ * que no es del dueño (envío, impuestos, Stripe) → ingreso neto → materiales,
+ * partidas por porcentaje y comisión del vendedor → ganancia del dueño, frente
+ * al objetivo (30 % del neto) y el precio que habría cubierto todo.
+ */
+function Waterfall({ sheet, lines, dirty, cur, lang }) {
+  const { t } = useLang();
+  const sum = (g) => lines.filter((l) => (l.group || "manual") === g).reduce((a, l) => a + (Number(l.amount) || 0) * (Number(l.qty) || 1), 0);
+  const gross = Number(sheet.gross ?? sheet.revenue) || 0;
+  // Con cambios sin guardar se recalcula en vivo desde las líneas; guardado, manda el servidor.
+  const ded = dirty ? sum("deduction") : Number(sheet.deductions_total) || sum("deduction");
+  const mat = dirty ? sum("material") + sum("manual") : Number(sheet.materials_total) || 0;
+  const per = dirty ? sum("percent") : Number(sheet.percent_total) || 0;
+  const sel = dirty ? sum("seller") : Number(sheet.commission_total) || 0;
+  const net = sheet.manual && !dirty ? Number(sheet.net_base) || gross - ded : gross - ded;
+  const profit = gross - ded - mat - per - sel;
+  const tp = sheet.profit_target_pct;
+  const target = tp == null ? null : (net * tp) / 100;
+  const gap = target == null ? null : profit - target;
+  const row = (cls, icon, label, value, sub) => (
+    <div className={`wf-row ${cls}`}><span className="wf-l"><Icon name={icon} size={14} />{label}{sub && <small className="muted"> · {sub}</small>}</span><b className="wf-v num">{value}</b></div>
+  );
+  return (
+    <div className="wf">
+      {row("gross", "dollar", t("adm.cost.wf.gross"), fmtMoney(gross, cur, lang))}
+      {row("minus", "truck", t("adm.cost.wf.deductions"), `− ${fmtMoney(ded, cur, lang)}`, t("adm.cost.wf.deductionsSub"))}
+      {row("net", "wallet", t("adm.cost.wf.net"), fmtMoney(net, cur, lang), t("adm.cost.wf.netSub"))}
+      {row("minus", "glasses", t("adm.cost.wf.materials"), `− ${fmtMoney(mat, cur, lang)}`)}
+      {row("minus", "percent", t("adm.cost.wf.percent"), `− ${fmtMoney(per, cur, lang)}`, net > 0 ? pct((per / net) * 100) + " " + t("adm.cost.ofNetShort") : undefined)}
+      {sel > 0 && row("minus", "sellers", t("adm.cost.wf.seller"), `− ${fmtMoney(sel, cur, lang)}`, net > 0 ? pct((sel / net) * 100) + " " + t("adm.cost.ofNetShort") : undefined)}
+      {row(`profit ${gap == null ? "" : gap >= 0 ? "good" : "bad"}`, "trendUp", t("adm.cost.wf.profit"), fmtMoney(profit, cur, lang), net > 0 ? pct((profit / net) * 100) + " " + t("adm.cost.ofNetShort") : undefined)}
+      {target != null && (
+        <div className={`alloc-sum ${gap >= 0 ? "good" : "bad"}`}>
+          <span>{t("adm.cost.targetLine", { pct: tp })} = {fmtMoney(target, cur, lang)}</span>
+          <b>{gap >= 0 ? t("adm.cost.aboveTarget", { v: fmtMoney(gap, cur, lang) }) : t("adm.cost.belowTargetBy", { v: fmtMoney(-gap, cur, lang) })}</b>
+        </div>
+      )}
+      {sheet.suggested_price != null && !dirty && (
+        <div className="wf-suggest">
+          <span><Icon name="sparkles" size={14} />{t("adm.cost.suggestedFull", { pct: tp })}</span>
+          <b>{fmtMoney(sheet.suggested_price, cur, lang)}</b>
+          <small className={sheet.suggested_delta > 0 ? "bad" : "good"}>{sheet.suggested_delta > 0 ? "+" : ""}{fmtMoney(sheet.suggested_delta, cur, lang)} {t("adm.cost.vsPaid")}</small>
+          <small className="muted">{t("adm.cost.suggestedNote")}</small>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,11 +304,9 @@ export function OrderCostSheet({ orderId, onClose, onChanged, go }) {
   useEffect(load, [orderId]);
 
   const total = useMemo(() => lines.reduce((a, l) => a + (Number(l.amount) || 0) * (Number(l.qty) || 1), 0), [lines]);
-  const revenue = sheet?.revenue || 0;
-  const margin = revenue - total;
-  const mpct = revenue > 0 ? (margin / revenue) * 100 : null;
+  const revenue = Number(sheet?.gross ?? sheet?.revenue) || 0;
   const cur = sheet?.currency_code || "usd";
-  const byKind = useMemo(() => lines.map((l, i) => ({ key: `${l.key}-${i}`, label: l.label, amount: (Number(l.amount) || 0) * (Number(l.qty) || 1), kind: l.kind })), [lines]);
+  const byKind = useMemo(() => lines.map((l, i) => ({ key: `${l.key}-${i}`, label: l.label, amount: (Number(l.amount) || 0) * (Number(l.qty) || 1), kind: l.kind, group: l.group })), [lines]);
 
   const setLine = (i, p) => { setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l))); setDirty(true); };
   const addLine = () => { setLines((ls) => [...ls, { key: `manual_${Date.now()}`, label: "", amount: 0, qty: 1, source: "manual", kind: "manual" }]); setDirty(true); };
@@ -311,19 +358,9 @@ export function OrderCostSheet({ orderId, onClose, onChanged, go }) {
             <div className="cost-line total"><span>{t("adm.cost.cost")}</span><span /><span /><span className="r num">{fmtMoney(total, cur, lang)}</span><span /></div>
           </div>
           <div>
-            <div className="cost-kpi-row three">
-              <div className="cost-kpi"><small><Icon name="dollar" size={13} />{t("adm.cost.revenue")}</small><b>{fmtMoney(revenue, cur, lang)}</b></div>
-              <div className="cost-kpi bad"><small><Icon name="receipt" size={13} />{t("adm.cost.cost")}</small><b>{fmtMoney(total, cur, lang)}</b></div>
-              <div className={`cost-kpi ${marginTone(mpct) === "bad" ? "bad" : "good"}`}><small><Icon name="trendUp" size={13} />{t("adm.cost.margin")}</small><b>{fmtMoney(margin, cur, lang)}</b><em>{pct(mpct)}</em></div>
-            </div>
-            {sheet.profit_target_pct != null && (
-              <div className={`alloc-sum ${(revenue * sheet.profit_target_pct) / 100 > margin ? "bad" : "good"}`}>
-                <span>{t("adm.cost.targetLine", { pct: sheet.profit_target_pct })} · {fmtMoney((revenue * sheet.profit_target_pct) / 100, cur, lang)}</span>
-                <b>{t("adm.cost.gap", { v: fmtMoney(margin - (revenue * sheet.profit_target_pct) / 100, cur, lang) })}</b>
-              </div>
-            )}
+            <Waterfall sheet={sheet} lines={lines} dirty={dirty} cur={cur} lang={lang} />
             <b style={{ display: "block", margin: "10px 0 6px", fontSize: 13 }}>{t("adm.cost.allocation")}</b>
-            <AllocationBar byKind={byKind} revenue={revenue} profitTargetPct={sheet.profit_target_pct} lang={lang} go={go || (() => {})} />
+            <AllocationBar byKind={byKind} revenue={revenue} targetAmount={sheet.profit_target_amount} lang={lang} go={go || (() => {})} />
           </div>
         </div>
       )}
@@ -359,7 +396,7 @@ function Profitability({ sellers, focusOrder, go }) {
   const tot = data?.totals || {};
   const cur = "usd";
   const undefinedOrders = (data?.orders || []).filter((o) => o.undefined_costs > 0).length;
-  const csvCols = [[t("adm.col.order"), "display_id"], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)], [t("adm.ord.colCustomer"), "customer_name"], [t("adm.ord.seller"), "seller_code"], [t("adm.cost.revenue"), "revenue"], [t("adm.cost.cost"), "cost_total"], [t("adm.cost.margin"), "margin"], ["%", "margin_pct"]];
+  const csvCols = [[t("adm.col.order"), "display_id"], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)], [t("adm.ord.colCustomer"), "customer_name"], [t("adm.ord.seller"), "seller_code"], [t("adm.cost.gross"), "gross"], [t("adm.cost.netBase"), "net_base"], [t("adm.cost.cost"), "cost_total"], [t("adm.cost.ownerProfit"), "margin"], [t("adm.cost.pctNet"), "profit_pct_net"], [t("adm.cost.suggested"), "suggested_price"]];
 
   return (
     <>
@@ -381,10 +418,10 @@ function Profitability({ sellers, focusOrder, go }) {
         <>
           <div className="cost-kpi-row">
             <button type="button" className="cost-kpi" onClick={() => go?.("orders", { preset: "all" })}><small><Icon name="orders" size={13} />{t("adm.kpi.orders")}</small><b>{tot.orders ?? 0}</b></button>
-            <button type="button" className="cost-kpi" onClick={() => go?.("exec", { sub: "sales" })}><small><Icon name="dollar" size={13} />{t("adm.cost.revenue")}</small><b>{fmtMoney(tot.revenue, cur, lang)}</b></button>
-            <button type="button" className="cost-kpi bad" onClick={() => go?.("costs", { sub: "rules" })}><small><Icon name="receipt" size={13} />{t("adm.cost.cost")}</small><b>{fmtMoney(tot.cost, cur, lang)}</b></button>
-            <button type="button" className={`cost-kpi ${marginTone(tot.margin_pct) === "bad" ? "bad" : "good"}`} onClick={() => go?.("exec", { sub: "costs" })}><small><Icon name="trendUp" size={13} />{t("adm.cost.margin")}</small><b>{fmtMoney(tot.margin, cur, lang)}</b><em>{pct(tot.margin_pct)}</em></button>
-            <button type="button" className={`cost-kpi ${tot.profit_target_pct == null ? "" : tot.profit_gap >= 0 ? "good" : "bad"}`} onClick={() => go?.("costs", { sub: "allocation" })}><small><Icon name="gauge" size={13} />{t("adm.cost.target")}</small><b>{tot.profit_target_pct == null ? "—" : pct(tot.profit_target_pct)}</b><em>{tot.profit_target_pct == null ? t("adm.cost.noTargetShort") : t("adm.cost.gap", { v: fmtMoney(tot.profit_gap, cur, lang) })}</em></button>
+            <button type="button" className="cost-kpi" onClick={() => go?.("exec", { sub: "sales" })}><small><Icon name="dollar" size={13} />{t("adm.cost.gross")}</small><b>{fmtMoney(tot.gross ?? tot.revenue, cur, lang)}</b><em>{t("adm.cost.netBase")}: {fmtMoney(tot.net_base, cur, lang)}</em></button>
+            <button type="button" className="cost-kpi bad" onClick={() => go?.("costs", { sub: "rules" })}><small><Icon name="receipt" size={13} />{t("adm.cost.cost")}</small><b>{fmtMoney(tot.cost, cur, lang)}</b><em>{t("adm.cost.deductionsSub", { v: fmtMoney(tot.deductions, cur, lang) })}</em></button>
+            <button type="button" className={`cost-kpi ${tot.profit_gap == null ? (marginTone(tot.margin_pct) === "bad" ? "bad" : "good") : tot.profit_gap >= 0 ? "good" : "bad"}`} onClick={() => go?.("exec", { sub: "costs" })}><small><Icon name="trendUp" size={13} />{t("adm.cost.ownerProfit")}</small><b>{fmtMoney(tot.profit ?? tot.margin, cur, lang)}</b><em>{t("adm.cost.ofNet", { pct: pct(tot.profit_pct_net) })}</em></button>
+            <button type="button" className={`cost-kpi ${tot.profit_target_pct == null ? "" : tot.profit_gap >= 0 ? "good" : "bad"}`} onClick={() => go?.("costs", { sub: "allocation" })}><small><Icon name="gauge" size={13} />{t("adm.cost.target")}</small><b>{tot.profit_target_pct == null ? "—" : `${pct(tot.profit_target_pct)} · ${fmtMoney(tot.profit_target_amount, cur, lang)}`}</b><em>{tot.profit_target_pct == null ? t("adm.cost.noTargetShort") : t("adm.cost.gap", { v: fmtMoney(tot.profit_gap, cur, lang) })}</em></button>
             <button type="button" className={`cost-kpi ${undefinedOrders ? "bad" : "good"}`} onClick={() => go?.("costs", { sub: "rules" })}><small><Icon name="alert" size={13} />{t("adm.cost.incomplete")}</small><b>{undefinedOrders}</b><em>{t("adm.cost.incompleteHint")}</em></button>
           </div>
           {data.truncated && <div className="adm-find-note muted">{t("adm.ord.truncated", { n: 300 })}</div>}
@@ -392,18 +429,20 @@ function Profitability({ sellers, focusOrder, go }) {
           <Card icon="sales" title={t("adm.cost.byOrder")} hint={t("adm.cost.byOrderHint")} name="rentabilidad" csv={{ cols: csvCols, rows }} className="tight">
             <div className="adm-table-wrap" ref={tableRef}>
               <table className="adm-table responsive">
-                <thead><tr>{th("display_id", t("adm.col.order"))}{th("created_at", t("adm.col.date"))}{th("customer_name", t("adm.ord.colCustomer"))}{th("seller_code", t("adm.ord.seller"))}{th("revenue", t("adm.cost.revenue"), "r")}{th("cost_total", t("adm.cost.cost"), "r")}{th("margin", t("adm.cost.margin"), "r")}{th("margin_pct", "%", "r")}<th /></tr></thead>
+                <thead><tr>{th("display_id", t("adm.col.order"))}{th("created_at", t("adm.col.date"))}{th("customer_name", t("adm.ord.colCustomer"))}{th("seller_code", t("adm.ord.seller"))}{th("gross", t("adm.cost.gross"), "r")}{th("net_base", t("adm.cost.netBase"), "r")}{th("cost_total", t("adm.cost.cost"), "r")}{th("margin", t("adm.cost.ownerProfit"), "r")}{th("profit_pct_net", t("adm.cost.pctNet"), "r")}{th("suggested_price", t("adm.cost.suggested"), "r")}<th /></tr></thead>
                 <tbody>
-                  {rows.length === 0 ? <tr><td colSpan="9" className="full"><div className="adm-empty"><Icon name="costs" size={36} /><b>{t("adm.cost.noOrders")}</b></div></td></tr> : rows.map((o) => (
+                  {rows.length === 0 ? <tr><td colSpan="11" className="full"><div className="adm-empty"><Icon name="costs" size={36} /><b>{t("adm.cost.noOrders")}</b></div></td></tr> : rows.map((o) => (
                     <tr key={o.id} className={`ord-row ${open === o.id ? "open" : ""}`} onClick={() => setOpen(open === o.id ? "" : o.id)}>
                       <td data-label={t("adm.col.order")}><b>#{o.display_id}</b>{o.manual && <span className="adm-chip gold" style={{ marginLeft: 6, fontSize: 10.5 }}><Icon name="edit" size={11} /></span>}{o.undefined_costs > 0 && <span className="adm-chip warn" style={{ marginLeft: 6, fontSize: 10.5 }} title={t("adm.cost.incompleteHint")}><Icon name="alert" size={11} />{o.undefined_costs}</span>}</td>
                       <td data-label={t("adm.col.date")}>{shortDate(o.created_at, lang)}</td>
                       <td data-label={t("adm.ord.colCustomer")}>{o.customer_name || "—"}</td>
                       <td data-label={t("adm.ord.seller")}>{o.seller_code || "—"}</td>
-                      <td data-label={t("adm.cost.revenue")} className="r num">{fmtMoney(o.revenue, cur, lang)}</td>
+                      <td data-label={t("adm.cost.gross")} className="r num">{fmtMoney(o.gross ?? o.revenue, cur, lang)}</td>
+                      <td data-label={t("adm.cost.netBase")} className="r num muted">{fmtMoney(o.net_base, cur, lang)}</td>
                       <td data-label={t("adm.cost.cost")} className="r num">{fmtMoney(o.cost_total, cur, lang)}</td>
-                      <td data-label={t("adm.cost.margin")} className="r num">{fmtMoney(o.margin, cur, lang)}</td>
-                      <td data-label="%" className="r"><span className={`margin-pct ${marginTone(o.margin_pct)}`}>{pct(o.margin_pct)}</span></td>
+                      <td data-label={t("adm.cost.ownerProfit")} className="r num">{fmtMoney(o.margin, cur, lang)}</td>
+                      <td data-label={t("adm.cost.pctNet")} className="r"><span className={`margin-pct ${o.profit_gap == null ? marginTone(o.margin_pct) : o.profit_gap >= 0 ? "good" : "bad"}`}>{pct(o.profit_pct_net)}</span></td>
+                      <td data-label={t("adm.cost.suggested")} className="r num">{o.suggested_price == null ? "—" : <span title={t("adm.cost.suggestedHint")}>{fmtMoney(o.suggested_price, cur, lang)} <small className={o.suggested_delta > 0 ? "bad" : "good"}>({o.suggested_delta > 0 ? "+" : ""}{fmtMoney(o.suggested_delta, cur, lang)})</small></span>}</td>
                       <td className="r"><Icon name={open === o.id ? "chevronUp" : "chevronDown"} size={14} /></td>
                     </tr>
                   ))}
@@ -430,7 +469,7 @@ function Profitability({ sellers, focusOrder, go }) {
               )}
             </Card>
             <Card icon="layers" title={t("adm.cost.allocation")} hint={t("adm.cost.allocationHint")} name="reparto" className="tight" onGo={() => go?.("costs", { sub: "allocation" })} goLabel={t("adm.cost.tab.allocation")}>
-              <AllocationBar byKind={data.by_kind} revenue={tot.revenue} profitTargetPct={tot.profit_target_pct} lang={lang} go={go || (() => {})} />
+              <AllocationBar byKind={data.by_kind} revenue={tot.gross ?? tot.revenue} targetAmount={tot.profit_target_amount} lang={lang} go={go || (() => {})} />
               <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, margin: "10px 0 0" }}>{t("adm.cost.howBody")}</p>
             </Card>
           </div>

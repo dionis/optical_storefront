@@ -19,29 +19,57 @@ const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 const pct = (v) => (v == null || Number.isNaN(v) ? "—" : `${Math.round(v)}%`);
 const PALETTE = ["#0b2f66", "#0e5ad0", "#b8921e", "#d6123e", "#1e6b3a", "#6b4fa8", "#8a5a00", "#2f74ff", "#5b6472", "#c9a44a"];
 
-/** Reparto del ingreso: barra apilada por concepto + ganancia (resto). */
-export function AllocationBar({ byKind, revenue, profitTargetPct, lang, go }) {
+/** Grupo de una partida por su `kind` (para colorear el reparto). */
+export function groupOfKind(kind, key = "") {
+  if (kind === "shipping" || kind === "tax" || kind === "payment_fixed" || key === "order_percent:payment_fee" || key === "payment_fee") return "deduction";
+  if (kind === "seller_commission" || kind === "seller") return "seller";
+  if (kind === "order_percent") return "percent";
+  if (kind === "manual") return "manual";
+  return "material";
+}
+const GROUP_COLOR = { deduction: "#8a93a2", material: "#0b2f66", percent: "#b8921e", seller: "#6b4fa8", manual: "#0e5ad0", profit: "#1a9d5c" };
+const GROUP_ORDER = ["deduction", "material", "percent", "seller", "manual"];
+
+/**
+ * Reparto del dinero de una venta (o del período): primero lo que se descuenta
+ * (envío, impuestos, Stripe), luego materiales, partidas por porcentaje y
+ * comisión del vendedor; lo que queda es la ganancia. La marca ◆ señala dónde
+ * debería empezar la ganancia para cumplir el objetivo (30 % del neto).
+ */
+export function AllocationBar({ byKind, revenue, targetAmount, lang, go, compact = false }) {
   const { t } = useLang();
   const total = Number(revenue) || 0;
-  const parts = (byKind || []).filter((k) => k.amount > 0);
+  const parts = (byKind || []).filter((k) => k.amount > 0).map((k) => ({ ...k, group: k.group || groupOfKind(k.kind, k.key) }))
+    .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group));
   const cost = parts.reduce((a, k) => a + k.amount, 0);
-  const profit = Math.max(0, total - cost);
-  const segs = [...parts.map((k, i) => ({ key: k.key, label: k.label, amount: k.amount, color: PALETTE[(i + 1) % PALETTE.length] })), { key: "profit", label: t("adm.cost.profit"), amount: profit, color: "#1a9d5c" }];
+  const profit = total - cost;
+  const segs = [...parts.map((k, i) => ({ key: `${k.key || k.label}-${i}`, label: k.label, amount: k.amount, group: k.group, color: GROUP_COLOR[k.group] })), { key: "profit", label: t("adm.cost.profit"), amount: Math.max(0, profit), group: "profit", color: GROUP_COLOR.profit }];
   if (total <= 0) return <div className="adm-nodata">{t("adm.cost.noOrders")}</div>;
-  const target = profitTargetPct != null ? (total * profitTargetPct) / 100 : null;
+  const target = targetAmount != null && targetAmount > 0 ? targetAmount : null;
+  const goTo = (g) => go("costs", { sub: g === "percent" || g === "profit" ? "allocation" : g === "seller" ? "profit" : "rules" });
   return (
     <div className="alloc">
       <div className="alloc-bar" role="img" aria-label={t("adm.cost.allocation")}>
         {segs.map((s) => s.amount > 0 && (
-          <button type="button" key={s.key} className="alloc-seg" style={{ width: `${(s.amount / total) * 100}%`, background: s.color }} title={`${s.label}: ${fmtMoney(s.amount, "usd", lang)} (${pct((s.amount / total) * 100)})`} onClick={() => go("costs", { sub: s.key === "profit" ? "profit" : "rules" })} />
+          <button type="button" key={s.key} className={`alloc-seg g-${s.group}`} style={{ width: `${(s.amount / total) * 100}%`, background: s.color }} title={`${s.label}: ${fmtMoney(s.amount, "usd", lang)} (${pct((s.amount / total) * 100)})`} onClick={() => goTo(s.group)} />
         ))}
-        {target != null && <i className="alloc-target" style={{ right: `${Math.min(100, (target / total) * 100)}%` }} title={t("adm.cost.targetLine", { pct: profitTargetPct })} />}
+        {profit < 0 && <span className="alloc-neg" title={t("adm.cost.lossTitle", { v: fmtMoney(-profit, "usd", lang) })}>−{fmtMoney(-profit, "usd", lang)}</span>}
+        {target != null && <i className="alloc-target" style={{ right: `${Math.min(100, Math.max(0, (target / total) * 100))}%` }} title={t("adm.cost.targetMark", { v: fmtMoney(target, "usd", lang) })} />}
       </div>
-      <ul className="alloc-legend">
-        {segs.map((s) => (
-          <li key={s.key}><button type="button" onClick={() => go("costs", { sub: s.key === "profit" ? "profit" : "rules" })}><i style={{ background: s.color }} /><span>{s.label}</span><b>{fmtMoney(s.amount, "usd", lang)}</b><em>{pct((s.amount / total) * 100)}</em></button></li>
-        ))}
-      </ul>
+      <div className="alloc-groups">
+        {["deduction", "material", "percent", "seller", "manual", "profit"].map((g) => {
+          const amt = g === "profit" ? profit : parts.filter((p) => p.group === g).reduce((a, p) => a + p.amount, 0);
+          if (g !== "profit" && amt <= 0) return null;
+          return <button type="button" key={g} className={`adm-chip g-${g}`} onClick={() => goTo(g)}><i style={{ background: GROUP_COLOR[g] }} />{t(`adm.cost.group.${g}`)} <b>{fmtMoney(amt, "usd", lang)}</b> <em>{pct((amt / total) * 100)}</em></button>;
+        })}
+      </div>
+      {!compact && (
+        <ul className="alloc-legend">
+          {segs.map((s) => (
+            <li key={s.key}><button type="button" onClick={() => goTo(s.group)}><i style={{ background: s.color }} /><span>{s.label}</span><b>{fmtMoney(s.amount, "usd", lang)}</b><em>{pct((s.amount / total) * 100)}</em></button></li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -67,8 +95,6 @@ export default function ExecutiveCosts({ preset = "30d", go }) {
   const brandDonut = useMemo(() => (data?.by_brand || []).filter((b) => b.frame_cost > 0).map((b) => ({ label: b.name, value: Math.round(b.frame_cost * 100) / 100 })), [data]);
   const recent = (data?.orders || []).slice(0, 7);
   const incomplete = (data?.orders || []).filter((o) => o.undefined_costs > 0).length;
-  const commissions = (data?.by_seller || []).reduce((a, s) => a + (s.commission || 0), 0);
-  const gapTone = tot.profit_gap == null ? "" : tot.profit_gap >= 0 ? "good" : "bad";
 
   return (
     <div className="adm-exec">
@@ -86,17 +112,17 @@ export default function ExecutiveCosts({ preset = "30d", go }) {
       )}
 
       <div className="adm-kpis adm-exec-kpis">
-        <KpiCard label={t("adm.cost.revenue")} value={fmtMoney(tot.revenue, "usd", lang)} icon={<Icon name="dollar" />} sub={t("adm.cost.ordersN", { n: tot.orders ?? 0 })} hint={t("adm.cost.h.revenue")} onClick={() => go("exec", { sub: "sales" })} />
-        <KpiCard label={t("adm.cost.cost")} value={fmtMoney(tot.cost, "usd", lang)} icon={<Icon name="receipt" />} hint={t("adm.cost.h.cost")} onClick={() => go("costs", { sub: "rules" })} />
-        <KpiCard label={t("adm.cost.margin")} value={fmtMoney(tot.margin, "usd", lang)} icon={<Icon name="trendUp" />} sub={pct(tot.margin_pct)} deltaGood={marginTone(tot.margin_pct) !== "bad"} hint={t("adm.cost.h.margin")} onClick={() => go("costs", { sub: "profit" })} />
-        <KpiCard label={t("adm.cost.target")} value={tot.profit_target_pct == null ? "—" : fmtMoney(tot.profit_target_amount, "usd", lang)} icon={<Icon name="gauge" />} sub={tot.profit_target_pct == null ? t("adm.cost.noTargetShort") : t("adm.cost.gap", { v: fmtMoney(tot.profit_gap, "usd", lang) })} hint={t("adm.cost.h.target")} onClick={() => go("costs", { sub: "allocation" })} />
-        <KpiCard label={t("adm.sel.commissions")} value={fmtMoney(commissions, "usd", lang)} icon={<Icon name="sellers" />} hint={t("adm.cost.h.commissions")} onClick={() => go("sellers")} />
+        <KpiCard label={t("adm.cost.gross")} value={fmtMoney(tot.gross ?? tot.revenue, "usd", lang)} icon={<Icon name="dollar" />} sub={t("adm.cost.ordersN", { n: tot.orders ?? 0 })} hint={t("adm.cost.h.gross")} onClick={() => go("exec", { sub: "sales" })} />
+        <KpiCard label={t("adm.cost.netBase")} value={fmtMoney(tot.net_base, "usd", lang)} icon={<Icon name="wallet" />} sub={t("adm.cost.deductionsSub", { v: fmtMoney(tot.deductions, "usd", lang) })} hint={t("adm.cost.h.netBase")} onClick={() => go("costs", { sub: "rules" })} />
+        <KpiCard label={t("adm.cost.opCost")} value={fmtMoney((tot.materials || 0) + (tot.percent_items || 0) + (tot.commission || 0), "usd", lang)} icon={<Icon name="receipt" />} sub={t("adm.cost.opCostSub", { m: fmtMoney(tot.materials, "usd", lang), p: fmtMoney((tot.percent_items || 0) + (tot.commission || 0), "usd", lang) })} hint={t("adm.cost.h.opCost")} onClick={() => go("costs", { sub: "rules" })} />
+        <KpiCard label={t("adm.cost.ownerProfit")} value={fmtMoney(tot.profit ?? tot.margin, "usd", lang)} icon={<Icon name="trendUp" />} sub={t("adm.cost.ofNet", { pct: pct(tot.profit_pct_net) })} deltaGood={tot.profit_gap == null ? true : tot.profit_gap >= 0} hint={t("adm.cost.h.ownerProfit")} onClick={() => go("costs", { sub: "profit" })} />
+        <KpiCard label={t("adm.cost.target")} value={tot.profit_target_pct == null ? "—" : `${pct(tot.profit_target_pct)} · ${fmtMoney(tot.profit_target_amount, "usd", lang)}`} icon={<Icon name="gauge" />} sub={tot.profit_target_pct == null ? t("adm.cost.noTargetShort") : t("adm.cost.gap", { v: fmtMoney(tot.profit_gap, "usd", lang) })} hint={t("adm.cost.h.target")} onClick={() => go("costs", { sub: "allocation" })} />
         <KpiCard label={t("adm.cost.incomplete")} value={String(incomplete)} icon={<Icon name="alert" />} sub={t("adm.cost.incompleteHint")} hint={t("adm.cost.h.incomplete")} onClick={() => go("costs", { sub: incomplete ? "rules" : "profit" })} />
       </div>
 
       <div className="exec-grid cols-3-1">
         <Card icon="layers" title={t("adm.cost.allocation")} hint={t("adm.cost.allocationHint")} onGo={() => go("costs", { sub: "allocation" })} goLabel={t("adm.cost.tab.allocation")} name="reparto" csv={{ cols: [[t("adm.cost.line"), "label"], [t("adm.cost.amount"), "amount"]], rows: data?.by_kind || [] }}>
-          <AllocationBar byKind={data?.by_kind} revenue={tot.revenue} profitTargetPct={tot.profit_target_pct} lang={lang} go={go} />
+          <AllocationBar byKind={data?.by_kind} revenue={tot.gross ?? tot.revenue} targetAmount={tot.profit_target_amount} lang={lang} go={go} />
         </Card>
         <SellersMini preset={preset} go={go} lang={lang} showCommission />
       </div>
@@ -125,9 +151,9 @@ export default function ExecutiveCosts({ preset = "30d", go }) {
                       <td><b>#{o.display_id}</b>{o.undefined_costs > 0 && <span className="adm-chip warn" style={{ marginLeft: 6, fontSize: 10 }}><Icon name="alert" size={10} /></span>}</td>
                       <td>{shortDate(o.created_at, lang)}</td>
                       <td>{o.customer_name || "—"}</td>
-                      <td className="r num">{fmtMoney(o.revenue, "usd", lang)}</td>
-                      <td className="r num" style={{ color: "var(--adm-red)" }}>−{fmtMoney(o.cost_total, "usd", lang)}</td>
-                      <td className="r"><span className={`margin-pct ${marginTone(o.margin_pct)}`}>{fmtMoney(o.margin, "usd", lang)} · {pct(o.margin_pct)}</span></td>
+                      <td className="r num">{fmtMoney(o.gross ?? o.revenue, "usd", lang)}</td>
+                      <td className="r num muted">{t("adm.cost.netShort")} {fmtMoney(o.net_base, "usd", lang)}</td>
+                      <td className="r"><span className={`margin-pct ${o.profit_gap == null ? marginTone(o.margin_pct) : o.profit_gap >= 0 ? "good" : "bad"}`}>{fmtMoney(o.margin, "usd", lang)} · {pct(o.profit_pct_net)}</span></td>
                     </tr>
                   ))}
                 </tbody>

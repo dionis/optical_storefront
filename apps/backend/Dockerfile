@@ -2,7 +2,7 @@
 # needs pnpm-workspace.yaml and packages/shared. In Coolify: set "Base
 # Directory" to / and "Dockerfile Location" to apps/backend/Dockerfile.
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 

@@ -746,3 +746,30 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .adm-exec .exec-mini-kpis button { padding: 6px 8px; }
 .adm-exec .adm-nodata { padding: 18px 0; }
 .adm-exec .alloc-bar { height: 18px; }
+
+/* cascada del dinero de un pedido + grupos del reparto */
+.wf { display: flex; flex-direction: column; gap: 2px; }
+.wf-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
+.wf-row .wf-l { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.wf-row .wf-l .adm-ico { color: var(--adm-blue); flex: none; }
+.wf-row.minus { color: var(--adm-muted); }
+.wf-row.minus .wf-v { color: var(--adm-red); }
+.wf-row.gross, .wf-row.net { background: var(--adm-bg); font-weight: 700; }
+.wf-row.net .wf-l .adm-ico { color: var(--adm-gold); }
+.wf-row.profit { background: var(--adm-green-soft); color: var(--adm-green); font-weight: 800; font-size: 14px; }
+.wf-row.profit .wf-l .adm-ico { color: var(--adm-green); }
+.wf-row.profit.bad { background: var(--adm-red-soft); color: #8f1030; }
+.wf-row.profit.bad .wf-l .adm-ico { color: var(--adm-red); }
+.wf-v { font-variant-numeric: tabular-nums; }
+.wf-suggest { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; margin-top: 8px; padding: 9px 11px; border-radius: 10px; background: var(--adm-gold-soft); color: #7a5b12; font-size: 12.5px; }
+.wf-suggest > span { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.wf-suggest > b { font-family: var(--adm-display); font-size: 18px; color: var(--adm-navy); }
+.wf-suggest > small { grid-column: 1 / -1; }
+.wf-suggest small.bad { color: var(--adm-red); font-weight: 700; }
+.wf-suggest small.good { color: var(--adm-green); font-weight: 700; }
+.alloc-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.alloc-groups .adm-chip { border: 1px solid var(--adm-line); background: #fff; color: var(--adm-ink); cursor: pointer; font: 600 11.5px var(--adm-font); gap: 5px; }
+.alloc-groups .adm-chip:hover { background: var(--adm-blue-soft); }
+.alloc-groups .adm-chip i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.alloc-groups .adm-chip em { font-style: normal; color: var(--adm-faint); }
+.alloc-neg { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; color: #fff; background: var(--adm-red); border-radius: 999px; padding: 1px 7px; }
