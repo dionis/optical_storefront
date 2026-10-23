@@ -1,0 +1,177 @@
+/**
+ * Cost sheet math and rule validation. Pure functions only.
+ */
+import {
+  COST_KINDS,
+  CostRuleError,
+  FALLBACK_LENS_CATALOG,
+  KNOWN_BRANDS,
+  computeCostSheet,
+  defaultCostRules,
+  undefinedCostCount,
+  validateCostRules,
+  type CostRule,
+} from "../src/lib/costing";
+
+const rule = (kind: CostRule["kind"], match_key: string, amount: number, unit: CostRule["unit"] = "fixed", over: Partial<CostRule> = {}): CostRule => ({
+  id: `r_${kind}_${match_key}`,
+  kind,
+  match_key,
+  label: `${kind} ${match_key}`,
+  amount,
+  unit,
+  active: true,
+  sort_order: 0,
+  ...over,
+});
+
+const RULES: CostRule[] = [
+  rule("frame_brand", "flexure", 18),
+  rule("frame_brand", "case", 2),
+  rule("frame_sku", "FX2043-BLK", 22),
+  rule("lens_design", "sv", 6),
+  rule("lens_material", "poly", 4),
+  rule("lens_ar", "ar-green", 3),
+  rule("order_fixed", "lab", 12),
+  rule("order_fixed", "packaging", 1.5),
+  rule("shipping", "actual", 0),
+  rule("order_percent", "payment_fee", 2.9, "percent"),
+  rule("payment_fixed", "payment_fee_fixed", 0.3),
+  rule("lens_photo", "photo-grey", 99, "fixed", { active: false }),
+];
+
+const ORDER = {
+  total: 210,
+  shipping_total: 10,
+  paid: true,
+  items: [
+    { title: "Flexure 2043", quantity: 1, sku: "FX2043-BLK", brand_slug: "flexure", lens: { design_code: "sv", material_code: "poly", photo_code: "photo-grey", ar_code: "ar-green" } },
+    { title: "Estuche", quantity: 2, sku: "CASE-01", brand_slug: "case", lens: { design_code: null } },
+  ],
+};
+
+describe("computeCostSheet", () => {
+  it("prefers the SKU rule over the brand rule and prices every lens code", () => {
+    const sheet = computeCostSheet(ORDER, RULES);
+    const by = Object.fromEntries(sheet.lines.map((l) => [l.key, l]));
+    expect(by["frame:FX2043-BLK"].amount).toBe(22); // sku beats brand (18)
+    expect(by["frame:CASE-01"]).toMatchObject({ amount: 2, qty: 2, subtotal: 4 }); // case by brand
+    expect(by["lens_design:sv"].subtotal).toBe(6);
+    expect(by["lens_material:poly"].subtotal).toBe(4);
+    expect(by["lens_ar:ar-green"].subtotal).toBe(3);
+    // An inactive rule is as good as none: the line exists, flagged undefined.
+    expect(by["lens_photo:photo-grey"]).toMatchObject({ amount: 0, undefined_cost: true });
+  });
+
+  it("adds per-order items, actual shipping, the percent fee and the fixed fee", () => {
+    const sheet = computeCostSheet(ORDER, RULES);
+    const by = Object.fromEntries(sheet.lines.map((l) => [l.key, l]));
+    expect(by["order_fixed:lab"].subtotal).toBe(12);
+    expect(by["order_fixed:packaging"].subtotal).toBe(1.5);
+    expect(by["shipping:actual"]).toMatchObject({ amount: 10, source: "order", undefined_cost: false });
+    expect(by["order_percent:payment_fee"].amount).toBe(6.09); // 2.9% of 210
+    expect(by["payment_fixed:payment_fee_fixed"].amount).toBe(0.3);
+    // 22 + 4 + 6 + 4 + 3 + 0 + 12 + 1.5 + 10 + 6.09 + 0.3
+    expect(sheet.cost_total).toBe(68.89);
+    expect(sheet.revenue).toBe(210);
+    expect(sheet.margin).toBe(141.11);
+    expect(sheet.margin_pct).toBe(67.2);
+    expect(sheet.manual).toBe(false);
+  });
+
+  it("skips the fixed payment fee on an unpaid order", () => {
+    const sheet = computeCostSheet({ ...ORDER, paid: false }, RULES);
+    expect(sheet.lines.some((l) => l.key === "payment_fixed:payment_fee_fixed")).toBe(false);
+  });
+
+  it("adds the seller's commission as its own line, never from a rule", () => {
+    const sheet = computeCostSheet(ORDER, RULES, { commission_pct: 10 });
+    const line = sheet.lines.find((l) => l.source === "seller")!;
+    expect(line).toMatchObject({ key: "order_percent:seller_commission", amount: 21, subtotal: 21 });
+    expect(sheet.cost_total).toBe(89.89);
+    expect(computeCostSheet(ORDER, RULES, { commission_pct: 0 }).lines.some((l) => l.source === "seller")).toBe(false);
+  });
+
+  it("uses a fixed shipping rule when the owner prefers it", () => {
+    const rules = RULES.filter((r) => r.kind !== "shipping").concat(rule("shipping", "fixed", 7));
+    const by = Object.fromEntries(computeCostSheet(ORDER, rules).lines.map((l) => [l.key, l]));
+    expect(by["shipping:fixed"].amount).toBe(7);
+    expect(by["shipping:actual"]).toBeUndefined();
+  });
+
+  it("flags lines without a defined cost and a frame nobody has a rule for", () => {
+    const sheet = computeCostSheet(
+      { total: 100, shipping_total: 0, items: [{ title: "Mystery", quantity: 1, sku: "ZZ-1", brand_slug: "grande", lens: {} }] },
+      [rule("frame_brand", "flexure", 18), rule("order_fixed", "lab", 0)]
+    );
+    expect(sheet.lines.map((l) => l.key)).toEqual(["frame:ZZ-1", "order_fixed:lab"]);
+    expect(undefinedCostCount(sheet)).toBe(2);
+    expect(sheet.margin).toBe(100);
+  });
+
+  it("a manual override replaces the rules entirely", () => {
+    const manual = { lines: [{ key: "frame:X", label: "Montura", amount: 20, qty: 1 }, { key: "manual", label: "Extra", amount: 2.5, qty: 2 }], updated_at: "2026-10-20T00:00:00Z", updated_by: "user_1" };
+    const sheet = computeCostSheet(ORDER, RULES, { commission_pct: 10 }, manual);
+    expect(sheet.manual).toBe(true);
+    expect(sheet.lines.every((l) => l.source === "manual")).toBe(true);
+    expect(sheet.cost_total).toBe(25);
+    expect(sheet.margin).toBe(185);
+    expect(sheet.margin_pct).toBe(88.1);
+  });
+
+  it("never divides by zero on a free order", () => {
+    const sheet = computeCostSheet({ total: 0, shipping_total: 0, items: [] }, RULES);
+    expect(sheet.margin_pct).toBe(0);
+  });
+});
+
+describe("validateCostRules", () => {
+  it("normalizes keys per kind and fills the unit", () => {
+    const [sku, brand, fee] = validateCostRules([
+      { kind: "frame_sku", match_key: " fx2043-blk ", label: "", amount: "22" },
+      { kind: "frame_brand", match_key: "Flexure", label: "Flexure", amount: 18 },
+      { kind: "order_percent", match_key: "Payment Fee", label: "Fee", amount: 2.9 },
+    ]);
+    expect(sku).toMatchObject({ match_key: "FX2043-BLK", unit: "fixed", amount: 22, active: true });
+    expect(sku.label).toContain("FX2043-BLK");
+    expect(brand.match_key).toBe("flexure");
+    expect(fee).toMatchObject({ match_key: "payment_fee", unit: "percent" });
+  });
+
+  it("refuses bad kinds, bad amounts, duplicates and the reserved seller key", () => {
+    const reason = (input: unknown[]) => {
+      try {
+        validateCostRules(input);
+        return null;
+      } catch (e) {
+        return e instanceof CostRuleError ? e.reason : "other";
+      }
+    };
+    expect(reason([{ kind: "nope", match_key: "x", amount: 1 }])).toBe("bad_kind");
+    expect(reason([{ kind: "order_fixed", match_key: "lab", amount: -1 }])).toBe("bad_amount");
+    expect(reason([{ kind: "order_percent", match_key: "fee", amount: 150 }])).toBe("bad_amount");
+    expect(reason([{ kind: "order_fixed", match_key: "lab", amount: 1 }, { kind: "order_fixed", match_key: "LAB", amount: 2 }])).toBe("duplicate");
+    expect(reason([{ kind: "order_percent", match_key: "seller_commission", amount: 5 }])).toBe("bad_match_key");
+    expect(reason([{ kind: "order_fixed", match_key: "", amount: 1 }])).toBe("bad_match_key");
+  });
+});
+
+describe("defaultCostRules", () => {
+  const catalog = { brands: KNOWN_BRANDS, ...FALLBACK_LENS_CATALOG };
+  const seed = defaultCostRules(catalog);
+
+  it("seeds the payment, shipping and per-order rows plus one per brand and lens code", () => {
+    const keys = seed.map((r) => `${r.kind}:${r.match_key}`);
+    expect(keys).toEqual(expect.arrayContaining([
+      "order_percent:payment_fee", "payment_fixed:payment_fee_fixed", "shipping:actual", "order_fixed:lab", "order_fixed:packaging",
+      "frame_brand:di-caprio", "frame_brand:case", "lens_design:sv", "lens_design:prog-high", "lens_material:cr39", "lens_photo:photo-grey", "lens_ar:ar-blue",
+    ]));
+    expect(seed.find((r) => r.match_key === "payment_fee")).toMatchObject({ amount: 2.9, unit: "percent" });
+    expect(seed.find((r) => r.match_key === "payment_fee_fixed")?.amount).toBe(0.3);
+    expect(seed.filter((r) => r.kind === "frame_brand")).toHaveLength(KNOWN_BRANDS.length);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(seed.every((r) => COST_KINDS.includes(r.kind))).toBe(true);
+    // The seed itself must pass the validator the panel goes through.
+    expect(() => validateCostRules(seed)).not.toThrow();
+  });
+});

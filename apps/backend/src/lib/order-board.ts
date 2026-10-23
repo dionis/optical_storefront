@@ -94,6 +94,10 @@ export const ORDER_BOARD_FIELDS = [
   "shipping_methods.adjustments.*",
   "credit_lines.*",
   "items.variant.product.thumbnail",
+  // Brand (and SKU fallback) for the cost sheet: the brand is product metadata
+  // (`brand_slug`, written by the scraper), not a Medusa collection.
+  "items.variant.sku",
+  "items.variant.product.metadata",
   "shipping_address.*",
   "billing_address.*",
   "customer.*",
@@ -142,6 +146,8 @@ export interface BoardQuery {
   terminal?: "canceled" | "refunded" | "payment_pending";
   /** Keep only orders carrying a prescription. */
   has_prescription?: boolean;
+  /** Seller code (exact, case-insensitive); "none" = orders with no seller. */
+  seller?: string;
   limit?: number;
   offset?: number;
 }
@@ -155,13 +161,50 @@ interface RawItem {
   total?: number | null;
   thumbnail?: string | null;
   metadata?: Record<string, unknown> | null;
+  /** Snapshot columns Medusa keeps on the order line item. */
+  variant_sku?: string | null;
+  product_handle?: string | null;
+  product_collection?: string | null;
   detail?: {
     quantity?: number | null;
     fulfilled_quantity?: number | null;
     shipped_quantity?: number | null;
     delivered_quantity?: number | null;
   } | null;
-  variant?: { product?: { thumbnail?: string | null } | null } | null;
+  variant?: {
+    sku?: string | null;
+    product?: { thumbnail?: string | null; metadata?: Record<string, unknown> | null } | null;
+  } | null;
+}
+
+/**
+ * Brand slug of a line, the way the catalog knows it (`di-caprio`, `flexure`,
+ * `case`…). The scraper writes `brand_slug` (and `collection_slug`) on the
+ * product metadata; `product_collection` is null on every order here, so it
+ * is only a last resort. Lowercased; null when nothing says.
+ */
+export function itemBrandSlug(item: RawItem): string | null {
+  const pm = (item.variant?.product?.metadata ?? {}) as Record<string, unknown>;
+  const md = item.metadata ?? {};
+  const candidates = [
+    md["brand_slug"],
+    pm["brand_slug"],
+    pm["collection_slug"],
+    item.product_collection,
+  ];
+  for (const c of candidates) {
+    const s = String(c ?? "").trim().toLowerCase();
+    if (s) return s;
+  }
+  // Display name → slug ("Di Caprio" → "di-caprio"), the scraper's inverse.
+  const name = String(pm["brand"] ?? md["brand"] ?? "").trim().toLowerCase();
+  return name ? name.replace(/\s+/g, "-") : null;
+}
+
+/** SKU of a line: the snapshot on the line item, the live variant, or metadata. */
+export function itemSku(item: RawItem): string | null {
+  const s = String(item.variant_sku ?? item.variant?.sku ?? item.metadata?.["sku"] ?? "").trim();
+  return s ? s.toUpperCase() : null;
 }
 
 interface RawAddress {
@@ -192,6 +235,16 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Seller code as stored on an order: uppercased, stripped of anything that is
+ * not A-Z0-9, null when empty. Lenient on purpose — this reads what a cart
+ * carried, it does not validate what the admin creates (see lib/sellers.ts).
+ */
+export function normalizeSellerCodeLoose(value: unknown): string | null {
+  const s = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return s ? s.slice(0, 12) : null;
+}
+
 function projectItem(item: RawItem) {
   const lens = (item.metadata?.["lens_config"] ?? {}) as Record<string, unknown>;
   const detail = item.detail ?? {};
@@ -203,6 +256,11 @@ function projectItem(item: RawItem) {
     unit_price: item.unit_price ?? 0,
     total: item.total ?? 0,
     thumbnail: item.thumbnail || item.variant?.product?.thumbnail || null,
+    // What the cost sheet keys on: brand slug (frame_brand rules) and SKU
+    // (frame_sku rules, cases).
+    sku: itemSku(item),
+    brand_slug: itemBrandSlug(item),
+    product_handle: item.product_handle ?? null,
     // Codes only — the panel already knows how to label these, exactly as the
     // checkout and the tracking page do.
     lens: {
@@ -318,6 +376,20 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     .flatMap((f) => f.labels ?? [])
     .map((l) => l?.tracking_number)
     .find(Boolean);
+  const labelTrackingUrl = fulfillments
+    .flatMap((f) => f.labels ?? [])
+    .map((l) => l?.tracking_url)
+    .find(Boolean);
+
+  const sellerCode = normalizeSellerCodeLoose(metadata["seller_code"]);
+  const ownerNote = typeof metadata["owner_note"] === "string" && metadata["owner_note"].trim()
+    ? String(metadata["owner_note"])
+    : null;
+  const stageHistory = Array.isArray(metadata["stage_history"])
+    ? (metadata["stage_history"] as Array<{ stage?: unknown; at?: unknown }>)
+        .filter((h) => h && typeof h.stage === "string" && typeof h.at === "string")
+        .map((h) => ({ stage: String(h.stage), at: String(h.at) }))
+    : [];
 
   return {
     id: order["id"] as string,
@@ -363,6 +435,15 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     shipping_address: shippingAddress,
     shipping_method: shippingMethod?.name ?? null,
     tracking_number: labelTracking ?? (metadata["tracking_number"] as string) ?? null,
+    tracking_url: labelTrackingUrl ?? (metadata["tracking_url"] as string) ?? null,
+
+    // Attribution: the referral code the storefront put on the cart
+    // (`metadata.seller_code`), copied onto the order by complete-cart.
+    seller_code: sellerCode,
+    // Free-text note the owner keeps on the order (panel + sheet).
+    owner_note: ownerNote,
+    // Every stage change recorded by transitionOrderStage, oldest first.
+    stage_history: stageHistory,
 
     fulfillments: fulfillments.map((f) => ({
       id: f.id,
@@ -393,11 +474,35 @@ function haystack(row: BoardOrder): string {
     row.shipping_method,
     row.tracking_number,
     row.stage,
+    row.seller_code,
     ...row.items.map((i) => i.title),
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+/**
+ * The in-memory filters (everything but the date range, which the database
+ * applies). Pure, so the seller/stage/text rules can be tested on literals.
+ */
+export function filterBoardRows(
+  rows: BoardOrder[],
+  params: Omit<BoardQuery, "from" | "to" | "limit" | "offset">
+): BoardOrder[] {
+  const q = String(params.q ?? "").trim().toLowerCase();
+  const sellerRaw = String(params.seller ?? "").trim();
+  const seller = sellerRaw.toLowerCase() === "none" ? "none" : sellerRaw.toUpperCase();
+  return rows.filter((row) => {
+    if (params.stage && row.stage !== params.stage) return false;
+    if (params.terminal && row.terminal !== params.terminal) return false;
+    if (params.has_prescription === true && !row.has_prescription) return false;
+    if (params.has_prescription === false && row.has_prescription) return false;
+    if (seller === "none" && row.seller_code) return false;
+    if (seller && seller !== "none" && row.seller_code !== seller) return false;
+    if (q && !haystack(row).includes(q)) return false;
+    return true;
+  });
 }
 
 export interface BoardResult {
@@ -427,6 +532,29 @@ export async function fetchBoardOrders(
   const limit = Math.min(Math.max(Number(params.limit) || DEFAULT_BOARD_LIMIT, 1), 100);
   const offset = Math.max(Number(params.offset) || 0, 0);
 
+  const { orders: projected, scanned, truncated } = await scanBoardWindow(scope, params);
+  const filtered = filterBoardRows(projected, params);
+
+  return {
+    orders: filtered.slice(offset, offset + limit),
+    count: filtered.length,
+    scanned,
+    truncated,
+    limit,
+    offset,
+  };
+}
+
+/**
+ * The raw window every board-derived report shares: the `MAX_BOARD_SCAN` most
+ * recent non-draft orders in the date range, projected, newest first. Sellers'
+ * stats and the cost summary read this directly so they see every row in the
+ * window instead of one page of it.
+ */
+export async function scanBoardWindow(
+  scope: MedusaContainer,
+  params: Pick<BoardQuery, "from" | "to">
+): Promise<{ orders: BoardOrder[]; raw: Record<string, unknown>[]; scanned: number; truncated: boolean }> {
   const createdAt: Record<string, string> = {};
   if (params.from) createdAt["$gte"] = params.from;
   if (params.to) createdAt["$lte"] = params.to;
@@ -455,24 +583,9 @@ export async function fetchBoardOrders(
   // Señal de prueba virtual por orden (una consulta por lote para toda la página).
   await markTryon(scope, projected);
 
-  const q = String(params.q ?? "").trim().toLowerCase();
-  const filtered = projected.filter((row) => {
-    if (params.stage && row.stage !== params.stage) return false;
-    if (params.terminal && row.terminal !== params.terminal) return false;
-    if (params.has_prescription === true && !row.has_prescription) return false;
-    if (params.has_prescription === false && row.has_prescription) return false;
-    if (q && !haystack(row).includes(q)) return false;
-    return true;
-  });
-
-  return {
-    orders: filtered.slice(offset, offset + limit),
-    count: filtered.length,
-    scanned: rawOrders.length,
-    truncated: rawOrders.length >= MAX_BOARD_SCAN,
-    limit,
-    offset,
-  };
+  // `raw` is kept (same index as `orders`) for readers that need what the
+  // projection leaves out, e.g. the stored cost sheet in metadata.
+  return { orders: projected, raw: rawOrders, scanned: rawOrders.length, truncated: rawOrders.length >= MAX_BOARD_SCAN };
 }
 
 /** Re-read one order after a transition, so the panel repaints from the truth. */

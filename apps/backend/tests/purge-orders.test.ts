@@ -12,6 +12,8 @@ describe("purge-orders table list", () => {
     "shipping_option_rule", "shipping_option_type", "shipping_profile", "region", "region_payment_provider",
     "customer", "customer_address", "customer_account_holder", "product", "product_variant", "price_set",
     "product_review", "store_setting", "lens_option", "ocr_setting", "frame_media_asset", "user", "invite",
+    // Vendedores y reglas de costo son configuración del dueño, no pedidos.
+    "seller", "cost_rule",
     "stock_location", "inventory_item", "promotion", "tax_rate", "api_key", "sales_channel",
   ];
 

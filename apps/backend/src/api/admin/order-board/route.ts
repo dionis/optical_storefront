@@ -3,6 +3,7 @@ import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { ORDER_STAGES } from "../../../lib/order-status";
 import { MAX_BOARD_SCAN, fetchBoardOrders, isOrderStage } from "../../../lib/order-board";
+import { parseBoardDate } from "../../../lib/board-dates";
 
 /**
  * GET /admin/order-board — every order, filtered the way a shop owner thinks.
@@ -24,6 +25,7 @@ import { MAX_BOARD_SCAN, fetchBoardOrders, isOrderStage } from "../../../lib/ord
  *   stage             one of ORDER_STAGES
  *   terminal          canceled | refunded | payment_pending
  *   has_prescription  "true" | "false"
+ *   seller            referral code (exact) | "none" (unattributed)
  *   limit / offset    page window (default 20, max 100)
  */
 export async function GET(
@@ -82,6 +84,7 @@ export async function GET(
           : query.has_prescription === "false"
             ? false
             : undefined,
+      seller: query.seller || undefined,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
     });
@@ -103,21 +106,6 @@ export async function GET(
   }
 }
 
-/**
- * Accept a plain `YYYY-MM-DD` and widen it to cover the whole local day.
- *
- * The owner picks a day, not an instant. Passing the bare date through would
- * make `to=2026-03-10` mean "up to midnight", silently dropping every order
- * placed during that day — the single most confusing thing a date filter can do.
- *
- * Returns `false` for input that is present but unparseable, so the caller can
- * reject rather than quietly ignore it.
- */
-function parseDate(value: string | undefined, edge: "start" | "end"): string | null | false {
-  if (!value) return null;
-  const bare = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const iso = bare ? `${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}` : value;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return false;
-  return date.toISOString();
-}
+// `parseDate` moved to lib/board-dates.ts (shared with sellers/stats and
+// costing/summary so every date range is read the same way).
+const parseDate = parseBoardDate;

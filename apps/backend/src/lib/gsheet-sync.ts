@@ -52,6 +52,8 @@ import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/o
 import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 import { tenantName } from "./tenant";
+import { projectBoardOrder } from "./order-board";
+import { costSheetForOrder, loadCostingContext } from "./costing";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -118,6 +120,12 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
   { name: "Notas", type: "TEXT", width: 320, wrap: true },
   // Editable por el dueño (igual que Estado): el número de guía del courier.
   { name: "Guía (tracking)", type: "TEXT", width: 150 },
+  // Vendedor que trajo la venta (código de referido del carrito) y la ficha de
+  // costo: costo total calculado con las reglas del panel y margen resultante.
+  // Vacíos cuando no hay vendedor / no hay reglas definidas.
+  { name: "Vendedor", type: "TEXT", width: 110 },
+  { name: "Costo", type: "DOUBLE", width: 90 },
+  { name: "Margen", type: "DOUBLE", width: 90 },
 ];
 /** Columnas que el dueño puede editar en la hoja; el resto se regenera. */
 export const EDITABLE_ORDER_COLUMNS = ["Estado", "Guía (tracking)"];
@@ -211,6 +219,9 @@ export const HISTORY_COLUMNS: HistoryColumn[] = [
   { key: "locale", name: "Idioma", width: 70 },
   { key: "notes", name: "Notas", width: 260, wrap: true },
   { key: "order_id", name: "Order ID", width: 230 },
+  { key: "seller", name: "Vendedor", width: 110 },
+  { key: "cost", name: "Costo", width: 90, type: "MONEY" },
+  { key: "margin", name: "Margen", width: 90, type: "MONEY" },
 ];
 const HISTORY_HEADERS = HISTORY_COLUMNS.map((c) => c.name);
 /** Letra de columna del Historial por clave (para las fórmulas del resumen). */
@@ -225,6 +236,8 @@ export const EVENT_LABEL: Record<string, string> = {
   resincronizado: "Alta en la hoja (resincronización)",
   guia: "Guía de envío actualizada (desde la hoja)",
   correccion: "Cambio rechazado (hoja corregida)",
+  costo: "Ficha de costo actualizada",
+  nota: "Nota del dueño actualizada",
 };
 export function eventLabel(event: string): string {
   if (EVENT_LABEL[event]) return EVENT_LABEL[event];
@@ -428,7 +441,7 @@ interface OrdersTable {
 }
 
 interface SheetMeta {
-  properties?: { sheetId?: number; title?: string };
+  properties?: { sheetId?: number; title?: string; gridProperties?: { columnCount?: number; rowCount?: number } };
   tables?: Array<{
     tableId?: string;
     name?: string;
@@ -443,7 +456,7 @@ interface SheetMeta {
 async function readSheetsMeta(cfg: GsheetConfig): Promise<SheetMeta[]> {
   const resp = await sheetsFetch(
     cfg,
-    `?fields=${encodeURIComponent("sheets(properties(sheetId,title),tables(tableId,name,range),conditionalFormats(ranges),charts(chartId),protectedRanges(protectedRangeId,description))")}`
+    `?fields=${encodeURIComponent("sheets(properties(sheetId,title,gridProperties(columnCount)),tables(tableId,name,range),conditionalFormats(ranges),charts(chartId),protectedRanges(protectedRangeId,description))")}`
   );
   if (!resp.ok) throw await failure("spreadsheet meta", resp);
   return ((await resp.json()) as { sheets?: SheetMeta[] }).sheets ?? [];
@@ -634,7 +647,21 @@ async function ensureHistorySheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promi
     const row = head.ok ? (((await head.json()) as { values?: string[][] }).values?.[0] ?? []) : [];
     const same = row.length === HISTORY_HEADERS.length && row.every((v, i) => v === HISTORY_HEADERS[i]);
     if (same) return;
-    if (row.length) {
+    // Sin filas de datos (solo cabecera, p. ej. tras una puesta a cero): se
+    // reescribe la cabecera en sitio, ensanchando la pestaña si hace falta,
+    // en vez de dejar una pestaña "(anterior)" vacía colgando.
+    const probe = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!A2:A3`)}`);
+    const hasData = probe.ok && ((((await probe.json()) as { values?: string[][] }).values ?? []).some((r) => r.some((v) => String(v ?? "").trim() !== "")));
+    if (row.length && !hasData) {
+      const columnCount = existing.properties?.gridProperties?.columnCount ?? 0;
+      if (columnCount < HISTORY_HEADERS.length + 2) {
+        await batchUpdate(cfg, [
+          { updateSheetProperties: { properties: { sheetId: existing.properties?.sheetId, gridProperties: { columnCount: HISTORY_HEADERS.length + 2 } }, fields: "gridProperties.columnCount" } },
+        ]);
+      }
+      // La cabecera vieja puede ser más corta: se limpia la fila entera antes de escribir.
+      await sheetsFetch(cfg, `/values/${encodeURIComponent(`${HISTORY_SHEET}!1:1`)}:clear`, { method: "POST", body: "{}" });
+    } else if (row.length) {
       let old = `${HISTORY_SHEET} (anterior)`;
       for (let n = 2; titles.has(old); n++) old = `${HISTORY_SHEET} (anterior ${n})`;
       await batchUpdate(cfg, [
@@ -796,13 +823,14 @@ async function applyBrandStyle(cfg: GsheetConfig, table: OrdersTable, sheets: Sh
         fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
       },
     },
-    {
+    // Importes (Total, Costo, Margen): número con dos decimales, a la derecha.
+    ...["Total", "Costo", "Margen"].map((name) => ({
       repeatCell: {
-        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + ocol("Total"), endColumnIndex: startCol + ocol("Total") + 1 },
+        range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol + ocol(name), endColumnIndex: startCol + ocol(name) + 1 },
         cell: { userEnteredFormat: { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" } },
         fields: "userEnteredFormat(numberFormat,horizontalAlignment)",
       },
-    },
+    })),
     {
       repeatCell: {
         range: { sheetId, startRowIndex: headerRow + 1, startColumnIndex: startCol, endColumnIndex: startCol + 1 },
@@ -1398,12 +1426,35 @@ const ORDER_SHEET_FIELDS = [
   "id", "status", "display_id", "email", "currency_code", "created_at", "metadata", "locale",
   "total", "subtotal", "discount_total", "shipping_total", "tax_total", "item_total", "item_subtotal",
   "items.*", "items.detail.*", "items.tax_lines.*", "items.adjustments.*",
+  // Marca y SKU de cada línea para la ficha de costo (ver lib/costing).
+  "items.variant.sku", "items.variant.product.metadata",
   "shipping_methods.*", "shipping_methods.tax_lines.*", "shipping_methods.adjustments.*",
   "credit_lines.*",
   "shipping_address.*",
   "fulfillments.id", "fulfillments.created_at", "fulfillments.packed_at", "fulfillments.shipped_at",
   "fulfillments.delivered_at", "fulfillments.canceled_at", "fulfillments.labels.*",
 ];
+
+/**
+ * Costo y margen del pedido con las reglas del panel (lib/costing). Mejor
+ * esfuerzo: sin reglas definidas, o si el módulo falla, las columnas van vacías.
+ */
+async function loadCostForSheet(
+  container: MedusaContainer,
+  order: Record<string, any>,
+  logger: Logger
+): Promise<{ cost_total: number; margin: number } | null> {
+  try {
+    const { rules, sellerByCode } = await loadCostingContext(container);
+    if (!rules.length) return null;
+    const projected = projectBoardOrder(order);
+    const sheet = await costSheetForOrder(container, projected, rules, sellerByCode, order.metadata ?? null);
+    return { cost_total: sheet.cost_total, margin: sheet.margin };
+  } catch (error) {
+    logger.warn(`[gsheet] order ${order.id}: cost sheet unavailable (${(error as Error).message})`);
+    return null;
+  }
+}
 
 /** Pedido con totales y estados calculados (ver ORDER_SHEET_FIELDS). */
 async function loadOrderForSheet(container: MedusaContainer, orderId: string): Promise<Record<string, any> | undefined> {
@@ -1574,6 +1625,8 @@ export function buildRows(
     payment?: PaymentInfo | null;
     /** Aviso para el dueño (va al final de Notas), p. ej. un cambio rechazado. */
     note?: string;
+    /** Ficha de costo calculada (lib/costing); ausente = columnas vacías. */
+    cost?: { cost_total: number; margin: number } | null;
   } = {}
 ) {
   const md = (order.metadata ?? {}) as Record<string, unknown>;
@@ -1690,7 +1743,15 @@ export function buildRows(
       `SMS ${md["notify_sms"] === true || md["notify_sms"] === "true" ? "sí" : "no"}`
   );
   if (trackingNumber) notes.push(`Tracking: ${trackingNumber}${trackingUrl ? ` ${trackingUrl}` : ""}`);
+  // Nota libre del dueño (panel → POST /admin/order-board/:id/note).
+  const ownerNote = typeof md["owner_note"] === "string" ? md["owner_note"].trim() : "";
+  if (ownerNote) notes.push(`Nota: ${ownerNote}`);
   notes.push(`Último evento: ${event} (${now})`);
+
+  // Vendedor (código de referido que viajó en el carrito) y ficha de costo.
+  const sellerCode = String(md["seller_code"] ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const costCell: Cell = extra.cost ? Number(money(extra.cost.cost_total)) : "";
+  const marginCell: Cell = extra.cost ? Number(money(extra.cost.margin)) : "";
 
   const lines0 = extra.lines ?? [];
   const brandCell = [...new Set(lines0.map((l) => l.brand).filter((b): b is string => Boolean(b && b.trim())))].join(" | ");
@@ -1709,6 +1770,9 @@ export function buildRows(
     fileCell,
     [...new Set(notes), ...(extra.note ? [`⚠ ${extra.note}`] : [])].join("\n"),
     trackingNumber,
+    sellerCode,
+    costCell,
+    marginCell,
   ];
   // Lo que la hoja muestra en las columnas editables: la próxima pasada del
   // vigilante compara contra esto para distinguir "lo cambió el dueño" de
@@ -1784,8 +1848,11 @@ export function buildRows(
     payText,
     `email ${md["notify_email"] === false || md["notify_email"] === "false" ? "no" : "sí"} · SMS ${md["notify_sms"] === true || md["notify_sms"] === "true" ? "sí" : "no"}`,
     String(order.locale ?? md["locale"] ?? "es"),
-    [terminalNote, hasFile ? "Receta original guardada (solo en el panel)" : ""].filter(Boolean).join(" · "),
+    [terminalNote, hasFile ? "Receta original guardada (solo en el panel)" : "", ownerNote ? `Nota: ${ownerNote}` : ""].filter(Boolean).join(" · "),
     String(order.id ?? ""),
+    sellerCode,
+    costCell,
+    marginCell,
   ];
 
   return { orderRow, historyRow, fileLinks, mirror };
@@ -1921,11 +1988,13 @@ export async function syncOrderToSheet(
 
     const table = await ensureSheets(cfg, logger);
     const extras = await loadRowExtras(container, order, logger);
+    const cost = await loadCostForSheet(container, order, logger);
     const { orderRow, historyRow, fileLinks, mirror } = buildRows(order, event, {
       tracking,
       ...extras,
       adminUrl: `${storefrontOrigin()}/admin`,
       note: options.note,
+      cost,
     });
     try {
       await upsertOrderRow(cfg, table, orderRow, { col: ocol("Archivo"), links: fileLinks });

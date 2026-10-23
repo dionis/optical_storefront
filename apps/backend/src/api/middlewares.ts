@@ -7,6 +7,7 @@ import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
 import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
+import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -314,6 +315,19 @@ export default defineMiddlewares({
       matcher: "/store/my-orders/:id/cancel",
       method: ["POST"],
       middlewares: [orderAccessRateLimit],
+    },
+    {
+      // Public seller routes: the referral-code lookup is an enumeration target
+      // and the dashboard token a brute-force one. Same publishable-key gate as
+      // every /store route, plus a per-IP ceiling (see store/sellers/rate-limit).
+      matcher: "/store/sellers/resolve",
+      method: ["GET"],
+      middlewares: [sellerPublicRateLimit],
+    },
+    {
+      matcher: "/store/seller-dashboard",
+      method: ["GET"],
+      middlewares: [sellerPublicRateLimit],
     },
     ...ocrSettingsMiddlewares,
     ...frameMediaMiddlewares,

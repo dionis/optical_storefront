@@ -282,5 +282,13 @@ export default defineConfig({
     {
       resolve: "./src/modules/frame-media",
     },
+    // Vendedores con enlace de referido (configuración, nunca se purga).
+    {
+      resolve: "./src/modules/seller",
+    },
+    // Ficha de costo por venta: reglas de costo (configuración, nunca se purga).
+    {
+      resolve: "./src/modules/costing",
+    },
   ],
 });

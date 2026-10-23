@@ -127,7 +127,11 @@ describe("buildRows", () => {
     expect(orderRow).toHaveLength(ORDER_COLUMNS.length);
     expect(ORDER_COLUMNS.map((c) => c.type)).toEqual([
       "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT", "TEXT",
+      // Vendedor, Costo, Margen
+      "TEXT", "DOUBLE", "DOUBLE",
     ]);
+    expect(ORDER_COLUMNS.slice(-3).map((c) => c.name)).toEqual(["Vendedor", "Costo", "Margen"]);
+    expect(HISTORY_COLUMNS.slice(-3).map((c) => c.key)).toEqual(["seller", "cost", "margin"]);
     expect(ORDER_COLUMNS.map((c) => c.name)).toEqual(expect.arrayContaining(EDITABLE_ORDER_COLUMNS));
   });
 
@@ -195,6 +199,31 @@ describe("buildRows", () => {
     const withNote = buildRows(order, "correccion", { note: "No se pudo cambiar a \"Entregado\": nada en camino." });
     expect(String(withNote.orderRow[ORDER_COLUMNS.findIndex((c) => c.name === "Notas")])).toContain("⚠ No se pudo cambiar");
     expect(withNote.historyRow[HISTORY_COLUMNS.findIndex((c) => c.key === "event")]).toBe("Cambio rechazado (hoja corregida)");
+  });
+
+  it("fills seller, cost and margin, and appends the owner's note", () => {
+    const col = (name: string) => ORDER_COLUMNS.findIndex((c) => c.name === name);
+    const hcol = (key: string) => HISTORY_COLUMNS.findIndex((c) => c.key === key);
+    // Sin vendedor ni ficha: celdas vacías, nunca ceros que parezcan un costo real.
+    expect(orderRow[col("Vendedor")]).toBe("");
+    expect(orderRow[col("Costo")]).toBe("");
+    expect(orderRow[col("Margen")]).toBe("");
+
+    const withSeller = buildRows(
+      { ...order, metadata: { ...order.metadata, seller_code: "ana", owner_note: "Llamar antes de enviar" } },
+      "costo",
+      { cost: { cost_total: 61.4, margin: 148.6 } }
+    );
+    expect(withSeller.orderRow[col("Vendedor")]).toBe("ANA");
+    expect(withSeller.orderRow[col("Costo")]).toBe(61.4);
+    expect(withSeller.orderRow[col("Margen")]).toBe(148.6);
+    expect(String(withSeller.orderRow[col("Notas")])).toContain("Nota: Llamar antes de enviar");
+    expect(withSeller.historyRow[hcol("seller")]).toBe("ANA");
+    expect(withSeller.historyRow[hcol("cost")]).toBe(61.4);
+    expect(withSeller.historyRow[hcol("margin")]).toBe(148.6);
+    expect(withSeller.historyRow[hcol("event")]).toBe("Ficha de costo actualizada");
+    expect(String(withSeller.historyRow[hcol("notes")])).toContain("Nota: Llamar antes de enviar");
+    expect(buildRows(order, "nota", {}).historyRow[hcol("event")]).toBe("Nota del dueño actualizada");
   });
 
   it("links each Archivo reference (frame → product page, receta/foto → panel)", () => {

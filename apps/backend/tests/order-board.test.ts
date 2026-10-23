@@ -8,6 +8,7 @@
  */
 import {
   availableTransitions,
+  filterBoardRows,
   liveFulfillments,
   isOrderStage,
   projectBoardOrder,
@@ -144,6 +145,83 @@ describe("projectBoardOrder", () => {
       ],
     });
     expect(projectBoardOrder(raw as never).tracking_number).toBe("NEW-2");
+  });
+});
+
+describe("projectBoardOrder — seller, note, history, brand/sku", () => {
+  it("carries the seller code (uppercased), the owner's note and the stage history", () => {
+    const raw = order({
+      metadata: {
+        seller_code: " ana ",
+        owner_note: "Llamar antes de enviar",
+        stage_history: [{ stage: "in_lab", at: "2026-10-02T10:00:00Z" }, { bogus: true }, { stage: "shipped", at: "2026-10-04T10:00:00Z" }],
+        tracking_url: "https://courier.example/t/1",
+      },
+    });
+    const row = projectBoardOrder(raw as never);
+    expect(row.seller_code).toBe("ANA");
+    expect(row.owner_note).toBe("Llamar antes de enviar");
+    expect(row.stage_history).toEqual([
+      { stage: "in_lab", at: "2026-10-02T10:00:00Z" },
+      { stage: "shipped", at: "2026-10-04T10:00:00Z" },
+    ]);
+    expect(row.tracking_url).toBe("https://courier.example/t/1");
+  });
+
+  it("defaults to null / [] when the metadata has none of it", () => {
+    const row = projectBoardOrder(order() as never);
+    expect(row.seller_code).toBeNull();
+    expect(row.owner_note).toBeNull();
+    expect(row.stage_history).toEqual([]);
+    expect(row.tracking_url).toBeNull();
+  });
+
+  it("reads brand slug and SKU from the product metadata and the line snapshot", () => {
+    const raw = order({
+      items: [
+        {
+          id: "item_1",
+          quantity: 1,
+          variant_sku: "fx2043-blk",
+          product_handle: "fx2043",
+          detail: { quantity: 1, fulfilled_quantity: 0 },
+          variant: { product: { thumbnail: null, metadata: { brand: "Flexure", brand_slug: "flexure" } } },
+        },
+        {
+          id: "item_2",
+          quantity: 1,
+          detail: { quantity: 1, fulfilled_quantity: 0 },
+          variant: { sku: "case-01", product: { metadata: { brand: "Cases" } } },
+        },
+      ],
+    });
+    const [frame, estuche] = projectBoardOrder(raw as never).items;
+    expect(frame.sku).toBe("FX2043-BLK");
+    expect(frame.brand_slug).toBe("flexure");
+    expect(frame.product_handle).toBe("fx2043");
+    expect(estuche.sku).toBe("CASE-01");
+    expect(estuche.brand_slug).toBe("cases"); // name → slug fallback
+  });
+
+  it("filters by seller code, 'none' for unattributed, and finds the code in free text", () => {
+    const rows = [
+      projectBoardOrder(order({ id: "o1", metadata: { seller_code: "ANA" } }) as never),
+      projectBoardOrder(order({ id: "o2", metadata: { seller_code: "luis" } }) as never),
+      projectBoardOrder(order({ id: "o3", metadata: {} }) as never),
+    ];
+    expect(filterBoardRows(rows, { seller: "ana" }).map((r) => r.id)).toEqual(["o1"]);
+    expect(filterBoardRows(rows, { seller: "LUIS" }).map((r) => r.id)).toEqual(["o2"]);
+    expect(filterBoardRows(rows, { seller: "none" }).map((r) => r.id)).toEqual(["o3"]);
+    expect(filterBoardRows(rows, {}).map((r) => r.id)).toEqual(["o1", "o2", "o3"]);
+    expect(filterBoardRows(rows, { q: "luis" }).map((r) => r.id)).toEqual(["o2"]);
+  });
+
+  it("prefers a fulfillment label URL over the metadata one", () => {
+    const raw = order({
+      metadata: { tracking_url: "https://old.example" },
+      fulfillments: [{ id: "ful_1", shipped_at: "2026-03-01", canceled_at: null, labels: [{ tracking_number: "N", tracking_url: "https://new.example" }] }],
+    });
+    expect(projectBoardOrder(raw as never).tracking_url).toBe("https://new.example");
   });
 });
 
