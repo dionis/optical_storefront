@@ -60,7 +60,12 @@ export default function App() {
           <CartProvider>
             <ScrollToTop />
             <Suspense fallback={<RouteFallback />}>
-              <Routes><Route path="/admin" element={<AdminPage />} /></Routes>
+              {/* /admin_stores: mismo panel, punto de entrada del sistema multi-tienda.
+                  isAdmin y buildVersion ya lo cubren por el prefijo "/admin". */}
+              <Routes>
+                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin_stores" element={<AdminPage />} />
+              </Routes>
             </Suspense>
           </CartProvider>
         </FeedbackProvider>
