@@ -18,7 +18,10 @@ import {
   renderAdminOrderNotification,
   renderCustomerOrderConfirmation,
   type OrderEmailData,
+  type PrescriptionForEmail,
+  type OrderEmailExtras,
 } from "../lib/email/order-confirmation";
+import type { EnrichedItem } from "../lib/email/order-enrich";
 
 /** Stand-in order used only by the template preview modes. */
 const SAMPLE_ORDER: OrderEmailData = {
@@ -27,19 +30,19 @@ const SAMPLE_ORDER: OrderEmailData = {
   email: "cliente@example.com",
   currency_code: "usd",
   created_at: new Date(),
-  subtotal: 189,
-  shipping_total: 8,
+  subtotal: 276,
+  shipping_total: 12,
   tax_total: 0,
   discount_total: 0,
-  total: 197,
+  total: 288,
   customer: { first_name: "Ana", last_name: "Pérez" },
   items: [
     {
-      title: "Montura Capri Aviator",
-      variant_title: "Dorado / 52-18-140",
+      title: "Flexure FX-2043",
+      variant_title: "Black / 54-17-140",
       quantity: 1,
-      unit_price: 189,
-      total: 189,
+      unit_price: 288,
+      total: 288,
       metadata: {
         kind: "configured-frame",
         prescription_id: "presc_sample",
@@ -60,6 +63,65 @@ const SAMPLE_ORDER: OrderEmailData = {
     country_code: "cu",
     phone: "+53 5555 5555",
   },
+};
+
+/** Enriched items with specs, photo, lens breakdown — triggers the card layout. */
+const SAMPLE_ITEMS: EnrichedItem[] = [
+  {
+    frame_name: "Flexure FX-2043",
+    image_url: null, // no image for the test — triggers the fallback icon
+    collection: "FLEXURE",
+    color: "Negro Mate",
+    frame_price: 89,
+    design: "Progresivo",
+    material: { label: "1.61 Alto Índice", price: 75 },
+    photo: { label: "Transitions Gen 8 Gris", price: 65 },
+    ar: { label: "AR Premium Multi-capa", price: 47 },
+    specs: {
+      sku: "889756112094",
+      size: "54 □ 17 – 140",
+      lens_width: 54,
+      lens_height: 38,
+      bridge: 17,
+      temple: 140,
+      shape: "Rectangular",
+      style: "Full-rim",
+      material: "TR-90 (Nylon)",
+      gender: "Unisex",
+      age_group: "Adulto",
+      features: ["Bisagra flexible", "Hipoalergénico"],
+    },
+    with_rx: true,
+    quantity: 1,
+    total: 288,
+  },
+];
+
+/** Prescription with realistic values, including fitting height for progressives. */
+const SAMPLE_PRESCRIPTIONS: Record<string, PrescriptionForEmail> = {
+  presc_sample: {
+    od: { sph: -2.25, cyl: -0.75, axis: 175, add: 1.5, prism: null, base: null },
+    os: { sph: -1.75, cyl: -1.0, axis: 10, add: 1.5, prism: null, base: null },
+    pd: 63,
+    pd_od: null,
+    pd_os: null,
+    seg_height: 22,
+    source: "manual",
+    verified_by_user: true,
+    created_at: new Date(),
+    has_file: false,
+    has_tryon: false,
+    patient_for: "me",
+    measurement_source: null,
+    id: "rx_01_sample",
+  },
+};
+
+const SAMPLE_EXTRAS: OrderEmailExtras = {
+  items: SAMPLE_ITEMS,
+  shippingMethod: { name: "Entrega personal en tienda", amount: 0 },
+  payment: { provider: "stripe", method: "card", brand: "visa", last4: "4242" },
+  tracking: [],
 };
 
 export default async function sendTestEmail({
@@ -92,10 +154,20 @@ export default async function sendTestEmail({
 
   if (mode === "order") {
     template = "order-placed-customer";
-    content = renderCustomerOrderConfirmation(SAMPLE_ORDER, locale);
+    content = renderCustomerOrderConfirmation(
+      SAMPLE_ORDER,
+      locale,
+      SAMPLE_PRESCRIPTIONS,
+      SAMPLE_EXTRAS
+    );
   } else if (mode === "admin") {
     template = "order-placed-admin";
-    content = renderAdminOrderNotification(SAMPLE_ORDER, locale);
+    content = renderAdminOrderNotification(
+      SAMPLE_ORDER,
+      locale,
+      SAMPLE_PRESCRIPTIONS,
+      SAMPLE_EXTRAS
+    );
   } else {
     const text = "envio de datos correctos de la compra";
     template = "test-verification";

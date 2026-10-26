@@ -394,11 +394,14 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
   <div style="font-size:14px;line-height:1.7;color:${INK}">${body}</div>`;
 }
 
-export function shell(title: string, preheader: string, inner: string, locale: EmailLocale): string {
+export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean }): string {
   const site = storefrontOrigin().replace(/^https?:\/\//, "");
+  const printCss = opts?.printTicket
+    ? `<style>@media print{@page{size:letter;margin:.4in .5in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{background:#fff!important;margin:0!important;padding:0!important}body>table{background:#fff!important}body>table>tbody>tr>td{padding:0!important}}</style>`
+    : "";
   return `<!doctype html>
 <html lang="${locale}">
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">${printCss}</head>
   <body style="margin:0;padding:0;background:${BONE};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${INK}">
     <span style="display:none;font-size:0;line-height:0;max-height:0;opacity:0;overflow:hidden">${esc(preheader)}</span>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:${BONE}">
@@ -1030,6 +1033,17 @@ function renderTrackingCta(locale: EmailLocale): string {
     </table>`;
 }
 
+/**
+ * Visual + print separator between page 1 (receipt) and page 2 (medical/logistics).
+ * On screen it is a dashed gold line with a label; in print it forces a page break
+ * so double-sided printing produces a single letter-size sales ticket.
+ */
+function printBreak(locale: EmailLocale): string {
+  return `<div style="page-break-before:always;break-before:page;margin:24px 0 0;border-top:2px dashed ${GOLD};padding-top:8px;text-align:center">
+    <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${MUTED}">${esc(t(locale, "ticket_label"))}</span>
+  </div>`;
+}
+
 export function renderCustomerOrderConfirmation(
   order: OrderEmailData,
   locale: EmailLocale,
@@ -1054,16 +1068,17 @@ export function renderCustomerOrderConfirmation(
     ${renderTicketHeader(displayId, formatDateTime(order.created_at, locale), locale, { text: "✓ " + t(locale, "payment_confirmed"), bg: GREEN_LIGHT, fg: GREEN })}
     ${sectionTitle(t(locale, "items"), "navy-eyewidth")}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
+    ${renderTotals(order, locale)}
+    ${printBreak(locale)}
     ${renderPrescriptions(order, prescriptions, locale)}
     ${renderAttachedImagesNote(imagesNote)}
-    ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
-    ${renderTotals(order, locale)}
     ${renderDeliveryCards(order, extras, locale)}
     <div style="margin-top:22px;padding:16px 18px;background:${GOLD_LIGHT};border-left:4px solid ${GOLD};border-radius:10px">
       <div style="font-size:14px;font-weight:800;color:${BRAND};margin-bottom:6px">${iconImg("navy-shield", 18)} ${esc(t(locale, "order_confirmation_next_steps_title"))}</div>
       <div style="font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "order_confirmation_next_steps_body"))}</div>
     </div>
     ${renderTrackingCta(locale)}
+    ${renderRxGlossary(hasRx, hasFittingHeight, locale)}
     <p style="margin:20px 0 0;font-size:13px;color:${MUTED}">${iconImg("navy-headset", 16)} ${esc(t(locale, "questions"))}</p>`;
 
   const text = [
@@ -1072,8 +1087,16 @@ export function renderCustomerOrderConfirmation(
     t(locale, "order_confirmation_intro"),
     "",
     ...textLines(order, locale, extras),
+    "",
+    `--- ${t(locale, "ticket_label")} ---`,
     ...rxTextLines(order, prescriptions, locale),
     ...(imagesNote ? ["", imagesNote] : []),
+    "",
+    t(locale, "order_confirmation_next_steps_title"),
+    t(locale, "order_confirmation_next_steps_body"),
+    "",
+    t(locale, "track_link_intro"),
+    trackingUrl(),
     ...(hasRx
       ? [
           "",
@@ -1087,12 +1110,6 @@ export function renderCustomerOrderConfirmation(
         ]
       : []),
     "",
-    t(locale, "order_confirmation_next_steps_title"),
-    t(locale, "order_confirmation_next_steps_body"),
-    "",
-    t(locale, "track_link_intro"),
-    trackingUrl(),
-    "",
     t(locale, "questions"),
   ].join("\n");
 
@@ -1100,7 +1117,7 @@ export function renderCustomerOrderConfirmation(
 
   return {
     subject,
-    html: shell(subject, t(locale, "order_confirmation_preheader"), inner, locale),
+    html: shell(subject, t(locale, "order_confirmation_preheader"), inner, locale, { printTicket: true }),
     text,
   };
 }
@@ -1138,11 +1155,12 @@ export function renderAdminOrderNotification(
     </table>
     ${sectionTitle(t(locale, "items"), "navy-eyewidth")}
     ${extras?.items?.length ? renderEnrichedItems(extras.items, order.currency_code, locale, extras.itemImages) : renderItemsTable(order, locale, extras?.itemImages)}
+    ${renderTotals(order, locale)}
+    ${printBreak(locale)}
     ${/* Store copy carries the record id: it is how the owner opens the Rx — and
           the uploaded photo — in the admin. */ ""}
     ${renderPrescriptions(order, prescriptions, locale, true)}
     ${renderAttachedImagesNote(imagesNote)}
-    ${renderTotals(order, locale)}
     ${renderDeliveryCards(order, extras, locale)}`;
 
   const text = [
@@ -1156,6 +1174,8 @@ export function renderAdminOrderNotification(
     ...(hasPrescription ? [t(locale, "prescription_attached")] : []),
     "",
     ...textLines(order, locale, extras),
+    "",
+    `--- ${t(locale, "ticket_label")} ---`,
     ...rxTextLines(order, prescriptions, locale, true),
     ...(imagesNote ? ["", imagesNote] : []),
   ].join("\n");
@@ -1164,7 +1184,7 @@ export function renderAdminOrderNotification(
 
   return {
     subject,
-    html: shell(t(locale, "admin_order_title"), subject, inner, locale),
+    html: shell(t(locale, "admin_order_title"), subject, inner, locale, { printTicket: true }),
     text,
   };
 }

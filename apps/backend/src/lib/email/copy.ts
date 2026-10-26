@@ -116,6 +116,7 @@ interface EmailCopy {
   payment_confirmed: string;
   questions: string;
   footer_automatic: string;
+  ticket_label: string;
   // ── Order tracking (magic link + stage names) ──
   track_cta: string;
   track_link_intro: string;
@@ -290,6 +291,7 @@ const es: EmailCopy = {
   payment_confirmed: "Pago confirmado",
   questions: "Si tienes alguna duda, responde a este correo y te ayudamos.",
   footer_automatic: "Este es un correo automático. No compartas datos de tarjeta por esta vía.",
+  ticket_label: "TICKET DE VENTA / VERIFICACIÓN",
   track_cta: "Ver el estado de mi pedido",
   track_link_intro:
     "Puedes seguir el estado de este y de todos tus pedidos desde un mismo lugar:",
@@ -472,6 +474,7 @@ const en: EmailCopy = {
   payment_confirmed: "Payment confirmed",
   questions: "If you have any questions, just reply to this email.",
   footer_automatic: "This is an automated message. Never send card details by email.",
+  ticket_label: "SALES TICKET / VERIFICATION",
   track_cta: "Track my order",
   track_link_intro: "You can follow this and all your other orders in one place:",
   magic_link_subject: "Your orders at {{store}}",
