@@ -295,5 +295,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/staff",
     },
+    // Tiendas físicas (Op1, Op2…), cada una con su canal de venta. Configuración.
+    {
+      resolve: "./src/modules/establishment",
+    },
   ],
 });

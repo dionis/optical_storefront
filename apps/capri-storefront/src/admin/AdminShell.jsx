@@ -12,6 +12,7 @@ import Icon from "./icons.jsx";
 export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
+    { key: "stores", icon: "store" },
     { key: "orders", icon: "orders" },
     { key: "costs", icon: "costs" },
     { key: "sellers", icon: "sellers" },

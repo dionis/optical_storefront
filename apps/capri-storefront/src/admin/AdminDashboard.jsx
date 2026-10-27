@@ -12,6 +12,7 @@ import { Card } from "./ui.jsx";
 import { printElement } from "./exportUtils.js";
 import CatalogManager from "./CatalogManager.jsx";
 import Team from "./Team.jsx";
+import Stores from "./Stores.jsx";
 import Security from "./Security.jsx";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
@@ -1196,6 +1197,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <Products preset={preset} setPreset={setPreset} />
         </>
       )}
+      {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
       <p className="muted adm-foot">{t("adm.footer", { name: TENANT.name })}</p>
