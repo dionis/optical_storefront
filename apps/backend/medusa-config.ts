@@ -321,5 +321,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/sales-analytics",
     },
+    // Costos fijos, variables y compartidos por tienda (E13). Configuración, nunca se purga.
+    {
+      resolve: "./src/modules/store-cost",
+    },
   ],
 });

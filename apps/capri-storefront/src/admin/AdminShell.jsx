@@ -13,6 +13,7 @@ export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
     { key: "salesboard", icon: "sales" },
+    { key: "storecosts", icon: "costs" },
     { key: "approvals", icon: "hand" },
     { key: "alerts", icon: "bell" },
     { key: "stores", icon: "store" },
@@ -35,6 +36,7 @@ export const NAV_GROUPS = [
 const WORK_GROUP = { key: "work", items: [
   { key: "pos", icon: "dollar" },
   { key: "possales", icon: "receipt" },
+  { key: "cash", icon: "wallet" },
   { key: "mysales", icon: "trendUp" },
   { key: "profile", icon: "user" },
 ] };
@@ -54,6 +56,8 @@ export function navGroupsFor(me) {
     ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
     // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
+    // Costos y resultado: privilegio por persona, sea cual sea el rol.
+    ...((me.privileges || []).some((p) => p === "costs.view" || p === "costs.manage") ? [{ key: "storecosts", icon: "costs" }] : []),
   ];
   return [{ ...WORK_GROUP, items: [...WORK_GROUP.items, ...extra] }];
 }

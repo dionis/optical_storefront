@@ -110,6 +110,9 @@ export default function Stores() {
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
                     {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
                   </select>
+                  {draft.kind !== "own" && (
+                    <input className="adm-input" type="number" min="0" max="100" step="0.5" aria-label={t("adm.stores.settlementPct")} placeholder={t("adm.stores.settlementPct")} value={draft.settlement_pct ?? ""} onChange={(e) => setDraft({ ...draft, settlement_pct: e.target.value === "" ? null : Number(e.target.value) })} />
+                  )}
                   <textarea className="adm-input" rows={3} maxLength={600} aria-label={t("adm.stores.receiptNote")} placeholder={t("adm.stores.receiptNote")} value={draft.receipt_note} onChange={(e) => setDraft({ ...draft, receipt_note: e.target.value })} />
                 </span>
               ) : (
@@ -127,7 +130,7 @@ export default function Stores() {
               ) : (
                 <>
                   <button className="btn-xs primary" disabled={demo} onClick={() => setPricingId(pricingId === s.id ? null : s.id)}>{t("adm.stores.prices")}</button>
-                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "" }); }}>{t("adm.stores.edit")}</button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}

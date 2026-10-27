@@ -15,6 +15,7 @@ interface UpdateBody {
   phone?: string | null;
   kind?: string;
   receipt_note?: string | null;
+  settlement_pct?: number | null;
   is_active?: boolean;
 }
 
@@ -48,6 +49,14 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
     patch.kind = body.kind;
   }
   if ("receipt_note" in body) patch.receipt_note = cleanText(body.receipt_note, 600);
+  if ("settlement_pct" in body) {
+    const v = body.settlement_pct === null || (body.settlement_pct as unknown) === "" ? null : Number(body.settlement_pct);
+    if (v !== null && (!Number.isFinite(v) || v < 0 || v > 100)) {
+      res.status(422).json({ type: "invalid_data", reason: "bad_settlement", message: "Settlement must be 0-100." });
+      return;
+    }
+    patch.settlement_pct = v;
+  }
   if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
 
   await svc.updateEstablishments(patch as never);

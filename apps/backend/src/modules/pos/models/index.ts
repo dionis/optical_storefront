@@ -13,3 +13,4 @@ export * from "./tray";
 export * from "./setting";
 export * from "./insurance-claim";
 export * from "./discount-approval";
+export * from "./cash-session";

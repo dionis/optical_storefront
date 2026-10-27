@@ -1089,7 +1089,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   });
   const tray = withLenses ? await takeTray(container, store.id, sale.id) : null;
   if (tray !== null) await svc.updatePosSales({ id: sale.id, tray_number: tray });
-  await writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, actorId: input.sellerId, kind: "deposit", payments: p.payments });
+  await writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments });
   if (approval) await svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never);
 
   // The order board, the Sheet and the emails show the store's number and the
@@ -1146,13 +1146,21 @@ async function stampOrder(container: MedusaContainer, orderId: string, patch: Re
   return Number(order.display_id) || null;
 }
 
+/** The till's open cash register, if any: cash payments and refunds go into it (HU-32). */
+async function openCashSession(container: MedusaContainer, terminalId: string | null): Promise<string | null> {
+  if (!terminalId) return null;
+  const [s] = await pos(container).listCashSessions({ terminal_id: terminalId, closed_at: null } as never, { take: 1 });
+  return s?.id ?? null;
+}
+
 /** Writes payments to the ledger; an insurer's part also opens its claim (HU-113). */
 async function writePayments(
   container: MedusaContainer,
-  args: { saleId: string; orderId: string | null; establishmentId: string; actorId: string | null; kind: "deposit" | "balance"; payments: PosPayment[] }
+  args: { saleId: string; orderId: string | null; establishmentId: string; terminalId: string | null; actorId: string | null; kind: "deposit" | "balance"; payments: PosPayment[] }
 ): Promise<void> {
   const svc = pos(container);
   if (!args.payments.length) return;
+  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, args.terminalId) : null;
   await svc.createPosSalePayments(
     args.payments.map((p) => ({
       sale_id: args.saleId,
@@ -1165,6 +1173,7 @@ async function writePayments(
       fee_cents: p.fee_cents,
       counts_as_cash: p.counts_as_cash,
       details: p.details as unknown as Record<string, unknown>,
+      cash_session_id: p.counts_as_cash ? cashSession : null,
     }))
   );
   for (const p of args.payments.filter((x) => x.insurance)) {
@@ -1303,7 +1312,7 @@ export async function collectPayment(
   const paid = cents(sale.paid) + payments.paid_cents;
   const insurance = cents(sale.insurance) + payments.insurance_cents;
   const balance = cents(sale.total) - paid - insurance;
-  await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, actorId, kind: "balance", payments: payments.payments });
+  await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId, kind: "balance", payments: payments.payments });
   await pos(container).updatePosSales({ id: sale.id, paid_cents: paid, insurance_cents: insurance, balance_cents: balance });
   if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance, paid_cents: paid + insurance }).catch(() => null);
   await recordAudit(container, {
@@ -1377,6 +1386,7 @@ export async function voidSale(
   const byMethod = new Map<string, number>();
   for (const p of sale.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
   const methods = new Map((await listPaymentMethods(container)).map((m) => [m.code, m]));
+  const cashSession = await openCashSession(container, sale.terminal_id);
   const ledger = [...byMethod.entries()]
     .filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable))
     .map(([code, amount]) => ({
@@ -1387,6 +1397,7 @@ export async function voidSale(
       establishment_id: sale.establishment_id,
       received_by: actorId,
       counts_as_cash: Boolean(methods.get(code)?.counts_as_cash),
+      cash_session_id: methods.get(code)?.counts_as_cash ? cashSession : null,
       reference: null,
     }));
   if (ledger.length) await svc.createPosSalePayments(ledger);

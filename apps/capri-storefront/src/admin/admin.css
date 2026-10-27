@@ -955,3 +955,8 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .my-block .board-kpis { margin: 8px 0 0; }
 .my-goal { height: 12px; background: #eef1f6; border-radius: 6px; overflow: hidden; max-width: 460px; }
 .my-goal i { display: block; height: 100%; background: #1e6b3a; }
+
+/* Resultado por tienda */
+.pnl tr.strong td, .pnl tr.strong th { font-weight: 800; border-top: 2px solid var(--adm-line-2); }
+.pnl td.neg { color: #b03a2e; }
+.pnl th[scope="row"] { text-align: left; font-weight: 600; }

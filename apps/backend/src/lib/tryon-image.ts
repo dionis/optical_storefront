@@ -26,6 +26,26 @@ export async function uploadTryonImage(dataUrl: unknown): Promise<string | null>
   return uploadPrivateImage(dataUrl, "tryon");
 }
 
+/**
+ * A cost receipt (comprobante, HU-92): image or PDF as a `data:` URL, to the
+ * private bucket under `costdoc/`. Best-effort like the others.
+ */
+export async function uploadCostReceipt(dataUrl: unknown): Promise<string | null> {
+  if (typeof dataUrl !== "string" || !storageConfigured()) return null;
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+|application\/pdf);base64,([\s\S]+)$/.exec(dataUrl);
+  if (!match) return null;
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.length || buffer.length > MAX_UPLOAD_BYTES) return null;
+  const ext = match[1] === "application/pdf" ? "pdf" : (match[1].split("/")[1] || "jpg").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const objectKey = `costdoc/${randomUUID()}.${ext}`;
+  try {
+    await createStorageClient().send(new PutObjectCommand({ Bucket: prescriptionBucket(), Key: objectKey, Body: buffer, ContentType: match[1] }));
+    return objectKey;
+  } catch {
+    return null;
+  }
+}
+
 /** Object keys of the photos of frames a point-of-sale customer brings: `posframe/<uuid>.<ext>`. */
 export const POS_FRAME_KEY_PATTERN = /^posframe\/[A-Za-z0-9-]{1,64}\.[a-z0-9]{1,8}$/;
 

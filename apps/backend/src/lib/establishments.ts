@@ -38,6 +38,8 @@ export interface EstablishmentRow {
   sales_channel_id: string | null;
   kind: string;
   receipt_note: string | null;
+  /** Share of the net sales the store keeps (family, partner, consignment); null = none set. */
+  settlement_pct: number | null;
   is_active: boolean;
   created_at: string;
 }
@@ -56,6 +58,7 @@ export async function listEstablishments(container: MedusaContainer): Promise<Es
     sales_channel_id: r.sales_channel_id ?? null,
     kind: String((r as { kind?: string }).kind ?? "own"),
     receipt_note: (r as { receipt_note?: string | null }).receipt_note ?? null,
+    settlement_pct: (r as { settlement_pct?: number | null }).settlement_pct == null ? null : Number((r as { settlement_pct?: number }).settlement_pct),
     is_active: Boolean(r.is_active),
     created_at: String(r.created_at),
   }));

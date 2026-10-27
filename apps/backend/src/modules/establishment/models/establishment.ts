@@ -27,6 +27,8 @@ export const Establishment = model.define("establishment", {
   kind: model.enum(["own", "family", "partner", "consignment"]).default("own"),
   /** Warranty and exchange policy printed on this store's receipts (HU-104). */
   receipt_note: model.text().nullable(),
+  /** Share of the net sales the store keeps in the settlement (HU-33); null = none. */
+  settlement_pct: model.float().nullable(),
   is_active: model.boolean().default(true),
   created_by: model.text().nullable(),
   updated_by: model.text().nullable(),

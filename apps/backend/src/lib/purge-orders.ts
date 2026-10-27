@@ -51,6 +51,8 @@ export const ORDER_DATA_TABLES = [
   "alert_delivery",
   // proyección de los paneles
   "sale_fact",
+  // cajas del punto de venta
+  "cash_movement", "cash_session",
 ];
 
 export interface PurgeReport {

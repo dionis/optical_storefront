@@ -142,6 +142,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
   { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
+  { method: "GET", path: /^\/admin\/pos\/cash-sessions$/ },
+  { method: "POST", path: /^\/admin\/pos\/cash-sessions(\/[^/]+\/(movement|close))?$/ },
   // Dashboards: every role, each scoped by lib/analytics-route.ts (a seller sees their own).
   { method: "GET", path: /^\/admin\/sales-analytics\/(summary|breakdown|timeseries|sales|export|me)$/ },
   // Alert rules: the routes let in admins and supervisors only (lib/alerts-route.ts).
@@ -153,6 +155,11 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
 const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privilege: string }> = [
   { method: "GET", path: /^\/admin\/pos\/payment-methods$/, privilege: "payments.manage" },
   { method: "POST", path: /^\/admin\/pos\/payment-methods(\/[^/]+)?$/, privilege: "payments.manage" },
+  // Costs (E13): edited with costs.manage, read with costs.view or costs.manage.
+  { method: "GET", path: /^\/admin\/store-costs(\/pnl)?$/, privilege: "costs.view" },
+  { method: "GET", path: /^\/admin\/store-costs(\/pnl)?$/, privilege: "costs.manage" },
+  { method: "POST", path: /^\/admin\/store-costs(\/[^/]+)?$/, privilege: "costs.manage" },
+  { method: "DELETE", path: /^\/admin\/store-costs\/[^/]+$/, privilege: "costs.manage" },
 ];
 
 export function isAllowedForRestrictedRole(method: string, url: string, privileges: readonly string[] = []): boolean {
