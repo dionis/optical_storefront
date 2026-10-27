@@ -142,6 +142,13 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
   // A dónde fue cada dólar: una entrada "concepto importe" por línea de la
   // ficha ("Montura Peachtree 12.00 · Envío real 28.00 · Vendedor ANA 4.30").
   { name: "Desglose costo", type: "TEXT", width: 320, wrap: true },
+  // Punto de venta (al final, para no mover las columnas de la plantilla):
+  // tienda (Op2), quién vendió en el mostrador (código del equipo, nunca su
+  // nombre), lo cobrado hasta hoy (anticipo + saldos + seguro) y lo que falta.
+  { name: "Tienda", type: "TEXT", width: 80 },
+  { name: "Vendedor tienda", type: "TEXT", width: 110 },
+  { name: "Cobrado", type: "DOUBLE", width: 90 },
+  { name: "Saldo", type: "DOUBLE", width: 90 },
 ];
 /** Columnas que el dueño puede editar en la hoja; el resto se regenera. */
 export const EDITABLE_ORDER_COLUMNS = ["Estado", "Guía (tracking)"];
@@ -2006,6 +2013,7 @@ export function buildRows(
     costCell,
     marginCell,
     breakdownCell,
+    ...tillCells(md, order.total),
   ];
   // Lo que la hoja muestra en las columnas editables: la próxima pasada del
   // vigilante compara contra esto para distinguir "lo cambió el dueño" de
@@ -2505,4 +2513,17 @@ export async function resetSheetData(logger?: Logger): Promise<{ orders: number;
   if (!clearS.ok && clearS.status !== 400) throw await failure("clear search inputs", clearS);
   logger?.info(`[gsheet] hoja vaciada: ${result.orders} pedidos y ${result.history} filas de historial.`);
   return result;
+}
+
+/** Tienda, vendedor de mostrador, cobrado y saldo de una venta de punto de venta; vacíos en la web. */
+export function tillCells(md: Record<string, unknown>, total: unknown): Cell[] {
+  if (md["source"] !== "pos") return ["", "", "", ""];
+  const balance = Number(md["balance_due_cents"] ?? 0) / 100;
+  const paid = md["paid_cents"] !== undefined ? Number(md["paid_cents"]) / 100 : Number(money(total)) - balance;
+  return [
+    String(md["establishment_code"] ?? ""),
+    String(md["staff_code"] ?? ""),
+    Number(paid.toFixed(2)),
+    md["pos_voided"] ? 0 : Number(balance.toFixed(2)),
+  ];
 }

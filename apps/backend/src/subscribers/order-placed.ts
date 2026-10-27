@@ -16,6 +16,7 @@ import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { emitAlert } from "../lib/alerts-data";
+import { projectOrder } from "../lib/sale-facts";
 import { resolveEmailLocale } from "../lib/email/copy";
 import {
   renderAdminOrderNotification,
@@ -259,6 +260,8 @@ export default async function orderPlacedSubscriber({
   // Web orders reach the alert rules that ask for them (include_web); till
   // sales emit their alerts from the sale itself, with its store number.
   if (!fromTill) {
+    // Web order into the dashboards; till sales project themselves once numbered.
+    await projectOrder(container, order.id);
     await emitAlert(container, {
       event: "sale.created",
       key: `order:${order.id}`,

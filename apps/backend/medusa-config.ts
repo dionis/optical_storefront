@@ -317,5 +317,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/sales-alert",
     },
+    // Proyección de líneas vendidas para los paneles (sale_fact). Se purga con los pedidos.
+    {
+      resolve: "./src/modules/sales-analytics",
+    },
   ],
 });

@@ -142,6 +142,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
   { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
+  // Dashboards: every role, each scoped by lib/analytics-route.ts (a seller sees their own).
+  { method: "GET", path: /^\/admin\/sales-analytics\/(summary|breakdown|timeseries|sales|export|me)$/ },
   // Alert rules: the routes let in admins and supervisors only (lib/alerts-route.ts).
   { method: "GET", path: /^\/admin\/sales-alerts\/(rules|deliveries)$/ },
   { method: "POST", path: /^\/admin\/sales-alerts\/rules(\/[^/]+)?$/ },

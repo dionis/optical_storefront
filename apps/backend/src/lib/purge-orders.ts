@@ -49,6 +49,8 @@ export const ORDER_DATA_TABLES = [
   "rx_sequence",
   // historial de alertas (habla de ventas que se borran); las reglas se quedan
   "alert_delivery",
+  // proyección de los paneles
+  "sale_fact",
 ];
 
 export interface PurgeReport {

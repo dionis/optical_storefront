@@ -12,6 +12,7 @@ import Icon from "./icons.jsx";
 export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
+    { key: "salesboard", icon: "sales" },
     { key: "approvals", icon: "hand" },
     { key: "alerts", icon: "bell" },
     { key: "stores", icon: "store" },
@@ -34,6 +35,7 @@ export const NAV_GROUPS = [
 const WORK_GROUP = { key: "work", items: [
   { key: "pos", icon: "dollar" },
   { key: "possales", icon: "receipt" },
+  { key: "mysales", icon: "trendUp" },
   { key: "profile", icon: "user" },
 ] };
 
@@ -47,6 +49,8 @@ export function navGroupsFor(me) {
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
   const extra = [
+    // Panel global limitado a sus tiendas (HU-67); el vendedor tiene «Mis cifras».
+    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "salesboard", icon: "sales" }] : []),
     ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
     // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),

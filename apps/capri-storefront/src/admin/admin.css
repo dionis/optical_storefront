@@ -941,3 +941,17 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .alr-stores { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0; }
 .alr-stores legend { font-weight: 800; font-size: 13px; padding: 0 6px; }
 .alr-stores label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+
+/* ── Paneles de ventas ─────────────────────────────────────────────────── */
+.board-filters { display: grid; gap: 10px; }
+.board-filters .pos-row { align-items: flex-end; }
+.board-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #4a5470; }
+.board-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; }
+.board-chips .chip { border: 1px solid var(--adm-line-2); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; color: #4a5470; }
+.board-chips .chip.on { background: var(--adm-navy); color: #fff; border-color: var(--adm-navy); }
+.board-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 12px 0; }
+.board-bar { display: inline-block; width: 70px; height: 7px; background: #eef1f6; border-radius: 4px; vertical-align: middle; overflow: hidden; }
+.board-bar i { display: block; height: 100%; background: var(--adm-blue, #0E5AD0); }
+.my-block .board-kpis { margin: 8px 0 0; }
+.my-goal { height: 12px; background: #eef1f6; border-radius: 6px; overflow: hidden; max-width: 460px; }
+.my-goal i { display: block; height: 100%; background: #1e6b3a; }

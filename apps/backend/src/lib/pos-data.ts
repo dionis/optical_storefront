@@ -32,6 +32,7 @@ import {
   type WornSource,
 } from "./pos";
 import { prescriptionColumns } from "./prescription-write";
+import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
 import { resolveStoreSettings } from "./store-settings";
@@ -992,7 +993,10 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
         terminal_id: input.terminal.id,
         terminal_code: input.terminal.code,
         seller_id: input.sellerId,
-        seller_code: input.sellerCode,
+        // NOT seller_code: on an order that key is the referral seller of the
+        // Sellers module, who earns a commission (costing.ts). The till's
+        // seller is a member of the staff.
+        staff_code: input.sellerCode,
         notify_email: input.notifyEmail,
         notify_sms: false,
         patient_phone: customer.phone,
@@ -1097,11 +1101,15 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
       pos_sale_id: sale.id,
       tray: tray === null ? null : `${store.code}-${tray}`,
       balance_due_cents: p.balance_cents,
+      paid_cents: p.paid_cents + p.insurance_cents,
       promised_on: promisedOn,
     });
   } catch (e) {
     logger.warn(`[pos] sale ${number}: could not stamp the order ${orderId}: ${(e as Error).message}`);
   }
+
+  // Dashboards (sale_fact), after the order carries the sale's id.
+  await projectOrder(container, orderId);
 
   logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
 
@@ -1297,7 +1305,7 @@ export async function collectPayment(
   const balance = cents(sale.total) - paid - insurance;
   await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, actorId, kind: "balance", payments: payments.payments });
   await pos(container).updatePosSales({ id: sale.id, paid_cents: paid, insurance_cents: insurance, balance_cents: balance });
-  if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance }).catch(() => null);
+  if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance, paid_cents: paid + insurance }).catch(() => null);
   await recordAudit(container, {
     actorId,
     action: "payment.collect",
@@ -1398,6 +1406,7 @@ export async function voidSale(
     balance_cents: 0,
   });
   await releaseTray(container, sale.id);
+  await voidFacts(container, sale.id);
   if (sale.order_id) await stampOrder(container, sale.order_id, { pos_voided: true, balance_due_cents: 0 }).catch(() => null);
   await recordAudit(container, {
     actorId,

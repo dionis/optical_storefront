@@ -20,7 +20,7 @@ describe("purge-orders table list", () => {
   ];
 
   it("contains only order, cart, payment, fulfillment, return/claim/exchange, link, prescription and point-of-sale tables", () => {
-    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$|rx_sequence$|pos_sale(_payment|_counter)?$|pos_tray$|insurance_claim$|discount_approval$|alert_delivery$)/;
+    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$|rx_sequence$|pos_sale(_payment|_counter)?$|pos_tray$|insurance_claim$|discount_approval$|alert_delivery$|sale_fact$)/;
     const offenders = ORDER_DATA_TABLES.filter((t) => !allowed.test(t));
     expect(offenders).toEqual([]);
   });

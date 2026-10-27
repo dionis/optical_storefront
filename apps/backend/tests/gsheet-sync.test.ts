@@ -132,9 +132,12 @@ describe("buildRows", () => {
       "TEXT", "DROPDOWN", "TEXT", "TEXT", "DROPDOWN", "DATE", "DOUBLE", "DROPDOWN", "TEXT", "DROPDOWN", "TEXT", "TEXT", "TEXT",
       // Vendedor, Costo, Margen, Desglose costo
       "TEXT", "DOUBLE", "DOUBLE", "TEXT",
+      // Tienda, Vendedor tienda, Cobrado, Saldo
+      "TEXT", "TEXT", "DOUBLE", "DOUBLE",
     ]);
-    expect(ORDER_COLUMNS.slice(-4).map((c) => c.name)).toEqual(["Vendedor", "Costo", "Margen", "Desglose costo"]);
-    expect(ORDER_COLUMNS[ORDER_COLUMNS.length - 1]).toMatchObject({ width: 320, wrap: true });
+    expect(ORDER_COLUMNS.slice(-8, -4).map((c) => c.name)).toEqual(["Vendedor", "Costo", "Margen", "Desglose costo"]);
+    expect(ORDER_COLUMNS.slice(-4).map((c) => c.name)).toEqual(["Tienda", "Vendedor tienda", "Cobrado", "Saldo"]);
+    expect(ORDER_COLUMNS[ORDER_COLUMNS.length - 5]).toMatchObject({ name: "Desglose costo", width: 320, wrap: true });
     expect(HISTORY_COLUMNS.slice(-4).map((c) => c.key)).toEqual(["seller", "cost", "margin", "cost_breakdown"]);
     expect(HISTORY_COLUMNS[HISTORY_COLUMNS.length - 1]).toMatchObject({ name: "Desglose costo", width: 320, wrap: true });
     expect(ORDER_COLUMNS.map((c) => c.name)).toEqual(expect.arrayContaining(EDITABLE_ORDER_COLUMNS));
