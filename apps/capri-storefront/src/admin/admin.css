@@ -960,3 +960,26 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .pnl tr.strong td, .pnl tr.strong th { font-weight: 800; border-top: 2px solid var(--adm-line-2); }
 .pnl td.neg { color: #b03a2e; }
 .pnl th[scope="row"] { text-align: left; font-weight: 600; }
+
+/* ── Punto de venta en móvil: campos táctiles y formularios a todo el ancho ── */
+.pos input:not([type=checkbox]):not([type=radio]):not([type=file]), .pos select, .pos textarea {
+  min-height: 40px; font-size: 15px; box-sizing: border-box; border: 1px solid var(--adm-line-2); border-radius: 8px; padding: 6px 10px; background: #fff; max-width: 100%;
+}
+.pos .pos-rx-grid input { padding: 4px 2px; }
+.pos-own label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #4a5470; }
+.pos-own label input { width: 100%; }
+.pos-cfg-add > input, .pos-cfg-add > select { flex: 1 1 180px; }
+.pos-filters > select, .pos-filters > input, .pos-filters > .pos-cust-filter { flex: 1 1 150px; }
+.pos-cust-filter input { width: 100%; }
+.board-filters label { flex: 1 1 140px; }
+.board-filters select, .board-filters input { width: 100%; }
+.pos-cfg-list li input { flex: 1 1 140px; }
+@media (max-width: 640px) {
+  .pos-filters > select, .pos-filters > input, .pos-filters > .pos-cust-filter, .pos-cfg-add > input, .pos-cfg-add > select { flex: 1 1 100%; width: 100%; }
+  .pos-pay select { flex: 1 1 100%; }
+  .pos-pay input { flex: 1 1 120px; }
+  .pos-actions .btn-sm { flex: 1 1 auto; }
+  .pos-head { align-items: stretch; }
+  .pos-where { width: 100%; }
+  .pos-where select { flex: 1 1 140px; }
+}

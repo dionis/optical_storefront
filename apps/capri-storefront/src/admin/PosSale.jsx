@@ -49,7 +49,7 @@ const maxPower = (f) => Math.max(...["od", "os"].flatMap((e) => [Math.abs(num(f[
 const hasAdd = (f) => (num(f.od.add) || 0) > 0 || (num(f.os.add) || 0) > 0;
 
 /** Tabla OD/OI de una receta: la del cristal nuevo o la que el paciente usa. */
-function RxGrid({ value, onChange, disabled, idp }) {
+function RxGrid({ value, onChange, disabled, idp, measures = true }) {
   const { t } = useLang();
   const set = (eye, k) => (e) => onChange({ ...value, [eye]: { ...value[eye], [k]: e.target.value } });
   return (
@@ -72,10 +72,10 @@ function RxGrid({ value, onChange, disabled, idp }) {
           ))}
         </tbody>
       </table>
-      <div className="pos-row">
+      {measures && <div className="pos-row">
         <label>{t("adm.pos.rx.pd")}<input inputMode="decimal" disabled={disabled} value={value.pd} onChange={(e) => onChange({ ...value, pd: e.target.value })} /></label>
         <label>{t("adm.pos.rx.seg")}<input inputMode="decimal" disabled={disabled} value={value.seg_height} onChange={(e) => onChange({ ...value, seg_height: e.target.value })} /></label>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -573,7 +573,7 @@ export default function PosSale({ me }) {
                   <>
                     <h3>{t("adm.pos.rx.worn")}</h3>
                     {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
-                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" />
+                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" measures={false} />
                     <div className="pos-form">
                       <label>{t("adm.pos.rx.source")}
                         <select value={worn.source} onChange={(e) => setWorn((w) => ({ ...w, source: e.target.value }))}>

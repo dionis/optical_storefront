@@ -51,7 +51,7 @@ const fmtDate = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en
 const fmtRx = (v, digits = 2, sign = true) => (v === null || v === undefined ? "—" : `${sign && Number(v) > 0 ? "+" : ""}${Number(v).toFixed(digits)}`);
 const bi = (o, lang) => (o ? o[lang] || o.es || "" : "");
 
-const PRINT_CSS = `
+export const PRINT_CSS = `
   *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
   .job{width:100%;max-width:7.6in;margin:0 auto;padding:.25in;page-break-after:always}
   .job:last-child{page-break-after:auto}
@@ -78,7 +78,7 @@ const PRINT_CSS = `
 `;
 
 /** Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos. */
-function jobHtml(doc) {
+export function jobHtml(doc) {
   const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
   const t = tIn(lang);
   const head = (tk) => `
@@ -146,7 +146,7 @@ function jobHtml(doc) {
 }
 
 /** Recibo del cliente: rollo de 80 mm. Sin valores de receta (dato de salud). */
-function receiptHtml(doc) {
+export function receiptHtml(doc) {
   const lang = doc.terminal.receipt_locale === "en" ? "en" : "es";
   const t = tIn(lang);
   const m = (v) => money(v, "usd", lang);

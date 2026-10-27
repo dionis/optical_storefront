@@ -79,8 +79,8 @@ export default function StoreCosts({ me }) {
                   <td data-label={t("adm.costs2.total")} className={k === "result" && pnl.total.result < 0 ? "neg" : ""}>{m(pnl.total[k])}</td>
                 </tr>
               ))}
-              <tr><th scope="row">{t("adm.costs2.row.margin")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{s.contribution_pct == null ? "—" : `${s.contribution_pct} %`}</td>)}<td>{pnl.total.contribution_pct == null ? "—" : `${pnl.total.contribution_pct} %`}</td></tr>
-              <tr className="strong"><th scope="row">{t("adm.costs2.row.breakEven")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{m(s.break_even)}</td>)}<td>{m(pnl.total.break_even)}</td></tr>
+              <tr><th scope="row">{t("adm.costs2.row.margin")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{s.contribution_pct == null ? "—" : `${s.contribution_pct} %`}</td>)}<td data-label={t("adm.costs2.total")}>{pnl.total.contribution_pct == null ? "—" : `${pnl.total.contribution_pct} %`}</td></tr>
+              <tr className="strong"><th scope="row">{t("adm.costs2.row.breakEven")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{m(s.break_even)}</td>)}<td data-label={t("adm.costs2.total")}>{m(pnl.total.break_even)}</td></tr>
             </tbody>
           </table>
           <small className="muted">{t("adm.costs2.breakEvenHint")}</small>
@@ -166,7 +166,7 @@ export default function StoreCosts({ me }) {
             </label>
             <label className="alr-recipients">{t("adm.costs2.notes")}<textarea rows={2} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)} /></label>
             <div className="pos-actions">
-              <button className="btn-sm primary"><Icon name="save" size={14} /> {t("adm.alerts.save")}</button>
+              <button className="btn-sm primary"><Icon name="save" size={14} /> {t("adm.costs2.save")}</button>
               <button type="button" className="btn-sm" onClick={() => setForm(null)}>{t("adm.alerts.cancel")}</button>
             </div>
           </form>
