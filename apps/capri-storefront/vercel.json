@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/medusa/:path*",
-      "destination": "http://api-staging.161-153-9-98.sslip.io/:path*"
+      "destination": "https://api-staging.161-153-9-98.sslip.io/:path*"
     },
     {
       "source": "/(.*)",
