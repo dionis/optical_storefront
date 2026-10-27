@@ -18,7 +18,20 @@ export const PosPaymentMethod = model.define("pos_payment_method", {
   id: model.id({ prefix: "pospm" }).primaryKey(),
   code: model.text(),
   label: model.text().nullable(),
+  /** English name of an owner-added method; the Spanish one is `label`. */
+  label_en: model.text().nullable(),
+  /** cash | debit | credit | zelle | insurance | other — drives the checkout form. */
+  kind: model.text().default("other"),
   receivable: model.boolean().default(false),
+  /** Fee charged by the processor: a percentage and/or a fixed amount, a variable cost of the store. */
+  fee_pct: model.float().default(0),
+  fee_fixed_cents: model.number().default(0),
+  /** Counts in the cash register count at closing. */
+  counts_as_cash: model.boolean().default(false),
+  /** Stores where it is accepted; null/empty = all. */
+  establishment_ids: model.json().nullable(),
+  /** Data asked when charging: [{ key, required, label?, label_en? }]. */
+  reference_fields: model.json().nullable(),
   builtin: model.boolean().default(false),
   is_active: model.boolean().default(true),
   sort_order: model.number().default(0),

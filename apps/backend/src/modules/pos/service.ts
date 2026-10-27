@@ -1,5 +1,5 @@
 import { MedusaService } from "@medusajs/framework/utils";
-import { PosPaymentMethod, PosSale, PosSalePayment } from "./models/index";
+import { DiscountApproval, InsuranceClaim, PosPaymentMethod, PosSale, PosSalePayment, PosSetting, PosTerminal, PosTray } from "./models/index";
 
 /**
  * CRUD only — the sale rules live in src/lib/pos.ts and the sale itself (cart,
@@ -9,4 +9,9 @@ export default class PosModuleService extends MedusaService({
   PosPaymentMethod,
   PosSale,
   PosSalePayment,
+  PosTerminal,
+  PosTray,
+  PosSetting,
+  InsuranceClaim,
+  DiscountApproval,
 }) {}

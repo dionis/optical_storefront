@@ -21,7 +21,7 @@
 
 export const RULE_SCOPES = ["all", "frame", "case"] as const;
 export type RuleScope = (typeof RULE_SCOPES)[number];
-export const RULE_MODES = ["percent", "delta", "override"] as const;
+export const RULE_MODES = ["percent", "delta", "override", "min"] as const;
 export type RuleMode = (typeof RULE_MODES)[number];
 
 /** A general adjustment can never take a price below this fraction of itself. */
@@ -128,6 +128,53 @@ export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, no
     frame_source: exact ? "store_exact" : "adjusted",
     adjustment,
   };
+}
+
+export interface LineMinimum {
+  /** Lowest price of the frame component, in dollars; null = none. */
+  frame_min: number | null;
+  /** Lowest price of the whole line as a % of its list price; null = none. */
+  floor_pct: number | null;
+}
+
+/**
+ * Minimum price of a sale line (HU-16). The store's own rule wins over the
+ * owner's global one. A discount that takes the line below either needs the
+ * approval of the owner or a superadmin.
+ */
+export function lineMinimum(
+  rules: PriceRuleLike[],
+  input: { establishmentId: string; scope: "frame" | "case"; target: string },
+  now = new Date()
+): LineMinimum {
+  const of = (est: string | null, scope: string, target: string | null) =>
+    pick(rules, now, (r) => r.mode === "min" && r.establishment_id === est && r.scope === scope && r.target === target);
+  const frame = input.target
+    ? of(input.establishmentId, input.scope, input.target) ?? of(null, input.scope, input.target)
+    : null;
+  const floor = of(input.establishmentId, "all", null) ?? of(null, "all", null);
+  return {
+    frame_min: frame ? cents(Number(frame.value)) : null,
+    floor_pct: floor ? Number(floor.value) : null,
+  };
+}
+
+/** True when a discounted line goes under its minimum. */
+export function belowMinimum(min: LineMinimum, line: { list: number; frame: number; total: number }): boolean {
+  if (min.frame_min !== null && line.frame < min.frame_min) return true;
+  if (min.floor_pct !== null && line.total < cents((line.list * min.floor_pct) / 100)) return true;
+  return false;
+}
+
+/** Validation for a minimum price; null value means "remove". */
+export function minimumDenied(scope: string, target: unknown, value: unknown): string | null {
+  if (scope !== "all" && scope !== "frame" && scope !== "case") return "bad_scope";
+  if (scope !== "all" && (typeof target !== "string" || !target.trim() || target.length > 120)) return "bad_target";
+  if (value === null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return "bad_value";
+  if (scope === "all" ? n > 100 : n > 100000) return "bad_value";
+  return null;
 }
 
 /** Validation for a general adjustment; returns a reason code or null. */

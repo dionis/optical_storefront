@@ -26,4 +26,31 @@ export const PosSale = model.define("pos_sale", {
   status: model.enum(["completed", "voided"]).default("completed"),
   /** Private-bucket keys of the photos of frames the customer brought. */
   own_frame_photo_keys: model.json().nullable(),
+  terminal_id: model.text().nullable(),
+  /** Snapshot of the seller code printed on the documents. */
+  seller_code: model.text().nullable(),
+  /** Sent by the till so a retried request never records the sale twice. */
+  idempotency_key: model.text().nullable(),
+  /** Price list total before the discount. */
+  list_cents: model.number().nullable(),
+  discount_cents: model.number().default(0),
+  discount_pct: model.float().default(0),
+  discount_approval_id: model.text().nullable(),
+  /** Paid by the customer (deposits + balances − refunds). */
+  paid_cents: model.number().default(0),
+  /** Covered by an insurer: owed by the insurer, not by the customer. */
+  insurance_cents: model.number().default(0),
+  /** What the customer still owes: total − paid − insurance. */
+  balance_cents: model.number().default(0),
+  tray_number: model.number().nullable(),
+  /** YYYY-MM-DD the glasses are promised for. */
+  promised_on: model.text().nullable(),
+  delivery: model.enum(["pickup", "ship"]).default("pickup"),
+  delivered_at: model.dateTime().nullable(),
+  voided_at: model.dateTime().nullable(),
+  voided_by: model.text().nullable(),
+  void_reason: model.text().nullable(),
+  void_note: model.text().nullable(),
+  void_requested_by: model.text().nullable(),
+  void_requested_at: model.dateTime().nullable(),
 });

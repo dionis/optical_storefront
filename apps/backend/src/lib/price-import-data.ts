@@ -52,7 +52,7 @@ export async function applyImportPlan(container: MedusaContainer, plan: ImportPl
   for (const p of plan.products) {
     await replaceRule(
       container,
-      { establishmentId: null, scope: p.scope, target: p.product_id },
+      { establishmentId: null, scope: p.scope, target: p.product_id, family: "price" },
       { mode: "override", value: p.price, source: "owner-import" },
       actorId
     );

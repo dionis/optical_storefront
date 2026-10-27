@@ -44,7 +44,9 @@ export const ORDER_DATA_TABLES = [
   // datos de salud (módulo propio)
   "prescription",
   // punto de venta: ventas, sus pagos y el contador (la siguiente venta de cada tienda vuelve a ser la 000001)
-  "pos_sale_payment", "pos_sale", "pos_sale_counter",
+  "pos_sale_payment", "pos_sale", "pos_sale_counter", "pos_tray", "insurance_claim", "discount_approval",
+  // numeración de recetas (RX-2026-00001 vuelve a empezar con las recetas borradas)
+  "rx_sequence",
 ];
 
 export interface PurgeReport {

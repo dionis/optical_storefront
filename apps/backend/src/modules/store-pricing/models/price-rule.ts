@@ -7,7 +7,9 @@ import { model } from "@medusajs/framework/utils";
  *    product (the base for the web and every store);
  *  - establishment_id set + scope "all": the store's general adjustment
  *    (percent, or a fixed "delta" added once per sale line);
- *  - establishment_id set + scope "frame"/"case": the store's exact price.
+ *  - establishment_id set + scope "frame"/"case": the store's exact price;
+ *  - mode "min": minimum price (HU-16) — of a model's frame (scope
+ *    "frame"/"case", dollars) or of every line as a % of its list (scope "all").
  *
  * Rows are never edited: a change closes the current row (valid_to) and adds a
  * new one, which is the price history. `value` is a percentage for "percent"
@@ -19,7 +21,7 @@ export const PriceRule = model.define("price_rule", {
   scope: model.enum(["all", "frame", "case"]),
   /** Medusa product id for "frame"/"case" (prices are per model); null for "all". */
   target: model.text().nullable(),
-  mode: model.enum(["percent", "delta", "override"]),
+  mode: model.enum(["percent", "delta", "override", "min"]),
   value: model.float(),
   valid_from: model.dateTime(),
   valid_to: model.dateTime().nullable(),

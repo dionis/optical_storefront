@@ -187,38 +187,165 @@ export interface PaymentMethodLike {
   code: string;
   is_active: boolean;
   receivable: boolean;
+  kind?: string;
+  fee_pct?: number;
+  fee_fixed_cents?: number;
+  counts_as_cash?: boolean;
+  /** Stores where it is accepted; null/empty = all. */
+  establishment_ids?: string[] | null;
+  reference_fields?: Array<{ key: string; required?: boolean }> | null;
 }
 
 export interface PosPayment {
   method_code: string;
   amount_cents: number;
+  /** One-line summary of the reference data, for lists. */
   reference: string | null;
+  details: Record<string, string | number>;
+  fee_cents: number;
+  counts_as_cash: boolean;
+  /** Insurer's part: owed by the insurer, not paid by the customer. */
+  insurance: boolean;
 }
 
+export interface CleanedPayments {
+  payments: PosPayment[];
+  /** Paid by the customer now. */
+  paid_cents: number;
+  /** Covered by insurers. */
+  insurance_cents: number;
+  /** Left for the customer to pay on pickup. */
+  balance_cents: number;
+}
+
+/** Whether a method may be used in a store. */
+export const acceptedAt = (m: PaymentMethodLike, establishmentId: string): boolean =>
+  m.is_active && (!m.establishment_ids || m.establishment_ids.length === 0 || m.establishment_ids.includes(establishmentId));
+
+/** Processor fee of a payment, in cents: percentage plus fixed amount. */
+export const paymentFee = (m: PaymentMethodLike, amountCents: number): number =>
+  amountCents <= 0 ? 0 : Math.round((amountCents * (Number(m.fee_pct) || 0)) / 100) + (Number(m.fee_fixed_cents) || 0);
+
 /**
- * Payments must cover the total exactly: no partial payments yet (the owner
- * has not decided on deposits), and no change — cash change is the clerk's,
- * the sale records what the store keeps.
+ * Payments at a sale or when collecting a balance (HU-24, HU-25, HU-113).
+ *
+ * A deposit and a balance are normal in optics, so the payments may cover
+ * part of the total, never more of it (cash change is computed from the amount
+ * tendered and recorded, the store keeps `amount`). Each method's required
+ * reference data must be there; an insurer's part is recorded apart so the
+ * customer's balance and what the insurer owes are seen separately.
+ *
+ * `dueCents` is what is still to be paid: the total at a sale, the balance
+ * when collecting later.
  */
 export function cleanPayments(
   input: unknown,
-  totalCents: number,
-  methods: PaymentMethodLike[]
-): { reason: string } | { payments: PosPayment[] } {
-  if (!Array.isArray(input) || input.length === 0) return { reason: "no_payments" };
-  if (input.length > 6) return { reason: "bad_payment" };
-  const active = new Map(methods.filter((m) => m.is_active).map((m) => [m.code, m]));
+  dueCents: number,
+  methods: PaymentMethodLike[],
+  opts: { establishmentId: string; requireFull?: boolean; allowInsurance?: boolean } = { establishmentId: "" }
+): { reason: string; method?: string } | CleanedPayments {
+  const list = Array.isArray(input) ? input : [];
+  if (list.length === 0 && dueCents > 0) return { reason: "no_payments" };
+  if (list.length > 6) return { reason: "bad_payment" };
+  const byCode = new Map(methods.map((m) => [m.code, m]));
   const payments: PosPayment[] = [];
-  for (const raw of input as Array<{ method_code?: unknown; amount?: unknown; reference?: unknown }>) {
+  for (const raw of list as Array<{ method_code?: unknown; amount?: unknown; details?: unknown }>) {
     const method_code = text(raw?.method_code, 40);
-    if (!active.has(method_code)) return { reason: "bad_method" };
+    const m = byCode.get(method_code);
+    if (!m || !acceptedAt(m, opts.establishmentId)) return { reason: "bad_method", method: method_code };
     const amount = Number(raw?.amount);
-    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) return { reason: "bad_payment" };
-    payments.push({ method_code, amount_cents: toCents(amount), reference: text(raw?.reference, 80) || null });
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) return { reason: "bad_payment", method: method_code };
+    const amount_cents = toCents(amount);
+    const insurance = m.kind === "insurance" || m.receivable;
+    if (insurance && opts.allowInsurance === false) return { reason: "insurance_at_sale_only", method: method_code };
+
+    const rawDetails = (raw?.details && typeof raw.details === "object" ? raw.details : {}) as Record<string, unknown>;
+    const details: Record<string, string | number> = {};
+    for (const f of m.reference_fields ?? []) {
+      const v = text(rawDetails[f.key], 80);
+      if (f.required && !v) return { reason: "missing_reference", method: method_code };
+      if (v) details[f.key] = v;
+    }
+    if (m.counts_as_cash && rawDetails.tendered !== undefined && rawDetails.tendered !== "") {
+      const tendered = toCents(rawDetails.tendered);
+      if (!Number.isFinite(tendered) || tendered < amount_cents) return { reason: "bad_tendered", method: method_code };
+      details.tendered_cents = tendered;
+      details.change_cents = tendered - amount_cents;
+    }
+    const summary = Object.entries(details)
+      .filter(([k]) => k !== "tendered_cents" && k !== "change_cents")
+      .map(([, v]) => v)
+      .join(" · ");
+    payments.push({
+      method_code,
+      amount_cents,
+      reference: summary || null,
+      details,
+      fee_cents: paymentFee(m, amount_cents),
+      counts_as_cash: Boolean(m.counts_as_cash),
+      insurance,
+    });
   }
-  const paid = payments.reduce((s, p) => s + p.amount_cents, 0);
-  if (paid !== totalCents) return { reason: "payments_mismatch" };
-  return { payments };
+  const insurance_cents = payments.filter((p) => p.insurance).reduce((s, p) => s + p.amount_cents, 0);
+  const paid_cents = payments.filter((p) => !p.insurance).reduce((s, p) => s + p.amount_cents, 0);
+  if (paid_cents + insurance_cents > dueCents) return { reason: "overpaid" };
+  if (opts.requireFull && paid_cents + insurance_cents !== dueCents) return { reason: "payments_mismatch" };
+  return { payments, paid_cents, insurance_cents, balance_cents: dueCents - paid_cents - insurance_cents };
+}
+
+// ---------------------------------------------------------------------------
+// Prescriptions at the counter
+// ---------------------------------------------------------------------------
+
+export const WORN_SOURCES = ["previous_rx", "lensometer", "prior_sale"] as const;
+export type WornSource = (typeof WORN_SOURCES)[number];
+
+/**
+ * Date and origin of a prescription (HU-120, HU-121). An approximate date
+ * ("about 3 years ago") is sent as `approx_months_ago` and turned into a date
+ * here, flagged as approximate.
+ */
+export function cleanRxMeta(
+  input: { rx_date?: unknown; approx_months_ago?: unknown; worn_source?: unknown } | null | undefined,
+  now = new Date()
+): { reason: string } | { rx_date: string | null; rx_date_approx: boolean; worn_source: WornSource | null } {
+  const i = input ?? {};
+  const source = i.worn_source == null || i.worn_source === "" ? null : String(i.worn_source);
+  if (source !== null && !(WORN_SOURCES as readonly string[]).includes(source)) return { reason: "bad_worn_source" };
+  const worn_source = source as WornSource | null;
+
+  if (i.approx_months_ago !== undefined && i.approx_months_ago !== null && i.approx_months_ago !== "") {
+    const months = Number(i.approx_months_ago);
+    if (!Number.isInteger(months) || months < 0 || months > 600) return { reason: "bad_rx_date" };
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1));
+    return { rx_date: d.toISOString().slice(0, 10), rx_date_approx: true, worn_source };
+  }
+  const raw = i.rx_date == null || i.rx_date === "" ? null : String(i.rx_date);
+  if (raw === null) return { rx_date: null, rx_date_approx: false, worn_source };
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00:00Z`) : null;
+  if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw || d > now) return { reason: "bad_rx_date" };
+  return { rx_date: raw, rx_date_approx: false, worn_source };
+}
+
+/** RX-2026-00812 */
+export const rxNumber = (year: number, seq: number): string => `RX-${year}-${String(seq).padStart(5, "0")}`;
+
+/** Op2-POS1 */
+export function nextTerminalCode(storeCode: string, existing: string[]): string {
+  let max = 0;
+  for (const c of existing) {
+    const m = new RegExp(`^${storeCode}-POS(\\d+)$`).exec(c);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${storeCode}-POS${max + 1}`;
+}
+
+/** Lowest tray number not in use: released trays are reused. */
+export function lowestFreeTray(inUse: number[]): number {
+  const used = new Set(inUse);
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
 }
 
 /** Payment method code for one the owner adds: lowercase slug of the label. */
@@ -234,4 +361,120 @@ export function methodCodeFor(label: string, taken: string[]): string {
   let candidate = base;
   for (let i = 2; taken.includes(candidate); i++) candidate = `${base}-${i}`;
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Discounts (HU-16, HU-26)
+// ---------------------------------------------------------------------------
+
+/** A sale-wide percentage, 0 to 100, two decimals. */
+export function cleanDiscountPct(v: unknown): { reason: string } | { pct: number } {
+  if (v === undefined || v === null || v === "") return { pct: 0 };
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return { reason: "bad_discount" };
+  return { pct: Math.round(n * 100) / 100 };
+}
+
+/**
+ * A line after the discount. The percentage applies to the frame and to the
+ * lenses alike, before sales tax (the tax is computed on what is charged).
+ */
+export function discountLine(line: { frame: number; lenses: number }, pct: number): { frame: number; lenses: number; total: number } {
+  const off = (v: number) => Math.round(v * (100 - pct)) / 100;
+  const frame = off(line.frame);
+  const lenses = off(line.lenses);
+  return { frame, lenses, total: Math.round((frame + lenses) * 100) / 100 };
+}
+
+/**
+ * Whether a discount needs the owner or a superadmin: above the person's
+ * limit, or taking a line under its minimum price. They never need approval
+ * themselves — they are who approves (owner's decision, not delegable).
+ */
+export function discountNeedsApproval(args: { isAdmin: boolean; pct: number; limitPct: number | null; belowMinimum: boolean }): boolean {
+  if (args.isAdmin || args.pct <= 0) return false;
+  if (args.limitPct !== null && args.pct > args.limitPct) return true;
+  return args.belowMinimum;
+}
+
+// ---------------------------------------------------------------------------
+// Payment-method settings (HU-111, HU-112)
+// ---------------------------------------------------------------------------
+
+export const METHOD_KINDS = ["cash", "debit", "credit", "zelle", "insurance", "other"] as const;
+
+export interface MethodPatch {
+  label?: string;
+  label_en?: string | null;
+  kind?: string;
+  receivable?: boolean;
+  fee_pct?: number;
+  fee_fixed_cents?: number;
+  counts_as_cash?: boolean;
+  establishment_ids?: string[] | null;
+  reference_fields?: Array<{ key: string; label: string | null; label_en: string | null; required: boolean }>;
+  is_active?: boolean;
+}
+
+/**
+ * Validates a payment-method edit. The seeded methods keep their name (it comes
+ * from the dictionary, in the chosen language) and their kind; their fee, the
+ * stores where they are accepted and whether they are active can change.
+ */
+export function cleanMethodPatch(
+  body: Record<string, unknown> | null | undefined,
+  opts: { builtin: boolean; creating: boolean; knownStores: string[] }
+): { reason: string } | { patch: MethodPatch } {
+  const b = body ?? {};
+  const out: MethodPatch = {};
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+  if (!opts.builtin) {
+    if (b.label !== undefined || opts.creating) {
+      const label = str(b.label, 40);
+      if (!label) return { reason: "label_required" };
+      out.label = label;
+    }
+    if (b.label_en !== undefined) out.label_en = str(b.label_en, 40) || null;
+    if (b.kind !== undefined) {
+      if (!(METHOD_KINDS as readonly string[]).includes(String(b.kind))) return { reason: "bad_kind" };
+      out.kind = String(b.kind);
+    }
+    if (b.receivable !== undefined) out.receivable = b.receivable === true;
+    if (b.counts_as_cash !== undefined) out.counts_as_cash = b.counts_as_cash === true;
+    if (b.reference_fields !== undefined) {
+      if (!Array.isArray(b.reference_fields) || b.reference_fields.length > 6) return { reason: "bad_reference_fields" };
+      const fields = [];
+      for (const f of b.reference_fields as Array<Record<string, unknown>>) {
+        const label = str(f?.label, 40);
+        if (!label) return { reason: "bad_reference_fields" };
+        const key = str(f?.key, 30) || label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+        if (!/^[a-z0-9_]{1,30}$/.test(key)) return { reason: "bad_reference_fields" };
+        fields.push({ key, label, label_en: str(f?.label_en, 40) || null, required: f?.required === true });
+      }
+      if (new Set(fields.map((f) => f.key)).size !== fields.length) return { reason: "bad_reference_fields" };
+      out.reference_fields = fields;
+    }
+  }
+  if (b.fee_pct !== undefined) {
+    const n = Number(b.fee_pct);
+    if (!Number.isFinite(n) || n < 0 || n > 30) return { reason: "bad_fee" };
+    out.fee_pct = Math.round(n * 100) / 100;
+  }
+  if (b.fee_fixed !== undefined) {
+    const n = Number(b.fee_fixed);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return { reason: "bad_fee" };
+    out.fee_fixed_cents = toCents(n);
+  }
+  if (b.establishment_ids !== undefined) {
+    if (b.establishment_ids === null) out.establishment_ids = null;
+    else {
+      if (!Array.isArray(b.establishment_ids)) return { reason: "bad_store" };
+      const ids = [...new Set(b.establishment_ids.map(String))];
+      if (ids.some((id) => !opts.knownStores.includes(id))) return { reason: "bad_store" };
+      out.establishment_ids = ids.length ? ids : null;
+    }
+  }
+  if (b.is_active !== undefined) out.is_active = b.is_active === true;
+  return { patch: out };
 }

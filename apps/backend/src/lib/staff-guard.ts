@@ -41,7 +41,7 @@ export async function staffGuard(
   }
 
   if (scope.is_admin) return next();
-  if (isAllowedForRestrictedRole(req.method, req.originalUrl ?? req.url)) return next();
+  if (isAllowedForRestrictedRole(req.method, req.originalUrl ?? req.url, scope.privileges)) return next();
 
   res.status(403).json({
     type: "not_allowed",

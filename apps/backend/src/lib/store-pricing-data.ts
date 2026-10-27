@@ -59,21 +59,33 @@ export async function ruleHistory(container: MedusaContainer, establishmentId: s
 }
 
 /**
- * Closes the open rules matching (store, scope, target) and, unless `next` is
+ * Which rules replace each other: a general adjustment (percent or fixed
+ * amount), a price (exact or the owner's global one) and a minimum are
+ * independent. Setting a store's adjustment must never close its minimum.
+ */
+export const MODE_FAMILIES = {
+  adjustment: ["percent", "delta"],
+  price: ["override"],
+  minimum: ["min"],
+} as const satisfies Record<string, readonly RuleMode[]>;
+export type ModeFamily = keyof typeof MODE_FAMILIES;
+
+/**
+ * Closes the open rules matching (store, scope, target, family) and, unless `next` is
  * null, opens a new one. One transaction-free sequence is fine here: the only
  * writers are owner/superadmin acting from the panel, and the worst outcome of
  * a race is two rules where the latest by valid_from wins (storeLinePrice).
  */
 export async function replaceRule(
   container: MedusaContainer,
-  key: { establishmentId: string | null; scope: RuleScope; target: string | null },
+  key: { establishmentId: string | null; scope: RuleScope; target: string | null; family: ModeFamily },
   next: { mode: RuleMode; value: number; source: string } | null,
   actorId: string | null
 ): Promise<void> {
   const service = svc(container);
   const now = new Date();
   const open = await service.listPriceRules(
-    { establishment_id: key.establishmentId, scope: key.scope, target: key.target, valid_to: null } as never,
+    { establishment_id: key.establishmentId, scope: key.scope, target: key.target, mode: [...MODE_FAMILIES[key.family]], valid_to: null } as never,
     { take: 100 }
   );
   if (open.length) {
@@ -90,6 +102,9 @@ export async function replaceRule(
     before: open.length ? { scope: key.scope, rules: open.map((r) => ({ mode: r.mode, value: Number(r.value) })) } : null,
     after: next ? { scope: key.scope, mode: next.mode, value: next.value } : null,
   });
+  if (next && !(MODE_FAMILIES[key.family] as readonly string[]).includes(next.mode)) {
+    throw new Error(`rule mode ${next.mode} is not in the ${key.family} family`);
+  }
   if (next) {
     await service.createPriceRules({
       establishment_id: key.establishmentId,

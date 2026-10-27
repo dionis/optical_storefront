@@ -138,5 +138,14 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/payment-methods")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods/pospm_cash")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/sales/poss_1/void")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/discount-approvals/posdisc_1/decide")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/settings")).toBe(false);
+  });
+
+  it("opens payment-method settings to whoever holds the privilege", () => {
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods", ["payments.manage"])).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods/pospm_cash", ["payments.manage"])).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods", ["costs.manage"])).toBe(false);
   });
 });

@@ -33,7 +33,7 @@ export async function POST(
   const actorId = req.auth_context?.actor_id ?? null;
   await replaceRule(
     req.scope,
-    { establishmentId: id, scope: "all", target: null },
+    { establishmentId: id, scope: "all", target: null, family: "adjustment" },
     mode === "none" ? null : { mode: mode as "percent" | "delta", value: Number(body.value), source: "panel" },
     actorId
   );

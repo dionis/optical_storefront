@@ -1,5 +1,15 @@
 import {
+  acceptedAt,
   canSellAt,
+  cleanDiscountPct,
+  cleanMethodPatch,
+  cleanRxMeta,
+  discountLine,
+  discountNeedsApproval,
+  lowestFreeTray,
+  nextTerminalCode,
+  paymentFee,
+  rxNumber,
   cleanCustomer,
   cleanLines,
   cleanPayments,
@@ -102,26 +112,133 @@ describe("cleanLines", () => {
 
 describe("cleanPayments", () => {
   const methods = [
-    { code: "cash", is_active: true, receivable: false },
-    { code: "insurance", is_active: true, receivable: true },
-    { code: "zelle", is_active: false, receivable: false },
+    { code: "cash", is_active: true, receivable: false, kind: "cash", counts_as_cash: true },
+    { code: "credit", is_active: true, receivable: false, kind: "credit", fee_pct: 3, fee_fixed_cents: 10, reference_fields: [{ key: "last4", required: false }] },
+    { code: "zelle", is_active: true, receivable: false, kind: "zelle", reference_fields: [{ key: "confirmation", required: true }] },
+    { code: "insurance", is_active: true, receivable: true, kind: "insurance", reference_fields: [{ key: "payer", required: true }] },
+    { code: "check", is_active: false, receivable: false, kind: "other" },
+    { code: "op2only", is_active: true, receivable: false, kind: "other", establishment_ids: ["est_2"] },
   ];
+  const at = { establishmentId: "est_1" };
 
-  it("a split payment that covers the total exactly", () => {
-    const r = cleanPayments([{ method_code: "cash", amount: 50.1 }, { method_code: "insurance", amount: "99.90", reference: "CLM-1" }], 15000, methods);
-    expect(r).toEqual({
-      payments: [
-        { method_code: "cash", amount_cents: 5010, reference: null },
-        { method_code: "insurance", amount_cents: 9990, reference: "CLM-1" },
+  it("a deposit leaves the rest as the customer's balance (HU-24)", () => {
+    const r = cleanPayments([{ method_code: "cash", amount: 100, details: { tendered: 120 } }], 20250, methods, at);
+    expect(r).toMatchObject({ paid_cents: 10000, insurance_cents: 0, balance_cents: 10250 });
+    expect("payments" in r && r.payments[0]).toMatchObject({ counts_as_cash: true, details: { tendered_cents: 12000, change_cents: 2000 } });
+  });
+
+  it("split across methods, with the card fee and the insurer's part apart (HU-25, HU-113)", () => {
+    const r = cleanPayments(
+      [
+        { method_code: "credit", amount: 50, details: { last4: "4242" } },
+        { method_code: "insurance", amount: 100, details: { payer: "VSP" } },
       ],
+      20000,
+      methods,
+      at
+    );
+    expect(r).toMatchObject({ paid_cents: 5000, insurance_cents: 10000, balance_cents: 5000 });
+    expect("payments" in r && r.payments.map((p) => [p.method_code, p.fee_cents, p.insurance, p.reference])).toEqual([
+      ["credit", 160, false, "4242"],
+      ["insurance", 0, true, "VSP"],
+    ]);
+  });
+
+  it("refuses overpaying, missing references, inactive methods and other stores' methods", () => {
+    expect(cleanPayments([{ method_code: "cash", amount: 300 }], 20000, methods, at)).toEqual({ reason: "overpaid" });
+    expect(cleanPayments([{ method_code: "zelle", amount: 10 }], 20000, methods, at)).toEqual({ reason: "missing_reference", method: "zelle" });
+    expect(cleanPayments([{ method_code: "check", amount: 10 }], 20000, methods, at)).toEqual({ reason: "bad_method", method: "check" });
+    expect(cleanPayments([{ method_code: "op2only", amount: 10 }], 20000, methods, at)).toEqual({ reason: "bad_method", method: "op2only" });
+    expect(cleanPayments([{ method_code: "cash", amount: 10, details: { tendered: 5 } }], 20000, methods, at)).toEqual({ reason: "bad_tendered", method: "cash" });
+    expect(cleanPayments([], 20000, methods, at)).toEqual({ reason: "no_payments" });
+  });
+
+  it("collecting a balance takes no insurer part and can require the full amount", () => {
+    expect(cleanPayments([{ method_code: "insurance", amount: 10, details: { payer: "VSP" } }], 5000, methods, { ...at, allowInsurance: false })).toEqual({
+      reason: "insurance_at_sale_only",
+      method: "insurance",
+    });
+    expect(cleanPayments([{ method_code: "cash", amount: 10 }], 5000, methods, { ...at, requireFull: true })).toEqual({ reason: "payments_mismatch" });
+  });
+
+  it("a method is accepted where it is active and listed", () => {
+    expect(acceptedAt(methods[5], "est_2")).toBe(true);
+    expect(acceptedAt(methods[5], "est_1")).toBe(false);
+    expect(paymentFee(methods[1], 0)).toBe(0);
+  });
+});
+
+describe("cleanRxMeta", () => {
+  const now = new Date("2026-10-27T12:00:00Z");
+
+  it("an exact date, or an approximate one from months ago (HU-121)", () => {
+    expect(cleanRxMeta({ rx_date: "2024-04-15", worn_source: "previous_rx" }, now)).toEqual({ rx_date: "2024-04-15", rx_date_approx: false, worn_source: "previous_rx" });
+    expect(cleanRxMeta({ approx_months_ago: 36 }, now)).toEqual({ rx_date: "2023-10-01", rx_date_approx: true, worn_source: null });
+  });
+
+  it("refuses future dates and unknown sources", () => {
+    expect(cleanRxMeta({ rx_date: "2027-01-01" }, now)).toEqual({ reason: "bad_rx_date" });
+    expect(cleanRxMeta({ worn_source: "guess" }, now)).toEqual({ reason: "bad_worn_source" });
+  });
+});
+
+describe("identifiers", () => {
+  it("prescription numbers, tills and trays", () => {
+    expect(rxNumber(2026, 812)).toBe("RX-2026-00812");
+    expect(nextTerminalCode("Op2", [])).toBe("Op2-POS1");
+    expect(nextTerminalCode("Op2", ["Op2-POS1", "Op2-POS3", "Op1-POS9"])).toBe("Op2-POS4");
+    expect(lowestFreeTray([])).toBe(1);
+    expect(lowestFreeTray([1, 2, 4])).toBe(3);
+  });
+});
+
+describe("discounts", () => {
+  it("validates the percentage", () => {
+    expect(cleanDiscountPct(undefined)).toEqual({ pct: 0 });
+    expect(cleanDiscountPct("10")).toEqual({ pct: 10 });
+    expect(cleanDiscountPct(120)).toEqual({ reason: "bad_discount" });
+  });
+
+  it("applies to frame and lenses alike (document example: 10 % of $225 = $22.50)", () => {
+    expect(discountLine({ frame: 36, lenses: 189 }, 10)).toEqual({ frame: 32.4, lenses: 170.1, total: 202.5 });
+  });
+
+  it("needs approval above the limit or under a minimum, never for admins", () => {
+    expect(discountNeedsApproval({ isAdmin: false, pct: 10, limitPct: 10, belowMinimum: false })).toBe(false);
+    expect(discountNeedsApproval({ isAdmin: false, pct: 12, limitPct: 10, belowMinimum: false })).toBe(true);
+    expect(discountNeedsApproval({ isAdmin: false, pct: 5, limitPct: 10, belowMinimum: true })).toBe(true);
+    expect(discountNeedsApproval({ isAdmin: true, pct: 40, limitPct: null, belowMinimum: true })).toBe(false);
+  });
+});
+
+describe("cleanMethodPatch", () => {
+  const opts = { builtin: false, creating: true, knownStores: ["est_1", "est_2"] };
+
+  it("a new method with its fee, stores and reference data", () => {
+    const r = cleanMethodPatch(
+      { label: "Cheque", label_en: "Check", fee_pct: 1.5, fee_fixed: 0.3, establishment_ids: ["est_2"], reference_fields: [{ label: "Nº de cheque", label_en: "Check no.", required: true }] },
+      opts
+    );
+    expect(r).toEqual({
+      patch: {
+        label: "Cheque",
+        label_en: "Check",
+        fee_pct: 1.5,
+        fee_fixed_cents: 30,
+        establishment_ids: ["est_2"],
+        reference_fields: [{ key: "n_de_cheque", label: "Nº de cheque", label_en: "Check no.", required: true }],
+      },
     });
   });
 
-  it("no partial payment, no unknown or inactive method", () => {
-    expect(cleanPayments([{ method_code: "cash", amount: 100 }], 15000, methods)).toEqual({ reason: "payments_mismatch" });
-    expect(cleanPayments([{ method_code: "zelle", amount: 150 }], 15000, methods)).toEqual({ reason: "bad_method" });
-    expect(cleanPayments([{ method_code: "cash", amount: -1 }], 15000, methods)).toEqual({ reason: "bad_payment" });
-    expect(cleanPayments([], 15000, methods)).toEqual({ reason: "no_payments" });
+  it("a seeded method keeps its name and kind", () => {
+    expect(cleanMethodPatch({ label: "Otro", fee_pct: 2 }, { ...opts, builtin: true, creating: false })).toEqual({ patch: { fee_pct: 2 } });
+  });
+
+  it("refuses unknown stores and bad fees", () => {
+    expect(cleanMethodPatch({ label: "X", establishment_ids: ["est_9"] }, opts)).toEqual({ reason: "bad_store" });
+    expect(cleanMethodPatch({ label: "X", fee_pct: 50 }, opts)).toEqual({ reason: "bad_fee" });
+    expect(cleanMethodPatch({}, opts)).toEqual({ reason: "label_required" });
   });
 });
 

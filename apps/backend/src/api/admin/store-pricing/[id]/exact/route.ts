@@ -43,7 +43,7 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
   const actorId = req.auth_context?.actor_id ?? null;
   await replaceRule(
     req.scope,
-    { establishmentId: id, scope: scope as "frame" | "case", target },
+    { establishmentId: id, scope: scope as "frame" | "case", target, family: "price" },
     price === null ? null : { mode: "override", value: Math.round(Number(price) * 100) / 100, source: "panel" },
     actorId
   );

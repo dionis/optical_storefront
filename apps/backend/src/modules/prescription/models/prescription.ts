@@ -45,4 +45,10 @@ export const PrescriptionRecord = model.define("prescription", {
   rx_date: model.dateTime().nullable(),
   /** On a "new" row: the "worn" row it replaces */
   previous_prescription_id: model.text().nullable(),
+  /** RX-2026-00812 — prescriptions made at a store (lib/pos-data.ts nextRxNumber). */
+  rx_number: model.text().nullable(),
+  /** On a "worn" row: where it came from (previous_rx | lensometer | prior_sale). */
+  worn_source: model.text().nullable(),
+  /** rx_date is an estimate ("about 3 years ago"). */
+  rx_date_approx: model.boolean().default(false),
 });

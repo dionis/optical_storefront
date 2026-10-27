@@ -124,8 +124,9 @@ export function assignmentRowsFor(
  * settings) would otherwise be fully open to any signed-in user.
  *
  * The point-of-sale routes are open to every role, and each of them limits the
- * request to the user's own stores (lib/pos-route.ts). Payment-method settings
- * stay admin-only.
+ * request to the user's own stores and, where the document's permission matrix
+ * says so, to the role (lib/pos-route.ts). Some routes are open to a person
+ * only with a privilege the owner granted them (PRIVILEGED_ALLOWED).
  */
 const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/me\/scope$/ },
@@ -134,12 +135,24 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/users\/me$/ },
   { method: "GET", path: /^\/admin\/team\/me\/profile$/ },
   { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
-  { method: "GET", path: /^\/admin\/pos\/(context|products|sales)$/ },
-  { method: "POST", path: /^\/admin\/pos\/(quote|sales)$/ },
+  { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims)$/ },
+  { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals)$/ },
+  { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },
+  { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt)$/ },
+  { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
+  { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
+  { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
 ];
 
-export function isAllowedForRestrictedRole(method: string, url: string): boolean {
+/** Routes a non-admin may call only with a privilege granted to them (lib/staff-profile.ts). */
+const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privilege: string }> = [
+  { method: "GET", path: /^\/admin\/pos\/payment-methods$/, privilege: "payments.manage" },
+  { method: "POST", path: /^\/admin\/pos\/payment-methods(\/[^/]+)?$/, privilege: "payments.manage" },
+];
+
+export function isAllowedForRestrictedRole(method: string, url: string, privileges: readonly string[] = []): boolean {
   const path = url.split("?")[0].replace(/\/+$/, "") || "/";
   const m = method.toUpperCase();
-  return RESTRICTED_ALLOWED.some((r) => r.method === m && r.path.test(path));
+  if (RESTRICTED_ALLOWED.some((r) => r.method === m && r.path.test(path))) return true;
+  return PRIVILEGED_ALLOWED.some((r) => r.method === m && r.path.test(path) && privileges.includes(r.privilege));
 }
