@@ -15,7 +15,7 @@ describe("purge-orders table list", () => {
     // Vendedores y reglas de costo son configuración del dueño, no pedidos.
     "seller", "cost_rule",
     // Tiendas, roles, precios por tienda y formas de pago del punto de venta.
-    "establishment", "staff_assignment", "staff_profile", "price_rule", "pos_payment_method", "audit_event", "pos_terminal", "pos_setting", "alert_rule", "cost_item",
+    "establishment", "staff_assignment", "staff_profile", "price_rule", "store_price_rule", "pos_payment_method", "audit_event", "pos_terminal", "pos_setting", "alert_rule", "cost_item",
     "stock_location", "inventory_item", "promotion", "tax_rate", "api_key", "sales_channel",
   ];
 
