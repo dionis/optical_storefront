@@ -7,6 +7,7 @@ import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
 import { fetchStores, createStore, updateStore } from "./adminStores.js";
 import Icon from "./icons.jsx";
+import StorePricing from "./StorePricing.jsx";
 
 const EMPTY = { name: "", address: "", phone: "" };
 
@@ -28,6 +29,7 @@ export default function Stores() {
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(null); // id en edición
   const [draft, setDraft] = useState(EMPTY);
+  const [pricingId, setPricingId] = useState(null); // tienda con el panel de precios abierto
 
   const load = () => {
     if (demo) return;
@@ -119,6 +121,7 @@ export default function Stores() {
                 </>
               ) : (
                 <>
+                  <button className="btn-xs primary" disabled={demo} onClick={() => setPricingId(pricingId === s.id ? null : s.id)}>{t("adm.stores.prices")}</button>
                   <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "" }); }}>{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
@@ -128,6 +131,10 @@ export default function Stores() {
         </div>
         <p className="adm-sub adm-team-note">{t("adm.stores.codeNote")}</p>
       </div>
+
+      {pricingId && stores.find((s) => s.id === pricingId) && (
+        <StorePricing key={pricingId} store={stores.find((s) => s.id === pricingId)} onClose={() => setPricingId(null)} />
+      )}
     </div>
   );
 }

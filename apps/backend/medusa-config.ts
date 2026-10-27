@@ -299,5 +299,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/establishment",
     },
+    // Reglas de precio: precio global del dueño y ajuste/precio exacto por tienda.
+    {
+      resolve: "./src/modules/store-pricing",
+    },
   ],
 });
