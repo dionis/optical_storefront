@@ -945,10 +945,18 @@ class VTOApp {
           this.opticalCalculator.customScaleMMPerNorm = null;
           this.opticalCalculator.cardApparentWidthPx = null;
           this.hudRenderer.resetCardAdjust();
+          this.hudRenderer.autoDetectEnabled = false;
+          this.hudRenderer.resetAutoDetect();
           this.opticalCalculator.resetSmoothing();
           this.setFrozen(false);
           const bf = document.getElementById('btn-card-freeze');
           if (bf) bf.textContent = t('card.freeze');
+          // Reset auto-detect button visual state
+          const bad = document.getElementById('btn-card-auto-detect');
+          if (bad) {
+            bad.textContent = t('card.autoDetect');
+            bad.style.background = 'rgba(59, 130, 246, 0.15)';
+          }
         }
       });
     }
@@ -991,6 +999,33 @@ class VTOApp {
     this.hudRenderer.onCardCalibrated = (scaleMMPerNorm: number) => {
       this.opticalCalculator.customScaleMMPerNorm = scaleMMPerNorm;
     };
+
+    // ── VIT-070: Auto-detect toggle ───────────────────────────────────────
+    // Pass the live video element so the detector can sample from it
+    this.hudRenderer.setVideoSource(this.faceTracker.videoElement);
+
+    const btnAutoDetect = document.getElementById('btn-card-auto-detect');
+    if (btnAutoDetect) {
+      btnAutoDetect.addEventListener('click', () => {
+        const isOn = !this.hudRenderer.autoDetectEnabled;
+        this.hudRenderer.autoDetectEnabled = isOn;
+
+        const key = isOn ? 'card.autoDetectActive' : 'card.autoDetect';
+        btnAutoDetect.setAttribute('data-i18n', key);
+        btnAutoDetect.textContent = t(key);
+        btnAutoDetect.style.background = isOn
+          ? 'rgba(59, 130, 246, 0.4)'
+          : 'rgba(59, 130, 246, 0.15)';
+
+        if (isOn) {
+          this.updateStatus('detecting', t('card.autoDetectHint'));
+        }
+
+        if (!isOn) {
+          this.hudRenderer.resetAutoDetect();
+        }
+      });
+    }
 
     // Returning to this tab is exactly the moment a freshly generated GLB appears on
     // disk, because the operator has just come back from the Gradio panel. So re-check

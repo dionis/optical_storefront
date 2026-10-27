@@ -2,6 +2,7 @@ import { OpticalMeasurements } from './optical_calculator';
 import { FITTING_CONFIG } from './fitting_config';
 import { t } from './i18n';
 import { viewTransform } from './view_transform';
+import { CardDetector, CardDetection } from './card_detector';
 
 export class HUDRenderer {
   private canvas: HTMLCanvasElement;
@@ -46,6 +47,18 @@ export class HUDRenderer {
 
   /** Low-passed seed: raw landmark jitter would otherwise make the card shimmer. */
   private cardSeedSmoothedPx: number = 0;
+
+  // ── Auto-detection (VIT-070) ──────────────────────────────────────────────
+  /** Whether the auto-detection algorithm should try to find the card edges. */
+  public autoDetectEnabled: boolean = false;
+  /** The detector instance, created lazily on first use. */
+  private cardDetector: CardDetector | null = null;
+  /** Last successful auto-detection result, kept for the confidence badge. */
+  private lastAutoDetection: CardDetection | null = null;
+  /** The video element to sample for detection — set by the host app. */
+  private videoSource: HTMLVideoElement | null = null;
+  /** Callback fired when auto-detection locks/unlocks onto a card. */
+  public onAutoDetectStateChange?: (detected: boolean) => void;
 
   /**
    * Overlay size in CSS pixels. The backing store is larger on a high-density screen,
@@ -130,6 +143,20 @@ export class HUDRenderer {
     this.cardOffsetXRatio = 0;
     this.cardOffsetYRatio = 0;
     this.cardSeedSmoothedPx = 0;
+    this.lastAutoDetection = null;
+  }
+
+  /** Points the auto-detector at the live video element. */
+  public setVideoSource(video: HTMLVideoElement): void {
+    this.videoSource = video;
+  }
+
+  /** Resets auto-detect state without clearing the manual adjustment. */
+  public resetAutoDetect(): void {
+    this.lastAutoDetection = null;
+    if (this.cardDetector) {
+      this.cardDetector = null; // GC the scratch canvases
+    }
   }
 
   /**
@@ -343,22 +370,109 @@ export class HUDRenderer {
     const seedPx = this.cardSeedSmoothedPx || this.cardSeedWidthPx;
     if (seedPx <= 0) return;
 
-    const factor = Math.min(
-      scaleFactorRange.max,
-      Math.max(scaleFactorRange.min, this.cardScaleFactor)
-    );
-    const cardW = seedPx * factor;
-    const cardH = cardW * (cardHeightMM / cardWidthMM); // ISO/IEC 7810 ID-1 ratio
+    // ── VIT-070: Auto-detection branch ─────────────────────────────────────
+    // When auto-detect is on and a video source is available, run the detector
+    // on a ROI around the predicted card position. If the detector finds a
+    // card-shaped rectangle, use its measured width and position to override
+    // the manual seed / scale / offsets.
+    let autoDetected = false;
+    let detectedCardW = 0;
+    let detectedCardH = 0;
+    let detectedCenterX = 0;
+    let detectedCenterY = 0;
+
+    if (this.autoDetectEnabled && this.videoSource && this.videoSource.readyState >= 2) {
+      if (!this.cardDetector) {
+        this.cardDetector = new CardDetector();
+      }
+
+      // Build a ROI in the VIDEO's coordinate space. The `toScreen` function
+      // maps normalized landmark positions to CSS-pixel screen coordinates, but
+      // the detector samples raw pixels from the <video> element. We need to
+      // reverse the mapping: screen → video.
+      const vw = this.videoSource.videoWidth;
+      const vh = this.videoSource.videoHeight;
+      const displayW = viewTransform.displayWidth || this.w;
+      const displayH = viewTransform.displayHeight || this.h;
+
+      // Predicted card size in screen pixels
+      const predW = seedPx;
+      const predH = predW * (cardHeightMM / cardWidthMM);
+
+      // ROI in screen space: 1.8× the predicted card, centred under the nose
+      const roiMargin = 0.4; // 40% padding on each side
+      const roiScreenW = predW * (1 + 2 * roiMargin);
+      const roiScreenH = predH * (1 + 2 * roiMargin) * 1.3; // extend below
+      const roiScreenX = nose.x - roiScreenW / 2;
+      const roiScreenY = nose.y - predH * 0.2; // start slightly above nose tip
+
+      // Map screen ROI → video ROI (the video might be mirrored and cropped)
+      const scaleX = vw / displayW;
+      const scaleY = vh / displayH;
+      const roiVidX = Math.max(0, Math.round(roiScreenX * scaleX));
+      const roiVidY = Math.max(0, Math.round(roiScreenY * scaleY));
+      const roiVidW = Math.min(vw - roiVidX, Math.round(roiScreenW * scaleX));
+      const roiVidH = Math.min(vh - roiVidY, Math.round(roiScreenH * scaleY));
+
+      if (roiVidW > 20 && roiVidH > 20) {
+        const detection = this.cardDetector.detect(
+          this.videoSource,
+          { x: roiVidX, y: roiVidY, w: roiVidW, h: roiVidH }
+        );
+
+        if (detection && detection.confidence > 0.4) {
+          autoDetected = true;
+          this.lastAutoDetection = detection;
+
+          // The detection corners are in video-pixel coordinates; map back to
+          // screen-pixel coordinates for drawing.
+          detectedCardW = detection.widthPx / scaleX;
+          detectedCardH = detection.heightPx / scaleY;
+          detectedCenterX = detection.center.x / scaleX;
+          detectedCenterY = detection.center.y / scaleY;
+        } else if (this.lastAutoDetection) {
+          // Brief dropout: keep the last good detection
+          autoDetected = true;
+          detectedCardW = this.lastAutoDetection.widthPx / scaleX;
+          detectedCardH = this.lastAutoDetection.heightPx / scaleY;
+          detectedCenterX = this.lastAutoDetection.center.x / scaleX;
+          detectedCenterY = this.lastAutoDetection.center.y / scaleY;
+        }
+      }
+    }
+
+    let cardW: number;
+    let cardH: number;
+    let cardX: number;
+    let cardY: number;
+
+    if (autoDetected && detectedCardW > 0) {
+      // Auto-detected card: use the detected dimensions and position directly
+      cardW = detectedCardW;
+      cardH = detectedCardH;
+      cardX = detectedCenterX - cardW / 2;
+      cardY = detectedCenterY - cardH / 2;
+
+      // Also publish the detected width as the new seed scale factor so the
+      // manual slider stays in sync if the user switches off auto-detect
+      if (seedPx > 0) {
+        this.cardScaleFactor = cardW / seedPx;
+      }
+    } else {
+      // Manual mode: original behaviour
+      const factor = Math.min(
+        scaleFactorRange.max,
+        Math.max(scaleFactorRange.min, this.cardScaleFactor)
+      );
+      cardW = seedPx * factor;
+      cardH = cardW * (cardHeightMM / cardWidthMM);
+      cardX = nose.x - cardW / 2 + this.cardOffsetXRatio * cardW;
+      cardY = nose.y + cardH * faceGapRatio + this.cardOffsetYRatio * cardW;
+    }
 
     // Published for the readout and the exported report: the span the card occupies
     // right now, which is the quantity the mm/pixel scale is built from.
     this.cardApparentWidthPx = cardW;
-
-    // The gap under the nose is a fraction of the card, never a pixel constant, so the
-    // guide stays glued to the face at any distance instead of drifting away from it
-    // when the subject backs off.
-    const cardX = nose.x - cardW / 2 + this.cardOffsetXRatio * cardW;
-    const cardY = nose.y + cardH * faceGapRatio + this.cardOffsetYRatio * cardW;
 
     this.cardRect = { x: cardX, y: cardY, w: cardW, h: cardH };
 
@@ -416,8 +530,11 @@ export class HUDRenderer {
       ctx.restore();
     }
 
-    // Outline hugging the card edge — thin, no glow, so it reads as a frame not a halo
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.9)';
+    // Outline colour changes to signal auto-detect state
+    const outlineColor = autoDetected ? 'rgba(59, 130, 246, 0.9)' : 'rgba(16, 185, 129, 0.9)';
+    const bracketColor = autoDetected ? '#3b82f6' : '#10b981';
+
+    ctx.strokeStyle = outlineColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.roundRect(cardX, cardY, cardW, cardH, radius);
@@ -426,7 +543,7 @@ export class HUDRenderer {
     // Corner brackets sitting just outside the outline
     const armLen = Math.min(cardW * 0.14, 26);
     const off = 5;
-    ctx.strokeStyle = '#10b981';
+    ctx.strokeStyle = bracketColor;
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     const drawBracket = (bx: number, by: number, sx: number, sy: number) => {
@@ -440,6 +557,32 @@ export class HUDRenderer {
     drawBracket(cardX + cardW + off, cardY - off, -1, 1);
     drawBracket(cardX - off, cardY + cardH + off, 1, -1);
     drawBracket(cardX + cardW + off, cardY + cardH + off, -1, -1);
+
+    // ── VIT-070: Confidence badge ─────────────────────────────────────────
+    if (this.autoDetectEnabled) {
+      const badgeText = autoDetected
+        ? `${t('card.autoDetected')} ${Math.round((this.lastAutoDetection?.confidence ?? 0) * 100)}%`
+        : t('card.searching');
+      const badgeColor = autoDetected ? 'rgba(59, 130, 246, 0.85)' : 'rgba(107, 114, 128, 0.75)';
+
+      const fontSize = Math.max(10, Math.min(13, cardW * 0.06));
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      const metrics = ctx.measureText(badgeText);
+      const badgeW = metrics.width + 12;
+      const badgeH = fontSize + 8;
+      const badgeX = cardX + cardW / 2 - badgeW / 2;
+      const badgeY = cardY - badgeH - 6;
+
+      ctx.fillStyle = badgeColor;
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
+    }
 
     ctx.restore();
   }
