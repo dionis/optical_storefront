@@ -9,9 +9,43 @@ import { Migration } from "@mikro-orm/migrations";
  *
  * The 2026 matrix tables (CreateLens2026Matrix2) already have the column; only these
  * two were missing it.
+ *
+ * Medusa runs a module's migrations in file-name order, so this one ("Add…")
+ * runs BEFORE CreateLensOption1 ("Create…") on an empty database. The two
+ * CREATE TABLE IF NOT EXISTS below repeat CreateLensOption1's DDL so a fresh
+ * install gets the tables first; where they already exist (every database that
+ * applied CreateLensOption1) they do nothing. tests/migration-order.test.ts
+ * keeps every module honest about this.
  */
 export class AddSoftDeleteToLensOption4 extends Migration {
   async up(): Promise<void> {
+    this.addSql(`
+      CREATE TABLE IF NOT EXISTS lens_option (
+        id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+        usage_type  TEXT NOT NULL,
+        index       NUMERIC(4,2) NOT NULL,
+        label       TEXT NOT NULL,
+        description TEXT,
+        price_modifier_cents INTEGER NOT NULL DEFAULT 0,
+        is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    this.addSql(`
+      CREATE TABLE IF NOT EXISTS coating_option (
+        id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+        type        TEXT NOT NULL UNIQUE,
+        label       TEXT NOT NULL,
+        description TEXT,
+        price_modifier_cents INTEGER NOT NULL DEFAULT 0,
+        compatible_usage_types TEXT[] NOT NULL DEFAULT '{}',
+        is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     this.addSql(`ALTER TABLE lens_option ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
     this.addSql(`ALTER TABLE coating_option ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
 
