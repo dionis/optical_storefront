@@ -15,6 +15,7 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { emitAlert } from "../lib/alerts-data";
 import { resolveEmailLocale } from "../lib/email/copy";
 import {
   renderAdminOrderNotification,
@@ -255,6 +256,18 @@ export default async function orderPlacedSubscriber({
   // exists — lib/pos-documents.ts. The web confirmation would promise shipping
   // and show none of that.
   const fromTill = orderMetadata["source"] === "pos";
+  // Web orders reach the alert rules that ask for them (include_web); till
+  // sales emit their alerts from the sale itself, with its store number.
+  if (!fromTill) {
+    await emitAlert(container, {
+      event: "sale.created",
+      key: `order:${order.id}`,
+      establishment_id: null,
+      seller_id: null,
+      is_web: true,
+      data: { number: `#${order.display_id ?? ""}`, total: Number((order as { total?: number }).total ?? 0) },
+    });
+  }
   const wantsEmail =
     !fromTill &&
     (orderMetadata["notify_email"] === undefined ||

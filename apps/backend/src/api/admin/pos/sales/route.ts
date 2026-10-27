@@ -22,6 +22,7 @@ import {
   type RxInput,
   type RxMeta,
 } from "../../../../lib/pos-data";
+import { emitAlert } from "../../../../lib/alerts-data";
 import { emailReceipt } from "../../../../lib/pos-documents";
 import { ownSalesOnly, posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
 import { getSale } from "../../../../lib/pos-data";
@@ -160,6 +161,14 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       } catch {
         receipt_sent = false;
       }
+    }
+    if (!sale.replayed) {
+      // Alerts (E7): every sale, a discount, a sale below the minimum price.
+      const data = { number: sale.number, total: sale.total, discount_pct: quote.discount_pct, store_code: store.code, store_name: store.name, seller_code: scope.seller_code };
+      const base = { establishment_id: store.id, seller_id: scope.user_id, data };
+      await emitAlert(req.scope, { ...base, event: "sale.created", key: `sale:${sale.id}` });
+      if (quote.discount_pct > 0) await emitAlert(req.scope, { ...base, event: "discount.applied", key: `discount:${sale.id}` });
+      if (quote.below_minimum) await emitAlert(req.scope, { ...base, event: "sale.below_min", key: `belowmin:${sale.id}` });
     }
     res.json({ sale, receipt_sent });
   });

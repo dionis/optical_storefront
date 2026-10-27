@@ -932,3 +932,12 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
   .pos-pay input { width: 100%; flex: 1 1 140px; }
   .pos-nav .big { max-width: none; }
 }
+
+/* ── Alertas ───────────────────────────────────────────────────────────── */
+.alr-form { display: grid; gap: 12px; }
+.alr-recipients { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #4a5470; }
+.alr-recipients textarea { width: 100%; box-sizing: border-box; font-size: 14px; }
+.alr-suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.alr-stores { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 8px 14px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0; }
+.alr-stores legend { font-weight: 800; font-size: 13px; padding: 0 6px; }
+.alr-stores label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }

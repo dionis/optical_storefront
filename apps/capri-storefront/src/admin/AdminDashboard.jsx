@@ -32,6 +32,7 @@ import PosSale from "./PosSale.jsx";
 import PosSales from "./PosSales.jsx";
 import PosApprovals from "./PosApprovals.jsx";
 import PosConfig from "./PosConfig.jsx";
+import AlertRules from "./AlertRules.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
@@ -1217,6 +1218,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "possales" && <PosSales />}
       {tab === "approvals" && <PosApprovals params={nav.params} />}
       {tab === "posconfig" && <PosConfig />}
+      {tab === "alerts" && <AlertRules />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { cleanText } from "../../../../lib/establishments";
 import { cleanDiscountPct, cleanLines, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
 import { createApproval, listApprovals, listTerminals, PosError, quoteSale } from "../../../../lib/pos-data";
+import { emitAlert } from "../../../../lib/alerts-data";
 import { notifyApprovalRequest } from "../../../../lib/pos-notify";
 import { posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
@@ -71,6 +72,14 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       reason: cleanText(body.reason, 300),
     });
     const sent = await notifyApprovalRequest(req.scope, approval, store, scope.seller_code ?? terminal?.code ?? store.code);
+    // The approvers already got the actionable mail; the rule tells whoever else it lists.
+    await emitAlert(req.scope, {
+      event: "discount.requested",
+      key: `approval:${approval.id}`,
+      establishment_id: store.id,
+      seller_id: scope.user_id,
+      data: { discount_pct: approval.discount_pct, total: approval.total, store_code: store.code, store_name: store.name, seller_code: scope.seller_code },
+    });
     res.json({ approval, notified: sent });
   });
 }

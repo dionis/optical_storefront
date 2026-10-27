@@ -15,12 +15,12 @@ describe("purge-orders table list", () => {
     // Vendedores y reglas de costo son configuración del dueño, no pedidos.
     "seller", "cost_rule",
     // Tiendas, roles, precios por tienda y formas de pago del punto de venta.
-    "establishment", "staff_assignment", "staff_profile", "price_rule", "pos_payment_method", "audit_event", "pos_terminal", "pos_setting",
+    "establishment", "staff_assignment", "staff_profile", "price_rule", "pos_payment_method", "audit_event", "pos_terminal", "pos_setting", "alert_rule",
     "stock_location", "inventory_item", "promotion", "tax_rate", "api_key", "sales_channel",
   ];
 
   it("contains only order, cart, payment, fulfillment, return/claim/exchange, link, prescription and point-of-sale tables", () => {
-    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$|rx_sequence$|pos_sale(_payment|_counter)?$|pos_tray$|insurance_claim$|discount_approval$)/;
+    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$|rx_sequence$|pos_sale(_payment|_counter)?$|pos_tray$|insurance_claim$|discount_approval$|alert_delivery$)/;
     const offenders = ORDER_DATA_TABLES.filter((t) => !allowed.test(t));
     expect(offenders).toEqual([]);
   });

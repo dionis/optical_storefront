@@ -1,5 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { cleanText } from "../../../../../../lib/establishments";
+import { emitAlert } from "../../../../../../lib/alerts-data";
+import { cleanText, listEstablishments } from "../../../../../../lib/establishments";
 import { PosError, requestVoid, VOID_REASONS, voidSale, type VoidReason } from "../../../../../../lib/pos-data";
 import { canVoid, posHandler, posScope, saleInScope } from "../../../../../../lib/pos-route";
 
@@ -31,6 +32,14 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       return;
     }
     const { sale: voided, order_canceled } = await voidSale(req.scope, sale, scope.user_id, reason, note);
+    const store = (await listEstablishments(req.scope)).find((s) => s.id === sale.establishment_id);
+    await emitAlert(req.scope, {
+      event: "sale.voided",
+      key: `void:${sale.id}`,
+      establishment_id: sale.establishment_id,
+      seller_id: sale.seller_id,
+      data: { number: sale.number, total: sale.total, reason, store_code: store?.code ?? null, store_name: store?.name ?? null, seller_code: sale.seller_code },
+    });
     res.json({ requested: false, sale: voided, order_canceled });
   });
 }

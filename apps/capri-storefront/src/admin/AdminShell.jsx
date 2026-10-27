@@ -13,6 +13,7 @@ export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
     { key: "approvals", icon: "hand" },
+    { key: "alerts", icon: "bell" },
     { key: "stores", icon: "store" },
     { key: "orders", icon: "orders" },
     { key: "costs", icon: "costs" },
@@ -45,7 +46,12 @@ export function navGroupsFor(me) {
   if (!me || me.is_admin !== false) return [WORK_GROUP, ...NAV_GROUPS];
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
-  return config ? [{ ...WORK_GROUP, items: [...WORK_GROUP.items, { key: "posconfig", icon: "settings" }] }] : [WORK_GROUP];
+  const extra = [
+    ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
+    // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
+    ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
+  ];
+  return [{ ...WORK_GROUP, items: [...WORK_GROUP.items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
 export const TABS = tabsOf(navGroupsFor(null));

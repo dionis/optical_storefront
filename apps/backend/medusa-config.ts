@@ -312,5 +312,10 @@ export default defineConfig({
     {
       resolve: "./src/modules/audit",
     },
+    // Reglas de alerta por email y su historial de envíos (E7). Las reglas son
+    // configuración; el historial se purga con los pedidos.
+    {
+      resolve: "./src/modules/sales-alert",
+    },
   ],
 });

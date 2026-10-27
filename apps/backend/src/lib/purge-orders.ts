@@ -47,6 +47,8 @@ export const ORDER_DATA_TABLES = [
   "pos_sale_payment", "pos_sale", "pos_sale_counter", "pos_tray", "insurance_claim", "discount_approval",
   // numeración de recetas (RX-2026-00001 vuelve a empezar con las recetas borradas)
   "rx_sequence",
+  // historial de alertas (habla de ventas que se borran); las reglas se quedan
+  "alert_delivery",
 ];
 
 export interface PurgeReport {
