@@ -4,15 +4,19 @@
 // staging URL on a branch rode along when that branch was merged into develop, and the
 // live store spent hours calling the staging backend and database.
 //
-//   - Production deployments (the develop branch) → production backend.
-//   - Everything else (previews of any branch, e.g. develop_optical_storepos) → staging.
+//   - Builds of develop or main, and any Production deployment → production backend.
+//   - Every other branch (e.g. develop_optical_storepos) → staging.
 //   - MEDUSA_BACKEND_ORIGIN, if set in the Vercel environment, overrides both.
 //
-// Evaluated at build time with the deployment's environment variables; VERCEL_ENV is a
-// Vercel system variable ("production" | "preview" | "development").
+// Keyed on the branch, not only on VERCEL_ENV: www.rubilens.com is attached to the
+// develop branch, so the live store is served by develop's *Preview* deployments.
+// Evaluated at build time; VERCEL_GIT_COMMIT_REF and VERCEL_ENV are Vercel system
+// variables.
 
 const PRODUCTION_BACKEND = "https://api.161-153-9-98.sslip.io";
 const STAGING_BACKEND = "https://api-staging.161-153-9-98.sslip.io";
+/** Branches whose builds serve real customers. */
+const PRODUCTION_BRANCHES = new Set(["develop", "main"]);
 
 function backendOrigin(): string {
   const override = process.env.MEDUSA_BACKEND_ORIGIN?.trim();
@@ -23,7 +27,9 @@ function backendOrigin(): string {
     }
     return override;
   }
-  return process.env.VERCEL_ENV === "production" ? PRODUCTION_BACKEND : STAGING_BACKEND;
+  const branch = process.env.VERCEL_GIT_COMMIT_REF ?? "";
+  const live = PRODUCTION_BRANCHES.has(branch) || process.env.VERCEL_ENV === "production";
+  return live ? PRODUCTION_BACKEND : STAGING_BACKEND;
 }
 
 const immutable = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
