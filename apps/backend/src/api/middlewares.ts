@@ -269,6 +269,13 @@ export default defineMiddlewares({
       middlewares: [visionNotifyRateLimit],
     },
     {
+      // The owner's exported price list: one entry per model plus the lens
+      // matrix, past Medusa's default JSON body limit on a full catalog.
+      matcher: "/admin/store-pricing/import",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "2mb" },
+    },
+    {
       // The prescription write can carry the AI try-on render as a base64 `data:`
       // URL (JSON, not multipart), which runs past Medusa's default JSON body
       // limit. Exact path — the /ocr and /validate subroutes are separate entries.

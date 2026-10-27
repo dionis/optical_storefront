@@ -68,6 +68,22 @@ export function globalPrice(
   return cents(r ? Number(r.value) : base);
 }
 
+/**
+ * The owner's open global prices by product id — what price-sync must keep
+ * instead of the wholesale-derived price. Latest active rule wins.
+ */
+export function globalPriceOverrides(rules: PriceRuleLike[], now = new Date()): Map<string, number> {
+  const out = new Map<string, { at: number; value: number }>();
+  for (const r of rules) {
+    if (r.establishment_id != null || r.mode !== "override" || !r.target || !isActiveAt(r, now)) continue;
+    if (r.scope !== "frame" && r.scope !== "case") continue;
+    const at = toMs(r.valid_from);
+    const prev = out.get(r.target);
+    if (!prev || at >= prev.at) out.set(r.target, { at, value: cents(Number(r.value)) });
+  }
+  return new Map([...out].map(([k, v]) => [k, v.value]));
+}
+
 export interface StoreLineInput {
   establishmentId: string;
   scope: "frame" | "case";

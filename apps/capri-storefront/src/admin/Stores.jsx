@@ -8,6 +8,7 @@ import { shortDate } from "./adminOrders.js";
 import { fetchStores, createStore, updateStore } from "./adminStores.js";
 import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
+import PriceImport from "./PriceImport.jsx";
 
 const EMPTY = { name: "", address: "", phone: "" };
 
@@ -135,6 +136,8 @@ export default function Stores() {
       {pricingId && stores.find((s) => s.id === pricingId) && (
         <StorePricing key={pricingId} store={stores.find((s) => s.id === pricingId)} onClose={() => setPricingId(null)} />
       )}
+
+      {!demo && <PriceImport />}
     </div>
   );
 }

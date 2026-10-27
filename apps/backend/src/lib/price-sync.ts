@@ -10,12 +10,18 @@
  * variant's USD price. Running it repeatedly (e.g. the 4-hourly job) keeps prices
  * stable and consistent with the catalog, and surfaces any catalog model that has
  * no sheet price (a newly added frame) so it can be priced.
+ *
+ * The owner's own price for a model (a global price rule, src/lib/store-pricing.ts)
+ * wins over the sheet: without this the 4-hourly run would put back the
+ * wholesale-derived price a few hours after the owner set theirs.
  */
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
 import { sellingPrice, normalizeModel, type PriceKind } from "./pricing";
 import { PRICE_BOOK, type PriceBookItem } from "../data/wholesale-prices";
+import { openRules } from "./store-pricing-data";
+import { globalPriceOverrides } from "./store-pricing";
 
 export type SyncReport = {
   total: number;
@@ -23,6 +29,7 @@ export type SyncReport = {
   unchanged: number;
   unmatched: string[]; // catalog products with no sheet price (title)
   estimatedUsed: number; // matched via brand-average estimate (no wholesale)
+  ownerPriced: number; // products priced by the owner's own global price
   currency: string;
 };
 
@@ -49,6 +56,7 @@ export async function syncPrices(
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const index = buildIndex();
+  const ownerPrices = globalPriceOverrides(await openRules(container, []));
 
   const report: SyncReport = {
     total: 0,
@@ -56,6 +64,7 @@ export async function syncPrices(
     unchanged: 0,
     unmatched: [],
     estimatedUsed: 0,
+    ownerPriced: 0,
     currency: CURRENCY,
   };
 
@@ -78,6 +87,15 @@ export async function syncPrices(
 
     for (const p of products) {
       report.total++;
+      const owner = ownerPrices.get(p.id as string);
+      if (owner != null) {
+        report.ownerPriced++;
+        for (const v of (p.variants as any[]) || []) {
+          report.updated++;
+          updates.push({ id: v.id, prices: [{ amount: owner, currency_code: CURRENCY }] });
+        }
+        continue;
+      }
       const hit = index.get(normalizeModel(p.title as string));
       if (!hit) {
         report.unmatched.push(p.title as string);
@@ -97,7 +115,7 @@ export async function syncPrices(
   }
 
   logger.info(
-    `[price-sync] scanned ${report.total} products; ${report.updated} variant prices to update, ` +
+    `[price-sync] scanned ${report.total} products (${report.ownerPriced} at the owner's own price); ${report.updated} variant prices to update, ` +
       `${report.unchanged} already correct, ${report.unmatched.length} without a sheet price` +
       (opts.dryRun ? " (DRY RUN — no writes)" : "")
   );

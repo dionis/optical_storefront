@@ -2,6 +2,7 @@ import {
   adjustmentDenied,
   exactPriceDenied,
   globalPrice,
+  globalPriceOverrides,
   storeLinePrice,
   type PriceRuleLike,
 } from "../src/lib/store-pricing";
@@ -32,6 +33,19 @@ describe("globalPrice", () => {
   it("ignores a store's exact price (that is not the base)", () => {
     const r = rule({ scope: "frame", target: "SKU-1", mode: "override", value: 1 });
     expect(globalPrice([r], "frame", "SKU-1", 99.5, NOW)).toBe(99.5);
+  });
+});
+
+describe("globalPriceOverrides (what price-sync keeps)", () => {
+  it("lists only the owner's open global prices, latest first", () => {
+    const rules = [
+      rule({ establishment_id: null, scope: "frame", target: "prod_1", mode: "override", value: 80, valid_from: "2026-10-01T00:00:00Z" }),
+      rule({ establishment_id: null, scope: "frame", target: "prod_1", mode: "override", value: 95, valid_from: "2026-10-20T00:00:00Z" }),
+      rule({ establishment_id: null, scope: "case", target: "prod_2", mode: "override", value: 12 }),
+      rule({ establishment_id: "est_2", scope: "frame", target: "prod_3", mode: "override", value: 1 }),
+      rule({ establishment_id: null, scope: "frame", target: "prod_4", mode: "override", value: 9, valid_to: "2026-10-02T00:00:00Z" }),
+    ];
+    expect([...globalPriceOverrides(rules, NOW)]).toEqual([["prod_1", 95], ["prod_2", 12]]);
   });
 });
 

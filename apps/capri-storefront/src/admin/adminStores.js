@@ -48,6 +48,15 @@ export async function setStoreExactPrice(id, { scope = "frame", productId, price
   }
 }
 
+/** Plan (apply=false) o aplicación (apply=true) de la lista de precios del dueño. */
+export async function importOwnerPrices(prices, apply = false) {
+  try {
+    return await adminFetch("/admin/store-pricing/import", { method: "POST", body: { prices, apply } });
+  } catch (e) {
+    throw new Error(pricingKey(e, "adm.err.pricing.importFailed"));
+  }
+}
+
 export async function previewStorePrices(id, productIds, lenses = 0) {
   return adminFetch(`/admin/store-pricing/${encodeURIComponent(id)}/preview`, {
     query: { products: productIds.join(","), lenses },

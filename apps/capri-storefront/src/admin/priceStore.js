@@ -126,6 +126,13 @@ export const setLensPhoto = (id, cat, v) => setIn("lens", `p:${id}:${cat}`, v);
 export const setLensAR = (id, v) => setIn("lens", `a:${id}`, v);
 
 // ---- export / import ----
+/**
+ * La lista tal como está guardada en ESTE navegador (incluye `lens`, que
+ * getOverrides no devuelve). Es lo que la pestaña Tiendas envía al servidor
+ * para convertirla en precio base real (/admin/store-pricing/import).
+ */
+export function rawOverrides() { return load(); }
+
 export function exportJSON() {
   const blob = new Blob([JSON.stringify(load(), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
