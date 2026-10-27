@@ -25,7 +25,9 @@ import {
 } from "./adminOrders.js";
 import { fetchOrderCost, marginTone } from "./adminCosting.js";
 import { fetchSellers } from "./adminSellers.js";
-import AdminShell, { TABS } from "./AdminShell.jsx";
+import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
+import StaffProfile from "./StaffProfile.jsx";
+import AuditLog from "./AuditLog.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
@@ -1142,31 +1144,35 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
  * dentro de Ejecutivo y de Costos y precios.
  */
 const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }] };
-function navFromUrl() {
+function navFromUrl(tabs) {
   const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const want = q.get("tab") || "";
   if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
   for (const k of ["sub", "order", "stage", "seller", "q"]) if (q.get(k)) params[k] = q.get(k);
-  return { tab: TABS.includes(want) ? want : "exec", params, n: 0 };
+  return { tab: tabs.includes(want) ? want : tabs[0], params, n: 0 };
 }
 
-export default function AdminDashboard({ user, onLogout }) {
+export default function AdminDashboard({ user, onLogout, me = null }) {
   const { t } = useLang();
+  const groups = navGroupsFor(me);
+  const tabs = tabsOf(groups);
+  const restricted = me?.is_admin === false;
   // `nav.n` cambia en cada salto para que la pantalla destino se monte con los
   // parámetros nuevos (p. ej. Pedidos filtrado por etapa desde el Ejecutivo).
-  const [nav, setNav] = useState(navFromUrl);
+  const [nav, setNav] = useState(() => navFromUrl(tabs));
   const [preset, setPreset] = useState("30d");
   const [find, setFind] = useState("");
   const [sellers, setSellers] = useState([]);
   const demo = isDemoLogin();
   useEffect(() => { if (demo) ensureSeed(); }, [demo]);
-  const loadSellers = () => { if (demo) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
+  const loadSellers = () => { if (demo || restricted) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
   useEffect(loadSellers, [demo]);
 
   /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
   const go = (tab, params = {}) => {
-    const target = LEGACY_TABS[tab] ? LEGACY_TABS[tab][0] : tab;
+    const wanted = LEGACY_TABS[tab] ? LEGACY_TABS[tab][0] : tab;
+    const target = tabs.includes(wanted) ? wanted : tabs[0];
     const p = LEGACY_TABS[tab] ? { ...LEGACY_TABS[tab][1], ...params } : params;
     setNav((n) => ({ tab: target, params: p, n: n.n + 1 }));
     if (typeof window !== "undefined") {
@@ -1178,12 +1184,13 @@ export default function AdminDashboard({ user, onLogout }) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
-  const tab = nav.tab;
+  // El rol llega después del primer pintado: una pestaña que ya no le toca cae en la primera suya.
+  const tab = tabs.includes(nav.tab) ? nav.tab : tabs[0];
   const onFind = (v) => { setFind(v); if (v && tab !== "costs") go("costs", { sub: "prices" }); };
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={find} onFind={onFind}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups}>
       {tab === "exec" && (
         <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
           views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />
@@ -1200,6 +1207,13 @@ export default function AdminDashboard({ user, onLogout }) {
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
+      {tab === "audit" && <AuditLog />}
+      {tab === "profile" && (
+        <div className="adm-section">
+          <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>
+          <div className="adm-card"><StaffProfile mode="self" /></div>
+        </div>
+      )}
       <p className="muted adm-foot">{t("adm.footer", { name: TENANT.name })}</p>
     </AdminShell>
   );

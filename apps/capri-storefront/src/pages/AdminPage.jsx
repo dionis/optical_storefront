@@ -153,8 +153,9 @@ export default function AdminPage() {
   if (mustChange === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
   if (mustChange) return <FirstPasswordGate onDone={() => setMustChange(false)} />;
   // `is_admin` ausente = backend anterior a los roles: se comporta como antes.
-  if (me && me.is_admin === false) return <RestrictedHome role={me.role} onLogout={signOut} />;
+  // Sin rol activo no hay nada que ver; con rol, el panel muestra solo sus pestañas.
+  if (me && me.is_admin === false && !me.role) return <RestrictedHome role={me.role} onLogout={signOut} />;
   // El armazón (barra lateral, barra superior, idioma, sesión) vive en
   // AdminShell, montado por AdminDashboard; aquí solo se decide si hay sesión.
-  return <AdminDashboard user={session.user} onLogout={signOut} />;
+  return <AdminDashboard user={session.user} onLogout={signOut} me={me} />;
 }

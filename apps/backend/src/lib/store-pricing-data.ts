@@ -1,6 +1,7 @@
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
+import { recordAudit } from "./audit";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import type { PriceRuleLike, RuleMode, RuleScope } from "./store-pricing";
 
@@ -78,6 +79,17 @@ export async function replaceRule(
   if (open.length) {
     await service.updatePriceRules(open.map((r) => ({ id: r.id, valid_to: now, closed_by: actorId })) as never);
   }
+  // Every price change is in the audit log (HU-15, HU-72) as well as in the
+  // rule history itself, so "who changed what" has one place to look.
+  await recordAudit(container, {
+    actorId,
+    action: "price.change",
+    entity: "price_rule",
+    entityId: key.target,
+    establishmentId: key.establishmentId,
+    before: open.length ? { scope: key.scope, rules: open.map((r) => ({ mode: r.mode, value: Number(r.value) })) } : null,
+    after: next ? { scope: key.scope, mode: next.mode, value: next.value } : null,
+  });
   if (next) {
     await service.createPriceRules({
       establishment_id: key.establishmentId,

@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { planOwnerPriceImport, type OwnerPriceList } from "../../../../lib/price-import";
+import { recordAudit } from "../../../../lib/audit";
 import { applyImportPlan, loadImportContext } from "../../../../lib/price-import-data";
 
 /**
@@ -36,6 +37,12 @@ export async function POST(
 
   const actorId = req.auth_context?.actor_id ?? null;
   const result = await applyImportPlan(req.scope, plan, actorId);
+  await recordAudit(req.scope, {
+    actorId,
+    action: "price.import",
+    entity: "price_list",
+    after: { products: result.products, variants: result.variants, lens_cells: result.lens_cells },
+  });
   req.scope
     .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
     .info(

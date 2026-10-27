@@ -132,6 +132,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/team\/me$/ },
   { method: "POST", path: /^\/admin\/team\/password$/ },
   { method: "GET", path: /^\/admin\/users\/me$/ },
+  { method: "GET", path: /^\/admin\/team\/me\/profile$/ },
+  { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
   { method: "GET", path: /^\/admin\/pos\/(context|products|sales)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales)$/ },
 ];

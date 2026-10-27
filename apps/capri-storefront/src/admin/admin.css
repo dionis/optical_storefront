@@ -794,3 +794,23 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .alloc-groups .adm-chip i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
 .alloc-groups .adm-chip em { font-style: normal; color: var(--adm-faint); }
 .alloc-neg { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 800; color: #fff; background: var(--adm-red); border-radius: 999px; padding: 1px 7px; }
+
+/* ── Perfil del vendedor y auditoría ───────────────────────────────────── */
+.adm-team-item { border-bottom: 1px solid var(--adm-line-2); }
+.adm-team-item .adm-team-row { border-bottom: 0; }
+.adm-team-tag.code { background: #fff4d6; color: #7a5600; font-family: ui-monospace, monospace; }
+.adm-team-profile { padding: 4px 6px 14px 52px; }
+.adm-profile { display: grid; gap: 14px; }
+.adm-profile-group { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 14px 12px; margin: 0; min-width: 0; }
+.adm-profile-group legend { font-weight: 800; font-size: 12.5px; padding: 0 6px; color: var(--adm-navy); }
+.adm-profile-group[disabled] input, .adm-profile-group[disabled] select, .adm-profile-group[disabled] textarea { background: #f6f7fa; color: #59627a; }
+.adm-profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; }
+.adm-profile-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.adm-profile-grid label span { font-weight: 700; color: #4a5470; }
+.adm-profile-grid label.bad input { border-color: #c0392b; }
+.adm-profile-grid input, .adm-profile-grid select, .adm-profile-group textarea { width: 100%; box-sizing: border-box; }
+.adm-profile-privs { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
+.adm-profile-privs label { display: inline-flex; gap: 6px; align-items: center; }
+.adm-profile-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.adm-audit-val { font-size: 11.5px; white-space: normal; word-break: break-word; background: transparent; }
+@media (max-width: 768px) { .adm-team-profile { padding-left: 6px; } }

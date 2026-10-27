@@ -6,3 +6,4 @@
  * src/modules/store-settings/models/index.ts.
  */
 export * from "./staff-assignment";
+export * from "./staff-profile";

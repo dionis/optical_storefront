@@ -308,5 +308,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/pos",
     },
+    // Registro de auditoría: solo inserción (precios, roles, descuentos, anulaciones…). Nunca se purga.
+    {
+      resolve: "./src/modules/audit",
+    },
   ],
 });

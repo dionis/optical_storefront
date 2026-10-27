@@ -7,6 +7,7 @@ import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
 import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
+import StaffProfile from "./StaffProfile.jsx";
 
 const isAdminRole = (role) => role === "owner" || role === "superadmin";
 
@@ -81,6 +82,8 @@ export default function Team() {
   const canEditRole = (m) => !m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin");
 
   const [stores, setStoreList] = useState([]);
+  // Persona cuyo perfil está abierto bajo su fila.
+  const [openProfile, setOpenProfile] = useState(null);
 
   const load = () => {
     if (demo) return;
@@ -175,12 +178,14 @@ export default function Team() {
         {state === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
         <div className="adm-team-rows">
           {team.map((m) => (
-            <div key={m.id} className={`adm-team-row ${m.is_super ? "super" : ""}`}>
+            <div key={m.id} className="adm-team-item">
+            <div className={`adm-team-row ${m.is_super ? "super" : ""}`}>
               <span className="adm-team-avatar">{(m.first_name || m.email)[0].toUpperCase()}</span>
               <span className="adm-team-main">
                 <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email}</b>
                 <small className="muted">{m.email} · {shortDate(m.created_at, lang)}</small>
               </span>
+              {m.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{m.seller_code}</span>}
               {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
@@ -202,6 +207,17 @@ export default function Team() {
                   {t("adm.team.delete")}
                 </button>
               )}
+              {!demo && (
+                <button className="btn-xs" aria-expanded={openProfile === m.id} onClick={() => setOpenProfile((o) => (o === m.id ? null : m.id))}>
+                  <Icon name="user" size={12} /> {t("adm.team.profile")}
+                </button>
+              )}
+            </div>
+            {openProfile === m.id && (
+              <div className="adm-team-profile">
+                <StaffProfile mode="admin" userId={m.id} onSaved={(p) => setTeam((list) => list.map((x) => (x.id === m.id ? { ...x, seller_code: p.seller_code ?? null } : x)))} />
+              </div>
+            )}
             </div>
           ))}
           {state === "ok" && team.length === 0 && <div className="adm-nodata">{t("adm.chart.noData")}</div>}

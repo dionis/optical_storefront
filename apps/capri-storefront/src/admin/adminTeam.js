@@ -74,3 +74,39 @@ export async function changeOwnPassword({ currentPassword, newPassword }) {
     throw new Error(reasonKey(e, "adm.err.team.passwordFailed"));
   }
 }
+
+// ── Perfil del vendedor ─────────────────────────────────────────────────────
+// Errores como claves adm.err.profile.<reason>; el campo culpable viaja aparte.
+const profileErr = (e, fallback) => {
+  const r = (e && e.reason) || (e && e.payload && e.payload.reason);
+  const err = new Error(r ? `adm.err.profile.${r}` : fallback);
+  err.field = (e && e.payload && e.payload.field) || null;
+  return err;
+};
+
+/** Privilegios que el dueño concede persona a persona (aprobar descuentos no se delega). */
+export const PRIVILEGES = ["costs.manage", "costs.view", "payments.manage", "sale.void", "catalog.edit"];
+
+export async function fetchProfile(id) {
+  return adminFetch(`/admin/team/${encodeURIComponent(id)}/profile`);
+}
+
+export async function saveProfile(id, patch) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/profile`, { method: "POST", body: patch });
+  } catch (e) {
+    throw profileErr(e, "adm.err.profile.saveFailed");
+  }
+}
+
+export async function fetchMyProfile() {
+  return adminFetch("/admin/team/me/profile");
+}
+
+export async function saveMyProfile(patch) {
+  try {
+    return await adminFetch("/admin/team/me/profile", { method: "POST", body: patch });
+  } catch (e) {
+    throw profileErr(e, "adm.err.profile.saveFailed");
+  }
+}

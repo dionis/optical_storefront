@@ -1,5 +1,5 @@
 import { MedusaService } from "@medusajs/framework/utils";
-import { StaffAssignment } from "./models/index";
+import { StaffAssignment, StaffProfile } from "./models/index";
 
 /**
  * CRUD only — role resolution and the rules around it live in
@@ -7,4 +7,5 @@ import { StaffAssignment } from "./models/index";
  */
 export default class StaffModuleService extends MedusaService({
   StaffAssignment,
+  StaffProfile,
 }) {}

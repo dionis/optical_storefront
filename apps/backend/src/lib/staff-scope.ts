@@ -2,6 +2,8 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { STAFF_MODULE } from "../modules/staff";
+import { recordAudit } from "./audit";
+import { profilesByUser } from "./staff-profile-data";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
@@ -21,6 +23,10 @@ export interface StaffScope extends ResolvedRole {
   user_id: string;
   is_owner: boolean;
   is_admin: boolean;
+  /** Extra privileges granted to the person (staff_profile); admins hold them all implicitly (lib/staff-profile.ts hasPrivilege). */
+  privileges: string[];
+  /** Code printed on receipts and lab tickets instead of the person's name or email. */
+  seller_code: string | null;
 }
 
 const TTL_MS = 30_000;
@@ -79,6 +85,9 @@ export async function writeStaffAssignment(
     discount_limit_pct: limits.length ? Math.max(...limits) : null,
     can_void: current.some((r) => Boolean(r.can_void)),
   };
+  const live = current.filter((r) => r.is_active);
+  const beforeRole = live[0]?.role ?? null;
+  const beforeStores = live.some((r) => !r.establishment_id) ? null : live.map((r) => r.establishment_id as string).sort();
   if (current.length) await staff.softDeleteStaffAssignments(current.map((r) => r.id));
   await staff.createStaffAssignments(
     assignmentRowsFor(input.role, input.establishmentIds).map((row) => ({
@@ -89,16 +98,27 @@ export async function writeStaffAssignment(
     }))
   );
   invalidateStaffScope(input.userId);
+  const afterStores = input.establishmentIds?.length ? [...new Set(input.establishmentIds)].sort() : null;
+  await recordAudit(container, {
+    actorId: input.actorId,
+    action: beforeRole !== input.role ? "role.change" : "stores.change",
+    entity: "user",
+    entityId: input.userId,
+    before: { role: beforeRole, establishment_ids: beforeStores },
+    after: { role: input.role, establishment_ids: afterStores },
+  });
 }
 
 export async function getStaffScope(container: MedusaContainer, userId: string): Promise<StaffScope> {
   const hit = cache.get(userId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.scope;
 
-  const [ownerId, byUser] = await Promise.all([
+  const [ownerId, byUser, profiles] = await Promise.all([
     ownerUserId(container),
     assignmentsByUser(container, [userId]),
+    profilesByUser(container, [userId]),
   ]);
+  const profile = profiles.get(userId);
   const isOwner = ownerId === userId;
   const resolved = resolveRole({ isOwner, assignments: byUser.get(userId) ?? [] });
   const scope: StaffScope = {
@@ -106,6 +126,8 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
     user_id: userId,
     is_owner: isOwner,
     is_admin: isAdminRole(resolved.role),
+    privileges: profile?.privileges ?? [],
+    seller_code: profile?.seller_code ?? null,
   };
   cache.set(userId, { at: Date.now(), scope });
   return scope;

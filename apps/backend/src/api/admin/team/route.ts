@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
+import { profilesByUser } from "../../../lib/staff-profile-data";
 import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
 
 /**
@@ -36,12 +37,18 @@ export interface TeamMember {
   role_legacy: boolean;
   /** Tiendas donde trabaja; null = todas. */
   establishment_ids: string[] | null;
+  /** Código de recibos y fichas (perfil); null si aún no tiene. */
+  seller_code: string | null;
+  display_name: string | null;
 }
 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  const byUser = await assignmentsByUser(req.scope, all.map((u) => u.id));
+  const [byUser, profiles] = await Promise.all([
+    assignmentsByUser(req.scope, all.map((u) => u.id)),
+    profilesByUser(req.scope, all.map((u) => u.id)),
+  ]);
   return all.map((u, i) => {
     // El más antiguo es el dueño (super admin) del sistema.
     const resolved = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] });
@@ -56,6 +63,8 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
       role: resolved.role,
       role_legacy: resolved.legacy,
       establishment_ids: resolved.establishment_ids,
+      seller_code: profiles.get(u.id)?.seller_code ?? null,
+      display_name: profiles.get(u.id)?.display_name ?? null,
     };
   });
 }

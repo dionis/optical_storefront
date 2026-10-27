@@ -22,10 +22,27 @@ export const NAV_GROUPS = [
   ] },
   { key: "admin", items: [
     { key: "team", icon: "team" },
+    { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
   ] },
 ];
-export const TABS = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.key));
+
+/** Lo de cada persona, sea cual sea su rol. */
+const WORK_GROUP = { key: "work", items: [
+  { key: "profile", icon: "user" },
+] };
+
+/**
+ * Pestañas según el rol (GET /admin/team/me). Dueño y superadmin ven todo; los
+ * demás roles, solo su trabajo. Ocultar es comodidad: el servidor rechaza igual
+ * cualquier ruta fuera de su alcance (lib/staff-guard.ts).
+ */
+export function navGroupsFor(me) {
+  if (!me || me.is_admin !== false) return [...NAV_GROUPS, WORK_GROUP];
+  return [WORK_GROUP];
+}
+export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
+export const TABS = tabsOf(navGroupsFor(null));
 
 const NAV_KEY = "adm_nav_collapsed";
 const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"; } catch { return false; } };
@@ -34,7 +51,7 @@ const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"
  * El cajón móvil se cierra solo al elegir sección, al pulsar Escape o al tocar
  * el fondo; en escritorio la barra recuerda si estaba contraída.
  */
-export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, children }) {
+export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, groups = navGroupsFor(null), children }) {
   const { t, lang, toggle } = useLang();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
@@ -62,7 +79,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
 
   const nav = (
     <nav className="adm-nav" aria-label={t("adm.nav.aria")}>
-      {NAV_GROUPS.map((g) => (
+      {groups.map((g) => (
         <div className="adm-nav-group" key={g.key}>
           <div className="adm-nav-gh">{t(`adm.nav.g.${g.key}`)}</div>
           {g.items.map((it) => {
@@ -126,11 +143,11 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             <span className="adm-top-sec">{t(`adm.tab.${tab}`)}</span>
             <em className="adm-badge">ADMIN</em>
           </div>
-          <label className="adm-find" title={t("adm.findPriceTitle")}>
+          {find !== null && <label className="adm-find" title={t("adm.findPriceTitle")}>
             <Icon name="search" size={16} />
             <input ref={findRef} placeholder={t("adm.findPrice")} value={find} onChange={(e) => onFind(e.target.value)} />
             {find ? <button type="button" className="adm-find-x" onClick={() => onFind("")} aria-label={t("adm.ord.clear")}><Icon name="close" size={13} /></button> : <kbd>/</kbd>}
-          </label>
+          </label>}
           <div className="adm-top-right">
             <button type="button" className="adm-icobtn" onClick={toggle} title={t("lang.switch")}>
               <Icon name="globe" size={17} /><span>{lang === "es" ? "EN" : "ES"}</span>
