@@ -250,11 +250,17 @@ export default async function orderPlacedSubscriber({
   }
 
   const orderMetadata = (order.metadata ?? {}) as Record<string, unknown>;
+  // A point-of-sale order gets the store's receipt instead (sale number, what
+  // was paid, the balance, the tray), sent by the sale itself once that number
+  // exists — lib/pos-documents.ts. The web confirmation would promise shipping
+  // and show none of that.
+  const fromTill = orderMetadata["source"] === "pos";
   const wantsEmail =
-    orderMetadata["notify_email"] === undefined ||
+    !fromTill &&
+    (orderMetadata["notify_email"] === undefined ||
     orderMetadata["notify_email"] === null ||
     orderMetadata["notify_email"] === true ||
-    orderMetadata["notify_email"] === "true";
+    orderMetadata["notify_email"] === "true");
 
   if (order.email && wantsEmail) {
     try {

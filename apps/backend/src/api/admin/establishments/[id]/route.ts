@@ -1,10 +1,10 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ESTABLISHMENT_MODULE } from "../../../../modules/establishment";
 import type EstablishmentModuleService from "../../../../modules/establishment/service";
-import { cleanText, listEstablishments } from "../../../../lib/establishments";
+import { cleanText, listEstablishments, STORE_KINDS } from "../../../../lib/establishments";
 
 /**
- * POST /admin/establishments/:id { name?, address?, phone?, is_active? }
+ * POST /admin/establishments/:id { name?, address?, phone?, kind?, receipt_note?, is_active? }
  *
  * Edita una tienda. El código no se cambia nunca (está impreso en recibos y
  * fichas). No hay DELETE: una tienda con historial solo se desactiva (HU-01).
@@ -13,6 +13,8 @@ interface UpdateBody {
   name?: string;
   address?: string | null;
   phone?: string | null;
+  kind?: string;
+  receipt_note?: string | null;
   is_active?: boolean;
 }
 
@@ -38,6 +40,14 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
   }
   if ("address" in body) patch.address = cleanText(body.address, 160);
   if ("phone" in body) patch.phone = cleanText(body.phone, 40);
+  if ("kind" in body) {
+    if (!(STORE_KINDS as readonly string[]).includes(String(body.kind))) {
+      res.status(422).json({ type: "invalid_data", reason: "bad_kind", message: "Unknown store kind." });
+      return;
+    }
+    patch.kind = body.kind;
+  }
+  if ("receipt_note" in body) patch.receipt_note = cleanText(body.receipt_note, 600);
   if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
 
   await svc.updateEstablishments(patch as never);

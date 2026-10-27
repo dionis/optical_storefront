@@ -107,11 +107,15 @@ export default function Stores() {
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+                  <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+                    {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
+                  </select>
+                  <textarea className="adm-input" rows={3} maxLength={600} aria-label={t("adm.stores.receiptNote")} placeholder={t("adm.stores.receiptNote")} value={draft.receipt_note} onChange={(e) => setDraft({ ...draft, receipt_note: e.target.value })} />
                 </span>
               ) : (
                 <span className="adm-team-main">
                   <b>{s.name}</b>
-                  <small className="muted">{[s.address, s.phone, shortDate(s.created_at, lang)].filter(Boolean).join(" · ")}</small>
+                  <small className="muted">{[t(`adm.stores.kind.${s.kind || "own"}`), s.address, s.phone, shortDate(s.created_at, lang)].filter(Boolean).join(" · ")}</small>
                 </span>
               )}
               {!s.is_active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.stores.inactive")}</span>}
@@ -123,7 +127,7 @@ export default function Stores() {
               ) : (
                 <>
                   <button className="btn-xs primary" disabled={demo} onClick={() => setPricingId(pricingId === s.id ? null : s.id)}>{t("adm.stores.prices")}</button>
-                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "" }); }}>{t("adm.stores.edit")}</button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "" }); }}>{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}

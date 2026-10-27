@@ -814,3 +814,121 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .adm-profile-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .adm-audit-val { font-size: 11.5px; white-space: normal; word-break: break-word; background: transparent; }
 @media (max-width: 768px) { .adm-team-profile { padding-left: 6px; } }
+
+/* ── Punto de venta (caja, ventas, aprobaciones, configuración) ──────────── */
+.pos .pos-head { flex-wrap: wrap; gap: 10px; }
+.pos-where { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pos-where select { min-height: 40px; }
+.pos-steps { list-style: none; display: flex; gap: 6px; padding: 0; margin: 0 0 12px; overflow-x: auto; scrollbar-width: thin; }
+.pos-steps li button { border: 1px solid var(--adm-line-2); background: #fff; border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 700; white-space: nowrap; color: #4a5470; cursor: pointer; }
+.pos-steps li.on button { background: var(--adm-navy); color: #fff; border-color: var(--adm-navy); }
+.pos-steps li.ok button { background: #eaf6ee; color: #1e6b3a; border-color: #bfe3cb; }
+.pos-steps li button:disabled { opacity: .55; cursor: default; }
+.pos-card { display: grid; gap: 14px; }
+.pos-card h3 { margin: 4px 0 0; font-size: 15px; }
+.pos-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 0 12px; background: #fff; }
+.pos-search input { border: 0; outline: none; flex: 1; min-height: 46px; font-size: 16px; background: transparent; }
+.pos-hits { list-style: none; margin: 0; padding: 0; border: 1px solid var(--adm-line-2); border-radius: 10px; max-height: 340px; overflow-y: auto; }
+.pos-hits li + li { border-top: 1px solid var(--adm-line-2); }
+.pos-hits button { width: 100%; text-align: left; background: none; border: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.pos-hits button:hover { background: #f5f8fe; }
+.pos-prod { display: flex; gap: 10px; padding: 8px 10px; align-items: flex-start; }
+.pos-prod img, .pos-noimg { width: 64px; height: 44px; object-fit: contain; border-radius: 6px; background: #f4f6fa; flex: 0 0 auto; display: grid; place-items: center; }
+.pos-prod-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pos-variants { display: flex; flex-wrap: wrap; gap: 6px; }
+.pos-picked { display: inline-flex; align-items: center; gap: 8px; background: var(--adm-blue-soft, #e8f0fd); color: #1c4f9c; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; }
+.pos-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; }
+.pos-form label, .pos-lens label, .pos-inline, .pos-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #4a5470; }
+.pos-form input, .pos-form select, .pos-lens select, .pos-row input, .pos-inline input { min-height: 42px; font-size: 15px; width: 100%; box-sizing: border-box; }
+.pos-address summary { cursor: pointer; font-weight: 700; font-size: 13px; color: #1c4f9c; }
+.pos-address .pos-form { margin-top: 10px; }
+.pos-wears { border: 1px solid var(--adm-line-2); border-radius: 10px; display: flex; gap: 18px; padding: 8px 14px; margin: 0; }
+.pos-wears legend { font-weight: 800; font-size: 13px; padding: 0 6px; }
+.pos-wears label, .pos-check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.pos-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pos-lines li { display: flex; align-items: center; gap: 10px; border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 8px 10px; }
+.pos-lines li span { flex: 1; min-width: 0; }
+.pos-own { display: grid; gap: 10px; border: 1px dashed var(--adm-line-2); border-radius: 10px; padding: 12px; }
+.pos-own-img { max-width: 220px; border-radius: 8px; }
+.pos-file { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 13px; background: #fff; width: fit-content; }
+.pos-file input { display: none; }
+.pos-rx-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pos-rx { display: grid; gap: 10px; }
+.pos-rx-grid { border-collapse: collapse; width: 100%; max-width: 640px; }
+.pos-rx-grid th { font-size: 11.5px; color: #4a5470; padding: 4px; text-align: center; }
+.pos-rx-grid td { padding: 3px; }
+.pos-rx-grid input { width: 100%; min-width: 52px; min-height: 42px; text-align: center; font-size: 15px; box-sizing: border-box; }
+.pos-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.pos-row label { flex: 1 1 160px; }
+.pos-ocr { background: #fff7e0; border: 1px solid #f0d58a; border-radius: 8px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13.5px; }
+.pos-history summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+.pos-history ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.pos-change { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; }
+.pos-change.warn { border-color: #f0b3a8; background: #fff6f4; }
+.pos-change table { border-collapse: collapse; }
+.pos-change th, .pos-change td { padding: 3px 8px; text-align: center; }
+.pos-change tr.sig td { color: #b03a2e; font-weight: 800; }
+.pos-lens-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.pos-lens-lines > li { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.pos-lens { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
+.pos-quote tr.warn td { background: #fff6f4; }
+.pos-flag { color: #b03a2e; font-weight: 800; }
+.pos-discount { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.pos-discount label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; }
+.pos-discount input { width: 120px; min-height: 42px; font-size: 16px; }
+.pos-totals { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; margin: 0; font-size: 14px; max-width: 420px; }
+.pos-totals dt { color: #4a5470; }
+.pos-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.pos-totals .big { font-size: 17px; font-weight: 800; color: var(--adm-navy); }
+.pos-totals .neg { color: #b03a2e; }
+.pos-approval { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #f5f8fe; border: 1px solid #cfdcf3; border-radius: 10px; padding: 10px 12px; }
+.pos-approval input { flex: 1 1 200px; min-height: 40px; }
+.pos-appr { font-weight: 800; font-size: 12.5px; border-radius: 999px; padding: 4px 10px; background: #eef1f6; }
+.pos-appr.pending { background: #fff4d6; color: #7a5600; }
+.pos-appr.approved, .pos-appr.used { background: #eaf6ee; color: #1e6b3a; }
+.pos-appr.rejected, .pos-appr.expired { background: #fdecea; color: #b03a2e; }
+.pos-pay { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 8px 10px; }
+.pos-pay select, .pos-pay input { min-height: 42px; font-size: 15px; }
+.pos-pay input { width: 150px; }
+.pos-change-due { font-weight: 800; color: #1e6b3a; }
+.pos-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; position: sticky; bottom: 0; background: linear-gradient(transparent, #f3f5f9 30%); padding: 12px 0 6px; }
+.pos-nav .btn-sm { min-height: 46px; padding: 0 18px; font-size: 15px; }
+.pos-nav .big { flex: 1; max-width: 420px; }
+.pos-done { display: grid; gap: 12px; justify-items: start; }
+.pos-done > svg { color: #1e6b3a; }
+.pos-docs { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-docs.compact .btn-sm { padding: 6px 10px; font-size: 12.5px; }
+.pos-foot { font-size: 11.5px; margin-top: 6px; }
+.pos-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pos-filters select, .pos-filters input { min-height: 40px; }
+.pos-cust-filter { position: relative; }
+.pos-cust-filter .pos-hits { position: absolute; z-index: 20; background: #fff; min-width: 260px; }
+.pos-detail { display: grid; gap: 12px; padding: 6px 4px 12px; }
+.pos-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pos-void { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pos-void input { flex: 1 1 220px; min-height: 40px; }
+.pos-due { color: #b03a2e; }
+.pos-approvals { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.pos-appr-card { display: grid; gap: 8px; }
+.pos-appr-card.focus { outline: 3px solid var(--adm-gold, #b8921e); }
+.pos-appr-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.pos-appr-big { font-size: 32px; font-weight: 900; color: var(--adm-navy); }
+.pos-appr-lines { margin: 0; padding-left: 18px; font-size: 13px; }
+.pos-appr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pos-appr-actions input { flex: 1 1 100%; min-height: 40px; }
+.pos-appr-actions .btn-sm { flex: 1; min-height: 44px; }
+.pos-cfg-store { border-top: 1px solid var(--adm-line-2); padding: 10px 0; display: grid; gap: 8px; }
+.pos-cfg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pos-cfg-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pos-cfg-list label { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.pos-cfg-stores { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-cfg-stores label { display: inline-flex; gap: 4px; align-items: center; font-size: 12.5px; }
+.pos-fee input { width: 70px; margin-right: 4px; }
+.pos-cfg-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; border-top: 1px solid var(--adm-line-2); padding-top: 12px; }
+.pos-cfg-add h4 { flex: 1 1 100%; margin: 0; }
+.pos-cfg-fields { flex: 1 1 100%; display: grid; gap: 6px; }
+@media (max-width: 640px) {
+  .pos-rx-grid input { min-width: 0; font-size: 14px; }
+  .pos-pay input { width: 100%; flex: 1 1 140px; }
+  .pos-nav .big { max-width: none; }
+}

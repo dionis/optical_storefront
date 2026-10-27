@@ -7,7 +7,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import { money, shortDate } from "./adminOrders.js";
-import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, previewStorePrices } from "./adminStores.js";
+import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices } from "./adminStores.js";
 import Icon from "./icons.jsx";
 
 /** Lentes de ejemplo para la vista previa: un monofocal típico. */
@@ -29,6 +29,8 @@ export default function StorePricing({ store, onClose }) {
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState(null); // { id, name, isCase }
   const [exactPrice, setExactPrice] = useState("");
+  const [floor, setFloor] = useState("");
+  const [minPrice, setMinPrice] = useState("");
   const [preview, setPreview] = useState(null);
   const fmt = (v) => (v == null ? "—" : money(v, "usd", lang));
 
@@ -38,6 +40,7 @@ export default function StorePricing({ store, onClose }) {
       .then((r) => {
         setData(r);
         setAdj(r.adjustment ? { mode: r.adjustment.mode, value: String(r.adjustment.value) } : { mode: "none", value: "" });
+        setFloor(r.minimum_floor_pct == null ? "" : String(r.minimum_floor_pct));
         setState("ok");
       })
       .catch(() => setState("error"));
@@ -95,6 +98,17 @@ export default function StorePricing({ store, onClose }) {
 
   const removeExact = (row) =>
     run(() => setStoreExactPrice(store.id, { scope: row.scope, productId: row.target, price: null }), t("adm.pricing.exactRemoved", { name: row.product_title || row.target }));
+
+  const saveFloor = (e) => {
+    e.preventDefault();
+    run(() => setStoreMinimum(store.id, { scope: "all", value: floor === "" ? null : Number(floor) }), t("adm.pricing.minSaved"));
+  };
+  const saveMin = async () => {
+    if (!picked) return;
+    const ok = await run(() => setStoreMinimum(store.id, { scope: picked.isCase ? "case" : "frame", productId: picked.id, value: Number(minPrice) }), t("adm.pricing.minSaved"));
+    if (ok) setMinPrice("");
+  };
+  const removeMin = (row) => run(() => setStoreMinimum(store.id, { scope: row.scope, productId: row.target, value: null }), t("adm.pricing.minRemoved"));
 
   const adjText = (a) => !a ? t("adm.pricing.mode.none")
     : a.mode === "percent" ? t("adm.pricing.adjPercent", { v: a.value })
@@ -162,6 +176,11 @@ export default function StorePricing({ store, onClose }) {
                     placeholder={t("adm.pricing.exactPrice")} value={exactPrice} onChange={(e) => setExactPrice(e.target.value)} />
                   <button className="btn-sm primary" disabled={busy}>{t("adm.pricing.save")}</button>
                 </div>
+                <div className="adm-pricing-row">
+                  <input className="adm-input" type="number" step="0.01" min="0" aria-label={t("adm.pricing.minPrice")}
+                    placeholder={t("adm.pricing.minPrice")} value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
+                  <button type="button" className="btn-sm" disabled={busy || minPrice === ""} onClick={saveMin}>{t("adm.pricing.minSave")}</button>
+                </div>
               </>
             )}
 
@@ -183,6 +202,32 @@ export default function StorePricing({ store, onClose }) {
             )}
           </form>
 
+          {/* Precio mínimo (HU-16) */}
+          <form className="adm-pricing-block" onSubmit={saveFloor}>
+            <h4>{t("adm.pricing.minTitle")}</h4>
+            <p className="adm-sub">{t("adm.pricing.minSub")}</p>
+            <div className="adm-pricing-row">
+              <input className="adm-input" type="number" step="1" min="0" max="100" aria-label={t("adm.pricing.floorPct")}
+                placeholder={t("adm.pricing.floorPct")} value={floor} onChange={(e) => setFloor(e.target.value)} />
+              <button className="btn-sm primary" disabled={busy}>{t("adm.pricing.save")}</button>
+            </div>
+            {data.minimums?.length > 0 && (
+              <table className="adm-table responsive" style={{ marginTop: 12 }}>
+                <thead><tr><th>{t("adm.pricing.colProduct")}</th><th>{t("adm.pricing.minPrice")}</th><th>{t("adm.pricing.colSince")}</th><th /></tr></thead>
+                <tbody>
+                  {data.minimums.map((r) => (
+                    <tr key={`min:${r.scope}:${r.target}`}>
+                      <td data-label={t("adm.pricing.colProduct")}>{r.product_title || r.target}</td>
+                      <td data-label={t("adm.pricing.minPrice")}><b>{fmt(r.price)}</b></td>
+                      <td data-label={t("adm.pricing.colSince")}>{shortDate(r.since, lang)}</td>
+                      <td><button type="button" className="btn-xs warn" disabled={busy} onClick={() => removeMin(r)}>{t("adm.pricing.remove")}</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </form>
+
           {/* Historial */}
           <details className="adm-pricing-block">
             <summary><h4 style={{ display: "inline" }}>{t("adm.pricing.historyTitle", { n: data.history.length })}</h4></summary>
@@ -190,7 +235,7 @@ export default function StorePricing({ store, onClose }) {
               {data.history.map((h) => (
                 <li key={h.id} className={h.valid_to ? "closed" : ""}>
                   <span>{shortDate(h.valid_from, lang)}</span>
-                  <span>{h.scope === "all" ? adjText({ mode: h.mode, value: h.value }) : t("adm.pricing.histExact", { v: fmt(h.value) })}</span>
+                  <span>{h.mode === "min" ? (h.scope === "all" ? t("adm.pricing.histFloor", { v: h.value }) : t("adm.pricing.histMin", { v: fmt(h.value) })) : h.scope === "all" ? adjText({ mode: h.mode, value: h.value }) : t("adm.pricing.histExact", { v: fmt(h.value) })}</span>
                   <span className="muted">{h.valid_to ? t("adm.pricing.histUntil", { d: shortDate(h.valid_to, lang) }) : t("adm.pricing.histCurrent")}</span>
                 </li>
               ))}

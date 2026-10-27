@@ -22,7 +22,9 @@ import {
   type RxInput,
   type RxMeta,
 } from "../../../../lib/pos-data";
+import { emailReceipt } from "../../../../lib/pos-documents";
 import { ownSalesOnly, posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
+import { getSale } from "../../../../lib/pos-data";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
 
 /**
@@ -148,6 +150,17 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       notifyEmail: body.notify_email === true,
       idempotencyKey: key,
     });
-    res.json({ sale });
+    // The receipt by email when the customer wants it (HU-27). Best-effort: the
+    // sale is recorded; a failed mail can be resent from the sale.
+    let receipt_sent = false;
+    if (body.notify_email === true && !sale.replayed) {
+      try {
+        const row = await getSale(req.scope, sale.id);
+        if (row) receipt_sent = Boolean(await emailReceipt(req.scope, row));
+      } catch {
+        receipt_sent = false;
+      }
+    }
+    res.json({ sale, receipt_sent });
   });
 }

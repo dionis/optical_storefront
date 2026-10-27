@@ -48,6 +48,18 @@ export async function setStoreExactPrice(id, { scope = "frame", productId, price
   }
 }
 
+/**
+ * Precio mínimo (HU-16): scope "all" = suelo en % del precio de lista de cada
+ * renglón; "frame"/"case" + producto = importe mínimo de esa montura. null lo quita.
+ */
+export async function setStoreMinimum(id, { scope, productId = null, value }) {
+  try {
+    return await adminFetch(`/admin/store-pricing/${encodeURIComponent(id)}/minimum`, { method: "POST", body: { scope, target: productId, value } });
+  } catch (e) {
+    throw new Error(pricingKey(e, "adm.err.pricing.saveFailed"));
+  }
+}
+
 /** Plan (apply=false) o aplicación (apply=true) de la lista de precios del dueño. */
 export async function importOwnerPrices(prices, apply = false) {
   try {

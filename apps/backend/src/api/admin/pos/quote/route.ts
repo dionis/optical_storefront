@@ -1,5 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { cleanDiscountPct, cleanLines, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
+import { opticalChange } from "../../../../lib/optical-change";
+import { cleanDiscountPct, cleanLines, cleanRxMeta, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
 import { checkPrescriptions, PosError, quoteSale, rxContexts, type RxInput } from "../../../../lib/pos-data";
 import { posHandler, posScope, sellableStore } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
@@ -10,7 +11,8 @@ import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
  * Each line priced in the store, the discount applied and the total, plus
  * whether the discount needs the owner's or a superadmin's approval. With the
  * new prescription it also says whether the lab can make it for those lenses
- * and frames. The same calculation the sale repeats: the till shows it, the
+ * and frames, and with the one they wear, the optical change ("daño óptico",
+ * HU-122) for the screen. The same calculation the sale repeats: the till shows it, the
  * sale recomputes it (a client total is never trusted).
  */
 interface Body {
@@ -18,6 +20,7 @@ interface Body {
   lines?: PosLineInput[];
   discount_pct?: unknown;
   prescription?: RxInput | null;
+  worn?: RxInput | null;
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse): Promise<void> {
@@ -43,8 +46,19 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       }
     }
 
+    let optical_change = null;
+    if (body.worn?.rx?.od && body.worn.rx.os && body.prescription?.rx?.od && body.prescription.rx.os) {
+      const meta = cleanRxMeta(body.worn as never);
+      optical_change = opticalChange(
+        { od: body.worn.rx.od, os: body.worn.rx.os, rx_date: "reason" in meta ? null : meta.rx_date },
+        { od: body.prescription.rx.od, os: body.prescription.rx.os },
+        { thresholds: settings.optical_thresholds }
+      );
+    }
+
     res.json({
       quote,
+      optical_change,
       limit_pct: limitPct,
       needs_approval: discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum }),
       rx_check,

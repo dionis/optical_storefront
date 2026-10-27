@@ -31,6 +31,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       role: scope.role,
       is_admin: scope.is_admin,
       seller_code: scope.seller_code,
+      privileges: scope.privileges,
       stores,
       payment_methods: methods.filter((m) => m.is_active),
       discount_limit_pct: discountLimitFor(scope, settings.discount_limits),

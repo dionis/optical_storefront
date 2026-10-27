@@ -1,4 +1,5 @@
 import type { EmailLocale } from "./copy";
+import type { SaleDocument } from "../pos-documents";
 import { esc, shell, type RenderedEmail } from "./order-confirmation";
 
 /**
@@ -26,6 +27,31 @@ const COPY = {
     approval_cta: "Aprobar o rechazar",
     approval_expires: "La solicitud caduca a las 24 horas.",
     own_frame: "Montura propia del cliente",
+    receipt_subject: "Tu recibo {number} · {store}",
+    receipt_title: "Recibo de tu compra",
+    receipt_intro: "Gracias por tu compra en {store}. Este es tu recibo.",
+    receipt_sale: "Venta",
+    receipt_date: "Fecha",
+    receipt_served: "Le atendió",
+    receipt_customer: "Cliente",
+    receipt_discount: "Descuento {pct} %",
+    receipt_tax: "Impuesto de venta",
+    receipt_total: "Total",
+    receipt_paid_deposit: "Anticipo",
+    receipt_paid_balance: "Pago del saldo",
+    receipt_refund: "Devolución",
+    receipt_insurance: "Cubre el seguro",
+    receipt_balance: "Saldo al recoger",
+    receipt_promised: "Fecha estimada",
+    receipt_tray: "Bandeja",
+    receipt_track: "Ver el estado de tu pedido",
+    receipt_no_rx: "Por privacidad, este recibo no incluye los valores de tu receta. Si los necesitas, pídelos en la tienda.",
+    receipt_voided: "VENTA ANULADA",
+    method_debit: "Tarjeta de débito",
+    method_credit: "Tarjeta de crédito",
+    method_zelle: "Zelle",
+    method_cash: "Efectivo",
+    method_insurance: "Seguro médico",
   },
   en: {
     approval_subject: "ACTION: discount to approve · {store} · {pct}%",
@@ -45,6 +71,31 @@ const COPY = {
     approval_cta: "Approve or reject",
     approval_expires: "The request expires after 24 hours.",
     own_frame: "Patient's own frame",
+    receipt_subject: "Your receipt {number} · {store}",
+    receipt_title: "Your purchase receipt",
+    receipt_intro: "Thank you for your purchase at {store}. Here is your receipt.",
+    receipt_sale: "Sale",
+    receipt_date: "Date",
+    receipt_served: "Served by",
+    receipt_customer: "Customer",
+    receipt_discount: "Discount {pct}%",
+    receipt_tax: "Sales tax",
+    receipt_total: "Total",
+    receipt_paid_deposit: "Deposit",
+    receipt_paid_balance: "Balance payment",
+    receipt_refund: "Refund",
+    receipt_insurance: "Covered by insurance",
+    receipt_balance: "Balance due at pickup",
+    receipt_promised: "Estimated date",
+    receipt_tray: "Tray",
+    receipt_track: "Check your order status",
+    receipt_no_rx: "For your privacy, this receipt does not include your prescription values. Ask at the store if you need them.",
+    receipt_voided: "SALE VOIDED",
+    method_debit: "Debit card",
+    method_credit: "Credit card",
+    method_zelle: "Zelle",
+    method_cash: "Cash",
+    method_insurance: "Medical insurance",
   },
 } as const;
 
@@ -115,6 +166,86 @@ export function renderApprovalRequestEmail(d: ApprovalEmailData, locale: EmailLo
       `${posT(locale, "approval_reason")}: ${d.reason || posT(locale, "approval_none")}`,
       "",
       `${posT(locale, "approval_cta")}: ${d.link}`,
+    ].join("\n"),
+  };
+}
+
+const METHOD_KEYS: Record<string, Key> = {
+  debit: "method_debit",
+  credit: "method_credit",
+  zelle: "method_zelle",
+  cash: "method_cash",
+  insurance: "method_insurance",
+};
+
+/** The customer's receipt (HU-27, HU-102): no prescription, no insurance member data. */
+export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): RenderedEmail {
+  const storeLabel = `${doc.business.name} · ${doc.store.name}`;
+  const subject = posT(locale, "receipt_subject", { number: doc.sale.number, store: doc.store.name });
+  const intro = posT(locale, "receipt_intro", { store: storeLabel });
+  const when = new Date(doc.sale.created_at).toLocaleString(locale === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" });
+  const lbl = (b: { es: string; en: string } | null) => (b ? b[locale] : "");
+  const lines = (doc.lines ?? []).map((l) => {
+    const name = l.kind === "own_frame" ? `${posT(locale, "own_frame")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · ");
+    const lens = l.lens ? [lbl(l.lens.design), lbl(l.lens.material), lbl(l.lens.photo), lbl(l.lens.ar)].filter(Boolean).join(" · ") : "";
+    return { name, lens, price: l.unit_price };
+  });
+  const tot = doc.totals!;
+  const pays = (doc.payments ?? []).map((p) => {
+    const method = p.method ? p.method[locale] : METHOD_KEYS[p.method_code] ? posT(locale, METHOD_KEYS[p.method_code]) : p.method_code;
+    const kind: Key =
+      p.kind === "refund" ? "receipt_refund" : p.method_code === "insurance" ? "receipt_insurance" : p.kind === "balance" ? "receipt_paid_balance" : "receipt_paid_deposit";
+    return { label: `${posT(locale, kind)} (${method})`, amount: p.amount };
+  });
+  const itemRows = lines
+    .map(
+      (l) =>
+        `<tr><td style="padding:8px 0;border-bottom:1px solid #e7eaf0;font-size:14px"><b>${esc(l.name)}</b>${l.lens ? `<div style="color:#5b6472;font-size:12.5px">${esc(l.lens)}</div>` : ""}</td><td style="padding:8px 0;border-bottom:1px solid #e7eaf0;font-size:14px;text-align:right;white-space:nowrap">${esc(money(l.price, locale))}</td></tr>`
+    )
+    .join("");
+  const sum = (label: string, value: string, strong = false) =>
+    `<tr><td style="padding:5px 0;font-size:${strong ? 16 : 14}px;${strong ? "font-weight:800" : "color:#5b6472"}">${esc(label)}</td><td style="padding:5px 0;text-align:right;font-size:${strong ? 16 : 14}px;${strong ? "font-weight:800" : ""}">${esc(value)}</td></tr>`;
+  const inner = `
+    ${doc.sale.status === "voided" ? `<div style="padding:10px 14px;background:#fef2f2;color:#991b1b;font-weight:800;border-radius:6px;margin-bottom:12px">${esc(posT(locale, "receipt_voided"))}</div>` : ""}
+    <div style="font-size:15px;line-height:1.7;color:#374151">${esc(intro)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">
+      ${row(posT(locale, "receipt_sale"), doc.sale.number)}
+      ${row(posT(locale, "receipt_date"), when)}
+      ${doc.sale.seller_code ? row(posT(locale, "receipt_served"), `${doc.sale.seller_code}${doc.terminal.code ? ` · ${doc.terminal.code}` : ""}`) : ""}
+      ${doc.customer.name ? row(posT(locale, "receipt_customer"), doc.customer.name) : ""}
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">${itemRows}</table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px">
+      ${tot.discount > 0 ? sum(posT(locale, "receipt_discount", { pct: tot.discount_pct }), `−${money(tot.discount, locale)}`) : ""}
+      ${tot.tax > 0 ? sum(posT(locale, "receipt_tax"), money(tot.tax, locale)) : ""}
+      ${sum(posT(locale, "receipt_total"), money(tot.total, locale), true)}
+      ${pays.map((p) => sum(p.label, money(p.amount, locale))).join("")}
+      ${sum(posT(locale, "receipt_balance"), money(tot.balance, locale), true)}
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">
+      ${doc.sale.promised_on ? row(posT(locale, "receipt_promised"), doc.sale.promised_on) : ""}
+      ${doc.sale.tray ? row(posT(locale, "receipt_tray"), doc.sale.tray) : ""}
+    </table>
+    <div style="margin-top:22px;text-align:center"><a href="${esc(doc.tracking_url)}" style="display:inline-block;background:#0b2f66;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px">${esc(posT(locale, "receipt_track"))}</a></div>
+    ${doc.store.receipt_note ? `<div style="margin-top:20px;font-size:12px;color:#5b6472;line-height:1.6">${esc(doc.store.receipt_note)}</div>` : ""}
+    <div style="margin-top:12px;font-size:12px;color:#5b6472">${esc(posT(locale, "receipt_no_rx"))}</div>`;
+  return {
+    subject,
+    html: shell(posT(locale, "receipt_title"), intro, inner, locale),
+    text: [
+      intro,
+      "",
+      `${posT(locale, "receipt_sale")}: ${doc.sale.number}`,
+      `${posT(locale, "receipt_date")}: ${when}`,
+      ...lines.map((l) => `${l.name}${l.lens ? ` — ${l.lens}` : ""}: ${money(l.price, locale)}`),
+      ...(tot.discount > 0 ? [`${posT(locale, "receipt_discount", { pct: tot.discount_pct })}: −${money(tot.discount, locale)}`] : []),
+      `${posT(locale, "receipt_total")}: ${money(tot.total, locale)}`,
+      ...pays.map((p) => `${p.label}: ${money(p.amount, locale)}`),
+      `${posT(locale, "receipt_balance")}: ${money(tot.balance, locale)}`,
+      ...(doc.sale.promised_on ? [`${posT(locale, "receipt_promised")}: ${doc.sale.promised_on}`] : []),
+      "",
+      `${posT(locale, "receipt_track")}: ${doc.tracking_url}`,
+      ...(doc.store.receipt_note ? ["", doc.store.receipt_note] : []),
     ].join("\n"),
   };
 }

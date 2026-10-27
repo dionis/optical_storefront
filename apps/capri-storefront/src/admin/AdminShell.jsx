@@ -12,6 +12,7 @@ import Icon from "./icons.jsx";
 export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
+    { key: "approvals", icon: "hand" },
     { key: "stores", icon: "store" },
     { key: "orders", icon: "orders" },
     { key: "costs", icon: "costs" },
@@ -22,6 +23,7 @@ export const NAV_GROUPS = [
   ] },
   { key: "admin", items: [
     { key: "team", icon: "team" },
+    { key: "posconfig", icon: "settings" },
     { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
   ] },
@@ -29,6 +31,8 @@ export const NAV_GROUPS = [
 
 /** Lo de cada persona, sea cual sea su rol. */
 const WORK_GROUP = { key: "work", items: [
+  { key: "pos", icon: "dollar" },
+  { key: "possales", icon: "receipt" },
   { key: "profile", icon: "user" },
 ] };
 
@@ -38,8 +42,10 @@ const WORK_GROUP = { key: "work", items: [
  * cualquier ruta fuera de su alcance (lib/staff-guard.ts).
  */
 export function navGroupsFor(me) {
-  if (!me || me.is_admin !== false) return [...NAV_GROUPS, WORK_GROUP];
-  return [WORK_GROUP];
+  if (!me || me.is_admin !== false) return [WORK_GROUP, ...NAV_GROUPS];
+  // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
+  const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
+  return config ? [{ ...WORK_GROUP, items: [...WORK_GROUP.items, { key: "posconfig", icon: "settings" }] }] : [WORK_GROUP];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
 export const TABS = tabsOf(navGroupsFor(null));

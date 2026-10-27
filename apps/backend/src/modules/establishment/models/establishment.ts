@@ -23,6 +23,10 @@ export const Establishment = model.define("establishment", {
   address: model.text().nullable(),
   phone: model.text().nullable(),
   sales_channel_id: model.text().nullable(),
+  /** own | family | partner | consignment — for the settlement with the store. */
+  kind: model.enum(["own", "family", "partner", "consignment"]).default("own"),
+  /** Warranty and exchange policy printed on this store's receipts (HU-104). */
+  receipt_note: model.text().nullable(),
   is_active: model.boolean().default(true),
   created_by: model.text().nullable(),
   updated_by: model.text().nullable(),

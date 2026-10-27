@@ -158,6 +158,36 @@ async function call(path, { method = "GET", body, token, query } = {}) {
  * left for every caller to remember — otherwise the panel loops on failing
  * requests behind a shell that still looks logged in.
  */
+/**
+ * Authenticated multipart upload (a prescription photo for the OCR reader).
+ * No Content-Type header: the browser sets the multipart boundary itself.
+ */
+export async function adminUpload(path, formData) {
+  const session = getSession();
+  if (!session) throw new AdminApiError("adm.err.sessionExpired", { status: 401 });
+  let res;
+  try {
+    res = await fetch(new URL(`${ADMIN_API_URL}${path}`, ORIGIN || undefined).toString(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.token}` },
+      body: formData,
+    });
+  } catch {
+    throw new AdminApiError("adm.err.offline", { reason: "offline" });
+  }
+  let payload = null;
+  try { payload = await res.json(); } catch { payload = null; }
+  if (!res.ok) {
+    if (res.status === 401) clearSession();
+    throw new AdminApiError(payload?.message || `HTTP ${res.status}`, {
+      status: res.status,
+      reason: payload?.reason || payload?.error_code,
+      payload,
+    });
+  }
+  return payload;
+}
+
 export async function adminFetch(path, options = {}) {
   const session = getSession();
   if (!session) throw new AdminApiError("adm.err.sessionExpired", { status: 401 });

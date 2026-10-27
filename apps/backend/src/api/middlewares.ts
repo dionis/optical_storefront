@@ -306,6 +306,12 @@ export default defineMiddlewares({
       middlewares: [ocrRateLimit, ocrUpload],
     },
     {
+      // The same reader at the counter (point of sale), with the panel session.
+      matcher: "/admin/pos/prescriptions/ocr",
+      method: ["POST"],
+      middlewares: [ocrRateLimit, ocrUpload],
+    },
+    {
       // Review photos are ordinary public images — a much tighter allowlist
       // than the prescription upload, since there is no camera-format problem
       // to accommodate here and these are served to every visitor.

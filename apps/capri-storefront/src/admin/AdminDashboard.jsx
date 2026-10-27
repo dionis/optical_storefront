@@ -28,6 +28,10 @@ import { fetchSellers } from "./adminSellers.js";
 import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import StaffProfile from "./StaffProfile.jsx";
 import AuditLog from "./AuditLog.jsx";
+import PosSale from "./PosSale.jsx";
+import PosSales from "./PosSales.jsx";
+import PosApprovals from "./PosApprovals.jsx";
+import PosConfig from "./PosConfig.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
@@ -1149,8 +1153,9 @@ function navFromUrl(tabs) {
   const want = q.get("tab") || "";
   if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q"]) if (q.get(k)) params[k] = q.get(k);
-  return { tab: tabs.includes(want) ? want : tabs[0], params, n: 0 };
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval"]) if (q.get(k)) params[k] = q.get(k);
+  // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.
+  return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
 
 export default function AdminDashboard({ user, onLogout, me = null }) {
@@ -1185,7 +1190,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
     }
   };
   // El rol llega después del primer pintado: una pestaña que ya no le toca cae en la primera suya.
-  const tab = tabs.includes(nav.tab) ? nav.tab : tabs[0];
+  const tab = tabs.includes(nav.tab) ? nav.tab : tabs.includes("exec") ? "exec" : tabs[0];
   const onFind = (v) => { setFind(v); if (v && tab !== "costs") go("costs", { sub: "prices" }); };
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
@@ -1208,6 +1213,10 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
       {tab === "audit" && <AuditLog />}
+      {tab === "pos" && <PosSale me={me} />}
+      {tab === "possales" && <PosSales />}
+      {tab === "approvals" && <PosApprovals params={nav.params} />}
+      {tab === "posconfig" && <PosConfig />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

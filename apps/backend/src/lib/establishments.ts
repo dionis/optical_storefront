@@ -36,9 +36,13 @@ export interface EstablishmentRow {
   address: string | null;
   phone: string | null;
   sales_channel_id: string | null;
+  kind: string;
+  receipt_note: string | null;
   is_active: boolean;
   created_at: string;
 }
+
+export const STORE_KINDS = ["own", "family", "partner", "consignment"] as const;
 
 export async function listEstablishments(container: MedusaContainer): Promise<EstablishmentRow[]> {
   const svc = container.resolve<EstablishmentModuleService>(ESTABLISHMENT_MODULE);
@@ -50,6 +54,8 @@ export async function listEstablishments(container: MedusaContainer): Promise<Es
     address: r.address ?? null,
     phone: r.phone ?? null,
     sales_channel_id: r.sales_channel_id ?? null,
+    kind: String((r as { kind?: string }).kind ?? "own"),
+    receipt_note: (r as { receipt_note?: string | null }).receipt_note ?? null,
     is_active: Boolean(r.is_active),
     created_at: String(r.created_at),
   }));

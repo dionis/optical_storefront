@@ -26,6 +26,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     is_super: scope.is_owner,
     role: scope.role,
     is_admin: scope.is_admin,
+    privileges: scope.privileges,
+    seller_code: scope.seller_code,
     must_change_password: Boolean((me.metadata as Record<string, unknown> | null)?.["must_change_password"]),
   });
 }
