@@ -39,4 +39,10 @@ export const PrescriptionRecord = model.define("prescription", {
   measurement_quality: model.text().nullable(),
   /** Customer ID (Medusa customer) — nullable for guest checkout */
   customer_id: model.text().nullable(),
+  /** "worn" (what the patient arrives wearing) or "new"; null = pre-POS rows, all "new" */
+  kind: model.enum(["worn", "new"]).nullable(),
+  /** Date written on the prescription, when known (for "months since last prescription") */
+  rx_date: model.dateTime().nullable(),
+  /** On a "new" row: the "worn" row it replaces */
+  previous_prescription_id: model.text().nullable(),
 });
