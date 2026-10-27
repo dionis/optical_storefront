@@ -8,6 +8,7 @@ import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
 import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
+import { staffGuard } from "../lib/staff-guard";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -210,6 +211,13 @@ export default defineMiddlewares({
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
       middlewares: [securityHeaders],
+    },
+    {
+      // Role gate for every admin route, Medusa's own included: owner and
+      // superadmin pass, other roles only reach their allowlist. See
+      // lib/staff-guard.ts.
+      matcher: "/admin*",
+      middlewares: [staffGuard],
     },
     {
       // Admin login: Medusa has no throttle of its own. Per IP and per email.

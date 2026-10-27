@@ -15,14 +15,32 @@ export async function fetchMe() {
   return adminFetch("/admin/team/me");
 }
 
-export async function createAdmin({ email, password, firstName = "", lastName = "" }) {
+// Roles que se pueden asignar desde el panel, de más a menos permisos. "owner"
+// no está: el dueño es siempre el usuario más antiguo (lo decide el backend).
+export const ASSIGNABLE_ROLES = ["superadmin", "supervisor", "manager", "seller"];
+
+/** Clave de traducción del rol; null = sin acceso. */
+export const roleKey = (role) => `adm.team.role.${role || "none"}`;
+
+export async function createAdmin({ email, password, firstName = "", lastName = "", role = "superadmin" }) {
   try {
     return await adminFetch("/admin/team", {
       method: "POST",
-      body: { email, password, first_name: firstName, last_name: lastName },
+      body: { email, password, first_name: firstName, last_name: lastName, role },
     });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.team.createFailed"));
+  }
+}
+
+export async function setRole(id, role) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/role`, {
+      method: "POST",
+      body: { role },
+    });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.roleFailed"));
   }
 }
 

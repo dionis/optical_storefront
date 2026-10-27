@@ -2,6 +2,9 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { listTeam } from "../route";
+import { STAFF_MODULE } from "../../../../modules/staff";
+import type StaffModuleService from "../../../../modules/staff/service";
+import { getStaffScope, invalidateStaffScope } from "../../../../lib/staff-scope";
 
 /**
  * DELETE /admin/team/:id — elimina a un administrador.
@@ -36,9 +39,22 @@ export async function DELETE(
     res.status(403).json({ type: "not_allowed", reason: "self", message: "You cannot delete your own account." });
     return;
   }
+  // Solo el dueño nombra o quita superadmins (decisión del dueño).
+  const actor = await getStaffScope(req.scope, actorId);
+  if (target.role === "superadmin" && actor.role !== "owner") {
+    res.status(403).json({ type: "not_allowed", reason: "owner_only", message: "Only the owner can remove a superadmin." });
+    return;
+  }
 
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   await users.deleteUsers([target.id]);
+
+  // Sus roles se van con él: un usuario nuevo con el mismo id no existirá, pero
+  // las filas huérfanas confundirían cualquier reporte del equipo.
+  const staff = req.scope.resolve<StaffModuleService>(STAFF_MODULE);
+  const rows = await staff.listStaffAssignments({ user_id: target.id }, { take: 1000 });
+  if (rows.length) await staff.softDeleteStaffAssignments(rows.map((r) => r.id));
+  invalidateStaffScope(target.id);
 
   // Identidad de credenciales fuera también (best-effort): sin esto el correo
   // quedaría bloqueado para siempre en un nuevo alta.

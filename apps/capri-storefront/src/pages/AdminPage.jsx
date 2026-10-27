@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout } from "../admin/adminAuth.js";
 import { isDemoLogin } from "../admin/adminAuth.js";
-import { fetchMe, changeOwnPassword } from "../admin/adminTeam.js";
+import { fetchMe, changeOwnPassword, roleKey } from "../admin/adminTeam.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import AdminDashboard from "../admin/AdminDashboard.jsx";
 import "../admin/admin.css";
@@ -110,25 +110,51 @@ function FirstPasswordGate({ onDone }) {
   );
 }
 
+/**
+ * Cuenta sin pantallas: su rol no es dueño ni superadmin. El backend ya le
+ * niega todo el API de administración (lib/staff-guard.ts); esto solo evita
+ * pintarle un panel que respondería con errores en cada pestaña. Cuando llegue
+ * el punto de venta, aquí se montan sus pantallas.
+ */
+function RestrictedHome({ role, onLogout }) {
+  const { t } = useLang();
+  return (
+    <div className="adm-login">
+      <div className="adm-login-card">
+        <img src={TENANT.logo} alt={TENANT.name} className="adm-login-logo" />
+        <h1>{t("adm.restricted.title")}</h1>
+        <p className="muted">{role ? t("adm.restricted.sub", { role: t(roleKey(role)) }) : t("adm.restricted.inactive")}</p>
+        <button className="btn btn-primary big" onClick={onLogout}>{t("adm.restricted.logout")}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [session, setSession] = useState(() => getSession());
   // null = comprobando · false = contraseña propia · true = temporal pendiente
   const [mustChange, setMustChange] = useState(null);
+  // Rol del usuario; null mientras no se sepa o si la API aún no lo devuelve.
+  const [me, setMe] = useState(null);
 
   useEffect(() => {
     if (!session) return undefined;
     if (isDemoLogin()) { setMustChange(false); return undefined; }
     let on = true;
     fetchMe()
-      .then((me) => { if (on) setMustChange(Boolean(me && me.must_change_password)); })
+      .then((r) => { if (on) { setMe(r || null); setMustChange(Boolean(r && r.must_change_password)); } })
       .catch(() => { if (on) setMustChange(false); }); // la API puede no estar desplegada aún
     return () => { on = false; };
   }, [session]);
 
+  const signOut = () => { logout(); setSession(null); setMe(null); };
+
   if (!session) return <Login onOk={() => { setMustChange(null); setSession(getSession()); }} />;
   if (mustChange === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
   if (mustChange) return <FirstPasswordGate onDone={() => setMustChange(false)} />;
+  // `is_admin` ausente = backend anterior a los roles: se comporta como antes.
+  if (me && me.is_admin === false) return <RestrictedHome role={me.role} onLogout={signOut} />;
   // El armazón (barra lateral, barra superior, idioma, sesión) vive en
   // AdminShell, montado por AdminDashboard; aquí solo se decide si hay sesión.
-  return <AdminDashboard user={session.user} onLogout={() => { logout(); setSession(null); }} />;
+  return <AdminDashboard user={session.user} onLogout={signOut} />;
 }

@@ -290,5 +290,10 @@ export default defineConfig({
     {
       resolve: "./src/modules/costing",
     },
+    // Roles del panel (dueño, superadmin, supervisor, encargado, vendedor) por
+    // usuario y, desde la fase 1, por establecimiento. Configuración, nunca se purga.
+    {
+      resolve: "./src/modules/staff",
+    },
   ],
 });

@@ -1,7 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
-import { listTeam } from "../route";
+import { getStaffScope } from "../../../../lib/staff-scope";
 
 /**
  * GET /admin/team/me — quién soy en el panel: email, si soy el super admin y,
@@ -16,13 +16,16 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     res.status(404).json({ type: "not_found", reason: "not_found", message: "Authenticated user not found." });
     return;
   }
-  const team = await listTeam(req);
-  const mine = team.find((m) => m.id === me.id);
+  // Reachable by every role (lib/staff-roles.ts allowlist), so it must not list
+  // the team: only the caller's own scope.
+  const scope = await getStaffScope(req.scope, me.id);
   res.json({
     id: me.id,
     email: me.email,
     first_name: me.first_name ?? null,
-    is_super: Boolean(mine?.is_super),
+    is_super: scope.is_owner,
+    role: scope.role,
+    is_admin: scope.is_admin,
     must_change_password: Boolean((me.metadata as Record<string, unknown> | null)?.["must_change_password"]),
   });
 }

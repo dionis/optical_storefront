@@ -423,8 +423,8 @@
 .adm-export { display: inline-flex; align-items: center; gap: 6px; }
 .adm-export .i3d-dl { height: 15px; width: auto; }
 .adm-export:not(.no-i3d) .adm-export-fb { display: none; }
-.adm-team-form { display: grid; grid-template-columns: 1.3fr 1.1fr 1fr 1fr auto; gap: 8px; align-items: center; }
-.adm-team-form input { padding: 8px 11px; border: 1px solid var(--adm-line); border-radius: 9px; font: inherit; font-size: 13.5px; min-width: 0; }
+.adm-team-form { display: grid; grid-template-columns: 1.3fr 1.1fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; }
+.adm-team-form input, .adm-team-form select, .adm-team-role { padding: 8px 11px; border: 1px solid var(--adm-line); border-radius: 9px; font: inherit; font-size: 13.5px; min-width: 0; background: var(--adm-surface); }
 .adm-team-rows { display: flex; flex-direction: column; }
 .adm-team-row { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--adm-line-2); border-radius: 8px; transition: background .14s; }
 .adm-team-row:hover { background: #f5f8fe; }
@@ -436,6 +436,9 @@
 .adm-team-tag.super { background: var(--adm-navy); color: #ffd76a; }
 .adm-team-tag.me { background: var(--adm-blue-soft); color: #1c4f9c; }
 .adm-team-tag.temp { background: var(--adm-amber-soft); color: #7a5b00; }
+.adm-team-tag.legacy { background: var(--adm-line-2); color: var(--adm-muted); }
+.adm-team-role { padding: 5px 9px; font-size: 12.5px; }
+.adm-team-role-label { font-size: 12.5px; font-weight: 700; color: var(--adm-muted); white-space: nowrap; }
 .adm-team-note { margin-top: 10px; }
 .adm-sec-kpi small { display: block; color: var(--adm-muted); font-size: 12px; margin-bottom: 4px; }
 .adm-sec-kpi b { font-size: 18px; font-family: var(--adm-display); }
@@ -543,6 +546,7 @@
   .adm-grid-2, .adm-grid-3 { grid-template-columns: 1fr; }
   .adm-team-form { grid-template-columns: 1fr 1fr; }
   .adm-team-form button { grid-column: 1 / -1; }
+  .adm-team-row { flex-wrap: wrap; }
   .ord-detail-grid { grid-template-columns: 1fr; }
   .cost-rule { grid-template-columns: 1fr 90px 70px auto; }
 }

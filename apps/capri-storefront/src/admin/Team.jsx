@@ -1,20 +1,22 @@
-// Dónde se usa: pestaña Equipo de /admin — alta de administradores con contraseña temporal de un solo primer uso; el super admin no puede eliminarse.
+// Dónde se usa: pestaña Equipo de /admin — alta de usuarios con contraseña temporal de un solo primer uso y su rol; el dueño no puede eliminarse ni cambiar de rol.
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setRole, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
 
 /**
- * EQUIPO — administradores del panel.
- *  · El SUPER ADMIN (el dueño, el usuario más antiguo) lleva sello y NO tiene
- *    botón de borrar: el sistema jamás se queda sin su administrador raíz.
- *  · Crear un admin pide email + contraseña TEMPORAL abierta: el nuevo admin
- *    entra con ella UNA vez y el panel le exige poner la suya antes de ver
- *    nada (candado must_change_password, ver AdminPage).
- *  · Nadie puede borrarse a sí mismo (lo veta también el backend).
+ * EQUIPO — personas que usan el panel y su rol.
+ *  · El DUEÑO (el usuario más antiguo) lleva sello y NO tiene botón de borrar
+ *    ni selector de rol: el sistema jamás se queda sin su administrador raíz.
+ *  · Crear un usuario pide email + contraseña TEMPORAL abierta + rol: entra con
+ *    ella UNA vez y el panel le exige poner la suya antes de ver nada (candado
+ *    must_change_password, ver AdminPage).
+ *  · Solo el dueño nombra o quita superadmins; nadie cambia su propio rol ni se
+ *    borra a sí mismo. El panel solo ofrece lo que el backend aceptaría, pero la
+ *    regla vive allí (lib/staff-roles.ts) y es la que manda.
  */
 export default function Team() {
   const { t, lang } = useLang();
@@ -24,8 +26,15 @@ export default function Team() {
   const [meId, setMeId] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "" });
+  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", role: "" });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const myRole = team.find((m) => m.id === meId)?.role ?? null;
+  const iAmOwner = myRole === "owner";
+  // Roles que puedo dar: el superadmin solo puede darlo el dueño.
+  const grantable = ASSIGNABLE_ROLES.filter((r) => iAmOwner || r !== "superadmin");
+  const newRole = form.role || grantable[0];
+  const canEditRole = (m) => !m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin");
 
   const load = () => {
     if (demo) return;
@@ -41,9 +50,9 @@ export default function Team() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await createAdmin(form);
+      const r = await createAdmin({ ...form, role: newRole });
       setTeam(r.team || []);
-      setForm({ email: "", password: "", firstName: "", lastName: "" });
+      setForm({ email: "", password: "", firstName: "", lastName: "", role: "" });
       toast({ tone: "success", title: t("adm.team.created"), message: t("adm.team.createdSub") });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
@@ -67,6 +76,18 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
+  const changeRole = async (m, role) => {
+    if (role === m.role) return;
+    setBusy(true);
+    try {
+      const r = await setRole(m.id, role);
+      setTeam(r.team || []);
+      toast({ tone: "success", title: t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
   return (
     <div className="adm-section">
       <div className="adm-head-row"><h2>{t("adm.team.title")}</h2></div>
@@ -82,6 +103,9 @@ export default function Team() {
           <input type="text" required minLength={8} placeholder={t("adm.team.tempPass")} value={form.password} onChange={set("password")} autoComplete="off" />
           <input placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
           <input placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
+          <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
+            {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
+          </select>
           <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.team.create")}</button>
         </form>
       </div>
@@ -101,7 +125,17 @@ export default function Team() {
               {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
-              {!m.is_super && m.id !== meId && (
+              {m.role_legacy && <span className="adm-team-tag legacy" title={t("adm.team.roleLegacy")}>{t("adm.team.roleLegacyTag")}</span>}
+              {canEditRole(m) ? (
+                <select className="adm-team-role" aria-label={t("adm.team.role")} title={t("adm.team.role")}
+                  value={m.role ?? ""} disabled={busy || demo} onChange={(e) => changeRole(m, e.target.value)}>
+                  {m.role == null && <option value="" disabled>{t(roleKey(null))}</option>}
+                  {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
+                </select>
+              ) : (
+                !m.is_super && <span className="adm-team-role-label">{t(roleKey(m.role))}</span>
+              )}
+              {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
                 <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>
                   {t("adm.team.delete")}
                 </button>
@@ -111,6 +145,7 @@ export default function Team() {
           {state === "ok" && team.length === 0 && <div className="adm-nodata">{t("adm.chart.noData")}</div>}
         </div>
         <p className="adm-sub adm-team-note">{t("adm.team.superNote")}</p>
+        <p className="adm-sub">{t("adm.team.roleNote")}</p>
       </div>
     </div>
   );
