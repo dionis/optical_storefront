@@ -43,6 +43,8 @@ export const ORDER_DATA_TABLES = [
   "cart_shipping_method_tax_line", "cart_line_item", "cart_shipping_method", "cart_address", "cart",
   // datos de salud (módulo propio)
   "prescription",
+  // punto de venta: ventas, sus pagos y el contador (la siguiente venta de cada tienda vuelve a ser la 000001)
+  "pos_sale_payment", "pos_sale", "pos_sale_counter",
 ];
 
 export interface PurgeReport {
@@ -86,6 +88,13 @@ export async function purgeOrders(container: MedusaContainer, confirm: boolean):
         .flatMap((r: { file_url: string | null; tryon_image_url: string | null }) => [r.file_url, r.tryon_image_url])
         .filter((k): k is string => typeof k === "string" && k.length > 0 && !/^https?:\/\//i.test(k))
     : [];
+  // Fotos de las monturas que trajo el cliente al punto de venta.
+  if (existing.has("pos_sale")) {
+    for (const r of await pg("pos_sale").select("own_frame_photo_keys")) {
+      const keys = (r as { own_frame_photo_keys: unknown }).own_frame_photo_keys;
+      if (Array.isArray(keys)) rxFiles.push(...keys.filter((k): k is string => typeof k === "string" && k.length > 0));
+    }
+  }
   logger.info(`[purge] ${rxFiles.length} archivo(s) de recetas/probador en el bucket privado.`);
 
   const report: PurgeReport = {

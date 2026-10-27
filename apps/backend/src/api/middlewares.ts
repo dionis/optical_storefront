@@ -276,6 +276,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "2mb" },
     },
     {
+      // A point-of-sale sale carries the photo of each frame the customer
+      // brought as a base64 `data:` URL.
+      matcher: "/admin/pos/sales",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "10mb" },
+    },
+    {
       // The prescription write can carry the AI try-on render as a base64 `data:`
       // URL (JSON, not multipart), which runs past Medusa's default JSON body
       // limit. Exact path — the /ocr and /validate subroutes are separate entries.

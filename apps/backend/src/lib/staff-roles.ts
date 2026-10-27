@@ -121,14 +121,19 @@ export function assignmentRowsFor(
 /**
  * /admin routes a non-admin role may call. Everything else under /admin is
  * refused for them: Medusa's own admin API (products, orders, customers,
- * settings) would otherwise be fully open to any signed-in user. Phase 2 adds
- * the point-of-sale routes here.
+ * settings) would otherwise be fully open to any signed-in user.
+ *
+ * The point-of-sale routes are open to every role, and each of them limits the
+ * request to the user's own stores (lib/pos-route.ts). Payment-method settings
+ * stay admin-only.
  */
 const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/me\/scope$/ },
   { method: "GET", path: /^\/admin\/team\/me$/ },
   { method: "POST", path: /^\/admin\/team\/password$/ },
   { method: "GET", path: /^\/admin\/users\/me$/ },
+  { method: "GET", path: /^\/admin\/pos\/(context|products|sales)$/ },
+  { method: "POST", path: /^\/admin\/pos\/(quote|sales)$/ },
 ];
 
 export function isAllowedForRestrictedRole(method: string, url: string): boolean {

@@ -4,6 +4,7 @@ import type { Logger } from "@medusajs/framework/types";
 import type { Knex } from "@mikro-orm/knex";
 import { PRESCRIPTION_MODULE } from "../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../modules/prescription/service";
+import { prescriptionColumns } from "../../../lib/prescription-write";
 import { uploadTryonImage } from "../../../lib/tryon-image";
 import type { Prescription } from "@eyewear/shared";
 
@@ -81,9 +82,6 @@ export async function POST(
       ? rx.file_url
       : null;
 
-  const num = (v: unknown): number | null =>
-    v === null || v === undefined || v === "" || Number.isNaN(Number(v)) ? null : Number(v);
-
   // Save the AI try-on render (if any) to the private bucket first, so the row
   // carries its key. Best-effort — a failed upload leaves tryon_image_url null
   // without failing the prescription.
@@ -91,14 +89,7 @@ export async function POST(
 
   const pg = req.scope.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
   const record = {
-      od_sph: num(rx.od.sph), od_cyl: num(rx.od.cyl), od_axis: num(rx.od.axis),
-      od_add: num(rx.od.add), od_prism: num(rx.od.prism), od_base: rx.od.base ?? null,
-      os_sph: num(rx.os.sph), os_cyl: num(rx.os.cyl), os_axis: num(rx.os.axis),
-      os_add: num(rx.os.add), os_prism: num(rx.os.prism), os_base: rx.os.base ?? null,
-      pd: num(rx.pd), pd_od: num(rx.pd_od), pd_os: num(rx.pd_os),
-      // Fitting height: mandatory for multifocals (the lab cuts the corridor to
-      // it) and used by the try-on to place the segment. Was being dropped here.
-      seg_height: num(rx.seg_height),
+      ...prescriptionColumns(rx),
       source,
       verified_by_user: verifiedByUser,
       file_url: safeFileKey,

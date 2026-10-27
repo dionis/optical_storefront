@@ -303,5 +303,10 @@ export default defineConfig({
     {
       resolve: "./src/modules/store-pricing",
     },
+    // Punto de venta: formas de pago (configuración), ventas y sus pagos (datos
+    // de pedido, se purgan con los pedidos) y el contador de venta por tienda.
+    {
+      resolve: "./src/modules/pos",
+    },
   ],
 });

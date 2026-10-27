@@ -14,11 +14,13 @@ describe("purge-orders table list", () => {
     "product_review", "store_setting", "lens_option", "ocr_setting", "frame_media_asset", "user", "invite",
     // Vendedores y reglas de costo son configuración del dueño, no pedidos.
     "seller", "cost_rule",
+    // Tiendas, roles, precios por tienda y formas de pago del punto de venta.
+    "establishment", "staff_assignment", "price_rule", "pos_payment_method",
     "stock_location", "inventory_item", "promotion", "tax_rate", "api_key", "sales_channel",
   ];
 
-  it("contains only order, cart, payment, fulfillment, return/claim/exchange, link and prescription tables", () => {
-    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$)/;
+  it("contains only order, cart, payment, fulfillment, return/claim/exchange, link, prescription and point-of-sale tables", () => {
+    const allowed = /^(order(_|$)|return(_item|_fulfillment)?$|cart(_|$)|credit_line$|payment_collection|payment_session$|payment$|capture$|refund$|fulfillment(_item|_label|_address)?$|prescription$|pos_sale(_payment|_counter)?$)/;
     const offenders = ORDER_DATA_TABLES.filter((t) => !allowed.test(t));
     expect(offenders).toEqual([]);
   });

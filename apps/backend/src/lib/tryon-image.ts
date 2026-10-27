@@ -23,6 +23,17 @@ export const TRYON_KEY_PATTERN = /^tryon\/[A-Za-z0-9-]{1,64}\.[a-z0-9]{1,8}$/;
  * must never fail the write it rides along with.
  */
 export async function uploadTryonImage(dataUrl: unknown): Promise<string | null> {
+  return uploadPrivateImage(dataUrl, "tryon");
+}
+
+/** Object keys of the photos of frames a point-of-sale customer brings: `posframe/<uuid>.<ext>`. */
+export const POS_FRAME_KEY_PATTERN = /^posframe\/[A-Za-z0-9-]{1,64}\.[a-z0-9]{1,8}$/;
+
+/**
+ * Same upload under another key prefix (`tryon`, `posframe`). Best-effort, like
+ * uploadTryonImage: null when there is nothing to store or storage fails.
+ */
+export async function uploadPrivateImage(dataUrl: unknown, prefix: "tryon" | "posframe"): Promise<string | null> {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:") || !storageConfigured()) {
     return null;
   }
@@ -33,7 +44,7 @@ export async function uploadTryonImage(dataUrl: unknown): Promise<string | null>
   // Guard against an oversized payload slipping past the body limit.
   if (!buffer.length || buffer.length > MAX_UPLOAD_BYTES) return null;
   const ext = (mediaType.split("/")[1] || "jpg").replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
-  const objectKey = `tryon/${randomUUID()}.${ext}`;
+  const objectKey = `${prefix}/${randomUUID()}.${ext}`;
   try {
     await createStorageClient().send(
       new PutObjectCommand({

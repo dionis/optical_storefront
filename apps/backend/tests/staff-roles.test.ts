@@ -129,4 +129,14 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("POST", "/admin/team/me")).toBe(false);
     expect(isAllowedForRestrictedRole("GET", "/admin/me/scope/extra")).toBe(false);
   });
+
+  it("opens the till but not its settings", () => {
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/context")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/products?store=est_1&q=ray")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/quote")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/sales")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/payment-methods")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods/pospm_cash")).toBe(false);
+  });
 });
