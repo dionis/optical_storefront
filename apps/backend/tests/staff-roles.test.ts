@@ -1,4 +1,5 @@
 import {
+  assignmentRowsFor,
   isAllowedForRestrictedRole,
   resolveRole,
   roleChangeDenied,
@@ -86,6 +87,31 @@ describe("roleChangeDenied", () => {
 
   it("nobody changes their own role", () => {
     expect(roleChangeDenied({ ...base, actorRole: "superadmin", actorIsTarget: true, nextRole: "seller" })).toBe("self_role");
+  });
+});
+
+describe("assignmentRowsFor", () => {
+  it("no store list means every store (one row)", () => {
+    expect(assignmentRowsFor("seller", null)).toEqual([{ role: "seller", establishment_id: null }]);
+    expect(assignmentRowsFor("seller", [])).toEqual([{ role: "seller", establishment_id: null }]);
+  });
+
+  it("one row per distinct store", () => {
+    expect(assignmentRowsFor("manager", ["est_2", "est_1", "est_2"])).toEqual([
+      { role: "manager", establishment_id: "est_1" },
+      { role: "manager", establishment_id: "est_2" },
+    ]);
+  });
+
+  it("superadmin always covers every store, whatever list it is given", () => {
+    expect(assignmentRowsFor("superadmin", ["est_1"])).toEqual([{ role: "superadmin", establishment_id: null }]);
+  });
+
+  it("round-trips through resolveRole", () => {
+    const rows = assignmentRowsFor("seller", ["est_3", "est_1"]).map((r) => ({
+      ...r, is_active: true, discount_limit_pct: null, can_void: false,
+    }));
+    expect(resolveRole({ isOwner: false, assignments: rows })).toMatchObject({ role: "seller", establishment_ids: ["est_1", "est_3"] });
   });
 });
 

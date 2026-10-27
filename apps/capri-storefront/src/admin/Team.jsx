@@ -5,7 +5,51 @@ import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setRole, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
+import { fetchStores } from "./adminStores.js";
+
+const isAdminRole = (role) => role === "owner" || role === "superadmin";
+
+/**
+ * Tiendas de una persona: "Todas" o una lista. Un desplegable con casillas; se
+ * guarda al cerrar, no en cada clic, para no reescribir sus filas por casilla.
+ */
+function StorePicker({ member, stores, disabled, onSave }) {
+  const { t } = useLang();
+  const current = member.establishment_ids || [];
+  const [picked, setPicked] = useState(current);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (!open) setPicked(member.establishment_ids || []); }, [member.establishment_ids, open]);
+
+  const active = stores.filter((s) => s.is_active || current.includes(s.id));
+  const label = current.length === 0
+    ? t("adm.team.storesAll")
+    : current.map((id) => stores.find((s) => s.id === id)?.code || "?").join(", ");
+  const toggle = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const close = () => {
+    setOpen(false);
+    const same = picked.length === current.length && picked.every((id) => current.includes(id));
+    if (!same) onSave(picked);
+  };
+
+  return (
+    <details className="adm-team-stores" open={open} onToggle={(e) => (e.currentTarget.open ? setOpen(true) : close())}>
+      <summary className="adm-team-role" aria-label={t("adm.team.stores")} title={t("adm.team.stores")}>
+        <Icon name="store" size={12} /> {label}
+      </summary>
+      <div className="adm-team-stores-menu">
+        {active.length === 0 && <small className="muted">{t("adm.team.storesNone")}</small>}
+        {active.map((s) => (
+          <label key={s.id}>
+            <input type="checkbox" disabled={disabled} checked={picked.includes(s.id)} onChange={() => toggle(s.id)} />
+            <b>{s.code}</b> {s.name}
+          </label>
+        ))}
+        <small className="muted">{t("adm.team.storesHint")}</small>
+      </div>
+    </details>
+  );
+}
 
 /**
  * EQUIPO — personas que usan el panel y su rol.
@@ -36,12 +80,16 @@ export default function Team() {
   const newRole = form.role || grantable[0];
   const canEditRole = (m) => !m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin");
 
+  const [stores, setStoreList] = useState([]);
+
   const load = () => {
     if (demo) return;
     setState("loading");
     fetchTeam()
       .then((r) => { setTeam(r.team || []); setMeId(r.me || null); setState("ok"); })
       .catch(() => setState("error"));
+    // Sin tiendas (o sin backend de tiendas aún) el selector simplemente no aparece.
+    fetchStores().then((r) => setStoreList(r.establishments || [])).catch(() => setStoreList([]));
   };
   useEffect(load, [demo]);
 
@@ -71,6 +119,17 @@ export default function Team() {
       const r = await deleteAdmin(m.id);
       setTeam(r.team || []);
       toast({ tone: "success", title: t("adm.team.deleted", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  const changeStores = async (m, ids) => {
+    setBusy(true);
+    try {
+      const r = await setStores(m.id, ids);
+      setTeam(r.team || []);
+      toast({ tone: "success", title: t("adm.team.storesSaved", { email: m.email }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -134,6 +193,9 @@ export default function Team() {
                 </select>
               ) : (
                 !m.is_super && <span className="adm-team-role-label">{t(roleKey(m.role))}</span>
+              )}
+              {m.role && !isAdminRole(m.role) && stores.length > 0 && (
+                <StorePicker member={m} stores={stores} disabled={busy || demo} onSave={(ids) => changeStores(m, ids)} />
               )}
               {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
                 <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>

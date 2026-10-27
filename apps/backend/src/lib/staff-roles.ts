@@ -104,6 +104,21 @@ export function roleChangeDenied(args: {
 }
 
 /**
+ * The rows that represent `role` limited to `establishmentIds`. Owner and
+ * superadmin always cover every store (one row, no establishment); so does any
+ * role with no store list. Otherwise one row per distinct store. Writing a
+ * person's rows always goes through this, so role and stores cannot drift.
+ */
+export function assignmentRowsFor(
+  role: StaffRole,
+  establishmentIds: string[] | null
+): Array<{ role: StaffRole; establishment_id: string | null }> {
+  const ids = [...new Set((establishmentIds ?? []).filter(Boolean))].sort();
+  if (isAdminRole(role) || ids.length === 0) return [{ role, establishment_id: null }];
+  return ids.map((establishment_id) => ({ role, establishment_id }));
+}
+
+/**
  * /admin routes a non-admin role may call. Everything else under /admin is
  * refused for them: Medusa's own admin API (products, orders, customers,
  * settings) would otherwise be fully open to any signed-in user. Phase 2 adds

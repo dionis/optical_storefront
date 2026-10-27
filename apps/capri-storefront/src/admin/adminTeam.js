@@ -33,6 +33,18 @@ export async function createAdmin({ email, password, firstName = "", lastName = 
   }
 }
 
+/** Tiendas de una persona; [] = todas. Solo para roles que no son admin. */
+export async function setStores(id, establishmentIds) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/stores`, {
+      method: "POST",
+      body: { establishment_ids: establishmentIds },
+    });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.storesFailed"));
+  }
+}
+
 export async function setRole(id, role) {
   try {
     return await adminFetch(`/admin/team/${encodeURIComponent(id)}/role`, {

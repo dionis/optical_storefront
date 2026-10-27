@@ -2,10 +2,8 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { listTeam } from "../../route";
-import { STAFF_MODULE } from "../../../../../modules/staff";
-import type StaffModuleService from "../../../../../modules/staff/service";
 import { roleChangeDenied, type StaffRole } from "../../../../../lib/staff-roles";
-import { getStaffScope, invalidateStaffScope } from "../../../../../lib/staff-scope";
+import { getStaffScope, writeStaffAssignment } from "../../../../../lib/staff-scope";
 
 /**
  * POST /admin/team/:id/role { role } — cambia el rol general (todas las tiendas)
@@ -49,19 +47,14 @@ export async function POST(
     return;
   }
 
-  const staff = req.scope.resolve<StaffModuleService>(STAFF_MODULE);
-  const [global] = await staff.listStaffAssignments({ user_id: targetId, establishment_id: null }, { take: 1 });
-  if (global) {
-    await staff.updateStaffAssignments({ id: global.id, role: nextRole as StaffRole, is_active: true, updated_by: actorId || null });
-  } else {
-    await staff.createStaffAssignments({
-      user_id: targetId,
-      establishment_id: null,
-      role: nextRole as StaffRole,
-      created_by: actorId || null,
-    });
-  }
-  invalidateStaffScope(targetId);
+  // Keeps the person's stores; promoting to superadmin widens them to all
+  // (assignmentRowsFor), demoting back starts from all stores again.
+  await writeStaffAssignment(req.scope, {
+    userId: targetId,
+    role: nextRole as StaffRole,
+    establishmentIds: target.establishment_ids,
+    actorId: actorId || null,
+  });
 
   logger.info(`[team] ${target.email}: role ${target.role ?? "none"} -> ${nextRole} by ${actorId}`);
   res.json({ team: await listTeam(req) });

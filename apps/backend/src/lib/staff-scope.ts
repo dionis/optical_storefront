@@ -3,7 +3,14 @@ import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { STAFF_MODULE } from "../modules/staff";
 import type StaffModuleService from "../modules/staff/service";
-import { isAdminRole, resolveRole, type AssignmentLike, type ResolvedRole } from "./staff-roles";
+import {
+  assignmentRowsFor,
+  isAdminRole,
+  resolveRole,
+  type AssignmentLike,
+  type ResolvedRole,
+  type StaffRole,
+} from "./staff-roles";
 
 /**
  * What a signed-in panel user may see and do: their resolved role plus whether
@@ -53,6 +60,35 @@ export async function assignmentsByUser(
     });
   }
   return out;
+}
+
+/**
+ * Replaces every assignment of `userId` with `role` over `establishmentIds`
+ * (null/empty = all stores). The personal discount limit and void permission
+ * carry over. Old rows are soft-deleted, not edited, so each change leaves a
+ * trail and the partial unique indexes never see two live rows.
+ */
+export async function writeStaffAssignment(
+  container: MedusaContainer,
+  input: { userId: string; role: StaffRole; establishmentIds: string[] | null; actorId: string | null }
+): Promise<void> {
+  const staff = container.resolve<StaffModuleService>(STAFF_MODULE);
+  const current = await staff.listStaffAssignments({ user_id: input.userId }, { take: 1000 });
+  const limits = current.map((r) => r.discount_limit_pct).filter((v) => v != null).map(Number);
+  const carry = {
+    discount_limit_pct: limits.length ? Math.max(...limits) : null,
+    can_void: current.some((r) => Boolean(r.can_void)),
+  };
+  if (current.length) await staff.softDeleteStaffAssignments(current.map((r) => r.id));
+  await staff.createStaffAssignments(
+    assignmentRowsFor(input.role, input.establishmentIds).map((row) => ({
+      user_id: input.userId,
+      ...row,
+      ...carry,
+      created_by: input.actorId,
+    }))
+  );
+  invalidateStaffScope(input.userId);
 }
 
 export async function getStaffScope(container: MedusaContainer, userId: string): Promise<StaffScope> {

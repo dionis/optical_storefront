@@ -1,10 +1,8 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
-import { STAFF_MODULE } from "../../../modules/staff";
-import type StaffModuleService from "../../../modules/staff/service";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
-import { assignmentsByUser, getStaffScope, invalidateStaffScope } from "../../../lib/staff-scope";
+import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
 
 /**
  * EQUIPO del panel: administradores de la tienda.
@@ -36,6 +34,8 @@ export interface TeamMember {
   role: StaffRole | null;
   /** Admin anterior a los roles, que conserva su acceso como superadmin. */
   role_legacy: boolean;
+  /** Tiendas donde trabaja; null = todas. */
+  establishment_ids: string[] | null;
 }
 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
@@ -55,6 +55,7 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
       must_change_password: Boolean((u.metadata as Record<string, unknown> | null)?.["must_change_password"]),
       role: resolved.role,
       role_legacy: resolved.legacy,
+      establishment_ids: resolved.establishment_ids,
     };
   });
 }
@@ -132,14 +133,13 @@ export async function POST(
     { id: registered.authIdentity.id, app_metadata: { user_id: user.id } },
   ]);
 
-  const staff = req.scope.resolve<StaffModuleService>(STAFF_MODULE);
-  await staff.createStaffAssignments({
-    user_id: user.id,
-    establishment_id: null,
+  // Starts in every store; stores are set afterwards from the Team tab.
+  await writeStaffAssignment(req.scope, {
+    userId: user.id,
     role: role as StaffRole,
-    created_by: actorId || null,
+    establishmentIds: null,
+    actorId: actorId || null,
   });
-  invalidateStaffScope(user.id);
 
   logger.info(`[team] ${role} ${user.email} created by ${actorId || "?"} (must change password on first login)`);
   res.status(200).json({ team: await listTeam(req) });
