@@ -303,6 +303,10 @@ export default defineConfig({
     {
       resolve: "./src/modules/store-pricing",
     },
+    // Surtido por tienda: marcas/modelos que una tienda NO expone (por defecto, todo). Configuración.
+    {
+      resolve: "./src/modules/store-assortment",
+    },
     // Punto de venta: formas de pago (configuración), ventas y sus pagos (datos
     // de pedido, se purgan con los pedidos) y el contador de venta por tienda.
     {

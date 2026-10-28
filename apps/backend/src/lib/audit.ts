@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
   "cash.close",
   "settings.change",
   "alert.rule",
+  "assortment.change",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
