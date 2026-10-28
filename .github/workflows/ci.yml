@@ -47,6 +47,9 @@ jobs:
       NODE_ENV: development
       JWT_SECRET: ci-only-not-a-secret
       COOKIE_SECRET: ci-only-not-a-secret
+      # Stripe is always registered (production must not boot without card
+      # payments), and its loader only checks that a key exists. Not a real key.
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder_not_a_real_key
     steps:
       - uses: actions/checkout@v4
 
