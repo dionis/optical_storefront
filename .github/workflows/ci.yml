@@ -69,14 +69,18 @@ jobs:
 
       - name: Boot the backend and wait for /health
         working-directory: apps/backend
+        # The log goes to $RUNNER_TEMP, outside apps/backend: `medusa develop` restarts
+        # on every file change in its folder, and a log written there restarted it
+        # on each line it printed, so it never finished booting.
         run: |
-          npx medusa develop -p 9000 > boot.log 2>&1 &
+          LOG="$RUNNER_TEMP/boot.log"
+          npx medusa develop -p 9000 > "$LOG" 2>&1 &
           for i in $(seq 1 90); do
             if curl -sf http://localhost:9000/health > /dev/null; then echo "backend is up"; exit 0; fi
-            if grep -qE "Error starting server|Could not resolve module" boot.log; then break; fi
+            if grep -qE "Error starting server|Could not resolve module" "$LOG"; then break; fi
             sleep 2
           done
-          echo "backend did not boot:"; tail -60 boot.log; exit 1
+          echo "backend did not boot:"; tail -60 "$LOG"; exit 1
 
   lint-typecheck:
     name: Lint & Typecheck
