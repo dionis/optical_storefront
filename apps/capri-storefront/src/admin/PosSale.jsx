@@ -22,9 +22,9 @@ import {
   quote as fetchQuote,
   requestApproval,
   searchCustomers,
-  searchProducts,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
+import PosFrameSearch from "./PosFrameSearch.jsx";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
@@ -181,9 +181,8 @@ export default function PosSale({ me }) {
   const [custInfo, setCustInfo] = useState(null);
   const [wears, setWears] = useState(null);
   // 2 · monturas
-  const [prodQ, setProdQ] = useState("");
-  const [prodHits, setProdHits] = useState([]);
   const [lines, setLines] = useState([]);
+  const [frameListOpen, setFrameListOpen] = useState(false);
   const [own, setOwn] = useState({ open: false, description: "", photo: null });
   // 3 · receta
   const [noRx, setNoRx] = useState(false);
@@ -230,11 +229,6 @@ export default function PosSale({ me }) {
     const h = setTimeout(() => searchCustomers(custQ).then((r) => setCustHits(r.customers || [])).catch(() => setCustHits([])), 300);
     return () => clearTimeout(h);
   }, [custQ]);
-  useEffect(() => {
-    if (!store || prodQ.trim().length < 2) { setProdHits([]); return undefined; }
-    const h = setTimeout(() => searchProducts(store.id, prodQ).then((r) => setProdHits(r.products || [])).catch(() => setProdHits([])), 300);
-    return () => clearTimeout(h);
-  }, [prodQ, store]);
 
   const pickCustomer = async (c) => {
     setCustomerId(c.id);
@@ -253,8 +247,7 @@ export default function PosSale({ me }) {
   const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); };
 
   const addFrame = (p, v) => {
-    setLines((ls) => [...ls, { key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
-    setProdQ(""); setProdHits([]);
+    setLines((ls) => [...ls, { key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, image: v.image || p.thumbnail || null, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
   };
   const addOwn = () => {
     if (!own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
@@ -446,7 +439,7 @@ export default function PosSale({ me }) {
         </ol>
       )}
 
-      <div className="adm-card pos-card">
+      <div className={`adm-card pos-card ${frameListOpen ? "ac-open" : ""}`}>
         {stepName === "customer" && (
           <>
             <label className="pos-search">
@@ -496,30 +489,7 @@ export default function PosSale({ me }) {
 
         {stepName === "frame" && (
           <>
-            <label className="pos-search">
-              <Icon name="barcode" size={16} />
-              <input value={prodQ} onChange={(e) => setProdQ(e.target.value)} placeholder={t("adm.pos.frame.search")} aria-label={t("adm.pos.frame.search")} autoFocus />
-            </label>
-            {prodHits.length > 0 && (
-              <ul className="pos-hits">
-                {prodHits.map((p) => (
-                  <li key={p.product_id} className="pos-prod">
-                    {p.thumbnail ? <img src={p.thumbnail} alt="" /> : <span className="pos-noimg"><Icon name="glasses" /></span>}
-                    <span className="pos-prod-main">
-                      <b>{p.title}</b>
-                      <small>{p.price == null ? t("adm.pos.frame.noPrice") : m(p.price)}</small>
-                      <span className="pos-variants">
-                        {p.variants.map((v) => (
-                          <button key={v.id} type="button" className="btn-xs" disabled={p.price == null} onClick={() => addFrame(p, v)}>
-                            <Icon name="plus" size={12} /> {v.title || v.sku || t("adm.pos.frame.add")}
-                          </button>
-                        ))}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} />
             <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
               <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
             </button>
@@ -538,7 +508,7 @@ export default function PosSale({ me }) {
             <ul className="pos-lines">
               {lines.map((l) => (
                 <li key={l.key}>
-                  <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />
+                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={l.image} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
                   <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>

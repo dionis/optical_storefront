@@ -482,8 +482,14 @@ export interface PosProduct {
   thumbnail: string | null;
   /** Frame only, in this store, before sales tax. Null when the model has no price. */
   price: number | null;
-  variants: Array<{ id: string; title: string; sku: string | null; barcode: string | null }>;
+  /** `image`: the colour's own photo (variant metadata), null when the catalog has none. */
+  variants: Array<{ id: string; title: string; sku: string | null; barcode: string | null; image: string | null }>;
 }
+
+const firstText = (...values: unknown[]): string | null => {
+  for (const v of values) if (typeof v === "string" && v.trim()) return v.trim();
+  return null;
+};
 
 /** Products the owner priced as cases (rules with scope "case"); everything else is a frame. */
 function caseProductIds(rules: Array<{ scope: string; target: string | null }>): Set<string> {
@@ -498,7 +504,9 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const term = q.trim().slice(0, 80);
   if (term.length < 2) return [];
-  const fields = ["id", "title", "thumbnail", "metadata", "variants.id", "variants.title", "variants.sku", "variants.barcode"];
+  // Many scraped models have no `thumbnail`: the list falls back to their first
+  // photo, then to a colour's photo, so the seller can recognise the frame.
+  const fields = ["id", "title", "thumbnail", "metadata", "images.url", "variants.id", "variants.title", "variants.sku", "variants.barcode", "variants.metadata"];
   // An exact SKU or barcode (what a scanner sends) first; then the name.
   const { data: byCode } = await query.graph({
     entity: "variant",
@@ -521,7 +529,14 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
     listAssortmentRules(container, establishmentId),
   ]);
   const seen = new Set<string>();
-  const products = ([...exact, ...named] as Array<{ id: string; title: string; thumbnail?: string | null; metadata?: Record<string, unknown> | null; variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null }> }>)
+  const products = ([...exact, ...named] as Array<{
+    id: string;
+    title: string;
+    thumbnail?: string | null;
+    metadata?: Record<string, unknown> | null;
+    images?: Array<{ url?: string | null }> | null;
+    variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null; metadata?: Record<string, unknown> | null }>;
+  }>)
     .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
     .filter((p) => isExposed(assortment, { id: p.id, brand: brandOf(p.metadata) }))
     .slice(0, 20);
@@ -533,15 +548,22 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const caseIds = caseProductIds(rules);
   return products.map((p) => {
     const base = byId.get(p.id) ?? null;
+    const variants = (p.variants ?? []).map((v) => ({
+      id: v.id,
+      title: v.title ?? "",
+      sku: v.sku ?? null,
+      barcode: v.barcode ?? null,
+      image: firstText(v.metadata?.["image"]),
+    }));
     return {
       product_id: p.id,
       title: p.title,
-      thumbnail: p.thumbnail ?? null,
+      thumbnail: firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image)),
       price:
         base === null
           ? null
           : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
-      variants: (p.variants ?? []).map((v) => ({ id: v.id, title: v.title ?? "", sku: v.sku ?? null, barcode: v.barcode ?? null })),
+      variants,
     };
   });
 }
