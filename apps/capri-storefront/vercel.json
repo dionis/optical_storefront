@@ -10,6 +10,10 @@
       "destination": "https://api.161-153-9-98.sslip.io/:path*"
     },
     {
+      "source": "/medusa-staging/:path*",
+      "destination": "https://api-staging.161-153-9-98.sslip.io/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
@@ -46,6 +50,19 @@
     },
     {
       "source": "/medusa/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/medusa-staging/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

@@ -9,8 +9,8 @@
     "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
-    "test": "node scripts/check-i18n.mjs && node --experimental-strip-types --no-warnings scripts/check-vercel-config.mjs && pnpm --recursive test",
-    "check:vercel": "node --experimental-strip-types --no-warnings scripts/check-vercel-config.mjs",
+    "test": "node scripts/check-i18n.mjs && node scripts/check-vercel-config.mjs && pnpm --recursive test",
+    "check:vercel": "node scripts/check-vercel-config.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "reindex": "pnpm --filter backend reindex"
   },

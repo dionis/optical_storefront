@@ -543,7 +543,7 @@ function Prices({ preQ }) {
       <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
         <div className="adm-pp-left">
           <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
+          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{p.supplierPrice ? `${t("adm.prices.supplier")} ${money(p.supplierPrice)} × ${p.markup || 3} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
         </div>
         <div className="adm-pp-right">
           {ev === 0
@@ -595,6 +595,9 @@ function Prices({ preQ }) {
         </div>
       </div>
       <p className="muted">{t("adm.prices.hint")}</p>
+      <div className="adm-demo-banner" style={{ background: "#e8f4fd", color: "#0b2f66", border: "1px solid #b3d4f0" }}>
+        <Icon name="info" size={14} /> {t("adm.prices.markupRule")}
+      </div>
 
       <div className="adm-grid-2">
         <div className="adm-card">

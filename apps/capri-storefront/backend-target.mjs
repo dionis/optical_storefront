@@ -1,55 +1,36 @@
-// The one place that decides which backend a storefront deployment talks to.
+// The one place that decides which backend a storefront build talks to.
 //
-// Used twice from the same code, so the two can never disagree:
-//   - vercel.ts imports resolveBackend() for the /medusa rewrite destination;
-//   - scripts/vercel-build.sh runs this file (`node backend-target.mjs`) to get the
-//     target for VITE_BACKEND_TARGET (the STAGING banner). vercel.ts cannot pass it
-//     itself: Vercel requires buildCommand to be a static value.
+// vercel.json is identical on every branch and has two fixed rewrites:
+//   /medusa/*          → production backend
+//   /medusa-staging/*  → staging backend
+// so merging a branch can never change where the live store points. What differs
+// per build is which of the two prefixes the app calls, and that is decided here,
+// at build time, from the branch Vercel is building:
+//   - develop and main serve the live store (www.rubilens.com is attached to
+//     develop) → always "production" (/medusa);
+//   - every other branch (e.g. develop_optical_storepos) → "staging".
 //
-// develop and main serve the live store (www.rubilens.com is attached to develop),
-// so they always use production; a MEDUSA_BACKEND_ORIGIN that says otherwise is an
-// error, which fails the build and keeps the previous deployment live. Every other
-// branch uses staging, or MEDUSA_BACKEND_ORIGIN if set for it.
-// scripts/check-vercel-config.mjs (pnpm test, CI) checks every case.
-
+// scripts/vercel-build.sh runs `node backend-target.mjs` and turns the answer into
+// VITE_BACKEND_TARGET (the STAGING banner) and VITE_BACKEND_PROXY (the prefix every
+// API call uses: data/medusa.js, admin/adminApi.js, data/visionMeasure.js and the
+// try-on's VITE_VISION_API_BASE). scripts/check-vercel-config.mjs checks it all.
 import { pathToFileURL } from "node:url";
 
-export const PRODUCTION_BACKEND = "https://api.161-153-9-98.sslip.io";
-export const STAGING_BACKEND = "https://api-staging.161-153-9-98.sslip.io";
 /** Branches whose builds serve real customers. */
 export const PRODUCTION_BRANCHES = new Set(["develop", "main"]);
+/** Path prefix per target; both are fixed rewrites in vercel.json. */
+export const PROXY_PATHS = { production: "/medusa", staging: "/medusa-staging" };
 
-/** @returns {{ target: "production" | "staging" | "custom", origin: string }} */
+/** @returns {{ target: "production" | "staging", proxy: string }} */
 export function resolveBackend(env) {
   const branch = env.VERCEL_GIT_COMMIT_REF ?? "";
   const live = PRODUCTION_BRANCHES.has(branch) || env.VERCEL_ENV === "production";
-  const override = env.MEDUSA_BACKEND_ORIGIN?.trim().replace(/\/+$/, "");
-  if (live) {
-    if (override && override !== PRODUCTION_BACKEND) {
-      throw new Error(
-        `MEDUSA_BACKEND_ORIGIN="${override}" is set for a production build (branch "${branch}"). ` +
-          `Production always uses ${PRODUCTION_BACKEND}; scope the variable to Preview branches only.`
-      );
-    }
-    return { target: "production", origin: PRODUCTION_BACKEND };
-  }
-  if (override) {
-    // Fail the build rather than ship a store that proxies to a typo.
-    if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(override)) {
-      throw new Error(`MEDUSA_BACKEND_ORIGIN must be an https origin without a path, got "${override}"`);
-    }
-    if (override === PRODUCTION_BACKEND) return { target: "production", origin: PRODUCTION_BACKEND };
-    return { target: override === STAGING_BACKEND ? "staging" : "custom", origin: override };
-  }
-  return { target: "staging", origin: STAGING_BACKEND };
+  const target = live ? "production" : "staging";
+  return { target, proxy: PROXY_PATHS[target] };
 }
 
-// `node backend-target.mjs` prints the target (used by scripts/vercel-build.sh).
+// `node backend-target.mjs` prints "<target> <proxy>" for scripts/vercel-build.sh.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    process.stdout.write(resolveBackend(process.env).target);
-  } catch (e) {
-    console.error(`backend-target: ${e.message}`);
-    process.exit(1);
-  }
+  const { target, proxy } = resolveBackend(process.env);
+  process.stdout.write(`${target} ${proxy}`);
 }
