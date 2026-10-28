@@ -4,9 +4,11 @@
 // staging URL on a branch rode along when that branch was merged into develop, and the
 // live store spent hours calling the staging backend and database.
 //
-//   - Builds of develop or main, and any Production deployment → production backend.
-//   - Every other branch (e.g. develop_optical_storepos) → staging.
-//   - MEDUSA_BACKEND_ORIGIN, if set in the Vercel environment, overrides both.
+//   - Builds of develop or main, and any Production deployment → production backend,
+//     always (see resolveBackend).
+//   - Every other branch (e.g. develop_optical_storepos) → staging, or the origin in
+//     MEDUSA_BACKEND_ORIGIN if that is set for the branch.
+// scripts/check-vercel-config.mjs (part of `npm test` and CI) checks all of this.
 //
 // Keyed on the branch, not only on VERCEL_ENV: www.rubilens.com is attached to the
 // develop branch, so the live store is served by develop's *Preview* deployments.
@@ -18,19 +20,41 @@ const STAGING_BACKEND = "https://api-staging.161-153-9-98.sslip.io";
 /** Branches whose builds serve real customers. */
 const PRODUCTION_BRANCHES = new Set(["develop", "main"]);
 
-function backendOrigin(): string {
-  const override = process.env.MEDUSA_BACKEND_ORIGIN?.trim();
+export type BackendTarget = "production" | "staging" | "custom";
+
+/**
+ * Which backend a deployment proxies /medusa to. Pure (takes the environment as an
+ * argument) so scripts/check-vercel-config.mjs can test every case.
+ *
+ * Production branches can never be pointed anywhere but production: a
+ * MEDUSA_BACKEND_ORIGIN that says otherwise fails the build, and Vercel keeps
+ * serving the previous deployment instead of a store wired to the wrong backend.
+ */
+export function resolveBackend(env: Record<string, string | undefined>): { target: BackendTarget; origin: string } {
+  const branch = env.VERCEL_GIT_COMMIT_REF ?? "";
+  const live = PRODUCTION_BRANCHES.has(branch) || env.VERCEL_ENV === "production";
+  const override = env.MEDUSA_BACKEND_ORIGIN?.trim().replace(/\/+$/, "");
+  if (live) {
+    if (override && override !== PRODUCTION_BACKEND) {
+      throw new Error(
+        `MEDUSA_BACKEND_ORIGIN="${override}" is set for a production build (branch "${branch}"). ` +
+          `Production always uses ${PRODUCTION_BACKEND}; scope the variable to Preview branches only.`
+      );
+    }
+    return { target: "production", origin: PRODUCTION_BACKEND };
+  }
   if (override) {
     // Fail the build rather than ship a store that proxies to a typo.
     if (!/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(override)) {
       throw new Error(`MEDUSA_BACKEND_ORIGIN must be an https origin without a path, got "${override}"`);
     }
-    return override;
+    if (override === PRODUCTION_BACKEND) return { target: "production", origin: PRODUCTION_BACKEND };
+    return { target: override === STAGING_BACKEND ? "staging" : "custom", origin: override };
   }
-  const branch = process.env.VERCEL_GIT_COMMIT_REF ?? "";
-  const live = PRODUCTION_BRANCHES.has(branch) || process.env.VERCEL_ENV === "production";
-  return live ? PRODUCTION_BACKEND : STAGING_BACKEND;
+  return { target: "staging", origin: STAGING_BACKEND };
 }
+
+const backend = resolveBackend(process.env);
 
 const immutable = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
 const noStore = [
@@ -45,12 +69,14 @@ const noStoreRevalidate = [
 export const config = {
   $schema: "https://openapi.vercel.sh/vercel.json",
   framework: "vite",
-  buildCommand: "bash scripts/vercel-build.sh",
+  // The app learns its backend from the same decision as the rewrite below, so the
+  // STAGING banner (src/components/EnvBanner.jsx) can never disagree with it.
+  buildCommand: `VITE_BACKEND_TARGET=${backend.target} bash scripts/vercel-build.sh`,
   outputDirectory: "dist",
   installCommand:
     "npm install --fetch-retries=6 --fetch-retry-mintimeout=15000 --fetch-retry-maxtimeout=120000 --fetch-retry-factor=3",
   rewrites: [
-    { source: "/medusa/:path*", destination: `${backendOrigin()}/:path*` },
+    { source: "/medusa/:path*", destination: `${backend.origin}/:path*` },
     { source: "/(.*)", destination: "/index.html" },
   ],
   headers: [
