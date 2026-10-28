@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout } from "../admin/adminAuth.js";
 import { isDemoLogin } from "../admin/adminAuth.js";
 import { fetchMe, changeOwnPassword, roleKey } from "../admin/adminTeam.js";
+import { fetchBackendFeatures } from "../admin/backendFeatures.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import AdminDashboard from "../admin/AdminDashboard.jsx";
 import "../admin/admin.css";
@@ -136,6 +137,16 @@ export default function AdminPage() {
   const [mustChange, setMustChange] = useState(null);
   // Rol del usuario; null mientras no se sepa o si la API aún no lo devuelve.
   const [me, setMe] = useState(null);
+  // What the backend supports (admin/backendFeatures.js); null while asking, so the
+  // panel never flashes tabs the backend cannot serve.
+  const [features, setFeatures] = useState(null);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    let on = true;
+    fetchBackendFeatures().then((f) => { if (on) setFeatures(f); });
+    return () => { on = false; };
+  }, [session]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -150,12 +161,12 @@ export default function AdminPage() {
   const signOut = () => { logout(); setSession(null); setMe(null); };
 
   if (!session) return <Login onOk={() => { setMustChange(null); setSession(getSession()); }} />;
-  if (mustChange === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
+  if (mustChange === null || features === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
   if (mustChange) return <FirstPasswordGate onDone={() => setMustChange(false)} />;
   // `is_admin` ausente = backend anterior a los roles: se comporta como antes.
   // Sin rol activo no hay nada que ver; con rol, el panel muestra solo sus pestañas.
   if (me && me.is_admin === false && !me.role) return <RestrictedHome role={me.role} onLogout={signOut} />;
   // El armazón (barra lateral, barra superior, idioma, sesión) vive en
   // AdminShell, montado por AdminDashboard; aquí solo se decide si hay sesión.
-  return <AdminDashboard user={session.user} onLogout={signOut} me={me} />;
+  return <AdminDashboard user={session.user} onLogout={signOut} me={me} features={features} />;
 }
