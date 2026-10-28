@@ -29,6 +29,14 @@ export const Seller = model.define("seller", {
   /** Commission as a percentage of the attributed revenue (0–100). */
   commission_pct: model.float().default(0),
   active: model.boolean().default(true),
+  /**
+   * Store (establishment) and till (pos_terminal) the seller works from. An
+   * active seller always has both, the till inside that store; an inactive one
+   * may have neither. Enforced in code (`sellerPlacementProblem`), not by the
+   * schema: the rule depends on `active`.
+   */
+  establishment_id: model.text().nullable(),
+  terminal_id: model.text().nullable(),
   notes: model.text().nullable(),
   token_version: model.number().default(1),
   /** { instagram?, facebook?, tiktok?, whatsapp? } — handles the seller shares. */
