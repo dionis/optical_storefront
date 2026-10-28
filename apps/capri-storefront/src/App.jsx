@@ -10,7 +10,6 @@ import ResumeBanner from "./components/ResumeBanner.jsx";
 import Footer from "./components/Footer.jsx";
 import BottomNav from "./components/BottomNav.jsx";
 import TrustStrip from "./components/TrustStrip.jsx";
-import EnvBanner from "./components/EnvBanner.jsx";
 // Rutas primarias (primera pintura): se cargan de inmediato.
 import Home from "./pages/Home.jsx";
 import Catalog from "./pages/Catalog.jsx";
@@ -59,7 +58,6 @@ export default function App() {
       <LanguageProvider>
         <FeedbackProvider>
           <CartProvider>
-            <EnvBanner />
             <ScrollToTop />
             <Suspense fallback={<RouteFallback />}>
               {/* /admin_stores: mismo panel, punto de entrada del sistema multi-tienda.
@@ -80,7 +78,6 @@ export default function App() {
       <FeedbackProvider>
         <CartProvider>
           <ReviewSummaryProvider>
-          <EnvBanner />
           <ScrollToTop />
           <Header />
           <main className="site-main">

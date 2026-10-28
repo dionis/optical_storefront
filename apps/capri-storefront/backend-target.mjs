@@ -11,7 +11,7 @@
 //   - every other branch (e.g. develop_optical_storepos) → "staging".
 //
 // scripts/vercel-build.sh runs `node backend-target.mjs` and turns the answer into
-// VITE_BACKEND_TARGET (the STAGING banner) and VITE_BACKEND_PROXY (the prefix every
+// VITE_BACKEND_TARGET (checked by the build guard) and VITE_BACKEND_PROXY (the prefix every
 // API call uses: data/medusa.js, admin/adminApi.js, data/visionMeasure.js and the
 // try-on's VITE_VISION_API_BASE). scripts/check-vercel-config.mjs checks it all.
 import { pathToFileURL } from "node:url";
