@@ -2,6 +2,10 @@
 
 _Estado: preparación (22/10/2026). Hoy hay un solo inquilino (RUBI LENS)._
 
+> Especificación completa del módulo (ficha `tenant.json`, traspaso de propiedad,
+> `pnpm tenant`, plan por fases): [MULTI-TENANT-TECNICO.md](MULTI-TENANT-TECNICO.md).
+> Visión de producto para dueños: [GUIA-GENERAL.md](GUIA-GENERAL.md).
+
 ## Modelo elegido: un despliegue por inquilino
 
 Cada óptica recibe **su propia pila** construida desde este mismo repositorio:
