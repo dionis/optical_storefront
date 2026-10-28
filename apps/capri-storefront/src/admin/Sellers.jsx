@@ -8,7 +8,7 @@ import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney, shortDate, stageErrorText } from "./adminOrders.js";
 import { fetchStores } from "./adminStores.js";
 import { listTerminals } from "./posApi.js";
-import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText } from "./adminSellers.js";
+import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText, onThisOrigin } from "./adminSellers.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
@@ -140,7 +140,7 @@ export default function Sellers({ onChanged, go }) {
     if (demo) { setState("demo"); return; }
     setState("loading");
     Promise.all([fetchSellers(), fetchSellerStats({ from: rangeFrom(range) })])
-      .then(([a, b]) => { setSellers(a.sellers || []); setStats(b); setState("ok"); })
+      .then(([a, b]) => { setSellers((a.sellers || []).map(onThisOrigin)); setStats(b); setState("ok"); })
       .catch(() => setState("error"));
   };
   useEffect(load, [range, demo]); // eslint-disable-line react-hooks/exhaustive-deps

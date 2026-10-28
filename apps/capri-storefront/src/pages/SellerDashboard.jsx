@@ -7,7 +7,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { fetchSellerDashboard } from "../data/referral.js";
-import { copyText } from "../admin/adminSellers.js";
+import { copyText, onThisOrigin } from "../admin/adminSellers.js";
 import { money as fmtMoney, shortDate, STAGE_BY_KEY, TERMINAL_BY_KEY } from "../admin/adminOrders.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "../admin/icons.jsx";
@@ -41,7 +41,7 @@ export default function SellerDashboard() {
     return () => { on = false; };
   }, [token, range]);
 
-  const seller = data?.seller;
+  const seller = onThisOrigin(data?.seller);
   const text = t("adm.sel.shareText", { name: TENANT.name });
   const copy = async (v, label) => toast({ tone: (await copyText(v)) ? "success" : "error", title: label });
   const stageText = (o) => (o.terminal && o.terminal !== "payment_pending" ? t(TERMINAL_BY_KEY[o.terminal]?.label || o.terminal) : t(STAGE_BY_KEY[o.stage]?.label || o.stage));
