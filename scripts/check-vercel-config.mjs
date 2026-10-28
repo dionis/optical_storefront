@@ -6,7 +6,8 @@
 //   1. develop/main (and any Production deployment) must resolve to production,
 //      whatever MEDUSA_BACKEND_ORIGIN says; other branches resolve to staging.
 //   2. The rewrite and the STAGING banner (VITE_BACKEND_TARGET) come from the same
-//      decision.
+//      decision (apps/capri-storefront/backend-target.mjs), and nothing else in
+//      vercel.ts varies by branch: Vercel fails builds with computed static props.
 //   3. No hardcoded staging host in a vercel.json or in storefront/try-on code.
 //   4. apps/capri-storefront has vercel.ts only — Vercel reads one config file.
 //
@@ -54,6 +55,11 @@ const CASES = [
   { env: { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feature-x", MEDUSA_BACKEND_ORIGIN: "http://bad/path" }, want: "error" },
 ];
 
+// The build script asks this module for VITE_BACKEND_TARGET; vercel.ts imports it
+// for the rewrite. Testing both against the same cases proves they agree.
+const { resolveBackend } = await import(pathToFileURL(join(STOREFRONT, "backend-target.mjs")).href);
+const STATIC_SHAPES = new Set();
+
 if (!existsSync(VERCEL_TS)) {
   fail("apps/capri-storefront/vercel.ts is missing");
 } else {
@@ -70,15 +76,25 @@ if (!existsSync(VERCEL_TS)) {
       fail(`${label}: config built but must fail the build`);
       continue;
     }
+    let target;
+    try {
+      target = resolveBackend(env).target;
+    } catch (e) {
+      fail(`${label}: backend-target.mjs threw (${e.message}) but vercel.ts did not`);
+      continue;
+    }
     const { config } = mod;
     const rewrite = config.rewrites.find((r) => r.source === "/medusa/:path*");
-    const target = /VITE_BACKEND_TARGET=(\w+)/.exec(config.buildCommand)?.[1];
-    if (target !== want) fail(`${label}: VITE_BACKEND_TARGET=${target}, expected ${want}`);
+    if (target !== want) fail(`${label}: build target (VITE_BACKEND_TARGET) = ${target}, expected ${want}`);
     if (!rewrite) fail(`${label}: no /medusa rewrite`);
     else if (want === "production" && rewrite.destination !== `${PRODUCTION}/:path*`) fail(`${label}: /medusa → ${rewrite.destination}, expected production`);
     else if (want === "staging" && !rewrite.destination.includes(STAGING_HOST)) fail(`${label}: /medusa → ${rewrite.destination}, expected staging`);
-    if (!/bash scripts\/vercel-build\.sh$/.test(config.buildCommand)) fail(`${label}: unexpected buildCommand "${config.buildCommand}"`);
+    if (config.buildCommand !== "bash scripts/vercel-build.sh") fail(`${label}: unexpected buildCommand "${config.buildCommand}"`);
+    // Vercel rejects computed values in static properties ("Dynamic values found in
+    // static properties: buildCommand"). Only the /medusa destination may vary.
+    STATIC_SHAPES.add(JSON.stringify({ ...config, rewrites: config.rewrites.map((r) => (r === rewrite ? { ...r, destination: "<backend>" } : r)) }));
   }
+  if (STATIC_SHAPES.size > 1) fail("vercel.ts varies by branch outside the /medusa rewrite destination — Vercel fails such builds");
 }
 
 // 4: Vercel reads exactly one config file per project.

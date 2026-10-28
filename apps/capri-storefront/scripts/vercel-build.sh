@@ -2,14 +2,14 @@
 set -e
 
 # Last line of defense, inside Vercel's own build: a store that serves customers
-# must talk to the production backend. vercel.ts sets VITE_BACKEND_TARGET from the
-# same decision as the /medusa rewrite; if it is missing, vercel.ts was not applied
-# (and the rewrite with it). Failing here keeps the previous deployment live.
+# must talk to the production backend. backend-target.mjs is the same decision
+# vercel.ts uses for the /medusa rewrite; its answer becomes VITE_BACKEND_TARGET
+# (the STAGING banner). If it errors (e.g. MEDUSA_BACKEND_ORIGIN pointing a live
+# branch elsewhere) or disagrees with the branch, the build fails and Vercel keeps
+# the previous deployment live.
 if [ -n "$VERCEL" ]; then
-  if [ -z "$VITE_BACKEND_TARGET" ]; then
-    echo "vercel-build: VITE_BACKEND_TARGET is not set — apps/capri-storefront/vercel.ts was not applied. Aborting." >&2
-    exit 1
-  fi
+  VITE_BACKEND_TARGET="$(node backend-target.mjs)"
+  export VITE_BACKEND_TARGET
   case "$VERCEL_GIT_COMMIT_REF" in
     develop|main) LIVE=1 ;;
     *) LIVE=$([ "$VERCEL_ENV" = "production" ] && echo 1 || echo 0) ;;
