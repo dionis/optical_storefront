@@ -2,11 +2,82 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # develop serves the live store (Vercel) and develop_optical_storepos is staging:
+    # both must be checked before they deploy, not only main.
+    branches: [main, develop, develop_optical_storepos]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
+  check-config:
+    name: Deploy wiring & i18n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # develop/main must proxy /medusa to the production backend; see the script.
+      - name: Storefront backend per branch (vercel.ts)
+        run: node --experimental-strip-types --no-warnings scripts/check-vercel-config.mjs
+
+      - name: i18n keys in both languages
+        run: node scripts/check-i18n.mjs
+
+  backend-boot:
+    name: Backend migrates and boots on an empty database
+    runs-on: ubuntu-latest
+    # Unit tests and typecheck passed while staging could not start: a custom model
+    # reused Medusa's `price_rule`, which only a real migrate + boot reveals.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: medusa_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/medusa_ci
+      NODE_ENV: development
+      JWT_SECRET: ci-only-not-a-secret
+      COOKIE_SECRET: ci-only-not-a-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @eyewear/shared build
+
+      - name: Run every module migration
+        working-directory: apps/backend
+        run: npx medusa db:migrate
+
+      - name: Boot the backend and wait for /health
+        working-directory: apps/backend
+        run: |
+          npx medusa develop -p 9000 > boot.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:9000/health > /dev/null; then echo "backend is up"; exit 0; fi
+            if grep -qE "Error starting server|Could not resolve module" boot.log; then break; fi
+            sleep 2
+          done
+          echo "backend did not boot:"; tail -60 boot.log; exit 1
+
   lint-typecheck:
     name: Lint & Typecheck
     runs-on: ubuntu-latest
