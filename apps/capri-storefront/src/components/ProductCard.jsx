@@ -266,6 +266,13 @@ export default function ProductCard({ product }) {
             </>
           )}
         </button>
+        {/* Atajo directo a receta: el cliente puede ir al flujo de lentes
+            graduados SIN pasar por el probador ni por la ficha (PDP). Cubre el
+            caso "no necesito probármelos, solo quiero poner la receta". */}
+        <button type="button" className="card-lensflow"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/recetas/${product.slug}?color=${active}`); }}>
+          {t("card.lensFlow")} →
+        </button>
       </div>
     </div>
   );

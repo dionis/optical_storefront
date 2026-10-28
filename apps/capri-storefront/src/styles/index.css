@@ -3524,6 +3524,18 @@ video.zlx-float-img { background: #000; object-fit: contain; }
 .card-add-cart:disabled { opacity: .5; cursor: not-allowed; }
 .card-add-cart svg { display: block; }
 
+/* Atajo "Comprar con receta →" en las tarjetas: enlace discreto bajo los
+   botones que lleva directo al flujo de lentes graduados sin pasar por el
+   probador ni por la ficha (PDP). Mismo estilo que .pdp-lensflow. */
+.card-lensflow {
+  display: block; width: 100%; text-align: center; margin-top: 7px;
+  background: none; border: none; cursor: pointer; padding: 3px 0;
+  color: var(--blue, #0E5AD0); font-size: 12.5px; font-weight: 700;
+  text-decoration: underline; text-underline-offset: 3px;
+  transition: color var(--dur-2), transform var(--dur-1) var(--ease);
+}
+.card-lensflow:hover { color: var(--blue-dark, #0a47a8); transform: translateX(2px); }
+
 /* ---- Responsive: 2 monturas por fila SIEMPRE en móvil, con aire ---- */
 @media (max-width: 640px) {
   .product-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
@@ -3532,6 +3544,7 @@ video.zlx-float-img { background: #000; object-fit: contain; }
   .card-price { font-size: 16px; }
   .card-tryon { height: 42px; font-size: 12.5px; gap: 6px; }
   .card-add-cart { height: 40px; font-size: 12.5px; }
+  .card-lensflow { font-size: 11.5px; margin-top: 5px; }
   .card-colors-n { display: none; }
 }
 @media (max-width: 380px) {
