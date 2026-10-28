@@ -14,8 +14,11 @@ import { model } from "@medusajs/framework/utils";
  * Rows are never edited: a change closes the current row (valid_to) and adds a
  * new one, which is the price history. `value` is a percentage for "percent"
  * and dollars otherwise. Configuration, never purged.
+ *
+ * Not `price_rule`: that table and the `PriceRule` entity are Medusa Pricing's,
+ * and reusing them breaks the migration and the boot (tests/model-names.test.ts).
  */
-export const PriceRule = model.define("price_rule", {
+export const StorePriceRule = model.define("store_price_rule", {
   id: model.id({ prefix: "prr" }).primaryKey(),
   establishment_id: model.text().nullable(),
   scope: model.enum(["all", "frame", "case"]),

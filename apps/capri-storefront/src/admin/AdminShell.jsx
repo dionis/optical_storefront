@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import { MULTISTORE_TABS } from "./backendFeatures.js";
 
 /** Secciones del panel agrupadas como en un panel de operaciones (Coolify-like). */
 export const NAV_GROUPS = [
@@ -46,7 +47,17 @@ const WORK_GROUP = { key: "work", items: [
  * demás roles, solo su trabajo. Ocultar es comodidad: el servidor rechaza igual
  * cualquier ruta fuera de su alcance (lib/staff-guard.ts).
  */
-export function navGroupsFor(me) {
+export function navGroupsFor(me, features = null) {
+  const groups = roleGroupsFor(me);
+  // `features` null = not asked (TABS, defaults): everything. Otherwise a backend
+  // without "multistore" has none of those tabs' routes (admin/backendFeatures.js).
+  if (!features || features.has("multistore")) return groups;
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !MULTISTORE_TABS.has(i.key)) }))
+    .filter((g) => g.items.length > 0);
+}
+
+function roleGroupsFor(me) {
   if (!me || me.is_admin !== false) return [WORK_GROUP, ...NAV_GROUPS];
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");

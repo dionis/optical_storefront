@@ -42,7 +42,7 @@ export async function openRules(container: MedusaContainer, establishmentIds: st
   const which = establishmentIds.length
     ? { $or: [{ establishment_id: establishmentIds }, { establishment_id: null }] }
     : { establishment_id: null };
-  const rows = await svc(container).listPriceRules(
+  const rows = await svc(container).listStorePriceRules(
     { valid_to: null, ...which } as never,
     { take: 10000 }
   );
@@ -51,7 +51,7 @@ export async function openRules(container: MedusaContainer, establishmentIds: st
 
 /** Every rule of one store, newest first: the store's price history. */
 export async function ruleHistory(container: MedusaContainer, establishmentId: string, take = 200): Promise<PriceRuleRow[]> {
-  const rows = await svc(container).listPriceRules(
+  const rows = await svc(container).listStorePriceRules(
     { establishment_id: establishmentId },
     { take, order: { created_at: "DESC" } }
   );
@@ -84,12 +84,12 @@ export async function replaceRule(
 ): Promise<void> {
   const service = svc(container);
   const now = new Date();
-  const open = await service.listPriceRules(
+  const open = await service.listStorePriceRules(
     { establishment_id: key.establishmentId, scope: key.scope, target: key.target, mode: [...MODE_FAMILIES[key.family]], valid_to: null } as never,
     { take: 100 }
   );
   if (open.length) {
-    await service.updatePriceRules(open.map((r) => ({ id: r.id, valid_to: now, closed_by: actorId })) as never);
+    await service.updateStorePriceRules(open.map((r) => ({ id: r.id, valid_to: now, closed_by: actorId })) as never);
   }
   // Every price change is in the audit log (HU-15, HU-72) as well as in the
   // rule history itself, so "who changed what" has one place to look.
@@ -106,7 +106,7 @@ export async function replaceRule(
     throw new Error(`rule mode ${next.mode} is not in the ${key.family} family`);
   }
   if (next) {
-    await service.createPriceRules({
+    await service.createStorePriceRules({
       establishment_id: key.establishmentId,
       scope: key.scope,
       target: key.target,

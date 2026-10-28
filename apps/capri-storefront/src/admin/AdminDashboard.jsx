@@ -1163,9 +1163,9 @@ function navFromUrl(tabs) {
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
 
-export default function AdminDashboard({ user, onLogout, me = null }) {
+export default function AdminDashboard({ user, onLogout, me = null, features = null }) {
   const { t } = useLang();
-  const groups = navGroupsFor(me);
+  const groups = navGroupsFor(me, features);
   const tabs = tabsOf(groups);
   const restricted = me?.is_admin === false;
   // `nav.n` cambia en cada salto para que la pantalla destino se monte con los

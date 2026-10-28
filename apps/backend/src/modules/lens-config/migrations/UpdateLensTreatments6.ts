@@ -22,6 +22,10 @@ export class UpdateLensTreatments6 extends Migration {
         deleted_at     TIMESTAMPTZ
       );
     `);
+    // Migration20260910014816 sorts first and creates the table with `id` and no
+    // default, so the CREATE above is skipped and the seed below (no ids) would
+    // fail the NOT NULL. Give the column the default this migration assumes.
+    this.addSql(`ALTER TABLE lens_treatment_price ALTER COLUMN id SET DEFAULT gen_random_uuid()::TEXT;`);
     this.addSql(`
       DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_lens_treatment_cell') THEN

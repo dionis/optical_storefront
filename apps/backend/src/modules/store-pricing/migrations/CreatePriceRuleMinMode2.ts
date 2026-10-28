@@ -13,13 +13,13 @@ import { Migration } from "@mikro-orm/migrations";
  */
 export class CreatePriceRuleMinMode2 extends Migration {
   async up(): Promise<void> {
-    this.addSql(`ALTER TABLE price_rule DROP CONSTRAINT IF EXISTS price_rule_mode_check;`);
-    this.addSql(`ALTER TABLE price_rule ADD CONSTRAINT price_rule_mode_check CHECK (mode IN ('percent', 'delta', 'override', 'min'));`);
+    this.addSql(`ALTER TABLE store_price_rule DROP CONSTRAINT IF EXISTS store_price_rule_mode_check;`);
+    this.addSql(`ALTER TABLE store_price_rule ADD CONSTRAINT store_price_rule_mode_check CHECK (mode IN ('percent', 'delta', 'override', 'min'));`);
   }
 
   async down(): Promise<void> {
-    this.addSql(`DELETE FROM price_rule WHERE mode = 'min';`);
-    this.addSql(`ALTER TABLE price_rule DROP CONSTRAINT IF EXISTS price_rule_mode_check;`);
-    this.addSql(`ALTER TABLE price_rule ADD CONSTRAINT price_rule_mode_check CHECK (mode IN ('percent', 'delta', 'override'));`);
+    this.addSql(`DELETE FROM store_price_rule WHERE mode = 'min';`);
+    this.addSql(`ALTER TABLE store_price_rule DROP CONSTRAINT IF EXISTS store_price_rule_mode_check;`);
+    this.addSql(`ALTER TABLE store_price_rule ADD CONSTRAINT store_price_rule_mode_check CHECK (mode IN ('percent', 'delta', 'override'));`);
   }
 }
