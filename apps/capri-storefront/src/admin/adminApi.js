@@ -26,9 +26,11 @@ const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const ORIGIN =
   typeof window !== "undefined" && window.location ? window.location.origin : "";
 
-export const ADMIN_API_URL =
-  (env.VITE_ADMIN_MEDUSA_URL && String(env.VITE_ADMIN_MEDUSA_URL).replace(/\/$/, "")) ||
-  `${ORIGIN}/medusa`;
+// VITE_BACKEND_PROXY is set by scripts/vercel-build.sh from the branch (/medusa or
+// /medusa-staging) and wins on Vercel, like in data/medusa.js.
+export const ADMIN_API_URL = env.VITE_BACKEND_PROXY
+  ? `${ORIGIN}${env.VITE_BACKEND_PROXY}`
+  : (env.VITE_ADMIN_MEDUSA_URL && String(env.VITE_ADMIN_MEDUSA_URL).replace(/\/$/, "")) || `${ORIGIN}/medusa`;
 
 // Same key and shape the panel has always used, so AdminPage.jsx keeps reading
 // `session.user` without knowing the token behind it changed meaning.

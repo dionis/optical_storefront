@@ -13,7 +13,9 @@
 const SAME_ORIGIN =
   typeof window !== "undefined" && window.location ? window.location.origin : "";
 
-const API = `${SAME_ORIGIN}/medusa/vision-measure`;
+// /medusa, or /medusa-staging on staging builds (scripts/vercel-build.sh).
+const PROXY = (import.meta.env && import.meta.env.VITE_BACKEND_PROXY) || "/medusa";
+const API = `${SAME_ORIGIN}${PROXY}/vision-measure`;
 const JOB_API = `${API}/job`;
 
 // Guarda la salida de una prueba con IA (imagen frontal con los espejuelos +

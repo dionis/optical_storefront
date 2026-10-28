@@ -27,7 +27,10 @@ const env = (import.meta && import.meta.env) || {};
 //                             so there is no CORS to configure. This matches how
 //                             the production storefront already reaches the
 //                             catalog, and is the mode we deploy with.
-const RAW_MEDUSA_URL = env.VITE_MEDUSA_URL || "";
+// On Vercel, VITE_BACKEND_PROXY (/medusa or /medusa-staging, set by
+// scripts/vercel-build.sh from the branch) wins over anything configured in the
+// dashboard, so no environment variable can point the live store at staging.
+const RAW_MEDUSA_URL = env.VITE_BACKEND_PROXY || env.VITE_MEDUSA_URL || "";
 const IS_ABSOLUTE_URL = /^https?:\/\//i.test(RAW_MEDUSA_URL);
 const PROXY_PATH = RAW_MEDUSA_URL && !IS_ABSOLUTE_URL ? RAW_MEDUSA_URL : "/medusa";
 const ORIGIN = typeof window !== "undefined" && window.location ? window.location.origin : "";

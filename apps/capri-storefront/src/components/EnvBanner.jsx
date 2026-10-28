@@ -1,8 +1,9 @@
 // Dónde se usa: App, encima de todo (tienda y panel). Franja fija que avisa de que
 // esta compilación NO habla con el backend de producción. VITE_BACKEND_TARGET lo
-// fija vercel.ts con la misma decisión que el rewrite de /medusa, así que la franja
-// y el backend real nunca se contradicen. En producción vale "production" y no se
-// pinta nada; en local (sin la variable) tampoco, para no ensuciar el desarrollo.
+// fija scripts/vercel-build.sh con la misma decisión que elige el prefijo del backend
+// (backend-target.mjs), así que la franja y el backend real nunca se contradicen. En
+// producción vale "production" y no se pinta nada; en local (sin la variable)
+// tampoco, para no ensuciar el desarrollo.
 //
 // Fija arriba (no `sticky`: el body lleva overflow-x hidden y lo anularía). Mientras
 // se ve, reserva su alto (BANNER_H) en el body y baja ese mismo alto la barra lateral

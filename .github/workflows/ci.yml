@@ -19,9 +19,9 @@ jobs:
         with:
           node-version: "22"
 
-      # develop/main must proxy /medusa to the production backend; see the script.
+      # develop/main must use the production backend; see the script.
       - name: Storefront backend per branch (vercel.ts)
-        run: node --experimental-strip-types --no-warnings scripts/check-vercel-config.mjs
+        run: node scripts/check-vercel-config.mjs
 
       - name: i18n keys in both languages
         run: node scripts/check-i18n.mjs
