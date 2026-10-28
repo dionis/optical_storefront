@@ -1,0 +1,81 @@
+{
+  "_source": "Óptica El Rancho — Houston, Texas",
+  "_document": "Lista de Precios Profesional 2026",
+  "_note": "Precios en USD. Todos los precios de fotocromáticos, transitions y AR son ADICIONALES al precio base del lente.",
+  "_images": [
+    "el-rancho-full-catalog.jpg",
+    "el-rancho-progressive-lens-map.jpg",
+    "el-rancho-ar-treatments.jpg"
+  ],
+
+  "lenses_base": {
+    "_description": "Precio base del lente según material y diseño",
+    "vision_sencilla": {
+      "cr39": 60, "poly": 90, "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150
+    },
+    "bifocal_ft28": {
+      "cr39": 130, "poly": 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160
+    },
+    "progresivo_gama_media": {
+      "cr39": 180, "poly": 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230
+    },
+    "progresivo_gama_alta": {
+      "cr39": 240, "poly": 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300
+    }
+  },
+
+  "photochromatic_addon": {
+    "_description": "Adicional al precio base del lente, por diseño",
+    "fotocromatico_grey":              { "vs": 85,  "bifocal": 110, "progresivo": 90 },
+    "fotocromatico_brown":             { "vs": null, "bifocal": 110, "progresivo": 90 },
+    "transitions_gen_s_grey":          { "vs": 105, "bifocal": 105, "progresivo": 105 },
+    "transitions_gen_s_brown":         { "vs": 105, "bifocal": 105, "progresivo": 105 },
+    "transitions_gen_s_graphite_green":{ "vs": 105, "bifocal": 105, "progresivo": 105 },
+    "transitions_xtractive_grey":      { "vs": 130, "bifocal": 130, "progresivo": 130 },
+    "transitions_xtractive_brown_ram": { "vs": 130, "bifocal": 130, "progresivo": 130 }
+  },
+
+  "ar_treatments_addon": {
+    "_description": "Adicional al precio base del lente",
+    "vision_sencilla": {
+      "ar_green_basico": 60,
+      "ar_green_plus": 90,
+      "ar_blue_protect": 90
+    },
+    "bifocales_y_progresivos": {
+      "adequate": 50,
+      "crystal": 80,
+      "flawless": 120,
+      "blue_uv_445": 120
+    }
+  },
+
+  "cost_rules_mapping": {
+    "_description": "Cómo se mapean estos precios al sistema de fichas de costo de la tienda (modelo simplificado con un solo valor por regla)",
+    "lens_design": {
+      "sv": { "amount": 60, "source": "VS CR-39 base" },
+      "bifocal": { "amount": 130, "source": "Bifocal CR-39 base" },
+      "prog-mid": { "amount": 180, "source": "Prog Gama Media CR-39 base" },
+      "prog-high": { "amount": 240, "source": "Prog Gama Alta CR-39 base" }
+    },
+    "lens_material": {
+      "cr39": { "amount": 0, "source": "Base material, no surcharge" },
+      "poly": { "amount": 30, "source": "VS poly($90) - VS cr39($60)" },
+      "1.67": { "amount": 60, "source": "VS 1.67($120) - VS cr39($60)" },
+      "1.74": { "amount": 90, "source": "VS 1.74($150) - VS cr39($60)" }
+    },
+    "lens_photo": {
+      "photo-grey": { "amount": 85, "source": "Fotocromático Grey VS price" },
+      "photo-brown": { "amount": 90, "source": "Fotocromático Brown prog price (no VS available)" },
+      "trans-s-grey": { "amount": 105, "source": "Transitions Gen S Grey (flat)" },
+      "trans-s-brown": { "amount": 105, "source": "Transitions Gen S Brown (flat)" },
+      "trans-s-green": { "amount": 105, "source": "Transitions Gen S Graphite Green (flat)" },
+      "trans-x-grey": { "amount": 130, "source": "Transitions Xtractive Grey (flat)" },
+      "trans-x-brown": { "amount": 130, "source": "Transitions Xtractive Brown RAM (flat)" }
+    },
+    "lens_ar": {
+      "ar-green": { "amount": 60, "source": "AR Green Básico VS price" },
+      "ar-blue": { "amount": 90, "source": "AR Blue Protect VS price" }
+    }
+  }
+}
