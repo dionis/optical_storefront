@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Tenant · Documentación</title>
+<style>
+  :root { --navy:#182a4e; --navy2:#26456f; --blue:#0E5AD0; --gold:#b8921e; --ink:#17203a; --muted:#5b6472;
+          --line:#e7eaf0; --soft:#f6f8fc; --ok:#116633; --okbg:#e9f8ef; --warn:#7a5b00; --warnbg:#fff7e6;
+          --bad:#a3122f; --badbg:#fdecef; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; scroll-padding-top:64px; }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--soft); }
+  header { background:linear-gradient(180deg,var(--navy2),var(--navy)); color:#fff; padding:26px 22px; }
+  header h1 { margin:0; font-size:24px; letter-spacing:.03em; }
+  header p { margin:6px 0 0; opacity:.85; font-size:13.5px; }
+  nav { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid var(--line); box-shadow:0 4px 14px rgba(16,24,40,.05); }
+  nav .in { max-width:1040px; margin:0 auto; padding:8px 16px; display:flex; gap:6px; overflow-x:auto; }
+  nav a { white-space:nowrap; text-decoration:none; color:var(--navy); font-size:13px; font-weight:600; padding:6px 11px; border-radius:999px; }
+  nav a:hover { background:var(--soft); }
+  nav a.part { background:var(--navy); color:#fff; }
+  main { max-width:1040px; margin:0 auto; padding:22px 16px 60px; }
+  .part-title { margin:34px 0 0; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); font-weight:800; }
+  section { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-top:18px; box-shadow:0 10px 30px rgba(16,24,40,.06); }
+  h2 { margin:0 0 10px; font-size:17px; color:var(--navy); border-bottom:2px solid #eef3fb; padding-bottom:8px; }
+  h3 { margin:16px 0 6px; font-size:14.5px; color:var(--blue); }
+  .tw { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; }
+  th,td { padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  code { background:#f2f5fa; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12.5px; word-break:break-word; }
+  pre { background:#0f1b33; color:#e6ecf7; border-radius:10px; padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
+  pre code { background:none; border:0; padding:0; color:inherit; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+  .ok { background:var(--okbg); color:var(--ok); }
+  .wip { background:var(--warnbg); color:var(--warn); }
+  .bad { background:var(--badbg); color:var(--bad); }
+  .note { border-left:4px solid var(--gold); background:#fbf7ea; padding:10px 14px; border-radius:8px; margin:10px 0; }
+  .alert { border-left:4px solid var(--bad); background:var(--badbg); padding:10px 14px; border-radius:8px; margin:10px 0; }
+  ul, ol { margin:6px 0; padding-left:20px; }
+  li { margin:3px 0; }
+  .muted { color:var(--muted); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .card { border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:var(--soft); }
+  .card b { color:var(--navy); }
+  .steps { counter-reset:s; list-style:none; padding:0; }
+  .steps li { counter-increment:s; position:relative; padding:6px 0 6px 38px; }
+  .steps li::before { content:counter(s); position:absolute; left:0; top:5px; width:26px; height:26px; border-radius:50%;
+                      background:var(--navy); color:#fff; font-size:12.5px; font-weight:700; display:grid; place-items:center; }
+  footer { text-align:center; color:var(--muted); font-size:12.5px; padding:20px; }
+  @media (max-width:760px){ .grid, .grid3 { grid-template-columns:1fr; } section { padding:16px 14px; } }
+  @media print { nav { display:none; } section { box-shadow:none; break-inside:avoid; } body { background:#fff; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Plataforma de óptica online — Multi-Tenant</h1>
+  <p>Guía general para dueños · Especificación técnica del módulo de inquilinos · Medusa v2 + React/Vite · Actualizado: 27-oct-2026</p>
+</header>
+<nav><div class="in">
+  <a class="part" href="#general">Guía general</a>
+  <a href="#que-es">Qué es</a>
+  <a href="#cliente">Cliente</a>
+  <a href="#panel">Panel</a>
+  <a href="#roles">Roles</a>
+  <a href="#politicas">Políticas</a>
+  <a href="#entrega">Entrega</a>
+  <a href="#costes">Costes</a>
+  <a class="part" href="#tecnica">Técnica</a>
+  <a href="#objetivo">Objetivo</a>
+  <a href="#arquitectura">Arquitectura</a>
+  <a href="#capas">Capas</a>
+  <a href="#estado">Estado</a>
+  <a href="#inventario">Inventario</a>
+  <a href="#ficha">Ficha</a>
+  <a href="#backend">Backend</a>
+  <a href="#catalogo">Catálogo</a>
+  <a href="#storefront">Storefront</a>
+  <a href="#cli">CLI</a>
+  <a href="#alta">Alta</a>
+  <a href="#pruebas">Pruebas</a>
+  <a href="#fases">Fases</a>
+  <a href="#preguntas">Preguntas</a>
+</div></nav>
+<main>
+
+<!-- ═══════════════════════════ PARTE 1 · GUÍA GENERAL ═══════════════════════════ -->
+<p class="part-title" id="general">Parte 1 · Guía general</p>
+
+<section id="que-es">
+  <h2>1. Qué es</h2>
+  <p>Una tienda online de <b>espejuelos con receta</b> lista para operar, más un <b>panel de gestión</b> para el dueño y su equipo. El cliente elige montura, configura sus lentes paso a paso, sube su receta (la IA la lee por él), paga con tarjeta y sigue su pedido sin crear cuenta. El dueño mueve los pedidos, controla precios, costos y márgenes, gestiona vendedores, sucursales y caja, y recibe avisos por correo, SMS y en una hoja de Google.</p>
+  <div class="note">Cada óptica que usa la plataforma tiene <b>su propia tienda, dominio, cuenta de cobro y datos</b>. Nada de una óptica es visible para otra. Hoy hay un inquilino en producción: RUBI LENS.</div>
+</section>
+
+<section id="cliente">
+  <h2>2. Qué ve el cliente</h2>
+  <div class="tw"><table>
+    <tr><th>Paso</th><th>Qué ocurre</th></tr>
+    <tr><td><b>Catálogo</b></td><td>Monturas con filtros (marca, forma, color, material, medidas), buscador y fichas en español e inglés.</td></tr>
+    <tr><td><b>Ficha de producto</b></td><td>Fotos, medidas, colores, valoraciones y —si está activado— <b>probador virtual 3D</b> con la cámara.</td></tr>
+    <tr><td><b>Configurador de lentes</b></td><td>Asistente de 4 pasos: uso (monofocal, progresivo, lectura, sin receta), material, filtros/fotocromático, antirreflejo. El precio se recalcula en cada paso y <b>siempre lo confirma el servidor</b>.</td></tr>
+    <tr><td><b>Receta</b></td><td>Escribe sus valores o <b>sube una foto</b>; la IA la lee, rellena el formulario y el cliente confirma. La imagen va a almacenamiento privado (dato de salud).</td></tr>
+    <tr><td><b>Pago</b></td><td>Resumen completo, teléfono del paciente, avisos por correo/SMS opcionales, tarjeta con Stripe (PayPal y Square disponibles).</td></tr>
+    <tr><td><b>Mis pedidos</b></td><td>Sin contraseña: enlace mágico al correo, todos sus pedidos con su etapa <code>confirmado → laboratorio → enviado → en tránsito → entregado</code>. Contacto con soporte y cancelación cuando la política lo permite.</td></tr>
+    <tr><td><b>Idioma</b></td><td>Español por defecto, inglés con un clic. Moneda y fechas siguen el idioma.</td></tr>
+  </table></div>
+</section>
+
+<section id="panel">
+  <h2>3. Qué ve el dueño: el panel <code>/admin</code></h2>
+  <p class="muted">Correo y contraseña. Barra lateral con iconos (cajón en móvil), todo exportable a CSV o PDF, todo en español e inglés.</p>
+  <div class="tw"><table>
+    <tr><th>Sección</th><th>Para qué sirve</th></tr>
+    <tr><td><b>Pedidos</b></td><td>Filtros (texto, fechas, etapa, receta, vendedor). Detalle con receta, línea de tiempo, guía y nota interna. "Avanzar etapa" ejecuta la operación real y avisa al cliente.</td></tr>
+    <tr><td><b>Ejecutivo</b></td><td>Ventas, costos operacionales, resumen y detalle en una pantalla; cada tarjeta lleva al dato de origen.</td></tr>
+    <tr><td><b>Costos y precios</b></td><td>Ficha de costo de cada venta, reparto porcentual, ganancia objetivo, precio sugerido, costos fijos y resultado mensual.</td></tr>
+    <tr><td><b>Precios de tienda</b></td><td>Reglas por sucursal, montura o estuche (porcentaje, ajuste, fijo, mínimo) con vigencia; importación desde hoja de cálculo.</td></tr>
+    <tr><td><b>Punto de venta</b></td><td>Venta en mostrador, caja (apertura, movimientos, cierre y cuadre), aprobación de descuentos, documentos, reclamaciones a seguros.</td></tr>
+    <tr><td><b>Vendedores</b></td><td>Código de referido <code>?ref=CODIGO</code>, enlaces por red social, comisión, ranking y panel privado sin login.</td></tr>
+    <tr><td><b>Sucursales</b></td><td>Varias tiendas físicas de la misma óptica (propia, familiar, socio, consignación) con su liquidación.</td></tr>
+    <tr><td><b>Equipo · Alertas · Auditoría</b></td><td>Personas y roles; reglas de aviso de ventas; registro de quién cambió qué.</td></tr>
+    <tr><td><b>Catálogo y media</b></td><td>Gestión del catálogo y fotos/vídeo de monturas generados con IA, con presupuesto mensual.</td></tr>
+    <tr><td><b>Seguridad</b></td><td>Semáforo de configuración (secretos, https, Stripe en vivo, webhook, correo, SMS, hoja, OCR) sin mostrar valores. Zona de peligro para borrar pedidos de prueba.</td></tr>
+    <tr><td><b>Ajustes</b></td><td>Correos/teléfono de avisos, administradores a notificar, soporte, proveedor de pago, impuesto de montura, modelo de IA para recetas.</td></tr>
+  </table></div>
+  <div class="grid" style="margin-top:14px">
+    <div class="card"><b>Hoja de Google</b><br>Cada pedido se replica en la hoja del dueño (Resumen, Buscar, Pedidos, Historial, Costos). <b>Estado</b> y <b>Guía</b> funcionan en ambos sentidos; un cambio imposible se revierte explicando el motivo.</div>
+    <div class="card"><b>Avisos automáticos</b><br>Al cliente: confirmación, cambios de etapa, enlace a sus pedidos, cancelación (distinta si hubo reembolso). Al equipo: pedido nuevo, cancelación (con <code>ACCIÓN:</code> si requiere tarea), alertas de ventas.</div>
+  </div>
+</section>
+
+<section id="roles">
+  <h2>4. Roles del equipo</h2>
+  <div class="tw"><table>
+    <tr><th>Rol</th><th>Puede</th></tr>
+    <tr><td><b>Dueño</b> <code>owner</code></td><td>Todo. Único que nombra o retira superadministradores.</td></tr>
+    <tr><td><b>Superadmin</b></td><td>Todo lo demás: precios, descuentos, alertas, configuración.</td></tr>
+    <tr><td><b>Supervisor</b></td><td>Supervisa sucursales asignadas, aprueba descuentos dentro de su límite.</td></tr>
+    <tr><td><b>Encargado</b> <code>manager</code></td><td>Opera su sucursal: caja, ventas, pedidos.</td></tr>
+    <tr><td><b>Vendedor</b></td><td>Vende en POS y ve sus ventas y comisiones.</td></tr>
+  </table></div>
+  <p class="muted">Cada rol puede limitarse a una o varias sucursales y llevar un límite de descuento propio.</p>
+</section>
+
+<section id="politicas">
+  <h2>5. Políticas de negocio incluidas</h2>
+  <ul>
+    <li><b>Precio</b>: siempre calculado en el servidor; el navegador solo lo muestra.</li>
+    <li><b>Laboratorio</b>: 10 días hábiles para tallar y montar.</li>
+    <li><b>Cancelación</b>: solo tras los 10 días hábiles <b>y</b> más de 24 h desde el envío. Sin nada enviado → cancela y reembolsa solo; ya en camino → se registra y el equipo gestiona la devolución.</li>
+    <li><b>Envío</b>: tarifa fija configurable (hoy FedEx $28, 4 días a EE. UU.), recogida en tienda opcional, gratis por encima de un importe.</li>
+    <li><b>Recetas</b>: dato de salud, almacenamiento privado, acceso solo con enlaces temporales.</li>
+  </ul>
+</section>
+
+<section id="entrega">
+  <h2>6. Cómo se entrega una tienda a un dueño nuevo</h2>
+  <ol class="steps">
+    <li><b>Recogemos los datos de la óptica</b> (<a href="#ficha">ficha <code>tenant.json</code></a>): nombre y razón social, dominio, logo y colores, avisos, dirección de recogida, zona horaria, moneda, proveedor, precios y envíos.</li>
+    <li><b>El dueño abre sus cuentas</b> (son suyas): Stripe (el dinero va directo a su banco), dominio, Google (la hoja) y Twilio opcional.</li>
+    <li><b>Montamos su copia</b>: servidor, base de datos, tienda web, almacenamiento privado de recetas, correo con su dominio.</li>
+    <li><b>Cargamos su catálogo</b> y precios.</li>
+    <li><b>Compra de prueba</b> con tarjeta real y reembolso; Seguridad en verde.</li>
+    <li><b>Traspaso</b>: el dueño recibe un enlace de activación, crea su contraseña y queda como <b>Dueño</b>. Da de alta a su equipo; nuestro usuario técnico queda como soporte o se retira.</li>
+  </ol>
+</section>
+
+<section id="costes">
+  <h2>7. Qué cuesta mantenerla</h2>
+  <div class="tw"><table>
+    <tr><th>Concepto</th><th>Orden de magnitud</th></tr>
+    <tr><td>Servidor (Hetzner + Coolify)</td><td>~€4–10 / mes por óptica</td></tr>
+    <tr><td>Tienda web (Vercel)</td><td>plan gratuito o Pro compartido</td></tr>
+    <tr><td>Correo (Resend), SMS (Twilio)</td><td>según volumen; SMS opcional</td></tr>
+    <tr><td>IA (recetas, medición, fotos)</td><td>por uso, con límites por hora/día y presupuesto mensual</td></tr>
+    <tr><td>Stripe</td><td>comisión por cobro, en la cuenta del dueño</td></tr>
+  </table></div>
+  <h3>Glosario</h3>
+  <ul>
+    <li><b>Inquilino (tenant)</b>: una óptica cliente, con su despliegue propio.</li>
+    <li><b>Sucursal (establishment)</b>: tienda física <i>dentro</i> de una misma óptica.</li>
+    <li><b>Etapa</b>: punto de la línea de tiempo del pedido. <b>Ficha de costo</b>: desglose real de una venta.</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════ PARTE 2 · TÉCNICA ═══════════════════════════ -->
+<p class="part-title" id="tecnica">Parte 2 · Especificación técnica del módulo</p>
+
+<section id="objetivo">
+  <h2>1. Objetivo y criterio de "terminado"</h2>
+  <p>Un <b>kit de inquilino</b> para que dar de alta una óptica sea <b>rellenar una ficha y ejecutar un comando</b>, y que después el dueño controle su tienda desde el panel sin tocar código ni variables.</p>
+  <div class="grid3">
+    <div class="card"><b>1 · Ficha</b><br><code>tenants/&lt;slug&gt;/tenant.json</code> + recursos de marca, validada por esquema.</div>
+    <div class="card"><b>2 · Herramienta de alta</b><br><code>pnpm tenant …</code> genera la configuración de cada app y guía el aprovisionamiento.</div>
+    <div class="card"><b>3 · Perfil y traspaso</b><br>Lo que el dueño cambia vive en base de datos; propiedad explícita y transferible.</div>
+  </div>
+  <h3>Terminado cuando</h3>
+  <ul>
+    <li>Una segunda óptica (<code>demo-optica</code>) se levanta <b>sin editar ningún archivo de <code>apps/</code></b>.</li>
+    <li><code>pnpm check:tenant</code> falla si aparece "RUBI LENS", <code>rubilens</code> o <code>caprioptics</code> fuera de los valores por defecto.</li>
+    <li>El dueño entra con un enlace de activación, queda como <code>owner</code> y puede transferir la propiedad; el usuario técnico no es dueño.</li>
+    <li>La pestaña Seguridad muestra "Configuración de la óptica" en verde.</li>
+  </ul>
+</section>
+
+<section id="arquitectura">
+  <h2>2. Decisión de arquitectura: silo por inquilino</h2>
+  <p>Cada óptica tiene su backend Medusa + Postgres + Redis (Coolify), su storefront (Vercel), su Stripe, su hoja, sus buckets y su dominio de correo. El código es uno solo (<code>main</code>).</p>
+  <div class="tw"><table>
+    <tr><th>Criterio</th><th>Silo <span class="tag ok">elegido</span></th><th>Base compartida <span class="tag bad">descartada</span></th></tr>
+    <tr><td>Recetas (datos de salud)</td><td>aisladas por base y bucket</td><td>mezcladas; un filtro olvidado = fuga</td></tr>
+    <tr><td>Medusa v2</td><td>sin cambios</td><td>no modela inquilinos: tocar cada ruta, workflow, job y subscriber</td></tr>
+    <tr><td>Coste por óptica</td><td>~€4–10/mes</td><td>menor a partir de decenas de ópticas</td></tr>
+    <tr><td>Despliegue</td><td>N apps a actualizar</td><td>una</td></tr>
+    <tr><td>Riesgo de migración</td><td>por óptica</td><td>todas a la vez</td></tr>
+  </table></div>
+  <div class="note">Revisar la decisión por encima de ~20 ópticas: entonces conviene un plano de control sobre la API de Coolify (fase 5), no una base compartida. Las <b>sucursales</b> (<code>establishment</code>) son otra cosa: tiendas físicas dentro de una óptica que comparten base, catálogo y Stripe.</div>
+</section>
+
+<section id="capas">
+  <h2>3. Capas de configuración</h2>
+  <p>Regla: <i>¿quién lo cambia después de la entrega, y necesita redespliegue?</i> Precedencia en el backend: <b>C → B → valor por defecto</b> (patrón de <code>store-settings</code> y <code>ocr-config</code>).</p>
+  <div class="tw"><table>
+    <tr><th>Capa</th><th>Dónde</th><th>Quién</th><th>Redespliegue</th><th>Ejemplos</th></tr>
+    <tr><td><b>A · Compilación</b></td><td><code>VITE_*</code> en Vercel, generado desde la ficha</td><td>nosotros</td><td>sí (storefront)</td><td>título/OG, logo, favicon, paleta, URL del API</td></tr>
+    <tr><td><b>B · Despliegue</b></td><td>variables de Coolify, generadas desde la ficha</td><td>nosotros</td><td>sí (backend)</td><td>secretos, Stripe/Resend/Twilio/R2, dominio, zona horaria, moneda, país</td></tr>
+    <tr><td><b>C · Ejecución</b></td><td>tablas del backend, editadas en el panel</td><td><b>el dueño</b></td><td>no</td><td>soporte, recogida y horario, redes, avisos, envíos, precios, impuestos, proveedor de pago</td></tr>
+  </table></div>
+</section>
+
+<section id="estado">
+  <h2>4. Estado actual — ya parametrizado</h2>
+  <div class="tw"><table>
+    <tr><th>Pieza</th><th>Archivo / módulo</th><th>Detalle</th></tr>
+    <tr><td>Identidad backend <span class="tag ok">hecho</span></td><td><code>apps/backend/src/lib/tenant.ts</code></td><td><code>STORE_NAME</code>, <code>TENANT_LEGAL_NAME</code>, <code>STOREFRONT_URL</code>, <code>STORE_SUPPORT_EMAIL</code>, <code>GSHEET_TIMEZONE</code>, <code>STORE_NOTIFICATION_LOCALE</code>, <code>TENANT_CURRENCY</code>, <code>TENANT_COUNTRY</code>, <code>TENANT_SMS_PREFIX</code></td></tr>
+    <tr><td>Identidad storefront <span class="tag ok">hecho</span></td><td><code>src/config/tenant.js</code></td><td><code>VITE_TENANT_NAME</code>, <code>_TAGLINE</code>, <code>_LOGO</code>, <code>_LOGO_MARK</code>, <code>_IMAGE_CREDIT</code></td></tr>
+    <tr><td>Ajustes del dueño <span class="tag ok">capa C</span></td><td><code>store_setting</code></td><td>avisos, soporte, proveedor de pago, impuesto de montura</td></tr>
+    <tr><td>OCR · POS · precios · costos <span class="tag ok">capa C</span></td><td><code>ocr_setting</code>, <code>pos_setting</code>, <code>store_price_rule</code>, <code>cost_rule</code>, <code>cost_item</code></td><td>modelos, límites de descuento, reglas con vigencia, costos</td></tr>
+    <tr><td>Proveedores opcionales <span class="tag ok">hecho</span></td><td><code>medusa-config.ts</code></td><td>Resend/Twilio/R2 solo con credenciales; el backend arranca siempre</td></tr>
+    <tr><td>Comprobación <span class="tag ok">hecho</span></td><td><code>GET /admin/security-status</code></td><td>semáforo sin valores</td></tr>
+  </table></div>
+  <div class="alert"><b>Brecha crítica: el traspaso de propiedad.</b> Hoy dueño = usuario admin más antiguo (<code>staff-scope.ts:42</code>, <code>team/route.ts</code>). Si nosotros creamos el primer usuario al montar la tienda, <b>quedamos como dueño para siempre</b> y el dueño real no puede nombrar superadmins. Se resuelve con propiedad explícita (<a href="#backend">§7.2</a>).</div>
+</section>
+
+<section id="inventario">
+  <h2>5. Inventario — lo que aún es de RUBI LENS o de Capri</h2>
+  <p class="muted">Búsqueda <code>RUBI ?LENS|rubilens|caprioptics</code>: ≈130 apariciones en 45 archivos (la mitad en documentación). Las de código:</p>
+  <div class="tw"><table>
+    <tr><th>#</th><th>Dónde</th><th>Qué</th><th>Capa</th><th>Arreglo</th></tr>
+    <tr><td>1</td><td><code>capri-storefront/index.html</code></td><td>title, description, OG/Twitter, <code>preconnect</code> a api.rubilens.com</td><td>A</td><td>plugin Vite <code>tenantHtml()</code> con <code>%TENANT_*%</code></td></tr>
+    <tr><td>2</td><td><code>public/site.webmanifest</code>, <code>favicon.svg</code>, <code>logo-oficial*.png</code></td><td>nombre e iconos</td><td>A</td><td>copiar <code>tenants/&lt;slug&gt;/assets/</code> en el build</td></tr>
+    <tr><td>3</td><td><code>i18n/translations.js</code> (footer, collage, vm.*, adm.sec…)</td><td>marca en el copy</td><td>A</td><td>placeholder <code>{store}</code>/<code>{domain}</code> interpolado por <code>t()</code></td></tr>
+    <tr><td>4–5</td><td><code>pages/Home.jsx</code>, <code>data/brandMedia.js</code></td><td>marca literal; hero enlazado a caprioptics</td><td>A</td><td><code>TENANT.name/tagline/heroMedia</code></td></tr>
+    <tr><td>6</td><td><code>LensProcess.jsx</code>, <code>TryOnStudio.jsx</code></td><td>logo y nombre en capturas</td><td>A</td><td><code>TENANT.logo/name</code></td></tr>
+    <tr><td>7</td><td><code>styles/index.css</code>, <code>admin/admin.css</code></td><td>paleta</td><td>A</td><td>tokens <code>--brand-*</code> en <code>tenant.css</code> generado</td></tr>
+    <tr><td>8</td><td><code>admin/priceStore.js</code></td><td>recogida "Fry Rd, Katy", zonas, transportistas — <b>en <code>localStorage</code></b></td><td><b>C</b></td><td>al backend (<code>tenant_profile</code>), leído por <code>GET /store/tenant</code></td></tr>
+    <tr><td>9</td><td><code>capri-storefront/vercel.json</code></td><td>rewrite <code>/medusa/*</code> a host fijo</td><td>A</td><td><code>vercel.ts</code> con <code>TENANT_API_ORIGIN</code></td></tr>
+    <tr><td>10–11</td><td><code>lib/email/order-confirmation.ts</code>, <code>order-images.ts</code></td><td>paleta <code>NAVY/GOLD</code>, CID <code>@rubilens</code></td><td>B</td><td><code>tenant().brand</code>, dominio de <code>STOREFRONT_URL</code></td></tr>
+    <tr><td>12</td><td><code>api/vision-measure/notify/route.ts</code></td><td>asunto "RUBILENS"</td><td>B</td><td><code>tenantName()</code></td></tr>
+    <tr><td>13</td><td><code>vto-web/index.html</code>, <code>report.html</code>, <code>i18n.ts</code></td><td>"TRY ON RUBILENS"</td><td>A</td><td><code>VITE_TENANT_NAME</code> en su build</td></tr>
+    <tr><td>14</td><td><code>vto-web</code> claves <code>rubilens.*</code></td><td>prefijo de <code>localStorage</code></td><td>—</td><td><span class="tag wip">no tocar</span> son por origen; renombrar borra preferencias</td></tr>
+    <tr><td>15–16</td><td><code>vision-measure</code> (<code>vision_api.py</code>, <code>config.py</code>, <code>capri_prompt.py</code>)</td><td>título, hosts permitidos, correo, prompt de Capri</td><td>B</td><td><code>TENANT_NAME</code>, <code>SUPPLIER_IMAGE_HOSTS</code>, adaptador</td></tr>
+    <tr><td>17–18</td><td><code>scraper/config.py</code> (<code>base_url</code>), <code>parser.py</code>, <code>catalog-sync.yml</code></td><td>proveedor WooCommerce fijo</td><td>B</td><td><code>SUPPLIER_BASE_URL</code> + adaptador</td></tr>
+    <tr><td>19</td><td><code>data/products.js</code>, <code>cases.js</code></td><td>catálogo estático de Capri</td><td>A</td><td><code>VITE_CATALOG_URL</code> por inquilino (ya existe)</td></tr>
+    <tr><td>20</td><td><code>publicar-*.bat</code></td><td>títulos</td><td>—</td><td>cosmético</td></tr>
+  </table></div>
+</section>
+
+<section id="ficha">
+  <h2>6. Ficha del inquilino — <code>tenant.json</code></h2>
+  <p>Única fuente para las capas A y B y semilla inicial de la C. Nada secreto entra en <code>tenants/</code>; <code>tenants/*/.secrets*</code> va en <code>.gitignore</code>.</p>
+<pre><code>{
+  "slug": "rubi-lens",
+  "identity": { "name": "RUBI LENS", "legalName": "RUBI LENS LLC",
+                "tagline": { "es": "Óptica y Salud Visual", "en": "Optics &amp; Vision Care" } },
+  "domains":  { "storefront": "https://www.rubilens.com", "api": "https://api.rubilens.com",
+                "emailFrom": "pedidos@rubilens.com" },
+  "locale":   { "default": "es", "timezone": "America/Chicago", "currency": "usd", "country": "us" },
+  "brand":    { "primary": "#0b2f66", "accent": "#b8921e", "info": "#0e5ad0", "danger": "#d6123e",
+                "logo": "assets/logo.png", "logoMark": "assets/logo-mark.png",
+                "favicon": "assets/favicon.svg", "ogImage": "assets/og.jpg", "heroMedia": [] },
+  "contact":  { "supportEmail": "…", "ownerNotificationEmail": "…", "ownerNotificationSms": "+1…",
+                "adminNotificationEmails": [], "social": { "instagram": "…", "whatsapp": "+1…" } },
+  "pickup":   { "enabled": true, "name": "RUBI LENS", "address": "Fry Rd, Katy, TX 77449",
+                "hours": { "es": "Lun–Sáb 9:00–19:00", "en": "Mon–Sat 9am–7pm" } },
+  "commerce": { "paymentProvider": "stripe", "frameTaxRate": 0.0825,
+                "shipping": { "flatRate": 28, "etaDays": 4, "freeThreshold": 59 },
+                "labBusinessDays": 10 },
+  "supplier": { "adapter": "woocommerce", "baseUrl": "https://caprioptics.com",
+                "imageHosts": ["caprioptics.com"], "imageCredit": "caprioptics.com" },
+  "features": { "tryOn": false, "discounts": false, "sms": true, "whatsapp": false },
+  "owner":    { "email": "dueno@rubilens.com", "name": "…" }
+}</code></pre>
+  <h3>Reglas del validador (<code>packages/shared/src/tenant.ts</code>)</h3>
+  <ul>
+    <li>URLs <code>https://</code>, <code>slug</code> único, colores <code>#rrggbb</code> con contraste AA sobre <code>primary</code>.</li>
+    <li><code>currency</code>/<code>country</code> ISO; <code>timezone</code> IANA válida.</li>
+    <li>Textos con <code>es</code> y <code>en</code> (misma regla que <code>check:i18n</code>); recursos existen y pesan &lt; 300 KB.</li>
+    <li><code>labBusinessDays</code> ≠ 10 avisa mientras el texto del correo (<code>lib/email/copy.ts</code>) sea fijo.</li>
+  </ul>
+  <h3>Estructura</h3>
+<pre><code>tenants/_schema/tenant.schema.json      tenants/rubi-lens/{tenant.json, assets/}
+tenants/demo-optica/                    packages/shared/src/tenant.ts
+scripts/tenant/                         apps/backend/src/modules/tenant-profile/
+apps/backend/src/api/admin/tenant/      apps/backend/src/api/store/tenant/
+apps/backend/src/scripts/tenant-bootstrap.ts
+apps/capri-storefront/vite-plugin-tenant.js   apps/capri-storefront/vercel.ts</code></pre>
+</section>
+
+<section id="backend">
+  <h2>7. Backend</h2>
+  <h3>7.1 Módulo <code>tenant-profile</code> (capa C)</h3>
+  <p>Mismo patrón que <code>store-settings</code>: una fila, <code>id = "default"</code>.</p>
+<pre><code>export const TenantProfile = model.define("tenant_profile", {
+  id: model.id().primaryKey(),
+  display_name: model.text().nullable(),
+  support_email: model.text().nullable(),     // migrar desde store_setting.support_email
+  support_phone: model.text().nullable(),
+  whatsapp: model.text().nullable(),
+  social: model.json().nullable(),
+  pickup: model.json().nullable(),            // { enabled, name, address, hours:{es,en}, maps_url }
+  shipping_origin: model.json().nullable(),
+  shipping_zones: model.json().nullable(),    // hoy en priceStore.js / localStorage
+  legal: model.json().nullable(),
+  owner_user_id: model.text().nullable(),
+  setup_completed_at: model.dateTime().nullable(),
+  updated_by: model.text().nullable(),
+});</code></pre>
+  <ul>
+    <li><code>resolveTenant(container)</code> asíncrono con caché de 60 s, precedencia C → B → defecto; <code>tenant()</code> síncrono se conserva.</li>
+    <li><code>GET /store/tenant</code> público (nombre, soporte, redes, recogida, zonas <i>solo para mostrar</i>), <code>Cache-Control: public, max-age=300</code>.</li>
+    <li><code>GET/POST /admin/tenant</code> solo <code>owner</code>/<code>superadmin</code>; errores con <code>reason</code> → <code>adm.err.tenant.&lt;reason&gt;</code>.</li>
+    <li>El envío se sigue cobrando en el servidor (<code>shipping-rates.ts</code>), nunca desde el navegador.</li>
+  </ul>
+  <h3>7.2 Propiedad explícita y traspaso</h3>
+  <ol class="steps">
+    <li><code>owner_user_id</code> en <code>tenant_profile</code>; dueño = <code>owner_user_id ?? usuario más antiguo</code> (RUBI LENS sigue igual sin migrar).</li>
+    <li><b>Arranque</b> <code>tenant-bootstrap.ts</code> (<code>medusa exec</code>, idempotente): región/moneda/país, canal y publishable key, semillas de perfil/ajustes/POS/costos, usuario técnico <code>superadmin</code> e <b>invitación al dueño</b> con <code>createInvitesWorkflow</code> (existe en <code>@medusajs/core-flows</code> 2.17 — revisar tipos antes). El operador nunca conoce la contraseña del dueño.</li>
+    <li><b>Transferencia</b> <code>POST /admin/tenant/transfer-owner</code>: solo el dueño, con reautenticación; el anterior pasa a <code>superadmin</code>; queda en auditoría y se avisa a ambos.</li>
+    <li>El dueño puede retirar al usuario técnico: "dar el control" incluye poder echarnos.</li>
+  </ol>
+  <h3>7.3 Asistente "Primeros pasos"</h3>
+  <p>Visible mientras <code>setup_completed_at</code> sea nulo: contacto y redes → avisos → recogida y envíos → precios (importación) → sucursales y equipo → revisión con el semáforo. Copy en <code>adm.setup.*</code> (es/en).</p>
+  <h3>7.4 Otros cambios</h3>
+  <ul>
+    <li><code>security.ts</code>: <code>tenant_profile_complete</code>, <code>owner_is_not_operator</code>, <code>storefront_matches_cors</code>.</li>
+    <li>Correos: paleta y logo desde <code>tenant()</code>. Hoja: nombre de la óptica en el título.</li>
+    <li><code>infra/scripts/backup.sh</code> parametrizado por <code>TENANT_SLUG</code>.</li>
+    <li>Meilisearch: instancia por óptica sin cambios; si se comparte, índice <code>${TENANT_SLUG}_frames</code> y clave restringida.</li>
+  </ul>
+</section>
+
+<section id="catalogo">
+  <h2>8. Catálogo y proveedor</h2>
+  <ul>
+    <li>Interfaz <code>SupplierAdapter</code> en <code>apps/scraper/scraper/adapters/</code>: <code>list_products()</code>, <code>fetch_product(slug)</code>, <code>image_urls()</code>. <code>woocommerce</code> = el código actual con <code>SUPPLIER_BASE_URL</code>.</li>
+    <li>Adaptador <code>csv</code> para ópticas sin web de proveedor (plantilla de <code>price-import.ts</code>).</li>
+    <li>Mismo proveedor → catálogo compartible vía <code>VITE_CATALOG_URL</code>; <b>los precios nunca se comparten</b>.</li>
+    <li><code>vision-measure</code>: <code>SUPPLIER_IMAGE_HOSTS</code> y <code>SUPPLIER_PRODUCT_URL_TEMPLATE</code> sustituyen las constantes de Capri.</li>
+  </ul>
+</section>
+
+<section id="storefront">
+  <h2>9. Storefront y apps web</h2>
+  <ul>
+    <li><code>vite-plugin-tenant.js</code>: lee <code>TENANT_FILE</code>, expone <code>VITE_TENANT_*</code>, sustituye <code>%TENANT_*%</code> en <code>index.html</code>, genera <code>site.webmanifest</code> y <code>tenant.css</code>, copia <code>assets/</code>.</li>
+    <li><code>config/tenant.js</code>: <code>brand</code>, <code>heroMedia</code>, <code>domain</code>, <code>social</code> y <code>loadRuntimeTenant()</code> que mezcla la capa C sin bloquear el render.</li>
+    <li><code>t(key, vars)</code> con <code>{store}</code> por defecto; <code>check:i18n</code> exige el placeholder en ambos idiomas.</li>
+    <li><code>priceStore.js</code>: <code>load()/save()</code> al API (el archivo ya se define como "the single seam").</li>
+    <li><code>vercel.ts</code>: <code>routes.rewrite('/medusa/(.*)', `${process.env.TENANT_API_ORIGIN}/$1`)</code> + cabeceras actuales; copia en la raíz.</li>
+    <li><code>vto-web</code>: <code>VITE_TENANT_NAME</code> dentro de <code>scripts/vercel-build.sh</code>.</li>
+  </ul>
+</section>
+
+<section id="cli">
+  <h2>10. Herramienta <code>pnpm tenant</code></h2>
+  <div class="tw"><table>
+    <tr><th>Comando</th><th>Hace</th></tr>
+    <tr><td><code>tenant new &lt;slug&gt;</code></td><td>copia la plantilla y pregunta lo mínimo (nombre, dominio, correo del dueño)</td></tr>
+    <tr><td><code>tenant validate &lt;slug&gt;</code></td><td>esquema + recursos + contraste; código ≠ 0 si falla (CI)</td></tr>
+    <tr><td><code>tenant env &lt;slug&gt; --target backend|storefront</code></td><td>bloque de variables para Coolify/Vercel; con <code>--with-secrets</code> genera <code>JWT_SECRET</code>, <code>COOKIE_SECRET</code>, <code>ORDER_ACCESS_SECRET</code>, <code>SELLER_LINK_SECRET</code>, <code>VISION_INTERNAL_SECRET</code> — nunca los escribe en el repo</td></tr>
+    <tr><td><code>tenant checklist &lt;slug&gt;</code></td><td>alta paso a paso con valores sustituidos (webhook Stripe, buckets, DNS)</td></tr>
+    <tr><td><code>tenant bootstrap &lt;slug&gt;</code></td><td>instrucciones para <code>medusa exec src/scripts/tenant-bootstrap.ts</code></td></tr>
+    <tr><td><code>tenant list</code></td><td>inquilinos, dominios y commit desplegado</td></tr>
+    <tr><td><code>tenant provision</code> / <code>deploy-all</code> <span class="tag wip">fase 5</span></td><td>APIs de Coolify, Cloudflare, Vercel, Stripe y Resend</td></tr>
+  </table></div>
+</section>
+
+<section id="alta">
+  <h2>11. Alta de una óptica — flujo completo</h2>
+  <ol class="steps">
+    <li><code>pnpm tenant new &lt;slug&gt;</code> → completar <code>tenant.json</code> y <code>assets/</code>; <code>pnpm tenant validate</code>.</li>
+    <li>Cuentas del dueño: Stripe (live), dominio, Google (hoja), Twilio opcional.</li>
+    <li>Coolify desde <code>main</code> + Postgres + Redis; <code>tenant env --target backend --with-secrets</code>; dominio <code>api.&lt;dominio&gt;</code>.</li>
+    <li>R2: <code>&lt;slug&gt;-assets</code> (público) y <code>&lt;slug&gt;-rx</code> (privado); Resend con dominio verificado.</li>
+    <li>Webhook Stripe a <code>https://api.&lt;dominio&gt;/hooks/payment/stripe_stripe</code> → <code>STRIPE_WEBHOOK_SECRET</code>.</li>
+    <li>Hoja compartida con la cuenta de servicio → <code>GSHEET_*</code>.</li>
+    <li><code>medusa exec src/scripts/tenant-bootstrap.ts</code> (región, canal, publishable key, semillas, invitación al dueño).</li>
+    <li>Vercel: Root Directory <code>apps/capri-storefront</code>, <code>TENANT_FILE</code>, <code>TENANT_API_ORIGIN</code>, claves públicas; dominio <code>www.&lt;dominio&gt;</code>.</li>
+    <li>Catálogo: <code>python -m scraper sync --full</code> con el adaptador; <code>pnpm reindex</code>.</li>
+    <li>Verificación: Seguridad en verde, compra real + reembolso, correo y SMS, fila en la hoja, cambio de estado desde la hoja.</li>
+    <li>Traspaso: el dueño acepta la invitación → "Primeros pasos" → <code>setup_completed_at</code>.</li>
+  </ol>
+  <h3>Versiones y despliegues</h3>
+  <ul>
+    <li>Un solo <code>main</code>, nunca ramas por cliente. Migraciones compatibles hacia atrás (columnas nulables, sin renombrar).</li>
+    <li>Orden: <code>demo-optica</code> → RUBI LENS → resto. CI con matriz <code>tenant validate</code> y build de <code>demo-optica</code>.</li>
+  </ul>
+</section>
+
+<section id="pruebas">
+  <h2>12. Pruebas y seguridad</h2>
+  <div class="tw"><table>
+    <tr><th>Prueba</th><th>Tipo</th></tr>
+    <tr><td>Esquema y validador de la ficha (válidos, inválidos, contraste)</td><td>unidad · <code>packages/shared</code></td></tr>
+    <tr><td>Precedencia C → B → defecto de <code>resolveTenant</code></td><td>unidad · backend</td></tr>
+    <tr><td>Dueño explícito vs. más antiguo; transferencia; retirar al técnico</td><td>unidad (<code>staff-roles</code>) + integración</td></tr>
+    <tr><td><code>tenant-bootstrap</code> idempotente</td><td>integración</td></tr>
+    <tr><td><code>check:tenant</code> sin literales de marca</td><td>script en <code>pnpm test</code></td></tr>
+    <tr><td><code>{store}</code> en ambos idiomas</td><td><code>check:i18n</code></td></tr>
+    <tr><td>Build de <code>demo-optica</code> sin "RUBI LENS" en <code>dist/index.html</code></td><td>CI</td></tr>
+  </table></div>
+  <h3>Seguridad y cumplimiento</h3>
+  <ul>
+    <li>Recetas en bucket privado por óptica con URLs prefirmadas.</li>
+    <li>Secretos únicos por óptica: rotar uno no afecta a otra.</li>
+    <li>Acuerdo de tratamiento de datos: el dueño es responsable de sus pacientes; nosotros, encargados.</li>
+    <li>Claves de IA nuestras o del dueño según contrato; si son nuestras, límites por óptica (<code>OCR_RATE_LIMIT_PER_HOUR</code>, <code>VISION_PROXY_*</code>, <code>FRAME_MEDIA_*_USD</code>) y facturación del consumo.</li>
+  </ul>
+</section>
+
+<section id="fases">
+  <h2>13. Plan por fases</h2>
+  <div class="tw"><table>
+    <tr><th>Fase</th><th>Entregable</th><th>Esfuerzo</th></tr>
+    <tr><td><b>1 · Ficha y marca</b></td><td><code>TenantManifest</code> + validador, <code>tenants/rubi-lens</code>, <code>vite-plugin-tenant</code>, <code>{store}</code>, inventario #1–7 y #10–13, <code>check:tenant</code></td><td>3–4 días</td></tr>
+    <tr><td><b>2 · Propiedad y perfil</b></td><td><code>tenant-profile</code>, <code>resolveTenant</code>, <code>owner_user_id</code>, transferencia, <code>/admin/tenant</code> y <code>/store/tenant</code></td><td>3 días</td></tr>
+    <tr><td><b>3 · Alta guiada</b></td><td><code>pnpm tenant</code>, <code>tenant-bootstrap.ts</code>, <code>vercel.ts</code>, "Primeros pasos", comprobaciones en Seguridad</td><td>4–5 días</td></tr>
+    <tr><td><b>4 · Proveedor</b></td><td><code>SupplierAdapter</code> (woocommerce + csv), variables de <code>vision-measure</code>, <code>priceStore</code> al backend</td><td>3–4 días</td></tr>
+    <tr><td><b>5 · Automatización</b> <span class="tag wip">opcional</span></td><td><code>tenant provision</code>/<code>deploy-all</code></td><td>5+ días</td></tr>
+  </table></div>
+  <p class="muted">Salida de cada fase: RUBI LENS se despliega idéntica y <code>demo-optica</code> compila y arranca.</p>
+</section>
+
+<section id="preguntas">
+  <h2>14. Preguntas abiertas para el negocio</h2>
+  <ol>
+    <li>¿Quién paga la infra y la IA de cada óptica: cuota fija, por uso o claves propias del dueño?</li>
+    <li>¿Pueden dos ópticas compartir proveedor y catálogo base?</li>
+    <li>¿El dueño cambia paleta y logo desde el panel (marca en capa C, en tiempo de ejecución) o basta con pedírnoslo?</li>
+    <li>¿Idiomas adicionales (el catálogo ya traduce a <code>fr</code>)?</li>
+    <li>¿Plan de salida: exportación de datos y entrega de la base si una óptica se va?</li>
+  </ol>
+</section>
+
+</main>
+<footer>Fuente: <code>docs/GUIA-GENERAL.md</code> · <code>docs/MULTI-TENANT-TECNICO.md</code> · <code>docs/MULTI-TENANT.md</code></footer>
+</body>
+</html>
