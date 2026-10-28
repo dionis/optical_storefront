@@ -4,6 +4,8 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
 import { profilesByUser } from "../../../lib/staff-profile-data";
 import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
+import { listSellers } from "../../../lib/sellers";
+import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
 
 /**
  * EQUIPO del panel: administradores de la tienda.
@@ -40,15 +42,30 @@ export interface TeamMember {
   /** Código de recibos y fichas (perfil); null si aún no tiene. */
   seller_code: string | null;
   display_name: string | null;
+  /** Seller record of a user with the `seller` role: store and till they sell from. */
+  seller: { id: string; code: string; name: string; active: boolean; establishment_id: string | null; terminal_id: string | null } | null;
+}
+
+/** Display name of a new user, for the seller record created with them. */
+export const personName = (first: unknown, last: unknown, email: string): string =>
+  [first, last].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ") || email.split("@")[0];
+
+/** `SellerLinkError` → the same `{ reason }` shape as every Equipo refusal. */
+export function sellerLinkRefusal(res: MedusaResponse, error: unknown): boolean {
+  if (!(error instanceof SellerLinkError)) return false;
+  res.status(error.status).json({ type: "invalid_data", reason: error.reason, message: error.message });
+  return true;
 }
 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  const [byUser, profiles] = await Promise.all([
+  const [byUser, profiles, sellers] = await Promise.all([
     assignmentsByUser(req.scope, all.map((u) => u.id)),
     profilesByUser(req.scope, all.map((u) => u.id)),
+    listSellers(req.scope),
   ]);
+  const sellerByUser = new Map(sellers.filter((s) => s.user_id).map((s) => [s.user_id as string, s]));
   return all.map((u, i) => {
     // El más antiguo es el dueño (super admin) del sistema.
     const resolved = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] });
@@ -65,6 +82,10 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
       establishment_ids: resolved.establishment_ids,
       seller_code: profiles.get(u.id)?.seller_code ?? null,
       display_name: profiles.get(u.id)?.display_name ?? null,
+      seller: (() => {
+        const s = sellerByUser.get(u.id);
+        return s ? { id: s.id, code: s.code, name: s.name, active: s.active, establishment_id: s.establishment_id, terminal_id: s.terminal_id } : null;
+      })(),
     };
   });
 }
@@ -80,6 +101,11 @@ interface CreateBody {
   last_name?: string;
   /** Rol inicial. Por omisión superadmin: el acceso que daba esta pantalla antes de los roles. */
   role?: string;
+  /**
+   * Obligatorio con rol `seller`: { seller_id } (ficha existente, activa y
+   * libre) o { create: { establishment_id, terminal_id, commission_pct?, code? } }.
+   */
+  seller?: unknown;
 }
 
 export async function POST(
@@ -115,6 +141,18 @@ export async function POST(
     return;
   }
 
+  // Un vendedor nace con su ficha (tienda + punto de venta): se valida ANTES de
+  // crear el usuario, para no dejar un vendedor sin ficha si se rechaza.
+  let link: PreparedSellerLink | null = null;
+  if (role === "seller") {
+    try {
+      link = await prepareSellerLink(req.scope, null, body.seller, { name: personName(body.first_name, body.last_name, email), email });
+    } catch (error) {
+      if (sellerLinkRefusal(res, error)) return;
+      throw error;
+    }
+  }
+
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const existing = await users.listUsers({ email }, { take: 1 });
   if (existing.length) {
@@ -142,11 +180,13 @@ export async function POST(
     { id: registered.authIdentity.id, app_metadata: { user_id: user.id } },
   ]);
 
-  // Starts in every store; stores are set afterwards from the Team tab.
+  // Starts in every store; stores are set afterwards from the Team tab. A
+  // seller works only in the store of their seller record.
+  const seller = link ? await applySellerLink(req.scope, user.id, link) : null;
   await writeStaffAssignment(req.scope, {
     userId: user.id,
     role: role as StaffRole,
-    establishmentIds: null,
+    establishmentIds: seller?.establishment_id ? [seller.establishment_id] : null,
     actorId: actorId || null,
   });
 

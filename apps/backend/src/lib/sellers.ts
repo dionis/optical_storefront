@@ -180,6 +180,8 @@ export interface SellerRow {
   establishment_id: string | null;
   /** Till (punto de venta) inside that store; always set while active. */
   terminal_id: string | null;
+  /** Equipo user who sells at the counter as this seller; null = referral only. */
+  user_id: string | null;
   notes: string | null;
   token_version: number;
   social: SellerSocial | null;
@@ -241,6 +243,7 @@ export function projectSeller(row: Record<string, unknown>): Seller {
     active: row["active"] !== false,
     establishment_id: (row["establishment_id"] as string | null) ?? null,
     terminal_id: (row["terminal_id"] as string | null) ?? null,
+    user_id: (row["user_id"] as string | null) ?? null,
     notes: (row["notes"] as string | null) ?? null,
     token_version: Math.max(1, Number(row["token_version"] ?? 1) || 1),
     social: normalizeSocial(row["social"]),
@@ -295,6 +298,52 @@ export function sellerPlacementProblem(
   if (!store.is_active) return "store_inactive";
   if (!till) return "terminal_required";
   if (!till.is_active) return "terminal_inactive";
+  return null;
+}
+
+// ── Panel user (Equipo) ↔ seller ─────────────────────────────────────────────
+
+/**
+ * How a user with the `seller` role gets their seller record, as the Equipo
+ * tab sends it: an existing one (`seller_id`) or a new one created with the
+ * user (store and till required — a new counter seller is active).
+ */
+export type SellerLinkInput =
+  | { seller_id: string }
+  | { create: { establishment_id: string; terminal_id: string; commission_pct: number; code: string | null } };
+
+export type SellerLinkReason = "seller_link_required" | "seller_not_found" | "seller_taken" | "seller_inactive" | "commission_invalid" | SellerPlacementReason;
+
+export function parseSellerLink(raw: unknown): SellerLinkInput | { reason: SellerLinkReason } {
+  if (!raw || typeof raw !== "object") return { reason: "seller_link_required" };
+  const r = raw as Record<string, unknown>;
+  const id = typeof r["seller_id"] === "string" ? r["seller_id"].trim() : "";
+  if (id) return { seller_id: id };
+  const c = r["create"];
+  if (!c || typeof c !== "object") return { reason: "seller_link_required" };
+  const cc = c as Record<string, unknown>;
+  const establishment_id = typeof cc["establishment_id"] === "string" ? cc["establishment_id"].trim() : "";
+  const terminal_id = typeof cc["terminal_id"] === "string" ? cc["terminal_id"].trim() : "";
+  if (!establishment_id) return { reason: "store_required" };
+  if (!terminal_id) return { reason: "terminal_required" };
+  const pct = parseCommissionPct(cc["commission_pct"]);
+  if (pct === null) return { reason: "commission_invalid" };
+  const code = String(cc["code"] ?? "").trim() || null;
+  return { create: { establishment_id, terminal_id, commission_pct: pct, code } };
+}
+
+/**
+ * Can `userId` take this existing seller? It must be free (or already theirs)
+ * and ACTIVE — an active seller always has store and till, which is what the
+ * counter needs.
+ */
+export function sellerLinkProblem(
+  seller: Pick<SellerRow, "user_id" | "active"> | null,
+  userId: string | null
+): SellerLinkReason | null {
+  if (!seller) return "seller_not_found";
+  if (seller.user_id && seller.user_id !== userId) return "seller_taken";
+  if (!seller.active) return "seller_inactive";
   return null;
 }
 

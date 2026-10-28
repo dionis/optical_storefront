@@ -22,11 +22,12 @@ export const ASSIGNABLE_ROLES = ["superadmin", "supervisor", "manager", "seller"
 /** Clave de traducción del rol; null = sin acceso. */
 export const roleKey = (role) => `adm.team.role.${role || "none"}`;
 
-export async function createAdmin({ email, password, firstName = "", lastName = "", role = "superadmin" }) {
+/** `seller`: obligatorio con rol vendedor — { seller_id } o { create: { establishment_id, terminal_id, commission_pct, code } }. */
+export async function createAdmin({ email, password, firstName = "", lastName = "", role = "superadmin", seller }) {
   try {
     return await adminFetch("/admin/team", {
       method: "POST",
-      body: { email, password, first_name: firstName, last_name: lastName, role },
+      body: { email, password, first_name: firstName, last_name: lastName, role, ...(seller ? { seller } : {}) },
     });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.team.createFailed"));
@@ -45,11 +46,12 @@ export async function setStores(id, establishmentIds) {
   }
 }
 
-export async function setRole(id, role) {
+/** Pasar a vendedor (o cambiar de ficha) lleva `seller`, igual que createAdmin. */
+export async function setRole(id, role, seller) {
   try {
     return await adminFetch(`/admin/team/${encodeURIComponent(id)}/role`, {
       method: "POST",
-      body: { role },
+      body: { role, ...(seller ? { seller } : {}) },
     });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.team.roleFailed"));

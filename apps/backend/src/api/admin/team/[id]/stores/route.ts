@@ -13,7 +13,8 @@ import { listEstablishments } from "../../../../../lib/establishments";
  * Solo para supervisor, encargado y vendedor: el dueño y los superadmin cubren
  * siempre todas las tiendas (reason `admin_all_stores`). Solo admite tiendas
  * activas (reason `bad_store`). Llegan aquí únicamente dueño y superadmin (guardia
- * de /admin).
+ * de /admin). La tienda de un VENDEDOR es la de su ficha (reason
+ * `seller_store_from_record`): se cambia desde Vendedores, no aquí.
  */
 export async function POST(
   req: AuthenticatedMedusaRequest<{ establishment_ids?: unknown }>,
@@ -36,6 +37,11 @@ export async function POST(
   }
   if (target.is_super || !target.role || isAdminRole(target.role)) {
     res.status(422).json({ type: "not_allowed", reason: "admin_all_stores", message: "Owner and superadmins always cover every store." });
+    return;
+  }
+
+  if (target.role === "seller") {
+    res.status(422).json({ type: "not_allowed", reason: "seller_store_from_record", message: "A seller's store comes from their seller record." });
     return;
   }
 

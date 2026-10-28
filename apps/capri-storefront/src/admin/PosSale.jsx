@@ -414,6 +414,7 @@ export default function PosSale({ me }) {
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
   if (!ctx) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
+  if (ctx.seller_block) return <div className="adm-section"><div className="adm-empty"><Icon name="lock" size={36} /><b>{t(`adm.err.pos.${ctx.seller_block}`)}</b><p>{t("adm.pos.sellerBlockHint")}</p></div></div>;
   if (!ctx.stores.length) return <div className="adm-section"><div className="adm-empty"><Icon name="store" size={36} /><b>{t("adm.pos.noStores")}</b></div></div>;
 
   const setC = (k) => (e) => setCustomer((c) => ({ ...c, [k]: e.target.value }));

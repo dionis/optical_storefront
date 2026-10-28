@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { listSessions, openSession } from "../../../../lib/cash";
 import { posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
 import { PosError } from "../../../../lib/pos-data";
+import { sellerTillProblem } from "../../../../lib/pos";
 
 /**
  * CAJA (HU-32).
@@ -26,6 +27,9 @@ export async function POST(req: AuthenticatedMedusaRequest<{ store?: string; ter
     const scope = await posScope(req);
     const body = (req.body ?? {}) as { store?: string; terminal_id?: string; opening?: unknown };
     const store = await sellableStore(req, scope, body.store);
+    // A counter seller opens only the register of their own till.
+    const till = sellerTillProblem(scope, store.id, String(body.terminal_id ?? ""));
+    if (till) throw new PosError(till, 403);
     const opening = Number(body.opening ?? 0);
     if (!Number.isFinite(opening) || opening < 0 || opening > 100000) throw new PosError("bad_payment");
     res.json({ session: await openSession(req.scope, { establishmentId: store.id, terminalId: String(body.terminal_id ?? ""), openingCents: Math.round(opening * 100), actorId: scope.user_id }) });

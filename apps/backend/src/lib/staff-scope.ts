@@ -2,6 +2,9 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { STAFF_MODULE } from "../modules/staff";
+import { SELLER_MODULE } from "../modules/seller";
+import type SellerModuleService from "../modules/seller/service";
+import type { CounterSeller } from "./pos";
 import { recordAudit } from "./audit";
 import { profilesByUser } from "./staff-profile-data";
 import type StaffModuleService from "../modules/staff/service";
@@ -27,6 +30,26 @@ export interface StaffScope extends ResolvedRole {
   privileges: string[];
   /** Code printed on receipts and lab tickets instead of the person's name or email. */
   seller_code: string | null;
+  /**
+   * Seller record of a user with the `seller` role (null when none is linked).
+   * It fixes the store and the one till they sell from (pos.ts sellerTillProblem).
+   */
+  seller?: CounterSeller | null;
+}
+
+/** Live seller record linked to a panel user, or null. */
+export async function counterSellerFor(container: MedusaContainer, userId: string): Promise<CounterSeller | null> {
+  const svc = container.resolve<SellerModuleService>(SELLER_MODULE);
+  const rows = (await svc.listSellers({ user_id: userId } as never, { take: 1 })) as unknown as Record<string, unknown>[];
+  const r = rows.find((x) => !x["deleted_at"]);
+  if (!r) return null;
+  return {
+    id: String(r["id"]),
+    code: String(r["code"] ?? "").toUpperCase(),
+    active: r["active"] !== false,
+    establishment_id: (r["establishment_id"] as string | null) ?? null,
+    terminal_id: (r["terminal_id"] as string | null) ?? null,
+  };
 }
 
 const TTL_MS = 30_000;
@@ -121,13 +144,16 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
   const profile = profiles.get(userId);
   const isOwner = ownerId === userId;
   const resolved = resolveRole({ isOwner, assignments: byUser.get(userId) ?? [] });
+  const seller = resolved.role === "seller" ? await counterSellerFor(container, userId) : null;
   const scope: StaffScope = {
     ...resolved,
     user_id: userId,
     is_owner: isOwner,
     is_admin: isAdminRole(resolved.role),
     privileges: profile?.privileges ?? [],
-    seller_code: profile?.seller_code ?? null,
+    // The seller record's code identifies a counter seller when the profile has none.
+    seller_code: profile?.seller_code ?? seller?.code ?? null,
+    seller,
   };
   cache.set(userId, { at: Date.now(), scope });
   return scope;

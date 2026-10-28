@@ -34,6 +34,35 @@ export function sellableStores<T extends { id: string; is_active: boolean }>(
   return stores.filter((s) => s.is_active && canSellAt(scope, s.id));
 }
 
+/** The seller record behind a user with the `seller` role (StaffScope.seller). */
+export interface CounterSeller {
+  id: string;
+  code: string;
+  active: boolean;
+  establishment_id: string | null;
+  terminal_id: string | null;
+}
+
+export type SellerTillReason = "seller_not_linked" | "seller_inactive" | "seller_wrong_till";
+
+/**
+ * A user with the `seller` role sells only as their seller record says: that
+ * record active, from its store and its one till. Other roles are not bound to
+ * a till (a manager covers whichever is free). Null = may sell there.
+ */
+export function sellerTillProblem(
+  scope: { is_admin: boolean; role: string | null; seller?: CounterSeller | null },
+  establishmentId: string | null,
+  terminalId: string | null
+): SellerTillReason | null {
+  if (scope.is_admin || scope.role !== "seller") return null;
+  const s = scope.seller;
+  if (!s) return "seller_not_linked";
+  if (!s.active || !s.establishment_id || !s.terminal_id) return "seller_inactive";
+  if (establishmentId !== s.establishment_id || terminalId !== s.terminal_id) return "seller_wrong_till";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Customer
 // ---------------------------------------------------------------------------
