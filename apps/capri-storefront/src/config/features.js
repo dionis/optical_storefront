@@ -41,4 +41,13 @@ export const MEDIA_REVIEW_ENABLED = flag(env.VITE_ENABLE_MEDIA_REVIEW, false);
 // descuento"). Para reactivarlos: VITE_ENABLE_DISCOUNTS=true en tu .env.
 export const DISCOUNTS_ENABLED = flag(env.VITE_ENABLE_DISCOUNTS, false);
 
-export default { TRY_ON_ENABLED, MEDIA_REVIEW_ENABLED, DISCOUNTS_ENABLED };
+// Multiplicador del precio del marco: el costo del proveedor (web scraping /
+// tabla seed) se multiplica por este factor para obtener el precio de venta al
+// público. Regla del dueño: ×3 (si vale $4 del proveedor se vende en $12).
+// Configurable: VITE_FRAME_MARKUP=3 en tu .env (por defecto 3).
+const rawMarkup = env.VITE_FRAME_MARKUP;
+export const FRAME_MARKUP = rawMarkup && Number.isFinite(Number(rawMarkup)) && Number(rawMarkup) > 0
+  ? Number(rawMarkup)
+  : 3;
+
+export default { TRY_ON_ENABLED, MEDIA_REVIEW_ENABLED, DISCOUNTS_ENABLED, FRAME_MARKUP };
