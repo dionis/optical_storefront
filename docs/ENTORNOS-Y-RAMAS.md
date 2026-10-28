@@ -26,7 +26,7 @@ Reglas de trabajo:
 2. **`apps/capri-storefront/backend-target.mjs`** decide el prefijo de cada compilación a partir de la rama (`VERCEL_GIT_COMMIT_REF`): `develop` y `main` → `/medusa`, siempre; cualquier otra → `/medusa-staging`.
 3. **`apps/capri-storefront/scripts/vercel-build.sh`** exporta esa decisión como:
    - `VITE_BACKEND_PROXY`: el prefijo de todas las llamadas (`data/medusa.js`, `admin/adminApi.js`, `data/visionMeasure.js` y el probador). En Vercel tiene prioridad sobre `VITE_MEDUSA_URL` y `VITE_ADMIN_MEDUSA_URL`, así que ninguna variable del panel de Vercel puede desviar la tienda en vivo.
-   - `VITE_BACKEND_TARGET`: activa la franja roja **STAGING** (`src/components/EnvBanner.jsx`) en toda compilación que no sea de producción.
+   - `VITE_BACKEND_TARGET`: `production` o `staging`; lo usa la salvaguarda del build.
 
    Si una rama en vivo no queda en `/medusa`, **el build falla** y Vercel sigue sirviendo el despliegue anterior.
 4. **En local** no se define nada: `/medusa` y el proxy de Vite, como siempre.
@@ -51,6 +51,6 @@ El CI corre en push a `main`, `develop` y `develop_optical_storepos`, y en pull 
 
 ## Si la tienda vuelve a apuntar al backend equivocado
 
-1. Comprobar: `https://www.rubilens.com/medusa/version` debe mostrar el commit de `main` (producción), y la franja STAGING no debe aparecer.
+1. Comprobar: `https://www.rubilens.com/medusa/version` debe mostrar el commit de `main` (producción).
 2. Volver a un despliegue bueno de `develop` en Vercel (*Redeploy*).
 3. Revisar en la base de datos de staging los pedidos de clientes reales hechos mientras tanto.
