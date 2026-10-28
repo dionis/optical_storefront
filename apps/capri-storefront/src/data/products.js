@@ -4,6 +4,7 @@
 import { EXTRA } from "./frames-extra.js";
 import { applyFrame } from "../admin/priceStore.js";
 import { FRAME_MARKUP } from "../config/features.js";
+import { capriPrice } from "./capriPrices.js";
 const RAW = [
   {"sku":"DC406","name":"DC406","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC406%20Black.jpg"},{"name":"Grey","image":"https://caprioptics.com/wp-content/uploads/DC406%20Grey.jpg"},{"name":"Tortoise","image":"https://caprioptics.com/wp-content/uploads/DC406%20TORTOISE.jpg"}],"attributes":{"eye_size":"54-56 mm","bridge_size":"18-19 mm","temple_length":"145-150 mm","material":["Acetato","Plástica"],"gender":"Hombres","age":"Adulto","shape":"Cuadrado"}},
   {"sku":"DC407","name":"DC407","brand":"Di Caprio","brand_slug":"di-caprio","colors":[{"name":"Black","image":"https://caprioptics.com/wp-content/uploads/DC407%20Black.jpg"},{"name":"Light Blue","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Blue.jpg"},{"name":"Light Pink","image":"https://caprioptics.com/wp-content/uploads/DC407%20Light%20Pink.jpg"}],"attributes":{"eye_size":"51-53 mm","bridge_size":"16-17 mm","temple_length":"135-140 mm","material":["Acetato","Plástica"],"gender":"Señoras","age":"Adulto","shape":"Ojo de gato"}},
@@ -82,7 +83,12 @@ function hash(str) {
   return Math.abs(h);
 }
 // Precio base del proveedor (costo antes del markup).
+// Usa el listado REAL de Capri Optics (capriPrices.js); si el SKU no está en la
+// tabla, cae al hash determinístico anterior como último respaldo.
 function supplierPriceFor(sku) {
+  const real = capriPrice(sku);
+  if (real != null) return real;
+  // Respaldo para SKUs no listados en la hoja de Capri
   const base = 15.95 + (hash(sku) % 30);
   return Math.round(base * 100) / 100;
 }
