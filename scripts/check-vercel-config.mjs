@@ -97,6 +97,25 @@ if (!existsSync(VERCEL_TS)) {
   if (STATIC_SHAPES.size > 1) fail("vercel.ts varies by branch outside the /medusa rewrite destination — Vercel fails such builds");
 }
 
+// Vercel validates vercel.ts's static properties by reading the source, without
+// running it: a variable, spread or ${} there reads as a missing or dynamic value
+// ("headers[1] missing required property headers", "Dynamic values found in static
+// properties: buildCommand"). Only the /medusa destination may be computed.
+if (existsSync(VERCEL_TS)) {
+  const src = readFileSync(VERCEL_TS, "utf8");
+  const at = src.indexOf("export const config");
+  const body = (at === -1 ? "" : src.slice(at))
+    .replace(/\/\/[^\n]*/g, "")
+    .replace("{ source: \"/medusa/:path*\", destination: `${backend.origin}/:path*` }", "{}");
+  if (at === -1) fail("vercel.ts has no `export const config`");
+  const computed = [
+    ...[...body.matchAll(/:\s*([A-Za-z_$][\w$.]*)\s*[,}\]\n]/g)].map((m) => m[1]).filter((v) => !["true", "false", "null"].includes(v)),
+    ...(body.match(/\.\.\.[A-Za-z_$]/g) ?? []),
+    ...(body.match(/\$\{/g) ?? []),
+  ];
+  if (computed.length) fail(`vercel.ts config has non-literal values outside the /medusa destination: ${[...new Set(computed)].join(", ")}`);
+}
+
 // 4: Vercel reads exactly one config file per project.
 if (existsSync(join(STOREFRONT, "vercel.json"))) {
   fail("apps/capri-storefront/vercel.json exists next to vercel.ts — delete it (vercel.ts replaces it)");
