@@ -2,7 +2,7 @@
 // y modelos expone a la venta. Una tienda nueva expone todo; el dueño o un
 // superadmin quita lo que no quiere vender. Backend: /admin/store-assortment/:id
 // (lib/store-assortment.ts). El punto de venta solo busca y cobra lo expuesto.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { fetchStoreAssortment, searchStoreCatalog, setAssortmentRule } from "./adminStores.js";
@@ -22,6 +22,8 @@ export default function StoreAssortment({ store, onClose }) {
   const [q, setQ] = useState("");
   const [brand, setBrand] = useState("");
   const [results, setResults] = useState([]);
+  const [search, setSearch] = useState("idle"); // idle | loading | ok | error
+  const modelsRef = useRef(null);
   const [reload, setReload] = useState(0);
 
   const load = () => {
@@ -34,12 +36,13 @@ export default function StoreAssortment({ store, onClose }) {
   // Modelos de una marca o que contienen el texto, con su estado en la tienda.
   useEffect(() => {
     const s = q.trim();
-    if (s.length < 2 && !brand) { setResults([]); return undefined; }
+    if (s.length < 2 && !brand) { setResults([]); setSearch("idle"); return undefined; }
     let on = true;
+    setSearch("loading");
     const timer = setTimeout(() => {
       searchStoreCatalog(store.id, { q: s, brand, limit: 100 })
-        .then((r) => { if (on) setResults(r.products || []); })
-        .catch(() => { if (on) setResults([]); });
+        .then((r) => { if (on) { setResults(r.products || []); setSearch("ok"); } })
+        .catch(() => { if (on) { setResults([]); setSearch("error"); } });
     }, 250);
     return () => { on = false; clearTimeout(timer); };
   }, [store.id, q, brand, reload]);
@@ -65,6 +68,14 @@ export default function StoreAssortment({ store, onClose }) {
     write({ scope: "product", target: p.id, exposed: !p.exposed }, t(p.exposed ? "adm.assort.modelHidden" : "adm.assort.modelShown", { name: p.title }));
   const resetModel = (x) =>
     write({ scope: "product", target: x.product_id, exposed: null }, t("adm.assort.modelReset", { name: x.title || x.product_id }));
+
+  // La lista de modelos está debajo de la tabla de marcas: sin bajar hasta ella,
+  // "Ver modelos" parecía no hacer nada.
+  const seeModels = (slug) => {
+    setBrand(slug);
+    setQ("");
+    modelsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const brandName = (slug) => data?.brands.find((b) => b.slug === slug)?.name || slug;
 
@@ -97,7 +108,7 @@ export default function StoreAssortment({ store, onClose }) {
                     </td>
                     <td data-label={t("adm.assort.colExposed")}>{t("adm.assort.count", { n: b.exposed_products, total: b.products })}</td>
                     <td>
-                      <button type="button" className="btn-xs" disabled={busy || !b.slug} onClick={() => { setBrand(b.slug); setQ(""); }}>{t("adm.assort.seeModels")}</button>{" "}
+                      <button type="button" className="btn-xs" disabled={busy || !b.slug} onClick={() => seeModels(b.slug)}>{t("adm.assort.seeModels")}</button>{" "}
                       {b.slug && (
                         <button type="button" className={`btn-xs ${b.exposed_products > 0 ? "warn" : "primary"}`} disabled={busy} onClick={() => toggleBrand(b)}>
                           {t(b.exposed_products > 0 ? "adm.assort.hideBrand" : "adm.assort.showBrand")}
@@ -111,8 +122,8 @@ export default function StoreAssortment({ store, onClose }) {
           </div>
 
           {/* Modelos */}
-          <div className="adm-pricing-block">
-            <h4>{t("adm.assort.modelsTitle")}</h4>
+          <div className="adm-pricing-block" ref={modelsRef}>
+            <h4>{t("adm.assort.modelsTitle")}{brand ? ` · ${brandName(brand)}` : ""}</h4>
             <p className="adm-sub">{t("adm.assort.modelsSub")}</p>
             <div className="adm-pricing-row">
               <label className="adm-find compact">
@@ -124,7 +135,7 @@ export default function StoreAssortment({ store, onClose }) {
                 {data.brands.filter((b) => b.slug).map((b) => <option key={b.slug} value={b.slug}>{b.name}</option>)}
               </select>
             </div>
-            {results.length > 0 && (
+            {search === "ok" && results.length > 0 && (
               <table className="adm-table responsive" style={{ marginTop: 12 }}>
                 <thead><tr><th>{t("adm.assort.colModel")}</th><th>{t("adm.assort.colBrand")}</th><th>{t("adm.assort.colState")}</th><th /></tr></thead>
                 <tbody>
@@ -145,7 +156,9 @@ export default function StoreAssortment({ store, onClose }) {
                 </tbody>
               </table>
             )}
-            {(q.trim().length >= 2 || brand) && results.length === 0 && <div className="adm-nodata">{t("adm.assort.noResults")}</div>}
+            {search === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
+            {search === "error" && <div className="adm-demo-banner">{t("adm.err.assortment.searchFailed")}</div>}
+            {search === "ok" && results.length === 0 && <div className="adm-nodata">{t("adm.assort.noResults")}</div>}
           </div>
 
           {/* Excepciones por modelo */}
