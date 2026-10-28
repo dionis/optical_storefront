@@ -11,12 +11,15 @@ import {
   normalizeSellerSource,
   parseCommissionPct,
   sellerLinks,
+  parseSellerLink,
+  sellerLinkProblem,
   sellerPlacementProblem,
   sellerSourceOf,
   signSellerToken,
   verifySellerToken,
 } from "../src/lib/sellers";
 import { normalizeSellerCodeLoose } from "../src/lib/order-board";
+import { sellerTillProblem } from "../src/lib/pos";
 
 beforeAll(() => {
   process.env.SELLER_LINK_SECRET = "test-seller-secret";
@@ -235,5 +238,49 @@ describe("sellerPlacementProblem", () => {
     expect(check(false, "est_9", null)).toBe("store_unknown");
     expect(check(false, "est_1", "t9")).toBe("terminal_unknown");
     expect(check(true, "est_1", "t2")).toBe("terminal_wrong_store");
+  });
+});
+
+describe("parseSellerLink (Equipo → seller record)", () => {
+  it("takes an existing record by id", () => {
+    expect(parseSellerLink({ seller_id: " sel_1 " })).toEqual({ seller_id: "sel_1" });
+  });
+
+  it("a new record needs store and till", () => {
+    expect(parseSellerLink(undefined)).toEqual({ reason: "seller_link_required" });
+    expect(parseSellerLink({ create: {} })).toEqual({ reason: "store_required" });
+    expect(parseSellerLink({ create: { establishment_id: "est_1" } })).toEqual({ reason: "terminal_required" });
+    expect(parseSellerLink({ create: { establishment_id: "est_1", terminal_id: "t1", commission_pct: 140 } })).toEqual({ reason: "commission_invalid" });
+    expect(parseSellerLink({ create: { establishment_id: "est_1", terminal_id: "t1", commission_pct: "7.5", code: "" } })).toEqual({
+      create: { establishment_id: "est_1", terminal_id: "t1", commission_pct: 7.5, code: null },
+    });
+  });
+});
+
+describe("sellerLinkProblem", () => {
+  it("only a free (or own), active record can be linked", () => {
+    expect(sellerLinkProblem(null, "u1")).toBe("seller_not_found");
+    expect(sellerLinkProblem({ user_id: "u2", active: true }, "u1")).toBe("seller_taken");
+    expect(sellerLinkProblem({ user_id: null, active: false }, "u1")).toBe("seller_inactive");
+    expect(sellerLinkProblem({ user_id: null, active: true }, "u1")).toBeNull();
+    expect(sellerLinkProblem({ user_id: "u1", active: true }, "u1")).toBeNull();
+  });
+});
+
+describe("sellerTillProblem (counter seller → their one till)", () => {
+  const seller = { id: "sel_1", code: "ANA", active: true, establishment_id: "est_1", terminal_id: "t1" };
+  const as = (over: Record<string, unknown> = {}) => ({ is_admin: false, role: "seller", seller, ...over });
+
+  it("binds only the seller role", () => {
+    expect(sellerTillProblem({ is_admin: false, role: "manager" }, "est_2", "t9")).toBeNull();
+    expect(sellerTillProblem({ is_admin: true, role: "owner" }, "est_2", "t9")).toBeNull();
+  });
+
+  it("a seller sells only from the store and till of an active record", () => {
+    expect(sellerTillProblem(as(), "est_1", "t1")).toBeNull();
+    expect(sellerTillProblem(as(), "est_1", "t2")).toBe("seller_wrong_till");
+    expect(sellerTillProblem(as(), "est_2", "t1")).toBe("seller_wrong_till");
+    expect(sellerTillProblem(as({ seller: null }), "est_1", "t1")).toBe("seller_not_linked");
+    expect(sellerTillProblem(as({ seller: { ...seller, active: false } }), "est_1", "t1")).toBe("seller_inactive");
   });
 });

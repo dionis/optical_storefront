@@ -1,6 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { cleanText } from "../../../../lib/establishments";
-import { cleanDiscountPct, cleanLines, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
+import { cleanDiscountPct, cleanLines, discountNeedsApproval, sellerTillProblem, type PosLineInput } from "../../../../lib/pos";
 import { createApproval, listApprovals, listTerminals, PosError, quoteSale } from "../../../../lib/pos-data";
 import { emitAlert } from "../../../../lib/alerts-data";
 import { notifyApprovalRequest } from "../../../../lib/pos-notify";
@@ -63,6 +63,8 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       throw new PosError("approval_not_needed", 409);
     }
     const terminal = terminals.find((t) => t.id === body.terminal_id) ?? null;
+    const till = sellerTillProblem(scope, store.id, terminal?.id ?? null);
+    if (till) throw new PosError(till, 403);
     const approval = await createApproval(req.scope, {
       store,
       terminalId: terminal?.id ?? null,

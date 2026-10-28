@@ -37,6 +37,12 @@ export const Seller = model.define("seller", {
    */
   establishment_id: model.text().nullable(),
   terminal_id: model.text().nullable(),
+  /**
+   * Panel user (Equipo) who sells at the counter as this seller. One to one:
+   * every user with the `seller` role has exactly one; a referral-only seller
+   * has none. Unique among live rows (partial index in CreateSeller3).
+   */
+  user_id: model.text().nullable(),
   notes: model.text().nullable(),
   token_version: model.number().default(1),
   /** { instagram?, facebook?, tiktok?, whatsapp? } — handles the seller shares. */

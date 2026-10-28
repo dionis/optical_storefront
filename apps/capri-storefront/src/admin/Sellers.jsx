@@ -103,7 +103,8 @@ function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete
         <div className="sel-stat"><small>{t("adm.sel.commissionShort", { pct: s.commission_pct })}</small><b>{fmtMoney(stat?.commission ?? 0, "usd", lang)}</b></div>
       </div>
       <small className="muted"><Icon name="store" size={12} /> {store ? `${store.code} · ${store.name}` : t("adm.sel.storeNone")}{terminal ? ` — ${termLabel(terminal)}` : s.establishment_id ? ` — ${t("adm.sel.terminalNone")}` : ""}</small>
-      {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.sel.inactive")}</span>}
+      {s.user_id && <span className="adm-chip neutral" title={t("adm.sel.counterUserHint")}><Icon name="user" size={12} />{t("adm.sel.counterUser")}</span>}
+      {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t(s.user_id ? "adm.sel.inactiveCounter" : "adm.sel.inactive")}</span>}
       <div className="sel-link" title={s.referral_url}><Icon name="link" size={14} /><code>{s.referral_url}</code><button type="button" className="btn-xs" onClick={() => copy(s.referral_url, t("adm.sel.copied"))}><Icon name="copy" size={13} />{t("adm.sel.copy")}</button></div>
       <SocialLinks seller={s} text={text} stat={stat} onCopy={copy} />
       <div className="sel-link" title={s.dashboard_url}><Icon name="dashboard" size={14} /><code>{t("adm.sel.dashboardLink")}</code>

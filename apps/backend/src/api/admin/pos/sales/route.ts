@@ -7,6 +7,7 @@ import {
   cleanRxMeta,
   discountNeedsApproval,
   needsPrescription,
+  sellerTillProblem,
   type PosCustomerInput,
   type PosLineInput,
 } from "../../../../lib/pos";
@@ -95,6 +96,8 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     const store = await sellableStore(req, scope, body.store);
     const terminal = (await listTerminals(req.scope, [store.id])).find((t) => t.id === body.terminal_id && t.is_active);
     if (!terminal) throw new PosError("bad_terminal");
+    const till = sellerTillProblem(scope, store.id, terminal.id);
+    if (till) throw new PosError(till, 403);
 
     const customer = cleanCustomer(body.customer);
     if ("reason" in customer) throw new PosError(customer.reason);

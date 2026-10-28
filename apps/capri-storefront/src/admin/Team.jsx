@@ -7,9 +7,93 @@ import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
 import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
+import { fetchSellers } from "./adminSellers.js";
+import { listTerminals } from "./posApi.js";
 import StaffProfile from "./StaffProfile.jsx";
 
 const isAdminRole = (role) => role === "owner" || role === "superadmin";
+
+/**
+ * Ficha de vendedor de un usuario con rol VENDEDOR: una existente (activa y
+ * libre) o una nueva con tienda y su único punto de venta. El servidor aplica
+ * la misma regla (lib/seller-link.ts); aquí solo se evita el viaje.
+ */
+const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "10", code: "" };
+const linkMissing = (l) => (l.mode === "existing" ? !l.seller_id : !l.establishment_id || !l.terminal_id);
+const linkPayload = (l) => (l.mode === "existing"
+  ? { seller_id: l.seller_id }
+  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, commission_pct: Number(l.commission_pct) || 0, code: l.code.trim().toUpperCase() } });
+
+function SellerLinkFields({ value, onChange, userId = null, sellers, stores, terminals, disabled }) {
+  const { t } = useLang();
+  const set = (patch) => onChange({ ...value, ...patch });
+  const free = sellers.filter((s) => s.active && (!s.user_id || s.user_id === userId));
+  const storeOf = (id) => stores.find((x) => x.id === id);
+  const tillOf = (id) => terminals.find((x) => x.id === id);
+  const activeStores = stores.filter((x) => x.is_active);
+  const tills = terminals.filter((p) => p.establishment_id === value.establishment_id && p.is_active);
+  const pickStore = (id) => {
+    const own = terminals.filter((p) => p.establishment_id === id && p.is_active);
+    set({ establishment_id: id, terminal_id: own.length === 1 ? own[0].id : "" });
+  };
+  return (
+    <fieldset className="adm-team-seller" disabled={disabled}>
+      <legend>{t("adm.team.seller.title")}</legend>
+      <p className="adm-sub">{t("adm.team.seller.hint")}</p>
+      <div className="adm-range">
+        <button type="button" className={value.mode === "existing" ? "on" : ""} onClick={() => set({ mode: "existing" })}>{t("adm.team.seller.existing")}</button>
+        <button type="button" className={value.mode === "new" ? "on" : ""} onClick={() => set({ mode: "new" })}>{t("adm.team.seller.new")}</button>
+      </div>
+      {value.mode === "existing" ? (
+        <label className="adm-field">{t("adm.team.seller.pick")}
+          <select className="adm-input" required value={value.seller_id} onChange={(e) => set({ seller_id: e.target.value })}>
+            <option value="">{free.length ? t("adm.team.seller.pickPh") : t("adm.team.seller.noneFree")}</option>
+            {free.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.code} · {s.name} — {storeOf(s.establishment_id)?.code || "?"} / {tillOf(s.terminal_id)?.code || "?"}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <div className="adm-form-grid">
+          <label className="adm-field">{t("adm.sel.store")} *
+            <select className="adm-input" required value={value.establishment_id} onChange={(e) => pickStore(e.target.value)}>
+              <option value="">{t("adm.sel.storeNone")}</option>
+              {activeStores.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+            </select>
+          </label>
+          <label className="adm-field">{t("adm.pos.terminal")} *
+            <select className="adm-input" required disabled={!value.establishment_id} value={value.terminal_id} onChange={(e) => set({ terminal_id: e.target.value })}>
+              <option value="">{value.establishment_id && !tills.length ? t("adm.sel.terminalNoneInStore") : t("adm.sel.terminalNone")}</option>
+              {tills.map((p) => <option key={p.id} value={p.id}>{p.name ? `${p.code} · ${p.name}` : p.code}</option>)}
+            </select>
+          </label>
+          <label className="adm-field">{t("adm.sel.commission")}
+            <input className="adm-input" type="number" min="0" max="100" step="0.5" value={value.commission_pct} onChange={(e) => set({ commission_pct: e.target.value })} />
+          </label>
+          <label className="adm-field">{t("adm.sel.code")}
+            <input className="adm-input" maxLength={12} value={value.code} placeholder={t("adm.sel.codePh")} onChange={(e) => set({ code: e.target.value.toUpperCase() })} />
+          </label>
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
+/** Lo que muestra la fila de un vendedor: su ficha (tienda / punto de venta) o el aviso de que no tiene. */
+function SellerRecordTag({ member, stores, terminals }) {
+  const { t } = useLang();
+  const s = member.seller;
+  if (!s) return <span className="adm-team-tag temp" title={t("adm.team.seller.missingHint")}><Icon name="alert" size={12} /> {t("adm.team.seller.missing")}</span>;
+  const store = stores.find((x) => x.id === s.establishment_id);
+  const till = terminals.find((x) => x.id === s.terminal_id);
+  return (
+    <span className={`adm-team-tag ${s.active ? "" : "temp"}`} title={t("adm.team.seller.recordTitle")}>
+      <Icon name="store" size={12} /> {store?.code || "?"} / {till?.code || "?"}{s.active ? "" : ` · ${t("adm.sel.off")}`}
+    </span>
+  );
+}
 
 /**
  * Tiendas de una persona: "Todas" o una lista. Un desplegable con casillas; se
@@ -72,6 +156,11 @@ export default function Team() {
   const [state, setState] = useState(demo ? "demo" : "loading");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", role: "" });
+  const [newLink, setNewLink] = useState(EMPTY_LINK);
+  // Fila cuya ficha de vendedor se está eligiendo: { id, role, link }.
+  const [linking, setLinking] = useState(null);
+  const [sellers, setSellers] = useState([]);
+  const [terminals, setTerminals] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const myRole = team.find((m) => m.id === meId)?.role ?? null;
@@ -93,6 +182,8 @@ export default function Team() {
       .catch(() => setState("error"));
     // Sin tiendas (o sin backend de tiendas aún) el selector simplemente no aparece.
     fetchStores().then((r) => setStoreList(r.establishments || [])).catch(() => setStoreList([]));
+    fetchSellers().then((r) => setSellers(r.sellers || [])).catch(() => setSellers([]));
+    listTerminals().then((r) => setTerminals(r.terminals || [])).catch(() => setTerminals([]));
   };
   useEffect(load, [demo]);
 
@@ -101,9 +192,11 @@ export default function Team() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await createAdmin({ ...form, role: newRole });
+      const r = await createAdmin({ ...form, role: newRole, seller: newRole === "seller" ? linkPayload(newLink) : undefined });
       setTeam(r.team || []);
       setForm({ email: "", password: "", firstName: "", lastName: "", role: "" });
+      setNewLink(EMPTY_LINK);
+      fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
       toast({ tone: "success", title: t("adm.team.created"), message: t("adm.team.createdSub") });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
@@ -138,12 +231,16 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
-  const changeRole = async (m, role) => {
-    if (role === m.role) return;
+  const changeRole = async (m, role, seller) => {
+    if (role === m.role && !seller) return;
+    // Pasar a vendedor necesita su ficha: se elige antes de llamar al servidor.
+    if (role === "seller" && !seller) { setLinking({ id: m.id, role, link: EMPTY_LINK }); return; }
     setBusy(true);
     try {
-      const r = await setRole(m.id, role);
+      const r = await setRole(m.id, role, seller);
       setTeam(r.team || []);
+      setLinking(null);
+      if (seller || m.role === "seller") fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
       toast({ tone: "success", title: t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
@@ -168,8 +265,11 @@ export default function Team() {
           <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
             {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
           </select>
-          <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.team.create")}</button>
+          <button className="btn-sm primary" disabled={demo || busy || (newRole === "seller" && linkMissing(newLink))}>{busy ? "…" : t("adm.team.create")}</button>
         </form>
+        {newRole === "seller" && (
+          <SellerLinkFields value={newLink} onChange={setNewLink} sellers={sellers} stores={stores} terminals={terminals} disabled={demo || busy} />
+        )}
       </div>
 
       {/* Lista del equipo */}
@@ -192,14 +292,23 @@ export default function Team() {
               {m.role_legacy && <span className="adm-team-tag legacy" title={t("adm.team.roleLegacy")}>{t("adm.team.roleLegacyTag")}</span>}
               {canEditRole(m) ? (
                 <select className="adm-team-role" aria-label={t("adm.team.role")} title={t("adm.team.role")}
-                  value={m.role ?? ""} disabled={busy || demo} onChange={(e) => changeRole(m, e.target.value)}>
+                  value={linking?.id === m.id ? linking.role : m.role ?? ""} disabled={busy || demo} onChange={(e) => (e.target.value === m.role ? setLinking(null) : changeRole(m, e.target.value))}>
                   {m.role == null && <option value="" disabled>{t(roleKey(null))}</option>}
                   {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
                 </select>
               ) : (
                 !m.is_super && <span className="adm-team-role-label">{t(roleKey(m.role))}</span>
               )}
-              {m.role && !isAdminRole(m.role) && stores.length > 0 && (
+              {m.role === "seller" ? (
+                <>
+                  <SellerRecordTag member={m} stores={stores} terminals={terminals} />
+                  {canEditRole(m) && (
+                    <button className="btn-xs" disabled={busy || demo} onClick={() => setLinking((l) => (l?.id === m.id ? null : { id: m.id, role: "seller", link: EMPTY_LINK }))}>
+                      <Icon name="link" size={12} /> {m.seller ? t("adm.team.seller.change") : t("adm.team.seller.link")}
+                    </button>
+                  )}
+                </>
+              ) : m.role && !isAdminRole(m.role) && stores.length > 0 && (
                 <StorePicker member={m} stores={stores} disabled={busy || demo} onSave={(ids) => changeStores(m, ids)} />
               )}
               {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
@@ -213,6 +322,17 @@ export default function Team() {
                 </button>
               )}
             </div>
+            {linking?.id === m.id && (
+              <div className="adm-team-profile">
+                <SellerLinkFields value={linking.link} onChange={(link) => setLinking((l) => ({ ...l, link }))} userId={m.id} sellers={sellers} stores={stores} terminals={terminals} disabled={busy || demo} />
+                <div className="adm-actions" style={{ marginTop: 10 }}>
+                  <button className="btn-sm primary" disabled={busy || demo || linkMissing(linking.link)} onClick={() => changeRole(m, "seller", linkPayload(linking.link))}>
+                    <Icon name="save" size={14} /> {t("adm.team.seller.save")}
+                  </button>
+                  <button className="btn-sm" onClick={() => setLinking(null)}>{t("adm.ord.cancel")}</button>
+                </div>
+              </div>
+            )}
             {openProfile === m.id && (
               <div className="adm-team-profile">
                 <StaffProfile mode="admin" userId={m.id} onSaved={(p) => setTeam((list) => list.map((x) => (x.id === m.id ? { ...x, seller_code: p.seller_code ?? null } : x)))} />
