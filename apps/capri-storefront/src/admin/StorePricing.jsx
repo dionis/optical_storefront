@@ -2,12 +2,11 @@
 // general (porcentaje o monto fijo por venta), precios exactos por modelo,
 // vista previa con el mismo cálculo del servidor e historial de cambios.
 // Backend: /admin/store-pricing/:id (lib/store-pricing.ts).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { useCatalog } from "../data/catalogStore.js";
 import { money, shortDate } from "./adminOrders.js";
-import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices } from "./adminStores.js";
+import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices, searchStoreCatalog } from "./adminStores.js";
 import Icon from "./icons.jsx";
 
 /** Lentes de ejemplo para la vista previa: un monofocal típico. */
@@ -21,13 +20,13 @@ const SAMPLE_LENSES = 100;
 export default function StorePricing({ store, onClose }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { products = [], cases = [] } = useCatalog();
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   const [busy, setBusy] = useState(false);
   const [adj, setAdj] = useState({ mode: "none", value: "" });
   const [q, setQ] = useState("");
-  const [picked, setPicked] = useState(null); // { id, name, isCase }
+  const [matches, setMatches] = useState([]);
+  const [picked, setPicked] = useState(null); // { id, name, brand, isCase, exposed }
   const [exactPrice, setExactPrice] = useState("");
   const [floor, setFloor] = useState("");
   const [minPrice, setMinPrice] = useState("");
@@ -47,16 +46,21 @@ export default function StorePricing({ store, onClose }) {
   };
   useEffect(load, [store.id]);
 
-  // Modelos del catálogo (los precios son por modelo, no por color).
-  const catalog = useMemo(() => [
-    ...products.filter((p) => p.medusaId).map((p) => ({ id: p.medusaId, name: p.name, brand: p.brand, isCase: false })),
-    ...cases.filter((c) => c.medusaId).map((c) => ({ id: c.medusaId, name: c.name, brand: "", isCase: true })),
-  ], [products, cases]);
-  const matches = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (s.length < 2) return [];
-    return catalog.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(s)).slice(0, 8);
-  }, [catalog, q]);
+  // Modelos del catálogo del SERVIDOR (los precios son por modelo, no por color).
+  // No el catálogo que cargó el navegador: ese solo trae ids de Medusa cuando la
+  // tienda web corre con VITE_USE_MEDUSA y la carga salió bien, y si no, el
+  // buscador se quedaba vacío.
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2 || picked) { setMatches([]); return undefined; }
+    let on = true;
+    const timer = setTimeout(() => {
+      searchStoreCatalog(store.id, { q: s, limit: 8 })
+        .then((r) => { if (on) setMatches((r.products || []).map((p) => ({ id: p.id, name: p.title, brand: p.brand, isCase: p.is_case, exposed: p.exposed }))); })
+        .catch(() => { if (on) setMatches([]); });
+    }, 250);
+    return () => { on = false; clearTimeout(timer); };
+  }, [store.id, q, picked]);
 
   useEffect(() => {
     if (!picked) { setPreview(null); return undefined; }
@@ -157,7 +161,7 @@ export default function StorePricing({ store, onClose }) {
               <div className="adm-pricing-matches">
                 {matches.map((p) => (
                   <button type="button" key={p.id} className="btn-xs" onClick={() => { setPicked(p); setQ(p.name); }}>
-                    {p.name}{p.brand ? ` · ${p.brand}` : ""}
+                    {p.name}{p.brand ? ` · ${p.brand}` : ""}{p.exposed ? "" : ` · ${t("adm.assort.hiddenShort")}`}
                   </button>
                 ))}
               </div>

@@ -8,6 +8,7 @@ import { shortDate } from "./adminOrders.js";
 import { fetchStores, createStore, updateStore } from "./adminStores.js";
 import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
+import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
 
 const EMPTY = { name: "", address: "", phone: "" };
@@ -31,6 +32,7 @@ export default function Stores() {
   const [editing, setEditing] = useState(null); // id en edición
   const [draft, setDraft] = useState(EMPTY);
   const [pricingId, setPricingId] = useState(null); // tienda con el panel de precios abierto
+  const [assortId, setAssortId] = useState(null); // tienda con el panel de catálogo abierto
 
   const load = () => {
     if (demo) return;
@@ -129,7 +131,8 @@ export default function Stores() {
                 </>
               ) : (
                 <>
-                  <button className="btn-xs primary" disabled={demo} onClick={() => setPricingId(pricingId === s.id ? null : s.id)}>{t("adm.stores.prices")}</button>
+                  <button className="btn-xs primary" disabled={demo} onClick={() => { setAssortId(null); setPricingId(pricingId === s.id ? null : s.id); }}>{t("adm.stores.prices")}</button>
+                  <button className="btn-xs primary" disabled={demo} onClick={() => { setPricingId(null); setAssortId(assortId === s.id ? null : s.id); }}>{t("adm.stores.catalog")}</button>
                   <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
@@ -142,6 +145,10 @@ export default function Stores() {
 
       {pricingId && stores.find((s) => s.id === pricingId) && (
         <StorePricing key={pricingId} store={stores.find((s) => s.id === pricingId)} onClose={() => setPricingId(null)} />
+      )}
+
+      {assortId && stores.find((s) => s.id === assortId) && (
+        <StoreAssortment key={assortId} store={stores.find((s) => s.id === assortId)} onClose={() => setAssortId(null)} />
       )}
 
       {!demo && <PriceImport />}

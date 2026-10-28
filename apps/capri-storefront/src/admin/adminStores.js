@@ -82,3 +82,34 @@ export async function updateStore(id, patch) {
     throw new Error(reasonKey(e, "adm.err.stores.saveFailed"));
   }
 }
+
+/* ── Surtido por tienda (/admin/store-assortment/:id) ── */
+
+const assortmentKey = (e, fallback) => {
+  const r = (e && e.reason) || (e && e.payload && e.payload.reason);
+  return r ? `adm.err.assortment.${r}` : fallback;
+};
+
+export async function fetchStoreAssortment(id) {
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Modelos del catálogo del servidor (no el que cargó el navegador) con su
+ * exposición en la tienda: { id, title, brand, is_case, exposed }.
+ */
+export async function searchStoreCatalog(id, { q = "", brand = "", limit } = {}) {
+  const query = { q };
+  if (brand) query.brand = brand;
+  if (limit) query.limit = limit;
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/products`, { query });
+}
+
+/** scope "brand" (slug) | "product" (id); exposed true/false, o null para volver a lo heredado. */
+export async function setAssortmentRule(id, { scope, target, exposed }) {
+  try {
+    return await adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/rule`, { method: "POST", body: { scope, target, exposed } });
+  } catch (e) {
+    throw new Error(assortmentKey(e, "adm.err.assortment.saveFailed"));
+  }
+}

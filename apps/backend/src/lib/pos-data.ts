@@ -35,6 +35,8 @@ import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { brandOf, isExposed } from "./store-assortment";
+import { listAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
 import { uploadPrivateImage } from "./tryon-image";
 
@@ -496,7 +498,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const term = q.trim().slice(0, 80);
   if (term.length < 2) return [];
-  const fields = ["id", "title", "thumbnail", "variants.id", "variants.title", "variants.sku", "variants.barcode"];
+  const fields = ["id", "title", "thumbnail", "metadata", "variants.id", "variants.title", "variants.sku", "variants.barcode"];
   // An exact SKU or barcode (what a scanner sends) first; then the name.
   const { data: byCode } = await query.graph({
     entity: "variant",
@@ -505,7 +507,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
     pagination: { take: 5 },
   });
   const codeIds = [...new Set((byCode as Array<{ product_id?: string }>).map((v) => v.product_id).filter(Boolean) as string[])];
-  const [{ data: exact }, { data: named }] = await Promise.all([
+  const [{ data: exact }, { data: named }, assortment] = await Promise.all([
     codeIds.length
       ? query.graph({ entity: "product", fields, filters: { id: codeIds } })
       : Promise.resolve({ data: [] as unknown[] }),
@@ -513,12 +515,15 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       entity: "product",
       fields,
       filters: { title: { $ilike: `%${term}%` }, status: "published" } as never,
-      pagination: { take: 20 },
+      // Wider than the 20 shown: models the store does not expose are dropped below.
+      pagination: { take: 60 },
     }),
+    listAssortmentRules(container, establishmentId),
   ]);
   const seen = new Set<string>();
-  const products = ([...exact, ...named] as Array<{ id: string; title: string; thumbnail?: string | null; variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null }> }>)
+  const products = ([...exact, ...named] as Array<{ id: string; title: string; thumbnail?: string | null; metadata?: Record<string, unknown> | null; variants?: Array<{ id: string; title?: string; sku?: string | null; barcode?: string | null }> }>)
     .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
+    .filter((p) => isExposed(assortment, { id: p.id, brand: brandOf(p.metadata) }))
     .slice(0, 20);
   const [rules, prices] = await Promise.all([
     openRules(container, [establishmentId]),
@@ -600,11 +605,12 @@ export async function quoteSale(
     (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string } }>).map((v) => [v.id, v])
   );
   const productIds = [...new Set([...variantById.values()].map((v) => v.product?.id).filter((v): v is string => Boolean(v)))];
-  const [rules, prices, settings, metadata] = await Promise.all([
+  const [rules, prices, settings, metadata, assortment] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, productIds),
     resolveStoreSettings(container),
     loadProductMetadata(pg, productIds),
+    listAssortmentRules(container, establishmentId),
   ]);
   const priceById = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
@@ -638,6 +644,11 @@ export async function quoteSale(
       min = lineMinimum(rules, { establishmentId, scope: "frame", target: "" });
     } else {
       if (!variant || !productId) throw new PosError("bad_variant");
+      // The store only sells what it exposes (store-assortment.ts); the search
+      // already hides the rest, this stops a stale screen or a scanned code.
+      if (!isExposed(assortment, { id: productId, brand: brandOf(metadata.get(productId)) })) {
+        throw new PosError("not_exposed");
+      }
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
       const scope = caseIds.has(productId) ? "case" : "frame";
