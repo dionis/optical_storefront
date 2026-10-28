@@ -15,7 +15,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const csv = await salesCsv(req.scope, filter, (id, channel) => (channel === "web" ? "web" : stores.get(id ?? "") ?? id ?? ""));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="sales_${filter.from}_${filter.to}.csv"`);
-    // BOM so Excel reads the accents right.
-    res.send(`﻿${csv}`);
+    // BOM so Excel reads the accents right (built, not typed: a literal one is invisible and fails lint).
+    res.send(String.fromCharCode(0xfeff) + csv);
   });
 }

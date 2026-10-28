@@ -84,7 +84,9 @@ const TABLES: Record<string, Row[]> = {
 
 /** Minimal chainable Knex stand-in over the fixtures above. */
 function makeKnex(tables: Record<string, Row[]> = TABLES): Knex {
-  const build = (rows: Row[]) => {
+  // `missing` mimics a table that does not exist: real Knex rejects when the query
+  // runs (so callers can `.catch()` and fall back), it never throws on `pg(table)`.
+  const build = (rows: Row[], missing: string | null = null) => {
     const state = { rows: [...rows] };
     const builder: Record<string, unknown> = {
       whereNull(col: string) {
@@ -103,13 +105,19 @@ function makeKnex(tables: Record<string, Row[]> = TABLES): Knex {
         return builder;
       },
       then(resolve: (v: Row[]) => unknown, reject?: (e: unknown) => unknown) {
-        return Promise.resolve(state.rows).then(resolve, reject);
+        const result = missing
+          ? Promise.reject(new Error(`relation "${missing}" does not exist`))
+          : Promise.resolve(state.rows);
+        return result.then(resolve, reject);
+      },
+      catch(reject: (e: unknown) => unknown) {
+        return (builder.then as (a: undefined, b: typeof reject) => Promise<unknown>)(undefined, reject);
       },
     };
     return builder;
   };
   const fn = (table: string) => {
-    if (!(table in tables)) throw new Error(`relation "${table}" does not exist`);
+    if (!(table in tables)) return build([], table);
     return build(tables[table] as Row[]);
   };
   return fn as unknown as Knex;
