@@ -5,7 +5,9 @@ import { STORE_ASSORTMENT_MODULE } from "../modules/store-assortment";
 import type StoreAssortmentModuleService from "../modules/store-assortment/service";
 import { recordAudit } from "./audit";
 import { KNOWN_BRANDS } from "./costing";
-import { brandExposed, brandOf, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
+import { brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
+import { storeLinePrice } from "./store-pricing";
+import { openRules, productPrices } from "./store-pricing-data";
 
 /**
  * Reads and writes of the per-store assortment (semantics in store-assortment.ts).
@@ -152,5 +154,77 @@ export async function storeAssortment(container: MedusaContainer, establishmentI
     exceptions,
     total_products: products.length,
     exposed_products: products.filter((p) => isExposed(rules, p)).length,
+  };
+}
+
+const num = (v: unknown): number | null => {
+  const n = Number(v);
+  return v !== null && v !== undefined && v !== "" && Number.isFinite(n) ? n : null;
+};
+const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/**
+ * One model as the store sees it, for the detail card of the catalog panel:
+ * photos and colours, frame measurements, base and store price (frame only,
+ * the same calculation as the point of sale) and why it is or is not on sale.
+ * Null when the product does not exist.
+ */
+export async function storeCatalogProduct(container: MedusaContainer, establishmentId: string, productId: string) {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { data } = await query.graph({
+    entity: "product",
+    fields: ["id", "title", "handle", "description", "status", "thumbnail", "metadata", "images.url", "variants.id", "variants.title", "variants.sku", "variants.metadata"],
+    filters: { id: productId },
+  });
+  const p = (data as Array<Record<string, any>>)[0];
+  if (!p) return null;
+
+  const md = (p.metadata ?? {}) as Record<string, unknown>;
+  const brand = brandOf(md);
+  const [assortment, rules, prices] = await Promise.all([
+    listAssortmentRules(container, establishmentId),
+    openRules(container, [establishmentId]),
+    productPrices(container, [p.id]),
+  ]);
+  const base = prices[0]?.price ?? null;
+  const scope = brand === "case" || rules.some((r) => r.scope === "case" && r.target === p.id) ? "case" : "frame";
+  const store = base === null ? null : storeLinePrice(rules, { establishmentId, scope, target: p.id, base, lenses: 0 });
+  const i18n = (md["i18n"] ?? {}) as Record<string, { title?: string; description?: string } | undefined>;
+  const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : []);
+
+  return {
+    id: p.id as string,
+    title: p.title as string,
+    handle: p.handle as string,
+    status: p.status as string,
+    brand,
+    brand_name: text(md["brand"]) ?? brand,
+    is_case: scope === "case",
+    thumbnail: (p.thumbnail as string | null) ?? null,
+    images: ((p.images ?? []) as Array<{ url?: string }>).map((i) => i.url).filter(Boolean) as string[],
+    colors: ((p.variants ?? []) as Array<Record<string, any>>).map((v) => ({
+      id: v.id as string,
+      title: (v.title as string) ?? "",
+      sku: (v.sku as string | null) ?? null,
+      image: text((v.metadata ?? {})["image"]),
+    })),
+    description: {
+      en: text(p.description),
+      es: text(i18n["es"]?.description),
+    },
+    attributes: {
+      eye_size: num(md["eye_size"]),
+      bridge_size: num(md["bridge_size"]),
+      temple_length: num(md["temple_length"]),
+      material: text(md["material"]),
+      shape: text(md["shape"]),
+      gender: text(md["gender"]),
+      features: list(md["features"]),
+    },
+    base_price: base,
+    store_price: store ? store.frame : null,
+    price_source: store ? store.frame_source : null,
+    exposed: isExposed(assortment, { id: p.id, brand }),
+    exposed_by: exposureSource(assortment, { id: p.id, brand }),
   };
 }
