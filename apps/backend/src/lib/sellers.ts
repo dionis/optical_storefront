@@ -176,6 +176,10 @@ export interface SellerRow {
   code: string;
   commission_pct: number;
   active: boolean;
+  /** Store the seller works from; always set while active. */
+  establishment_id: string | null;
+  /** Till (punto de venta) inside that store; always set while active. */
+  terminal_id: string | null;
   notes: string | null;
   token_version: number;
   social: SellerSocial | null;
@@ -235,6 +239,8 @@ export function projectSeller(row: Record<string, unknown>): Seller {
     code: String(row["code"] ?? "").toUpperCase(),
     commission_pct: Number(row["commission_pct"] ?? 0) || 0,
     active: row["active"] !== false,
+    establishment_id: (row["establishment_id"] as string | null) ?? null,
+    terminal_id: (row["terminal_id"] as string | null) ?? null,
     notes: (row["notes"] as string | null) ?? null,
     token_version: Math.max(1, Number(row["token_version"] ?? 1) || 1),
     social: normalizeSocial(row["social"]),
@@ -250,6 +256,46 @@ export function parseCommissionPct(value: unknown): number | null {
   const n = Number(String(value).replace("%", "").trim());
   if (!Number.isFinite(n) || n < 0 || n > 100) return null;
   return Math.round(n * 100) / 100;
+}
+
+// ── Store and till ───────────────────────────────────────────────────────────
+
+export type SellerPlacementReason =
+  | "store_required"
+  | "terminal_required"
+  | "store_unknown"
+  | "store_inactive"
+  | "terminal_unknown"
+  | "terminal_wrong_store"
+  | "terminal_inactive";
+
+/**
+ * Owner's rule: a seller always belongs to a store and, while ACTIVE, sells
+ * from exactly one till of that store (both live). An inactive seller may have
+ * neither, so any other field can be saved while deactivated — but whatever is
+ * set must still be coherent (a till always inside the chosen store).
+ *
+ * `seller` is the state AFTER the save (current row merged with the body), so
+ * activating a seller without a store is refused the same as clearing it.
+ */
+export function sellerPlacementProblem(
+  seller: { active: boolean; establishment_id: string | null; terminal_id: string | null },
+  stores: Array<{ id: string; is_active: boolean }>,
+  terminals: Array<{ id: string; establishment_id: string; is_active: boolean }>
+): SellerPlacementReason | null {
+  const { active, establishment_id, terminal_id } = seller;
+  if (terminal_id && !establishment_id) return "store_required";
+  const store = establishment_id ? stores.find((s) => s.id === establishment_id) : undefined;
+  if (establishment_id && !store) return "store_unknown";
+  const till = terminal_id ? terminals.find((t) => t.id === terminal_id) : undefined;
+  if (terminal_id && !till) return "terminal_unknown";
+  if (till && till.establishment_id !== establishment_id) return "terminal_wrong_store";
+  if (!active) return null;
+  if (!store) return "store_required";
+  if (!store.is_active) return "store_inactive";
+  if (!till) return "terminal_required";
+  if (!till.is_active) return "terminal_inactive";
+  return null;
 }
 
 export function sellerService(container: MedusaContainer): SellerModuleService {

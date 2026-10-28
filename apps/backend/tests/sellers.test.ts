@@ -11,6 +11,7 @@ import {
   normalizeSellerSource,
   parseCommissionPct,
   sellerLinks,
+  sellerPlacementProblem,
   sellerSourceOf,
   signSellerToken,
   verifySellerToken,
@@ -201,5 +202,38 @@ describe("customerInitials", () => {
     expect(customerInitials("Ana García Pérez")).toBe("A. G. P.");
     expect(customerInitials("  luis ")).toBe("L.");
     expect(customerInitials(null)).toBe("—");
+  });
+});
+
+describe("sellerPlacementProblem", () => {
+  const stores = [{ id: "est_1", is_active: true }, { id: "est_2", is_active: true }, { id: "est_off", is_active: false }];
+  const terminals = [
+    { id: "t1", establishment_id: "est_1", is_active: true },
+    { id: "t1off", establishment_id: "est_1", is_active: false },
+    { id: "t2", establishment_id: "est_2", is_active: true },
+  ];
+  const check = (active: boolean, establishment_id: string | null, terminal_id: string | null) =>
+    sellerPlacementProblem({ active, establishment_id, terminal_id }, stores, terminals);
+
+  it("an active seller needs a live store and a live till of that store", () => {
+    expect(check(true, "est_1", "t1")).toBeNull();
+    expect(check(true, null, null)).toBe("store_required");
+    expect(check(true, "est_1", null)).toBe("terminal_required");
+    expect(check(true, "est_off", null)).toBe("store_inactive");
+    expect(check(true, "est_1", "t1off")).toBe("terminal_inactive");
+  });
+
+  it("an inactive seller may have neither, or just the store", () => {
+    expect(check(false, null, null)).toBeNull();
+    expect(check(false, "est_1", null)).toBeNull();
+    expect(check(false, "est_off", "t1off")).toBe("terminal_wrong_store");
+    expect(check(false, "est_1", "t1off")).toBeNull();
+  });
+
+  it("whatever is set must be coherent, active or not", () => {
+    expect(check(false, null, "t1")).toBe("store_required");
+    expect(check(false, "est_9", null)).toBe("store_unknown");
+    expect(check(false, "est_1", "t9")).toBe("terminal_unknown");
+    expect(check(true, "est_1", "t2")).toBe("terminal_wrong_store");
   });
 });
