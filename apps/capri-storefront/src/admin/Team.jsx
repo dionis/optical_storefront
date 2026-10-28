@@ -241,7 +241,7 @@ export default function Team() {
       setTeam(r.team || []);
       setLinking(null);
       if (seller || m.role === "seller") fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
-      toast({ tone: "success", title: t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
+      toast({ tone: "success", title: seller && m.role === "seller" ? t("adm.team.seller.linked", { email: m.email }) : t("adm.team.roleChanged", { email: m.email, role: t(roleKey(role)) }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
