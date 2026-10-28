@@ -38,6 +38,13 @@ export function isExposed(rules: AssortmentRuleLike[], product: { id: string; br
   return own ? own.exposed : brandExposed(rules, product.brand);
 }
 
+/** Which rule decides a model: its own, its brand's, or none (exposed by default). */
+export function exposureSource(rules: AssortmentRuleLike[], product: { id: string; brand: string }): "product" | "brand" | "default" {
+  if (rules.some((x) => x.scope === "product" && x.target === product.id)) return "product";
+  if (product.brand && rules.some((x) => x.scope === "brand" && x.target === product.brand)) return "brand";
+  return "default";
+}
+
 /** Validation of a rule write; `exposed: null` means "remove the rule". Returns a reason or null. */
 export function assortmentRuleDenied(scope: unknown, target: unknown, exposed: unknown): string | null {
   if (!ASSORTMENT_SCOPES.includes(scope as AssortmentScope)) return "bad_scope";

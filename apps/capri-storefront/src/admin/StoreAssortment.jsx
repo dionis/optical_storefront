@@ -2,11 +2,13 @@
 // y modelos expone a la venta. Una tienda nueva expone todo; el dueño o un
 // superadmin quita lo que no quiere vender. Backend: /admin/store-assortment/:id
 // (lib/store-assortment.ts). El punto de venta solo busca y cobra lo expuesto.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { fetchStoreAssortment, searchStoreCatalog, setAssortmentRule } from "./adminStores.js";
 import Icon from "./icons.jsx";
+import StoreModelDetail from "./StoreModelDetail.jsx";
+import { resolveImageSized } from "../data/imageUrl.js";
 
 /**
  * Reglas: un modelo manda sobre su marca, y una marca oculta también oculta los
@@ -25,6 +27,7 @@ export default function StoreAssortment({ store, onClose }) {
   const [search, setSearch] = useState("idle"); // idle | loading | ok | error
   const modelsRef = useRef(null);
   const [reload, setReload] = useState(0);
+  const [openId, setOpenId] = useState(null); // modelo con la ficha abierta
 
   const load = () => {
     fetchStoreAssortment(store.id)
@@ -140,8 +143,17 @@ export default function StoreAssortment({ store, onClose }) {
                 <thead><tr><th>{t("adm.assort.colModel")}</th><th>{t("adm.assort.colBrand")}</th><th>{t("adm.assort.colState")}</th><th /></tr></thead>
                 <tbody>
                   {results.map((p) => (
-                    <tr key={p.id}>
-                      <td data-label={t("adm.assort.colModel")}>{p.title}</td>
+                    <Fragment key={p.id}>
+                    <tr className={openId === p.id ? "adm-row-open" : ""}>
+                      <td data-label={t("adm.assort.colModel")}>
+                        <button type="button" className="adm-model-link" aria-expanded={openId === p.id}
+                          title={t("adm.assort.d.open")} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
+                          {p.thumbnail
+                            ? <img className="adm-model-thumb" src={resolveImageSized(p.thumbnail, 120)} alt="" loading="lazy" />
+                            : <span className="adm-model-thumb" aria-hidden="true" />}
+                          <b>{p.title}</b>
+                        </button>
+                      </td>
                       <td data-label={t("adm.assort.colBrand")}>{brandName(p.brand)}</td>
                       <td data-label={t("adm.assort.colState")}>
                         <span className={`adm-chip ${p.exposed ? "ok" : "bad"}`}>{t(p.exposed ? "adm.assort.exposed" : "adm.assort.hidden")}</span>
@@ -152,6 +164,12 @@ export default function StoreAssortment({ store, onClose }) {
                         </button>
                       </td>
                     </tr>
+                    {openId === p.id && (
+                      <tr className="adm-model-row"><td colSpan={4}>
+                        <StoreModelDetail key={`${p.id}:${reload}`} storeId={store.id} productId={p.id} storeCode={store.code} />
+                      </td></tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

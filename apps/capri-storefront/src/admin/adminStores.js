@@ -105,6 +105,11 @@ export async function searchStoreCatalog(id, { q = "", brand = "", limit } = {})
   return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/products`, { query });
 }
 
+/** Ficha de un modelo en la tienda (fotos, medidas, precios, exposición). */
+export async function fetchStoreModel(id, productId) {
+  return adminFetch(`/admin/store-assortment/${encodeURIComponent(id)}/products/${encodeURIComponent(productId)}`);
+}
+
 /** scope "brand" (slug) | "product" (id); exposed true/false, o null para volver a lo heredado. */
 export async function setAssortmentRule(id, { scope, target, exposed }) {
   try {

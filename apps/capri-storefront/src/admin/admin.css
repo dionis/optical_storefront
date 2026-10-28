@@ -988,3 +988,26 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
   .pos-where { width: 100%; }
   .pos-where select { flex: 1 1 140px; }
 }
+
+/* Tiendas → Catálogo: miniatura del modelo y su ficha desplegable. */
+.adm-model-link { display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 0; font: inherit; color: var(--adm-ink); cursor: pointer; text-align: left; }
+.adm-model-link:hover b, .adm-model-link:focus-visible b { color: var(--adm-blue); text-decoration: underline; }
+.adm-model-thumb { width: 56px; height: 36px; flex: none; object-fit: contain; border-radius: 6px; background: var(--adm-line-2); border: 1px solid var(--adm-line); }
+.adm-row-open > td { background: var(--adm-blue-soft); }
+.adm-model-row > td { padding: 0 !important; }
+.adm-model-detail { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 18px; padding: 16px; border-bottom: 1px solid var(--adm-line); }
+.adm-model-photo { width: 100%; aspect-ratio: 16 / 10; object-fit: contain; border-radius: var(--adm-radius-sm); background: #fff; border: 1px solid var(--adm-line); }
+.adm-model-nophoto { display: grid; place-items: center; color: var(--adm-muted); font-size: 13px; }
+.adm-model-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.adm-model-color { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; padding: 4px; border: 1px solid var(--adm-line); border-radius: 8px; background: #fff; font: inherit; font-size: 11px; color: var(--adm-muted); cursor: pointer; }
+.adm-model-color img { width: 54px; height: 30px; object-fit: contain; }
+.adm-model-color.on { border-color: var(--adm-blue); box-shadow: 0 0 0 2px rgba(14,90,208,.15); color: var(--adm-ink); }
+.adm-model-color:disabled { cursor: default; opacity: .6; }
+.adm-model-info h4 { margin: 0 0 6px; }
+.adm-model-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; margin: 10px 0; }
+.adm-model-specs dt { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--adm-muted); }
+.adm-model-specs dd { margin: 2px 0 0; font-size: 13px; }
+.adm-model-desc { font-size: 13px; color: var(--adm-muted); margin: 8px 0 10px; max-height: 7.5em; overflow: auto; }
+@media (max-width: 720px) {
+  .adm-model-detail { grid-template-columns: 1fr; padding: 12px; }
+}

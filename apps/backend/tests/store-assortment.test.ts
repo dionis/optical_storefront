@@ -1,4 +1,4 @@
-import { assortmentRuleDenied, brandExposed, brandOf, isExposed, type AssortmentRuleLike } from "../src/lib/store-assortment";
+import { assortmentRuleDenied, brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike } from "../src/lib/store-assortment";
 
 const brandRule = (target: string, exposed: boolean): AssortmentRuleLike => ({ scope: "brand", target, exposed });
 const modelRule = (target: string, exposed: boolean): AssortmentRuleLike => ({ scope: "product", target, exposed });
@@ -53,5 +53,14 @@ describe("assortmentRuleDenied", () => {
     expect(assortmentRuleDenied("brand", "  ", true)).toBe("bad_target");
     expect(assortmentRuleDenied("brand", 5, true)).toBe("bad_target");
     expect(assortmentRuleDenied("brand", "4u", "yes")).toBe("bad_exposed");
+  });
+});
+
+describe("exposureSource", () => {
+  it("names the rule that decides the model", () => {
+    expect(exposureSource([], dc)).toBe("default");
+    expect(exposureSource([brandRule("di-caprio", false)], dc)).toBe("brand");
+    expect(exposureSource([brandRule("di-caprio", false), modelRule("prod_1", true)], dc)).toBe("product");
+    expect(exposureSource([brandRule("flexure", false)], dc)).toBe("default");
   });
 });
