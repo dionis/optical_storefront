@@ -1276,3 +1276,25 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 
 /* Código generado por el sistema: se muestra, no se escribe. */
 .adm-code-ro { display: inline-flex; align-items: center; min-height: 40px; align-self: flex-start; }
+
+/* Móvil: el menú de la hamburguesa baja desde ARRIBA a todo el ancho (no es un
+   cajón lateral). Mismo acordeón de grupos; scroll interno solo si no cabe. */
+@media (max-width: 768px) {
+  .adm-side {
+    inset: 0 0 auto 0;
+    width: 100% !important;
+    height: auto;
+    max-height: 100dvh;
+    border-radius: 0 0 18px 18px;
+    box-shadow: 0 18px 40px rgba(6, 28, 64, .28);
+    transform: translateY(calc(-100% - 24px));
+    transition: transform .28s var(--adm-ease);
+  }
+  .adm-shell.drawer-open .adm-side { transform: none; }
+  .adm-side-head { padding: 10px 14px 6px; }
+  .adm-nav { flex: 0 1 auto; padding: 2px 12px 6px; }
+  .adm-side-foot { padding: 6px 12px 12px; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .adm-side { transition: none; }
+}
