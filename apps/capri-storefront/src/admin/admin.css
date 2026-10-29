@@ -938,6 +938,10 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .pos-form input, .pos-form select, .pos-lens select, .pos-row input, .pos-inline input { min-height: 42px; font-size: 15px; width: 100%; box-sizing: border-box; }
 .pos-address summary { cursor: pointer; font-weight: 700; font-size: 13px; color: #1c4f9c; }
 .pos-address .pos-form { margin-top: 10px; }
+
+/* Worn frame measurements */
+.pos-worn-frame { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
+.pos-worn-frame small { font-weight: 400; color: var(--adm-muted, #888); }
 .pos-wears { border: 1px solid var(--adm-line-2); border-radius: 10px; display: flex; gap: 18px; padding: 8px 14px; margin: 0; }
 .pos-wears legend { font-weight: 800; font-size: 13px; padding: 0 6px; }
 .pos-wears label, .pos-check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
