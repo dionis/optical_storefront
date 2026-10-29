@@ -364,14 +364,18 @@ export default function PosSale({ me }) {
     return { paid: Math.round(paid * 100) / 100, ins: Math.round(ins * 100) / 100, balance: Math.round((total - paid - ins) * 100) / 100 };
   }, [payments, methods, total]);
 
+  // Lo que usa hoy: graduación de ambos ojos y cuándo se la hicieron.
+  const wornReady = rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
+  const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
+  const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
   const canNext = () => {
     switch (STEPS[step]) {
-      case "customer": return customer.first_name && customer.last_name && customer.email && customer.phone && customer.birth_date && wears !== null;
+      case "customer": return customer.first_name && customer.last_name && customer.email && customer.phone && customer.birth_date && wears !== null
+        && (!wears || wornReady);
       case "frame": return lines.length > 0;
       case "rx":
         if (noRx) return !lines.some((l) => l.kind === "own_frame");
         if (!rxFilled(rxNew) || (ocr.status === "done" && !ocr.confirmed)) return false;
-        if (wears) return rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
         return true;
       case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
         && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
@@ -503,65 +507,12 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={wears === true} onChange={() => setWears(true)} /> {t("adm.pos.yes")}</label>
               <label><input type="radio" checked={wears === false} onChange={() => setWears(false)} /> {t("adm.pos.no")}</label>
             </fieldset>
-          </>
-        )}
-
-        {stepName === "frame" && (
-          <>
-            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />
-            <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
-              <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
-            </button>
-            {own.open && (
-              <div className="pos-own">
-                <label>{t("adm.pos.own.description")}<input value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
-                <label className="pos-file">
-                  <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
-                  <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
-                </label>
-                {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.photo")} />}
-                <small className="muted">{t("adm.pos.own.hint")}</small>
-                <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
-              </div>
-            )}
-            <ul className="pos-lines">
-              {lines.map((l) => (
-                <li key={l.key}>
-                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={l.image} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
-                  <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
-                  <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {stepName === "rx" && (
-          <>
-            <label className="pos-check">
-              <input type="checkbox" checked={noRx} onChange={(e) => setNoRx(e.target.checked)} /> {t("adm.pos.rx.none")}
-            </label>
-            {noRx && lines.some((l) => l.kind === "own_frame") && <div className="adm-demo-banner">{t("adm.err.pos.own_frame_needs_lenses")}</div>}
-            {!noRx && (
-              <>
-                <div className="pos-rx-head">
-                  <h3>{t("adm.pos.rx.new")}</h3>
-                  <label className="pos-file">
-                    <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.photo")}
-                    <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
-                  </label>
-                </div>
-                {ocr.status === "done" && !ocr.confirmed && (
-                  <div className="pos-ocr">
-                    {t("adm.pos.rx.review")}
-                    <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
-                  </div>
-                )}
-                <RxGrid value={rxNew} onChange={setRxNew} idp="new" />
-                <label className="pos-inline">{t("adm.pos.rx.date")}<input type="date" value={rxNew.rx_date} onChange={(e) => setRxNew((r) => ({ ...r, rx_date: e.target.value }))} /></label>
-                {wears && (
-                  <>
-                    <h3>{t("adm.pos.rx.worn")}</h3>
+            {/* Usa espejuelos: se mide lo que usa hoy aquí mismo, para compararlo con la receta nueva
+                y ver si la vista ha empeorado (aviso de cambio óptico en Precio y en el recibo). */}
+            {wears && (
+              <div className="pos-worn-now">
+                <p className="adm-sub">{t("adm.pos.worn.hint")}</p>
+<h3>{t("adm.pos.rx.worn")}</h3>
                     {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
                     <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" />
                     <div className="pos-form">
@@ -620,7 +571,70 @@ export default function PosSale({ me }) {
                         </select>
                       </label>
                     </div>
-                  </>
+              </div>
+            )}
+          </>
+        )}
+
+        {stepName === "frame" && (
+          <>
+            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />
+            <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
+              <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
+            </button>
+            {own.open && (
+              <div className="pos-own">
+                <label>{t("adm.pos.own.description")}<input value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
+                <label className="pos-file">
+                  <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
+                  <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
+                </label>
+                {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.photo")} />}
+                <small className="muted">{t("adm.pos.own.hint")}</small>
+                <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
+              </div>
+            )}
+            <ul className="pos-lines">
+              {lines.map((l) => (
+                <li key={l.key}>
+                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={l.image} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
+                  <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
+                  <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {stepName === "rx" && (
+          <>
+            <label className="pos-check">
+              <input type="checkbox" checked={noRx} onChange={(e) => setNoRx(e.target.checked)} /> {t("adm.pos.rx.none")}
+            </label>
+            {noRx && lines.some((l) => l.kind === "own_frame") && <div className="adm-demo-banner">{t("adm.err.pos.own_frame_needs_lenses")}</div>}
+            {!noRx && (
+              <>
+                <div className="pos-rx-head">
+                  <h3>{t("adm.pos.rx.new")}</h3>
+                  <label className="pos-file">
+                    <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.photo")}
+                    <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
+                  </label>
+                </div>
+                {ocr.status === "done" && !ocr.confirmed && (
+                  <div className="pos-ocr">
+                    {t("adm.pos.rx.review")}
+                    <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
+                  </div>
+                )}
+                <RxGrid value={rxNew} onChange={setRxNew} idp="new" />
+                <label className="pos-inline">{t("adm.pos.rx.date")}<input type="date" value={rxNew.rx_date} onChange={(e) => setRxNew((r) => ({ ...r, rx_date: e.target.value }))} /></label>
+                {wears && (
+                  <div className="pos-worn-summary">
+                    <span><b>{t("adm.pos.rx.worn")}</b> · {t("adm.pos.worn.takenInStep1")}</span>
+                    <small className="muted">{wornSummary}</small>
+                    <button type="button" className="btn-xs" onClick={() => setStep(0)}><Icon name="edit" size={12} /> {t("adm.pos.worn.edit")}</button>
+                  </div>
                 )}
               </>
             )}

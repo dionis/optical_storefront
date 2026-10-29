@@ -1427,3 +1427,9 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-ac-view { position: absolute; right: 8px; top: 12px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--adm-line); border-radius: 8px; background: #fff; color: var(--adm-muted, #6b7280); cursor: pointer; }
 .pos-ac-view:hover { color: var(--adm-blue, #0e5ad0); border-color: var(--adm-blue, #0e5ad0); }
 .pos-ac .pos-ac-view, .pos-ac .pos-ac-view:hover, .pos-ac .pos-ac-view:active { scale: none; translate: none; transform: none; filter: none; }
+
+/* Paso Cliente: lo que usa hoy, bajo «¿Ya usa espejuelos?». */
+.pos-worn-now { margin-top: 10px; padding: 14px 16px; border: 1px solid var(--adm-line); border-left: 3px solid var(--adm-blue, #0e5ad0); border-radius: 12px; background: #fbfcfe; display: grid; gap: 10px; min-width: 0; }
+.pos-worn-now .adm-sub { margin: 0; }
+.pos-worn-now h3 { margin: 6px 0 0; font-size: 15px; }
+.pos-worn-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; border: 1px dashed var(--adm-line); border-radius: 10px; margin-top: 12px; }
