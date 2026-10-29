@@ -19,7 +19,7 @@ import {
   verifySellerToken,
 } from "../src/lib/sellers";
 import { normalizeSellerCodeLoose } from "../src/lib/order-board";
-import { sellerTillProblem } from "../src/lib/pos";
+import { EMPTY_TERMINAL_USAGE, sellerTillProblem, terminalDeactivateProblem, terminalDeleteProblem, type TerminalUsage } from "../src/lib/pos";
 
 beforeAll(() => {
   process.env.SELLER_LINK_SECRET = "test-seller-secret";
@@ -282,5 +282,26 @@ describe("sellerTillProblem (counter seller → their one till)", () => {
     expect(sellerTillProblem(as(), "est_2", "t1")).toBe("seller_wrong_till");
     expect(sellerTillProblem(as({ seller: null }), "est_1", "t1")).toBe("seller_not_linked");
     expect(sellerTillProblem(as({ seller: { ...seller, active: false } }), "est_1", "t1")).toBe("seller_inactive");
+  });
+});
+
+describe("terminal delete / deactivate rules", () => {
+  const usage = (over: Partial<TerminalUsage> = {}): TerminalUsage => ({ ...EMPTY_TERMINAL_USAGE, ...over });
+  const store = [{ id: "t1", is_active: true }, { id: "t2", is_active: true }, { id: "t3", is_active: false }];
+
+  it("deletes only an unused till that is not the store's last", () => {
+    expect(terminalDeleteProblem({ id: "t2" }, store, usage())).toBeNull();
+    expect(terminalDeleteProblem({ id: "t1" }, [{ id: "t1", is_active: true }], usage())).toBe("last_terminal");
+    expect(terminalDeleteProblem({ id: "t2" }, store, usage({ sales: 1 }))).toBe("terminal_in_use");
+    expect(terminalDeleteProblem({ id: "t2" }, store, usage({ cash_sessions: 1 }))).toBe("terminal_in_use");
+    expect(terminalDeleteProblem({ id: "t2" }, store, usage({ approvals: 2 }))).toBe("terminal_in_use");
+    expect(terminalDeleteProblem({ id: "t2" }, store, usage({ sellers: 1 }))).toBe("terminal_has_sellers");
+  });
+
+  it("deactivates unless it is the last active one, an active seller uses it, or its register is open", () => {
+    expect(terminalDeactivateProblem({ id: "t2" }, store, usage({ sales: 40, sellers: 1 }))).toBeNull();
+    expect(terminalDeactivateProblem({ id: "t1" }, [{ id: "t1", is_active: true }, { id: "t3", is_active: false }], usage())).toBe("last_terminal");
+    expect(terminalDeactivateProblem({ id: "t2" }, store, usage({ active_sellers: 1 }))).toBe("terminal_has_sellers");
+    expect(terminalDeactivateProblem({ id: "t2" }, store, usage({ open_cash: 1 }))).toBe("terminal_cash_open");
   });
 });

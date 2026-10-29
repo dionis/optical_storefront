@@ -141,6 +141,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt|documents)$/ },
   { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
   { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
+  // Deleting a till: the route lets in admins and the store's manager only.
+  { method: "DELETE", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
   { method: "GET", path: /^\/admin\/pos\/cash-sessions$/ },
   { method: "POST", path: /^\/admin\/pos\/cash-sessions(\/[^/]+\/(movement|close))?$/ },

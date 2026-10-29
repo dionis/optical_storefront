@@ -30,6 +30,8 @@ import {
   type PosLine,
   type PosPayment,
   type WornSource,
+  EMPTY_TERMINAL_USAGE,
+  type TerminalUsage,
 } from "./pos";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
@@ -162,6 +164,39 @@ export async function createTerminal(
     updated_by: actorId,
   });
   return toTerminal(created as unknown as Record<string, unknown>);
+}
+
+/** Usage of each till (sales, registers, approvals, sellers), for the Stores tab and the delete rule. */
+export async function terminalUsage(container: MedusaContainer, ids: string[]): Promise<Map<string, TerminalUsage>> {
+  const out = new Map<string, TerminalUsage>(ids.map((id) => [id, { ...EMPTY_TERMINAL_USAGE }]));
+  if (!ids.length) return out;
+  const pg = pgOf(container);
+  const count = async (table: string, extra?: (q: Knex.QueryBuilder) => void) => {
+    const q = pg(table).select("terminal_id").count({ n: "*" }).whereIn("terminal_id", ids).whereNull("deleted_at").groupBy("terminal_id");
+    extra?.(q);
+    return (await q) as Array<{ terminal_id: string; n: string | number }>;
+  };
+  const [sales, cash, open, approvals, sellers, activeSellers] = await Promise.all([
+    count("pos_sale"),
+    count("cash_session"),
+    count("cash_session", (q) => q.whereNull("closed_at")),
+    count("discount_approval"),
+    count("seller"),
+    count("seller", (q) => q.where("active", true)),
+  ]);
+  const add = (rows: Array<{ terminal_id: string; n: string | number }>, key: keyof TerminalUsage) => {
+    for (const r of rows) {
+      const u = out.get(r.terminal_id);
+      if (u) u[key] = Number(r.n) || 0;
+    }
+  };
+  add(sales, "sales");
+  add(cash, "cash_sessions");
+  add(open, "open_cash");
+  add(approvals, "approvals");
+  add(sellers, "sellers");
+  add(activeSellers, "active_sellers");
+  return out;
 }
 
 /** Every store sells from at least one till: the first one is made on demand. */

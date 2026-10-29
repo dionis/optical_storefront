@@ -1,4 +1,5 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { createTerminal } from "../../../lib/pos-data";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { cleanText, createEstablishment, listEstablishments } from "../../../lib/establishments";
@@ -38,8 +39,10 @@ export async function POST(req: AuthenticatedMedusaRequest<CreateBody>, res: Med
     phone: cleanText(body.phone, 40),
     actorId,
   });
+  // Every store sells from at least one till: Op#-POS1 is made with the store.
+  const terminal = await createTerminal(req.scope, created, { name: null }, actorId);
   req.scope
     .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
-    .info(`[stores] ${created.code} "${created.name}" created by ${actorId ?? "?"} (sales channel ${created.sales_channel_id})`);
+    .info(`[stores] ${created.code} "${created.name}" created by ${actorId ?? "?"} (sales channel ${created.sales_channel_id}, till ${terminal.code})`);
   res.json({ establishment: created, establishments: await listEstablishments(req.scope) });
 }
