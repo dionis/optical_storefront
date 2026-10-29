@@ -34,6 +34,44 @@ export function sellableStores<T extends { id: string; is_active: boolean }>(
   return stores.filter((s) => s.is_active && canSellAt(scope, s.id));
 }
 
+/** A catalog variant's codes, as the frame search reads them. */
+export interface VariantCodes {
+  id: string;
+  product_id: string;
+  sku?: string | null;
+  barcode?: string | null;
+  ean?: string | null;
+  upc?: string | null;
+}
+
+/**
+ * Frames found by code (UPC/SKU on the tag, barcode, EAN): the products in
+ * order — an exact code (what a scanner sends) before a partial one (what a
+ * seller types from the tag) — and, per product, the colours whose code
+ * matched, exact first. Case-insensitive.
+ */
+export function rankCodeMatches(variants: VariantCodes[], term: string): { productIds: string[]; matched: Map<string, string[]> } {
+  const q = term.trim().toLowerCase();
+  const scored: Array<{ v: VariantCodes; exact: boolean }> = [];
+  for (const v of variants) {
+    const codes = [v.sku, v.barcode, v.ean, v.upc].filter((c): c is string => Boolean(c)).map((c) => c.toLowerCase());
+    if (codes.some((c) => c === q)) scored.push({ v, exact: true });
+    else if (q && codes.some((c) => c.includes(q))) scored.push({ v, exact: false });
+  }
+  scored.sort((a, b) => Number(b.exact) - Number(a.exact));
+  const productIds: string[] = [];
+  const matched = new Map<string, string[]>();
+  for (const { v } of scored) {
+    if (!matched.has(v.product_id)) {
+      matched.set(v.product_id, []);
+      productIds.push(v.product_id);
+    }
+    const list = matched.get(v.product_id)!;
+    if (!list.includes(v.id)) list.push(v.id);
+  }
+  return { productIds, matched };
+}
+
 /** How much a till has been used: what stops it from being deleted or deactivated. */
 export interface TerminalUsage {
   sales: number;

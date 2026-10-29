@@ -24,6 +24,7 @@ import {
   searchCustomers,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
+import PosFrameSearch from "./PosFrameSearch.jsx";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 
@@ -188,6 +189,9 @@ export default function PosSale({ me }) {
   const [own, setOwn] = useState({ open: false, description: "", photo: null });
   const [cardProduct, setCardProduct] = useState(null);
   const { products: catProducts = [], cases: catCases = [] } = useCatalog();
+  // Ficha completa de una montura (AdminFrameCard) desde el buscador, o null si el catálogo local no la tiene.
+  const frameCardOf = (productId) => catProducts.find((x) => x.medusaId === productId) || catCases.find((x) => x.medusaId === productId) || null;
+  const viewFrame = (p) => { const full = frameCardOf(p.product_id); if (full) setCardProduct(full); };
   // 3 · receta
   const [noRx, setNoRx] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
@@ -504,30 +508,7 @@ export default function PosSale({ me }) {
 
         {stepName === "frame" && (
           <>
-            <label className="pos-search">
-              <Icon name="barcode" size={16} />
-              <input value={prodQ} onChange={(e) => setProdQ(e.target.value)} placeholder={t("adm.pos.frame.search")} aria-label={t("adm.pos.frame.search")} autoFocus />
-            </label>
-            {prodHits.length > 0 && (
-              <ul className="pos-hits">
-                {prodHits.map((p) => (
-                  <li key={p.product_id} className="pos-prod">
-                    {p.thumbnail ? <img src={p.thumbnail} alt="" style={{ cursor: "pointer" }} onClick={() => { const full = catProducts.find((x) => x.medusaId === p.product_id) || catCases.find((x) => x.medusaId === p.product_id); if (full) setCardProduct(full); }} /> : <span className="pos-noimg"><Icon name="glasses" /></span>}
-                    <span className="pos-prod-main">
-                      <b style={{ cursor: "pointer" }} onClick={() => { const full = catProducts.find((x) => x.medusaId === p.product_id) || catCases.find((x) => x.medusaId === p.product_id); if (full) setCardProduct(full); }}>{p.title}</b>
-                      <small>{p.price == null ? t("adm.pos.frame.noPrice") : m(p.price)}</small>
-                      <span className="pos-variants">
-                        {p.variants.map((v) => (
-                          <button key={v.id} type="button" className="btn-xs" disabled={p.price == null} onClick={() => addFrame(p, v)}>
-                            <Icon name="plus" size={12} /> {v.title || v.sku || t("adm.pos.frame.add")}
-                          </button>
-                        ))}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />
             <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
               <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
             </button>

@@ -1298,3 +1298,14 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
   .adm-side { transition: none; }
 }
+
+/* Búsqueda de monturas por código (UPC/SKU de la etiqueta). */
+.pos-ac-code { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.pos-ac-vtxt { display: flex; flex-direction: column; line-height: 1.2; text-align: left; }
+.pos-ac-vtxt small { font-size: 11px; font-variant-numeric: tabular-nums; }
+.pos-ac-variant.hit { border-color: var(--adm-blue, #0e5ad0); background: #f5f8fe; }
+.pos-ac-item { position: relative; }
+.pos-ac-item.has-view .pos-ac-row { padding-right: 44px; }
+.pos-ac-view { position: absolute; right: 8px; top: 12px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--adm-line); border-radius: 8px; background: #fff; color: var(--adm-muted, #6b7280); cursor: pointer; }
+.pos-ac-view:hover { color: var(--adm-blue, #0e5ad0); border-color: var(--adm-blue, #0e5ad0); }
+.pos-ac .pos-ac-view, .pos-ac .pos-ac-view:hover, .pos-ac .pos-ac-view:active { scale: none; translate: none; transform: none; filter: none; }

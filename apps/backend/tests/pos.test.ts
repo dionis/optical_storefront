@@ -17,6 +17,7 @@ import {
   needsPrescription,
   saleNumber,
   sellableStores,
+  rankCodeMatches,
 } from "../src/lib/pos";
 
 const NOW = new Date("2026-10-27T12:00:00Z");
@@ -247,5 +248,32 @@ describe("methodCodeFor", () => {
     expect(methodCodeFor("Cheque bancario", [])).toBe("cheque-bancario");
     expect(methodCodeFor("Crédito", ["credito"])).toBe("credito-2");
     expect(methodCodeFor("!!!", [])).toBe("method");
+  });
+});
+
+describe("rankCodeMatches (frame search by the code on the tag)", () => {
+  const variants = [
+    { id: "v1", product_id: "p1", sku: "012345678905", barcode: null },
+    { id: "v2", product_id: "p1", sku: "012345678912" },
+    { id: "v3", product_id: "p2", sku: "dc406-ditalia-black" },
+    { id: "v4", product_id: "p3", sku: "999", barcode: "012345678912" },
+  ];
+
+  it("an exact code (scanner) comes before a partial one (typed from the tag)", () => {
+    const r = rankCodeMatches(variants, "012345678912");
+    expect(r.productIds).toEqual(["p1", "p3"]);
+    expect(r.matched.get("p1")).toEqual(["v2"]);
+    expect(r.matched.get("p3")).toEqual(["v4"]);
+  });
+
+  it("a partial code finds every colour that carries it", () => {
+    const r = rankCodeMatches(variants, "0123456789");
+    expect(r.productIds).toEqual(["p1", "p3"]);
+    expect(r.matched.get("p1")).toEqual(["v1", "v2"]);
+  });
+
+  it("ignores case and finds nothing for an unrelated term", () => {
+    expect(rankCodeMatches(variants, "DC406").productIds).toEqual(["p2"]);
+    expect(rankCodeMatches(variants, "zzz").productIds).toEqual([]);
   });
 });

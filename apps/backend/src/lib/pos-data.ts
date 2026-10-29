@@ -31,7 +31,9 @@ import {
   type PosPayment,
   type WornSource,
   EMPTY_TERMINAL_USAGE,
+  rankCodeMatches,
   type TerminalUsage,
+  type VariantCodes,
 } from "./pos";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
@@ -519,6 +521,8 @@ export interface PosProduct {
   price: number | null;
   /** `image`: the colour's own photo (variant metadata), null when the catalog has none. */
   variants: Array<{ id: string; title: string; sku: string | null; barcode: string | null; image: string | null }>;
+  /** Colours whose code (UPC/SKU, barcode) matched the search, best first; empty when found by name. */
+  matched_variant_ids: string[];
 }
 
 const firstText = (...values: unknown[]): string | null => {
@@ -532,8 +536,9 @@ function caseProductIds(rules: Array<{ scope: string; target: string | null }>):
 }
 
 /**
- * Catalog search by name, SKU or scanned barcode (HU-20), with each model's
- * price in the store (HU-17: shown, never editable).
+ * Catalog search by name, model handle or the code on the tag — UPC/SKU,
+ * barcode, EAN — whole (a scanner) or in part (typed from the tag) (HU-20),
+ * with each model's price in the store (HU-17: shown, never editable).
  */
 export async function searchPosProducts(container: MedusaContainer, establishmentId: string, q: string): Promise<PosProduct[]> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
@@ -542,22 +547,25 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   // Many scraped models have no `thumbnail`: the list falls back to their first
   // photo, then to a colour's photo, so the seller can recognise the frame.
   const fields = ["id", "title", "thumbnail", "metadata", "images.url", "variants.id", "variants.title", "variants.sku", "variants.barcode", "variants.metadata"];
-  // An exact SKU or barcode (what a scanner sends) first; then the name.
+  // Codes first (exact, then partial — rankCodeMatches); then the name and the handle.
+  const like = `%${term}%`;
   const { data: byCode } = await query.graph({
     entity: "variant",
-    fields: ["product_id"],
-    filters: { $or: [{ sku: term }, { barcode: term }, { ean: term }, { upc: term }] } as never,
-    pagination: { take: 5 },
+    fields: ["id", "product_id", "sku", "barcode", "ean", "upc"],
+    filters: { $or: [{ sku: { $ilike: like } }, { barcode: { $ilike: like } }, { ean: { $ilike: like } }, { upc: { $ilike: like } }] } as never,
+    pagination: { take: 60 },
   });
-  const codeIds = [...new Set((byCode as Array<{ product_id?: string }>).map((v) => v.product_id).filter(Boolean) as string[])];
+  const { productIds: codeIds, matched } = rankCodeMatches(byCode as VariantCodes[], term);
   const [{ data: exact }, { data: named }, assortment] = await Promise.all([
     codeIds.length
-      ? query.graph({ entity: "product", fields, filters: { id: codeIds } })
+      ? query.graph({ entity: "product", fields, filters: { id: codeIds } }).then((r) => ({
+          data: (r.data as Array<{ id: string }>).slice().sort((x, y) => codeIds.indexOf(x.id) - codeIds.indexOf(y.id)),
+        }))
       : Promise.resolve({ data: [] as unknown[] }),
     query.graph({
       entity: "product",
       fields,
-      filters: { title: { $ilike: `%${term}%` }, status: "published" } as never,
+      filters: { $or: [{ title: { $ilike: like } }, { handle: { $ilike: like } }], status: "published" } as never,
       // Wider than the 20 shown: models the store does not expose are dropped below.
       pagination: { take: 60 },
     }),
@@ -599,6 +607,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
           ? null
           : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
       variants,
+      matched_variant_ids: matched.get(p.id) ?? [],
     };
   });
 }
