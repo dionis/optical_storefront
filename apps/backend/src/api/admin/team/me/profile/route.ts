@@ -1,5 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { recordAudit } from "../../../../../lib/audit";
+import { ensureStaffCode } from "../../../../../lib/staff-code";
 import { cleanProfilePatch, viewProfile } from "../../../../../lib/staff-profile";
 import { profileOf, saveProfile } from "../../../../../lib/staff-profile-data";
 import { getStaffScope, invalidateStaffScope } from "../../../../../lib/staff-scope";
@@ -15,6 +16,7 @@ import { getStaffScope, invalidateStaffScope } from "../../../../../lib/staff-sc
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const userId = req.auth_context?.actor_id ?? "";
+  await ensureStaffCode(req.scope, userId);
   const scope = await getStaffScope(req.scope, userId);
   const profile = await profileOf(req.scope, userId);
   res.json({ profile: viewProfile(profile, { isAdmin: scope.is_admin, isSelf: true, managesThem: false }) });

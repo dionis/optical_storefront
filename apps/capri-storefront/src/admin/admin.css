@@ -1273,3 +1273,6 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
   .adm-side-foot { padding-top: 4px; padding-bottom: 6px; }
   .adm-side-foot .adm-nav-item { padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* Código generado por el sistema: se muestra, no se escribe. */
+.adm-code-ro { display: inline-flex; align-items: center; min-height: 40px; align-self: flex-start; }

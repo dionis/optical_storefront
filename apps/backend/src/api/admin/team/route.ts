@@ -6,6 +6,7 @@ import { profilesByUser } from "../../../lib/staff-profile-data";
 import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
 import { listSellers } from "../../../lib/sellers";
 import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
+import { ensureStaffCode } from "../../../lib/staff-code";
 
 /**
  * EQUIPO del panel: administradores de la tienda.
@@ -189,6 +190,8 @@ export async function POST(
     establishmentIds: seller?.establishment_id ? [seller.establishment_id] : null,
     actorId: actorId || null,
   });
+  // Receipt code, generated (a seller takes their record's).
+  await ensureStaffCode(req.scope, user.id);
 
   logger.info(`[team] ${role} ${user.email} created by ${actorId || "?"} (must change password on first login)`);
   res.status(200).json({ team: await listTeam(req) });

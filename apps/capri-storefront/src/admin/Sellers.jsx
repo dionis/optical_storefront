@@ -44,11 +44,14 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
   const termOpts = terminals.filter((p) => p.establishment_id === f.establishment_id && (p.is_active || p.id === f.terminal_id));
   const missing = placementMissing(f);
   return (
-    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); if (missing) return; onSubmit({ ...f, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0, code: f.code.trim().toUpperCase() || undefined }); }}>
+    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); if (missing) return; onSubmit({ ...f, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0 }); }}>
       <h3><Icon name={initial.id ? "edit" : "plus"} size={16} />{initial.id ? t("adm.sel.editTitle", { name: initial.name }) : t("adm.sel.newTitle")}</h3>
       <div className="adm-form-grid">
         <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /></label>
-        <label className="adm-field">{t("adm.sel.code")}<input className="adm-input" value={f.code} onChange={(e) => set("code", e.target.value.toUpperCase())} placeholder={t("adm.sel.codePh")} maxLength={12} /></label>
+        {/* El código lo genera el sistema y no cambia: va en los enlaces de referido ya compartidos. */}
+        <div className="adm-field">{t("adm.sel.code")}
+          {initial.id ? <span className="sel-code adm-code-ro" title={t("adm.sel.codeFixed")}>{initial.code}</span> : <span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span>}
+        </div>
         <label className="adm-field">{t("adm.sel.commission")}<input className="adm-input" type="number" min="0" max="100" step="0.5" value={f.commission_pct} onChange={(e) => set("commission_pct", e.target.value)} /></label>
         <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
         <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>

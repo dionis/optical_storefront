@@ -18,11 +18,11 @@ const isAdminRole = (role) => role === "owner" || role === "superadmin";
  * libre) o una nueva con tienda y su único punto de venta. El servidor aplica
  * la misma regla (lib/seller-link.ts); aquí solo se evita el viaje.
  */
-const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "10", code: "" };
+const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "10" };
 const linkMissing = (l) => (l.mode === "existing" ? !l.seller_id : !l.establishment_id || !l.terminal_id);
 const linkPayload = (l) => (l.mode === "existing"
   ? { seller_id: l.seller_id }
-  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, commission_pct: Number(l.commission_pct) || 0, code: l.code.trim().toUpperCase() } });
+  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, commission_pct: Number(l.commission_pct) || 0 } });
 
 function SellerLinkFields({ value, onChange, userId = null, sellers, stores, terminals, disabled }) {
   const { t } = useLang();
@@ -72,9 +72,7 @@ function SellerLinkFields({ value, onChange, userId = null, sellers, stores, ter
           <label className="adm-field">{t("adm.sel.commission")}
             <input className="adm-input" type="number" min="0" max="100" step="0.5" value={value.commission_pct} onChange={(e) => set({ commission_pct: e.target.value })} />
           </label>
-          <label className="adm-field">{t("adm.sel.code")}
-            <input className="adm-input" maxLength={12} value={value.code} placeholder={t("adm.sel.codePh")} onChange={(e) => set({ code: e.target.value.toUpperCase() })} />
-          </label>
+          <div className="adm-field">{t("adm.sel.code")}<span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span></div>
         </div>
       )}
     </fieldset>

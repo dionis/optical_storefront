@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { listEstablishments } from "../../../lib/establishments";
+import { takenCodes } from "../../../lib/staff-code";
 import { listTerminals } from "../../../lib/pos-data";
 import {
   deriveSellerCode,
@@ -20,8 +21,9 @@ import {
  * Vendedores (sellers with a referral link).
  *
  *   GET  /admin/sellers  — every live seller, with referral_url + dashboard_url.
- *   POST /admin/sellers  — create one. `code` is optional: derived from the
- *                          name when absent ("Ana García" → ANA / ANAG / ANAG2).
+ *   POST /admin/sellers  — create one. The code is always generated from the
+ *                          name ("Ana García" → ANA / ANAG / ANAG2), never typed,
+ *                          and never changes: shared referral links carry it.
  *
  * Authenticated like every /admin route (Medusa session/JWT). Refusals carry a
  * `reason` code — the panel is bilingual and owns the wording (adm.err.*).
@@ -59,27 +61,13 @@ export async function validateSellerBody(
   current: Seller | null
 ): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {};
-  const live = await listSellers(req.scope);
-  const taken = new Set(live.filter((s) => s.id !== current?.id).map((s) => s.code));
-
   if (body.name !== undefined || !current) {
     const name = str(body.name, 120);
     if (!name) throw new SellerInputError("name_required", "Seller name is required.");
     out["name"] = name;
   }
-  if (body.code !== undefined) {
-    const raw = String(body.code ?? "").trim();
-    if (raw) {
-      const code = normalizeSellerCode(raw);
-      if (!code) throw new SellerInputError("code_invalid", "Code must be 3–12 letters or digits.");
-      if (taken.has(code)) throw new SellerInputError("code_taken", `Code ${code} is already in use.`);
-      out["code"] = code;
-    } else if (!current) {
-      out["code"] = deriveSellerCode(out["name"], taken);
-    }
-  } else if (!current) {
-    out["code"] = deriveSellerCode(out["name"], taken);
-  }
+  // Codes are generated, never typed (lib/staff-code.ts): a sent `code` is ignored.
+  if (!current) out["code"] = deriveSellerCode(out["name"], await takenCodes(req.scope));
   if (body.commission_pct !== undefined) {
     const pct = parseCommissionPct(body.commission_pct);
     if (pct === null) throw new SellerInputError("commission_invalid", "Commission must be a percentage between 0 and 100.");

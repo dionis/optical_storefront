@@ -2,8 +2,9 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../../lib/audit";
-import { cleanProfilePatch, suggestSellerCode, viewProfile } from "../../../../../lib/staff-profile";
-import { profileOf, saveProfile, takenSellerCodes } from "../../../../../lib/staff-profile-data";
+import { ensureStaffCode } from "../../../../../lib/staff-code";
+import { cleanProfilePatch, viewProfile } from "../../../../../lib/staff-profile";
+import { profileOf, saveProfile } from "../../../../../lib/staff-profile-data";
 import { invalidateStaffScope } from "../../../../../lib/staff-scope";
 
 /**
@@ -26,13 +27,10 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     res.status(404).json({ type: "not_found", reason: "not_found", message: "User not found." });
     return;
   }
+  // People created before codes were generated get theirs the first time they are looked at.
+  await ensureStaffCode(req.scope, user.id);
   const profile = await profileOf(req.scope, user.id);
-  res.json({
-    profile: viewProfile(profile, { isAdmin: true, isSelf: req.auth_context?.actor_id === user.id, managesThem: false }),
-    suggested_seller_code: profile.seller_code
-      ? null
-      : suggestSellerCode(user.first_name ?? null, user.last_name ?? null, await takenSellerCodes(req.scope, user.id)),
-  });
+  res.json({ profile: viewProfile(profile, { isAdmin: true, isSelf: req.auth_context?.actor_id === user.id, managesThem: false }) });
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknown>>, res: MedusaResponse): Promise<void> {

@@ -36,7 +36,6 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   const { toast } = useFeedback();
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState(toForm(null));
-  const [suggested, setSuggested] = useState(null);
   const [state, setState] = useState("loading");
   const [busy, setBusy] = useState(false);
   const [badField, setBadField] = useState(null);
@@ -50,7 +49,6 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
         if (!on) return;
         setProfile(r.profile || {});
         setForm(toForm(r.profile));
-        setSuggested(r.suggested_seller_code || null);
         setState("ok");
       })
       .catch(() => on && setState("error"));
@@ -58,6 +56,8 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   }, [isAdmin, userId]);
 
   const editable = (group) => isAdmin || group === "contact" || group === "prefs";
+  // El código de recibos lo genera el sistema (lib/staff-code.ts): nadie lo escribe.
+  const readOnly = (k) => k === "seller_code";
   const set = (k) => (e) => { setBadField(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const togglePriv = (p) => setForm((f) => ({ ...f, privileges: f.privileges.includes(p) ? f.privileges.filter((x) => x !== p) : [...f.privileges, p] }));
 
@@ -68,7 +68,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
     const patch = {};
     for (const g of GROUPS) {
       if (!editable(g.key) || !(g.fields[0][0] in (profile || {}))) continue;
-      for (const [k] of g.fields) if (String(form[k] ?? "") !== String(profile?.[k] ?? "")) patch[k] = form[k] === "" ? null : form[k];
+      for (const [k] of g.fields) if (!readOnly(k) && String(form[k] ?? "") !== String(profile?.[k] ?? "")) patch[k] = form[k] === "" ? null : form[k];
     }
     if (isAdmin) {
       const prev = profile?.privileges || [];
@@ -81,7 +81,6 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
       const r = await (isAdmin ? saveProfile(userId, patch) : saveMyProfile(patch));
       setProfile(r.profile || {});
       setForm(toForm(r.profile));
-      setSuggested(null);
       toast({ tone: "success", title: t("adm.profile.saved") });
       onSaved?.(r.profile);
     } catch (err) {
@@ -114,14 +113,11 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
                     step={type === "number" ? "0.01" : undefined}
                     value={form[k]}
                     onChange={set(k)}
-                    placeholder={k === "seller_code" && suggested ? suggested : undefined}
-                    maxLength={type === "code" ? 8 : undefined}
+                    maxLength={type === "code" ? 12 : undefined}
+                    readOnly={readOnly(k)}
+                    disabled={readOnly(k) || undefined}
+                    placeholder={readOnly(k) ? t("adm.sel.codeAuto") : undefined}
                   />
-                )}
-                {k === "seller_code" && suggested && !form.seller_code && isAdmin && (
-                  <button type="button" className="btn-xs" onClick={() => setForm((f) => ({ ...f, seller_code: suggested }))}>
-                    {t("adm.profile.useSuggested", { code: suggested })}
-                  </button>
                 )}
               </label>
             ))}

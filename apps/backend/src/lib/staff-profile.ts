@@ -29,8 +29,9 @@ export const EMERGENCY_FIELDS = ["emergency_name", "emergency_relation", "emerge
 export const IDENTITY_FIELDS = ["display_name", "seller_code"] as const;
 
 const SELF_EDITABLE = new Set<string>([...CONTACT_FIELDS, ...PREFERENCE_FIELDS]);
+// The receipt code is generated (lib/staff-code.ts), never typed — not even by the owner.
 const ADMIN_EDITABLE = new Set<string>([
-  ...IDENTITY_FIELDS,
+  "display_name",
   ...CONTACT_FIELDS,
   ...PREFERENCE_FIELDS,
   ...WORK_FIELDS,

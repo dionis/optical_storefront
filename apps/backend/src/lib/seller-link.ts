@@ -4,7 +4,6 @@ import { listTerminals } from "./pos-data";
 import {
   deriveSellerCode,
   listSellers,
-  normalizeSellerCode,
   parseSellerLink,
   sellerLinkProblem,
   sellerPlacementProblem,
@@ -13,6 +12,7 @@ import {
   type SellerLinkReason,
 } from "./sellers";
 import { invalidateStaffScope } from "./staff-scope";
+import { ensureStaffCode, takenCodes } from "./staff-code";
 
 /**
  * Panel user (Equipo) ↔ seller record. A user with the `seller` role always
@@ -70,16 +70,8 @@ export async function prepareSellerLink(
     await listTerminals(container, [establishment_id])
   );
   if (placement) throw new SellerLinkError(placement);
-  const taken = new Set(live.map((s) => s.code));
-  let code: string;
-  if (link.create.code) {
-    const c = normalizeSellerCode(link.create.code);
-    if (!c) throw new SellerLinkError("code_invalid");
-    if (taken.has(c)) throw new SellerLinkError("code_taken");
-    code = c;
-  } else {
-    code = deriveSellerCode(person.name, taken);
-  }
+  // Generated, never typed: one namespace with the staff receipt codes.
+  const code = deriveSellerCode(person.name, await takenCodes(container));
   return {
     kind: "new",
     data: { name: person.name.slice(0, 120) || code, email: person.email, code, commission_pct, establishment_id, terminal_id },
@@ -104,6 +96,8 @@ export async function applySellerLink(container: MedusaContainer, userId: string
     row = (await svc.createSellers({ ...prepared.data, user_id: userId, active: true, notes: null, phone: null, social: null, token_version: 1 })) as unknown as Record<string, unknown>;
   }
   invalidateStaffScope(userId);
+  // One person, one code: their receipts carry the record's code from now on.
+  await ensureStaffCode(container, userId, { fromSeller: true });
   console.info(JSON.stringify({ event: "seller.linked", seller_id: row?.["id"] ?? null, user_id: userId, kind: prepared.kind, timestamp: new Date().toISOString() }));
   return (await sellerOfUser(container, userId))!;
 }
