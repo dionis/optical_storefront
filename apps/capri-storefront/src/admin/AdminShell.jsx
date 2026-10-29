@@ -13,6 +13,7 @@ import { MULTISTORE_TABS } from "./backendFeatures.js";
 export const NAV_GROUPS = [
   { key: "business", items: [
     { key: "exec", icon: "dashboard" },
+    { key: "storestatus", icon: "store" },
     { key: "salesboard", icon: "sales" },
     { key: "storecosts", icon: "costs" },
     { key: "approvals", icon: "hand" },
@@ -70,7 +71,14 @@ function roleGroupsFor(me) {
     // Costos y resultado: privilegio por persona, sea cual sea el rol.
     ...((me.privileges || []).some((p) => p === "costs.view" || p === "costs.manage") ? [{ key: "storecosts", icon: "costs" }] : []),
   ];
-  return [{ ...WORK_GROUP, items: [...WORK_GROUP.items, ...extra] }];
+  // El vendedor arranca en su panel («Mi panel»): primero en su menú, y la
+  // primera pestaña es la que abre el panel cuando el enlace no pide otra.
+  // El supervisor y el encargado arrancan en «Estado de tienda» (sus tiendas).
+  const lead = me.role === "supervisor" || me.role === "manager" ? [{ key: "storestatus", icon: "store" }] : [];
+  const items = me.role === "seller"
+    ? [...WORK_GROUP.items.filter((i) => i.key === "mysales"), ...WORK_GROUP.items.filter((i) => i.key !== "mysales")]
+    : [...lead, ...WORK_GROUP.items];
+  return [{ ...WORK_GROUP, items: [...items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
 export const TABS = tabsOf(navGroupsFor(null));

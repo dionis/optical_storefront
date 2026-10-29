@@ -34,6 +34,7 @@ import PosApprovals from "./PosApprovals.jsx";
 import PosConfig from "./PosConfig.jsx";
 import AlertRules from "./AlertRules.jsx";
 import SalesBoard from "./SalesBoard.jsx";
+import StoreStatus from "./StoreStatus.jsx";
 import MySales from "./MySales.jsx";
 import PosCash from "./PosCash.jsx";
 import StoreCosts from "./StoreCosts.jsx";
@@ -1227,6 +1228,7 @@ export default function AdminDashboard({ user, onLogout, me = null, features = n
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}
       {tab === "salesboard" && <SalesBoard />}
+      {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} />}
       {tab === "mysales" && <MySales go={go} />}
       {tab === "cash" && <PosCash />}
       {tab === "storecosts" && <StoreCosts me={me} />}

@@ -11,7 +11,7 @@ import { ADMIN_API_URL } from "./adminApi.js";
 export const MULTISTORE_TABS = new Set([
   "pos", "possales", "cash", "mysales", "profile",
   "salesboard", "storecosts", "approvals", "alerts", "stores",
-  "posconfig", "audit",
+  "posconfig", "audit", "storestatus",
 ]);
 
 export async function fetchBackendFeatures() {

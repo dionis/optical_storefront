@@ -1,13 +1,15 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { localParts } from "../../../../lib/alerts";
-import { deriveOrderProgress, stageIndex } from "../../../../lib/order-status";
-import { listSales, PosError } from "../../../../lib/pos-data";
+import { readyToHand } from "../../../../lib/ready-orders";
+import { listSales, listTerminals, PosError } from "../../../../lib/pos-data";
+import { listEstablishments } from "../../../../lib/establishments";
+import { openSessionFor } from "../../../../lib/cash";
+import { sellerOfUser } from "../../../../lib/seller-link";
 import { posHandler } from "../../../../lib/pos-route";
 import { salesSummary } from "../../../../lib/sales-analytics";
 import { profileOf } from "../../../../lib/staff-profile-data";
 import { getStaffScope } from "../../../../lib/staff-scope";
 import { tenant } from "../../../../lib/tenant";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 
 /**
  * GET /admin/sales-analytics/me — the seller's own panel (E8):
@@ -15,6 +17,10 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
  *  - commission so far and what is left to the monthly goal (HU-53);
  *  - their customers' orders back from the lab, ready to hand over (HU-52).
  * The list of their sales (HU-51) is Store sales.
+ *
+ * It is also where a seller lands when they open the panel, so it carries the
+ * day at a glance: their store and till (with the register open or not), the
+ * store's sales today and their share, and their latest sales.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
@@ -33,26 +39,27 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       salesSummary(req.scope, { ...base, from: monthStart }),
     ]);
     const profile = await profileOf(req.scope, userId);
-    const commissionPct = profile.commission_pct ?? null;
+    // A counter seller's record carries the commission when the profile has none.
+    const record = scope.role === "seller" ? await sellerOfUser(req.scope, userId) : null;
+    const commissionPct = profile.commission_pct ?? (record && record.commission_pct > 0 ? record.commission_pct : null);
+
+    // Where they sell: the store and till of their seller record.
+    const storeId = scope.seller?.establishment_id ?? null;
+    const terminalId = scope.seller?.terminal_id ?? null;
+    const [stores, tills, storeToday, recent, cashOpen] = await Promise.all([
+      storeId ? listEstablishments(req.scope) : Promise.resolve([]),
+      storeId ? listTerminals(req.scope, [storeId]) : Promise.resolve([]),
+      storeId ? salesSummary(req.scope, { from: today.date, to: today.date, stores: [storeId], sellers: null }) : Promise.resolve(null),
+      listSales(req.scope, { establishmentIds: null, sellerId: userId }, 6),
+      terminalId ? openSessionFor(req.scope, terminalId) : Promise.resolve(null),
+    ]);
+    const store = stores.find((x) => x.id === storeId) ?? null;
+    const till = tills.find((x) => x.id === terminalId) ?? null;
     const goal = profile.monthly_goal ?? null;
 
     // Ready to hand over: their open sales whose order is back from the lab.
-    const open = (await listSales(req.scope, { establishmentIds: null, sellerId: userId, status: "completed" }, 200)).filter((s) => !s.delivered_at && s.order_id);
-    let ready: Array<{ id: string; number: string; balance: number; stage: string }> = [];
-    if (open.length) {
-      const { data } = await req.scope.resolve(ContainerRegistrationKeys.QUERY).graph({
-        entity: "order",
-        fields: ["id", "status", "payment_status", "fulfillment_status", "created_at", "metadata", "items.metadata", "fulfillments.*"],
-        filters: { id: open.map((s) => s.order_id as string) },
-      });
-      const stageOf = new Map((data as Array<Record<string, unknown>>).map((o) => [String(o.id), deriveOrderProgress(o as never).stage]));
-      ready = open
-        .filter((s) => {
-          const st = stageOf.get(s.order_id as string);
-          return st && stageIndex(st) >= stageIndex("shipped");
-        })
-        .map((s) => ({ id: s.id, number: s.number, balance: s.balance, stage: stageOf.get(s.order_id as string) as string }));
-    }
+    const ready = (await readyToHand(req.scope, await listSales(req.scope, { establishmentIds: null, sellerId: userId, status: "completed" }, 200)))
+      .map(({ id, number, balance, stage }) => ({ id, number, balance, stage }));
 
     res.json({
       role: scope.role,
@@ -64,6 +71,11 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       commission: commissionPct === null ? null : { pct: commissionPct, amount: Math.round(m.current.total * commissionPct) / 100 },
       goal: goal === null ? null : { amount: goal, done: m.current.total, left: Math.max(0, Math.round((goal - m.current.total) * 100) / 100) },
       ready,
+      workplace: store
+        ? { store: { id: store.id, code: store.code, name: store.name }, terminal: till ? { id: till.id, code: till.code, name: till.name } : null, cash_open: Boolean(cashOpen) }
+        : null,
+      store_today: storeToday ? { ...storeToday.current, mine: d.current.total } : null,
+      recent: recent.map((r) => ({ id: r.id, number: r.number, total: r.total, balance: r.balance, status: r.status, delivered: Boolean(r.delivered_at), created_at: r.created_at })),
     });
   });
 }

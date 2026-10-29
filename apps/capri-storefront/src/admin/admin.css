@@ -1000,6 +1000,34 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 .my-block .board-kpis { margin: 8px 0 0; }
 .my-goal { height: 12px; background: #eef1f6; border-radius: 6px; overflow: hidden; max-width: 460px; }
 .my-goal i { display: block; height: 100%; background: #1e6b3a; }
+/* Panel del vendedor (MySales.jsx): la pantalla con la que arranca un vendedor. */
+.my-dash .adm-head-row { align-items: flex-start; }
+.my-where { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 0; }
+.my-head-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.my-head-tags button.adm-chip { border: 0; cursor: pointer; }
+.my-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.my-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.my-period { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 16px 18px; border: 1px solid var(--adm-line); border-radius: 14px; background: #fff; cursor: pointer; color: inherit; }
+.my-period small { font-weight: 600; color: var(--adm-muted, #6b7280); text-transform: uppercase; letter-spacing: .04em; font-size: 11.5px; }
+.my-period b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.my-period span { font-size: 12.5px; }
+.my-period.hero { background: var(--adm-navy, #0b2a5b); border-color: transparent; color: #fff; }
+.my-period.hero small, .my-period.hero span { color: rgba(255, 255, 255, .78); }
+.my-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.my-grid .adm-card { margin: 0; }
+.my-store { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 10px; }
+.my-store > div { display: flex; flex-direction: column; gap: 2px; }
+.my-store b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.my-recent { list-style: none; margin: 0 0 8px; padding: 0; }
+.my-recent li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--adm-line-2); }
+.my-recent li:last-child { border-bottom: 0; }
+.my-recent-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.my-recent-tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.my-recent-total { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 760px) {
+  .my-periods, .my-grid { grid-template-columns: 1fr; }
+  .my-actions .btn-sm { flex: 1 1 auto; justify-content: center; }
+}
 
 /* Resultado por tienda */
 .pnl tr.strong td, .pnl tr.strong th { font-weight: 800; border-top: 2px solid var(--adm-line-2); }
@@ -1075,4 +1103,47 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
   .adm-tills-new { grid-template-columns: 1fr 1fr; }
   .adm-tills-new .adm-input:first-child, .adm-tills-new button { grid-column: 1 / -1; }
   .adm-tills-actions { justify-content: flex-start; }
+}
+
+/* Estado de tienda (StoreStatus.jsx). Reutiliza .my-periods / .my-grid / .my-recent del panel del vendedor. */
+.ss .adm-head-row { align-items: flex-start; }
+.ss-sub { margin: 4px 0 0; }
+.ss-tools { display: flex; gap: 8px; align-items: center; }
+.ss-tools select { min-width: 200px; }
+.ss-attention { display: grid; gap: 6px; margin-bottom: 14px; }
+.ss-alert { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 14px; border-radius: 10px; border: 1px solid transparent; font-size: 14px; cursor: pointer; }
+.ss-alert span { flex: 1; }
+.ss-alert:disabled { cursor: default; }
+.ss-alert.bad { background: var(--adm-red-soft, #fdecee); color: var(--adm-red, #b4232f); border-color: rgba(180, 35, 47, .18); }
+.ss-alert.warn { background: #fdf3e0; color: #8a5a10; border-color: rgba(183, 121, 31, .22); }
+.ss-alert.info { background: var(--adm-blue-soft, #eaf1fd); color: var(--adm-blue, #0e5ad0); border-color: rgba(14, 90, 208, .16); }
+.ss .ss-alert, .ss .ss-alert:hover, .ss .ss-alert:active, .ss .my-period, .ss .my-period:hover, .ss .my-period:active, .ss .ss-pend, .ss .ss-pend:hover, .ss .ss-pend:active { scale: none; translate: none; transform: none; filter: none; }
+.ss-allgood { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: var(--adm-green-soft, #e7f6ed); color: var(--adm-green, #1e6b3a); margin-bottom: 14px; font-size: 14px; }
+.my-period em { font-style: normal; font-weight: 700; }
+.my-period em.up { color: #9be3b4; }
+.my-period em.down { color: #ffb4b4; }
+.my-period:disabled { cursor: default; }
+.ss-pending { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.ss-pend { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--adm-line); background: #fff; color: var(--adm-muted, #6b7280); text-align: left; cursor: pointer; }
+.ss-pend b { font-size: 22px; color: var(--adm-ink, #0f1b33); font-variant-numeric: tabular-nums; }
+.ss-pend small { font-size: 12.5px; }
+.ss-pend em { font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--adm-ink, #0f1b33); }
+.ss-pend.on { border-color: rgba(183, 121, 31, .35); background: #fffaf0; }
+.ss-pend:disabled { cursor: default; }
+.ss-h-note { margin-left: auto; font-size: 12.5px; font-weight: 500; }
+.ss .adm-card h3 { display: flex; align-items: center; gap: 6px; }
+.ss-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.ss-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--adm-line-2); }
+.ss-list li:last-child { border-bottom: 0; }
+.ss-list li.off { opacity: .6; }
+.ss-list-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ss-reg { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.ss-num { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ss-card-links { display: flex; gap: 6px; flex-wrap: wrap; }
+.ss-foot { margin: 8px 0 0; font-size: 13px; }
+@media (max-width: 1000px) { .ss-pending { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .ss-pending { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ss-tools { width: 100%; }
+  .ss-tools select { flex: 1; min-width: 0; }
 }
