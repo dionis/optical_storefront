@@ -24,13 +24,15 @@ import {
   searchCustomers,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
-import PosFrameSearch from "./PosFrameSearch.jsx";
+import AdminFrameCard from "./AdminFrameCard.jsx";
+import { useCatalog } from "../data/catalogStore.js";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
 const EMPTY_EYE = { sph: "", cyl: "", axis: "", add: "", prism: "", base: "" };
 const EMPTY_RX = { od: { ...EMPTY_EYE }, os: { ...EMPTY_EYE }, pd: "", seg_height: "", rx_date: "" };
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
+const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
@@ -184,12 +186,15 @@ export default function PosSale({ me }) {
   const [lines, setLines] = useState([]);
   const [frameListOpen, setFrameListOpen] = useState(false);
   const [own, setOwn] = useState({ open: false, description: "", photo: null });
+  const [cardProduct, setCardProduct] = useState(null);
+  const { products: catProducts = [], cases: catCases = [] } = useCatalog();
   // 3 · receta
   const [noRx, setNoRx] = useState(false);
   const [rxNew, setRxNew] = useState(EMPTY_RX);
   const [ocr, setOcr] = useState({ status: "idle", confirmed: true });
   const [rxWorn, setRxWorn] = useState(EMPTY_RX);
   const [worn, setWorn] = useState({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
+  const [wornFrame, setWornFrame] = useState(EMPTY_WORN_FRAME);
   // 5 · precio
   const [discount, setDiscount] = useState("");
   const [q, setQ] = useState(null);
@@ -295,6 +300,11 @@ export default function PosSale({ me }) {
     rx: toRx(rxWorn),
     worn_source: worn.source,
     ...(worn.dateMode === "approx" ? { approx_months_ago: Number(worn.months) || 0 } : { rx_date: worn.date || null }),
+    frame_measures: Object.values(wornFrame).some((v) => v && v !== "good") ? {
+      lens_width: num(wornFrame.lens_width), bridge: num(wornFrame.bridge),
+      temple: num(wornFrame.temple), lens_height: num(wornFrame.lens_height),
+      total_width: num(wornFrame.total_width), condition: wornFrame.condition,
+    } : null,
   } : null);
   const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual"), rx_date: rxNew.rx_date || null });
 
@@ -489,7 +499,30 @@ export default function PosSale({ me }) {
 
         {stepName === "frame" && (
           <>
-            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} />
+            <label className="pos-search">
+              <Icon name="barcode" size={16} />
+              <input value={prodQ} onChange={(e) => setProdQ(e.target.value)} placeholder={t("adm.pos.frame.search")} aria-label={t("adm.pos.frame.search")} autoFocus />
+            </label>
+            {prodHits.length > 0 && (
+              <ul className="pos-hits">
+                {prodHits.map((p) => (
+                  <li key={p.product_id} className="pos-prod">
+                    {p.thumbnail ? <img src={p.thumbnail} alt="" style={{ cursor: "pointer" }} onClick={() => { const full = catProducts.find((x) => x.medusaId === p.product_id) || catCases.find((x) => x.medusaId === p.product_id); if (full) setCardProduct(full); }} /> : <span className="pos-noimg"><Icon name="glasses" /></span>}
+                    <span className="pos-prod-main">
+                      <b style={{ cursor: "pointer" }} onClick={() => { const full = catProducts.find((x) => x.medusaId === p.product_id) || catCases.find((x) => x.medusaId === p.product_id); if (full) setCardProduct(full); }}>{p.title}</b>
+                      <small>{p.price == null ? t("adm.pos.frame.noPrice") : m(p.price)}</small>
+                      <span className="pos-variants">
+                        {p.variants.map((v) => (
+                          <button key={v.id} type="button" className="btn-xs" disabled={p.price == null} onClick={() => addFrame(p, v)}>
+                            <Icon name="plus" size={12} /> {v.title || v.sku || t("adm.pos.frame.add")}
+                          </button>
+                        ))}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
               <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
             </button>
@@ -544,7 +577,7 @@ export default function PosSale({ me }) {
                   <>
                     <h3>{t("adm.pos.rx.worn")}</h3>
                     {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
-                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" measures={false} />
+                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" />
                     <div className="pos-form">
                       <label>{t("adm.pos.rx.source")}
                         <select value={worn.source} onChange={(e) => setWorn((w) => ({ ...w, source: e.target.value }))}>
@@ -574,6 +607,33 @@ export default function PosSale({ me }) {
                         </ul>
                       </details>
                     )}
+
+                    <h3>{t("adm.pos.worn.frame")}</h3>
+                    <p className="muted" style={{ fontSize: "0.85em", margin: "0 0 0.5rem" }}>{t("adm.pos.worn.frameHint")}</p>
+                    <div className="pos-form pos-worn-frame">
+                      <label>{t("adm.pos.worn.lensWidth")} <small>(A) mm</small>
+                        <input inputMode="decimal" value={wornFrame.lens_width} onChange={(e) => setWornFrame((f) => ({ ...f, lens_width: e.target.value }))} placeholder="50" />
+                      </label>
+                      <label>{t("adm.pos.worn.bridge")} <small>(DBL) mm</small>
+                        <input inputMode="decimal" value={wornFrame.bridge} onChange={(e) => setWornFrame((f) => ({ ...f, bridge: e.target.value }))} placeholder="18" />
+                      </label>
+                      <label>{t("adm.pos.worn.temple")} <small>mm</small>
+                        <input inputMode="decimal" value={wornFrame.temple} onChange={(e) => setWornFrame((f) => ({ ...f, temple: e.target.value }))} placeholder="140" />
+                      </label>
+                      <label>{t("adm.pos.worn.lensHeight")} <small>(B) mm</small>
+                        <input inputMode="decimal" value={wornFrame.lens_height} onChange={(e) => setWornFrame((f) => ({ ...f, lens_height: e.target.value }))} placeholder="35" />
+                      </label>
+                      <label>{t("adm.pos.worn.totalWidth")} <small>mm</small>
+                        <input inputMode="decimal" value={wornFrame.total_width} onChange={(e) => setWornFrame((f) => ({ ...f, total_width: e.target.value }))} placeholder="136" />
+                      </label>
+                      <label>{t("adm.pos.worn.condition")}
+                        <select value={wornFrame.condition} onChange={(e) => setWornFrame((f) => ({ ...f, condition: e.target.value }))}>
+                          <option value="good">{t("adm.pos.worn.cond.good")}</option>
+                          <option value="fair">{t("adm.pos.worn.cond.fair")}</option>
+                          <option value="poor">{t("adm.pos.worn.cond.poor")}</option>
+                        </select>
+                      </label>
+                    </div>
                   </>
                 )}
               </>
@@ -722,6 +782,7 @@ export default function PosSale({ me }) {
         </div>
       )}
       {terminal && <p className="muted pos-foot">{terminal.code} · {me?.email || ""}</p>}
+      {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
     </div>
   );
 }

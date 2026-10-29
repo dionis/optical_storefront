@@ -17,7 +17,7 @@ const pick = (key, fallback) => {
 
 export const TENANT = Object.freeze({
   /** Brand name shown in titles, alt texts and page metadata. */
-  name: pick("VITE_TENANT_NAME", "RUBI LENS"),
+  name: pick("VITE_TENANT_NAME", "Óptica El Rancho"),
   /** Tagline appended to the brand in document titles. */
   tagline: pick("VITE_TENANT_TAGLINE", "Óptica y Salud Visual"),
   /** Logo paths (served from /public). */
