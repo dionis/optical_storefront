@@ -1051,3 +1051,28 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
 @media (max-width: 720px) {
   .adm-model-detail { grid-template-columns: 1fr; padding: 12px; }
 }
+
+/* Puntos de venta de una tienda (Tiendas → Editar, StoreTerminals.jsx). */
+.adm-tills { margin: 4px 0 14px 52px; padding: 14px 16px; border: 1px solid var(--adm-line); border-radius: 12px; background: #fbfcfe; display: grid; gap: 10px; min-width: 0; }
+.adm-tills h4 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.adm-tills .adm-sub { margin: 0; }
+.adm-tills-new { display: grid; grid-template-columns: minmax(160px, 1fr) auto auto auto; gap: 8px; align-items: center; }
+.adm-tills-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.adm-tills-tools .adm-find { flex: 1 1 220px; }
+.adm-tills-table .r { text-align: right; }
+.adm-tills-code { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.adm-tills-locales { display: flex; gap: 6px; flex-wrap: wrap; }
+.adm-tills-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.adm-tills-check { display: inline-flex; align-items: center; gap: 6px; }
+.adm-tills-why { display: flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: normal; line-height: 1.35; margin: 0; }
+.adm-tills-table td { white-space: normal; }
+.adm-tills-table .adm-input { min-width: 0; width: 100%; max-width: 200px; }
+.adm-tills-table .adm-tills-locales .adm-input { max-width: 130px; }
+.adm-tills-table tr.adm-tills-why-row td { padding-top: 0; border-top: 0; }
+.adm-tills-table tr.muted-row td { color: var(--adm-muted, #6b7280); }
+@media (max-width: 760px) {
+  .adm-tills { margin-left: 0; padding: 12px; }
+  .adm-tills-new { grid-template-columns: 1fr 1fr; }
+  .adm-tills-new .adm-input:first-child, .adm-tills-new button { grid-column: 1 / -1; }
+  .adm-tills-actions { justify-content: flex-start; }
+}

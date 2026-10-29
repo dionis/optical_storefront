@@ -1,12 +1,14 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { cleanText } from "../../../../lib/establishments";
-import { createTerminal, listTerminals, PosError } from "../../../../lib/pos-data";
+import { createTerminal, listTerminals, PosError, terminalUsage } from "../../../../lib/pos-data";
 import { managesStore, posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
 
 /**
  * PUNTOS DE VENTA de cada tienda (HU-80): Op2-POS1, Op2-POS2…
  *
- *   GET  /admin/pos/terminals?store= — los de las tiendas del usuario.
+ *   GET  /admin/pos/terminals?store=&usage=1 — los de las tiendas del usuario;
+ *        con `usage=1` cada uno trae su uso (ventas, cajas, vendedores), que
+ *        decide si se puede eliminar o desactivar.
  *   POST /admin/pos/terminals — { store, name?, receipt_locale?, ticket_locale? }
  *        Dueño, superadmin o el encargado de esa tienda (matriz de permisos).
  *        El código lo asigna el servidor y nunca se reutiliza.
@@ -16,7 +18,13 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const scope = await posScope(req);
     const q = req.query as Record<string, string | undefined>;
     const ids = q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope);
-    res.json({ terminals: ids && !ids.length ? [] : await listTerminals(req.scope, ids) });
+    const terminals = ids && !ids.length ? [] : await listTerminals(req.scope, ids);
+    if (q.usage !== "1") {
+      res.json({ terminals });
+      return;
+    }
+    const usage = await terminalUsage(req.scope, terminals.map((t) => t.id));
+    res.json({ terminals: terminals.map((t) => ({ ...t, usage: usage.get(t.id) })) });
   });
 }
 

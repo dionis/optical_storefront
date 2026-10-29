@@ -49,6 +49,9 @@ export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURI
 export const listTerminals = (store) => call(`/admin/pos/terminals${qs({ store })}`);
 export const createTerminal = (body) => call("/admin/pos/terminals", { method: "POST", body });
 export const updateTerminal = (id, body) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "POST", body });
+/** Con el uso de cada uno (ventas, cajas, vendedores): lo que decide si se puede borrar o desactivar. */
+export const listTerminalsWithUsage = (store) => call(`/admin/pos/terminals${qs({ store, usage: 1 })}`);
+export const deleteTerminal = (id) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 export const fetchPosSettings = () => call("/admin/pos/settings");
 export const savePosSettings = (body) => call("/admin/pos/settings", { method: "POST", body });

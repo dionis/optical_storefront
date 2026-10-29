@@ -34,6 +34,55 @@ export function sellableStores<T extends { id: string; is_active: boolean }>(
   return stores.filter((s) => s.is_active && canSellAt(scope, s.id));
 }
 
+/** How much a till has been used: what stops it from being deleted or deactivated. */
+export interface TerminalUsage {
+  sales: number;
+  cash_sessions: number;
+  /** Cash register open right now on this till. */
+  open_cash: number;
+  approvals: number;
+  /** Seller records assigned to this till (any state) and, of them, the active ones. */
+  sellers: number;
+  active_sellers: number;
+}
+
+export const EMPTY_TERMINAL_USAGE: TerminalUsage = { sales: 0, cash_sessions: 0, open_cash: 0, approvals: 0, sellers: 0, active_sellers: 0 };
+
+export type TerminalChangeReason = "last_terminal" | "terminal_in_use" | "terminal_has_sellers" | "terminal_cash_open";
+
+/**
+ * A till can be DELETED only if nothing ever pointed at it — sales, registers
+ * and approvals keep its id forever, and so does a seller record — and the
+ * store keeps at least one other till (every store sells from one).
+ * `siblings` = the store's live tills, this one included.
+ */
+export function terminalDeleteProblem(
+  terminal: { id: string },
+  siblings: Array<{ id: string; is_active: boolean }>,
+  usage: TerminalUsage
+): TerminalChangeReason | null {
+  if (!siblings.some((s) => s.id !== terminal.id)) return "last_terminal";
+  if (usage.sellers > 0) return "terminal_has_sellers";
+  if (usage.sales + usage.cash_sessions + usage.approvals > 0) return "terminal_in_use";
+  return null;
+}
+
+/**
+ * A till can be DEACTIVATED unless it is the store's last active one, an
+ * active seller sells from it (they would be locked out), or its register is
+ * still open (close it first, so the cash is counted).
+ */
+export function terminalDeactivateProblem(
+  terminal: { id: string },
+  siblings: Array<{ id: string; is_active: boolean }>,
+  usage: TerminalUsage
+): TerminalChangeReason | null {
+  if (!siblings.some((s) => s.id !== terminal.id && s.is_active)) return "last_terminal";
+  if (usage.active_sellers > 0) return "terminal_has_sellers";
+  if (usage.open_cash > 0) return "terminal_cash_open";
+  return null;
+}
+
 /** The seller record behind a user with the `seller` role (StaffScope.seller). */
 export interface CounterSeller {
   id: string;

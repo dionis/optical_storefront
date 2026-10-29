@@ -10,6 +10,7 @@ import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
+import StoreTerminals from "./StoreTerminals.jsx";
 
 const EMPTY = { name: "", address: "", phone: "" };
 
@@ -102,7 +103,8 @@ export default function Stores() {
         {state === "ok" && stores.length === 0 && <div className="adm-nodata">{t("adm.stores.empty")}</div>}
         <div className="adm-team-rows">
           {stores.map((s) => (
-            <div key={s.id} className="adm-team-row">
+            <div key={s.id} className="adm-team-item">
+            <div className="adm-team-row">
               <span className="adm-team-avatar adm-store-code">{s.code}</span>
               {editing === s.id ? (
                 <span className="adm-team-main adm-store-edit">
@@ -137,6 +139,9 @@ export default function Stores() {
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}
+            </div>
+            {/* Al editar la tienda se gestionan también sus puntos de venta. */}
+            {editing === s.id && <StoreTerminals store={s} disabled={demo} />}
             </div>
           ))}
         </div>
