@@ -9,6 +9,7 @@ import {
   setProductStatus, setBrandStatus, setFramePrice,
   fetchDiscontinued, exportCatalogCsv, exportCatalogExcel,
 } from "./catalogAdmin.js";
+import AdminFrameCard from "./AdminFrameCard.jsx";
 
 const usd = (n) => "$" + (Number(n) || 0).toFixed(2);
 
@@ -31,6 +32,7 @@ export default function CatalogManager() {
   const [price, setPrice] = useState({});        // slug -> draft price
   const [off, setOff] = useState([]);            // descontinuadas (draft en Medusa)
   const [progress, setProgress] = useState(null); // {done,total} en lotes de marca
+  const [cardProduct, setCardProduct] = useState(null); // producto seleccionado → ficha
 
   const refreshOff = () => { if (!demo) fetchDiscontinued().then(setOff).catch(() => {}); };
   useEffect(refreshOff, [demo]);
@@ -146,8 +148,8 @@ export default function CatalogManager() {
       <div className="adm-cat-rows">
         {list.map((p) => (
           <div key={p.slug} className="adm-cat-row">
-            <div className="adm-tb-thumb sm">{p.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" /> : <span>◈</span>}</div>
-            <div className="adm-cat-main">
+            <div className="adm-tb-thumb sm" style={{ cursor: "pointer" }} onClick={() => setCardProduct(p)}>{p.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" /> : <span>◈</span>}</div>
+            <div className="adm-cat-main" style={{ cursor: "pointer" }} onClick={() => setCardProduct(p)}>
               <b>{p.name}</b>
               <small className="muted">{p.brand} · {usd(p.price)}</small>
             </div>
@@ -186,6 +188,8 @@ export default function CatalogManager() {
           </div>
         </div>
       )}
+
+      {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
     </div>
   );
 }

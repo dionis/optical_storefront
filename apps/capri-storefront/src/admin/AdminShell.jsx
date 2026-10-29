@@ -7,7 +7,6 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
-import { MULTISTORE_TABS } from "./backendFeatures.js";
 
 /** Secciones del panel agrupadas como en un panel de operaciones (Coolify-like). */
 export const NAV_GROUPS = [
@@ -47,17 +46,7 @@ const WORK_GROUP = { key: "work", items: [
  * demás roles, solo su trabajo. Ocultar es comodidad: el servidor rechaza igual
  * cualquier ruta fuera de su alcance (lib/staff-guard.ts).
  */
-export function navGroupsFor(me, features = null) {
-  const groups = roleGroupsFor(me);
-  // `features` null = not asked (TABS, defaults): everything. Otherwise a backend
-  // without "multistore" has none of those tabs' routes (admin/backendFeatures.js).
-  if (!features || features.has("multistore")) return groups;
-  return groups
-    .map((g) => ({ ...g, items: g.items.filter((i) => !MULTISTORE_TABS.has(i.key)) }))
-    .filter((g) => g.items.length > 0);
-}
-
-function roleGroupsFor(me) {
+export function navGroupsFor(me) {
   if (!me || me.is_admin !== false) return [WORK_GROUP, ...NAV_GROUPS];
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
@@ -82,11 +71,12 @@ const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"
  * El cajón móvil se cierra solo al elegir sección, al pulsar Escape o al tocar
  * el fondo; en escritorio la barra recuerda si estaba contraída.
  */
-export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, groups = navGroupsFor(null), children }) {
+export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
   const { t, lang, toggle } = useLang();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
   const findRef = useRef(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => { try { localStorage.setItem(NAV_KEY, collapsed ? "1" : "0"); } catch { /* noop */ } }, [collapsed]);
   useEffect(() => {
@@ -104,9 +94,18 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  useEffect(() => {
+    if (!showProfile) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setShowProfile(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showProfile]);
 
   const go = (key) => { onTab(key); setDrawer(false); };
-  const initials = String(user || "?").split("@")[0].slice(0, 2).toUpperCase();
+  const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
+  const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
+  const userStore = me?.store_name || me?.store_code || "";
+  const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   const nav = (
     <nav className="adm-nav" aria-label={t("adm.nav.aria")}>
@@ -140,10 +139,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
     <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
-          <Link to="/" className="adm-side-logo" title={t("adm.viewStore")}>
-            <img src={TENANT.logoMark || TENANT.logo} alt={TENANT.name} />
-          </Link>
-          <div className="adm-side-title">
+          <div className="adm-side-title" style={{ paddingLeft: 4 }}>
             <b>{TENANT.name}</b>
             <small>{t("adm.title")}</small>
           </div>
@@ -183,10 +179,10 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             <button type="button" className="adm-icobtn" onClick={toggle} title={t("lang.switch")}>
               <Icon name="globe" size={17} /><span>{lang === "es" ? "EN" : "ES"}</span>
             </button>
-            <div className="adm-user-chip" title={user}>
+            <button type="button" className="adm-user-chip" title={user} onClick={() => setShowProfile(p => !p)} style={{ cursor: "pointer", position: "relative" }}>
               <span className="adm-avatar">{initials}</span>
-              <span className="adm-user-mail">{user}</span>
-            </div>
+              <span className="adm-user-mail">{displayName}{userRole ? ` · ${t(`adm.role.${userRole}`, userRole)}` : ""}{userStore ? ` — ${userStore}` : ""}</span>
+            </button>
             <button type="button" className="adm-icobtn danger" onClick={onLogout} title={t("adm.logout")}>
               <Icon name="logout" size={17} /><span>{t("adm.logout")}</span>
             </button>
@@ -194,6 +190,50 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
         </header>
         <main className="adm-body" key={tab}>{children}</main>
       </div>
+
+      {showProfile && (
+        <div className="adm-profile-popup-overlay" onClick={() => setShowProfile(false)}>
+          <div className="adm-profile-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="adm-profile-popup-head">
+              <div className="adm-profile-popup-avatar">{initials}</div>
+              <div className="adm-profile-popup-info">
+                <b>{displayName}</b>
+                <small>{user}</small>
+              </div>
+            </div>
+            <dl className="adm-profile-popup-fields">
+              <div className="adm-profile-popup-field">
+                <dt>{t("adm.profile.role")}</dt>
+                <dd>{t(`adm.role.${userRole}`, userRole)}</dd>
+              </div>
+              {userStore && <div className="adm-profile-popup-field">
+                <dt>{t("adm.profile.store")}</dt>
+                <dd>{userStore}</dd>
+              </div>}
+              <div className="adm-profile-popup-field">
+                <dt>{t("adm.profile.email")}</dt>
+                <dd>{user}</dd>
+              </div>
+              {me?.phone_mobile && <div className="adm-profile-popup-field">
+                <dt>{t("adm.profile.phone")}</dt>
+                <dd>{me.phone_mobile}</dd>
+              </div>}
+              {me?.seller_code && <div className="adm-profile-popup-field">
+                <dt>{t("adm.profile.code")}</dt>
+                <dd>{me.seller_code}</dd>
+              </div>}
+            </dl>
+            <div className="adm-profile-popup-foot">
+              <button type="button" className="btn-sm" onClick={() => { onTab("profile"); setShowProfile(false); }}>
+                <Icon name="user" size={15} /> {t("adm.profile.viewFull")}
+              </button>
+              <button type="button" className="btn-sm danger" onClick={onLogout}>
+                <Icon name="logout" size={15} /> {t("adm.logout")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
