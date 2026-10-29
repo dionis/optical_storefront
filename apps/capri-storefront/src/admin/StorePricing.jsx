@@ -8,6 +8,7 @@ import { useFeedback } from "../components/Feedback.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices, searchStoreCatalog } from "./adminStores.js";
 import Icon from "./icons.jsx";
+import AdminFrameCard from "./AdminFrameCard.jsx";
 
 /** Lentes de ejemplo para la vista previa: un monofocal típico. */
 const SAMPLE_LENSES = 100;
@@ -31,6 +32,7 @@ export default function StorePricing({ store, onClose }) {
   const [floor, setFloor] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [preview, setPreview] = useState(null);
+  const [cardProduct, setCardProduct] = useState(null);
   const fmt = (v) => (v == null ? "—" : money(v, "usd", lang));
 
   const load = () => {
@@ -160,9 +162,15 @@ export default function StorePricing({ store, onClose }) {
             {matches.length > 0 && !picked && (
               <div className="adm-pricing-matches">
                 {matches.map((p) => (
-                  <button type="button" key={p.id} className="btn-xs" onClick={() => { setPicked(p); setQ(p.name); }}>
-                    {p.name}{p.brand ? ` · ${p.brand}` : ""}{p.exposed ? "" : ` · ${t("adm.assort.hiddenShort")}`}
-                  </button>
+                  <span key={p.id} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                    <button type="button" className="btn-xs" onClick={() => { setPicked(p); setQ(p.name); }}>
+                      {p.name}{p.brand ? ` · ${p.brand}` : ""}
+                    </button>
+                    <button type="button" className="btn-xs" style={{ padding: "3px 6px" }} title={t("adm.profile.viewFull")}
+                      onClick={() => { const full = products.find((x) => x.medusaId === p.id) || cases.find((x) => x.medusaId === p.id); if (full) setCardProduct(full); }}>
+                      <Icon name="eye" size={13} />
+                    </button>
+                  </span>
                 ))}
               </div>
             )}
@@ -247,6 +255,7 @@ export default function StorePricing({ store, onClose }) {
           </details>
         </>
       )}
+      {cardProduct && <AdminFrameCard product={cardProduct} onClose={() => setCardProduct(null)} />}
     </div>
   );
 }

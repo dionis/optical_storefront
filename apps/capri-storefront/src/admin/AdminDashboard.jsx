@@ -1166,9 +1166,9 @@ function navFromUrl(tabs) {
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
 
-export default function AdminDashboard({ user, onLogout, me = null, features = null }) {
+export default function AdminDashboard({ user, onLogout, me = null }) {
   const { t } = useLang();
-  const groups = navGroupsFor(me, features);
+  const groups = navGroupsFor(me);
   const tabs = tabsOf(groups);
   const restricted = me?.is_admin === false;
   // `nav.n` cambia en cada salto para que la pantalla destino se monte con los
@@ -1203,7 +1203,7 @@ export default function AdminDashboard({ user, onLogout, me = null, features = n
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me}>
       {tab === "exec" && (
         <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
           views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />

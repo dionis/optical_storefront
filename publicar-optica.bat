@@ -1,45 +1,51 @@
 @echo off
 chcp 65001 >nul 2>&1
-title RUBI LENS — Publicar actualizaciones
+title RUBI LENS — Publicar Tienda Online (Vercel)
 color 0E
 
 echo.
 echo  ╔══════════════════════════════════════════════════╗
-echo  ║        RUBI LENS — Publicar actualizaciones      ║
+echo  ║    RUBI LENS — Publicar Tienda Online (Vercel)   ║
 echo  ╚══════════════════════════════════════════════════╝
 echo.
 
-:: ── Paso 1: Ir al directorio del proyecto ──
 cd /d "%~dp0"
-echo [1/5] Directorio: %cd%
+
+echo [1/4] Directorio: %cd%
 echo.
 
-:: ── Paso 2: Estado de git ──
-echo [2/5] Verificando cambios pendientes...
+echo [2/4] Verificando cambios pendientes en develop...
+git checkout develop
+if %errorlevel% neq 0 (
+    color 0C
+    echo ERROR: No se pudo cambiar a develop.
+    pause
+    exit /b 1
+)
 git status --short
 echo.
 
-:: ── Paso 3: Añadir todos los cambios ──
-echo [3/5] Agregando archivos modificados...
+echo [3/4] Agregando y creando commit...
 git add -A
+git diff --cached --quiet 2>nul
+if %errorlevel% neq 0 (
+    for /f "tokens=1-3 delims=/ " %%a in ('date /t') do set FECHA=%%c-%%a-%%b
+    for /f "tokens=1-2 delims=: " %%a in ('time /t') do set HORA=%%a:%%b
+    git commit -m "rubilens: actualización %FECHA% %HORA%"
+    echo    → Commit creado.
+) else (
+    echo    → Sin cambios nuevos.
+)
 echo.
 
-:: ── Paso 4: Commit con fecha y hora ──
-for /f "tokens=1-3 delims=/ " %%a in ('date /t') do set FECHA=%%c-%%a-%%b
-for /f "tokens=1-2 delims=: " %%a in ('time /t') do set HORA=%%a:%%b
-echo [4/5] Creando commit...
-git commit -m "actualización %FECHA% %HORA%"
-echo.
-
-:: ── Paso 5: Push a develop (Vercel storefront) ──
-echo [5/5] Subiendo a GitHub (develop → Vercel)...
+echo [4/4] Subiendo a GitHub (develop → Vercel)...
 git push origin develop
 echo.
 
 if %errorlevel% equ 0 (
     color 0A
     echo  ╔══════════════════════════════════════════════════╗
-    echo  ║   ✓ ¡Publicado! Vercel desplegará en ~1 minuto   ║
+    echo  ║   ✓ rubilens.com se actualizará en ~1 minuto     ║
     echo  ╚══════════════════════════════════════════════════╝
 ) else (
     color 0C
@@ -48,11 +54,5 @@ if %errorlevel% equ 0 (
     echo  ╚══════════════════════════════════════════════════╝
 )
 
-echo.
-echo  Para actualizar el BACKEND (Coolify), ejecuta también:
-echo    git checkout main
-echo    git merge develop
-echo    git push origin main
-echo    git checkout develop
 echo.
 pause
