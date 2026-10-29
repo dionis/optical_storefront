@@ -32,6 +32,7 @@ const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
 const EMPTY_EYE = { sph: "", cyl: "", axis: "", add: "", prism: "", base: "" };
 const EMPTY_RX = { od: { ...EMPTY_EYE }, os: { ...EMPTY_EYE }, pd: "", seg_height: "", rx_date: "" };
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
+const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
@@ -193,6 +194,7 @@ export default function PosSale({ me }) {
   const [ocr, setOcr] = useState({ status: "idle", confirmed: true });
   const [rxWorn, setRxWorn] = useState(EMPTY_RX);
   const [worn, setWorn] = useState({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
+  const [wornFrame, setWornFrame] = useState(EMPTY_WORN_FRAME);
   // 5 · precio
   const [discount, setDiscount] = useState("");
   const [q, setQ] = useState(null);
@@ -298,6 +300,11 @@ export default function PosSale({ me }) {
     rx: toRx(rxWorn),
     worn_source: worn.source,
     ...(worn.dateMode === "approx" ? { approx_months_ago: Number(worn.months) || 0 } : { rx_date: worn.date || null }),
+    frame_measures: Object.values(wornFrame).some((v) => v && v !== "good") ? {
+      lens_width: num(wornFrame.lens_width), bridge: num(wornFrame.bridge),
+      temple: num(wornFrame.temple), lens_height: num(wornFrame.lens_height),
+      total_width: num(wornFrame.total_width), condition: wornFrame.condition,
+    } : null,
   } : null);
   const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual"), rx_date: rxNew.rx_date || null });
 
@@ -570,7 +577,7 @@ export default function PosSale({ me }) {
                   <>
                     <h3>{t("adm.pos.rx.worn")}</h3>
                     {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
-                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" measures={false} />
+                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" />
                     <div className="pos-form">
                       <label>{t("adm.pos.rx.source")}
                         <select value={worn.source} onChange={(e) => setWorn((w) => ({ ...w, source: e.target.value }))}>
@@ -600,6 +607,33 @@ export default function PosSale({ me }) {
                         </ul>
                       </details>
                     )}
+
+                    <h3>{t("adm.pos.worn.frame")}</h3>
+                    <p className="muted" style={{ fontSize: "0.85em", margin: "0 0 0.5rem" }}>{t("adm.pos.worn.frameHint")}</p>
+                    <div className="pos-form pos-worn-frame">
+                      <label>{t("adm.pos.worn.lensWidth")} <small>(A) mm</small>
+                        <input inputMode="decimal" value={wornFrame.lens_width} onChange={(e) => setWornFrame((f) => ({ ...f, lens_width: e.target.value }))} placeholder="50" />
+                      </label>
+                      <label>{t("adm.pos.worn.bridge")} <small>(DBL) mm</small>
+                        <input inputMode="decimal" value={wornFrame.bridge} onChange={(e) => setWornFrame((f) => ({ ...f, bridge: e.target.value }))} placeholder="18" />
+                      </label>
+                      <label>{t("adm.pos.worn.temple")} <small>mm</small>
+                        <input inputMode="decimal" value={wornFrame.temple} onChange={(e) => setWornFrame((f) => ({ ...f, temple: e.target.value }))} placeholder="140" />
+                      </label>
+                      <label>{t("adm.pos.worn.lensHeight")} <small>(B) mm</small>
+                        <input inputMode="decimal" value={wornFrame.lens_height} onChange={(e) => setWornFrame((f) => ({ ...f, lens_height: e.target.value }))} placeholder="35" />
+                      </label>
+                      <label>{t("adm.pos.worn.totalWidth")} <small>mm</small>
+                        <input inputMode="decimal" value={wornFrame.total_width} onChange={(e) => setWornFrame((f) => ({ ...f, total_width: e.target.value }))} placeholder="136" />
+                      </label>
+                      <label>{t("adm.pos.worn.condition")}
+                        <select value={wornFrame.condition} onChange={(e) => setWornFrame((f) => ({ ...f, condition: e.target.value }))}>
+                          <option value="good">{t("adm.pos.worn.cond.good")}</option>
+                          <option value="fair">{t("adm.pos.worn.cond.fair")}</option>
+                          <option value="poor">{t("adm.pos.worn.cond.poor")}</option>
+                        </select>
+                      </label>
+                    </div>
                   </>
                 )}
               </>
