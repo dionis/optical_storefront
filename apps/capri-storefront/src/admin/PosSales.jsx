@@ -154,14 +154,19 @@ export default function PosSales() {
       <div className="adm-head-row"><h2>{t("adm.tab.possales")}</h2></div>
       <p className="adm-sub">{ctx && !ctx.is_admin && ctx.role === "seller" ? t("adm.pos.sales.subSeller") : t("adm.pos.sales.sub")}</p>
       <div className="adm-card pos-filters">
-        <select value={f.store} onChange={(e) => setF((x) => ({ ...x, store: e.target.value, terminal: "" }))} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-          <option value="">{t("adm.pos.sales.allStores")}</option>
-          {(ctx?.stores || []).map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-        </select>
-        <select value={f.terminal} onChange={set("terminal")} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
-          <option value="">{t("adm.pos.sales.allTerminals")}</option>
-          {terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
-        </select>
+        {/* Filtrar por tienda o punto de venta solo tiene sentido si hay más de uno (un vendedor tiene los suyos fijos). */}
+        {(ctx?.stores || []).length > 1 && (
+          <select value={f.store} onChange={(e) => setF((x) => ({ ...x, store: e.target.value, terminal: "" }))} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
+            <option value="">{t("adm.pos.sales.allStores")}</option>
+            {(ctx?.stores || []).map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+          </select>
+        )}
+        {terminals.length > 1 && (
+          <select value={f.terminal} onChange={set("terminal")} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
+            <option value="">{t("adm.pos.sales.allTerminals")}</option>
+            {terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+          </select>
+        )}
         <select value={f.status} onChange={set("status")} aria-label={t("adm.pos.sales.status")} title={t("adm.pos.sales.status")}>
           <option value="">{t("adm.pos.sales.anyStatus")}</option>
           <option value="completed">{t("adm.pos.sales.st.completed")}</option>

@@ -276,6 +276,12 @@ describe("sellerTillProblem (counter seller → their one till)", () => {
     expect(sellerTillProblem({ is_admin: true, role: "owner" }, "est_2", "t9")).toBeNull();
   });
 
+  it("the same rule guards another till's register in the seller's own store", () => {
+    // Moving or closing a register goes through sellerTillProblem with the session's store and till.
+    expect(sellerTillProblem(as(), "est_1", "t2")).toBe("seller_wrong_till");
+    expect(sellerTillProblem({ is_admin: false, role: "manager" }, "est_1", "t2")).toBeNull();
+  });
+
   it("a seller sells only from the store and till of an active record", () => {
     expect(sellerTillProblem(as(), "est_1", "t1")).toBeNull();
     expect(sellerTillProblem(as(), "est_1", "t2")).toBe("seller_wrong_till");

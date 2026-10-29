@@ -1242,3 +1242,34 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(14,90,208,.35); }
   .ss-tools { width: 100%; }
   .ss-tools select { flex: 1; min-width: 0; }
 }
+
+/* Menú lateral por grupos plegables (acordeón): cabe sin scroll; el scroll de
+   .adm-nav queda solo como último recurso en pantallas muy bajas. */
+.adm-nav.accordion .adm-nav-group { margin-bottom: 2px; }
+.adm-nav.accordion .adm-nav-group.single { margin-bottom: 2px; }
+.adm-nav-gbtn { width: 100%; font-weight: 700; }
+.adm-nav-chev { margin-left: auto; display: grid; place-items: center; transition: transform .2s var(--adm-ease); opacity: .7; }
+.adm-nav-gbtn .adm-nav-badge + .adm-nav-chev { margin-left: 6px; }
+.adm-nav-group.open > .adm-nav-gbtn .adm-nav-chev { transform: rotate(180deg); }
+.adm-nav-group.has-on > .adm-nav-gbtn { color: #1b5e20; }
+.adm-nav-sub { padding: 2px 0 6px 12px; margin-left: 10px; border-left: 1px solid rgba(27, 94, 32, .18); }
+.adm-nav-sub[hidden] { display: none; }
+.adm-nav-item.sub { padding-top: 7px; padding-bottom: 7px; font-size: 13.5px; }
+.adm-shell.is-collapsed .adm-nav-chev { display: none; }
+.adm-shell.is-collapsed .adm-nav-group.has-on > .adm-nav-gbtn { background: rgba(255,255,255,.45); }
+/* Submenú flotante de la barra contraída. */
+.adm-nav-fly { position: fixed; left: calc(var(--adm-side-w-min) + 6px); z-index: 70; min-width: 210px; padding: 6px; border-radius: 12px; background: #fff; box-shadow: 0 12px 32px rgba(15, 30, 60, .18); border: 1px solid var(--adm-line); }
+.adm-nav-fly-h { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #2e7d32; padding: 6px 10px 4px; }
+.adm-nav-fly .adm-nav-item { color: var(--adm-ink); }
+.adm-nav-fly .adm-nav-txt { opacity: 1 !important; width: auto !important; }
+.adm-nav-fly .adm-nav-item.on { background: rgba(129, 199, 132, .25); }
+.adm-nav-fly .adm-nav-item.on::before { left: -6px; }
+.adm-shell.is-collapsed .adm-nav-fly .adm-nav-item { justify-content: flex-start; padding: 8px 10px; }
+/* Pantallas bajas: el mismo menú, más apretado, antes de recurrir al scroll. */
+@media (max-height: 700px) {
+  .adm-side-head { min-height: 0; padding-top: 8px; padding-bottom: 6px; }
+  .adm-nav .adm-nav-item { padding-top: 7px; padding-bottom: 7px; }
+  .adm-nav .adm-nav-item.sub { padding-top: 5px; padding-bottom: 5px; }
+  .adm-side-foot { padding-top: 4px; padding-bottom: 6px; }
+  .adm-side-foot .adm-nav-item { padding-top: 6px; padding-bottom: 6px; }
+}

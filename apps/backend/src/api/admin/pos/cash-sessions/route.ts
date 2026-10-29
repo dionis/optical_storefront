@@ -18,7 +18,10 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const scope = await posScope(req);
     const q = req.query as Record<string, string | undefined>;
     const ids = q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope);
-    res.json({ sessions: ids && !ids.length ? [] : await listSessions(req.scope, ids) });
+    const sessions = ids && !ids.length ? [] : await listSessions(req.scope, ids);
+    // A counter seller sees only their own till's register, not the other tills' counts.
+    const own = !scope.is_admin && scope.role === "seller" ? scope.seller?.terminal_id ?? "" : null;
+    res.json({ sessions: own === null ? sessions : sessions.filter((s) => s.terminal_id === own) });
   });
 }
 

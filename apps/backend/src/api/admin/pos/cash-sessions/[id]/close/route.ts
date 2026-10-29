@@ -1,7 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { closeSession, getSession } from "../../../../../../lib/cash";
 import { cleanText } from "../../../../../../lib/establishments";
-import { canSellAt } from "../../../../../../lib/pos";
+import { canSellAt, sellerTillProblem } from "../../../../../../lib/pos";
 import { PosError } from "../../../../../../lib/pos-data";
 import { posHandler, posScope } from "../../../../../../lib/pos-route";
 
@@ -15,6 +15,9 @@ export async function POST(req: AuthenticatedMedusaRequest<{ counted?: unknown; 
     const session = await getSession(req.scope, String(req.params.id ?? ""));
     if (!session) throw new PosError("cash_not_found", 404);
     if (!canSellAt(scope, session.establishment_id)) throw new PosError("forbidden_store", 403);
+    // A counter seller only touches the register of their own till.
+    const till = sellerTillProblem(scope, session.establishment_id, session.terminal_id);
+    if (till) throw new PosError(till, 403);
     const body = (req.body ?? {}) as { counted?: unknown; note?: string };
     const counted = Number(body.counted);
     if (!Number.isFinite(counted) || counted < 0 || counted > 1000000) throw new PosError("bad_payment");

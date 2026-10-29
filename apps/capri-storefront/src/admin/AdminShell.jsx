@@ -8,38 +8,52 @@ import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 
-/** Secciones del panel agrupadas como en un panel de operaciones (Coolify-like). */
+/**
+ * Secciones del panel en grupos pequeños, por tarea: cada grupo es un submenú
+ * plegable (acordeón, uno abierto a la vez) para que el menú quepa sin scroll.
+ * `navHidden`: la pestaña existe (se llega por enlace o desde la cabecera) pero
+ * no ocupa sitio en el menú.
+ */
 export const NAV_GROUPS = [
-  { key: "business", items: [
+  { key: "overview", icon: "dashboard", items: [
     { key: "exec", icon: "dashboard" },
     { key: "storestatus", icon: "store" },
     { key: "salesboard", icon: "sales" },
-    { key: "storecosts", icon: "costs" },
-    { key: "approvals", icon: "hand" },
-    { key: "alerts", icon: "bell" },
+  ] },
+  { key: "stores", icon: "store", items: [
     { key: "stores", icon: "store" },
+    { key: "storecosts", icon: "costs" },
+    { key: "posconfig", icon: "settings" },
+    { key: "alerts", icon: "bell" },
+  ] },
+  { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
-    { key: "costs", icon: "costs" },
+    { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
-  { key: "catalog", items: [
+  { key: "catalog", icon: "products", items: [
     { key: "products", icon: "products" },
   ] },
-  { key: "admin", items: [
+  { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },
-    { key: "posconfig", icon: "settings" },
     { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
   ] },
 ];
 
 /** Lo de cada persona, sea cual sea su rol. */
-const WORK_GROUP = { key: "work", items: [
+const WORK_GROUP = { key: "work", icon: "dollar", items: [
   { key: "pos", icon: "dollar" },
   { key: "possales", icon: "receipt" },
   { key: "cash", icon: "wallet" },
   { key: "mysales", icon: "trendUp" },
   { key: "profile", icon: "user" },
+] };
+
+/** Dueño y superadmin: el punto de venta con las aprobaciones; su perfil, desde la cabecera. */
+const ADMIN_WORK_GROUP = { key: "work", icon: "dollar", items: [
+  ...WORK_GROUP.items.map((i) => (i.key === "profile" ? { ...i, navHidden: true } : i)),
+  { key: "approvals", icon: "hand" },
 ] };
 
 /**
@@ -48,7 +62,7 @@ const WORK_GROUP = { key: "work", items: [
  * cualquier ruta fuera de su alcance (lib/staff-guard.ts).
  */
 export function navGroupsFor(me) {
-  if (!me || me.is_admin !== false) return [WORK_GROUP, ...NAV_GROUPS];
+  if (!me || me.is_admin !== false) return [NAV_GROUPS[0], ADMIN_WORK_GROUP, ...NAV_GROUPS.slice(1)];
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
   const extra = [
@@ -85,6 +99,22 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   const [drawer, setDrawer] = useState(false);
   const findRef = useRef(null);
   const [showProfile, setShowProfile] = useState(false);
+  // Grupo abierto del acordeón (uno a la vez); de entrada, el de la pestaña actual.
+  const groupOf = (key) => groups.find((g) => g.items.some((i) => i.key === key))?.key ?? null;
+  const [openGroup, setOpenGroup] = useState(() => groupOf(tab));
+  useEffect(() => { setOpenGroup(groupOf(tab)); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Barra contraída: submenú flotante del grupo pulsado, junto a su icono.
+  const [fly, setFly] = useState(null); // { key, top }
+  const flyRef = useRef(null);
+  useEffect(() => {
+    if (!fly) return undefined;
+    const onDown = (e) => { if (flyRef.current && !flyRef.current.contains(e.target) && !e.target.closest?.(".adm-nav-gbtn")) setFly(null); };
+    const onKey = (e) => { if (e.key === "Escape") setFly(null); };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [fly]);
+  useEffect(() => { if (!collapsed) setFly(null); }, [collapsed]);
 
   useEffect(() => { try { localStorage.setItem(NAV_KEY, collapsed ? "1" : "0"); } catch { /* noop */ } }, [collapsed]);
   useEffect(() => {
@@ -109,39 +139,91 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
     return () => window.removeEventListener("keydown", onKey);
   }, [showProfile]);
 
-  const go = (key) => { onTab(key); setDrawer(false); };
+  const go = (key) => { onTab(key); setDrawer(false); setFly(null); };
   const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
   const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
   const userStore = me?.store_name || me?.store_code || "";
   const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
+  const item = (it, sub = false) => {
+    const on = tab === it.key;
+    const badge = badges[it.key];
+    return (
+      <button
+        key={it.key}
+        type="button"
+        className={`adm-nav-item ${sub ? "sub" : ""} ${on ? "on" : ""}`}
+        onClick={() => go(it.key)}
+        aria-current={on ? "page" : undefined}
+        title={collapsed && !sub ? t(`adm.tab.${it.key}`) : undefined}
+      >
+        <span className="adm-nav-ico"><Icon name={it.icon} size={sub ? 17 : 19} /></span>
+        <span className="adm-nav-txt">{t(`adm.tab.${it.key}`)}</span>
+        {badge ? <span className="adm-nav-badge">{badge}</span> : null}
+      </button>
+    );
+  };
+  const visible = (g) => g.items.filter((i) => !i.navHidden);
+  // Con un solo grupo (vendedor, encargado…) el menú es corto: lista simple, sin plegar.
+  const flat = groups.filter((g) => visible(g).length).length <= 1;
+
   const nav = (
-    <nav className="adm-nav" aria-label={t("adm.nav.aria")}>
-      {groups.map((g) => (
-        <div className="adm-nav-group" key={g.key}>
-          <div className="adm-nav-gh">{t(`adm.nav.g.${g.key}`)}</div>
-          {g.items.map((it) => {
-            const on = tab === it.key;
-            const badge = badges[it.key];
-            return (
-              <button
-                key={it.key}
-                type="button"
-                className={`adm-nav-item ${on ? "on" : ""}`}
-                onClick={() => go(it.key)}
-                aria-current={on ? "page" : undefined}
-                title={collapsed ? t(`adm.tab.${it.key}`) : undefined}
-              >
-                <span className="adm-nav-ico"><Icon name={it.icon} size={19} /></span>
-                <span className="adm-nav-txt">{t(`adm.tab.${it.key}`)}</span>
-                {badge ? <span className="adm-nav-badge">{badge}</span> : null}
-              </button>
-            );
-          })}
-        </div>
-      ))}
+    <nav className={`adm-nav ${flat ? "flat" : "accordion"}`} aria-label={t("adm.nav.aria")}>
+      {groups.map((g) => {
+        const items = visible(g);
+        if (!items.length) return null;
+        if (flat) {
+          return (
+            <div className="adm-nav-group" key={g.key}>
+              <div className="adm-nav-gh">{t(`adm.nav.g.${g.key}`)}</div>
+              {items.map((it) => item(it))}
+            </div>
+          );
+        }
+        // Un grupo de una sola sección no necesita submenú.
+        if (items.length === 1) return <div className="adm-nav-group single" key={g.key}>{item(items[0])}</div>;
+        const open = openGroup === g.key;
+        const active = items.some((i) => i.key === tab);
+        const total = items.reduce((a, i) => a + (Number(badges[i.key]) || 0), 0);
+        const id = `adm-nav-sub-${g.key}`;
+        return (
+          <div className={`adm-nav-group fold ${open ? "open" : ""} ${active ? "has-on" : ""}`} key={g.key}>
+            <button
+              type="button"
+              className="adm-nav-item adm-nav-gbtn"
+              aria-expanded={collapsed ? fly?.key === g.key : open}
+              aria-controls={collapsed ? undefined : id}
+              title={collapsed ? t(`adm.nav.g.${g.key}`) : undefined}
+              onClick={(e) => {
+                if (collapsed) {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setFly((f) => (f?.key === g.key ? null : { key: g.key, top: Math.min(r.top, window.innerHeight - 56 - items.length * 42) }));
+                } else setOpenGroup((k) => (k === g.key ? null : g.key));
+              }}
+            >
+              <span className="adm-nav-ico"><Icon name={g.icon || "layers"} size={19} /></span>
+              <span className="adm-nav-txt">{t(`adm.nav.g.${g.key}`)}</span>
+              {total && !open ? <span className="adm-nav-badge">{total}</span> : null}
+              <span className="adm-nav-chev" aria-hidden="true"><Icon name="chevronDown" size={15} /></span>
+            </button>
+            {!collapsed && (
+              <div className="adm-nav-sub" id={id} hidden={!open}>
+                {items.map((it) => item(it, true))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </nav>
   );
+
+  const flyGroup = fly && groups.find((g) => g.key === fly.key);
+  const flyout = collapsed && flyGroup ? (
+    <div className="adm-nav-fly" ref={flyRef} style={{ top: Math.max(8, fly.top) }} role="menu" aria-label={t(`adm.nav.g.${flyGroup.key}`)}>
+      <div className="adm-nav-fly-h">{t(`adm.nav.g.${flyGroup.key}`)}</div>
+      {visible(flyGroup).map((it) => item(it, true))}
+    </div>
+  ) : null;
 
   return (
     <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`}>
@@ -156,6 +238,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
           </button>
         </div>
         {nav}
+        {flyout}
         <div className="adm-side-foot">
           <Link to="/" className="adm-nav-item ghost" title={collapsed ? t("adm.viewStore") : undefined}>
             <span className="adm-nav-ico"><Icon name="store" size={19} /></span>
@@ -176,7 +259,8 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
           </button>
           <div className="adm-top-crumb">
             <span className="adm-top-sec">{t(`adm.tab.${tab}`)}</span>
-            <em className="adm-badge">ADMIN</em>
+            {/* Solo dueño y superadmin: un vendedor o un encargado no administran el panel. */}
+            {me?.is_admin !== false && <em className="adm-badge">ADMIN</em>}
           </div>
           {find !== null && <label className="adm-find" title={t("adm.findPriceTitle")}>
             <Icon name="search" size={16} />

@@ -11,6 +11,7 @@ import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 
 const PERIODS = ["today", "week", "month"];
+const ZERO = { total: 0, count: 0, avg_ticket: 0 };
 
 export default function MySales({ go }) {
   const { t, lang } = useLang();
@@ -64,7 +65,7 @@ export default function MySales({ go }) {
 
       <div className="my-periods">
         {PERIODS.map((k) => {
-          const s = d[k];
+          const s = d[k] || ZERO;
           return (
             <button type="button" key={k} className={`my-period ${k === "today" ? "hero" : ""}`} onClick={() => go?.("possales")}>
               <small>{t(`adm.my.${k}`)}</small>
@@ -96,7 +97,7 @@ export default function MySales({ go }) {
               <p>{t("adm.my.goal", { done: m(d.goal.done), goal: m(d.goal.amount), left: m(d.goal.left) })}</p>
             </>
           ) : <p className="muted">{t("adm.my.noGoal")}</p>}
-          <p className="muted">{t("adm.my.balance", { v: m(d.balance_due) })}</p>
+          <p className="muted">{t("adm.my.balance", { v: m(d.balance_due ?? 0) })}</p>
         </div>
       </div>
 
@@ -122,8 +123,8 @@ export default function MySales({ go }) {
         </div>
 
         <div className="adm-card">
-          <h3><Icon name="hand" size={16} /> {t("adm.my.ready", { n: d.ready.length })}</h3>
-          {d.ready.length === 0 ? <div className="adm-nodata">{t("adm.my.noneReady")}</div> : (
+          <h3><Icon name="hand" size={16} /> {t("adm.my.ready", { n: (d.ready || []).length })}</h3>
+          {!(d.ready || []).length ? <div className="adm-nodata">{t("adm.my.noneReady")}</div> : (
             <ul className="pos-lines">
               {d.ready.map((r) => (
                 <li key={r.id}>

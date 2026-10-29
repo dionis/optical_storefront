@@ -61,12 +61,16 @@ export default function PosCash() {
       <div className="adm-head-row">
         <h2>{t("adm.tab.cash")}</h2>
         <div className="pos-where">
-          <select value={storeId} onChange={(e) => { setStoreId(e.target.value); setTerminalId(ctx.stores.find((s) => s.id === e.target.value)?.terminals[0]?.id || ""); }} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-            {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-          </select>
-          <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
-            {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
-          </select>
+          {ctx.stores.length > 1 ? (
+            <select value={storeId} onChange={(e) => { setStoreId(e.target.value); setTerminalId(ctx.stores.find((s) => s.id === e.target.value)?.terminals[0]?.id || ""); }} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
+              {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+            </select>
+          ) : store && <span className="adm-team-tag" title={t("adm.pos.store")}><Icon name="store" size={12} /> {store.code} · {store.name}</span>}
+          {(store?.terminals.length || 0) > 1 ? (
+            <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
+              {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
+            </select>
+          ) : terminalId && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {termCode(terminalId)}</span>}
         </div>
       </div>
       <p className="adm-sub">{t("adm.cash.sub")}</p>

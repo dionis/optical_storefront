@@ -130,7 +130,16 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
         </fieldset>
       ))}
 
-      {"privileges" in (profile || {}) && (
+      {/* En su propio perfil, solo los privilegios concedidos (sin la lista de todo lo que podría tener). */}
+      {"privileges" in (profile || {}) && !isAdmin && form.privileges.length > 0 && (
+        <fieldset className="adm-profile-group" disabled>
+          <legend>{t("adm.profile.g.privileges")}</legend>
+          <div className="adm-profile-privs">
+            {form.privileges.map((p) => <span key={p} className="adm-chip ok"><Icon name="check" size={11} />{t(`adm.profile.priv.${p}`)}</span>)}
+          </div>
+        </fieldset>
+      )}
+      {"privileges" in (profile || {}) && isAdmin && (
         <fieldset className="adm-profile-group" disabled={!isAdmin || busy}>
           <legend>{t("adm.profile.g.privileges")}</legend>
           <div className="adm-profile-privs">

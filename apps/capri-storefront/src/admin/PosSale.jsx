@@ -429,12 +429,17 @@ export default function PosSale({ me }) {
       <div className="adm-head-row pos-head">
         <h2>{t("adm.tab.pos")}</h2>
         <div className="pos-where">
-          <select value={storeId} onChange={(e) => setStoreId(e.target.value)} disabled={step > 0 && stepName !== "done"} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-            {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-          </select>
-          <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
-            {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name ? ` · ${x.name}` : ""}</option>)}
-          </select>
+          {/* Un vendedor tiene tienda y punto de venta fijos: se muestran, no se eligen. */}
+          {ctx.stores.length > 1 ? (
+            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} disabled={step > 0 && stepName !== "done"} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
+              {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+            </select>
+          ) : store && <span className="adm-team-tag" title={t("adm.pos.store")}><Icon name="store" size={12} /> {store.code} · {store.name}</span>}
+          {(store?.terminals.length || 0) > 1 ? (
+            <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
+              {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name ? ` · ${x.name}` : ""}</option>)}
+            </select>
+          ) : terminal && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {terminal.code}{terminal.name ? ` · ${terminal.name}` : ""}</span>}
           {ctx.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{ctx.seller_code}</span>}
         </div>
       </div>
