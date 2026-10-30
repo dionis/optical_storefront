@@ -70,6 +70,11 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  // Los colores se abren debajo de la fila: si no caben, la lista se desplaza hasta ellos.
+  useEffect(() => {
+    if (expanded) boxRef.current?.querySelector(".pos-ac-variants")?.scrollIntoView({ block: "nearest" });
+  }, [expanded]);
+
   const add = (p, v) => {
     if (p.price == null) return;
     onAdd(p, v);

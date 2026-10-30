@@ -156,9 +156,12 @@
 
 /* tarjetas */
 .adm-card { position: relative; background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: var(--adm-radius); padding: clamp(12px, 1.6vw, 20px); transition: transform .28s var(--adm-ease), box-shadow .28s var(--adm-ease), border-color .22s; overflow: hidden; box-shadow: var(--adm-shadow-card); }
-.adm-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--adm-grad-brand); opacity: 0; transition: opacity .28s var(--adm-ease); }
+.adm-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: var(--adm-radius) var(--adm-radius) 0 0; background: var(--adm-grad-brand); opacity: 0; transition: opacity .28s var(--adm-ease); }
 .adm-card:hover { box-shadow: var(--adm-shadow-hover); border-color: rgba(99,102,241,.12); transform: translateY(-4px); }
 .adm-card:hover::before { opacity: 1; }
+/* La tarjeta recorta su contenido: mientras hay un elemento flotante abierto dentro
+   (lista, globo de ayuda, menú, tooltip) deja de recortar y sube sobre sus vecinas. */
+.adm-card:has(.pos-ac-pop, .adm-tip-pop, details[open] > .adm-team-stores-menu, .pos-cust-filter .pos-hits, .cx-tip) { overflow: visible; z-index: 6; }
 .adm-card h3 { margin: 0 0 clamp(8px, 1vw, 12px); font-size: clamp(13px, 1.2vw, 15px); font-weight: 700; color: var(--adm-ink); display: flex; align-items: center; gap: clamp(5px, .6vw, 8px); }
 .adm-card h3 .adm-ico { color: var(--adm-blue); transition: transform .2s var(--adm-ease); }
 .adm-card:hover h3 .adm-ico { transform: scale(1.12); }
@@ -997,6 +1000,8 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-steps li.ok button::before { content: "✓ "; font-size: 11px; }
 .pos-steps li button:disabled { opacity: .45; cursor: default; }
 .pos-card { display: grid; gap: 14px; }
+/* Es un formulario de trabajo: no se levanta bajo el cursor mientras se elige. */
+.pos-card:hover { transform: none; }
 .pos-card h3 { margin: 4px 0 0; font-size: 15px; }
 .pos-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 0 12px; background: var(--adm-surface); }
 .pos-search input { border: 0; outline: none; flex: 1; min-height: 46px; font-size: 16px; background: transparent; }
@@ -1019,7 +1024,8 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-ac-clear:hover { background: var(--adm-line-2); }
 .pos-ac-pop { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 30, 60, .14); overflow: hidden; }
 .pos-ac-note { padding: 14px 16px; color: var(--adm-muted); font-size: 14px; }
-.pos-ac-list { list-style: none; margin: 0; padding: 4px; max-height: min(420px, 60vh); overflow-y: auto; overflow-x: hidden; }
+/* Aprovecha la altura libre de la pantalla (300px = cabecera, pasos y buscador). */
+.pos-ac-list { list-style: none; margin: 0; padding: 4px; max-height: max(260px, calc(100dvh - 300px)); overflow-y: auto; overflow-x: hidden; }
 /* Sin el «levantar» global de los botones de la tienda: la fila resaltada ya se marca con fondo. */
 .pos-ac .pos-ac-row.pos-ac-row, .pos-ac .pos-ac-row.pos-ac-row:hover, .pos-ac .pos-ac-row.pos-ac-row:active,
 .pos-ac .pos-ac-variant.pos-ac-variant:hover, .pos-ac .pos-ac-variant.pos-ac-variant:active,
