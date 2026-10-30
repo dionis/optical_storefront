@@ -2,7 +2,7 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import { createSalesChannelsWorkflow } from "@medusajs/medusa/core-flows";
 import { ESTABLISHMENT_MODULE } from "../modules/establishment";
 import type EstablishmentModuleService from "../modules/establishment/service";
-import { nextStoreColor, STORE_COLORS } from "./store-color";
+import { nextStoreColor, normalizeColor, STORE_COLORS } from "./store-color";
 
 /**
  * Stores (establecimientos): code assignment and creation.
@@ -74,7 +74,7 @@ export async function listEstablishments(container: MedusaContainer): Promise<Es
  */
 export async function createEstablishment(
   container: MedusaContainer,
-  input: { name: string; address: string | null; phone: string | null; actorId: string | null }
+  input: { name: string; address: string | null; phone: string | null; color?: string | null; actorId: string | null }
 ): Promise<EstablishmentRow> {
   const svc = container.resolve<EstablishmentModuleService>(ESTABLISHMENT_MODULE);
   const all = await svc.listEstablishments({}, { take: 1000, withDeleted: true });
@@ -92,7 +92,7 @@ export async function createEstablishment(
     address: input.address,
     phone: input.phone,
     sales_channel_id: result[0]?.id ?? null,
-    color: nextStoreColor(all.map((r) => (r as { color?: string | null }).color)),
+    color: normalizeColor(input.color) ?? nextStoreColor(all.map((r) => (r as { color?: string | null }).color)),
     created_by: input.actorId,
   });
   const [row] = (await listEstablishments(container)).filter((r) => r.id === created.id);

@@ -11,9 +11,9 @@ export async function fetchStores() {
   return adminFetch("/admin/establishments");
 }
 
-export async function createStore({ name, address = "", phone = "" }) {
+export async function createStore({ name, address = "", phone = "", color }) {
   try {
-    return await adminFetch("/admin/establishments", { method: "POST", body: { name, address, phone } });
+    return await adminFetch("/admin/establishments", { method: "POST", body: { name, address, phone, ...(color ? { color } : {}) } });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.stores.saveFailed"));
   }
@@ -77,6 +77,12 @@ export async function previewStorePrices(id, productIds, lenses = 0) {
 
 /** Colores de partida; el servidor reparte uno distinto a cada tienda nueva (lib/store-color.ts). */
 export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569"];
+
+/** El que se propone a una tienda nueva: el primero que ninguna usa; null si no queda (lo elige el servidor). */
+export function freeStoreColor(stores) {
+  const used = new Set(stores.map((s) => String(s.color || "").toUpperCase()));
+  return STORE_COLORS.find((c) => !used.has(c)) ?? null;
+}
 
 /** Texto legible sobre el color de una tienda. */
 export function storeInk(hex) {

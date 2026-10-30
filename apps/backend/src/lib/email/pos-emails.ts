@@ -154,7 +154,7 @@ export function renderApprovalRequestEmail(d: ApprovalEmailData, locale: EmailLo
     <div style="margin-top:14px;font-size:12px;color:#5b6472;text-align:center">${esc(posT(locale, "approval_expires"))}</div>`;
   return {
     subject,
-    html: shell(posT(locale, "approval_title"), intro, inner, locale),
+    html: shell(posT(locale, "approval_title"), intro, inner, locale, { accent: d.storeColor }),
     text: [
       intro,
       "",

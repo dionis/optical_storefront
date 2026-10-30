@@ -5,7 +5,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchStores, createStore, updateStore, storeInk, STORE_COLORS } from "./adminStores.js";
+import { fetchStores, createStore, updateStore, freeStoreColor, storeInk, STORE_COLORS } from "./adminStores.js";
 import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
@@ -13,6 +13,22 @@ import PriceImport from "./PriceImport.jsx";
 import StoreTerminals from "./StoreTerminals.jsx";
 
 const EMPTY = { name: "", address: "", phone: "" };
+
+/** Muestras de la paleta y, al lado, cualquier otro color. */
+function ColorPicker({ value, onChange, disabled }) {
+  const { t } = useLang();
+  const current = String(value || "").toUpperCase();
+  return (
+    <span className="adm-store-colors" role="group" aria-label={t("adm.stores.color")}>
+      <small className="muted">{t("adm.stores.color")}</small>
+      {STORE_COLORS.map((c) => (
+        <button key={c} type="button" disabled={disabled} className={`adm-store-swatch ${current === c ? "on" : ""}`} style={{ background: c }} aria-label={c} aria-pressed={current === c} title={c} onClick={() => onChange(c)} />
+      ))}
+      <input type="color" disabled={disabled} className="adm-store-swatch-custom" aria-label={t("adm.stores.colorCustom")} title={t("adm.stores.colorCustom")} value={value || STORE_COLORS[0]} onChange={(e) => onChange(e.target.value.toUpperCase())} />
+      <small className="muted">{t("adm.stores.colorHint")}</small>
+    </span>
+  );
+}
 
 /**
  * TIENDAS.
@@ -59,9 +75,12 @@ export default function Stores() {
     } finally { setBusy(false); }
   };
 
+  // El color que se propone hasta que la persona elija otro; vuelve a calcularse tras cada alta.
+  const newColor = form.color || freeStoreColor(stores);
+
   const create = async (e) => {
     e.preventDefault();
-    const ok = await run(() => createStore(form), t("adm.stores.created"));
+    const ok = await run(() => createStore({ ...form, color: newColor }), t("adm.stores.created"));
     if (ok) setForm(EMPTY);
   };
 
@@ -93,6 +112,7 @@ export default function Stores() {
           <label className="adm-field">{t("adm.stores.address")}<input className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
           <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
         </div>
+        <div style={{ marginTop: 12 }}><ColorPicker value={newColor} disabled={demo || busy} onChange={(color) => setForm({ ...form, color })} /></div>
         <div className="adm-actions" style={{ marginTop: 12 }}>
           <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.stores.create")}</button>
         </div>
@@ -112,14 +132,7 @@ export default function Stores() {
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-                  <span className="adm-store-colors" role="group" aria-label={t("adm.stores.color")}>
-                    <small className="muted">{t("adm.stores.color")}</small>
-                    {STORE_COLORS.map((c) => (
-                      <button key={c} type="button" className={`adm-store-swatch ${draft.color?.toUpperCase() === c ? "on" : ""}`} style={{ background: c }} aria-label={c} aria-pressed={draft.color?.toUpperCase() === c} title={c} onClick={() => setDraft({ ...draft, color: c })} />
-                    ))}
-                    <input type="color" className="adm-store-swatch-custom" aria-label={t("adm.stores.colorCustom")} title={t("adm.stores.colorCustom")} value={draft.color || STORE_COLORS[0]} onChange={(e) => setDraft({ ...draft, color: e.target.value.toUpperCase() })} />
-                    <small className="muted">{t("adm.stores.colorHint")}</small>
-                  </span>
+                  <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
                     {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
                   </select>

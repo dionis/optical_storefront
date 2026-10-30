@@ -57,6 +57,34 @@ describe("emails identify the store by color", () => {
     expect(plain.subject.startsWith("Nueva venta")).toBe(true);
   });
 
+  it("wears the color across the email: stripe, title edge and footer line", () => {
+    const e = renderApprovalRequestEmail(
+      { storeCode: "Op2", storeName: "Norte", storeColor: "#DC2626", seller: "AN", pct: 20, limitPct: 10, belowMinimum: false, list: 100, total: 80, lines: [], reason: null, link: "https://x" },
+      "es"
+    );
+    expect(e.html).toContain('bgcolor="#DC2626"');
+    expect(e.html).toContain("border-left:10px solid #DC2626");
+    expect(e.html).toContain("border-top:6px solid #DC2626");
+  });
+
+  it("an email with no store keeps the house style", () => {
+    const e = renderAlertEmail({ name: "R" }, [{ event: "sale.created", data: { is_web: true, total: 10 } }], "es", "https://x");
+    expect(e.html).toContain("border-left:6px solid");
+    expect(e.html).not.toContain("border-left:10px");
+  });
+
+  it("several alerts: the color only when they are all from one store", () => {
+    const ev = (code: string, color: string) => ({ event: "sale.created", data: { store_code: code, store_name: "N", store_color: color, total: 10 } });
+    const same = renderAlertEmail({ name: "R" }, [ev("Op1", "#2563EB"), ev("Op1", "#2563EB")], "es", "https://x");
+    expect(same.subject.startsWith("🔵 ")).toBe(true);
+    expect(same.html).toContain("border-left:10px solid #2563EB");
+    const mixed = renderAlertEmail({ name: "R" }, [ev("Op1", "#2563EB"), ev("Op2", "#DC2626")], "es", "https://x");
+    expect(mixed.subject.startsWith("🔵 ")).toBe(false);
+    expect(mixed.html).not.toContain("border-left:10px");
+    expect(mixed.html).toContain("#2563EB");
+    expect(mixed.html).toContain("#DC2626");
+  });
+
   it("digest", () => {
     const e = renderDigestEmail({ name: "R" }, { since: "a", date: "b", stores: [{ label: "Op1 · N", color: "#16A34A", count: 1, total: 5, voided: 0 }], sellers: [], count: 1, total: 5 }, "es", "https://x");
     expect(e.html).toContain("#16A34A");

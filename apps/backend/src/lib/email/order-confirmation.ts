@@ -11,7 +11,7 @@
  */
 
 import { tenantName } from "../tenant";
-import { storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
+import { normalizeColor, storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
 import type { ImageRef } from "./order-images";
@@ -397,7 +397,9 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
   <div style="font-size:14px;line-height:1.7;color:${INK}">${body}</div>`;
 }
 
-export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean }): string {
+export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean; accent?: string | null }): string {
+  // A store's email wears its color: a stripe on top, the title's edge and the footer's line.
+  const accent = normalizeColor(opts?.accent);
   const site = storefrontOrigin().replace(/^https?:\/\//, "");
   const printCss = opts?.printTicket
     ? `<style>@media print{@page{size:letter;margin:.4in .5in}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{background:#fff!important;margin:0!important;padding:0!important}body>table{background:#fff!important}body>table>tbody>tr>td{padding:0!important}}</style>`
@@ -411,9 +413,10 @@ export function shell(title: string, preheader: string, inner: string, locale: E
       <tr>
         <td align="center" style="padding:28px 12px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(11,47,102,.10)">
+            ${accent ? `<tr><td height="12" bgcolor="${accent}" style="background:${accent};height:12px;font-size:0;line-height:0">&nbsp;</td></tr>` : ""}
             ${brandHeaderRow()}
             <tr>
-              <td style="background:${NAVY_SOFT};padding:18px 32px;border-left:6px solid ${GOLD}">
+              <td style="background:${NAVY_SOFT};padding:18px 32px;border-left:${accent ? `10px solid ${accent}` : `6px solid ${GOLD}`}">
                 <div style="color:${BRAND};font-size:20px;font-weight:800;letter-spacing:.01em;line-height:1.3">${esc(title)}</div>
               </td>
             </tr>
@@ -421,7 +424,7 @@ export function shell(title: string, preheader: string, inner: string, locale: E
               <td style="padding:26px 32px 30px">${inner}</td>
             </tr>
             <tr>
-              <td style="background:${BRAND};padding:18px 32px;border-top:3px solid ${GOLD}">
+              <td style="background:${BRAND};padding:18px 32px;border-top:${accent ? `6px solid ${accent}` : `3px solid ${GOLD}`}">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
                   <tr>
                     <td style="font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#ffffff">${esc(emailStoreName())}</td>
@@ -1189,7 +1192,7 @@ export function renderAdminOrderNotification(
 
   return {
     subject,
-    html: shell(t(locale, "admin_order_title"), subject, inner, locale, { printTicket: true }),
+    html: shell(t(locale, "admin_order_title"), subject, inner, locale, { printTicket: true, accent: extras?.store?.color }),
     text,
   };
 }

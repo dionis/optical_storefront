@@ -103,9 +103,10 @@ export function renderAlertEmail(
   panelUrl: string
 ): RenderedEmail {
   const lines = events.map((e) => alertLine(e.event, e.data, locale));
-  // One event from one store: its color on the subject and across the top.
-  const only = events.length === 1 && events[0].data.store_color ? events[0].data : null;
-  const subject = lines.length === 1 ? `${only ? `${colorCircle(String(only.store_color))} ` : ""}${lines[0]}` : tt(locale, "subject_many", { name: rule.name, n: lines.length });
+  // Everything from one store: the email wears its color. A mix keeps a dot per line.
+  const first = events[0]?.data;
+  const only = first?.store_color && events.every((e) => e.data.store_code === first.store_code) ? first : null;
+  const subject = `${only ? `${colorCircle(String(only.store_color))} ` : ""}${lines.length === 1 ? lines[0] : tt(locale, "subject_many", { name: rule.name, n: lines.length })}`;
   const intro = lines.length === 1 ? lines[0] : tt(locale, "intro_many", { name: rule.name });
   const inner = `
     ${only ? storeBanner({ code: String(only.store_code ?? ""), name: only.store_name as string | null, color: String(only.store_color) }) : ""}
@@ -115,7 +116,7 @@ export function renderAlertEmail(
     <div style="margin-top:18px;font-size:12px;color:#5b6472">${esc(tt(locale, "footer", { name: rule.name }))}</div>`;
   return {
     subject,
-    html: shell(tt(locale, "title"), intro, inner, locale),
+    html: shell(tt(locale, "title"), intro, inner, locale, { accent: only ? String(only.store_color) : null }),
     text: [...lines, "", panelUrl, "", tt(locale, "footer", { name: rule.name })].join("\n"),
   };
 }
@@ -146,12 +147,13 @@ export function renderDigestEmail(rule: { name: string }, d: DigestData, locale:
           ["", String(d.count), money(d.total, locale), ""],
         ], d.stores.map((s) => s.color))}
         ${d.sellers.length ? table([tt(locale, "digest_seller"), tt(locale, "digest_count"), tt(locale, "digest_total")], d.sellers.map((s) => [s.label, String(s.count), money(s.total, locale)])) : ""}`;
-  const inner = `<div style="font-size:15px;color:#374151">${esc(intro)}</div>${body}
+  const oneStore = d.stores.length === 1 && d.stores[0].color ? d.stores[0] : null;
+  const inner = `${oneStore ? storeBanner({ code: oneStore.label, color: oneStore.color }) : ""}<div style="font-size:15px;color:#374151">${esc(intro)}</div>${body}
     <div style="margin-top:20px"><a href="${esc(panelUrl)}" style="color:#0b2f66;font-weight:700">${esc(tt(locale, "panel"))}</a></div>
     <div style="margin-top:18px;font-size:12px;color:#5b6472">${esc(tt(locale, "footer", { name: rule.name }))}</div>`;
   return {
     subject,
-    html: shell(tt(locale, "digest_title"), intro, inner, locale),
+    html: shell(tt(locale, "digest_title"), intro, inner, locale, { accent: oneStore?.color }),
     text: [
       intro,
       ...d.stores.map((s) => `${s.label}: ${s.count} · ${money(s.total, locale)}`),
