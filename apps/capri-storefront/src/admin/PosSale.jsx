@@ -498,10 +498,10 @@ export default function PosSale({ me }) {
             <details className="pos-address">
               <summary>{t("adm.pos.cust.address")}</summary>
               <div className="pos-form">
-                <label>{t("adm.pos.cust.address1")}<AddressInput value={customer.address_1} onChange={setC("address_1")} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /></label>
+                <label>{t("adm.pos.cust.address1")}<AddressInput value={customer.address_1} onChange={setC("address_1")} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.area ? "" : p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /></label>
                 <label>{t("adm.pos.cust.city")}<input value={customer.city} onChange={setC("city")} /></label>
                 <label>{t("adm.pos.cust.state")}<input value={customer.province} onChange={setC("province")} /></label>
-                <label>{t("adm.pos.cust.zip")}<input value={customer.postal_code} onChange={setC("postal_code")} /></label>
+                <label>{t("adm.pos.cust.zip")}<AddressInput mode="zip" inputMode="numeric" value={customer.postal_code} onChange={setC("postal_code")} onPick={(p) => setCustomer((c) => ({ ...c, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /></label>
               </div>
             </details>
             <fieldset className="pos-wears">

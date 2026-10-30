@@ -122,7 +122,7 @@ export default function MedusaCheckout() {
     const cleanup = attachAddressAutocomplete(addrRef.current, (parts) => {
       setF((p) => ({
         ...p,
-        address_1: parts.address_1 || p.address_1,
+        address_1: parts.area ? "" : parts.address_1 || p.address_1,
         postal_code: parts.postal_code || p.postal_code,
         city: parts.city || p.city,
         state: parts.state || p.state,

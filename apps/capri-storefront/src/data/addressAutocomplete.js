@@ -35,6 +35,9 @@ export function hasAddressAutocomplete() {
 
 // ── Carga del SDK de Google Maps (una sola vez) ─────────────────────────────
 let scriptPromise = null;
+// Google calls gm_authFailure AFTER the script loaded, so that promise is already
+// resolved by then: a rejected key has to be remembered for the searches to see it.
+let authFailed = false;
 
 function loadGoogleMaps() {
   if (!GOOGLE_KEY) return Promise.reject(new Error("no-google-key"));
@@ -66,7 +69,10 @@ function loadGoogleMaps() {
     document.head.appendChild(s);
     // Si Google rechaza la llave (referrer no autorizado, API sin habilitar)
     // el script carga pero avisa por este callback global.
-    window.gm_authFailure = () => reject(new Error("gmaps-auth-failed"));
+    window.gm_authFailure = () => {
+      authFailed = true;
+      reject(new Error("gmaps-auth-failed"));
+    };
   });
   return scriptPromise;
 }
@@ -121,7 +127,8 @@ function makeSuggestBox(inputEl, onSelect, source) {
   const close = () => { box.style.display = "none"; box.innerHTML = ""; };
   const show = (items) => {
     box.innerHTML = "";
-    if (!items.length) { close(); return; }
+    // La respuesta llegó cuando el cursor ya estaba en otro campo.
+    if (!items.length || document.activeElement !== inputEl) { close(); return; }
     items.forEach((item) => {
       const it = document.createElement("button");
       it.type = "button";
@@ -170,16 +177,19 @@ function debounceInput(inputEl, ms, fn) {
 }
 
 /**
- * Attach address autocomplete to a street input.
+ * Attach address autocomplete to a street input, or to a ZIP input.
  *
- * @param {HTMLInputElement} inputEl  the "street / address line 1" input
+ * @param {HTMLInputElement} inputEl  the "street / address line 1" input, or the ZIP one
  * @param {(parts) => void}  onSelect  called with parsed { address_1,
- *   postal_code, city, state, country, country_code } when the user picks
+ *   postal_code, city, state, country, country_code } when the user picks;
+ *   `area: true` when what was found is a city or a ZIP, with no street
+ * @param {{ mode?: "street" | "zip" }} [opts]  "zip": only digits are searched, and
+ *   a complete ZIP with a single answer fills in without having to pick it
  * @returns {() => void} cleanup function; always safe to call
  */
-export function attachAddressAutocomplete(inputEl, onSelect) {
+export function attachAddressAutocomplete(inputEl, onSelect, { mode = "street" } = {}) {
   if (!inputEl) return () => {};
-  if (!GOOGLE_KEY) return attachPhoton(inputEl, onSelect);
+  if (!GOOGLE_KEY) return attachPhoton(inputEl, onSelect, mode);
 
   let cleanup = () => {};
   let cancelled = false;
@@ -189,11 +199,11 @@ export function attachAddressAutocomplete(inputEl, onSelect) {
     .then((places) => {
       if (cancelled) return;
       if (!places || !places.AutocompleteSuggestion) throw new Error("places-new-api-missing");
-      cleanup = attachGoogle(inputEl, onSelect, places);
+      cleanup = attachGoogle(inputEl, onSelect, places, mode);
     })
     .catch(() => {
       // Sin Google (llave mal, red, bloqueador): respaldo abierto.
-      if (!cancelled) cleanup = attachPhoton(inputEl, onSelect);
+      if (!cancelled) cleanup = attachPhoton(inputEl, onSelect, mode);
     });
 
   return () => {
@@ -203,14 +213,29 @@ export function attachAddressAutocomplete(inputEl, onSelect) {
 }
 
 // ── Google Places (API nueva) ───────────────────────────────────────────────
-function attachGoogle(inputEl, onSelect, places) {
+function attachGoogle(inputEl, onSelect, places, mode) {
   const { AutocompleteSuggestion, AutocompleteSessionToken } = places;
   const ui = makeSuggestBox(inputEl, onSelect, "Google Maps");
   let token = new AutocompleteSessionToken();
   let seq = 0;
 
-  const off = debounceInput(inputEl, 250, async (q) => {
-    if (q.length < 3) { ui.close(); return; }
+  let fallback = null;
+  let off = () => {};
+
+  // Google said no (key refused, API not enabled, quota): the rest of this field's
+  // life goes to the open fallback, and the console says why. An empty answer is
+  // not a failure, it just means no address matched.
+  const giveUp = (reason) => {
+    console.warn(`[address] Google Places unavailable, using OpenStreetMap: ${reason}. See docs/GOOGLE-MAPS.md.`);
+    off();
+    ui.destroy();
+    fallback = attachPhoton(inputEl, onSelect, mode);
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  off = debounceInput(inputEl, 250, async (q) => {
+    if (q.length < 3 || (mode === "zip" && !/^\d+$/.test(q))) { ui.close(); return; }
+    if (authFailed) { giveUp("the key was rejected"); return; }
     const my = ++seq;
     try {
       const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
@@ -218,7 +243,9 @@ function attachGoogle(inputEl, onSelect, places) {
         sessionToken: token,
         // Solo direcciones de EE. UU. (la región y el envío son de EE. UU.).
         includedRegionCodes: ["us"],
-        includedPrimaryTypes: ["street_address", "premise", "subpremise", "route"],
+        // Calles y edificios, y también ciudades y ZIP: quien empieza por "Katy" o
+        // por "77449" debe ver algo. Google admite como máximo cinco tipos.
+        includedPrimaryTypes: mode === "zip" ? ["postal_code"] : ["street_address", "premise", "route", "locality", "postal_code"],
         language: "en-US",
       });
       if (my !== seq) return; // llegó tarde: ya hay otra búsqueda en curso
@@ -233,28 +260,46 @@ function attachGoogle(inputEl, onSelect, places) {
             // La sesión termina al elegir: nuevo token para la siguiente búsqueda.
             token = new AutocompleteSessionToken();
             const parts = parsePlaceComponents(place.addressComponents);
+            // Eligió una ciudad o un ZIP: rellena lo que hay, y la calle queda por escribir.
+            const types = s.placePrediction.types || [];
+            if (mode === "zip" || types.includes("locality") || types.includes("postal_code")) return { ...parts, address_1: "", area: true };
             // Dirección sin número (el cliente eligió solo la calle): se deja
             // el texto de la sugerencia para que complete el número a mano.
             if (!parts.address_1) parts.address_1 = s.placePrediction.mainText?.text || "";
             return parts;
           },
         }));
+      if (mode === "zip" && /^\d{5}$/.test(q) && items.length === 1) {
+        ui.close();
+        const parts = await items[0].pick();
+        if (my === seq) onSelect(parts);
+        return;
+      }
       ui.show(items);
-    } catch {
-      ui.close(); // cuota agotada o error de red: el campo manual sigue
+    } catch (e) {
+      ui.close();
+      if (my === seq) giveUp(e?.message || "request failed");
     }
   });
 
-  return () => { off(); ui.destroy(); };
+  return () => {
+    if (fallback) fallback();
+    else { off(); ui.destroy(); }
+  };
 }
 
 // ── Respaldo sin llave: Photon (OpenStreetMap) ──────────────────────────────
 // Direcciones de EE. UU. con número y calle. Misma interfaz que Google.
-function attachPhoton(inputEl, onSelect) {
+//
+// Por ZIP solo se rellena el estado: OSM conoce muchos códigos postales de EE. UU.
+// sin su ciudad, o con la de al lado (90210 → Los Ángeles), y una ciudad equivocada
+// es peor que un campo vacío. La ciudad con ZIP queda para Google.
+function attachPhoton(inputEl, onSelect, mode) {
   const ui = makeSuggestBox(inputEl, onSelect, "© OpenStreetMap");
   let ctrl = null;
 
   const off = debounceInput(inputEl, 320, async (q) => {
+    if (mode === "zip" && !/^\d{5}$/.test(q)) { ui.close(); return; }
     if (q.length < 4) { ui.close(); return; }
     try {
       if (ctrl) ctrl.abort();
@@ -264,6 +309,11 @@ function attachPhoton(inputEl, onSelect) {
         { signal: ctrl.signal }
       );
       const j = await r.json();
+      if (mode === "zip") {
+        const zip = (j.features || []).map((ft) => ft.properties || {}).find((pr) => pr.countrycode === "US" && pr.osm_value === "postcode" && pr.name === q);
+        if (zip?.state) onSelect({ address_1: "", city: "", state: zip.state, postal_code: q, country: "United States", country_code: "us", area: true });
+        return;
+      }
       const feats = (j.features || []).filter((ft) => {
         const pr = ft.properties || {};
         return pr.countrycode === "US" && pr.street;

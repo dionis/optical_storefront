@@ -1,16 +1,16 @@
 // Dónde se usa: campos de dirección del panel (tiendas, perfil de la persona,
 // cliente de una venta). Es un <input> normal: se puede escribir a mano siempre,
 // y al elegir una sugerencia (Google Maps, ver data/addressAutocomplete.js) avisa
-// con las partes de la dirección.
+// con las partes de la dirección. Con mode="zip" busca por código postal.
 import { useEffect, useRef } from "react";
 import { attachAddressAutocomplete } from "../data/addressAutocomplete.js";
 
 /** `onPick(parts)`: { address_1, city, state, postal_code, country, country_code }. */
-export default function AddressInput({ onPick, ...inputProps }) {
+export default function AddressInput({ onPick, mode = "street", ...inputProps }) {
   const ref = useRef(null);
   const pick = useRef(onPick);
   pick.current = onPick;
-  useEffect(() => attachAddressAutocomplete(ref.current, (parts) => pick.current(parts)), []);
+  useEffect(() => attachAddressAutocomplete(ref.current, (parts) => pick.current(parts), { mode }), [mode]);
   // El desplegable se coloca respecto a este contenedor, y no al formulario.
   return (
     <span className="addr-host">
