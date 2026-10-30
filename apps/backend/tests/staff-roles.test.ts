@@ -1,10 +1,4 @@
-import {
-  assignmentRowsFor,
-  isAllowedForRestrictedRole,
-  resolveRole,
-  roleChangeDenied,
-  type AssignmentLike,
-} from "../src/lib/staff-roles";
+import { assignmentRowsFor, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
 
 const row = (over: Partial<AssignmentLike>): AssignmentLike => ({
   role: "seller",
@@ -13,6 +7,23 @@ const row = (over: Partial<AssignmentLike>): AssignmentLike => ({
   discount_limit_pct: null,
   can_void: false,
   ...over,
+});
+
+describe("setting someone else's password", () => {
+  it("is for the owner and superadmins, over anyone but themselves", () => {
+    expect(passwordResetDenied({ actorRole: "superadmin", actorId: "a", targetId: "owner" })).toBeNull();
+    expect(passwordResetDenied({ actorRole: "owner", actorId: "a", targetId: "b" })).toBeNull();
+    expect(passwordResetDenied({ actorRole: "superadmin", actorId: "a", targetId: "a" })).toBe("self_password");
+    for (const actorRole of ["supervisor", "manager", "seller", null] as const) {
+      expect(passwordResetDenied({ actorRole, actorId: "a", targetId: "b" })).toBe("forbidden_role");
+    }
+  });
+
+  it("is out of reach of restricted roles at the guard, while their own stays open", () => {
+    expect(isAllowedForRestrictedRole("POST", "/admin/team/user_1/password")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/team/password")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/team/me/profile")).toBe(true);
+  });
 });
 
 describe("resolveRole", () => {

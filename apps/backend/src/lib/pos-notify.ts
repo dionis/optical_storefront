@@ -63,6 +63,7 @@ export async function notifyApprovalRequest(
           {
             storeCode: store.code,
             storeName: store.name,
+            storeColor: store.color,
             seller: sellerLabel,
             pct: approval.discount_pct,
             limitPct: approval.limit_pct,

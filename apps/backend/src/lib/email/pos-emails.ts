@@ -1,6 +1,7 @@
 import type { EmailLocale } from "./copy";
 import type { SaleDocument } from "../pos-documents";
 import { esc, shell, type RenderedEmail } from "./order-confirmation";
+import { colorCircle, storeBanner } from "../store-color";
 
 /**
  * Emails of the point of sale. Copy is kept here, in both languages, like
@@ -116,6 +117,7 @@ const row = (label: string, value: string) =>
 export interface ApprovalEmailData {
   storeCode: string;
   storeName: string;
+  storeColor?: string | null;
   seller: string;
   pct: number;
   limitPct: number | null;
@@ -128,11 +130,12 @@ export interface ApprovalEmailData {
 }
 
 export function renderApprovalRequestEmail(d: ApprovalEmailData, locale: EmailLocale): RenderedEmail {
-  const subject = posT(locale, "approval_subject", { store: d.storeCode, pct: d.pct });
+  const subject = `${d.storeColor ? `${colorCircle(d.storeColor)} ` : ""}${posT(locale, "approval_subject", { store: d.storeCode, pct: d.pct })}`;
   const intro = posT(locale, "approval_intro", { seller: d.seller });
   const limit = d.limitPct === null ? posT(locale, "approval_no_limit") : `${d.limitPct} %`;
   const lines = d.lines.map((l) => `${l.title || posT(locale, "own_frame")} · ${money(l.list, locale)}`);
   const inner = `
+    ${d.storeColor ? storeBanner({ code: d.storeCode, name: d.storeName, color: d.storeColor }) : ""}
     <div style="font-size:15px;line-height:1.7;color:#374151">${esc(intro)}</div>
     ${d.belowMinimum ? `<div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-left:3px solid #dc2626;border-radius:6px;font-size:14px;color:#991b1b">${esc(posT(locale, "approval_below_min"))}</div>` : ""}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:18px">

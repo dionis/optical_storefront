@@ -107,6 +107,16 @@ async function send(container: MedusaContainer, to: string, content: { subject: 
   }
 }
 
+/** Adds each event's store color, read now so a color the owner just changed applies. Best-effort. */
+async function withStoreColors(container: MedusaContainer, events: Array<{ event: string; data: Record<string, unknown> }>) {
+  try {
+    const colors = new Map((await listEstablishments(container)).map((s) => [s.code, s.color]));
+    return events.map((e) => ({ ...e, data: { ...e.data, store_color: colors.get(String(e.data.store_code ?? "")) ?? null } }));
+  } catch {
+    return events;
+  }
+}
+
 /** Records an event for every matching rule; immediate rules mail now, the rest queue. */
 export async function emitAlert(container: MedusaContainer, ev: AlertEvent): Promise<void> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
@@ -130,7 +140,7 @@ export async function emitAlert(container: MedusaContainer, ev: AlertEvent): Pro
         }
         if (rule.mode !== "immediate") continue;
         const locale = resolveEmailLocale(rule.locale);
-        const error = await send(container, email, renderAlertEmail(rule, [{ event: ev.event, data: { ...ev.data, is_web: ev.is_web } }], locale, panelUrl()), rule.id);
+        const error = await send(container, email, renderAlertEmail(rule, await withStoreColors(container, [{ event: ev.event, data: { ...ev.data, is_web: ev.is_web } }]), locale, panelUrl()), rule.id);
         await s.updateAlertDeliveries({ id: row.id, status: error ? "failed" : "sent", error, sent_at: error ? null : new Date() } as never);
       }
     }
@@ -146,13 +156,15 @@ async function digestData(container: MedusaContainer, rule: RuleRow, since: Date
   if (rule.establishment_ids?.length) where.establishment_id = rule.establishment_ids;
   if (rule.seller_ids?.length) where.seller_id = rule.seller_ids;
   const sales = await pos.listPosSales(where as never, { take: 10000 });
-  const stores = new Map((await listEstablishments(container)).map((s) => [s.id, `${s.code} · ${s.name}`]));
-  const byStore = new Map<string, { label: string; count: number; total: number; voided: number }>();
+  const all = await listEstablishments(container);
+  const stores = new Map(all.map((s) => [s.id, `${s.code} · ${s.name}`]));
+  const colors = new Map(all.map((s) => [s.id, s.color]));
+  const byStore = new Map<string, { label: string; color: string | null; count: number; total: number; voided: number }>();
   const bySeller = new Map<string, { label: string; count: number; total: number }>();
   let count = 0;
   let total = 0;
   for (const s of sales) {
-    const st = byStore.get(s.establishment_id) ?? { label: stores.get(s.establishment_id) ?? s.establishment_id, count: 0, total: 0, voided: 0 };
+    const st = byStore.get(s.establishment_id) ?? { label: stores.get(s.establishment_id) ?? s.establishment_id, color: colors.get(s.establishment_id) ?? null, count: 0, total: 0, voided: 0 };
     if (s.status === "voided") { st.voided++; byStore.set(s.establishment_id, st); continue; }
     const amount = Number(s.total_cents) / 100;
     st.count++; st.total += amount; byStore.set(s.establishment_id, st);
@@ -230,7 +242,7 @@ export async function runAlertsJob(container: MedusaContainer, now = new Date())
         for (const d of queued) byRecipient.set(d.recipient_email, [...(byRecipient.get(d.recipient_email) ?? []), d]);
         for (const [email, rows] of byRecipient) {
           const events = rows.map((d) => ({ event: d.event, data: (d.payload ?? {}) as Record<string, unknown> }));
-          const error = await send(container, email, renderAlertEmail(rule, events, locale, panelUrl()), rule.id);
+          const error = await send(container, email, renderAlertEmail(rule, await withStoreColors(container, events), locale, panelUrl()), rule.id);
           await s.updateAlertDeliveries(rows.map((d) => ({ id: d.id, status: error ? "failed" : "sent", error, sent_at: error ? null : new Date() })) as never);
         }
       }

@@ -5,7 +5,7 @@ import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -163,6 +163,8 @@ export default function Team() {
 
   const myRole = team.find((m) => m.id === meId)?.role ?? null;
   const iAmOwner = myRole === "owner";
+  const [pwFor, setPwFor] = useState(null);
+  const [pwValue, setPwValue] = useState("");
   // Roles que puedo dar: el superadmin solo puede darlo el dueño.
   const grantable = ASSIGNABLE_ROLES.filter((r) => iAmOwner || r !== "superadmin");
   const newRole = form.role || grantable[0];
@@ -224,6 +226,21 @@ export default function Team() {
       const r = await setStores(m.id, ids);
       setTeam(r.team || []);
       toast({ tone: "success", title: t("adm.team.storesSaved", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  const submitPassword = async (e, m) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await resetPassword(m.id, pwValue);
+      setTeam((list) => list.map((x) => (x.id === m.id ? { ...x, must_change_password: true } : x)));
+      setPwFor(null);
+      setPwValue("");
+      toast({ tone: "success", title: t("adm.team.pw.done", { email: m.email }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -314,6 +331,11 @@ export default function Team() {
                   {t("adm.team.delete")}
                 </button>
               )}
+              {!demo && m.id !== meId && (
+                <button className="btn-xs" aria-expanded={pwFor === m.id} onClick={() => { setPwValue(""); setPwFor((o) => (o === m.id ? null : m.id)); }}>
+                  <Icon name="lock" size={12} /> {t("adm.team.pw.open")}
+                </button>
+              )}
               {!demo && (
                 <button className="btn-xs" aria-expanded={openProfile === m.id} onClick={() => setOpenProfile((o) => (o === m.id ? null : m.id))}>
                   <Icon name="user" size={12} /> {t("adm.team.profile")}
@@ -330,6 +352,14 @@ export default function Team() {
                   <button className="btn-sm" onClick={() => setLinking(null)}>{t("adm.ord.cancel")}</button>
                 </div>
               </div>
+            )}
+            {pwFor === m.id && (
+              <form className="adm-team-profile adm-team-pw" onSubmit={(e) => submitPassword(e, m)}>
+                <input className="adm-input" type="text" required minLength={8} autoComplete="off" aria-label={t("adm.team.pw.new")} placeholder={t("adm.team.pw.new")} value={pwValue} onChange={(e) => setPwValue(e.target.value)} />
+                <button className="btn-sm primary" disabled={busy || pwValue.length < 8}>{t("adm.team.pw.save")}</button>
+                <button type="button" className="btn-sm" onClick={() => setPwFor(null)}>{t("adm.ord.cancel")}</button>
+                <small className="muted">{t("adm.team.pw.hint", { email: m.email })}</small>
+              </form>
             )}
             {openProfile === m.id && (
               <div className="adm-team-profile">

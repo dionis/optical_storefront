@@ -11,6 +11,7 @@
  */
 
 import { tenantName } from "../tenant";
+import { storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
 import type { ImageRef } from "./order-images";
@@ -27,6 +28,8 @@ export interface OrderEmailExtras {
    * with a prescription ride on PrescriptionForEmail). Attached to the message.
    */
   itemImages?: Record<number, ImageRef>;
+  /** Admin copy of a till sale: the store it belongs to, shown in its color. */
+  store?: StoreLabel | null;
 }
 
 /**
@@ -1140,6 +1143,7 @@ export function renderAdminOrderNotification(
 
   const phone = order.shipping_address?.phone ? ` · ${order.shipping_address.phone}` : "";
   const inner = `
+    ${extras?.store ? storeBanner(extras.store) : ""}
     <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:${INK}">${esc(t(locale, "admin_order_intro"))}</p>
     ${renderTicketHeader(displayId, formatDateTime(order.created_at, locale), locale, { text: total, bg: GREEN_LIGHT, fg: GREEN })}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin-top:14px;border:1px solid ${BORDER};border-radius:12px;font-size:14px">
@@ -1164,6 +1168,7 @@ export function renderAdminOrderNotification(
     ${renderDeliveryCards(order, extras, locale)}`;
 
   const text = [
+    ...(extras?.store ? [[extras.store.code, extras.store.name].filter(Boolean).join(" · "), ""] : []),
     t(locale, "admin_order_intro"),
     "",
     `${t(locale, "customer")}: ${name ? `${name} · ` : ""}${order.email ?? ""}`,
@@ -1180,7 +1185,7 @@ export function renderAdminOrderNotification(
     ...(imagesNote ? ["", imagesNote] : []),
   ].join("\n");
 
-  const subject = t(locale, "admin_order_subject", { display_id: displayId, total });
+  const subject = `${extras?.store ? `${storeSubjectTag(extras.store)} · ` : ""}${t(locale, "admin_order_subject", { display_id: displayId, total })}`;
 
   return {
     subject,

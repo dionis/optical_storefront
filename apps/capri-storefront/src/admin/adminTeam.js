@@ -77,6 +77,18 @@ export async function changeOwnPassword({ currentPassword, newPassword }) {
   }
 }
 
+/** Dueño o superadmin: contraseña temporal para otra persona, que deberá cambiarla al entrar. */
+export async function resetPassword(id, newPassword) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/password`, {
+      method: "POST",
+      body: { new_password: newPassword },
+    });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.passwordFailed"));
+  }
+}
+
 // ── Perfil del vendedor ─────────────────────────────────────────────────────
 // Errores como claves adm.err.profile.<reason>; el campo culpable viaja aparte.
 const profileErr = (e, fallback) => {

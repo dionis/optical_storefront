@@ -2,9 +2,10 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { ESTABLISHMENT_MODULE } from "../../../../modules/establishment";
 import type EstablishmentModuleService from "../../../../modules/establishment/service";
 import { cleanText, listEstablishments, STORE_KINDS } from "../../../../lib/establishments";
+import { normalizeColor } from "../../../../lib/store-color";
 
 /**
- * POST /admin/establishments/:id { name?, address?, phone?, kind?, receipt_note?, is_active? }
+ * POST /admin/establishments/:id { name?, address?, phone?, color?, kind?, receipt_note?, is_active? }
  *
  * Edita una tienda. El código no se cambia nunca (está impreso en recibos y
  * fichas). No hay DELETE: una tienda con historial solo se desactiva (HU-01).
@@ -13,6 +14,7 @@ interface UpdateBody {
   name?: string;
   address?: string | null;
   phone?: string | null;
+  color?: string;
   kind?: string;
   receipt_note?: string | null;
   settlement_pct?: number | null;
@@ -41,6 +43,14 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
   }
   if ("address" in body) patch.address = cleanText(body.address, 160);
   if ("phone" in body) patch.phone = cleanText(body.phone, 40);
+  if ("color" in body) {
+    const color = normalizeColor(body.color);
+    if (!color) {
+      res.status(422).json({ type: "invalid_data", reason: "bad_color", message: "A color must be #RRGGBB." });
+      return;
+    }
+    patch.color = color;
+  }
   if ("kind" in body) {
     if (!(STORE_KINDS as readonly string[]).includes(String(body.kind))) {
       res.status(422).json({ type: "invalid_data", reason: "bad_kind", message: "Unknown store kind." });

@@ -5,7 +5,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchStores, createStore, updateStore } from "./adminStores.js";
+import { fetchStores, createStore, updateStore, storeInk, STORE_COLORS } from "./adminStores.js";
 import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
@@ -21,6 +21,7 @@ const EMPTY = { name: "", address: "", phone: "" };
  *  · El recibo lleva los datos del negocio; solo el NOMBRE de la tienda varía
  *    (decisión del dueño). Dirección y teléfono son informativos.
  *  · No se borran: una tienda con ventas solo se desactiva.
+ *  · Cada una nace con un color distinto, el de sus correos; se puede cambiar.
  */
 export default function Stores() {
   const { t, lang } = useLang();
@@ -105,12 +106,20 @@ export default function Stores() {
           {stores.map((s) => (
             <div key={s.id} className="adm-team-item">
             <div className="adm-team-row">
-              <span className="adm-team-avatar adm-store-code">{s.code}</span>
+              <span className="adm-team-avatar adm-store-code" style={s.color ? { background: s.color, color: storeInk(s.color) } : undefined}>{s.code}</span>
               {editing === s.id ? (
                 <span className="adm-team-main adm-store-edit">
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
                   <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+                  <span className="adm-store-colors" role="group" aria-label={t("adm.stores.color")}>
+                    <small className="muted">{t("adm.stores.color")}</small>
+                    {STORE_COLORS.map((c) => (
+                      <button key={c} type="button" className={`adm-store-swatch ${draft.color?.toUpperCase() === c ? "on" : ""}`} style={{ background: c }} aria-label={c} aria-pressed={draft.color?.toUpperCase() === c} title={c} onClick={() => setDraft({ ...draft, color: c })} />
+                    ))}
+                    <input type="color" className="adm-store-swatch-custom" aria-label={t("adm.stores.colorCustom")} title={t("adm.stores.colorCustom")} value={draft.color || STORE_COLORS[0]} onChange={(e) => setDraft({ ...draft, color: e.target.value.toUpperCase() })} />
+                    <small className="muted">{t("adm.stores.colorHint")}</small>
+                  </span>
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
                     {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
                   </select>
@@ -135,7 +144,7 @@ export default function Stores() {
                 <>
                   <button className="btn-xs primary" disabled={demo} onClick={() => { setAssortId(null); setPricingId(pricingId === s.id ? null : s.id); }}>{t("adm.stores.prices")}</button>
                   <button className="btn-xs primary" disabled={demo} onClick={() => { setPricingId(null); setAssortId(assortId === s.id ? null : s.id); }}>{t("adm.stores.catalog")}</button>
-                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", color: s.color || STORE_COLORS[0], kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
                   <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}

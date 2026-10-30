@@ -967,6 +967,14 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .adm-team-item { border-bottom: 1px solid var(--adm-line-2); }
 .adm-team-item .adm-team-row { border-bottom: 0; }
 .adm-team-tag.code { background: var(--adm-amber-soft); color: var(--adm-amber); font-family: ui-monospace, monospace; }
+.adm-store-colors { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.adm-store-colors small:last-child { flex-basis: 100%; }
+.adm-store-swatch { width: 26px; height: 26px; padding: 0; border: 2px solid transparent; border-radius: 7px; cursor: pointer; }
+.adm-store-swatch.on { border-color: var(--adm-navy); box-shadow: 0 0 0 2px #fff inset; }
+.adm-store-swatch-custom { width: 34px; height: 28px; padding: 0; border: 1px solid var(--adm-line, #d6dce5); border-radius: 7px; background: none; cursor: pointer; }
+.adm-team-pw { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.adm-team-pw .adm-input { flex: 1 1 220px; max-width: 320px; }
+.adm-team-pw small { flex-basis: 100%; }
 .adm-team-profile { padding: 4px 6px 14px 52px; }
 /* Ficha de vendedor al dar el rol vendedor (Equipo). */
 .adm-team-seller { border: 1px solid var(--adm-line); border-radius: 12px; padding: 12px 14px; margin: 12px 0 0; display: grid; gap: 10px; min-width: 0; }

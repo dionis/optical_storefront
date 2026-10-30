@@ -75,6 +75,20 @@ export async function previewStorePrices(id, productIds, lenses = 0) {
   });
 }
 
+/** Colores de partida; el servidor reparte uno distinto a cada tienda nueva (lib/store-color.ts). */
+export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569"];
+
+/** Texto legible sobre el color de una tienda. */
+export function storeInk(hex) {
+  const c = /^#[0-9a-f]{6}$/i.test(hex || "") ? hex : "#2563EB";
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(c.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return (l + 0.05) / 0.05 > 1.05 / (l + 0.05) ? "#111827" : "#FFFFFF";
+}
+
 export async function updateStore(id, patch) {
   try {
     return await adminFetch(`/admin/establishments/${encodeURIComponent(id)}`, { method: "POST", body: patch });

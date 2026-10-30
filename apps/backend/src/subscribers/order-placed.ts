@@ -16,6 +16,7 @@ import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { emitAlert } from "../lib/alerts-data";
+import { listEstablishments } from "../lib/establishments";
 import { projectOrder } from "../lib/sale-facts";
 import { resolveEmailLocale } from "../lib/email/copy";
 import {
@@ -327,7 +328,11 @@ export default async function orderPlacedSubscriber({
     // that throws should fail before we start sending, not halfway down the list.
     let adminEmail: ReturnType<typeof renderAdminOrderNotification> | null = null;
     try {
-      adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions, adminExtras);
+      // A till sale tells the administrators, in its color, which store it is from.
+      const store = fromTill
+        ? (await listEstablishments(container).catch(() => [])).find((s) => s.id === orderMetadata["establishment_id"])
+        : undefined;
+      adminEmail = renderAdminOrderNotification(order, storeLocale, prescriptions, store ? { ...adminExtras, store } : adminExtras);
     } catch (error) {
       logger.error(
         `[order-placed] store notification for order ${order.id} could not be rendered: ${(error as Error).message}`

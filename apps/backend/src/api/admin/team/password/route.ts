@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { recordAudit } from "../../../../lib/audit";
 
 /**
  * POST /admin/team/password — el admin AUTENTICADO cambia SU contraseña.
@@ -8,7 +9,8 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
  * Es la segunda mitad del alta con contraseña temporal: el panel detecta
  * `must_change_password` (GET /admin/team/me) y no deja pasar al dashboard
  * hasta completar este cambio. Exige la contraseña actual (la temporal) para
- * que un panel abierto en otro equipo no baste para secuestrar la cuenta.
+ * que un panel abierto en otro equipo no baste para secuestrar la cuenta. Es
+ * también lo que usa la sección Contraseña de «Mi perfil», en cualquier momento.
  */
 interface Body {
   current_password?: string;
@@ -58,6 +60,7 @@ export async function POST(
   const metadata = { ...((me.metadata as Record<string, unknown>) ?? {}), must_change_password: false };
   await users.updateUsers({ id: me.id, metadata });
 
+  await recordAudit(req.scope, { actorId, action: "password.change", entity: "user", entityId: me.id });
   logger.info(`[team] ${me.email} changed their password`);
   res.json({ ok: true });
 }

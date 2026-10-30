@@ -104,6 +104,18 @@ export function roleChangeDenied(args: {
 }
 
 /**
+ * Why `actorRole` may not set someone else's password; null when allowed. The
+ * owner and superadmins may do it for anyone (owner's decision), the owner
+ * included. One's own goes through POST /admin/team/password, which asks for the
+ * current one.
+ */
+export function passwordResetDenied(args: { actorRole: StaffRole | null; actorId: string; targetId: string }): "forbidden_role" | "self_password" | null {
+  if (!isAdminRole(args.actorRole)) return "forbidden_role";
+  if (args.actorId === args.targetId) return "self_password";
+  return null;
+}
+
+/**
  * The rows that represent `role` limited to `establishmentIds`. Owner and
  * superadmin always cover every store (one row, no establishment); so does any
  * role with no store list. Otherwise one row per distinct store. Writing a

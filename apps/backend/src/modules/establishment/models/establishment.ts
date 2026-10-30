@@ -23,6 +23,8 @@ export const Establishment = model.define("establishment", {
   address: model.text().nullable(),
   phone: model.text().nullable(),
   sales_channel_id: model.text().nullable(),
+  /** #RRGGBB: identifies the store at a glance in emails (src/lib/store-color.ts). */
+  color: model.text().nullable(),
   /** own | family | partner | consignment — for the settlement with the store. */
   kind: model.enum(["own", "family", "partner", "consignment"]).default("own"),
   /** Warranty and exchange policy printed on this store's receipts (HU-104). */

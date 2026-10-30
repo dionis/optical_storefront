@@ -1,5 +1,6 @@
 import type { EmailLocale } from "./copy";
 import { esc, shell, type RenderedEmail } from "./order-confirmation";
+import { colorCircle, storeBanner, storeDot } from "../store-color";
 
 /**
  * Alert emails (functional document E7). Display data only: sale number,
@@ -102,11 +103,14 @@ export function renderAlertEmail(
   panelUrl: string
 ): RenderedEmail {
   const lines = events.map((e) => alertLine(e.event, e.data, locale));
-  const subject = lines.length === 1 ? lines[0] : tt(locale, "subject_many", { name: rule.name, n: lines.length });
+  // One event from one store: its color on the subject and across the top.
+  const only = events.length === 1 && events[0].data.store_color ? events[0].data : null;
+  const subject = lines.length === 1 ? `${only ? `${colorCircle(String(only.store_color))} ` : ""}${lines[0]}` : tt(locale, "subject_many", { name: rule.name, n: lines.length });
   const intro = lines.length === 1 ? lines[0] : tt(locale, "intro_many", { name: rule.name });
   const inner = `
+    ${only ? storeBanner({ code: String(only.store_code ?? ""), name: only.store_name as string | null, color: String(only.store_color) }) : ""}
     ${lines.length > 1 ? `<div style="font-size:15px;color:#374151">${esc(intro)}</div>` : ""}
-    <ul style="margin:12px 0 0;padding-left:18px;font-size:15px;line-height:1.7;color:#1e2733">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+    <ul style="margin:12px 0 0;padding-left:18px;font-size:15px;line-height:1.7;color:#1e2733">${lines.map((l, i) => `<li>${storeDot(events[i].data.store_color as string | undefined)}${esc(l)}</li>`).join("")}</ul>
     <div style="margin-top:20px"><a href="${esc(panelUrl)}" style="color:#0b2f66;font-weight:700">${esc(tt(locale, "panel"))}</a></div>
     <div style="margin-top:18px;font-size:12px;color:#5b6472">${esc(tt(locale, "footer", { name: rule.name }))}</div>`;
   return {
@@ -119,7 +123,7 @@ export function renderAlertEmail(
 export interface DigestData {
   since: string;
   date: string;
-  stores: Array<{ label: string; count: number; total: number; voided: number }>;
+  stores: Array<{ label: string; color?: string | null; count: number; total: number; voided: number }>;
   sellers: Array<{ label: string; count: number; total: number }>;
   count: number;
   total: number;
@@ -129,10 +133,10 @@ export interface DigestData {
 export function renderDigestEmail(rule: { name: string }, d: DigestData, locale: EmailLocale, panelUrl: string): RenderedEmail {
   const subject = tt(locale, "digest_subject", { name: rule.name, date: d.date, n: d.count, total: money(d.total, locale) });
   const intro = tt(locale, "digest_intro", { since: d.since });
-  const table = (head: string[], rows: string[][]) => `
+  const table = (head: string[], rows: string[][], dots: Array<string | null | undefined> = []) => `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px;font-size:14px">
       <tr>${head.map((h, i) => `<th style="text-align:${i ? "right" : "left"};border-bottom:2px solid #e7eaf0;padding:6px 0;color:#5b6472">${esc(h)}</th>`).join("")}</tr>
-      ${rows.map((r) => `<tr>${r.map((c, i) => `<td style="text-align:${i ? "right" : "left"};border-bottom:1px solid #e7eaf0;padding:6px 0">${esc(c)}</td>`).join("")}</tr>`).join("")}
+      ${rows.map((r, n) => `<tr>${r.map((c, i) => `<td style="text-align:${i ? "right" : "left"};border-bottom:1px solid #e7eaf0;padding:6px 0">${i ? "" : storeDot(dots[n])}${esc(c)}</td>`).join("")}</tr>`).join("")}
     </table>`;
   const body =
     d.count === 0
@@ -140,7 +144,7 @@ export function renderDigestEmail(rule: { name: string }, d: DigestData, locale:
       : `${table([tt(locale, "digest_store"), tt(locale, "digest_count"), tt(locale, "digest_total"), tt(locale, "digest_voided")], [
           ...d.stores.map((s) => [s.label, String(s.count), money(s.total, locale), String(s.voided)]),
           ["", String(d.count), money(d.total, locale), ""],
-        ])}
+        ], d.stores.map((s) => s.color))}
         ${d.sellers.length ? table([tt(locale, "digest_seller"), tt(locale, "digest_count"), tt(locale, "digest_total")], d.sellers.map((s) => [s.label, String(s.count), money(s.total, locale)])) : ""}`;
   const inner = `<div style="font-size:15px;color:#374151">${esc(intro)}</div>${body}
     <div style="margin-top:20px"><a href="${esc(panelUrl)}" style="color:#0b2f66;font-weight:700">${esc(tt(locale, "panel"))}</a></div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
-import { PRIVILEGES, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
+import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
 
 /**
  * Grupos del perfil (documento funcional, «Perfil del vendedor»). Qué grupos
@@ -18,6 +18,44 @@ const GROUPS = [
   { key: "work", fields: [["hire_date", "date"], ["commission_pct", "number"], ["monthly_goal", "number"]], admin: true },
   { key: "emergency", fields: [["emergency_name", "text"], ["emergency_relation", "text"], ["emergency_phone", "tel"]], admin: true },
 ];
+
+/** Mi contraseña, cuando la persona quiera: pide la actual. Formulario propio, separado de los datos del perfil. */
+function OwnPassword() {
+  const { t } = useLang();
+  const { toast } = useFeedback();
+  const [f, setF] = useState({ current: "", next: "", again: "" });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    if (f.next.length < 8) return toast({ tone: "error", title: t("adm.err.team.weak_password") });
+    if (f.next !== f.again) return toast({ tone: "error", title: t("adm.team.gate.mismatch") });
+    setBusy(true);
+    try {
+      await changeOwnPassword({ currentPassword: f.current, newPassword: f.next });
+      setF({ current: "", next: "", again: "" });
+      toast({ tone: "success", title: t("adm.profile.pw.done") });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+  return (
+    <form className="adm-profile" onSubmit={submit} style={{ marginTop: 14 }}>
+      <fieldset className="adm-profile-group" disabled={busy}>
+        <legend>{t("adm.profile.pw.title")}</legend>
+        <div className="adm-profile-grid">
+          <label><span>{t("adm.profile.pw.current")}</span><input type="password" required autoComplete="current-password" value={f.current} onChange={set("current")} /></label>
+          <label><span>{t("adm.profile.pw.new")}</span><input type="password" required minLength={8} autoComplete="new-password" value={f.next} onChange={set("next")} /></label>
+          <label><span>{t("adm.profile.pw.again")}</span><input type="password" required minLength={8} autoComplete="new-password" value={f.again} onChange={set("again")} /></label>
+        </div>
+      </fieldset>
+      <div className="adm-profile-actions">
+        <button className="btn-sm primary" disabled={busy}><Icon name="lock" size={14} /> {busy ? "…" : t("adm.profile.pw.save")}</button>
+      </div>
+    </form>
+  );
+}
 
 const toForm = (p) => {
   const f = {};
@@ -93,6 +131,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   if (state === "error") return <div className="adm-demo-banner">{t("adm.err.profile.loadFailed")}</div>;
 
   return (
+    <>
     <form className="adm-profile" onSubmit={save}>
       {GROUPS.filter((g) => g.fields[0][0] in (profile || {})).map((g) => (
         <fieldset key={g.key} className="adm-profile-group" disabled={!editable(g.key) || busy}>
@@ -162,5 +201,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
         {!isAdmin && <small className="muted">{t("adm.profile.selfHint")}</small>}
       </div>
     </form>
+    {!isAdmin && <OwnPassword />}
+    </>
   );
 }
