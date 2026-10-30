@@ -7,6 +7,7 @@ import { SALES_ANALYTICS_MODULE } from "../modules/sales-analytics";
 import type SalesAnalyticsModuleService from "../modules/sales-analytics/service";
 import { localParts } from "./alerts";
 import { loadProductMetadata } from "./frame-specs";
+import { normalizeSellerCodeLoose } from "./order-board";
 import { tenant } from "./tenant";
 
 /**
@@ -108,7 +109,8 @@ export async function projectOrder(container: MedusaContainer, orderId: string):
       establishmentId: isPos ? ((md.establishment_id as string | undefined) ?? null) : null,
       terminalId: (md.terminal_id as string | undefined) ?? null,
       sellerId: isPos ? ((md.seller_id as string | undefined) ?? null) : null,
-      sellerCode: sale?.seller_code ?? null,
+      // A web sale from a seller's referral link carries the code on the order.
+      sellerCode: sale?.seller_code ?? normalizeSellerCodeLoose(md.seller_code),
       customerId: order.customer_id ?? null,
       paymentMethods: [...new Set(payments.filter((p) => p.kind !== "refund").map((p) => p.method_code))],
       soldAt: new Date(order.created_at),

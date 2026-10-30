@@ -85,3 +85,21 @@ sesión real del dueño. Backend: `npx tsc --noEmit` y `npx jest`.
 Cada línea lleva `kind` y `group` (`deduction|material|percent|seller|manual`). El panel pinta la cascada (`Waterfall` en `Costs.jsx`) y el reparto por grupos (`AllocationBar`), y Rentabilidad muestra neto, % del neto y precio sugerido por pedido.
 
 **Seguridad de dependencias**: `pnpm.overrides` en el `package.json` raíz fuerzan versiones parcheadas de paquetes transitivos con CVE (proxy-addr, qs, compression, multer, axios, handlebars, shell-quote, follow-redirects, lodash, nanoid, browserslist, source-map-js, postcss, uuid, react-router, ajv, morgan, @graphql-tools/utils…); `sharp` subido a ^0.35.5. Los rangos son **caret dentro del mismo major** (`^1.1.21`, `react-router-dom@6: ^6.30.6`): un `>=` cruza de major y rompió el primer despliegue (react-router 7 sin `json`, brace-expansion 5 y nanoid 6 solo ESM). Lo que queda en `pnpm audit --prod` son transitivas de Medusa sin parche dentro de su major o que no se ejecutan en producción (vite/esbuild del admin-bundler, otel/grpc de telemetría, braces sin versión parcheada, csv-parse 5 y uuid 9 dentro de Medusa, react-router 6 del dashboard). Node 20 llegó a fin de vida sin parches (la tanda de seguridad de Node de octubre 2026 —Brotli RCE CVE-2026-111497 y TLS— solo cubre 22/24/26): Dockerfiles, CI y `engines` pasan a **Node 22**. En Vercel, comprobar que el proyecto compila con Node 22 (Settings → General → Node.js Version). No hay PHP en este proyecto (caprioptics.com es WordPress del proveedor y solo se lee con el scraper).
+
+## Panel de ventas: desglose de ventas y ganancia
+
+Pestaña **Panel de ventas** (`SalesBoard.jsx`). Cada usuario ve lo suyo: dueño y superadmin, todas las tiendas y la web; supervisor y encargado, sus tiendas; vendedor, sus propias ventas.
+
+- **Periodo**: hoy, ayer, 7 y 30 días, este mes, mes pasado, este año, 5 años, una fecha o un rango libre.
+- **Ver por**: hora del día, día, mes o año. La hora suma todos los días del periodo; para las horas de un día concreto se elige «Una fecha».
+- **Desglose**: por tienda, vendedor o producto, y en «Otro desglose» marca, categoría, lente, forma de pago o punto de venta. Un clic en una fila filtra todo el panel y baja de nivel, hasta las ventas una a una.
+
+| Quién | Ventas | Su comisión | Comisiones de todos, costo y ganancia |
+| --- | --- | --- | --- |
+| Dueño y superadmin | Sí | — | Sí |
+| Supervisor y encargado | Sí, de sus tiendas | — | Solo con el privilegio de costos |
+| Vendedor | Sí, las suyas | Sí | Solo con el privilegio de costos, sobre sus ventas |
+
+**Ganancia** = ventas sin impuestos − costo de monturas, lentes y fijos por pedido (reglas de Costos) − comisión del cobro − comisión del vendedor. No resta la renta ni otros gastos del mes: esos siguen en el resultado de cada tienda. Si a una montura o lente le falta su costo, el panel avisa, porque la ganancia mostrada sería mayor que la real.
+
+Tras desplegar, correr una vez `npx medusa exec ./src/scripts/backfill-sale-fact.ts` para que las ventas web anteriores hechas con enlace de vendedor aparezcan bajo ese vendedor.

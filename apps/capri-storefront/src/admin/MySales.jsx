@@ -60,6 +60,7 @@ export default function MySales({ go }) {
           <button type="button" className="btn-sm primary big" onClick={() => go("pos")}><Icon name="plus" size={15} /> {t("adm.tab.pos")}</button>
           <button type="button" className="btn-sm" onClick={() => go("cash")}><Icon name="wallet" size={14} /> {t("adm.tab.cash")}</button>
           <button type="button" className="btn-sm" onClick={() => go("possales")}><Icon name="receipt" size={14} /> {t("adm.tab.possales")}</button>
+          <button type="button" className="btn-sm" onClick={() => go("salesboard")}><Icon name="sales" size={14} /> {t("adm.tab.salesboard")}</button>
         </div>
       )}
 

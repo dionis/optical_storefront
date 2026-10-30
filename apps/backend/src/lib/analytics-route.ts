@@ -33,11 +33,13 @@ export async function analyticsFilter(req: AuthenticatedMedusaRequest): Promise<
 
   let stores = list(q.stores);
   let sellers = list(q.sellers);
-  if (!scope.is_admin) {
+  if (scope.role === "seller") {
+    // Their own sales wherever they made them: moving to another store does not take away their history.
+    sellers = [scope.user_id];
+  } else if (!scope.is_admin) {
     const mine = sellableStores(scope, await listEstablishments(req.scope)).map((s) => s.id);
     stores = (stores ?? mine).filter((s) => mine.includes(s));
     if (!stores.length) stores = ["-"];
-    if (scope.role === "seller") sellers = [scope.user_id];
   }
   const rx = q.rx === "1" ? true : q.rx === "0" ? false : null;
   return {
@@ -47,6 +49,7 @@ export async function analyticsFilter(req: AuthenticatedMedusaRequest): Promise<
       to,
       stores,
       sellers,
+      sellerCodes: list(q.seller_codes),
       products: list(q.products),
       brands: list(q.brands),
       categories: list(q.categories),

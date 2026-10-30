@@ -1227,7 +1227,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "approvals" && <PosApprovals params={nav.params} />}
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}
-      {tab === "salesboard" && <SalesBoard />}
+      {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} />}
       {tab === "mysales" && <MySales go={go} />}
       {tab === "cash" && <PosCash />}

@@ -66,8 +66,8 @@ export function navGroupsFor(me) {
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
   const extra = [
-    // Panel global limitado a sus tiendas (HU-67); el vendedor tiene «Mis cifras».
-    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "salesboard", icon: "sales" }] : []),
+    // El panel de ventas, cada cual sobre lo suyo: sus tiendas (HU-67) o, el vendedor, sus ventas.
+    ...(me.role === "supervisor" || me.role === "manager" || me.role === "seller" ? [{ key: "salesboard", icon: "sales" }] : []),
     ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
     // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),

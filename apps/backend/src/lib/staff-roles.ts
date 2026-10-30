@@ -161,7 +161,7 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // Store status: the route lets in admins, supervisors and managers, for their stores.
   { method: "GET", path: /^\/admin\/store-status$/ },
   // Dashboards: every role, each scoped by lib/analytics-route.ts (a seller sees their own).
-  { method: "GET", path: /^\/admin\/sales-analytics\/(summary|breakdown|timeseries|sales|export|me)$/ },
+  { method: "GET", path: /^\/admin\/sales-analytics\/(summary|insights|breakdown|timeseries|sales|export|me)$/ },
   // Alert rules: the routes let in admins and supervisors only (lib/alerts-route.ts).
   { method: "GET", path: /^\/admin\/sales-alerts\/(rules|deliveries)$/ },
   { method: "POST", path: /^\/admin\/sales-alerts\/rules(\/[^/]+)?$/ },

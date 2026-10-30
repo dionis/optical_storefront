@@ -19,6 +19,8 @@ export interface AnalyticsFilter {
   /** null = every store; "web" in the list = the online store. */
   stores: string[] | null;
   sellers?: string[] | null;
+  /** A row of the by-seller ranking is a code: web sales from a referral link have no user. */
+  sellerCodes?: string[] | null;
   products?: string[] | null;
   brands?: string[] | null;
   categories?: string[] | null;
@@ -33,7 +35,7 @@ export type Breakdown = (typeof BREAKDOWNS)[number];
 
 const pgOf = (c: MedusaContainer) => c.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
 
-function applyFilter(q: Knex.QueryBuilder, f: AnalyticsFilter): Knex.QueryBuilder {
+export function applyFilter(q: Knex.QueryBuilder, f: AnalyticsFilter): Knex.QueryBuilder {
   q.whereNull("sale_fact.deleted_at").whereBetween("sale_fact.sold_date_local", [f.from, f.to]);
   if (!f.includeVoided) q.where("sale_fact.status", "active");
   if (f.stores) {
@@ -45,6 +47,7 @@ function applyFilter(q: Knex.QueryBuilder, f: AnalyticsFilter): Knex.QueryBuilde
     });
   }
   if (f.sellers?.length) q.whereIn("sale_fact.seller_id", f.sellers);
+  if (f.sellerCodes?.length) q.whereIn("sale_fact.seller_code", f.sellerCodes);
   if (f.products?.length) q.whereIn("sale_fact.product_id", f.products);
   if (f.brands?.length) q.whereIn("sale_fact.brand", f.brands);
   if (f.categories?.length) q.whereIn("sale_fact.category", f.categories);
@@ -64,6 +67,7 @@ export interface Summary {
   units: number;
   avg_ticket: number;
   discount: number;
+  tax: number;
 }
 
 async function summaryOf(pg: Knex, f: AnalyticsFilter): Promise<Summary> {
@@ -71,11 +75,12 @@ async function summaryOf(pg: Knex, f: AnalyticsFilter): Promise<Summary> {
     pg.raw("COALESCE(SUM(total_cents), 0)::bigint AS total"),
     pg.raw("COUNT(DISTINCT order_id)::int AS count"),
     pg.raw("COALESCE(SUM(qty), 0)::int AS units"),
-    pg.raw("COALESCE(SUM(discount_cents), 0)::bigint AS discount")
-  )) as Array<{ total: string; count: number; units: number; discount: string }>;
+    pg.raw("COALESCE(SUM(discount_cents), 0)::bigint AS discount"),
+    pg.raw("COALESCE(SUM(tax_cents), 0)::bigint AS tax")
+  )) as Array<{ total: string; count: number; units: number; discount: string; tax: string }>;
   const total = Number(row?.total ?? 0) / 100;
   const count = Number(row?.count ?? 0);
-  return { total, count, units: Number(row?.units ?? 0), avg_ticket: count ? Math.round((total / count) * 100) / 100 : 0, discount: Number(row?.discount ?? 0) / 100 };
+  return { total, count, units: Number(row?.units ?? 0), avg_ticket: count ? Math.round((total / count) * 100) / 100 : 0, discount: Number(row?.discount ?? 0) / 100, tax: Number(row?.tax ?? 0) / 100 };
 }
 
 /** The same number of days just before `from` (HU-62: compare with the previous period). */

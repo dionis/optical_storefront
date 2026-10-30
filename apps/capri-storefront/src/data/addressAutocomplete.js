@@ -71,6 +71,12 @@ function loadGoogleMaps() {
   return scriptPromise;
 }
 
+/** Una sola línea, para los campos que guardan la dirección entera (tienda, perfil). */
+export function formatAddressLine(parts) {
+  const region = [parts.state, parts.postal_code].filter(Boolean).join(" ");
+  return [parts.address_1, parts.city, region].filter(Boolean).join(", ");
+}
+
 // Convierte los `addressComponents` de un Place (API nueva: longText/shortText)
 // en los campos separados del formulario. Las partes ausentes vuelven como ""
 // para que el formulario conserve lo que el cliente ya tenía.
@@ -100,7 +106,9 @@ function parsePlaceComponents(comps) {
 
 // ── Desplegable propio (compartido por Google y el respaldo) ────────────────
 // `items`: [{ label, pick: () => Promise<parts> | parts }]
-function makeSuggestBox(inputEl, onSelect) {
+// `source`: de dónde vienen. Sugerencias sin mapa exigen atribución (políticas de
+// Google Maps Platform: sin traducir y a la vista); también la licencia de OSM.
+function makeSuggestBox(inputEl, onSelect, source) {
   const host = inputEl.parentElement;
   const prevPos = host.style.position;
   if (getComputedStyle(host).position === "static") host.style.position = "relative";
@@ -130,6 +138,11 @@ function makeSuggestBox(inputEl, onSelect) {
       });
       box.appendChild(it);
     });
+    const by = document.createElement("div");
+    by.className = "addr-sugg-by";
+    by.setAttribute("translate", "no");
+    by.textContent = source;
+    box.appendChild(by);
     box.style.display = "block";
   };
   const onBlur = () => setTimeout(close, 160);
@@ -192,7 +205,7 @@ export function attachAddressAutocomplete(inputEl, onSelect) {
 // ── Google Places (API nueva) ───────────────────────────────────────────────
 function attachGoogle(inputEl, onSelect, places) {
   const { AutocompleteSuggestion, AutocompleteSessionToken } = places;
-  const ui = makeSuggestBox(inputEl, onSelect);
+  const ui = makeSuggestBox(inputEl, onSelect, "Google Maps");
   let token = new AutocompleteSessionToken();
   let seq = 0;
 
@@ -238,7 +251,7 @@ function attachGoogle(inputEl, onSelect, places) {
 // ── Respaldo sin llave: Photon (OpenStreetMap) ──────────────────────────────
 // Direcciones de EE. UU. con número y calle. Misma interfaz que Google.
 function attachPhoton(inputEl, onSelect) {
-  const ui = makeSuggestBox(inputEl, onSelect);
+  const ui = makeSuggestBox(inputEl, onSelect, "© OpenStreetMap");
   let ctrl = null;
 
   const off = debounceInput(inputEl, 320, async (q) => {

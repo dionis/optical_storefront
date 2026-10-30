@@ -68,7 +68,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       week: w.current,
       month: m.current,
       balance_due: m.balance_due,
-      commission: commissionPct === null ? null : { pct: commissionPct, amount: Math.round(m.current.total * commissionPct) / 100 },
+      commission: commissionPct === null ? null : { pct: commissionPct, amount: Math.round((m.current.total - m.current.tax) * commissionPct) / 100 },
       goal: goal === null ? null : { amount: goal, done: m.current.total, left: Math.max(0, Math.round((goal - m.current.total) * 100) / 100) },
       ready,
       workplace: store

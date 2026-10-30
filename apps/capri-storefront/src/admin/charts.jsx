@@ -1,4 +1,4 @@
-import { useState, useRef, useId } from "react";
+import { useEffect, useState, useRef, useId } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,8 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
       </div>
       <div
         style={{
-          fontSize: 26,
+          // Dentro de .board-kpis el tamaño sigue al ancho de la tarjeta; fuera, se queda en 26.
+          fontSize: "clamp(17px, 11.5cqi, 26px)",
           fontWeight: 700,
           color: BRAND.ink,
           lineHeight: 1.1,
@@ -216,6 +217,108 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
           <span style={{ fontSize: 12, color: BRAND.muted }}>{sub}</span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TrendChart: one or several series of the same unit over the same buckets, on
+// one axis. Bars while they fit (one or two series), lines otherwise. It draws
+// at the real width of its box, so the text stays readable on a phone, and it
+// takes negative values (a period with a loss).
+function barPath(x, y0, y1, w, r) {
+  const up = y1 <= y0;
+  const h = Math.abs(y1 - y0);
+  const c = Math.min(r, h, w / 2);
+  const s = up ? 1 : -1;
+  return `M${x},${y0} V${y1 + s * c} Q${x},${y1} ${x + c},${y1} H${x + w - c} Q${x + w},${y1} ${x + w},${y1 + s * c} V${y0} Z`;
+}
+
+export function TrendChart({ labels, series, height = 260, format = fmt, axisFormat, tipExtra, forceLines = false }) {
+  const { t } = useLang();
+  const wrap = useRef(null);
+  const [W, setW] = useState(720);
+  const [hover, setHover] = useState(null);
+  useEffect(() => {
+    if (!wrap.current || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => { if (e.contentRect.width > 0) setW(Math.round(e.contentRect.width)); });
+    ro.observe(wrap.current);
+    return () => ro.disconnect();
+  }, []);
+  // El contenedor existe aunque no haya datos: así se mide antes de dibujar.
+  const n = labels?.length || 0;
+  const all = (series || []).flatMap((s) => s.values);
+  const empty = n === 0 || !series?.length || all.every((v) => !v);
+
+  const H = height;
+  const compact = W < 480;
+  const padL = compact ? 44 : 58;
+  const padR = 10;
+  const padT = 12;
+  const padB = 26;
+  const plotW = Math.max(10, W - padL - padR);
+  const plotH = H - padT - padB;
+  const hi = niceMax(Math.max(0, ...all));
+  const lowest = Math.min(0, ...all);
+  const lo = lowest < 0 ? -niceMax(-lowest) : 0;
+  const yAt = (v) => padT + plotH - (plotH * (v - lo)) / (hi - lo || 1);
+  const band = plotW / Math.max(1, n);
+  const xAt = (i) => padL + band * (i + 0.5);
+  const bars = !forceLines && series?.length <= 2 && band >= 7;
+  const step = labelStep(n, Math.max(3, Math.floor(plotW / (compact ? 62 : 76))));
+  const ticks = lo < 0 ? [lo, 0, hi / 2, hi] : [0, hi / 4, hi / 2, (hi * 3) / 4, hi];
+  const axis = axisFormat || format;
+
+  const onMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.floor(((e.clientX - rect.left) * (W / rect.width) - padL) / band);
+    setHover(i >= 0 && i < n ? i : null);
+  };
+
+  return (
+    <div ref={wrap} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
+      {empty ? <Empty height={H} /> : (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={t("adm.chart.ariaTrend", { n, series: series.map((s) => s.label).join(", ") })} style={{ display: "block" }}>
+            {ticks.map((v) => (
+              <g key={v}>
+                <line x1={padL} x2={W - padR} y1={yAt(v)} y2={yAt(v)} stroke={v === 0 ? "#c9cdd4" : BRAND.line} strokeWidth="1" />
+                <text x={padL - 8} y={yAt(v) + 4} textAnchor="end" fontSize="11" fill={BRAND.muted}>{axis(v)}</text>
+              </g>
+            ))}
+            {hover !== null && <rect x={padL + band * hover} y={padT} width={band} height={plotH} fill={BRAND.soft} />}
+            {labels.map((l, i) => (i % step === 0 ? (
+              <text key={i} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="11" fill={BRAND.muted}>{l}</text>
+            ) : null))}
+            {bars && labels.map((_, i) => {
+              const groupW = Math.min(band * 0.78, series.length * 34);
+              const w = (groupW - 2 * (series.length - 1)) / series.length;
+              return series.map((s, k) => {
+                const v = Number(s.values[i]) || 0;
+                if (!v) return null;
+                const x = xAt(i) - groupW / 2 + k * (w + 2);
+                return <path key={s.key + i} d={barPath(x, yAt(0), yAt(v), w, 4)} fill={s.color} />;
+              });
+            })}
+            {!bars && series.map((s) => (
+              <path key={s.key} d={s.values.map((v, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)},${yAt(Number(v) || 0).toFixed(1)}`).join(" ")} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            ))}
+            {!bars && (hover !== null ? [hover] : n === 1 ? [0] : []).flatMap((i) => series.map((s) => (
+              <circle key={s.key + i} cx={xAt(i)} cy={yAt(Number(s.values[i]) || 0)} r="4.5" fill={s.color} stroke="#fff" strokeWidth="2" />
+            )))}
+            <rect x={padL} y={padT} width={plotW} height={plotH} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} />
+          </svg>
+          {hover !== null && (
+            <Tip x={xAt(hover)} y={yAt(Math.max(0, ...series.map((s) => Number(s.values[hover]) || 0)))} W={W} H={H} caption={labels[hover]}
+              lines={[...series.map((s) => ({ text: `${s.label}: ${format(Number(s.values[hover]) || 0)}` })), ...(tipExtra ? tipExtra(hover) : []).map((text) => ({ text }))]} />
+          )}
+          {series.length > 1 && (
+            <div className="ins-legend">
+              {series.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.label}</span>)}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

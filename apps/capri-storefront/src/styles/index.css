@@ -9274,6 +9274,9 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 }
 .addr-sugg-it:hover { background: var(--blue-soft); color: #0b2f66; }
 .addr-sugg-it + .addr-sugg-it { border-top: 1px solid var(--line); }
+.addr-sugg-by { padding: 5px 12px; border-top: 1px solid var(--line); font-size: 11px; color: #5b6472; text-align: right; }
+.addr-host { display: block; position: relative; }
+.addr-host > input { width: 100%; box-sizing: border-box; }
 /* Carrito: marca de agua del logo + mensajes de confianza + precios navy */
 .side-panel .side-panel-body { position: relative; }
 .side-panel .side-panel-body::before {

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
+import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
 
@@ -13,7 +15,7 @@ import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProf
  */
 const GROUPS = [
   { key: "identity", fields: [["display_name", "text"], ["seller_code", "code"]], admin: true },
-  { key: "contact", fields: [["phone_mobile", "tel"], ["phone_whatsapp", "tel"], ["phone_landline", "tel"], ["email_alt", "email"], ["address", "text"]] },
+  { key: "contact", fields: [["phone_mobile", "tel"], ["phone_whatsapp", "tel"], ["phone_landline", "tel"], ["email_alt", "email"], ["address", "address"]] },
   { key: "prefs", fields: [["alert_email", "email"], ["locale", "locale"]] },
   { key: "work", fields: [["hire_date", "date"], ["commission_pct", "number"], ["monthly_goal", "number"]], admin: true },
   { key: "emergency", fields: [["emergency_name", "text"], ["emergency_relation", "text"], ["emergency_phone", "tel"]], admin: true },
@@ -146,6 +148,8 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
                     <option value="es">Español</option>
                     <option value="en">English</option>
                   </select>
+                ) : type === "address" ? (
+                  <AddressInput maxLength={200} value={form[k]} onChange={set(k)} onPick={(p) => { setBadField(null); setForm((f) => ({ ...f, [k]: formatAddressLine(p) })); }} />
                 ) : (
                   <input
                     type={type === "code" ? "text" : type === "number" ? "number" : type}

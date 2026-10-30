@@ -6,6 +6,8 @@ import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
 import { fetchStores, createStore, updateStore, freeStoreColor, storeInk, STORE_COLORS } from "./adminStores.js";
+import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
@@ -109,7 +111,7 @@ export default function Stores() {
         <p className="adm-sub">{t("adm.stores.newSub")}</p>
         <div className="adm-form-grid">
           <label className="adm-field">{t("adm.stores.name")}<input className="adm-input" required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("adm.stores.namePh")} /></label>
-          <label className="adm-field">{t("adm.stores.address")}<input className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>
+          <label className="adm-field">{t("adm.stores.address")}<AddressInput className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} onPick={(p) => setForm((v) => ({ ...v, address: formatAddressLine(p) }))} /></label>
           <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
         </div>
         <div style={{ marginTop: 12 }}><ColorPicker value={newColor} disabled={demo || busy} onChange={(color) => setForm({ ...form, color })} /></div>
@@ -130,7 +132,7 @@ export default function Stores() {
               {editing === s.id ? (
                 <span className="adm-team-main adm-store-edit">
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-                  <input className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+                  <AddressInput className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} onPick={(p) => setDraft((v) => ({ ...v, address: formatAddressLine(p) }))} />
                   <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
                   <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
