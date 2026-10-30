@@ -22,6 +22,17 @@ import {
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 
+describe("lens material codes", () => {
+  it("keeps 1.67 and 1.74, which price the lens", () => {
+    for (const material_code of ["1.67", "1.74", "cr39", "poly"]) {
+      const r = cleanLines([{ kind: "frame", variant_id: "v", selection: { design_code: "sv", material_code } }]);
+      expect("lines" in r && r.lines[0].selection.material_code).toBe(material_code);
+    }
+    const bad = cleanLines([{ kind: "frame", variant_id: "v", selection: { design_code: "sv", material_code: "1.67;drop" } }]);
+    expect("lines" in bad && bad.lines[0].selection.material_code).toBeNull();
+  });
+});
+
 describe("saleNumber", () => {
   it("is the store code and a six-digit sequence", () => {
     expect(saleNumber("Op2", 147)).toBe("Op2-000147");

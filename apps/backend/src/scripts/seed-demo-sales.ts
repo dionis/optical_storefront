@@ -15,10 +15,9 @@
  * Optional: DEMO_SEED_DAYS (60), DEMO_SEED_SALES_PER_STORE (25), DEMO_SEED_PASSWORD.
  */
 import { randomBytes } from "crypto";
-import type { ExecArgs, IAuthModuleService, ICustomerModuleService, IOrderModuleService, IUserModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
+import type { ExecArgs, IAuthModuleService, IOrderModuleService, IUserModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
-import { createOrderFulfillmentWorkflow } from "@medusajs/medusa/core-flows";
 import { localParts } from "../lib/alerts";
 import { loadCostCatalog, listCostRules, seedCostRulesIfEmpty, costingService, type CostRule } from "../lib/costing";
 import {
@@ -83,7 +82,7 @@ import { monthPnl } from "../lib/store-pnl";
 import { salesBreakdown, salesSummary } from "../lib/sales-analytics";
 import { projectOrder } from "../lib/sale-facts";
 import { prepareSellerLink, applySellerLink } from "../lib/seller-link";
-import { deriveSellerCode, listSellers, sellerService } from "../lib/sellers";
+import { deriveSellerCode, sellerService } from "../lib/sellers";
 import { takenCodes } from "../lib/staff-code";
 import { saveProfile } from "../lib/staff-profile-data";
 import { ownerUserId, writeStaffAssignment } from "../lib/staff-scope";
@@ -168,7 +167,6 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
   const tz = tenant().timezone;
   const pos = container.resolve<PosModuleService>(POS_MODULE);
   const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
-  const customers = container.resolve<ICustomerModuleService>(Modules.CUSTOMER);
   const ownerId = await ownerUserId(container);
   if (!ownerId) throw new Error("[demo-seed] the database has no owner user.");
 
@@ -178,12 +176,6 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
   const runStart = new Date(clock[0].now);
   const latest = new Date(runStart.getTime() - 60_000);
 
-  const [option] = (await pg("shipping_option").whereNull("deleted_at").select("id").limit(1)) as Array<{ id: string }>;
-  const shippingOptionId = option?.id ?? null;
-  // Named too: an option need not be linked to a location.
-  const [location] = (await pg("stock_location").whereNull("deleted_at").select("id").limit(1)) as Array<{ id: string }>;
-  const locationId = location?.id ?? null;
-  if (!shippingOptionId) logger.warn("[demo-seed] no shipping option: sales will stop at the lab stage.");
   const lens = await loadLens(pg);
   const allFrames = await loadFrames(container, pg);
   if (allFrames.length < 5) throw new Error(`[demo-seed] only ${allFrames.length} sellable frames in the catalog.`);
@@ -269,20 +261,7 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
 
   const stage = async (orderId: string, target: string, ts: Date, actor: string, tracking?: string) => {
     try {
-      if (target === "shipped") {
-        // A till order has no shipping method, and transitionOrderStage gives
-        // Medusa nothing else to find a location with: name the option here.
-        if (!shippingOptionId) return false;
-        const board = await fetchBoardOrder(container, orderId);
-        const items = (board?.items ?? []).map((i) => ({ id: i.id as string, quantity: Number(i.quantity ?? 1) }));
-        await createOrderFulfillmentWorkflow(container).run({ input: { order_id: orderId, created_by: actor, items, shipping_option_id: shippingOptionId, location_id: locationId ?? undefined, no_notification: true } as never });
-        const before = await orders.retrieveOrder(orderId, { select: ["id", "metadata"] });
-        const meta = (before.metadata ?? {}) as Record<string, unknown>;
-        const previous = Array.isArray(meta.stage_history) ? (meta.stage_history as unknown[]) : [];
-        await orders.updateOrders(orderId, { metadata: { ...meta, stage_history: [...previous, { stage: "shipped", at: new Date().toISOString() }] } });
-      } else {
-        await transitionOrderStage(container, orderId, { stage: target, actorId: actor, noNotification: true, trackingNumber: tracking });
-      }
+      await transitionOrderStage(container, orderId, { stage: target, actorId: actor, noNotification: true, trackingNumber: tracking });
     } catch (e) {
       // A lens order already reads as "in the lab" without the note: nothing to do.
       if (target === "in_lab" && (e as { reason?: string }).reason === "not_allowed") return true;
@@ -362,9 +341,6 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
         : { kind: "frame", variant_id: frame.variantId, selection },
     ]);
     if ("reason" in lines) throw new Error(`lines: ${lines.reason}`);
-    // cleanLines drops "1.67" and "1.74" (its code check has no dot), which would
-    // price those lenses at nothing. The simulated sale keeps what was chosen.
-    lines.lines[0].selection.material_code = selection.material_code;
 
     // Discount: most pay list price; some get what the seller may give; a few ask for more.
     const r = rng();

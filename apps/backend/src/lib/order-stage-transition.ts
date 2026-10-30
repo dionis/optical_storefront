@@ -240,6 +240,26 @@ async function setLabStage(
   });
 }
 
+/**
+ * Where a till order is fulfilled. It has no shipping method (nothing is shipped
+ * from the till), and that is where Medusa would look for the shipping option
+ * and the location: name them, the store's main ones. A web order passes nothing.
+ */
+async function tillFulfillmentRoute(container: MedusaContainer): Promise<{ shipping_option_id: string; location_id: string }> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const oldest = { take: 1, order: { created_at: "ASC" } };
+  const [{ data: options }, { data: locations }] = await Promise.all([
+    query.graph({ entity: "shipping_option", fields: ["id"], pagination: oldest as never }),
+    query.graph({ entity: "stock_location", fields: ["id"], pagination: oldest as never }),
+  ]);
+  const shipping_option_id = (options[0] as { id?: string } | undefined)?.id;
+  const location_id = (locations[0] as { id?: string } | undefined)?.id;
+  if (!shipping_option_id || !location_id) {
+    throw new StageError("no_location", "A till order needs a shipping option and a stock location to be fulfilled.");
+  }
+  return { shipping_option_id, location_id };
+}
+
 /** Everything not yet fulfilled goes into one box. */
 async function createFulfillment(
   container: MedusaContainer,
@@ -258,12 +278,15 @@ async function createFulfillment(
     throw new StageError("nothing_to_fulfill", "No order line has quantity left to fulfill.");
   }
 
+  const route = order.shipping_method ? {} : await tillFulfillmentRoute(container);
+
   await createOrderFulfillmentWorkflow(container).run({
     input: {
       order_id: order.id,
       created_by: actorId,
       items,
       no_notification: noNotification,
+      ...route,
     },
   });
 }

@@ -258,7 +258,8 @@ export const MAX_LINES = 10;
 
 const code = (v: unknown): string | null => {
   const s = text(v, 40);
-  return /^[a-z0-9-]+$/i.test(s) ? s : null;
+  // The dot is for lens materials: "1.67", "1.74".
+  return /^[a-z0-9.-]+$/i.test(s) ? s : null;
 };
 
 export function cleanLines(input: unknown): { reason: string } | { lines: PosLine[] } {
