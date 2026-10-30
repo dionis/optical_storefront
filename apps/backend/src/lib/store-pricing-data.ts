@@ -1,5 +1,6 @@
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { upsertVariantPricesWorkflow } from "@medusajs/medusa/core-flows";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import { recordAudit } from "./audit";
 import type StorePricingModuleService from "../modules/store-pricing/service";
@@ -130,6 +131,33 @@ export interface ProductPrice {
    * the first variant that has one; null if none does.
    */
   price: number | null;
+}
+
+export interface VariantPriceUpdate {
+  variant_id: string;
+  product_id: string;
+  prices: Array<{ amount: number; currency_code: string }>;
+}
+
+/**
+ * Writes variants' prices, creating the price set and its link for a variant
+ * that has none. updateProductVariantsWorkflow cannot do that: it throws on the
+ * whole batch if a single variant has no link.
+ */
+export async function setVariantPrices(container: MedusaContainer, updates: VariantPriceUpdate[]): Promise<void> {
+  if (!updates.length) return;
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { data: links } = await query.graph({
+    entity: "product_variant_price_set",
+    fields: ["variant_id"],
+    filters: { variant_id: updates.map((u) => u.variant_id) },
+  });
+  await upsertVariantPricesWorkflow(container).run({
+    input: {
+      variantPrices: updates,
+      previousVariantIds: (links as Array<{ variant_id: string }>).map((l) => l.variant_id),
+    },
+  });
 }
 
 /** Medusa price of products by id, for previews and (phase 2) the point of sale. */

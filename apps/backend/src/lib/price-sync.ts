@@ -17,10 +17,9 @@
  */
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { MedusaContainer } from "@medusajs/framework/types";
-import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows";
 import { sellingPrice, normalizeModel, type PriceKind } from "./pricing";
 import { PRICE_BOOK, type PriceBookItem } from "../data/wholesale-prices";
-import { openRules } from "./store-pricing-data";
+import { openRules, setVariantPrices, type VariantPriceUpdate } from "./store-pricing-data";
 import { globalPriceOverrides } from "./store-pricing";
 
 export type SyncReport = {
@@ -75,7 +74,7 @@ export async function syncPrices(
   // price here: in Medusa v2 the amount lives on a price set linked to the
   // variant, and the exact query path is version-sensitive; setting the target
   // unconditionally is simpler and safe to run every few hours.
-  const updates: { id: string; prices: { amount: number; currency_code: string }[] }[] = [];
+  const updates: VariantPriceUpdate[] = [];
 
   for (;;) {
     const { data: products } = await query.graph({
@@ -92,7 +91,7 @@ export async function syncPrices(
         report.ownerPriced++;
         for (const v of (p.variants as any[]) || []) {
           report.updated++;
-          updates.push({ id: v.id, prices: [{ amount: owner, currency_code: CURRENCY }] });
+          updates.push({ variant_id: v.id, product_id: p.id as string, prices: [{ amount: owner, currency_code: CURRENCY }] });
         }
         continue;
       }
@@ -105,7 +104,8 @@ export async function syncPrices(
       for (const v of (p.variants as any[]) || []) {
         report.updated++;
         updates.push({
-          id: v.id,
+          variant_id: v.id,
+          product_id: p.id as string,
           prices: [{ amount: hit.price, currency_code: CURRENCY }],
         });
       }
@@ -124,10 +124,7 @@ export async function syncPrices(
     // Update in batches so a huge catalog does not build one giant transaction.
     const batchSize = 100;
     for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
-      await updateProductVariantsWorkflow(container).run({
-        input: { product_variants: batch as any },
-      });
+      await setVariantPrices(container, updates.slice(i, i + batchSize));
       logger.info(`[price-sync] updated ${Math.min(i + batchSize, updates.length)}/${updates.length}`);
     }
   }
