@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { searchProducts } from "./posApi.js";
+import { resolveImageSized } from "../data/imageUrl.js";
 
 const MIN_CHARS = 2;
 
@@ -21,7 +22,7 @@ function Highlight({ text, term }) {
 function Thumb({ src, size = "md" }) {
   const [broken, setBroken] = useState(false);
   if (!src || broken) return <span className={`pos-ac-thumb ${size} noimg`}><Icon name="glasses" size={size === "sm" ? 14 : 20} /></span>;
-  return <img className={`pos-ac-thumb ${size}`} src={src} alt="" loading="lazy" onError={() => setBroken(true)} />;
+  return <img className={`pos-ac-thumb ${size}`} src={resolveImageSized(src, size === "sm" ? 96 : 160)} alt="" loading="lazy" onError={() => setBroken(true)} />;
 }
 
 /** Variante cuyo SKU o código de barras es exactamente lo escrito (lo que manda un lector). */

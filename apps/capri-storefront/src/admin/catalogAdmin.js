@@ -6,6 +6,7 @@
 // Regla del módulo: sin hook de idioma. Lo que llegue a la pantalla viaja como
 // CLAVE de diccionario y lo traduce quien pinta.
 import { adminFetch } from "./adminApi.js";
+import { resolveImage } from "../data/imageUrl.js";
 
 /**
  * Descontinuar / reactivar una montura.
@@ -79,7 +80,7 @@ export async function fetchDiscontinued() {
       query: { status: "draft", limit: 100, offset, fields: "id,title,handle,thumbnail,status" },
     });
     const items = data?.products || [];
-    out.push(...items.map((p) => ({ medusaId: p.id, name: p.title, slug: p.handle, image: p.thumbnail })));
+    out.push(...items.map((p) => ({ medusaId: p.id, name: p.title, slug: p.handle, image: resolveImage(p.thumbnail) })));
     if (items.length < 100) break;
     offset += 100;
   }

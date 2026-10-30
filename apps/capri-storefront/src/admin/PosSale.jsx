@@ -25,6 +25,7 @@ import {
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
+import { resolveImageSized } from "../data/imageUrl.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 
@@ -597,7 +598,7 @@ export default function PosSale({ me }) {
             <ul className="pos-lines">
               {lines.map((l) => (
                 <li key={l.key}>
-                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={l.image} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
+                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={resolveImageSized(l.image, 96)} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
                   <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
