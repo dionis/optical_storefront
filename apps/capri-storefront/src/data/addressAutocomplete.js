@@ -189,7 +189,10 @@ function debounceInput(inputEl, ms, fn) {
  */
 export function attachAddressAutocomplete(inputEl, onSelect, { mode = "street" } = {}) {
   if (!inputEl) return () => {};
-  if (!GOOGLE_KEY) return attachPhoton(inputEl, onSelect, mode);
+  if (!GOOGLE_KEY) {
+    console.info("[address] This build has no VITE_GOOGLE_MAPS_KEY, using OpenStreetMap. See docs/GOOGLE-MAPS.md.");
+    return attachPhoton(inputEl, onSelect, mode);
+  }
 
   let cleanup = () => {};
   let cancelled = false;
@@ -201,7 +204,8 @@ export function attachAddressAutocomplete(inputEl, onSelect, { mode = "street" }
       if (!places || !places.AutocompleteSuggestion) throw new Error("places-new-api-missing");
       cleanup = attachGoogle(inputEl, onSelect, places, mode);
     })
-    .catch(() => {
+    .catch((e) => {
+      console.warn(`[address] Google Maps could not load, using OpenStreetMap: ${e?.message || "unknown error"}. See docs/GOOGLE-MAPS.md.`);
       // Sin Google (llave mal, red, bloqueador): respaldo abierto.
       if (!cancelled) cleanup = attachPhoton(inputEl, onSelect, mode);
     });
