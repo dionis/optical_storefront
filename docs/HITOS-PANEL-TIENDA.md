@@ -39,6 +39,27 @@ La tienda online (`develop` / www.rubilens.com) **no se toca** desde esta rama.
 - **Estado de cuenta por tienda** (`StoreStatement.jsx`, `lib/pos-statement.ts`, `GET /admin/pos/statement`): `EST-<tienda>-<AAAAMM>`, todas las ventas del período con artículos, descuentos, cobros por método y saldo; totales por vendedor y por día; liquidación (`settlement_pct`) para tiendas familiares / socias / consignación; carta imprimible y Excel. Pestaña «Estado de cuenta» para administradores, supervisores y encargados.
 - **Excel sin dependencias** (`exportXlsx.js`): libro `.xlsx` real (números como números, cabecera fija con filtro, totales en negrita). `ExportMenu` ofrece PDF · Excel · CSV.
 
+## Hito 4 — Ejecutivo en una vista, filtro global por tienda, premium ✅
+
+- **Filtro de tienda único** (`StoreFilter.jsx`, `useStoreFilter(me)`): Todas · Tienda online · cada tienda; se guarda en `adm_active_store` (la misma que colorea el panel) y lo leen todas las pantallas con datos por tienda. Parámetros por ruta: `store=` (POS, auditoría, order-board, sellers/stats, costing/summary), `stores=` (analítica), `establishment_id=` (caja, estado de cuenta).
+- **Acordeón con resumen ejecutivo** (`Accordion.jsx`): la cabecera lleva pastillas (conteo, total, ganancia, variación) antes de abrirse; estado recordado por id.
+- **Ejecutivo** (`ExecutiveHub.jsx`, `exec.css`): barra fija (tienda + período hoy/ayer/semana/mes/año/rango + PDF/Excel/CSV), franja de 10 KPIs y acordeones: Pedidos de la tienda, Cobros y caja, Vendedores, Costos y margen, Pedidos web, Catálogo, Resumen, Detalle.
+- **Pedidos de la tienda** (`StoreOrders.jsx`, pestaña `storeorders`): cada venta con cliente, vendedor, artículos, precio, descuento, **costo real** (costo + comisión de cobro), comisión, ganancia, margen, cobrado y saldo. `GET /admin/sales-analytics/sales` devuelve la economía por venta sumando `lineEconomics`; `null` salvo admin o `costs.view`; el vendedor ve solo su comisión.
+- **Bienvenida en cada recarga** con cifras reales (vendedor: hoy/semana/mes y comisión; dueño: negocio + línea por tienda, aprobaciones pendientes, cajas abiertas).
+- **Premium**: Manrope (UI) + Fraunces (títulos e importes), acento único a partir del color de tienda (`--adm-accent*`), superficies finas, más densidad, modo oscuro AA.
+
+## Hito 5 — Ficha de venta, ayuda para novatos, una vista, roles ✅
+
+- **Ficha de la venta** (`SaleDetailPanel.jsx`, `useSalePanel`): clic en cualquier venta → cajón lateral con todo (cliente, montura con foto, lentes, receta solo para admin/supervisor/encargado, importes y economía solo admin, cobros + «Registrar cobro», documentos, historial, entregar/anular). Botones propios del panel.
+- **Ayuda** (`HelpTip.jsx`, 38 temas es/en): «?» junto a cada columna de la receta (qué es ESF/CIL/EJE/ADD/PRISMA/BASE/DNP/ALT en lenguaje llano, cómo leer una receta de papel), pasos de la venta, lentes, KPIs, caja, estado de cuenta, colores, roles; popover corto + guía completa (qué es · cómo se hace · por qué importa · ejemplo · errores frecuentes).
+- **Una vista** (`fit.css`, `StageBar.jsx`): `.adm-fit` con cuerpo que desplaza por dentro; «Pedidos por etapa» como franja de 64 px clicable y exportable; gráficas con paleta de tokens, ejes 11 px; «Accesos vs compras» y «Por día de la semana» en una fila; **Estado de tienda** con barra fija, KPIs, acordeones y exportación completa (Excel de 7 hojas, CSV, PDF), caché de 60 s por tienda.
+- **Roles**: el vendedor solo ve Mi panel (sus ventas y comisión), Nueva venta, **Cobros pendientes**, Caja y Perfil; nada de estado general. Servidor: `GET /admin/pos/sales` para vendedor = sus ventas completas + ventas ajenas de su tienda solo con saldo (fila limitada); puede cobrar esos saldos (`received_by` auditado); `?pending=1`, `?mine=1`. `/sales-analytics/me` ya no devuelve el día de la tienda al vendedor.
+
+## Pendiente tras estos hitos
+- Dirección de envío en la ficha de venta (`buildSaleDocument` no la trae).
+- Ayuda en Estado de tienda, Pedidos de la tienda y Mi panel (temas ya escritos: `cash.session`, `exec.orders`, `salesboard.what`).
+- Toasts/diálogos en modo oscuro; plantillas de lente para montura propia; rotación de secretos (Daniel).
+
 ## Tras desplegar
 
 1. Coolify (backend staging): `medusa db:migrate` — columnas `staff_profile.photo_url`, `cash_movement.category` y colores por defecto de las tiendas.
