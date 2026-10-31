@@ -31,12 +31,11 @@ import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
 import PosSaleSummary from "./PosSaleSummary.jsx";
-import { customerProblems, LIMITS, paymentProblem, typedDecimal, typedEmail, typedPhone, typedSigned, typedZip } from "../data/fieldRules.js";
+import { customerProblems, LIMITS, paymentProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import RxForm from "./PosRx.jsx";
+import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, validateRx } from "./rxRules.js";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
-const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
-const EMPTY_EYE = { sph: "", cyl: "", axis: "", add: "", prism: "", base: "" };
-const EMPTY_RX = { od: { ...EMPTY_EYE }, os: { ...EMPTY_EYE }, pd: "", seg_height: "", rx_date: "" };
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const EMPTY_OWN = { open: false, description: "", photo: null };
@@ -63,50 +62,23 @@ const read = (k) => { try { return localStorage.getItem(k); } catch { return nul
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
 
-/** Receta del formulario → forma que espera el servidor (números o null). */
+/** Receta del formulario → forma que espera el servidor (números o null). El tipo
+ *  (monofocal/multifocal) no viaja: el servidor lo deduce de la adición. */
 function toRx(form, source = "manual") {
   const eye = (e) => ({ sph: num(e.sph), cyl: num(e.cyl), axis: num(e.axis), add: num(e.add), prism: num(e.prism), base: e.base || null });
-  return { od: eye(form.od), os: eye(form.os), pd: num(form.pd), seg_height: num(form.seg_height), source, verified_by_user: true, file_url: form.file_url || null };
+  const pd_od = num(form.pd_od); const pd_os = num(form.pd_os);
+  const pd = binocularPd(form) ?? (pd_od == null && pd_os == null ? num(form.pd) : null);
+  return { od: eye(form.od), os: eye(form.os), pd, pd_od, pd_os, seg_height: num(form.seg_height), source, verified_by_user: true, file_url: form.file_url || null };
 }
+/** Receta guardada (o leída de la foto) → formulario, ya con el formato de la hoja. */
 const fromRx = (rx) => {
-  const eye = (e) => Object.fromEntries(EYE_FIELDS.map((k) => [k, e?.[k] == null ? "" : String(e[k])]).concat([["base", e?.base || ""]]));
-  return { od: eye(rx?.od), os: eye(rx?.os), pd: rx?.pd == null ? "" : String(rx.pd), seg_height: rx?.seg_height == null ? "" : String(rx.seg_height), rx_date: "", file_url: rx?.file_url || "" };
+  const eye = (e) => Object.fromEntries(EYE_FIELDS.map((k) => [k, k === "base" ? (e?.base || "") : e?.[k] == null ? "" : normalizeField(k, e[k]) || String(e[k])]));
+  const form = { ...EMPTY_RX, od: eye(rx?.od), os: eye(rx?.os), ...splitPd(rx), pd: rx?.pd == null ? "" : String(rx.pd), seg_height: rx?.seg_height == null ? "" : normalizeField("seg_height", rx.seg_height), rx_date: "", file_url: rx?.file_url || "" };
+  return { ...form, type: inferType(form) };
 };
 const rxFilled = (f) => num(f.od.sph) !== null && num(f.os.sph) !== null;
 const maxPower = (f) => Math.max(...["od", "os"].flatMap((e) => [Math.abs(num(f[e].sph) || 0), Math.abs(num(f[e].cyl) || 0)]));
-const hasAdd = (f) => (num(f.od.add) || 0) > 0 || (num(f.os.add) || 0) > 0;
-
-/** Tabla OD/OI de una receta: la del cristal nuevo o la que el paciente usa. */
-function RxGrid({ value, onChange, disabled, idp, measures = true }) {
-  const { t } = useLang();
-  const set = (eye, k) => (e) => onChange({ ...value, [eye]: { ...value[eye], [k]: e.target.value } });
-  return (
-    <div className="pos-rx">
-      <table className="pos-rx-grid">
-        <thead>
-          <tr><th />{EYE_FIELDS.map((k) => <th key={k}>{t(`adm.pos.rx.${k}`)}</th>)}</tr>
-        </thead>
-        <tbody>
-          {["od", "os"].map((eye) => (
-            <tr key={eye}>
-              <th scope="row">{t(`adm.pos.rx.${eye}`)}</th>
-              {EYE_FIELDS.map((k) => (
-                <td key={k}>
-                  <input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value[eye][k]} onChange={(e) => set(eye, k)({ target: { value: typedSigned(e.target.value) } })}
-                    aria-label={`${t(`adm.pos.rx.${eye}`)} ${t(`adm.pos.rx.${k}`)}`} id={`${idp}-${eye}-${k}`} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {measures && <div className="pos-row">
-        <label>{t("adm.pos.rx.pd")}<input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value.pd} onChange={(e) => onChange({ ...value, pd: typedDecimal(e.target.value) })} /></label>
-        <label>{t("adm.pos.rx.seg")}<input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value.seg_height} onChange={(e) => onChange({ ...value, seg_height: typedDecimal(e.target.value) })} /></label>
-      </div>}
-    </div>
-  );
-}
+const isMulti = (f) => (f.type || inferType(f)) === "multifocal";
 
 /** Cambio por ojo (solo pantalla: nunca va en recibos, correos ni la hoja). */
 function OpticalChange({ change }) {
@@ -150,7 +122,8 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   const photos = PHOTO.filter((p) => cat && p.price && p.price[cat] != null);
   const ars = design && sel.design_code !== "frame-only" ? AR[arGroupFor(design)] || [] : [];
   const set = (patch) => onChange({ ...line, selection: { ...sel, ...patch } });
-  const designs = noRx ? [] : DESIGNS.filter((d) => (hasAdd(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
+  // Filtro por tipo de receta: monofocal → solo visión sencilla; multifocal → bifocal o progresivo.
+  const designs = noRx ? [] : DESIGNS.filter((d) => (isMulti(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
   return (
     <div className="pos-lens">
       <label>
@@ -303,10 +276,12 @@ export default function PosSale({ me }) {
   };
   const onOcr = async (e) => {
     const f = e.target.files?.[0];
+    e.target.value = "";
     if (!f) return;
     setOcr({ status: "loading", confirmed: false });
     try {
       const r = await ocrPrescription(f);
+      // El tipo sale de lo leído: con adición es multifocal.
       setRxNew({ ...fromRx(r.prescription), rx_date: rxNew.rx_date });
       setOcr({ status: "done", confirmed: false });
     } catch (err) {
@@ -320,7 +295,7 @@ export default function PosSale({ me }) {
     if (STEPS[step] !== "lenses") return;
     setLines((ls) => ls.map((l) => {
       if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } };
-      const multi = hasAdd(rxNew);
+      const multi = isMulti(rxNew);
       const d = l.selection.design_code;
       const fits = d === "frame-only" ? l.kind === "frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
       if (fits && !(l.kind === "frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
@@ -400,8 +375,11 @@ export default function PosSale({ me }) {
     return { paid: Math.round(paid * 100) / 100, ins: Math.round(ins * 100) / 100, balance: Math.round((total - paid - ins) * 100) / 100 };
   }, [payRows, methods, total]);
 
-  // Lo que usa hoy: graduación de ambos ojos y cuándo se la hicieron.
-  const wornReady = rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
+  // Lo que usa hoy: graduación de ambos ojos, dentro de rango, y cuándo se la hicieron.
+  const wornCheck = validateRx(rxWorn, rxWorn.type, { mode: "worn" });
+  const wornReady = rxFilled(rxWorn) && wornCheck.ok && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
+  // Receta nueva: el servidor es la última palabra, pero lo que el laboratorio no corta no sale de aquí.
+  const rxCheck = validateRx(rxNew, rxNew.type, { mode: "new" });
   const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
   const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
   const custProblems = customerProblems(customer, { requireAddress: delivery === "ship" });
@@ -412,7 +390,7 @@ export default function PosSale({ me }) {
       case "frame": return lines.length > 0;
       case "rx":
         if (noRx) return !lines.some((l) => l.kind === "own_frame");
-        if (!rxFilled(rxNew) || (ocr.status === "done" && !ocr.confirmed)) return false;
+        if (!rxFilled(rxNew) || !rxCheck.ok || (ocr.status === "done" && !ocr.confirmed)) return false;
         return true;
       case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
         && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
@@ -569,65 +547,11 @@ export default function PosSale({ me }) {
             {wears && (
               <div className="pos-worn-now">
                 <p className="adm-sub">{t("adm.pos.worn.hint")}</p>
-<h3>{t("adm.pos.rx.worn")}</h3>
-                    {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
-                    <RxGrid value={rxWorn} onChange={setRxWorn} idp="worn" />
-                    <div className="pos-form">
-                      <label>{t("adm.pos.rx.source")}
-                        <select value={worn.source} onChange={(e) => setWorn((w) => ({ ...w, source: e.target.value }))}>
-                          {["previous_rx", "lensometer", "prior_sale"].map((s) => <option key={s} value={s}>{t(`adm.pos.rx.src.${s}`)}</option>)}
-                        </select>
-                      </label>
-                      <label>{t("adm.pos.rx.when")}
-                        <select value={worn.dateMode} onChange={(e) => setWorn((w) => ({ ...w, dateMode: e.target.value }))}>
-                          <option value="exact">{t("adm.pos.rx.exact")}</option>
-                          <option value="approx">{t("adm.pos.rx.approx")}</option>
-                        </select>
-                      </label>
-                      {worn.dateMode === "exact"
-                        ? <label>{t("adm.pos.rx.date")}<input type="date" value={worn.date} onChange={(e) => setWorn((w) => ({ ...w, date: e.target.value }))} /></label>
-                        : <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" value={worn.months} onChange={(e) => setWorn((w) => ({ ...w, months: e.target.value.replace(/\D/g, "") }))} /></label>}
-                    </div>
-                    {custInfo?.history?.length > 1 && (
-                      <details className="pos-history">
-                        <summary>{t("adm.pos.rx.history", { n: custInfo.history.length })}</summary>
-                        <ul>
-                          {custInfo.history.map((h) => (
-                            <li key={h.id}>
-                              <b>{h.rx_number || h.kind || "—"}</b> · {h.rx_date || h.created_at.slice(0, 10)}
-                              {h.change && <> · {t("adm.pos.change.se")} {h.change.max_se == null ? "—" : h.change.max_se.toFixed(2)} {h.change.significant ? "⚠" : ""}</>}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-
-                    <h3>{t("adm.pos.worn.frame")}</h3>
-                    <p className="muted" style={{ fontSize: "0.85em", margin: "0 0 0.5rem" }}>{t("adm.pos.worn.frameHint")}</p>
-                    <div className="pos-form pos-worn-frame">
-                      <label>{t("adm.pos.worn.lensWidth")} <small>(A) mm</small>
-                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.lens_width} onChange={(e) => setWornFrame((f) => ({ ...f, lens_width: typedDecimal(e.target.value) }))} placeholder="50" />
-                      </label>
-                      <label>{t("adm.pos.worn.bridge")} <small>(DBL) mm</small>
-                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.bridge} onChange={(e) => setWornFrame((f) => ({ ...f, bridge: typedDecimal(e.target.value) }))} placeholder="18" />
-                      </label>
-                      <label>{t("adm.pos.worn.temple")} <small>mm</small>
-                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.temple} onChange={(e) => setWornFrame((f) => ({ ...f, temple: typedDecimal(e.target.value) }))} placeholder="140" />
-                      </label>
-                      <label>{t("adm.pos.worn.lensHeight")} <small>(B) mm</small>
-                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.lens_height} onChange={(e) => setWornFrame((f) => ({ ...f, lens_height: typedDecimal(e.target.value) }))} placeholder="35" />
-                      </label>
-                      <label>{t("adm.pos.worn.totalWidth")} <small>mm</small>
-                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.total_width} onChange={(e) => setWornFrame((f) => ({ ...f, total_width: typedDecimal(e.target.value) }))} placeholder="136" />
-                      </label>
-                      <label>{t("adm.pos.worn.condition")}
-                        <select value={wornFrame.condition} onChange={(e) => setWornFrame((f) => ({ ...f, condition: e.target.value }))}>
-                          <option value="good">{t("adm.pos.worn.cond.good")}</option>
-                          <option value="fair">{t("adm.pos.worn.cond.fair")}</option>
-                          <option value="poor">{t("adm.pos.worn.cond.poor")}</option>
-                        </select>
-                      </label>
-                    </div>
+                <h3>{t("adm.pos.rx.worn")}</h3>
+                {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
+                {/* Misma cuadrícula que la receta nueva; aquí la altura no es obligatoria (el lensómetro no la da). */}
+                <RxForm mode="worn" idp="worn" value={rxWorn} onChange={setRxWorn} type={rxWorn.type} errors={wornCheck.errors} warnings={wornCheck.warnings}
+                  showErrors={showCustErrors || rxFilled(rxWorn)} worn={worn} onWornChange={setWorn} wornFrame={wornFrame} onWornFrameChange={setWornFrame} history={custInfo?.history || []} />
               </div>
             )}
           </>
@@ -686,10 +610,17 @@ export default function PosSale({ me }) {
               <>
                 <div className="pos-rx-head">
                   <h3>{t("adm.pos.rx.new")}</h3>
-                  <label className="pos-file">
-                    <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.photo")}
-                    <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
-                  </label>
+                  {/* Dos entradas: la cámara del móvil o tablet, o un archivo (foto o PDF) ya guardado. */}
+                  <div className="pos-rx-ocr">
+                    <label className="pos-file">
+                      <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.takePhoto")}
+                      <input type="file" accept="image/*" capture="environment" onChange={onOcr} disabled={ocr.status === "loading"} />
+                    </label>
+                    <label className="pos-file">
+                      <Icon name="upload" size={16} /> {t("adm.pos.rx.upload")}
+                      <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
+                    </label>
+                  </div>
                 </div>
                 {ocr.status === "done" && !ocr.confirmed && (
                   <div className="pos-ocr">
@@ -697,8 +628,8 @@ export default function PosSale({ me }) {
                     <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
                   </div>
                 )}
-                <RxGrid value={rxNew} onChange={setRxNew} idp="new" />
-                <label className="pos-inline">{t("adm.pos.rx.date")}<input type="date" value={rxNew.rx_date} onChange={(e) => setRxNew((r) => ({ ...r, rx_date: e.target.value }))} /></label>
+                <RxForm mode="new" idp="new" value={rxNew} onChange={setRxNew} type={rxNew.type} errors={rxCheck.errors} warnings={rxCheck.warnings}
+                  showErrors={rxFilled(rxNew)} source={ocr.status === "done" ? "ocr" : "manual"} disabled={ocr.status === "loading"} />
                 {wears && (
                   <div className="pos-worn-summary">
                     <span><b>{t("adm.pos.rx.worn")}</b> · {t("adm.pos.worn.takenInStep1")}</span>
@@ -722,7 +653,7 @@ export default function PosSale({ me }) {
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
-            {!noRx && hasAdd(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
+            {!noRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
         )}
 

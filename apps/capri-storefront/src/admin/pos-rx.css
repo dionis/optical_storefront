@@ -1,0 +1,60 @@
+/* Receta del punto de venta (PosRx.jsx): cuadrícula compacta calcada de la hoja
+   de laboratorio. Tokens --adm-* de admin.css. Objetivo: tipo + cuadrícula +
+   fila de fecha/origen en ~180 px de alto en escritorio, sin huecos. */
+.pos-rx { display: grid; gap: 8px; min-width: 0; }
+
+/* Tipo de receta: control segmentado */
+.pos-rx-type { display: inline-flex; border: 1px solid var(--adm-line); border-radius: 999px; padding: 3px; background: var(--adm-surface); width: fit-content; max-width: 100%; }
+.pos-rx-type button { border: 0; background: transparent; border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; color: var(--adm-muted); cursor: pointer; white-space: nowrap; min-height: 32px; }
+.pos-rx-type button.on { background: linear-gradient(135deg, var(--adm-navy), var(--adm-navy-2)); color: #fff; box-shadow: 0 3px 10px -4px rgba(15, 36, 64, .4); }
+.pos-rx-type button:disabled { opacity: .6; cursor: default; }
+
+/* Cuadrícula OD/OI */
+.pos-rx-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.pos .pos-rx-grid { border-collapse: separate; border-spacing: 3px 2px; width: auto; max-width: none; }
+.pos .pos-rx-grid th { font-size: 11px; letter-spacing: .04em; color: var(--adm-muted); padding: 0 2px 2px; text-align: center; font-weight: 800; }
+.pos .pos-rx-grid tbody th { text-align: left; font-size: 12.5px; color: var(--adm-navy); padding-right: 4px; }
+.pos .pos-rx-grid td { padding: 0; }
+.pos .pos-rx-grid input, .pos .pos-rx-grid select { width: 100%; min-width: 64px; min-height: 44px; padding: 4px 4px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); box-sizing: border-box; }
+.pos .pos-rx-grid select { min-width: 92px; text-align: left; font-size: 13.5px; }
+.pos .pos-rx-grid input:disabled, .pos .pos-rx-grid select:disabled { background: var(--adm-line-2); color: var(--adm-muted); }
+.pos .pos-rx-grid td.mirror input { opacity: .6; }
+.pos .pos-rx-grid td.err input, .pos .pos-rx-grid td.err select { border-color: var(--adm-red); background: var(--adm-red-soft); box-shadow: 0 0 0 2px var(--adm-red-line) inset; }
+.pos .pos-rx-grid td.warn input { border-color: var(--adm-gold); background: var(--adm-gold-soft); }
+
+/* Fila de fecha · origen (nueva) o de origen · cuándo (la que usa hoy) */
+.pos-rx-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: flex-end; }
+.pos-rx-meta label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 700; color: var(--adm-muted); flex: 0 1 170px; min-width: 120px; }
+.pos-rx-meta input, .pos-rx-meta select { min-height: 40px; font-size: 14px; width: 100%; box-sizing: border-box; }
+.pos-rx-tag { font-size: 12.5px; color: var(--adm-muted); padding: 10px 0 11px; white-space: nowrap; }
+.pos-rx-tag b { color: var(--adm-navy); }
+.pos-rx-tag.pd { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* Errores y avisos bajo la cuadrícula */
+.pos-rx-errs, .pos-rx-warns { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; line-height: 1.35; }
+.pos-rx-errs li { color: #b42318; }
+.pos-rx-errs li b { font-weight: 800; margin-right: 4px; }
+.pos-rx-warns li { color: var(--adm-gold-dark); }
+.pos-rx-warns li::before { content: "⚠ "; }
+
+/* Armazón actual, en una sola fila de casillas pequeñas */
+.pos-rx-frame { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 6px 10px 8px; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: flex-end; }
+.pos-rx-frame legend { font-size: 12px; font-weight: 800; color: var(--adm-navy); padding: 0 4px; }
+.pos-rx-frame legend small { font-weight: 400; color: var(--adm-muted); }
+.pos-rx-frame label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; font-weight: 700; color: var(--adm-muted); flex: 1 1 64px; max-width: 110px; }
+.pos-rx-frame label:last-child { flex: 1 1 110px; max-width: 150px; }
+.pos-rx-frame input, .pos-rx-frame select { min-height: 40px; font-size: 14px; width: 100%; padding: 4px 6px; box-sizing: border-box; text-align: center; }
+.pos-rx-frame select { text-align: left; }
+
+@media (max-width: 720px) {
+  .pos-rx-type { width: 100%; }
+  .pos-rx-type button { flex: 1; padding: 6px 8px; font-size: 12px; white-space: normal; }
+  .pos .pos-rx-grid input { min-width: 58px; font-size: 14px; }
+  .pos .pos-rx-grid select { min-width: 84px; }
+  .pos-rx-meta label { flex: 1 1 140px; }
+  .pos-rx-tag.pd { margin-left: 0; flex-basis: 100%; padding: 2px 0 0; }
+  .pos-rx-frame label { max-width: none; flex: 1 1 28%; }
+}
+
+/* Las dos entradas del OCR en el paso Receta (PosSale.jsx) */
+.pos-rx-ocr { display: flex; gap: 8px; flex-wrap: wrap; }
