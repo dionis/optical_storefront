@@ -191,12 +191,18 @@ export interface SaleListRow {
   channel: string;
   establishment_id: string | null;
   seller_code: string | null;
+  /** The customer's name (or email) when the sale has one. */
+  customer: string | null;
   sold_at: string;
   total: number;
   discount: number;
   units: number;
   status: string;
   items: string;
+  /** Collected so far: the till sale's payments; a web order is paid in full when placed. */
+  paid: number;
+  /** What the customer still owes (till sales only). */
+  balance: number;
 }
 
 /** The sales behind a number (HU-64: from a figure to the single sale). */
@@ -210,6 +216,7 @@ export async function salesList(container: MedusaContainer, f: AnalyticsFilter, 
       pg.raw("MAX(sale_fact.channel) AS channel"),
       pg.raw("MAX(sale_fact.establishment_id) AS establishment_id"),
       pg.raw("MAX(sale_fact.seller_code) AS seller_code"),
+      pg.raw("MAX(sale_fact.customer_id) AS customer_id"),
       pg.raw("MIN(sale_fact.sold_at) AS sold_at"),
       pg.raw("SUM(sale_fact.total_cents)::bigint AS total"),
       pg.raw("SUM(sale_fact.discount_cents)::bigint AS discount"),
@@ -221,20 +228,36 @@ export async function salesList(container: MedusaContainer, f: AnalyticsFilter, 
     .orderBy("sold_at", "desc")
     .limit(take)
     .offset(skip)) as Array<Record<string, unknown>>;
-  return rows.map((r) => ({
-    order_id: String(r.order_id),
-    sale_id: (r.sale_id as string | null) ?? null,
-    number: (r.number as string | null) ?? null,
-    channel: String(r.channel),
-    establishment_id: (r.establishment_id as string | null) ?? null,
-    seller_code: (r.seller_code as string | null) ?? null,
-    sold_at: new Date(r.sold_at as string).toISOString(),
-    total: Number(r.total) / 100,
-    discount: Number(r.discount) / 100,
-    units: Number(r.units),
-    status: String(r.status),
-    items: String(r.items ?? ""),
-  }));
+  // Collected and owed come from the till sale; the customer's name from Medusa's customer.
+  const saleIds = [...new Set(rows.map((r) => r.sale_id as string | null).filter((v): v is string => Boolean(v)))];
+  const customerIds = [...new Set(rows.map((r) => r.customer_id as string | null).filter((v): v is string => Boolean(v)))];
+  const [saleRows, customerRows] = await Promise.all([
+    saleIds.length ? (pg("pos_sale").whereIn("id", saleIds).select("id", "paid_cents", "balance_cents") as Promise<Array<{ id: string; paid_cents: number | string; balance_cents: number | string }>>) : Promise.resolve([]),
+    customerIds.length ? (pg("customer").whereIn("id", customerIds).select("id", "first_name", "last_name", "email") as Promise<Array<{ id: string; first_name: string | null; last_name: string | null; email: string | null }>>) : Promise.resolve([]),
+  ]);
+  const sales = new Map(saleRows.map((r) => [r.id, r]));
+  const customers = new Map(customerRows.map((c) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || c.email || null]));
+  return rows.map((r) => {
+    const total = Number(r.total) / 100;
+    const sale = r.sale_id ? sales.get(String(r.sale_id)) : undefined;
+    return {
+      order_id: String(r.order_id),
+      sale_id: (r.sale_id as string | null) ?? null,
+      number: (r.number as string | null) ?? null,
+      channel: String(r.channel),
+      establishment_id: (r.establishment_id as string | null) ?? null,
+      seller_code: (r.seller_code as string | null) ?? null,
+      customer: r.customer_id ? customers.get(String(r.customer_id)) ?? null : null,
+      sold_at: new Date(r.sold_at as string).toISOString(),
+      total,
+      discount: Number(r.discount) / 100,
+      units: Number(r.units),
+      status: String(r.status),
+      items: String(r.items ?? ""),
+      paid: sale ? Number(sale.paid_cents) / 100 : total,
+      balance: sale ? Number(sale.balance_cents) / 100 : 0,
+    };
+  });
 }
 
 /** Lines as CSV (HU-65: export what is filtered). Excel opens it as is. */

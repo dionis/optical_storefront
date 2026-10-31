@@ -5,8 +5,8 @@ import { sellerStats } from "../../../../lib/sellers";
 import { parseBoardDate } from "../../../../lib/board-dates";
 
 /**
- * GET /admin/sellers/stats?from&to — sales and commission per seller over the
- * board window (the `MAX_BOARD_SCAN` most recent orders in the range; the
+ * GET /admin/sellers/stats?from&to&store — sales and commission per seller over the
+ * board window (`store` = establishment id or "web" narrows it to one store) (the `MAX_BOARD_SCAN` most recent orders in the range; the
  * response says `truncated` when the window was full). Terminal orders
  * (canceled / refunded / payment pending) earn nobody anything. Sellers with
  * no sales are listed with zeros; orders without a code go to `unattributed`.
@@ -21,7 +21,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     return;
   }
   try {
-    res.json(await sellerStats(req.scope, { from, to }));
+    res.json(await sellerStats(req.scope, { from, to, store: query.store || null }));
   } catch (error) {
     logger.error(`[sellers] stats failed: ${(error as Error).message}`);
     res.status(500).json({ type: "error", reason: "stats_failed", message: "Could not compute seller stats." });

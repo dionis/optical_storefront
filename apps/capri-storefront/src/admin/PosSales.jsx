@@ -9,6 +9,9 @@ import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { collectPayment, deliverSale, fetchSale, listSales, methodName, posContext, searchCustomers, voidSale } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
+import Accordion from "./Accordion.jsx";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 const fmt = (v, lang) => new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" });
 
@@ -114,12 +117,17 @@ function SaleDetail({ id, ctx, onChanged }) {
   );
 }
 
-export default function PosSales() {
+/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
+export default function PosSales({ me }) {
   const { t, lang } = useLang();
   const [ctx, setCtx] = useState(null);
   const [sales, setSales] = useState([]);
   const [state, setState] = useState("loading");
-  const [f, setF] = useState({ store: "", terminal: "", with_balance: false, status: "", number: "" });
+  const [f, setF] = useState({ terminal: "", with_balance: false, status: "", number: "" });
+  // La tienda la decide el filtro global del panel (StoreFilter); la online no tiene ventas de mostrador.
+  const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
+  const { storeId, isAll, isWeb } = useStoreFilter(who);
+  const store = isAll || isWeb ? "" : storeId;
   const [custQ, setCustQ] = useState("");
   const [custHits, setCustHits] = useState([]);
   const [customer, setCustomer] = useState(null);
@@ -131,11 +139,13 @@ export default function PosSales() {
     if (!ctx) return undefined;
     let on = true;
     setState("loading");
-    listSales({ store: f.store, terminal: f.terminal, with_balance: f.with_balance ? 1 : "", status: f.status, number: f.number.trim(), customer: customer?.id })
+    listSales({ store, terminal: f.terminal, with_balance: f.with_balance ? 1 : "", status: f.status, number: f.number.trim(), customer: customer?.id })
       .then((r) => { if (on) { setSales(r.sales || []); setState("ok"); } })
       .catch(() => on && setState("error"));
     return () => { on = false; };
-  }, [ctx, f, customer, tick]);
+  }, [ctx, f, store, customer, tick]);
+  // Cambiar de tienda suelta el punto de venta: el anterior es de otra tienda.
+  useEffect(() => { setF((x) => (x.terminal ? { ...x, terminal: "" } : x)); }, [store]);
   useEffect(() => {
     if (custQ.trim().length < 2) { setCustHits([]); return undefined; }
     const h = setTimeout(() => searchCustomers(custQ).then((r) => setCustHits(r.customers || [])).catch(() => setCustHits([])), 300);
@@ -143,24 +153,30 @@ export default function PosSales() {
   }, [custQ]);
 
   const storeById = useMemo(() => new Map((ctx?.stores || []).map((s) => [s.id, s])), [ctx]);
-  const terminals = f.store ? storeById.get(f.store)?.terminals || [] : (ctx?.stores || []).flatMap((s) => s.terminals);
+  const terminals = store ? storeById.get(store)?.terminals || [] : (ctx?.stores || []).flatMap((s) => s.terminals);
   const termById = useMemo(() => new Map((ctx?.stores || []).flatMap((s) => s.terminals.map((x) => [x.id, x]))), [ctx]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+
+  // Resumen ejecutivo del acordeón: cuántas, cuánto y cuánto queda por cobrar (las anuladas aparte).
+  const sums = useMemo(() => {
+    const live = sales.filter((s) => s.status !== "voided");
+    return { n: live.length, total: live.reduce((a, s) => a + (Number(s.total) || 0), 0), balance: live.reduce((a, s) => a + (Number(s.balance) || 0), 0), voided: sales.length - live.length };
+  }, [sales]);
+  const summary = [
+    { label: t("adm.scr.count"), value: sums.n },
+    { label: t("adm.scr.total"), value: money(sums.total, "usd", lang), strong: true },
+    sums.balance > 0 ? { label: t("adm.scr.balance"), value: money(sums.balance, "usd", lang), tone: "warn" } : null,
+    sums.voided > 0 ? { label: t("adm.scr.voided"), value: sums.voided, tone: "muted" } : null,
+  ];
 
   if (state === "error" && !ctx) return <div className="adm-section"><div className="adm-demo-banner">{t("adm.err.pos.generic")}</div></div>;
 
   return (
     <div className="adm-section pos">
-      <div className="adm-head-row"><h2>{t("adm.tab.possales")}</h2></div>
+      <div className="adm-head-row"><h2>{t("adm.tab.possales")}</h2>{who && <StoreFilter me={who} />}</div>
       <p className="adm-sub">{ctx && !ctx.is_admin && ctx.role === "seller" ? t("adm.pos.sales.subSeller") : t("adm.pos.sales.sub")}</p>
       <div className="adm-card pos-filters">
-        {/* Filtrar por tienda o punto de venta solo tiene sentido si hay más de uno (un vendedor tiene los suyos fijos). */}
-        {(ctx?.stores || []).length > 1 && (
-          <select value={f.store} onChange={(e) => setF((x) => ({ ...x, store: e.target.value, terminal: "" }))} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-            <option value="">{t("adm.pos.sales.allStores")}</option>
-            {(ctx?.stores || []).map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-          </select>
-        )}
+        {/* Filtrar por punto de venta solo tiene sentido si hay más de uno (un vendedor tiene el suyo fijo). */}
         {terminals.length > 1 && (
           <select value={f.terminal} onChange={set("terminal")} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
             <option value="">{t("adm.pos.sales.allTerminals")}</option>
@@ -187,7 +203,7 @@ export default function PosSales() {
           )}
         </div>
       </div>
-      <div className="adm-card">
+      <Accordion id="possales" icon="receipt" title={t("adm.scr.sales")} summary={summary} defaultOpen bodyClassName="scr-acc-table">
         {state === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
         <table className="adm-table responsive">
           <thead><tr><th>{t("adm.pos.sales.number")}</th><th>{t("adm.pos.sales.when")}</th><th>{t("adm.pos.terminal")}</th><th>{t("adm.pos.sales.seller")}</th><th>{t("adm.pos.price.total")}</th><th>{t("adm.pos.pay.balance")}</th><th>{t("adm.pos.sales.status")}</th></tr></thead>
@@ -216,7 +232,7 @@ export default function PosSales() {
             )}
           </tbody>
         </table>
-      </div>
+      </Accordion>
     </div>
   );
 }

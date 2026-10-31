@@ -11,6 +11,7 @@ import { BarChart } from "./charts.jsx";
 import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
 import "./cash-report.css";
+import { useStoreFilter } from "./StoreFilter.jsx";
 
 const PERIODS = ["today", "week", "month", "year", "range"];
 const CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
@@ -51,11 +52,14 @@ function Acc({ icon, title, count, sum, children, open = true }) {
   );
 }
 
-export default function CashReport({ ctx }) {
+/** Props: `ctx` (GET /admin/pos/context) y `me` para el filtro de tienda global del panel (StoreFilter). */
+export default function CashReport({ ctx, me }) {
   const { t, lang } = useLang();
   const [period, setPeriod] = useState("month");
   const [range, setRange] = useState(() => periodRange("month"));
-  const [storeId, setStoreId] = useState("");
+  // La tienda la fija el filtro global; «Todas» o la online = todas las suyas (la online no tiene caja).
+  const { storeId: globalId, isAll, isWeb } = useStoreFilter(me);
+  const storeId = isAll || isWeb ? "" : globalId;
   const [personId, setPersonId] = useState("");
   const [cat, setCat] = useState("");
   const [data, setData] = useState(null);
@@ -64,7 +68,6 @@ export default function CashReport({ ctx }) {
   const [busy, setBusy] = useState(false);
   const ref = useRef(null);
 
-  const isAdmin = ctx?.is_admin !== false;
   const stores = ctx?.stores || [];
   const locale = lang === "en" ? "en-US" : "es-US";
   const m = (cents) => money((Number(cents) || 0) / 100, "usd", lang);
@@ -213,12 +216,7 @@ export default function CashReport({ ctx }) {
           </span>
         )}
         {period !== "range" && <span className="cr-period">{periodText}</span>}
-        {(isAdmin || stores.length > 1) && (
-          <select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-            <option value="">{t("adm.cash.rep.allStores")}</option>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-          </select>
-        )}
+        {/* La tienda se elige en el filtro global de la cabecera de Caja (PosCash.jsx). */}
         {ctx?.role !== "seller" && (
           <select value={personId} onChange={(e) => setPersonId(e.target.value)} aria-label={t("adm.cash.rep.who")} title={t("adm.cash.rep.who")}>
             <option value="">{t("adm.cash.rep.allPeople")}</option>

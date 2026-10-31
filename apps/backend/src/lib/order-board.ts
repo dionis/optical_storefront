@@ -148,6 +148,8 @@ export interface BoardQuery {
   has_prescription?: boolean;
   /** Seller code (exact, case-insensitive); "none" = orders with no seller. */
   seller?: string;
+  /** Establishment id of a till sale, or "web" = the online store (orders not placed at a till). */
+  store?: string;
   limit?: number;
   offset?: number;
 }
@@ -455,6 +457,10 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     // Which network the referral link was shared on (`src=` of the link →
     // `metadata.seller_source`); null when the link had no tag.
     seller_source: sellerSource,
+    // Where it was sold: a till (`metadata.source === "pos"`, with its
+    // establishment) or the online store. The executive panel filters on it.
+    channel: metadata["source"] === "pos" ? "pos" : "web",
+    establishment_id: typeof metadata["establishment_id"] === "string" && metadata["establishment_id"] ? String(metadata["establishment_id"]) : null,
     // Free-text note the owner keeps on the order (panel + sheet).
     owner_note: ownerNote,
     // Every stage change recorded by transitionOrderStage, oldest first.
@@ -498,6 +504,14 @@ function haystack(row: BoardOrder): string {
     .toLowerCase();
 }
 
+/** `store` = "web" keeps online orders; an establishment id keeps that till's sales; empty keeps all. Pure. */
+export function matchesStore(row: Pick<BoardOrder, "channel" | "establishment_id">, store: string | undefined | null): boolean {
+  const s = String(store ?? "").trim();
+  if (!s || s === "all") return true;
+  if (s === "web") return row.channel !== "pos";
+  return row.channel === "pos" && row.establishment_id === s;
+}
+
 /**
  * The in-memory filters (everything but the date range, which the database
  * applies). Pure, so the seller/stage/text rules can be tested on literals.
@@ -516,6 +530,7 @@ export function filterBoardRows(
     if (params.has_prescription === false && row.has_prescription) return false;
     if (seller === "none" && row.seller_code) return false;
     if (seller && seller !== "none" && row.seller_code !== seller) return false;
+    if (!matchesStore(row, params.store)) return false;
     if (q && !haystack(row).includes(q)) return false;
     return true;
   });

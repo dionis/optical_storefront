@@ -10,6 +10,8 @@ import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 const CATEGORIES = ["rent", "maintenance", "utilities", "salaries", "insurance", "licenses", "subscriptions", "equipment", "supplies", "shipping", "repairs", "remakes", "accounting", "other"];
 const FREQS = ["monthly", "quarterly", "annual", "one_time"];
@@ -30,13 +32,20 @@ export default function StoreCosts({ me }) {
   const canManage = !me || me.is_admin !== false || (me.privileges || []).includes("costs.manage");
   const isAdmin = !me || me.is_admin !== false;
   const m = (v) => (v === null || v === undefined ? "—" : money(v, "usd", lang));
+  // Tienda del filtro global del panel: acota los costos (?store=) y la columna del resultado. La online no tiene costos propios.
+  const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
+  const { storeId, isAll, isWeb } = useStoreFilter(who);
+  const storeOnly = isAll || isWeb ? "" : storeId;
 
   useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
   const load = () => {
     adminFetch(`/admin/store-costs/pnl?month=${month}`).then(setPnl).catch(() => setPnl(null));
-    adminFetch("/admin/store-costs").then((r) => setItems(r.items || [])).catch(() => setItems([]));
+    adminFetch(`/admin/store-costs${storeOnly ? `?store=${encodeURIComponent(storeOnly)}` : ""}`).then((r) => setItems(r.items || [])).catch(() => setItems([]));
   };
-  useEffect(load, [month]);
+  useEffect(load, [month, storeOnly]);
+  // Con una tienda elegida, el resultado enseña solo su columna (y no el total del negocio).
+  const pnlStores = pnl ? (storeOnly ? pnl.stores.filter((s) => s.establishment_id === storeOnly) : pnl.stores) : [];
+  const showTotal = !storeOnly;
 
   const storeCode = (id) => (id ? ctx?.stores.find((s) => s.id === id)?.code || "…" : t("adm.costs2.shared"));
   const save = async (e) => {
@@ -61,39 +70,42 @@ export default function StoreCosts({ me }) {
     <div className="adm-section pos">
       <div className="adm-head-row">
         <h2>{t("adm.tab.storecosts")}</h2>
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("adm.costs2.month")} title={t("adm.costs2.month")} />
+        <div className="scr-tools">
+          {who && <StoreFilter me={who} />}
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("adm.costs2.month")} title={t("adm.costs2.month")} />
+        </div>
       </div>
       <p className="adm-sub">{t("adm.costs2.sub")}</p>
       {pnl?.cost_rules_missing && <div className="adm-demo-banner">{t("adm.costs2.noRules")}</div>}
 
       {pnl && (
         <div className="adm-card">
-          <h3>{t("adm.costs2.pnlTitle")}</h3>
+          <h3>{t("adm.costs2.pnlTitle")}{storeOnly && <small className="muted"> · {t("adm.scr.onlyStore")}</small>}</h3>
           <table className="adm-table responsive pnl">
-            <thead><tr><th />{pnl.stores.map((s) => <th key={s.establishment_id}>{s.code}</th>)}<th>{t("adm.costs2.total")}</th></tr></thead>
+            <thead><tr><th />{pnlStores.map((s) => <th key={s.establishment_id}>{s.code}</th>)}{showTotal && <th>{t("adm.costs2.total")}</th>}</tr></thead>
             <tbody>
               {ROWS.map(([k, minus]) => (
                 <tr key={k} className={["contribution", "result"].includes(k) ? "strong" : ""}>
                   <th scope="row">{minus ? "− " : k === "net_sales" ? "" : "= "}{t(`adm.costs2.row.${k}`)}</th>
-                  {pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code} className={k === "result" && s.result < 0 ? "neg" : ""}>{m(s[k])}</td>)}
-                  <td data-label={t("adm.costs2.total")} className={k === "result" && pnl.total.result < 0 ? "neg" : ""}>{m(pnl.total[k])}</td>
+                  {pnlStores.map((s) => <td key={s.establishment_id} data-label={s.code} className={k === "result" && s.result < 0 ? "neg" : ""}>{m(s[k])}</td>)}
+                  {showTotal && <td data-label={t("adm.costs2.total")} className={k === "result" && pnl.total.result < 0 ? "neg" : ""}>{m(pnl.total[k])}</td>}
                 </tr>
               ))}
-              <tr><th scope="row">{t("adm.costs2.row.margin")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{s.contribution_pct == null ? "—" : `${s.contribution_pct} %`}</td>)}<td data-label={t("adm.costs2.total")}>{pnl.total.contribution_pct == null ? "—" : `${pnl.total.contribution_pct} %`}</td></tr>
-              <tr className="strong"><th scope="row">{t("adm.costs2.row.breakEven")}</th>{pnl.stores.map((s) => <td key={s.establishment_id} data-label={s.code}>{m(s.break_even)}</td>)}<td data-label={t("adm.costs2.total")}>{m(pnl.total.break_even)}</td></tr>
+              <tr><th scope="row">{t("adm.costs2.row.margin")}</th>{pnlStores.map((s) => <td key={s.establishment_id} data-label={s.code}>{s.contribution_pct == null ? "—" : `${s.contribution_pct} %`}</td>)}{showTotal && <td data-label={t("adm.costs2.total")}>{pnl.total.contribution_pct == null ? "—" : `${pnl.total.contribution_pct} %`}</td>}</tr>
+              <tr className="strong"><th scope="row">{t("adm.costs2.row.breakEven")}</th>{pnlStores.map((s) => <td key={s.establishment_id} data-label={s.code}>{m(s.break_even)}</td>)}{showTotal && <td data-label={t("adm.costs2.total")}>{m(pnl.total.break_even)}</td>}</tr>
             </tbody>
           </table>
           <small className="muted">{t("adm.costs2.breakEvenHint")}</small>
         </div>
       )}
 
-      {pnl?.stores.some((s) => s.settlement) && (
+      {pnlStores.some((s) => s.settlement) && (
         <div className="adm-card">
           <h3>{t("adm.costs2.settlement")}</h3>
           <table className="adm-table responsive">
             <thead><tr><th>{t("adm.pos.store")}</th><th>{t("adm.costs2.row.net_sales")}</th><th>{t("adm.costs2.storeShare")}</th><th>{t("adm.costs2.ownerShare")}</th></tr></thead>
             <tbody>
-              {pnl.stores.filter((s) => s.settlement).map((s) => (
+              {pnlStores.filter((s) => s.settlement).map((s) => (
                 <tr key={s.establishment_id}>
                   <td data-label={t("adm.pos.store")}>{s.code} · {t(`adm.stores.kind.${s.kind}`)}</td>
                   <td data-label={t("adm.costs2.row.net_sales")}>{m(s.net_sales)}</td>
@@ -124,7 +136,7 @@ export default function StoreCosts({ me }) {
       <div className="adm-card">
         <div className="adm-head-row">
           <h3>{t("adm.costs2.items")}</h3>
-          {canManage && !form && <button type="button" className="btn-sm primary" onClick={() => setForm({ ...EMPTY, establishment_id: isAdmin ? "" : ctx?.stores[0]?.id || "" })}><Icon name="plus" size={14} /> {t("adm.costs2.add")}</button>}
+          {canManage && !form && <button type="button" className="btn-sm primary" onClick={() => setForm({ ...EMPTY, establishment_id: storeOnly || (isAdmin ? "" : ctx?.stores[0]?.id || "") })}><Icon name="plus" size={14} /> {t("adm.costs2.add")}</button>}
         </div>
         {form && (
           <form className="alr-form" onSubmit={save}>

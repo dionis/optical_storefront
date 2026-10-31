@@ -18,6 +18,8 @@ import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
 import { Card } from "./ui.jsx";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 const RANGES = ["30d", "90d", "ytd", "all"];
@@ -143,10 +145,14 @@ function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete
   );
 }
 
-export default function Sellers({ onChanged, go }) {
+/** Props: `onChanged`, `go` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda global. */
+export default function Sellers({ onChanged, go, me }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
+  // La tienda del filtro global acota la lista y el ranking por `establishment_id` (la online no tiene vendedores de mostrador).
+  const { storeId, isAll, isWeb } = useStoreFilter(me);
+  const storeOnly = isAll || isWeb ? "" : storeId;
   const [sellers, setSellers] = useState([]);
   const [stores, setStores] = useState([]);
   const [terminals, setTerminals] = useState([]);
@@ -185,8 +191,11 @@ export default function Sellers({ onChanged, go }) {
     run(() => updateSeller(x.id, { active: !x.active }), x.active ? "adm.sel.deactivated" : "adm.sel.activated");
   };
   const statBy = useMemo(() => Object.fromEntries((stats?.sellers || []).map((s) => [s.id, s])), [stats]);
-  const list = sellers.filter((s) => !q || `${s.name} ${s.code} ${s.email || ""}`.toLowerCase().includes(q.toLowerCase()));
-  const totals = (stats?.sellers || []).reduce((a, s) => ({ orders: a.orders + s.orders, revenue: a.revenue + s.revenue, commission: a.commission + s.commission }), { orders: 0, revenue: 0, commission: 0 });
+  const list = sellers.filter((s) => (!storeOnly || s.establishment_id === storeOnly) && (!q || `${s.name} ${s.code} ${s.email || ""}`.toLowerCase().includes(q.toLowerCase())));
+  // El ranking y los totales siguen a la tienda elegida a través de la ficha de cada vendedor.
+  const inStore = useMemo(() => (storeOnly ? new Set(sellers.filter((s) => s.establishment_id === storeOnly).map((s) => s.id)) : null), [sellers, storeOnly]);
+  const statRows = useMemo(() => (stats?.sellers || []).filter((s) => !inStore || inStore.has(s.id)), [stats, inStore]);
+  const totals = statRows.reduce((a, s) => ({ orders: a.orders + s.orders, revenue: a.revenue + s.revenue, commission: a.commission + s.commission }), { orders: 0, revenue: 0, commission: 0 });
 
   const run = async (fn, okKey) => {
     setBusy(true);
@@ -215,6 +224,7 @@ export default function Sellers({ onChanged, go }) {
       <div className="adm-head-row">
         <h2>{t("adm.tab.sellers")}</h2>
         <div className="adm-orders-tools">
+          <StoreFilter me={me} />
           <div className="adm-range">{RANGES.map((k) => <button key={k} className={range === k ? "on" : ""} onClick={() => setRange(k)}>{t(`adm.range.${k}`)}</button>)}</div>
           <label className="adm-find compact"><Icon name="search" size={15} /><input placeholder={t("adm.sel.searchPh")} value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <button className="btn-sm primary" disabled={demo} onClick={() => { setCreating(true); setEditing(null); }}><Icon name="plus" size={14} />{t("adm.sel.new")}</button>
@@ -226,7 +236,7 @@ export default function Sellers({ onChanged, go }) {
 
       {stats && (
         <div className="cost-kpi-row">
-          <button type="button" className="cost-kpi" onClick={() => setCreating(true)}><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active).length}</b></button>
+          <button type="button" className="cost-kpi" onClick={() => setCreating(true)}><small><Icon name="sellers" size={13} />{t("adm.sel.active")}</small><b>{sellers.filter((s) => s.active && (!storeOnly || s.establishment_id === storeOnly)).length}</b>{storeOnly && <em>{t("adm.scr.sellersIn", { n: list.length })}</em>}</button>
           <button type="button" className="cost-kpi" onClick={() => go?.("orders", { preset: "all" })}><small><Icon name="orders" size={13} />{t("adm.sel.attributed")}</small><b>{totals.orders}</b><em>{t("adm.sel.unattributed", { n: stats.unattributed?.orders ?? 0 })}</em></button>
           <button type="button" className="cost-kpi" onClick={() => go?.("exec", { sub: "sales" })}><small><Icon name="dollar" size={13} />{t("adm.sel.sales")}</small><b>{fmtMoney(totals.revenue, "usd", lang)}</b></button>
           <button type="button" className="cost-kpi bad" onClick={() => go?.("exec", { sub: "costs" })}><small><Icon name="percent" size={13} />{t("adm.sel.commissions")}</small><b>{fmtMoney(totals.commission, "usd", lang)}</b></button>
@@ -249,13 +259,13 @@ export default function Sellers({ onChanged, go }) {
           </div>
         )}
 
-      {stats && (stats.sellers || []).length > 0 && (
-        <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: stats.sellers }}>
+      {stats && statRows.length > 0 && (
+        <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: statRows }}>
           <div className="adm-table-wrap">
             <table className="adm-table responsive">
               <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
               <tbody>
-                {stats.sellers.slice().sort((a, b) => b.revenue - a.revenue).map((s, i) => (
+                {statRows.slice().sort((a, b) => b.revenue - a.revenue).map((s, i) => (
                   <tr key={s.id}>
                     <td data-label="#">{i + 1}</td><td data-label={t("adm.sel.name")}><b>{s.name}</b></td><td data-label={t("adm.sel.code")}><span className="sel-code">{s.code}</span></td>
                     <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(s.revenue, "usd", lang)}</td>
@@ -263,7 +273,7 @@ export default function Sellers({ onChanged, go }) {
                     <td data-label={t("adm.sel.lastOrderCol")}>{s.last_order_at ? shortDate(s.last_order_at, lang) : "—"}</td>
                   </tr>
                 ))}
-                <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /></tr>
+                {!storeOnly && <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /></tr>}
               </tbody>
             </table>
           </div>

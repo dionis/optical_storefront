@@ -1,15 +1,19 @@
-// Dónde se usa: Ejecutivo → pestaña "Ventas" — la foto completa del negocio en
-// UNA vista: alertas, KPI, pipeline por etapa, ventas por vendedor, tendencia
-// diaria, mezcla por marca, últimos pedidos y salud del catálogo. Cada tarjeta
-// y cada cifra es clicable: ayuda, ir a la pantalla relacionada o exportar.
+// Dónde se usa: Ejecutivo → acordeón «Pedidos web» — la foto de la tienda
+// online (el tablero de pedidos, `store=web`) en UNA vista: alertas, KPI,
+// pipeline por etapa, ventas por vendedor referido, tendencia diaria, mezcla
+// por marca y últimos pedidos. Cada tarjeta y cada cifra es clicable: ayuda,
+// ir a la pantalla relacionada o exportar. `CatalogMini` (salud del catálogo)
+// se exporta aparte para el acordeón «Catálogo».
+//
+//   <Executive range={{ from: Date, to: Date }} store="web" go={go} />
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart } from "./charts.jsx";
 import { summarize, summarizeOrders, rangeFor, subscribe as onAnalytics } from "./analytics.js";
+import { adminFetch } from "./adminApi.js";
 import { fetchBoardWindow, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
 import { isDemoLogin } from "./adminAuth.js";
 import { STAGE_BY_KEY, TERMINAL_BY_KEY, money as fmtMoney, shortDate, orderLabel } from "./adminOrders.js";
 import { fetchDiscontinued } from "./catalogAdmin.js";
-import { fetchSellerStats } from "./adminSellers.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS } from "../data/brands.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -22,20 +26,23 @@ const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]
 const BRAND_SLUG_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.slug]));
 const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es");
 const usd = (n, lang) => "$" + (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const ymd = (d) => new Date(d).toISOString().slice(0, 10);
+// Día local (toISOString correría el día cerca de medianoche).
+const ymd = (d) => { const x = new Date(d); const p = (n) => String(n).padStart(2, "0"); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; };
 const daysSince = (iso) => (Date.now() - new Date(iso).getTime()) / 864e5;
 const demoSnap = () => { try { return (localStorage.getItem("oer_orders") || "").length; } catch { return 0; } };
 
-/** Ventas por vendedor (top 5) + por red social, reutilizado en Ventas y Costos. */
-export function SellersMini({ preset, go, lang, showCommission = false }) {
+/** Ventas por vendedor referido (top 5) + por red social (GET /admin/sellers/stats?from&to&store). */
+export function SellersMini({ range, store = "", go, lang, showCommission = false }) {
   const { t } = useLang();
   const [stats, setStats] = useState(null);
+  const from = range?.from ? ymd(range.from) : "";
+  const to = range?.to ? ymd(range.to) : "";
   useEffect(() => {
     if (isDemoLogin()) return undefined;
     let on = true;
-    fetchSellerStats({ from: ymd(rangeFor(preset).from) }).then((s) => { if (on) setStats(s); }).catch(() => {});
+    adminFetch("/admin/sellers/stats", { query: { from, to, store: store === "all" ? "" : store } }).then((s) => { if (on) setStats(s); }).catch(() => {});
     return () => { on = false; };
-  }, [preset]);
+  }, [from, to, store]);
   const rows = (stats?.sellers || []).filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
   const max = Math.max(1, ...rows.map((r) => r.revenue));
   const sources = (stats?.sources || []).slice(0, 5);
@@ -67,31 +74,50 @@ export function SellersMini({ preset, go, lang, showCommission = false }) {
   );
 }
 
-export default function Executive({ preset = "30d", go }) {
+/** Salud del catálogo: monturas activas, estuches, descatalogadas y marcas. */
+export function CatalogMini({ go, bare = false }) {
+  const { t, lang } = useLang();
+  const { products, cases } = useCatalog();
+  const [discontinued, setDiscontinued] = useState(null);
+  useEffect(() => {
+    if (isDemoLogin()) return undefined;
+    let on = true;
+    fetchDiscontinued().then((d) => { if (on) setDiscontinued(d.length); }).catch(() => {});
+    return () => { on = false; };
+  }, []);
+  const body = (
+    <div className="exec-mini-kpis">
+      <button type="button" onClick={() => go("products")}><small>{t("adm.exec.activeFrames")}</small><b>{int(products.length, lang)}</b></button>
+      <button type="button" onClick={() => go("products")}><small>{t("adm.prod.cases")}</small><b>{int(cases.length, lang)}</b></button>
+      <button type="button" onClick={() => go("products")}><small>{t("adm.exec.discontinued")}</small><b>{discontinued == null ? "—" : int(discontinued, lang)}</b></button>
+      <button type="button" onClick={() => go("products")}><small>{t("adm.exec.brands")}</small><b>{int(new Set(products.map((p) => p.brand)).size, lang)}</b></button>
+    </div>
+  );
+  if (bare) return body;
+  return <Card icon="glasses" title={t("adm.exec.catalogHealth")} hint={t("adm.exec.catalogHint")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="catalogo">{body}</Card>;
+}
+
+export default function Executive({ preset, range: givenRange, store = "web", go, compact = false }) {
   const { t, lang } = useLang();
   const demo = isDemoLogin();
   const snap = useSyncExternalStore(onAnalytics, demoSnap, () => 0);
   const { products, cases } = useCatalog();
   const [win, setWin] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
-  const [discontinued, setDiscontinued] = useState(null);
+  // `range` manda; `preset` (hoy/7d/30d/90d) se conserva para quien aún lo pase.
+  const range = useMemo(() => givenRange || rangeFor(preset || "30d"), [givenRange, preset]);
+  const fromMs = range.from.getTime();
+  const toMs = range.to.getTime();
 
   useEffect(() => {
     if (demo) return undefined;
     let on = true;
     setState("loading");
-    fetchBoardWindow(rangeFor(preset)).then((w) => { if (on) { setWin(w); setState("real"); } }).catch(() => { if (on) setState("error"); });
+    fetchBoardWindow({ from: new Date(fromMs), to: new Date(toMs), store }).then((w) => { if (on) { setWin(w); setState("real"); } }).catch(() => { if (on) setState("error"); });
     return () => { on = false; };
-  }, [preset, demo]);
-  useEffect(() => {
-    if (demo) return undefined;
-    let on = true;
-    fetchDiscontinued().then((d) => { if (on) setDiscontinued(d.length); }).catch(() => {});
-    return () => { on = false; };
-  }, [demo]);
+  }, [fromMs, toMs, store, demo]);
 
   const catalogIndex = useMemo(() => buildCatalogIndex(products, cases), [products, cases]);
-  const range = useMemo(() => rangeFor(preset), [preset]);
   const { s, boardOrders } = useMemo(() => {
     if (state === "real" && win) {
       const board = win.orders || [];
@@ -100,7 +126,7 @@ export default function Executive({ preset = "30d", go }) {
     }
     return { s: summarize(range), boardOrders: [] };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, win, catalogIndex, preset, snap]);
+  }, [state, win, catalogIndex, range, snap]);
 
   const ops = useMemo(() => {
     const by = { confirmed: { n: 0, v: 0 }, in_lab: { n: 0, v: 0 }, shipped: { n: 0, v: 0 }, in_transit: { n: 0, v: 0 }, delivered: { n: 0, v: 0 } };
@@ -126,7 +152,7 @@ export default function Executive({ preset = "30d", go }) {
     if (win?.truncated) alerts.push({ tone: "info", txt: t("adm.real.truncated", { n: int(win.scanLimit, lang) }) });
   }
   const brandSlug = (label) => BRAND_SLUG_BY_NAME[label] || String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  const H = useChartHeight(0.17, 110, 200);
+  const H = useChartHeight(0.14, 90, 150);
 
   return (
     <div className="adm-exec">
@@ -143,7 +169,7 @@ export default function Executive({ preset = "30d", go }) {
 
       <div className="adm-kpis adm-exec-kpis">
         <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue, lang)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units, lang) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount, lang)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount, lang)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders")} />
         <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov, lang)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
         <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN, lang)} · ${usd(ops.todayV, lang)}`} icon={<Icon name="calendar" />} hint={t("adm.kpi.h.today")} onClick={() => go("orders", { preset: "today" })} />
         <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare, lang)} icon={<Icon name="lab" />} sub={t("adm.exec.toPrepareSub")} hint={t("adm.kpi.h.toPrepare")} onClick={() => go("orders", { stage: "in_lab" })} />
@@ -168,19 +194,19 @@ export default function Executive({ preset = "30d", go }) {
             </div>
           )}
         </Card>
-        <SellersMini preset={preset} go={go} lang={lang} />
+        <SellersMini range={range} store={store} go={go} lang={lang} />
       </div>
 
       <div className="exec-grid cols-2">
         <Card icon="sales" title={t("adm.chart.salesByDay")} hint={t("adm.chart.h.salesByDay")} onGo={() => go("exec", { sub: "detail" })} goLabel={t("adm.tab.sales")} name="ventas-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.salesSeries }}>
           <LineChart data={s.salesSeries} valuePrefix="$" color="#0b2f66" height={H} />
         </Card>
-        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.chart.h.ordersByDay")} onGo={() => go("orders", { preset })} goLabel={t("adm.tab.orders")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
+        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.chart.h.ordersByDay")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
           <BarChart data={s.ordersSeries} color="#0e5ad0" height={H} />
         </Card>
       </div>
 
-      <div className="exec-grid cols-1-2-1">
+      <div className={`exec-grid ${compact ? "cols-1-2" : "cols-1-2-1"}`}>
         <Card icon="tagIcon" title={t("adm.chart.salesByBrand")} hint={t("adm.chart.h.salesByBrand")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="ventas-marca" csv={{ cols: [[t("adm.exec.brands"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.topBrands }}>
           <DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={120} onSelect={(label) => go("costs", { sub: "prices", q: label, brand: brandSlug(label) })} />
         </Card>
@@ -206,14 +232,7 @@ export default function Executive({ preset = "30d", go }) {
             </div>
           )}
         </Card>
-        <Card icon="glasses" title={t("adm.exec.catalogHealth")} hint={t("adm.exec.catalogHint")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="catalogo">
-          <div className="exec-mini-kpis">
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.activeFrames")}</small><b>{int(products.length, lang)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.prod.cases")}</small><b>{int(cases.length, lang)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.discontinued")}</small><b>{discontinued == null ? "—" : int(discontinued, lang)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.brands")}</small><b>{int(new Set(products.map((p) => p.brand)).size, lang)}</b></button>
-          </div>
-        </Card>
+        {!compact && <CatalogMini go={go} />}
       </div>
     </div>
   );

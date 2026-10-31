@@ -39,6 +39,7 @@ import MySales from "./MySales.jsx";
 import PosCash from "./PosCash.jsx";
 import StoreCosts from "./StoreCosts.jsx";
 import StoreStatement from "./StoreStatement.jsx";
+import StoreOrders from "./StoreOrders.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
@@ -1213,14 +1214,14 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
 
   return (
     <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me}>
-      {showBriefing && <WelcomeBriefing me={me} onDone={() => setShowBriefing(false)} />}
+      {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
-        <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
+        <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub}
           views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />
       )}
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} pricesView={<Prices preQ={find || nav.params.q || ""} />} />}
-      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} />}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} />}
       {tab === "products" && (
         <>
           <div className="adm-section adm-section-top"><CatalogManager /></div>
@@ -1230,18 +1231,19 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
-      {tab === "audit" && <AuditLog />}
+      {tab === "audit" && <AuditLog me={me} />}
       {tab === "pos" && <PosSale me={me} />}
-      {tab === "possales" && <PosSales />}
-      {tab === "approvals" && <PosApprovals params={nav.params} />}
+      {tab === "possales" && <PosSales me={me} />}
+      {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}
-      {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} />}
-      {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} />}
-      {tab === "mysales" && <MySales go={go} />}
-      {tab === "cash" && <PosCash />}
+      {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
+      {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
+      {tab === "mysales" && <MySales go={go} me={me} />}
+      {tab === "cash" && <PosCash me={me} />}
       {tab === "storecosts" && <StoreCosts me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
+      {tab === "storeorders" && <StoreOrders me={me} go={go} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

@@ -9,31 +9,33 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // Brand palette. Neutrals follow the panel's --adm-* tokens (admin.css) so the
 // charts switch with light/dark mode; the hex is the fallback outside the panel.
 const BRAND = {
-  primary: "#0E5AD0",
-  accent: "#FD0E3F",
+  primary: "var(--adm-accent, #4f5bd5)",
+  accent: "var(--adm-red, #dc3545)",
   ink: "var(--adm-ink, #16181d)",
   muted: "var(--adm-muted, #5c6470)",
   line: "var(--adm-line, #e6e8ec)",
   soft: "var(--adm-surface-2, #f5f6f8)",
   surface: "var(--adm-surface, #fff)",
-  ok: "var(--adm-green-dark, #2e7d46)",
-  warn: "var(--adm-gold-dark, #b26a00)",
+  ok: "var(--adm-green-dark, #10754d)",
+  warn: "var(--adm-gold-dark, #8a5a0c)",
 };
 
 // Categorical palette for donut / multi-series when no explicit color given.
+// The first slot is the store accent (--adm-accent); the rest are muted, premium
+// companions that keep their distance from the semantic red/green of the panel.
 const PALETTE = [
-  "#0E5AD0",
-  "#FD0E3F",
-  "#2e7d46",
-  "#b26a00",
-  "#7b4aa0",
-  "#4bb8c4",
-  "#c9a44a",
-  "#5c6470",
+  "var(--adm-accent, #4f5bd5)",
+  "#c9a24a",
+  "#2d8f78",
+  "#b5651d",
+  "#6d4fc2",
+  "#3a8fb7",
+  "#c2185b",
+  "#646b7c",
 ];
 
-const FONT =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const FONT = 'var(--adm-font, "Manrope", system-ui, sans-serif)';
+const DISPLAY = 'var(--adm-display, "Fraunces", Georgia, serif)';
 
 // ---- helpers --------------------------------------------------------------
 function fmt(n) {
@@ -151,12 +153,12 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         fontFamily: FONT,
         background: BRAND.surface,
         border: `1px solid ${BRAND.line}`,
-        borderRadius: 14,
-        padding: "16px 18px",
-        boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+        borderRadius: "var(--adm-radius, 14px)",
+        padding: "10px 14px",
+        boxShadow: "var(--adm-shadow-card, 0 1px 2px rgba(16,24,40,0.04))",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: 3,
         minWidth: 0,
       }}
     >
@@ -169,10 +171,11 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         }}
       >
         <span
+          className="cx-kpi-label"
           style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.06em",
+            fontSize: 10.5,
+            fontWeight: 800,
+            letterSpacing: "0.07em",
             textTransform: "uppercase",
             color: BRAND.muted,
           }}
@@ -186,11 +189,16 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         ) : null}
       </div>
       <div
+        className="cx-kpi-value"
         style={{
           // Dentro de .board-kpis el tamaño sigue al ancho de la tarjeta; fuera, se queda en 26.
-          fontSize: "clamp(17px, 11.5cqi, 26px)",
-          fontWeight: 700,
-          color: BRAND.ink,
+          fontFamily: DISPLAY,
+          fontOpticalSizing: "auto",
+          fontSize: "clamp(20px, 11.5cqi, 26px)",
+          fontWeight: 600,
+          letterSpacing: "-0.02em",
+          fontVariantNumeric: "tabular-nums",
+          color: "var(--adm-accent-ink, " + BRAND.ink + ")",
           lineHeight: 1.1,
         }}
       >
@@ -203,12 +211,12 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
               display: "inline-flex",
               alignItems: "center",
               gap: 3,
-              fontSize: 12,
-              fontWeight: 600,
-              padding: "2px 8px",
+              fontSize: 11.5,
+              fontWeight: 700,
+              padding: "1px 7px",
               borderRadius: 999,
-              color: good ? BRAND.ok : BRAND.accent,
-              background: good ? "rgba(46,125,70,0.10)" : "rgba(253,14,63,0.10)",
+              color: good ? "var(--adm-green-dark, #10754d)" : "var(--adm-red-dark, #b02a37)",
+              background: good ? "var(--adm-green-soft, #ebf8f2)" : "var(--adm-red-soft, #fdf1f2)",
             }}
           >
             <span aria-hidden="true">{good ? "▲" : "▼"}</span>
@@ -216,7 +224,7 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
           </span>
         ) : null}
         {sub ? (
-          <span style={{ fontSize: 12, color: BRAND.muted }}>{sub}</span>
+          <span style={{ fontSize: 11.5, color: BRAND.muted }}>{sub}</span>
         ) : null}
       </div>
     </div>
@@ -330,7 +338,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
 export function LineChart({
   data,
   height = 220,
-  color = "#0E5AD0",
+  color = BRAND.primary,
   valuePrefix = "",
   area = true,
 }) {
@@ -545,7 +553,7 @@ export function LineChart({
 export function BarChart({
   data,
   height = 220,
-  color = "#0E5AD0",
+  color = BRAND.primary,
   horizontal = false,
   valuePrefix = "",
 }) {
@@ -1054,7 +1062,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
 
 // ---------------------------------------------------------------------------
 // 5. Sparkline
-export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 }) {
+export function Sparkline({ data, color = BRAND.primary, width = 120, height = 34 }) {
   // Above the empty-data guard: hooks cannot sit behind an early return.
   const { t } = useLang();
   if (!Array.isArray(data) || data.length === 0) {
@@ -1277,8 +1285,8 @@ export function AccessVsBuyChart({ data, height = 250 }) {
   return (
     <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaAccessVsBuy")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
-        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
+        <span><i style={{ background: BRAND.primary }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: BRAND.accent }} />{t("adm.chart.buys")}</span>
       </div>
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
@@ -1286,16 +1294,16 @@ export function AccessVsBuyChart({ data, height = 250 }) {
              onMouseLeave={() => setHi(-1)}>
           <defs>
             <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.22" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
+              <stop offset="0" stopColor={BRAND.primary} stopOpacity="0.22" /><stop offset="1" stopColor={BRAND.primary} stopOpacity="0" />
             </linearGradient>
             <linearGradient id={gid + "b"} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" />
+              <stop offset="0" stopColor={BRAND.accent} /><stop offset="1" stopColor={BRAND.accent} />
             </linearGradient>
           </defs>
           {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
-            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
+            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill={BRAND.muted}>{val}</text></g>; })}
           <polygon points={areaPts} fill={`url(#${gid})`} style={{ animation: "cxFadeIn 1.1s ease .3s both" }} />
-          <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round"
+          <polyline points={linePts} fill="none" stroke={BRAND.primary} strokeWidth="2.5" strokeLinejoin="round"
                     style={{ strokeDasharray: "3000", "--cx-len": "3000px", animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both" }} />
           {data.map((d, i) => {
             const hovered = hi === i;
@@ -1307,13 +1315,13 @@ export function AccessVsBuyChart({ data, height = 250 }) {
                         style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
                                  animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 30}ms both` }} />
                 </g>
-                {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill={hovered ? "#16181d" : "#98a1b0"} fontWeight={hovered ? "700" : "400"}>{d.label}</text>}
+                {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "400"}>{d.label}</text>}
                 <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
               </g>
             );
           })}
-          {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke="#0E5AD0" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
-          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill="#0E5AD0" stroke={BRAND.surface} strokeWidth="2" />}
+          {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke={BRAND.primary} strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
+          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill={BRAND.primary} stroke={BRAND.surface} strokeWidth="2" />}
         </svg>
         {hd && (
           <Tip
@@ -1357,17 +1365,17 @@ export function WeekdayChart({ data, height = 230 }) {
   return (
     <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaWeekday")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
-        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
+        <span><i style={{ background: BRAND.primary }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: BRAND.accent }} />{t("adm.chart.buys")}</span>
       </div>
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }} onMouseLeave={() => setHi(-1)}>
           <defs>
-            <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#3d84ea" /><stop offset="1" stopColor="#0E5AD0" /></linearGradient>
-            <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" /></linearGradient>
+            <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={BRAND.primary} /><stop offset="1" stopColor={BRAND.primary} /></linearGradient>
+            <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={BRAND.accent} /><stop offset="1" stopColor={BRAND.accent} /></linearGradient>
           </defs>
           {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
-            return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
+            return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} />; })}
           {data.map((d, i) => {
             const cx = PL + gw * i + gw / 2;
             const hovered = hi === i;
@@ -1386,8 +1394,8 @@ export function WeekdayChart({ data, height = 230 }) {
                                  animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45 + 60}ms both` }} />
                 </g>
                 {isBest && <text x={cx} y={Math.min(y(d.access), y(d.orders)) - 6} textAnchor="middle" fontSize="12" fill="#c9a44a">★</text>}
-                <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill={hovered || isBest ? "#16181d" : "#5c6470"} fontWeight={hovered || isBest ? "700" : "600"}>{d.label}</text>
-                <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
+                <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill={hovered || isBest ? BRAND.ink : BRAND.muted} fontWeight={hovered || isBest ? "700" : "600"}>{d.label}</text>
+                <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill={BRAND.muted}>{d.conv}%</text>
               </g>
             );
           })}

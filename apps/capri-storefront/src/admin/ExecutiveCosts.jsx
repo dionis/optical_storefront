@@ -1,9 +1,11 @@
-// Dónde se usa: Ejecutivo → pestaña "Costos operacionales" — la misma foto que
+// Dónde se usa: Ejecutivo → acordeón «Costos y margen» — la misma foto que
 // la de ventas pero mirando el dinero que sale: ingreso vs costo, margen y
 // ganancia objetivo, reparto del ingreso por concepto (materiales, comisiones,
 // porcentajes de operación), costo por día, costo por marca, por vendedor y
 // últimos pedidos con su margen. Todo clicable y exportable. Backend:
-// GET /admin/costing/summary (+ reglas para la ganancia objetivo).
+// GET /admin/costing/summary?from&to&store (+ reglas para la ganancia objetivo).
+//
+//   <ExecutiveCosts range={{ from: Date, to: Date }} store="all" | "web" | id go={go} />
 import { useEffect, useMemo, useState } from "react";
 import { KpiCard, LineChart, BarChart, DonutChart } from "./charts.jsx";
 import { rangeFor } from "./analytics.js";
@@ -15,7 +17,8 @@ import Icon from "./icons.jsx";
 import { Card, useChartHeight } from "./ui.jsx";
 import { SellersMini } from "./Executive.jsx";
 
-const ymd = (d) => new Date(d).toISOString().slice(0, 10);
+// Día local (toISOString correría el día cerca de medianoche).
+const ymd = (d) => { const x = new Date(d); const p = (n) => String(n).padStart(2, "0"); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; };
 const pct = (v) => (v == null || Number.isNaN(v) ? "—" : `${Math.round(v)}%`);
 const PALETTE = ["#0b2f66", "#0e5ad0", "#b8921e", "#d6123e", "#1e6b3a", "#6b4fa8", "#8a5a00", "#2f74ff", "#5b6472", "#c9a44a"];
 
@@ -74,19 +77,23 @@ export function AllocationBar({ byKind, revenue, targetAmount, lang, go, compact
   );
 }
 
-export default function ExecutiveCosts({ preset = "30d", go }) {
+export default function ExecutiveCosts({ preset, range: givenRange, store = "", go }) {
   const { t, lang } = useLang();
   const demo = isDemoLogin();
   const [data, setData] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
-  const H = useChartHeight(0.17, 110, 200);
+  const H = useChartHeight(0.14, 90, 150);
+  // `range` manda; `preset` (hoy/7d/30d/90d) se conserva para quien aún lo pase.
+  const range = useMemo(() => givenRange || rangeFor(preset || "30d"), [givenRange, preset]);
+  const from = ymd(range.from);
+  const to = ymd(range.to);
   useEffect(() => {
     if (demo) return undefined;
     let on = true;
     setState("loading");
-    fetchCostSummary({ from: ymd(rangeFor(preset).from) }).then((d) => { if (on) { setData(d); setState("ok"); } }).catch(() => { if (on) setState("error"); });
+    fetchCostSummary({ from, to, store }).then((d) => { if (on) { setData(d); setState("ok"); } }).catch(() => { if (on) setState("error"); });
     return () => { on = false; };
-  }, [preset, demo]);
+  }, [from, to, store, demo]);
 
   const tot = data?.totals || {};
   const byDay = data?.by_day || [];
@@ -124,7 +131,7 @@ export default function ExecutiveCosts({ preset = "30d", go }) {
         <Card icon="layers" title={t("adm.cost.allocation")} hint={t("adm.cost.allocationHint")} onGo={() => go("costs", { sub: "allocation" })} goLabel={t("adm.cost.tab.allocation")} name="reparto" csv={{ cols: [[t("adm.cost.line"), "label"], [t("adm.cost.amount"), "amount"]], rows: data?.by_kind || [] }}>
           <AllocationBar byKind={data?.by_kind} revenue={tot.gross ?? tot.revenue} targetAmount={tot.profit_target_amount} lang={lang} go={go} />
         </Card>
-        <SellersMini preset={preset} go={go} lang={lang} showCommission />
+        <SellersMini range={range} store={store} go={go} lang={lang} showCommission />
       </div>
 
       <div className="exec-grid cols-2">

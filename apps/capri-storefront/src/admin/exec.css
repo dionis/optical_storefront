@@ -1,0 +1,100 @@
+/* Ejecutivo de una pantalla (ExecutiveHub.jsx) y Pedidos de la tienda
+   (StoreOrders.jsx): barra de filtros fija, tira de KPI densa y acordeones con
+   resumen en la cabecera. Tokens --adm-* (admin.css) y --st-* (tema de tienda,
+   admin-theme.css). Nada de aquí se aplica fuera de .ex-root. */
+
+.ex-root .ex-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 4px; }
+.ex-root .ex-head h2 { margin: 0; font-size: clamp(17px, 1.6vw, 21px); }
+.ex-root .ex-head p { margin: 0; color: var(--adm-faint); font-size: 12px; }
+
+/* ── Barra de filtros: tienda · período · desde–hasta · exportar ─────────── */
+.ex-bar {
+  position: sticky; top: var(--ex-top, var(--adm-top-h)); z-index: 30;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  min-height: 44px; padding: 6px 0; margin: 0 0 8px;
+  background: var(--st-bg, var(--adm-bg)); border-bottom: 1px solid var(--adm-line);
+}
+.ex-bar.busy { opacity: .8; }
+.ex-bar .adm-store-filter { margin-right: 2px; }
+.ex-chips { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.ex-chips button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 4px 9px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; transition: background .15s, color .15s, border-color .15s; }
+.ex-chips button:hover { color: var(--st-accent, var(--adm-blue)); border-color: var(--st-accent-line, var(--adm-blue-line)); }
+.ex-chips button.on { background: var(--st-accent, var(--adm-navy-fill)); color: #fff; border-color: var(--st-accent, var(--adm-navy-fill)); }
+.ex-dates { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--adm-muted); }
+.ex-bar input[type="date"] { min-height: 30px; height: 30px; font: 600 12px var(--adm-font); color: var(--adm-ink); padding: 2px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); max-width: 150px; }
+.ex-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.ex-export .adm-export-menu { display: inline-flex; gap: 4px; }
+.ex-export .btn-xs { min-height: 30px; }
+.ex-note { font-size: 12px; color: var(--adm-muted); flex-basis: 100%; }
+.ex-note.err { color: var(--adm-red-dark); }
+
+/* ── Tira de KPI: diez cifras en una fila de escritorio, ≤ 60 px de alto ── */
+.ex-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(112px, 100%), 1fr)); gap: 6px; margin: 0 0 8px; }
+.ex-kpi { min-height: 54px; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 6px 9px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface); min-width: 0; text-align: left; font-family: var(--adm-font); cursor: default; position: relative; overflow: hidden; }
+.ex-kpi::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--st-accent, var(--adm-navy)); opacity: .55; }
+.ex-kpi.click { cursor: pointer; transition: border-color .15s, background .15s; }
+.ex-kpi.click:hover { border-color: var(--st-accent-line, var(--adm-blue-line)); background: var(--st-soft, var(--adm-blue-soft)); }
+.ex-kpi small { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpi b { font-size: 16.5px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--st-accent, var(--adm-navy)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpi b.neg { color: var(--adm-red-dark); }
+.ex-kpi i { font-style: normal; font-size: 10.5px; color: var(--adm-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpi i.good { color: var(--adm-green-dark, #116633); }
+.ex-kpi i.bad { color: var(--adm-red-dark); }
+.ex-kpi i.warn { color: var(--adm-amber-dark, #92400e); }
+.ex-kpi.skel b { color: transparent; background: var(--adm-surface-2); border-radius: 6px; }
+
+/* ── Acordeones del Ejecutivo ───────────────────────────────────────────── */
+.ex-root .adm-acc > summary { min-height: 46px; padding: 6px 12px; }
+.ex-root .acc-body { padding-top: 8px; }
+.ex-root .adm-acc .adm-exec { gap: 8px; }
+.ex-root .adm-acc .adm-exec-kpis { margin-bottom: 8px; }
+.ex-root .exec-grid.cols-1-2 { grid-template-columns: minmax(min(220px, 30vw), 1fr) minmax(0, 1.6fr); }
+.ex-root .adm-acc .adm-card { box-shadow: none; }
+.ex-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font: 700 12px var(--adm-font); color: var(--st-accent, var(--adm-blue)); background: none; border: 0; cursor: pointer; padding: 0; }
+.ex-link:hover { text-decoration: underline; }
+.ex-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 10px; }
+.ex-two h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); }
+.ex-root .adm-table.dense th, .ex-root .adm-table.dense td { padding: 5px 8px; font-size: 12.5px; }
+.ex-root .adm-table tfoot td { font-weight: 800; background: var(--st-soft, var(--adm-surface-2)); border-top: 2px solid var(--adm-line); }
+.ex-root td.num, .ex-root th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.ex-root .neg { color: var(--adm-red-dark); }
+.ex-root .pos { color: var(--adm-green-dark, #116633); }
+.ex-root .margin-pct.good { color: var(--adm-green-dark, #116633); }
+.ex-root .margin-pct.mid { color: var(--adm-amber-dark, #92400e); }
+.ex-root .margin-pct.bad { color: var(--adm-red-dark); }
+.ex-catalog { padding: 2px 0 4px; }
+.ex-catalog .exec-mini-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* ── Pedidos de la tienda ───────────────────────────────────────────────── */
+.so-wrap { max-height: min(62vh, 640px); overflow: auto; }
+.so-wrap.compact { max-height: min(48vh, 520px); }
+.so-table th, .so-table td { padding: 5px 8px; font-size: 12.5px; }
+.so-table td.so-items, .so-table th.so-items { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-table tr.so-voided td { opacity: .55; text-decoration: line-through; }
+.so-table tr.so-voided td:last-child { text-decoration: none; }
+.so-table .so-warn { margin-left: 4px; padding: 0 4px; min-height: 16px; }
+.so-table .so-store { font-weight: 600; }
+.so-table tfoot tr.so-total td { position: sticky; bottom: 0; }
+
+/* ── Móvil: KPI de dos en dos, pastillas que se envuelven, tabla en fichas ─ */
+@media (max-width: 900px) {
+  .ex-two { grid-template-columns: 1fr; }
+  .ex-root .exec-grid.cols-1-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .ex-kpis { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ex-bar { position: static; }
+  .ex-export { margin-left: 0; flex-basis: 100%; justify-content: flex-end; }
+  .so-wrap, .so-wrap.compact { max-height: none; overflow: visible; }
+  .so-table td.so-items { max-width: none; white-space: normal; }
+  .so-table tfoot tr.so-total td { position: static; }
+  .so-table.responsive tfoot, .so-table.responsive tfoot tr { display: block; width: 100%; }
+  .so-table.responsive tfoot td { display: flex; justify-content: space-between; gap: 10px; border: none; padding: 5px 0; }
+  .so-table.responsive tfoot td:empty { display: none; }
+  .ex-catalog .exec-mini-kpis { grid-template-columns: 1fr 1fr; }
+}
+@media print {
+  .ex-bar, .ex-export { display: none; }
+  .so-wrap, .so-wrap.compact { max-height: none; overflow: visible; }
+  .ex-kpis { grid-template-columns: repeat(5, 1fr); }
+}

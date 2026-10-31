@@ -13,7 +13,9 @@ import { money } from "./adminOrders.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
 import { fetchStatement, posContext } from "./posApi.js";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import "./store-statement.css";
+import "./screens.css";
 
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -55,7 +57,6 @@ export default function StoreStatement({ me }) {
   const { t, lang } = useLang();
   const catalog = useLensCatalog();
   const [ctx, setCtx] = useState(null);
-  const [storeId, setStoreId] = useState("");
   const [mode, setMode] = useState("this");
   const [range, setRange] = useState(monthRange(0));
   const [draft, setDraft] = useState(monthRange(0));
@@ -66,12 +67,13 @@ export default function StoreStatement({ me }) {
   const [printing, setPrinting] = useState(false);
   const ref = useRef(null);
   const isAdmin = Boolean(ctx?.is_admin ?? me?.is_admin);
+  // La tienda la fija el filtro global del panel: «Todas» (o la online, que no tiene estado de cuenta)
+  // es el negocio entero para un administrador y la primera de las suyas para los demás.
+  const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
+  const { storeId: globalId, isAll, isWeb } = useStoreFilter(who);
+  const storeId = !ctx ? "" : !isAll && !isWeb && ctx.stores.some((s) => s.id === globalId) ? globalId : isAdmin ? "all" : ctx.stores[0]?.id || "";
 
-  useEffect(() => {
-    posContext()
-      .then((c) => { setCtx(c); setStoreId(c.stores[0]?.id || (c.is_admin ? "all" : "")); })
-      .catch(() => setCtx({ stores: [] }));
-  }, []);
+  useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
 
   useEffect(() => {
     if (!storeId) { setState("idle"); return undefined; }
@@ -215,10 +217,7 @@ export default function StoreStatement({ me }) {
       <p className="adm-sub">{t("adm.stmt.sub")}</p>
 
       <div className="stmt-bar adm-noprint">
-        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-          {isAdmin && <option value="all">{t("adm.stmt.allStores")}</option>}
-          {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-        </select>
+        {who && <StoreFilter me={who} />}
         <span className="stmt-chips" role="tablist">
           <button type="button" className={mode === "this" ? "on" : ""} onClick={() => pick("this")}>{t("adm.stmt.thisMonth")}</button>
           <button type="button" className={mode === "last" ? "on" : ""} onClick={() => pick("last")}>{t("adm.stmt.lastMonth")}</button>

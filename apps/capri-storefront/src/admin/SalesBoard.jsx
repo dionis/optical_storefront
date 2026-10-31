@@ -19,6 +19,7 @@ import { ExportMenu, SubTabs } from "./ui.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch, ADMIN_API_URL, getSession } from "./adminApi.js";
 import { methodName, posContext } from "./posApi.js";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import "./sales-board.css";
 
 const GRAINS = ["hour", "day", "week", "month", "year"];
@@ -225,7 +226,8 @@ function DimTable({ by, rows, totals, label, m, t, second, showMargin, canDrill,
   );
 }
 
-export default function SalesBoard({ go, tabs = [] }) {
+/** Props: `go`/`tabs` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
+export default function SalesBoard({ go, tabs = [], me }) {
   const { t, lang } = useLang();
   const { DESIGNS, MATERIALS, PHOTO, AR } = useLensCatalog();
   const [ctx, setCtx] = useState(null);
@@ -372,6 +374,14 @@ export default function SalesBoard({ go, tabs = [] }) {
 
   const storeFocus = focusOf("establishment");
   const sellerFocus = focusOf("seller");
+  // El filtro global del panel fija el foco de tienda (la online es «web» para la analítica); con
+  // «Todas», el tablero sigue pudiendo bajar a una tienda desde su propia tabla.
+  const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
+  const { storeId: globalStore, isAll: globalAll } = useStoreFilter(who);
+  useEffect(() => {
+    if (globalAll) setFocusOne("establishment", null);
+    else setFocusOne("establishment", globalStore, storeLabel(globalStore));
+  }, [globalStore, globalAll, ctx]); // eslint-disable-line react-hooks/exhaustive-deps
   const storeSlug = () => (storeFocus ? String(storeLabel(storeFocus.key)).replace(/[^\w-]+/g, "_") : "todas");
 
   const exportCsv = async () => {
@@ -517,12 +527,11 @@ export default function SalesBoard({ go, tabs = [] }) {
         <div className="adm-range" role="group" aria-label={t("adm.ins.seeBy")}>
           {GRAINS.map((g) => <button key={g} type="button" className={usedGrain === g ? "on" : ""} disabled={!useful[g]} title={useful[g] ? undefined : t("adm.ins.grainNotUseful")} onClick={() => setGrain(g)}>{t(`adm.ins.grain.${g}`)}</button>)}
         </div>
-        {moreStores && (
-          <select value={storeFocus?.key ?? ""} aria-label={t("adm.sb.store")} title={t("adm.sb.store")} onChange={(e) => setFocusOne("establishment", e.target.value, storeLabel(e.target.value))}>
-            <option value="">{t("adm.sb.allStores")}</option>
-            {(ctx?.stores || []).map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-            {ctx?.is_admin && <option value="web">{t("adm.board.web")}</option>}
-          </select>
+        {moreStores && who && <StoreFilter me={who} />}
+        {moreStores && globalAll && storeFocus && (
+          <button type="button" className="adm-chip neutral" onClick={() => setFocusOne("establishment", null)} aria-label={t("adm.ins.removeFocus", { label: storeFocus.label })} title={t("adm.ins.removeFocus", { label: storeFocus.label })}>
+            {t("adm.board.by.establishment")}: {storeFocus.label} <Icon name="close" size={11} />
+          </button>
         )}
         {!isSeller && (
           <select value={sellerFocus?.key ?? ""} aria-label={t("adm.sb.seller")} title={t("adm.sb.seller")} onChange={(e) => setFocusOne("seller", e.target.value, e.target.value ? `${sellerOptions.get(e.target.value) || e.target.value} (${e.target.value})` : "")}>

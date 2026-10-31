@@ -13,18 +13,24 @@ import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
 import { SubTabs } from "./ui.jsx";
 import CashReport from "./CashReport.jsx";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
 /** Same list as CASH_CATEGORIES in the backend (lib/cash.ts). */
 const CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
 const EMPTY_MV = { kind: "in", amount: "", category: "", note: "" };
 
-export default function PosCash() {
+/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
+export default function PosCash({ me }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const [ctx, setCtx] = useState(null);
-  const [storeId, setStoreId] = useState("");
   const [terminalId, setTerminalId] = useState("");
+  // La caja es de UNA tienda: la del filtro global si es suya; con «Todas» o la online, la primera de las suyas.
+  const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
+  const { storeId: globalId, isAll, isWeb, store: globalStore } = useStoreFilter(who);
+  const storeId = ctx ? (!isAll && !isWeb && ctx.stores.some((s) => s.id === globalId) ? globalId : ctx.stores[0]?.id || "") : "";
   const [sessions, setSessions] = useState([]);
   const [opening, setOpening] = useState("");
   const [mv, setMv] = useState(EMPTY_MV);
@@ -33,15 +39,10 @@ export default function PosCash() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    posContext().then((c) => {
-      setCtx(c);
-      const s = c.stores[0];
-      if (s) { setStoreId(s.id); setTerminalId(s.terminals[0]?.id || ""); }
-    }).catch(() => setCtx({ stores: [] }));
-  }, []);
+  useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
   const load = () => storeId && adminFetch(`/admin/pos/cash-sessions?store=${encodeURIComponent(storeId)}`).then((r) => setSessions(r.sessions || [])).catch(() => setSessions([]));
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
+  // Cambiar de tienda: su primer punto de venta y sus cajas.
+  useEffect(() => { setTerminalId(ctx?.stores.find((s) => s.id === storeId)?.terminals[0]?.id || ""); load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
 
   const store = ctx?.stores.find((s) => s.id === storeId);
   const open = sessions.find((s) => s.terminal_id === terminalId && !s.closed_at);
@@ -68,21 +69,20 @@ export default function PosCash() {
     <div className="adm-section pos">
       <div className="adm-head-row">
         <h2>{t("adm.tab.cash")}</h2>
-        {view === "day" && <div className="pos-where">
-          {ctx.stores.length > 1 ? (
-            <select value={storeId} onChange={(e) => { setStoreId(e.target.value); setTerminalId(ctx.stores.find((s) => s.id === e.target.value)?.terminals[0]?.id || ""); }} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-              {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
-            </select>
-          ) : store && <span className="adm-team-tag" title={t("adm.pos.store")}><Icon name="store" size={12} /> {store.code} · {store.name}</span>}
-          {(store?.terminals.length || 0) > 1 ? (
+        <div className="pos-where">
+          {who && <StoreFilter me={who} />}
+          {view === "day" && store && (!globalStore || globalStore.id !== store.id) && (
+            <span className="scr-store-note" title={ctx.stores.length > 1 ? t("adm.scr.storeHint") : undefined}><Icon name="store" size={12} /> {t("adm.scr.storeShown", { store: `${store.code} · ${store.name}` })}</span>
+          )}
+          {view === "day" && ((store?.terminals.length || 0) > 1 ? (
             <select value={terminalId} onChange={(e) => setTerminalId(e.target.value)} aria-label={t("adm.pos.terminal")} title={t("adm.pos.terminal")}>
               {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
             </select>
-          ) : terminalId && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {termCode(terminalId)}</span>}
-        </div>}
+          ) : terminalId && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {termCode(terminalId)}</span>)}
+        </div>
       </div>
       <SubTabs value={view} onChange={setView} items={[{ key: "day", icon: "wallet", label: t("adm.cash.tab.day") }, { key: "report", icon: "history", label: t("adm.cash.tab.report") }]} />
-      {view === "report" && <CashReport ctx={ctx} />}
+      {view === "report" && <CashReport ctx={ctx} me={who} />}
       {view === "day" && <p className="adm-sub">{t("adm.cash.sub")}</p>}
 
       {view !== "day" ? null : !open ? (

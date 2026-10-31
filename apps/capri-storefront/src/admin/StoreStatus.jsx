@@ -4,16 +4,16 @@
 // ayer, semana y mes; quién vende; cada punto de venta con su caja; lo que
 // espera a alguien; las últimas ventas y los avisos. Solo lectura: cada
 // acción vive en su pestaña y aquí se llega con un clic. Backend:
-// GET /admin/store-status (lib/store-status.ts).
+// GET /admin/store-status (lib/store-status.ts). La tienda la fija el filtro
+// global del panel (StoreFilter → ?store=); con «Todas» o la online, la primera
+// de las suyas, y se dice cuál.
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
-
-const STORE_KEY = "adm_store_status";
-const readStore = () => { try { return localStorage.getItem(STORE_KEY) || ""; } catch { return ""; } };
-const writeStore = (v) => { try { localStorage.setItem(STORE_KEY, v); } catch { /* sin almacenamiento: no se recuerda */ } };
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 function pctDelta(cur, prev) {
   if (!prev) return null;
@@ -22,9 +22,11 @@ function pctDelta(cur, prev) {
 
 const timeOf = (iso, lang) => new Date(iso).toLocaleTimeString(lang === "en" ? "en-US" : "es", { hour: "2-digit", minute: "2-digit" });
 
-export default function StoreStatus({ go, tabs = [] }) {
+/** Props: `go`/`tabs` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda. */
+export default function StoreStatus({ go, tabs = [], me }) {
   const { t, lang } = useLang();
-  const [storeId, setStoreId] = useState(readStore);
+  const { storeId: globalId, isAll, isWeb, setStoreId, store: globalStore } = useStoreFilter(me);
+  const storeId = isAll || isWeb ? "" : globalId;
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   const can = (tab) => tabs.includes(tab);
@@ -35,13 +37,12 @@ export default function StoreStatus({ go, tabs = [] }) {
     adminFetch("/admin/store-status", { query: id ? { store: id } : {} })
       .then((r) => { setData(r); setState("ok"); })
       .catch((e) => {
-        // La tienda recordada ya no está en su alcance: se vuelve a la primera.
-        if (id && (e?.reason === "store_not_found" || e?.reason === "forbidden_store")) { writeStore(""); setStoreId(""); load(""); return; }
+        // La tienda elegida ya no está en su alcance: el filtro vuelve a «Todas» y se carga la primera.
+        if (id && (e?.reason === "store_not_found" || e?.reason === "forbidden_store")) { setStoreId(null); load(""); return; }
         setState("error");
       });
   };
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const pick = (id) => { setStoreId(id); writeStore(id); load(id); };
+  useEffect(() => { load(storeId); }, [storeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const m = (v) => money(v, "usd", lang);
   if (state === "loading" && !data) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
@@ -64,11 +65,13 @@ export default function StoreStatus({ go, tabs = [] }) {
           <p className="adm-sub ss-sub">{t("adm.ss.sub")}</p>
         </div>
         <div className="ss-tools">
-          {data.stores.length > 1 ? (
-            <select className="adm-input" value={s.store.id} onChange={(e) => pick(e.target.value)} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
-              {data.stores.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
-            </select>
-          ) : <span className="adm-team-tag"><Icon name="store" size={12} /> {s.store.code} · {s.store.name}</span>}
+          <StoreFilter me={me} />
+          {/* Con «Todas» o la online se enseña la primera tienda: se dice cuál. */}
+          {(!globalStore || globalStore.id !== s.store.id) && (
+            <span className="scr-store-note" title={data.stores.length > 1 ? t("adm.scr.storeHint") : undefined}>
+              <Icon name="store" size={12} /> {t("adm.scr.storeShown", { store: `${s.store.code} · ${s.store.name}` })}
+            </span>
+          )}
           <button type="button" className="btn-xs" onClick={() => load(s.store.id)} disabled={state === "loading"} aria-label={t("adm.my.refresh")} title={t("adm.my.refresh")}><Icon name="refresh" size={13} /></button>
         </div>
       </div>

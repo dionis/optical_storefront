@@ -26,6 +26,7 @@ import { parseBoardDate } from "../../../lib/board-dates";
  *   terminal          canceled | refunded | payment_pending
  *   has_prescription  "true" | "false"
  *   seller            referral code (exact) | "none" (unattributed)
+ *   store             establishment id (till sales of that store) | "web" (online store)
  *   limit / offset    page window (default 20, max 100)
  */
 export async function GET(
@@ -85,6 +86,7 @@ export async function GET(
             ? false
             : undefined,
       seller: query.seller || undefined,
+      store: query.store || undefined,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
     });

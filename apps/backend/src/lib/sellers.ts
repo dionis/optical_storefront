@@ -3,7 +3,7 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import { SELLER_MODULE } from "../modules/seller/index";
 import type SellerModuleService from "../modules/seller/service";
 import { storefrontOrigin } from "./order-access";
-import { normalizeSellerCodeLoose, normalizeSellerSourceLoose, scanBoardWindow, type BoardOrder } from "./order-board";
+import { matchesStore, normalizeSellerCodeLoose, normalizeSellerSourceLoose, scanBoardWindow, type BoardOrder } from "./order-board";
 
 /**
  * Sellers (vendedores): referral codes, dashboard links and sales stats.
@@ -507,13 +507,15 @@ export function groupSellerStats(
 /** Stats over the board window (`MAX_BOARD_SCAN` most recent orders in range). */
 export async function sellerStats(
   container: MedusaContainer,
-  range: { from?: string | null; to?: string | null }
+  range: { from?: string | null; to?: string | null; store?: string | null }
 ): Promise<SellerStats> {
   const [sellers, window] = await Promise.all([
     listSellers(container),
     scanBoardWindow(container, { from: range.from ?? undefined, to: range.to ?? undefined }),
   ]);
-  const grouped = groupSellerStats(window.orders, sellers);
+  // `store`: one establishment's till sales, or "web" for the online store; empty = everything.
+  const orders = range.store ? window.orders.filter((o) => matchesStore(o, range.store)) : window.orders;
+  const grouped = groupSellerStats(orders, sellers);
   return {
     from: range.from ?? null,
     to: range.to ?? null,

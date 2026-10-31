@@ -28,7 +28,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     res.json({
       approvals: await listApprovals(req.scope, {
         status,
-        establishmentIds: await scopeStoreIds(req, scope),
+        // `?store=` narrows to one of the person's stores (the panel's global store filter).
+        establishmentIds: q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope),
         requestedBy: scope.is_admin ? undefined : scope.user_id,
       }),
     });

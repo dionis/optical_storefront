@@ -9,19 +9,26 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import "./screens.css";
 
 const PERIODS = ["today", "week", "month"];
 const ZERO = { total: 0, count: 0, avg_ticket: 0 };
 
-export default function MySales({ go }) {
+/** Props: `go` (navegación) y `me` (GET /admin/team/me): el filtro de tienda solo sale si vende en varias. */
+export default function MySales({ go, me }) {
   const { t, lang } = useLang();
   const [d, setD] = useState(null);
   const [state, setState] = useState("loading");
+  const { storeId, stores, isAll, isWeb } = useStoreFilter(me);
+  // Solo con varias tiendas tiene sentido elegir; la online no tiene mostrador.
+  const multi = Boolean(me) && stores.length > 1;
+  const storeParam = multi && !isAll && !isWeb ? storeId : "";
   const load = () => {
     setState("loading");
-    adminFetch("/admin/sales-analytics/me").then((r) => { setD(r); setState("ok"); }).catch(() => setState("error"));
+    adminFetch(`/admin/sales-analytics/me${storeParam ? `?store=${encodeURIComponent(storeParam)}` : ""}`).then((r) => { setD(r); setState("ok"); }).catch(() => setState("error"));
   };
-  useEffect(load, []);
+  useEffect(load, [storeParam]); // eslint-disable-line react-hooks/exhaustive-deps
   const m = (v) => money(v, "usd", lang);
   if (state === "loading" && !d) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (state === "error" || !d) return <div className="adm-section"><div className="adm-demo-banner">{t("adm.err.pos.generic")}</div></div>;
@@ -45,6 +52,7 @@ export default function MySales({ go }) {
           )}
         </div>
         <div className="my-head-tags">
+          {multi && <StoreFilter me={me} />}
           {wp && (
             <button type="button" className={`adm-chip ${wp.cash_open ? "ok" : "neutral"}`} onClick={() => go?.("cash")} title={t("adm.my.cashHint")}>
               <Icon name="wallet" size={12} /> {t(wp.cash_open ? "adm.my.cashOpen" : "adm.my.cashClosed")}
