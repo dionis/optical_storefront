@@ -3,11 +3,15 @@
 // etiqueta (UPC/SKU, entero o en parte) se despliega la lista de modelos que
 // coinciden, con miniatura, nombre y precio; si el modelo tiene varios colores
 // se elige el color (con su foto). Un código exacto escaneado se añade solo.
+// Cada resultado trae además marca, fotos y ficha técnica (`brand`, `images`,
+// `specs`) y cada color su nombre y códigos: `onAdd(p, v)` recibe los dos
+// objetos enteros para que la línea de la venta los guarde (frameLineFields).
 import { useEffect, useId, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { searchProducts } from "./posApi.js";
 import { resolveImageSized } from "../data/imageUrl.js";
+import { sizeNotation } from "./PosFrameCard.jsx";
 
 const MIN_CHARS = 2;
 
@@ -150,15 +154,16 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
                     <button type="button" className="pos-ac-row" disabled={unpriced} onClick={() => pick(p)}>
                       <Thumb src={p.thumbnail} />
                       <span className="pos-ac-main">
-                        <b><Highlight text={p.title} term={term} /></b>
+                        <b>{p.brand && <span className="pos-ac-brand">{p.brand} · </span>}<Highlight text={p.title} term={term} /></b>
                         <small className="muted">
+                          {sizeNotation(p.specs) && <span className="pos-ac-size">{sizeNotation(p.specs)} · </span>}
                           {byCode.length ? (
                             <span className="pos-ac-code">
                               <Icon name="barcode" size={12} /> <Highlight text={byCode[0].sku || byCode[0].barcode || ""} term={term} />
-                              {byCode[0].title ? ` · ${byCode[0].title}` : ""}
+                              {(byCode[0].color || byCode[0].title) ? ` · ${byCode[0].color || byCode[0].title}` : ""}
                               {byCode.length > 1 ? ` ${t("adm.pos.frame.moreMatches", { n: byCode.length - 1 })}` : ""}
                             </span>
-                          ) : many ? t("adm.pos.frame.colors", { n: p.variants.length }) : p.variants[0]?.title || p.variants[0]?.sku || ""}
+                          ) : many ? t("adm.pos.frame.colors", { n: p.variants.length }) : p.variants[0]?.color || p.variants[0]?.title || p.variants[0]?.sku || ""}
                         </small>
                       </span>
                       <span className="pos-ac-price">{unpriced ? t("adm.pos.frame.noPrice") : money(p.price)}</span>
@@ -175,7 +180,7 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
                           <button key={v.id} type="button" className={`pos-ac-variant ${byCode.includes(v) ? "hit" : ""}`} onClick={() => add(p, v)}>
                             <Thumb src={v.image || p.thumbnail} size="sm" />
                             <span className="pos-ac-vtxt">
-                              {v.title || t("adm.pos.frame.add")}
+                              {v.color || v.title || t("adm.pos.frame.add")}
                               {v.sku && <small className="muted"><Highlight text={v.sku} term={term} /></small>}
                             </span>
                           </button>

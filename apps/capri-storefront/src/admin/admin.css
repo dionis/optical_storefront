@@ -1242,7 +1242,7 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .my-head-tags button.adm-chip { border: 0; cursor: pointer; }
 .my-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .my-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.my-period { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 16px 18px; border: 1px solid var(--adm-line); border-radius: 14px; background: #fff; cursor: pointer; color: inherit; }
+.my-period { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 16px 18px; border: 1px solid var(--adm-line); border-radius: 14px; background: var(--adm-surface); cursor: pointer; color: inherit; }
 .my-period small { font-weight: 600; color: var(--adm-muted, #6b7280); text-transform: uppercase; letter-spacing: .04em; font-size: 11.5px; }
 .my-period b { font-size: 24px; font-variant-numeric: tabular-nums; }
 .my-period span { font-size: 12.5px; }
@@ -1468,7 +1468,7 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .my-period em.down { color: #ffb4b4; }
 .my-period:disabled { cursor: default; }
 .ss-pending { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-.ss-pend { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--adm-line); background: #fff; color: var(--adm-muted, #6b7280); text-align: left; cursor: pointer; }
+.ss-pend { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-muted, #6b7280); text-align: left; cursor: pointer; }
 .ss-pend b { font-size: 22px; color: var(--adm-ink, #0f1b33); font-variant-numeric: tabular-nums; }
 .ss-pend small { font-size: 12.5px; }
 .ss-pend em { font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--adm-ink, #0f1b33); }
@@ -1507,7 +1507,7 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .adm-shell.is-collapsed .adm-nav-chev { display: none; }
 .adm-shell.is-collapsed .adm-nav-group.has-on > .adm-nav-gbtn { background: rgba(255,255,255,.45); }
 /* Submenú flotante de la barra contraída. */
-.adm-nav-fly { position: fixed; left: calc(var(--adm-side-w-min) + 6px); z-index: 70; min-width: 210px; padding: 6px; border-radius: 12px; background: #fff; box-shadow: 0 12px 32px rgba(15, 30, 60, .18); border: 1px solid var(--adm-line); }
+.adm-nav-fly { position: fixed; left: calc(var(--adm-side-w-min) + 6px); z-index: 70; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--adm-surface); box-shadow: 0 12px 32px rgba(15, 30, 60, .18); border: 1px solid var(--adm-line); }
 .adm-nav-fly-h { font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #2e7d32; padding: 6px 10px 4px; }
 .adm-nav-fly .adm-nav-item { color: var(--adm-ink); }
 .adm-nav-fly .adm-nav-txt { opacity: 1 !important; width: auto !important; }
@@ -1555,7 +1555,7 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-ac-variant.hit { border-color: var(--adm-blue, #0e5ad0); background: #f5f8fe; }
 .pos-ac-item { position: relative; }
 .pos-ac-item.has-view .pos-ac-row { padding-right: 44px; }
-.pos-ac-view { position: absolute; right: 8px; top: 12px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--adm-line); border-radius: 8px; background: #fff; color: var(--adm-muted, #6b7280); cursor: pointer; }
+.pos-ac-view { position: absolute; right: 8px; top: 12px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-muted, #6b7280); cursor: pointer; }
 .pos-ac-view:hover { color: var(--adm-blue, #0e5ad0); border-color: var(--adm-blue, #0e5ad0); }
 .pos-ac .pos-ac-view, .pos-ac .pos-ac-view:hover, .pos-ac .pos-ac-view:active { scale: none; translate: none; transform: none; filter: none; }
 

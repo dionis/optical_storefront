@@ -27,6 +27,8 @@ import {
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import PosFrameCard, { frameLineFields } from "./PosFrameCard.jsx";
+import { setActiveStore } from "./useStoreTheme.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
@@ -228,6 +230,7 @@ export default function PosSale({ me }) {
   useEffect(() => {
     if (!store) return;
     write("pos_store", store.id);
+    setActiveStore(store.id); // el panel toma los colores de la tienda en la que se vende
     const saved = read(`pos_terminal:${store.id}`);
     setTerminalId((store.terminals.find((x) => x.id === saved) || store.terminals[0])?.id || "");
   }, [store]);
@@ -259,7 +262,7 @@ export default function PosSale({ me }) {
   const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); setTouched({}); setShowCustErrors(false); };
 
   const addFrame = (p, v) => {
-    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, image: v.image || p.thumbnail || null, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
+    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
     setOwn(EMPTY_OWN);
   };
   const addOwn = () => {
@@ -381,6 +384,8 @@ export default function PosSale({ me }) {
   // Receta nueva: el servidor es la última palabra, pero lo que el laboratorio no corta no sale de aquí.
   const rxCheck = validateRx(rxNew, rxNew.type, { mode: "new" });
   const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
+  // La montura que se está vendiendo, siempre a la vista en los pasos siguientes.
+  const frameCards = lines.filter((l) => l.kind === "frame").map((l) => <PosFrameCard key={l.key} frame={l} money={m} compact />);
   const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
   const custProblems = customerProblems(customer, { requireAddress: delivery === "ship" });
   const canNext = () => {
@@ -589,10 +594,15 @@ export default function PosSale({ me }) {
               </>
             ) : <small className="muted">{t("adm.pos.frame.onlyOne")}</small>}
             <ul className="pos-lines">
-              {lines.map((l) => (
+              {lines.map((l) => l.kind === "frame" ? (
+                <li key={l.key} className="pos-line-card">
+                  <PosFrameCard frame={l} money={m} onRemove={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
+                    onChangeColor={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, variant_id: v.id, variant_title: v.title, color: v.color ?? v.title, sku: v.sku ?? null, barcode: v.barcode ?? null, image: v.image || x.images?.[0] || null } : x)))} />
+                </li>
+              ) : (
                 <li key={l.key}>
                   <PosFramePhoto line={l} />
-                  <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
+                  <span><b>{t("adm.pos.own.tag")}</b> <small className="muted">{l.description}</small></span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
               ))}
@@ -602,6 +612,7 @@ export default function PosSale({ me }) {
 
         {stepName === "rx" && (
           <>
+            {frameCards}
             <label className="pos-check">
               <input type="checkbox" checked={noRx} onChange={(e) => setNoRx(e.target.checked)} /> {t("adm.pos.rx.none")}
             </label>
@@ -612,12 +623,14 @@ export default function PosSale({ me }) {
                   <h3>{t("adm.pos.rx.new")}</h3>
                   {/* Dos entradas: la cámara del móvil o tablet, o un archivo (foto o PDF) ya guardado. */}
                   <div className="pos-rx-ocr">
+                    {hasTouchCamera() && (
+                      <label className="pos-file">
+                        <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.takePhoto")}
+                        <input type="file" accept="image/*" capture="environment" onChange={onOcr} disabled={ocr.status === "loading"} />
+                      </label>
+                    )}
                     <label className="pos-file">
-                      <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.takePhoto")}
-                      <input type="file" accept="image/*" capture="environment" onChange={onOcr} disabled={ocr.status === "loading"} />
-                    </label>
-                    <label className="pos-file">
-                      <Icon name="upload" size={16} /> {t("adm.pos.rx.upload")}
+                      <Icon name="upload" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.upload")}
                       <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
                     </label>
                   </div>
@@ -643,6 +656,7 @@ export default function PosSale({ me }) {
         )}
 
         {stepName === "lenses" && (
+          <>
           <ul className="pos-lens-lines">
             {lines.map((l) => (
               <li key={l.key}>
@@ -655,10 +669,12 @@ export default function PosSale({ me }) {
             ))}
             {!noRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
+          </>
         )}
 
         {stepName === "price" && (
           <>
+            {frameCards}
             {!q && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
             {q && (
               <>
@@ -777,7 +793,7 @@ export default function PosSale({ me }) {
               {result.promised_on && <><dt>{t("adm.pos.done.promised")}</dt><dd>{result.promised_on}</dd></>}
             </dl>
             <OpticalChange change={result.optical_change} />
-            <SaleDocuments saleId={result.id} />
+            <SaleDocuments saleId={result.id} printer={terminal?.printer} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>
           </div>
         )}

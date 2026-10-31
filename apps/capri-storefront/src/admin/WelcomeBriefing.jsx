@@ -19,7 +19,7 @@ const daysAgo = (n) => {
 /** Format currency with MXN symbol. */
 const money = (v) => {
   if (v == null || Number.isNaN(v)) return "$0";
-  return "$" + Number(v).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
 
 /**

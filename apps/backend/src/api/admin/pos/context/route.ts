@@ -29,6 +29,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         id: s.id,
         code: s.code,
         name: s.name,
+        color: s.color,
         terminals,
         payment_methods: methods.filter((m) => acceptedAt(m, s.id)).map((m) => m.code),
       });

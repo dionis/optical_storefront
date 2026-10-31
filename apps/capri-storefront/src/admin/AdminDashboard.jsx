@@ -52,8 +52,9 @@ import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../dat
 
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 
-const money = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const int = (n) => (Number(n) || 0).toLocaleString("es");
+// US business: "$1,234.50" in both languages (never "$1.234,50").
+const money = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = (n) => (Number(n) || 0).toLocaleString("en-US");
 const normKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 // Visual bar list with a small product photo per row (icons with product thumbnails).

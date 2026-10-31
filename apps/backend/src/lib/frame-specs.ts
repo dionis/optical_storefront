@@ -49,6 +49,12 @@ const strOrNull = (v: unknown): string | null => {
   return s.length ? s : null;
 };
 
+/** Display brand ("Four You") from product metadata, falling back to the slug. */
+export function frameBrand(metadata: Record<string, unknown> | undefined | null): string | null {
+  const md = metadata ?? {};
+  return strOrNull(md["brand"]) ?? strOrNull(md["brand_slug"]);
+}
+
 /** Frame metadata for every product in an order, in one query. Never throws. */
 export async function loadProductMetadata(
   pg: Knex,
@@ -81,7 +87,7 @@ export function rawFrameSpecs(
   const md = metadata ?? {};
   const eye = numOrNull(md["eye_size"]);
   const specs: RawFrameSpecs = {
-    brand: strOrNull(md["brand"]) ?? strOrNull(md["brand_slug"]),
+    brand: frameBrand(md),
     sku: strOrNull(item["variant_sku"]),
     eye_size: eye,
     bridge_size: numOrNull(md["bridge_size"]),
@@ -105,6 +111,44 @@ export function rawFrameSpecs(
     !specs.style && !specs.gender && !specs.age_group && !specs.lens_height &&
     !specs.features.length;
   return empty ? null : specs;
+}
+
+/**
+ * The same sheet in the shape the POS frame card consumes (`PosFrameCard.jsx`):
+ * short measurement names, `rim` instead of the supplier's `style`, no SKU (the
+ * card gets it from the chosen colour) and no features list (too long for a
+ * card). Values stay raw slugs, localized in the browser by `frameSpecLabels.js`.
+ */
+export interface PosFrameSpecs {
+  shape: string | null;
+  material: string | null;
+  /** Rim construction (`full-frame`, `semi-rimless`…) — `style` in the metadata. */
+  rim: string | null;
+  gender: string | null;
+  age_group: string | null;
+  /** Millimetres. */
+  eye: number | null;
+  bridge: number | null;
+  temple: number | null;
+  lens_width: number | null;
+  lens_height: number | null;
+}
+
+/** Specs for the POS card from product metadata; every field null when unscraped. */
+export function posFrameSpecs(metadata: Record<string, unknown> | undefined | null): PosFrameSpecs {
+  const raw = rawFrameSpecs(metadata ?? undefined, {});
+  return {
+    shape: raw?.shape ?? null,
+    material: raw?.material ?? null,
+    rim: raw?.style ?? null,
+    gender: raw?.gender ?? null,
+    age_group: raw?.age_group ?? null,
+    eye: raw?.eye_size ?? null,
+    bridge: raw?.bridge_size ?? null,
+    temple: raw?.temple_length ?? null,
+    lens_width: raw?.lens_width ?? null,
+    lens_height: raw?.lens_height ?? null,
+  };
 }
 
 /** Optical shorthand every optician reads at a glance: 52□18-140. */

@@ -75,8 +75,19 @@ export async function previewStorePrices(id, productIds, lenses = 0) {
   });
 }
 
-/** Colores de partida; el servidor reparte uno distinto a cada tienda nueva (lib/store-color.ts). */
-export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569"];
+/**
+ * Azul de marca de la tienda online (`--blue` en styles/index.css): el canal
+ * «web» no es un establecimiento, así que su color no vive en la base de datos.
+ */
+export const ONLINE_STORE_COLOR = "#0E5AD0";
+
+/**
+ * Colores de partida; el servidor reparte uno distinto a cada tienda nueva
+ * (lib/store-color.ts, misma lista). Los cuatro últimos son los que pidió el
+ * dueño para sus tiendas: verde clínica, cobre, fucsia y el azul de la web.
+ * Qué tienda lleva cuál es dato (Tiendas → Editar), nunca código.
+ */
+export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569", "#1B7F4C", "#B5651D", "#C2185B", ONLINE_STORE_COLOR];
 
 /** El que se propone a una tienda nueva: el primero que ninguna usa; null si no queda (lo elige el servidor). */
 export function freeStoreColor(stores) {

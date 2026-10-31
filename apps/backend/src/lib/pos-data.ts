@@ -14,7 +14,7 @@ import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
 import { recordAudit } from "./audit";
 import type { EstablishmentRow } from "./establishments";
-import { loadProductMetadata } from "./frame-specs";
+import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
 import { computeLensBreakdown } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
@@ -128,8 +128,18 @@ export interface TerminalRow {
   name: string | null;
   receipt_locale: string;
   ticket_locale: string;
+  /** Printer as configured, free text ("thermal 80mm", "HP LaserJet"); null when unknown. Decides the default receipt layout. */
+  printer: string | null;
   is_active: boolean;
 }
+
+const printerText = (p: unknown): string | null => {
+  if (!p) return null;
+  if (typeof p === "string") return p;
+  const o = p as Record<string, unknown>;
+  const text = [o.type, o.kind, o.model, o.name, o.paper].filter((v) => typeof v === "string" && v).join(" ");
+  return text || null;
+};
 
 const toTerminal = (r: Record<string, unknown>): TerminalRow => ({
   id: String(r.id),
@@ -138,6 +148,7 @@ const toTerminal = (r: Record<string, unknown>): TerminalRow => ({
   name: (r.name as string | null) ?? null,
   receipt_locale: String(r.receipt_locale ?? "es"),
   ticket_locale: String(r.ticket_locale ?? "en"),
+  printer: printerText(r.printer),
   is_active: Boolean(r.is_active),
 });
 
@@ -513,17 +524,43 @@ async function insertPrescriptions(
 // Catalog and quote
 // ---------------------------------------------------------------------------
 
+export interface PosProductVariant {
+  id: string;
+  title: string;
+  sku: string | null;
+  barcode: string | null;
+  /** The colour's own photo (variant metadata), null when the catalog has none. */
+  image: string | null;
+  /** Human colour name (variant metadata `color`), falling back to the variant title. */
+  color: string | null;
+  /**
+   * Store price of this colour when it differs from the model's. Always null
+   * today: the catalog prices by model and `quoteSale` charges the model price,
+   * so a colour price here would contradict the quote.
+   */
+  price: number | null;
+}
+
 export interface PosProduct {
   product_id: string;
   title: string;
   thumbnail: string | null;
   /** Frame only, in this store, before sales tax. Null when the model has no price. */
   price: number | null;
-  /** `image`: the colour's own photo (variant metadata), null when the catalog has none. */
-  variants: Array<{ id: string; title: string; sku: string | null; barcode: string | null; image: string | null }>;
+  variants: PosProductVariant[];
   /** Colours whose code (UPC/SKU, barcode) matched the search, best first; empty when found by name. */
   matched_variant_ids: string[];
+  /** Display brand from product metadata ("Di Caprio"); null for an unscraped product. */
+  brand: string | null;
+  /** The model name — same as `title`, named for the card. */
+  model: string;
+  /** Up to four catalog photos, main first (thumbnail, then the gallery, then colour photos). */
+  images: string[];
+  /** Technical sheet for the card (raw slugs, mm); every field null when unscraped. */
+  specs: PosFrameSpecs;
 }
+
+const MAX_CARD_IMAGES = 4;
 
 const firstText = (...values: unknown[]): string | null => {
   for (const v of values) if (typeof v === "string" && v.trim()) return v.trim();
@@ -591,23 +628,32 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const caseIds = caseProductIds(rules);
   return products.map((p) => {
     const base = byId.get(p.id) ?? null;
-    const variants = (p.variants ?? []).map((v) => ({
+    const variants: PosProductVariant[] = (p.variants ?? []).map((v) => ({
       id: v.id,
       title: v.title ?? "",
       sku: v.sku ?? null,
       barcode: v.barcode ?? null,
       image: firstText(v.metadata?.["image"]),
+      color: firstText(v.metadata?.["color"], v.title),
+      price: null,
     }));
+    const thumbnail = firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image));
+    // Main photo first, then the gallery, then the colours' photos — deduplicated.
+    const images = [...new Set([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)].filter((u): u is string => !!u))].slice(0, MAX_CARD_IMAGES);
     return {
       product_id: p.id,
       title: p.title,
-      thumbnail: firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image)),
+      thumbnail,
       price:
         base === null
           ? null
           : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
       variants,
       matched_variant_ids: matched.get(p.id) ?? [],
+      brand: frameBrand(p.metadata),
+      model: p.title,
+      images,
+      specs: posFrameSpecs(p.metadata),
     };
   });
 }

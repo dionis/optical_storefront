@@ -1,0 +1,136 @@
+/* ============================================================================
+   TEMA POR TIENDA del panel (/admin). Consume las variables que useStoreTheme.js
+   pone en `.adm-shell` (nunca en :root — la tienda pública no cambia):
+     --st-accent      color de la tienda (barra superior, botones primarios, KPIs)
+     --st-ink         texto legible sobre el acento (storeInk)
+     --st-bg          fondo de la página: acento al 7 % sobre blanco (color-mix; --st-bg-fallback desde JS)
+     --st-surface     tarjetas: blanco siempre
+     --st-chrome      barra lateral: acento oscurecido un 15 % (gris #111827 si neutro)
+     --st-chrome-ink  texto legible sobre la barra lateral
+     --st-soft        acento al 12 %: pestaña activa, chips (color-mix; --st-soft-fallback desde JS)
+   Solo el cromo: tablas, formularios y tarjetas siguen con los tokens --adm-*.
+   Todo cuelga de `.adm-shell[data-store-theme]`, así que sin tema no pasa nada.
+   ============================================================================ */
+
+.adm-shell[data-store-theme] {
+  --st-bg: var(--st-bg-fallback, #F3F4F6);
+  --st-soft: var(--st-soft-fallback, #E5E7EB);
+  --st-chrome-ink-70: var(--st-chrome-ink);
+  --st-chrome-ink-45: var(--st-chrome-ink);
+  --st-chrome-ink-12: rgba(255, 255, 255, .12);
+  --st-chrome-ink-20: rgba(255, 255, 255, .2);
+  --st-ink-85: var(--st-ink);
+  --st-accent-line: var(--st-soft);
+  background: var(--st-bg);
+}
+
+/* color-mix donde existe (la mezcla en JS queda como respaldo del navegador viejo). */
+@supports (color: color-mix(in srgb, red 50%, white)) {
+  .adm-shell[data-store-theme] {
+    --st-bg: color-mix(in srgb, var(--st-accent) 7%, white);
+    --st-soft: color-mix(in srgb, var(--st-accent) 12%, white);
+    --st-chrome-ink-70: color-mix(in srgb, var(--st-chrome-ink) 72%, transparent);
+    --st-chrome-ink-45: color-mix(in srgb, var(--st-chrome-ink) 45%, transparent);
+    --st-chrome-ink-12: color-mix(in srgb, var(--st-chrome-ink) 12%, transparent);
+    --st-chrome-ink-20: color-mix(in srgb, var(--st-chrome-ink) 20%, transparent);
+    --st-ink-85: color-mix(in srgb, var(--st-ink) 85%, transparent);
+    --st-accent-line: color-mix(in srgb, var(--st-accent) 28%, white);
+  }
+  .adm-shell[data-store-theme="neutral"] { --st-bg: #F3F4F6; }
+}
+/* ── Barra lateral: el cromo oscuro de la tienda ─────────────────────────── */
+.adm-shell[data-store-theme] .adm-side {
+  background: linear-gradient(180deg, var(--st-chrome) 0%, var(--st-chrome) 100%);
+  color: var(--st-chrome-ink);
+  border-right-color: var(--st-chrome-ink-12);
+}
+.adm-shell[data-store-theme] .adm-side-title b { color: var(--st-chrome-ink); }
+.adm-shell[data-store-theme] .adm-side-title small { color: var(--st-chrome-ink-45); }
+.adm-shell[data-store-theme] .adm-nav-gh { color: var(--st-chrome-ink-70); }
+.adm-shell[data-store-theme] .adm-nav-item { color: var(--st-chrome-ink-70); }
+.adm-shell[data-store-theme] .adm-nav-item:hover { background: var(--st-chrome-ink-12); color: var(--st-chrome-ink); }
+.adm-shell[data-store-theme] .adm-nav-item.on { background: var(--st-chrome-ink-20); color: var(--st-chrome-ink); }
+.adm-shell[data-store-theme] .adm-nav-item.on::before { background: var(--st-accent-line); }
+.adm-shell[data-store-theme] .adm-nav-group.has-on > .adm-nav-gbtn { color: var(--st-chrome-ink); }
+.adm-shell[data-store-theme].is-collapsed .adm-nav-group.has-on > .adm-nav-gbtn { background: var(--st-chrome-ink-20); }
+.adm-shell[data-store-theme] .adm-nav-sub { border-left-color: var(--st-chrome-ink-20); }
+.adm-shell[data-store-theme] .adm-nav-item.ghost { color: var(--st-chrome-ink-70); }
+.adm-shell[data-store-theme] .adm-side-foot { border-top-color: var(--st-chrome-ink-12); }
+.adm-shell[data-store-theme] .adm-side-close { background: var(--st-chrome-ink-12); color: var(--st-chrome-ink); }
+/* Submenú flotante (barra contraída): fondo blanco, acentos de la tienda. */
+.adm-shell[data-store-theme] .adm-nav-fly-h { color: var(--st-accent); }
+.adm-shell[data-store-theme] .adm-nav-fly .adm-nav-item { color: var(--adm-ink); }
+.adm-shell[data-store-theme] .adm-nav-fly .adm-nav-item:hover { background: var(--st-soft); color: var(--adm-ink); }
+.adm-shell[data-store-theme] .adm-nav-fly .adm-nav-item.on { background: var(--st-soft); color: var(--adm-ink); }
+.adm-shell[data-store-theme] .adm-nav-fly .adm-nav-item.on::before { background: var(--st-accent); }
+
+/* ── Barra superior: el acento de la tienda, texto legible encima ─────────── */
+.adm-shell[data-store-theme] .adm-top {
+  background: var(--st-accent);
+  color: var(--st-ink);
+  border-bottom-color: transparent;
+  backdrop-filter: none;
+  box-shadow: 0 2px 10px -4px rgba(0, 0, 0, .25);
+}
+.adm-shell[data-store-theme] .adm-top-sec { color: var(--st-ink); }
+.adm-shell[data-store-theme] .adm-badge { background: var(--st-chrome); color: var(--st-chrome-ink); box-shadow: none; animation: none; }
+.adm-shell[data-store-theme] .adm-burger { background: var(--st-surface); color: var(--adm-ink); border-color: transparent; }
+.adm-shell[data-store-theme] .adm-find { background: var(--st-surface); border-color: transparent; }
+.adm-shell[data-store-theme] .adm-icobtn { background: var(--st-surface); color: var(--adm-ink); border-color: transparent; }
+.adm-shell[data-store-theme] .adm-icobtn:hover { background: var(--st-soft); color: var(--adm-ink); box-shadow: none; }
+.adm-shell[data-store-theme] .adm-icobtn.danger:hover { background: var(--adm-red-soft); color: var(--adm-red); }
+.adm-shell[data-store-theme] .adm-top-crumb { min-width: 0; }
+
+/* Ficha de la persona: fondo claro de la tienda, avatar con su color. */
+.adm-shell[data-store-theme] .adm-user-chip { background: var(--st-surface); border-color: transparent; }
+.adm-shell[data-store-theme] .adm-user-chip:hover { background: var(--st-soft); }
+.adm-shell[data-store-theme] .adm-user-mail { color: var(--adm-ink); }
+.adm-shell[data-store-theme] .adm-avatar { background: var(--st-chrome); color: var(--st-chrome-ink); box-shadow: none; }
+.adm-shell[data-store-theme] .adm-user-chip:hover .adm-avatar { box-shadow: 0 0 0 3px var(--st-soft); }
+
+/* Píldora «dónde estoy»: punto del color + nombre, nunca se oculta. */
+.adm-shell[data-store-theme] .adm-store-pill {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 260px;
+  padding: 4px 11px 4px 8px; border-radius: 999px;
+  background: var(--st-surface); color: var(--adm-ink);
+  font-size: 12.5px; font-weight: 700; letter-spacing: .01em; line-height: 1.3;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.adm-shell[data-store-theme] .adm-store-pill-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adm-shell[data-store-theme] .adm-store-dot {
+  flex: none; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--st-accent); box-shadow: 0 0 0 2px var(--st-soft);
+}
+.adm-shell[data-store-theme="neutral"] .adm-store-dot { background: var(--st-chrome); }
+
+/* ── Área de trabajo: acentos de sección, KPIs y botones primarios ────────── */
+.adm-shell[data-store-theme] .adm-section h2::after { background: linear-gradient(90deg, var(--st-accent), var(--st-soft), transparent); }
+.adm-shell[data-store-theme] .adm-subtabs button.on { color: var(--adm-ink); border-bottom-color: var(--st-accent); }
+.adm-shell[data-store-theme] .adm-kpis .cx-kpi::after { background: var(--st-accent); }
+.adm-shell[data-store-theme] .adm-kpis .cx-kpi > div:nth-child(2) { color: var(--st-chrome) !important; }
+.adm-shell[data-store-theme] .adm-card-head h3.go:hover { background: var(--st-soft); color: var(--adm-ink); }
+.adm-shell[data-store-theme] .btn-sm.primary,
+.adm-shell[data-store-theme] .btn-xs.primary { background: var(--st-accent); color: var(--st-ink); border-color: var(--st-accent); }
+.adm-shell[data-store-theme] .btn-sm.primary::after,
+.adm-shell[data-store-theme] .btn-xs.primary::after { background: var(--st-chrome); }
+.adm-shell[data-store-theme] .btn-sm.primary:hover,
+.adm-shell[data-store-theme] .btn-xs.primary:hover { color: var(--st-chrome-ink); border-color: var(--st-chrome); box-shadow: 0 8px 24px -10px var(--st-chrome); }
+.adm-shell[data-store-theme] .adm-nav-item:focus-visible,
+.adm-shell[data-store-theme] .btn-sm:focus-visible,
+.adm-shell[data-store-theme] .btn-xs:focus-visible,
+.adm-shell[data-store-theme] .adm-icobtn:focus-visible,
+.adm-shell[data-store-theme] .adm-subtabs button:focus-visible { outline-color: var(--st-accent); }
+.adm-shell[data-store-theme] .adm-nav-item:focus-visible { outline-color: var(--st-chrome-ink); }
+
+/* ── Móvil: la píldora cabe junto al título; el nombre se recorta, no desaparece. */
+@media (max-width: 768px) {
+  .adm-shell[data-store-theme] .adm-store-pill { max-width: 46vw; font-size: 12px; padding: 3px 9px 3px 7px; }
+  .adm-shell[data-store-theme] .adm-top-sec { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+}
+@media (max-width: 420px) {
+  .adm-shell[data-store-theme] .adm-badge { display: none; }
+  .adm-shell[data-store-theme] .adm-store-pill { max-width: 40vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-shell[data-store-theme] .adm-side, .adm-shell[data-store-theme] .adm-top { transition: none; }
+}
