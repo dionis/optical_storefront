@@ -1,3 +1,5 @@
+import { PARTS } from "./parts/index.js";
+
 // UI string dictionary (ES / EN). Everything user-facing goes through t(key).
 export const T = {
   es: {
@@ -6031,6 +6033,10 @@ export const T = {
     "checkout.pendingCancel": "Cancel and start over",
   },
 };
+for (const part of PARTS) {
+  Object.assign(T.es, part.es);
+  Object.assign(T.en, part.en);
+}
 
 // Attribute VALUE translations (data is stored in Spanish; translate for EN display).
 export const VAL = {
