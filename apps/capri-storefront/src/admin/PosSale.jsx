@@ -26,7 +26,7 @@ import {
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
-import { resolveImageSized } from "../data/imageUrl.js";
+import PosFramePhoto from "./PosFramePhoto.jsx";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
@@ -42,6 +42,23 @@ const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: 
 const EMPTY_OWN = { open: false, description: "", photo: null };
 // Móvil o tablet: en un ordenador `capture` no abre la cámara, solo repetiría el selector de archivos.
 const hasTouchCamera = () => window.matchMedia?.("(pointer: coarse)").matches === true;
+const EMPTY_PAYMENT = { method_code: "", amount: null, details: {} };
+const toCents = (v) => Math.round((Number(v) || 0) * 100);
+const centsText = (c) => (c > 0 ? (c / 100).toFixed(2) : "");
+
+/**
+ * `amount: null` = nadie lo ha tocado: la primera fila así propone lo que falta
+ * por cobrar del total del servidor. Lo que se escribe a mano se respeta.
+ */
+function withSuggestedAmounts(payments, total) {
+  let rest = toCents(total) - payments.reduce((sum, p) => sum + (p.amount === null ? 0 : toCents(p.amount)), 0);
+  return payments.map((p) => {
+    if (p.amount !== null) return { ...p, suggested: false };
+    const amount = centsText(rest);
+    rest = 0;
+    return { ...p, amount, suggested: true };
+  });
+}
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
@@ -216,7 +233,7 @@ export default function PosSale({ me }) {
   const [approval, setApproval] = useState(null);
   const [reason, setReason] = useState("");
   // 6 · pago
-  const [payments, setPayments] = useState([{ method_code: "", amount: "", details: {} }]);
+  const [payments, setPayments] = useState([EMPTY_PAYMENT]);
   const [delivery, setDelivery] = useState("pickup");
   const [notifyEmail, setNotifyEmail] = useState(true);
   // Foto y receta en el correo: se decide en cada venta, nunca se recuerda.
@@ -368,17 +385,20 @@ export default function PosSale({ me }) {
   };
 
   const total = q?.quote?.total ?? 0;
+  const payRows = useMemo(() => withSuggestedAmounts(payments, total), [payments, total]);
+  // Una fila sugerida sin forma de pago aún no es un error: no se ha empezado a rellenar.
+  const rowProblem = (p) => (p.suggested && !p.method_code ? null : paymentProblem(p, methods.find((x) => x.code === p.method_code)));
   const payState = useMemo(() => {
     const byCode = new Map(methods.map((m) => [m.code, m]));
     let paid = 0; let ins = 0;
-    for (const p of payments) {
+    for (const p of payRows) {
       const m = byCode.get(p.method_code);
       const a = Number(p.amount) || 0;
       if (!m || a <= 0) continue;
       if (m.kind === "insurance" || m.receivable) ins += a; else paid += a;
     }
     return { paid: Math.round(paid * 100) / 100, ins: Math.round(ins * 100) / 100, balance: Math.round((total - paid - ins) * 100) / 100 };
-  }, [payments, methods, total]);
+  }, [payRows, methods, total]);
 
   // Lo que usa hoy: graduación de ambos ojos y cuándo se la hicieron.
   const wornReady = rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
@@ -399,7 +419,7 @@ export default function PosSale({ me }) {
       case "price": return Boolean(q) && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
       case "payment": return payState.balance >= 0
         && (total <= 0 || payState.paid + payState.ins > 0)
-        && !payments.some((p) => paymentProblem(p, methods.find((x) => x.code === p.method_code)))
+        && !payRows.some(rowProblem)
         && (delivery === "pickup" || Object.keys(custProblems).length === 0);
       default: return false;
     }
@@ -431,7 +451,7 @@ export default function PosSale({ me }) {
         lines: apiLines(),
         discount_pct: discount || 0,
         approval_id: approval?.status === "approved" ? approval.id : null,
-        payments: payments.filter((p) => p.method_code && Number(p.amount) > 0),
+        payments: payRows.filter((p) => p.method_code && Number(p.amount) > 0).map(({ method_code, amount, details }) => ({ method_code, amount, details })),
         prescriptions: { new: newBody(), worn: wornBody() },
         delivery,
         notify_email: notifyEmail,
@@ -451,7 +471,7 @@ export default function PosSale({ me }) {
     setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setApproval(null); setReason("");
-    setPayments([{ method_code: "", amount: "", details: {} }]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
+    setPayments([EMPTY_PAYMENT]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
   };
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
@@ -647,7 +667,7 @@ export default function PosSale({ me }) {
             <ul className="pos-lines">
               {lines.map((l) => (
                 <li key={l.key}>
-                  {l.kind === "frame" && l.image ? <img className="pos-ac-thumb sm" src={resolveImageSized(l.image, 96)} alt="" /> : <Icon name={l.kind === "own_frame" ? "camera" : "glasses"} size={16} />}
+                  <PosFramePhoto line={l} />
                   <span><b>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}</b> <small className="muted">{l.kind === "own_frame" ? l.description : l.variant_title}</small></span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
@@ -695,7 +715,10 @@ export default function PosSale({ me }) {
           <ul className="pos-lens-lines">
             {lines.map((l) => (
               <li key={l.key}>
-                <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
+                <div className="pos-lens-head">
+                  <PosFramePhoto line={l} size="md" />
+                  <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
+                </div>
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
@@ -756,8 +779,9 @@ export default function PosSale({ me }) {
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
-            {payments.map((p, i) => {
+            {payRows.map((p, i) => {
               const meth = methods.find((x) => x.code === p.method_code);
+              const othersCents = payRows.reduce((sum, x, j) => sum + (j === i || x.suggested ? 0 : toCents(x.amount)), 0);
               const set = (patch) => setPayments((ps) => ps.map((x, j) => (j === i ? { ...x, ...patch } : x)));
               const tendered = Number(p.details.tendered) || 0;
               return (
@@ -767,7 +791,7 @@ export default function PosSale({ me }) {
                     {methods.map((x) => <option key={x.code} value={x.code}>{methodName(x, t, lang)}</option>)}
                   </select>
                   <input inputMode="decimal" maxLength={LIMITS.amount} value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
-                  <button type="button" className="btn-xs" onClick={() => set({ amount: String(Math.max(0, Math.round((payState.balance + (Number(p.amount) || 0)) * 100) / 100)) })}>{t("adm.pos.pay.rest")}</button>
+                  <button type="button" className="btn-xs" onClick={() => set({ amount: centsText(toCents(total) - othersCents) })}>{t("adm.pos.pay.rest")}</button>
                   {meth?.reference_fields?.map((f) => (
                     <input key={f.key} maxLength={f.key === "last4" ? 4 : 80} inputMode={f.key === "last4" ? "numeric" : undefined} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: f.key === "last4" ? e.target.value.replace(/\D/g, "") : e.target.value } })}
                       placeholder={`${meth.builtin ? t(`adm.pos.ref.${f.key}`) : (lang === "en" && f.label_en) || f.label || f.key}${f.required ? " *" : ""}`}
@@ -779,12 +803,13 @@ export default function PosSale({ me }) {
                       {tendered > 0 && <small className="pos-change-due">{t("adm.pos.pay.change", { v: m(Math.max(0, tendered - (Number(p.amount) || 0))) })}</small>}
                     </>
                   )}
-                  <FieldError error={paymentProblem(p, meth)} />
+                  <FieldError error={rowProblem(p)} />
+                  {p.suggested && p.amount && <small className="muted pos-pay-note">{t("adm.pos.pay.suggested")}</small>}
                   {payments.length > 1 && <button type="button" className="btn-xs warn" onClick={() => setPayments((ps) => ps.filter((_, j) => j !== i))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>}
                 </div>
               );
             })}
-            {payments.length < 6 && <button type="button" className="btn-sm" onClick={() => setPayments((ps) => [...ps, { method_code: "", amount: "", details: {} }])}><Icon name="plus" size={14} /> {t("adm.pos.pay.another")}</button>}
+            {payments.length < 6 && <button type="button" className="btn-sm" onClick={() => setPayments((ps) => [...ps, EMPTY_PAYMENT])}><Icon name="plus" size={14} /> {t("adm.pos.pay.another")}</button>}
             <dl className="pos-totals">
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(payState.paid)}</dd>
               {payState.ins > 0 && <><dt>{t("adm.pos.pay.insurance")}</dt><dd>{m(payState.ins)}</dd></>}
@@ -832,7 +857,7 @@ export default function PosSale({ me }) {
           <button type="button" className="btn-sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}><Icon name="chevronLeft" size={14} /> {t("adm.pos.back")}</button>
           {stepName === "payment" ? (
             <button type="button" className="btn-sm primary big" disabled={!canNext() || busy} onClick={confirmSale}>
-              {busy ? "…" : t("adm.pos.confirm", { total: m(total) })}
+              {busy ? t("adm.pos.confirming") : t("adm.pos.confirm", { total: m(total) })}
             </button>
           ) : (
             <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={stepName !== "customer" && !canNext()} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>

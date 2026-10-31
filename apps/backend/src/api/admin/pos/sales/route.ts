@@ -23,10 +23,8 @@ import {
   type RxInput,
   type RxMeta,
 } from "../../../../lib/pos-data";
-import { emitAlert } from "../../../../lib/alerts-data";
-import { emailReceipt } from "../../../../lib/pos-documents";
+import { runAfterSale } from "../../../../lib/pos-after-sale";
 import { ownSalesOnly, posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
-import { getSale } from "../../../../lib/pos-data";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
 
 /**
@@ -93,6 +91,7 @@ interface SaleBody {
 
 export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
+    const started = Date.now();
     const body = (req.body ?? {}) as SaleBody;
     const scope = await posScope(req);
     const store = await sellableStore(req, scope, body.store);
@@ -156,25 +155,19 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       notifyEmail: body.notify_email === true,
       idempotencyKey: key,
     });
-    // The receipt by email when the customer wants it (HU-27). Best-effort: the
-    // sale is recorded; a failed mail can be resent from the sale.
-    let receipt_sent = false;
-    if (body.notify_email === true && !sale.replayed) {
-      try {
-        const row = await getSale(req.scope, sale.id);
-        if (row) receipt_sent = Boolean(await emailReceipt(req.scope, row, { detailed: body.receipt_detail === true, actorId: scope.user_id }));
-      } catch {
-        receipt_sent = false;
-      }
-    }
+    res.json({ sale });
+    // The sale is recorded and the till answered: emails go out without holding it.
     if (!sale.replayed) {
-      // Alerts (E7): every sale, a discount, a sale below the minimum price.
-      const data = { number: sale.number, total: sale.total, discount_pct: quote.discount_pct, store_code: store.code, store_name: store.name, seller_code: scope.seller_code };
-      const base = { establishment_id: store.id, seller_id: scope.user_id, data };
-      await emitAlert(req.scope, { ...base, event: "sale.created", key: `sale:${sale.id}` });
-      if (quote.discount_pct > 0) await emitAlert(req.scope, { ...base, event: "discount.applied", key: `discount:${sale.id}` });
-      if (quote.below_minimum) await emitAlert(req.scope, { ...base, event: "sale.below_min", key: `belowmin:${sale.id}` });
+      void runAfterSale(req.scope, {
+        sale,
+        quote,
+        store,
+        sellerId: scope.user_id,
+        sellerCode: scope.seller_code,
+        notifyEmail: body.notify_email === true,
+        receiptDetail: body.receipt_detail === true,
+        responseMs: Date.now() - started,
+      });
     }
-    res.json({ sale, receipt_sent });
   });
 }

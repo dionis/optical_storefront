@@ -4,8 +4,8 @@
 // del servidor, nunca se recalculan aquí.
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { FRAME_ONLY } from "../data/lensPricing.js";
-import { resolveImageSized } from "../data/imageUrl.js";
 import Icon from "./icons.jsx";
+import PosFramePhoto from "./PosFramePhoto.jsx";
 
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
 
@@ -61,9 +61,7 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
               const own = l.kind === "own_frame";
               return (
                 <li key={line?.key ?? i}>
-                  {!own && line?.image
-                    ? <img className="pos-ac-thumb" src={resolveImageSized(line.image, 160)} alt="" />
-                    : <span className="pos-ac-thumb noimg"><Icon name="glasses" size={18} /></span>}
+                  <PosFramePhoto line={line} />
                   <div className="pos-sum-item">
                     <b>{own ? t("adm.pos.own.tag") : l.title}</b>
                     <small>{[own ? l.description : l.variant_title, l.sku && `${t("adm.pos.sum.sku")} ${l.sku}`].filter(Boolean).join(" · ")}</small>
