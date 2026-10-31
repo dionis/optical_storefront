@@ -161,7 +161,7 @@
 .adm-card:hover::before { opacity: 1; }
 /* La tarjeta recorta su contenido: mientras hay un elemento flotante abierto dentro
    (lista, globo de ayuda, menú, tooltip) deja de recortar y sube sobre sus vecinas. */
-.adm-card:has(.pos-ac-pop, .adm-tip-pop, details[open] > .adm-team-stores-menu, .pos-cust-filter .pos-hits, .cx-tip) { overflow: visible; z-index: 6; }
+.adm-card:has(.pos-ac-pop, .adm-tip-pop, .addr-sugg[style*="block"], details[open] > .adm-team-stores-menu, .pos-cust-filter .pos-hits, .cx-tip) { overflow: visible; z-index: 6; }
 .adm-card h3 { margin: 0 0 clamp(8px, 1vw, 12px); font-size: clamp(13px, 1.2vw, 15px); font-weight: 700; color: var(--adm-ink); display: flex; align-items: center; gap: clamp(5px, .6vw, 8px); }
 .adm-card h3 .adm-ico { color: var(--adm-blue); transition: transform .2s var(--adm-ease); }
 .adm-card:hover h3 .adm-ico { transform: scale(1.12); }

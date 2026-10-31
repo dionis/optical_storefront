@@ -93,6 +93,14 @@ export function formatAddressLine(parts) {
   return [parts.address_1, parts.city, region].filter(Boolean).join(", ");
 }
 
+// Ciudad, estado y ZIP del texto de una sugerencia de zona: "Katy, TX 77449, USA".
+// Es lo que la persona vio y eligió; los componentes de un ZIP pueden traer solo el
+// condado como ciudad, o no traer nada.
+function areaFromLabel(label) {
+  const m = /^(.*?),\s*([A-Z]{2})(?:\s+(\d{5}))?(?:,|$)/.exec(label || "");
+  return m ? { city: m[1].trim(), state: m[2], postal_code: m[3] || "" } : {};
+}
+
 // Convierte los `addressComponents` de un Place (API nueva: longText/shortText)
 // en los campos separados del formulario. Las partes ausentes vuelven como ""
 // para que el formulario conserve lo que el cliente ya tenía.
@@ -151,7 +159,10 @@ function makeSuggestBox(inputEl, onSelect, source) {
         try {
           const parts = await item.pick();
           if (parts) onSelect(parts);
-        } catch { /* la selección falló: el cliente sigue tecleando */ }
+        } catch (err) {
+          // La selección falló: se puede seguir tecleando. Que quede dicho por qué.
+          console.warn(`[address] Could not use the selected suggestion: ${err?.message || "unknown error"}`);
+        }
       });
       box.appendChild(it);
     });
@@ -269,14 +280,27 @@ function attachGoogle(inputEl, onSelect, places, mode) {
         .map((s) => ({
           label: s.placePrediction.text?.text || "",
           pick: async () => {
-            const place = s.placePrediction.toPlace();
-            await place.fetchFields({ fields: ["addressComponents"] });
-            // La sesión termina al elegir: nuevo token para la siguiente búsqueda.
-            token = new AutocompleteSessionToken();
-            const parts = parsePlaceComponents(place.addressComponents);
-            // Eligió una ciudad o un ZIP: rellena lo que hay, y la calle queda por escribir.
             const types = s.placePrediction.types || [];
-            if (mode === "zip" || types.includes("locality") || types.includes("postal_code")) return { ...parts, address_1: "", area: true };
+            const isArea = mode === "zip" || types.includes("locality") || types.includes("postal_code");
+            const label = s.placePrediction.text?.text || "";
+            let parts = {};
+            try {
+              const place = s.placePrediction.toPlace();
+              await place.fetchFields({ fields: ["addressComponents"] });
+              parts = parsePlaceComponents(place.addressComponents);
+            } catch (err) {
+              // Una zona se puede rellenar con el texto elegido; una calle, no.
+              if (!isArea) throw err;
+              console.warn(`[address] Place details failed, using the suggestion's text: ${err?.message || "unknown error"}`);
+            } finally {
+              // La sesión termina al elegir: nuevo token para la siguiente búsqueda.
+              token = new AutocompleteSessionToken();
+            }
+            // Eligió una ciudad o un ZIP: rellena lo que hay, y la calle queda por escribir.
+            if (isArea) {
+              const fromLabel = areaFromLabel(label);
+              return { ...parts, ...fromLabel, postal_code: fromLabel.postal_code || parts.postal_code || "", address_1: "", area: true };
+            }
             // Dirección sin número (el cliente eligió solo la calle): se deja
             // el texto de la sugerencia para que complete el número a mano.
             if (!parts.address_1) parts.address_1 = s.placePrediction.mainText?.text || "";
