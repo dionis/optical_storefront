@@ -22,6 +22,7 @@ import {
   quote as fetchQuote,
   requestApproval,
   searchCustomers,
+  searchProducts,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import AdminFrameCard from "./AdminFrameCard.jsx";
@@ -183,6 +184,8 @@ export default function PosSale({ me }) {
   const [custInfo, setCustInfo] = useState(null);
   const [wears, setWears] = useState(null);
   // 2 · monturas
+  const [prodQ, setProdQ] = useState("");
+  const [prodHits, setProdHits] = useState([]);
   const [lines, setLines] = useState([]);
   const [frameListOpen, setFrameListOpen] = useState(false);
   const [own, setOwn] = useState({ open: false, description: "", photo: null });
@@ -234,6 +237,11 @@ export default function PosSale({ me }) {
     const h = setTimeout(() => searchCustomers(custQ).then((r) => setCustHits(r.customers || [])).catch(() => setCustHits([])), 300);
     return () => clearTimeout(h);
   }, [custQ]);
+  useEffect(() => {
+    if (prodQ.trim().length < 2 || !storeId) { setProdHits([]); return undefined; }
+    const h = setTimeout(() => searchProducts(storeId, prodQ).then((r) => setProdHits(r.products || [])).catch(() => setProdHits([])), 300);
+    return () => clearTimeout(h);
+  }, [prodQ, storeId]);
 
   const pickCustomer = async (c) => {
     setCustomerId(c.id);
@@ -409,6 +417,7 @@ export default function PosSale({ me }) {
   const reset = () => {
     idem.current = null;
     setStep(0); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
+    setProdQ(""); setProdHits([]);
     setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setApproval(null); setReason("");

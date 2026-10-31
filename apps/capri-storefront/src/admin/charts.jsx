@@ -991,7 +991,7 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
       width={width}
       height={height}
       role="img"
-      aria-label={`Tendencia, ${n} puntos`}
+      aria-label={t("adm.chart.ariaSparkline", { n })}
       style={{ display: "inline-block", verticalAlign: "middle" }}
     >
       <path
@@ -1126,7 +1126,7 @@ export function Funnel({ steps }) {
                     pointerEvents: "none",
                   }}
                 >
-                  −{stepDrop.toFixed(0)}% vs paso previo
+                  {t("adm.chart.funnelDrop", { pct: stepDrop.toFixed(0) })}
                 </span>
               ) : null}
             </div>

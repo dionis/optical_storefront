@@ -20,8 +20,8 @@ import { SOURCE_ICON } from "./sellerShared.jsx";
 export const STAGE_ICON = { confirmed: "receipt", in_lab: "lab", shipped: "box", in_transit: "truck", delivered: "checkCircle", payment_pending: "clock", canceled: "alert", refunded: "undo" };
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 const BRAND_SLUG_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.slug]));
-const int = (n) => (Number(n) || 0).toLocaleString("es");
-const usd = (n) => "$" + (Number(n) || 0).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es");
+const usd = (n, lang) => "$" + (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 const daysSince = (iso) => (Date.now() - new Date(iso).getTime()) / 864e5;
 const demoSnap = () => { try { return (localStorage.getItem("oer_orders") || "").length; } catch { return 0; } };
@@ -121,9 +121,9 @@ export default function Executive({ preset = "30d", go }) {
   const recent = state === "real" ? boardOrders.slice(0, 7) : [];
   const alerts = [];
   if (state === "real") {
-    if (ops.pendingPay) alerts.push({ tone: "warn", txt: t("adm.exec.alertPay", { n: int(ops.pendingPay) }), go: () => go("orders", { terminal: "payment_pending" }) });
-    if (ops.stuck) alerts.push({ tone: "crit", txt: t("adm.exec.alertStuck", { n: int(ops.stuck) }), go: () => go("orders", { stage: "in_lab" }) });
-    if (win?.truncated) alerts.push({ tone: "info", txt: t("adm.real.truncated", { n: int(win.scanLimit) }) });
+    if (ops.pendingPay) alerts.push({ tone: "warn", txt: t("adm.exec.alertPay", { n: int(ops.pendingPay, lang) }), go: () => go("orders", { terminal: "payment_pending" }) });
+    if (ops.stuck) alerts.push({ tone: "crit", txt: t("adm.exec.alertStuck", { n: int(ops.stuck, lang) }), go: () => go("orders", { stage: "in_lab" }) });
+    if (win?.truncated) alerts.push({ tone: "info", txt: t("adm.real.truncated", { n: int(win.scanLimit, lang) }) });
   }
   const brandSlug = (label) => BRAND_SLUG_BY_NAME[label] || String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const H = useChartHeight(0.17, 110, 200);
@@ -142,12 +142,12 @@ export default function Executive({ preset = "30d", go }) {
       )}
 
       <div className="adm-kpis adm-exec-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
-        <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
-        <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN)} · ${usd(ops.todayV)}`} icon={<Icon name="calendar" />} hint={t("adm.kpi.h.today")} onClick={() => go("orders", { preset: "today" })} />
-        <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare)} icon={<Icon name="lab" />} sub={t("adm.exec.toPrepareSub")} hint={t("adm.kpi.h.toPrepare")} onClick={() => go("orders", { stage: "in_lab" })} />
-        <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery)} icon={<Icon name="truck" />} hint={t("adm.kpi.h.inDelivery")} onClick={() => go("orders", { stage: "in_transit" })} />
+        <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue, lang)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units, lang) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
+        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount, lang)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
+        <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov, lang)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
+        <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN, lang)} · ${usd(ops.todayV, lang)}`} icon={<Icon name="calendar" />} hint={t("adm.kpi.h.today")} onClick={() => go("orders", { preset: "today" })} />
+        <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare, lang)} icon={<Icon name="lab" />} sub={t("adm.exec.toPrepareSub")} hint={t("adm.kpi.h.toPrepare")} onClick={() => go("orders", { stage: "in_lab" })} />
+        <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery, lang)} icon={<Icon name="truck" />} hint={t("adm.kpi.h.inDelivery")} onClick={() => go("orders", { stage: "in_transit" })} />
       </div>
 
       <div className="exec-grid cols-3-1">
@@ -158,10 +158,10 @@ export default function Executive({ preset = "30d", go }) {
                 const st = STAGE_BY_KEY[key];
                 return (
                   <button type="button" key={key} className="exec-pipe-col" onClick={() => go("orders", { stage: key })} title={t("adm.exec.goOrdersStage", { stage: st ? t(st.label) : key })}>
-                    <span className="exec-pipe-n">{int(v.n)}</span>
+                    <span className="exec-pipe-n">{int(v.n, lang)}</span>
                     <span className="exec-pipe-bar"><i style={{ height: `${Math.max(8, (v.n / maxStage) * 100)}%` }} /></span>
                     <span className="exec-pipe-k"><Icon name={STAGE_ICON[key] || "box"} size={13} />{st ? t(st.label) : key}</span>
-                    <span className="exec-pipe-v">{usd(v.v)}</span>
+                    <span className="exec-pipe-v">{usd(v.v, lang)}</span>
                   </button>
                 );
               })}
@@ -208,10 +208,10 @@ export default function Executive({ preset = "30d", go }) {
         </Card>
         <Card icon="glasses" title={t("adm.exec.catalogHealth")} hint={t("adm.exec.catalogHint")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="catalogo">
           <div className="exec-mini-kpis">
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.activeFrames")}</small><b>{int(products.length)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.prod.cases")}</small><b>{int(cases.length)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.discontinued")}</small><b>{discontinued == null ? "—" : int(discontinued)}</b></button>
-            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.brands")}</small><b>{int(new Set(products.map((p) => p.brand)).size)}</b></button>
+            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.activeFrames")}</small><b>{int(products.length, lang)}</b></button>
+            <button type="button" onClick={() => go("products")}><small>{t("adm.prod.cases")}</small><b>{int(cases.length, lang)}</b></button>
+            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.discontinued")}</small><b>{discontinued == null ? "—" : int(discontinued, lang)}</b></button>
+            <button type="button" onClick={() => go("products")}><small>{t("adm.exec.brands")}</small><b>{int(new Set(products.map((p) => p.brand)).size, lang)}</b></button>
           </div>
         </Card>
       </div>

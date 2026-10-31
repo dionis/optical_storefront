@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
+import { useCatalog } from "../data/catalogStore.js";
 import { money, shortDate } from "./adminOrders.js";
 import { fetchStorePricing, setStoreAdjustment, setStoreExactPrice, setStoreMinimum, previewStorePrices, searchStoreCatalog } from "./adminStores.js";
 import Icon from "./icons.jsx";
@@ -21,6 +22,7 @@ const SAMPLE_LENSES = 100;
 export default function StorePricing({ store, onClose }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
+  const { products, cases } = useCatalog();
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   const [busy, setBusy] = useState(false);

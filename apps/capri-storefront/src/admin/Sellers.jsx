@@ -52,10 +52,10 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
         <label className="adm-field">{t("adm.sel.commission")}<input className="adm-input" type="number" min="0" max="100" step="0.5" value={f.commission_pct} onChange={(e) => set("commission_pct", e.target.value)} /></label>
         <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
         <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>
-        <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder="@usuario" /></label>
+        <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder={t("adm.sel.socialUserPh")} /></label>
         <label className="adm-field">Facebook<input className="adm-input" value={f.social.facebook} onChange={(e) => setS("facebook", e.target.value)} /></label>
-        <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder="@usuario" /></label>
-        <label className="adm-field">WhatsApp<input className="adm-input" value={f.social.whatsapp} onChange={(e) => setS("whatsapp", e.target.value)} placeholder="+1 …" /></label>
+        <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder={t("adm.sel.socialUserPh")} /></label>
+        <label className="adm-field">WhatsApp<input className="adm-input" value={f.social.whatsapp} onChange={(e) => setS("whatsapp", e.target.value)} placeholder={t("adm.sel.whatsappPh")} /></label>
         <label className="adm-field">{t("adm.sel.status")}
           <select className="adm-input" value={f.active ? "1" : "0"} onChange={(e) => set("active", e.target.value === "1")}>
             <option value="1">{t("adm.sel.statusActive")}</option>
