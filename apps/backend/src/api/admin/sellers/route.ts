@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { listEstablishments } from "../../../lib/establishments";
+import { sellerWithAddress } from "../../../lib/seller-address";
 import { takenCodes } from "../../../lib/staff-code";
 import { listTerminals } from "../../../lib/pos-data";
 import {
@@ -34,6 +35,8 @@ export interface SellerBody {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  /** How to settle an address that differs from the person's profile (lib/seller-address.ts). */
+  address_choice?: string | null;
   code?: string | null;
   commission_pct?: number | string | null;
   notes?: string | null;
@@ -104,7 +107,7 @@ export async function validateSellerBody(
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   try {
-    res.json({ sellers: await listSellers(req.scope) });
+    res.json({ sellers: await Promise.all((await listSellers(req.scope)).map((s) => sellerWithAddress(req.scope, s))) });
   } catch (error) {
     logger.error(`[sellers] list failed: ${(error as Error).message}`);
     res.status(500).json({ type: "error", reason: "list_failed", message: "Could not list sellers." });

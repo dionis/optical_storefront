@@ -95,6 +95,8 @@ const profileErr = (e, fallback) => {
   const r = (e && e.reason) || (e && e.payload && e.payload.reason);
   const err = new Error(r ? `adm.err.profile.${r}` : fallback);
   err.field = (e && e.payload && e.payload.field) || null;
+  err.reason = r || null;
+  err.other = (e && e.payload && e.payload.other) ?? null;
   return err;
 };
 

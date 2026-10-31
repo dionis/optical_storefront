@@ -1,5 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { recordAudit } from "../../../../../lib/audit";
+import { isAddressChoice, profileAddressLink, saveFromProfile } from "../../../../../lib/seller-address";
 import { ensureStaffCode } from "../../../../../lib/staff-code";
 import { cleanProfilePatch, viewProfile } from "../../../../../lib/staff-profile";
 import { profileOf, saveProfile } from "../../../../../lib/staff-profile-data";
@@ -19,15 +20,27 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   await ensureStaffCode(req.scope, userId);
   const scope = await getStaffScope(req.scope, userId);
   const profile = await profileOf(req.scope, userId);
-  res.json({ profile: viewProfile(profile, { isAdmin: scope.is_admin, isSelf: true, managesThem: false }) });
+  const link = await profileAddressLink(req.scope, userId, profile.address);
+  res.json({ profile: { ...viewProfile(profile, { isAdmin: scope.is_admin, isSelf: true, managesThem: false }), address: link ? link.address : profile.address }, address_link: link });
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknown>>, res: MedusaResponse): Promise<void> {
   const userId = req.auth_context?.actor_id ?? "";
-  const cleaned = cleanProfilePatch((req.body ?? {}) as Record<string, unknown>, "self");
+  const { address_choice: rawChoice, ...body } = (req.body ?? {}) as Record<string, unknown>;
+  const cleaned = cleanProfilePatch(body, "self");
   if ("reason" in cleaned) {
     res.status(422).json({ type: "invalid_data", reason: cleaned.reason, field: cleaned.field, message: `Profile: ${cleaned.reason}` });
     return;
+  }
+  // One address with the seller record, unless the person decides otherwise.
+  const choice = isAddressChoice(rawChoice) ? rawChoice : null;
+  if ("address" in cleaned.patch || choice) {
+    const saved = await saveFromProfile(req.scope, userId, cleaned.patch.address, choice, userId);
+    if (saved.conflict) {
+      res.status(409).json({ type: "not_allowed", reason: "address_conflict", other: saved.other, message: "The address differs from the one on the seller record." });
+      return;
+    }
+    cleaned.patch.address = saved.address;
   }
   const { before, after } = await saveProfile(req.scope, userId, cleaned.patch, userId);
   invalidateStaffScope(userId);
@@ -40,5 +53,6 @@ export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknow
     after: cleaned.patch,
   });
   const scope = await getStaffScope(req.scope, userId);
-  res.json({ profile: viewProfile(after, { isAdmin: scope.is_admin, isSelf: true, managesThem: false }) });
+  const link = await profileAddressLink(req.scope, userId, after.address);
+  res.json({ profile: { ...viewProfile(after, { isAdmin: scope.is_admin, isSelf: true, managesThem: false }), address: link ? link.address : after.address }, address_link: link });
 }

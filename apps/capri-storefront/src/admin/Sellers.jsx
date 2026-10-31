@@ -11,6 +11,7 @@ import { listTerminals } from "./posApi.js";
 import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText, onThisOrigin } from "./adminSellers.js";
 import { TENANT } from "../config/tenant.js";
 import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
@@ -31,7 +32,7 @@ const placementMissing = (f) => (f.active ? (!f.establishment_id ? "store_requir
 const termLabel = (x) => (x ? (x.name ? `${x.code} · ${x.name}` : x.code) : "");
 const initials = (name) => String(name || "?").split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, busy }) {
+function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, busy, addressConflict = null }) {
   const { t } = useLang();
   const [f, setF] = useState({ ...EMPTY, ...initial, establishment_id: initial.establishment_id || "", terminal_id: initial.terminal_id || "", social: { ...EMPTY.social, ...(initial.social || {}) }, commission_pct: String(initial.commission_pct ?? "10") });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -45,8 +46,15 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
   const storeOpts = stores.filter((x) => x.is_active || x.id === f.establishment_id);
   const termOpts = terminals.filter((p) => p.establishment_id === f.establishment_id && (p.is_active || p.id === f.terminal_id));
   const missing = placementMissing(f);
+  const submit = (extra = {}) => {
+    if (missing) return;
+    const { address_link: _link, ...rest } = f;
+    onSubmit({ ...rest, ...extra, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0 });
+  };
+  // Lo que respondió el servidor al guardar manda sobre lo que se vio al abrir.
+  const addrLink = addressConflict ? { state: "conflict", other: addressConflict.other } : initial.address_link;
   return (
-    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); if (missing) return; onSubmit({ ...f, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0 }); }}>
+    <form className="adm-card" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <h3><Icon name={initial.id ? "edit" : "plus"} size={16} />{initial.id ? t("adm.sel.editTitle", { name: initial.name }) : t("adm.sel.newTitle")}</h3>
       <div className="adm-form-grid">
         <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /></label>
@@ -58,6 +66,7 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
         <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
         <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>
         <label className="adm-field">{t("adm.sel.address")}<AddressInput className="adm-input" maxLength={200} value={f.address || ""} onChange={(e) => set("address", e.target.value)} onPick={(p) => set("address", formatAddressLine(p))} /></label>
+        {addrLink && <div style={{ gridColumn: "1 / -1" }}><AddressChoice state={addrLink.state} other={addrLink.other} place="profile" busy={busy} onChoose={(address_choice) => submit({ address_choice })} /></div>}
         <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder="@usuario" /></label>
         <label className="adm-field">Facebook<input className="adm-input" value={f.social.facebook} onChange={(e) => setS("facebook", e.target.value)} /></label>
         <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder="@usuario" /></label>
@@ -140,6 +149,7 @@ export default function Sellers({ onChanged, go }) {
   const [range, setRange] = useState("30d");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [addressConflict, setAddressConflict] = useState(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
 
@@ -158,7 +168,7 @@ export default function Sellers({ onChanged, go }) {
   }, [demo]);
   const storeBy = useMemo(() => Object.fromEntries(stores.map((x) => [x.id, x])), [stores]);
   const termBy = useMemo(() => Object.fromEntries(terminals.map((x) => [x.id, x])), [terminals]);
-  const openEditor = (x) => { setEditing(x); setCreating(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const openEditor = (x) => { setAddressConflict(null); setEditing(x); setCreating(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
   // Activar sin tienda o sin punto de venta no se puede: se abre la ficha para elegirlos.
   const onToggle = (x) => {
     if (!x.active && placementMissing({ ...x, active: true })) {
@@ -174,8 +184,15 @@ export default function Sellers({ onChanged, go }) {
 
   const run = async (fn, okKey) => {
     setBusy(true);
-    try { await fn(); toast({ tone: "success", title: t(okKey) }); setCreating(false); setEditing(null); load(); onChanged?.(); }
-    catch (e) { toast({ tone: "error", title: stageErrorText(t, e, "adm.err.sel.saveFailed") }); }
+    try { await fn(); toast({ tone: "success", title: t(okKey) }); setAddressConflict(null); setCreating(false); setEditing(null); load(); onChanged?.(); }
+    catch (e) {
+      // No es un error: dos direcciones distintas las decide quien edita, en el propio formulario.
+      if (e?.reason === "address_conflict") {
+        setAddressConflict({ other: e.payload?.other ?? null });
+        return;
+      }
+      toast({ tone: "error", title: stageErrorText(t, e, "adm.err.sel.saveFailed") });
+    }
     finally { setBusy(false); }
   };
   const onDelete = async (s) => {
@@ -211,7 +228,7 @@ export default function Sellers({ onChanged, go }) {
       )}
 
       {creating && <div style={{ marginBottom: 16 }}><SellerForm stores={stores} terminals={terminals} busy={busy} onCancel={() => setCreating(false)} onSubmit={(body) => run(() => createSeller(body), "adm.sel.created")} /></div>}
-      {editing && <div style={{ marginBottom: 16 }}><SellerForm key={`${editing.id}-${editing.active}`} initial={editing} stores={stores} terminals={terminals} busy={busy} onCancel={() => setEditing(null)} onSubmit={(body) => run(() => updateSeller(editing.id, body), "adm.sel.updated")} /></div>}
+      {editing && <div style={{ marginBottom: 16 }}><SellerForm key={`${editing.id}-${editing.active}`} initial={editing} stores={stores} terminals={terminals} busy={busy} addressConflict={addressConflict} onCancel={() => { setAddressConflict(null); setEditing(null); }} onSubmit={(body) => run(() => updateSeller(editing.id, body), "adm.sel.updated")} /></div>}
 
       {state === "loading" && !sellers.length ? <div className="adm-skel-rows"><div className="adm-skel" style={{ height: 160 }} /></div>
         : !demo && list.length === 0 ? (

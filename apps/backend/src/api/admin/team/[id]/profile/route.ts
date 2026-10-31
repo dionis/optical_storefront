@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../../lib/audit";
+import { isAddressChoice, profileAddressLink, saveFromProfile } from "../../../../../lib/seller-address";
 import { ensureStaffCode } from "../../../../../lib/staff-code";
 import { cleanProfilePatch, viewProfile } from "../../../../../lib/staff-profile";
 import { profileOf, saveProfile } from "../../../../../lib/staff-profile-data";
@@ -30,7 +31,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   // People created before codes were generated get theirs the first time they are looked at.
   await ensureStaffCode(req.scope, user.id);
   const profile = await profileOf(req.scope, user.id);
-  res.json({ profile: viewProfile(profile, { isAdmin: true, isSelf: req.auth_context?.actor_id === user.id, managesThem: false }) });
+  const link = await profileAddressLink(req.scope, user.id, profile.address);
+  res.json({ profile: { ...viewProfile(profile, { isAdmin: true, isSelf: req.auth_context?.actor_id === user.id, managesThem: false }), address: link ? link.address : profile.address }, address_link: link });
 }
 
 export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknown>>, res: MedusaResponse): Promise<void> {
@@ -39,12 +41,23 @@ export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknow
     res.status(404).json({ type: "not_found", reason: "not_found", message: "User not found." });
     return;
   }
-  const cleaned = cleanProfilePatch((req.body ?? {}) as Record<string, unknown>, "admin");
+  const { address_choice: rawChoice, ...body } = (req.body ?? {}) as Record<string, unknown>;
+  const cleaned = cleanProfilePatch(body, "admin");
   if ("reason" in cleaned) {
     res.status(422).json({ type: "invalid_data", reason: cleaned.reason, field: cleaned.field, message: `Profile: ${cleaned.reason}` });
     return;
   }
   const actorId = req.auth_context?.actor_id ?? null;
+  // One address with the seller record, unless someone decides otherwise.
+  const choice = isAddressChoice(rawChoice) ? rawChoice : null;
+  if ("address" in cleaned.patch || choice) {
+    const outcome = await saveFromProfile(req.scope, user.id, cleaned.patch.address, choice, actorId);
+    if (outcome.conflict) {
+      res.status(409).json({ type: "not_allowed", reason: "address_conflict", other: outcome.other, message: "The address differs from the one on the seller record." });
+      return;
+    }
+    cleaned.patch.address = outcome.address;
+  }
   let saved;
   try {
     saved = await saveProfile(req.scope, user.id, cleaned.patch, actorId);
@@ -84,5 +97,6 @@ export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknow
       after: Object.fromEntries(rest.map((k) => [k, redact(k, (cleaned.patch as Record<string, unknown>)[k])])),
     });
   }
-  res.json({ profile: viewProfile(after, { isAdmin: true, isSelf: actorId === user.id, managesThem: false }) });
+  const link = await profileAddressLink(req.scope, user.id, after.address);
+  res.json({ profile: { ...viewProfile(after, { isAdmin: true, isSelf: actorId === user.id, managesThem: false }), address: link ? link.address : after.address }, address_link: link });
 }

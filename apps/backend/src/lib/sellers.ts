@@ -174,6 +174,7 @@ export interface SellerRow {
   email: string | null;
   phone: string | null;
   address: string | null;
+  address_separate: boolean;
   code: string;
   commission_pct: number;
   active: boolean;
@@ -240,6 +241,7 @@ export function projectSeller(row: Record<string, unknown>): Seller {
     email: (row["email"] as string | null) ?? null,
     phone: (row["phone"] as string | null) ?? null,
     address: (row["address"] as string | null) ?? null,
+    address_separate: row["address_separate"] === true,
     code: String(row["code"] ?? "").toUpperCase(),
     commission_pct: Number(row["commission_pct"] ?? 0) || 0,
     active: row["active"] !== false,

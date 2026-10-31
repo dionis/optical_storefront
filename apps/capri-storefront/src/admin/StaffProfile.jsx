@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
@@ -79,6 +80,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   const [state, setState] = useState("loading");
   const [busy, setBusy] = useState(false);
   const [badField, setBadField] = useState(null);
+  const [addressLink, setAddressLink] = useState(null);
   const isAdmin = mode === "admin";
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
         if (!on) return;
         setProfile(r.profile || {});
         setForm(toForm(r.profile));
+        setAddressLink(r.address_link || null);
         setState("ok");
       })
       .catch(() => on && setState("error"));
@@ -100,6 +103,22 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   const readOnly = (k) => k === "seller_code";
   const set = (k) => (e) => { setBadField(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
   const togglePriv = (p) => setForm((f) => ({ ...f, privileges: f.privileges.includes(p) ? f.privileges.filter((x) => x !== p) : [...f.privileges, p] }));
+
+  const chooseAddress = async (address_choice) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const body = { address: form.address === "" ? null : form.address, address_choice };
+      const r = await (isAdmin ? saveProfile(userId, body) : saveMyProfile(body));
+      setProfile(r.profile || {});
+      setForm(toForm(r.profile));
+      setAddressLink(r.address_link || null);
+      toast({ tone: "success", title: t("adm.profile.saved") });
+      onSaved?.(r.profile);
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -121,9 +140,15 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
       const r = await (isAdmin ? saveProfile(userId, patch) : saveMyProfile(patch));
       setProfile(r.profile || {});
       setForm(toForm(r.profile));
+      setAddressLink(r.address_link || null);
       toast({ tone: "success", title: t("adm.profile.saved") });
       onSaved?.(r.profile);
     } catch (err) {
+      // No es un error: dos direcciones distintas las decide quien edita, aquí mismo.
+      if (err.reason === "address_conflict") {
+        setAddressLink({ state: "conflict", other: err.other });
+        return;
+      }
       setBadField(err.field || null);
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -165,6 +190,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
               </label>
             ))}
           </div>
+          {g.key === "contact" && addressLink && <AddressChoice state={addressLink.state} other={addressLink.other} place="record" busy={busy} onChoose={chooseAddress} />}
           {g.key === "identity" && <small className="muted">{t("adm.profile.codeHint")}</small>}
         </fieldset>
       ))}

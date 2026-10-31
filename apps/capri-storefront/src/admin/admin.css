@@ -967,6 +967,9 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .adm-team-item { border-bottom: 1px solid var(--adm-line-2); }
 .adm-team-item .adm-team-row { border-bottom: 0; }
 .adm-team-tag.code { background: var(--adm-amber-soft); color: var(--adm-amber); font-family: ui-monospace, monospace; }
+.adm-addr-choice { margin: 10px 0 0; }
+.adm-addr-choice > span:first-of-type { flex: 1 1 260px; }
+.adm-addr-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .adm-store-colors { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .adm-store-colors small:last-child { flex-basis: 100%; }
 .adm-store-swatch { width: 26px; height: 26px; padding: 0; border: 2px solid transparent; border-radius: 7px; cursor: pointer; }

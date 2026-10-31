@@ -22,6 +22,8 @@ export const Seller = model.define("seller", {
   phone: model.text().nullable(),
   /** Personal data: returned by the admin routes only, never by the public dashboard. */
   address: model.text().nullable(),
+  /** Someone chose to keep an address here different from the person's profile (lib/seller-address.ts). */
+  address_separate: model.boolean().default(false),
   /**
    * Uppercase A-Z0-9, 3–12 chars. The referral code. Unique among live rows
    * (partial index in the migration; enforced in code so a soft-deleted seller
