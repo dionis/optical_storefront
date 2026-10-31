@@ -9,8 +9,8 @@ import { profilesByUser } from "./staff-profile-data";
 import { tenant } from "./tenant";
 
 /**
- * Sales panel: sales and profit over time (hour of day, day, month, year) and
- * by store, seller, product or any other dimension of sale_fact.
+ * Sales panel: sales and profit over time (hour of day, day, ISO week, month,
+ * year) and by store, seller, product or any other dimension of sale_fact.
  *
  * Profit here is gross profit, the store P&L's contribution before its manual
  * variable items (lib/store-pnl.ts), and it can be cut by hour or product
@@ -28,7 +28,7 @@ import { tenant } from "./tenant";
  * changes past figures, and a hand-typed cost sheet on one order is not used.
  */
 
-export const GRAINS = ["hour", "day", "month", "year"] as const;
+export const GRAINS = ["hour", "day", "week", "month", "year"] as const;
 export type Grain = (typeof GRAINS)[number];
 
 /** Lines read per period; an optical chain takes years to reach it, and `truncated` says so if it does. */
@@ -139,11 +139,12 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
   });
 }
 
-/** Sensible grain for a range: one day by hour, up to two months by day, up to two years by month. */
+/** Sensible grain for a range: one day by hour, up to two months by day, up to six months by week, up to two years by month. */
 export function grainFor(from: string, to: string): Grain {
   const days = spanDays(from, to);
   if (days <= 1) return "hour";
   if (days <= 62) return "day";
+  if (days <= 182) return "week";
   if (days <= 731) return "month";
   return "year";
 }
@@ -152,9 +153,35 @@ export function spanDays(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400_000) + 1;
 }
 
-/** Hour of the day (all days of the range added up), "YYYY-MM-DD", "YYYY-MM" or "YYYY". */
+const DAY_MS = 86400_000;
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * ISO week of a local calendar day: "YYYY-Www", Monday to Sunday, week 1 the
+ * one holding January 4th. The year is the ISO year, so "2024-12-30" is
+ * "2025-W01" and "2027-01-01" is "2026-W53".
+ */
+export function isoWeekOf(ymd: string): string {
+  const d = new Date(Date.parse(`${ymd}T00:00:00Z`));
+  const dow = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dow); // the Thursday decides the year
+  const year = d.getUTCFullYear();
+  const week = Math.ceil(((d.getTime() - Date.UTC(year, 0, 1)) / DAY_MS + 1) / 7);
+  return `${year}-W${pad2(week)}`;
+}
+
+/** The Monday of an ISO week key ("2026-W44" → "2026-10-26"), for display. */
+export function weekStart(key: string): string {
+  const [y, w] = key.split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const monday1 = jan4.getTime() - ((jan4.getUTCDay() || 7) - 1) * DAY_MS;
+  return new Date(monday1 + (w - 1) * 7 * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Hour of the day (all days of the range added up), "YYYY-MM-DD", "YYYY-Www", "YYYY-MM" or "YYYY". */
 export function bucketOf(line: Pick<InsightLine, "sold_date_local" | "hour">, grain: Grain): string {
   if (grain === "hour") return String(line.hour).padStart(2, "0");
+  if (grain === "week") return isoWeekOf(line.sold_date_local);
   if (grain === "month") return line.sold_date_local.slice(0, 7);
   if (grain === "year") return line.sold_date_local.slice(0, 4);
   return line.sold_date_local;
@@ -172,7 +199,10 @@ export function bucketsOf(from: string, to: string, grain: Grain, seen: Iterable
   const size = grain === "day" ? 10 : grain === "month" ? 7 : 4;
   const out = new Set<string>();
   const end = Date.parse(`${to}T00:00:00Z`);
-  for (let t = Date.parse(`${from}T00:00:00Z`); t <= end; t += 86400_000) out.add(new Date(t).toISOString().slice(0, size));
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= end; t += DAY_MS) {
+    const day = new Date(t).toISOString().slice(0, 10);
+    out.add(grain === "week" ? isoWeekOf(day) : day.slice(0, size));
+  }
   return [...out];
 }
 
@@ -272,12 +302,30 @@ export interface InsightRow extends Figures {
 }
 
 export interface InsightPoint {
+  /** "HH", "YYYY-MM-DD", "YYYY-Www", "YYYY-MM" or "YYYY" (bucketOf). */
   bucket: string;
+  /** Week grain only: the Monday the bucket starts on, "YYYY-MM-DD". */
+  start?: string;
   sales: number;
   profit: number;
   commission: number;
   count: number;
   units: number;
+}
+
+export interface CompareSeries {
+  key: string;
+  label: string | null;
+  color: string | null;
+  sales: number[];
+  profit: number[];
+  commission: number[];
+}
+
+export interface InsightBreakdown {
+  rows: InsightRow[];
+  /** The leaders of the dimension over time, aligned with `series`. */
+  compare: CompareSeries[];
 }
 
 export interface Insights {
@@ -287,20 +335,24 @@ export interface Insights {
   previous: Figures;
   previous_range: { from: string; to: string };
   series: InsightPoint[];
+  /** The rows of `by` — the same as `breakdowns[by].rows`. */
   rows: InsightRow[];
-  /** The leaders of the dimension over time, aligned with `series`. */
-  compare: Array<{ key: string; label: string | null; color: string | null; sales: number[]; profit: number[]; commission: number[] }>;
+  /** The leaders of `by` over time, aligned with `series`. */
+  compare: CompareSeries[];
+  /** Every dimension asked for, `by` included, each over the same lines and buckets. */
+  breakdowns: Partial<Record<Breakdown, InsightBreakdown>>;
   missing_cost_lines: number;
   cost_rules_missing: boolean;
   truncated: boolean;
 }
 
-/** All the figures of the panel from lines already costed. Pure. */
+/** All the figures of the panel from lines already costed. Pure. `bys` adds dimensions besides `by`. */
 export function buildInsights(input: {
   from: string;
   to: string;
   grain: Grain;
   by: Breakdown;
+  bys?: readonly Breakdown[];
   lines: InsightLine[];
   econ: LineEconomics[];
   previous: Figures;
@@ -310,56 +362,67 @@ export function buildInsights(input: {
   truncated: boolean;
 }): Insights {
   const { lines, econ, grain, by, labels } = input;
+  const dims = [...new Set([by, ...(input.bys ?? [])])];
   const buckets = new Map<string, Tally>();
-  const groups = new Map<string | null, { tally: Tally; title: string | null; perBucket: Map<string, Tally> }>();
+  type Group = { tally: Tally; title: string | null; perBucket: Map<string, Tally> };
+  const groupsOf = new Map<Breakdown, Map<string | null, Group>>(dims.map((d) => [d, new Map()]));
 
   lines.forEach((l, i) => {
     const bucket = bucketOf(l, grain);
     if (!buckets.has(bucket)) buckets.set(bucket, newTally());
     add(buckets.get(bucket) as Tally, l, econ[i]);
-    for (const key of keysOf(l, by)) {
-      if (!groups.has(key)) groups.set(key, { tally: newTally(), title: l.title, perBucket: new Map() });
-      const group = groups.get(key)!;
-      add(group.tally, l, econ[i]);
-      if (!group.perBucket.has(bucket)) group.perBucket.set(bucket, newTally());
-      add(group.perBucket.get(bucket) as Tally, l, econ[i]);
+    for (const dim of dims) {
+      const groups = groupsOf.get(dim)!;
+      for (const key of keysOf(l, dim)) {
+        if (!groups.has(key)) groups.set(key, { tally: newTally(), title: l.title, perBucket: new Map() });
+        const group = groups.get(key)!;
+        add(group.tally, l, econ[i]);
+        if (!group.perBucket.has(bucket)) group.perBucket.set(bucket, newTally());
+        add(group.perBucket.get(bucket) as Tally, l, econ[i]);
+      }
     }
   });
 
   const order = bucketsOf(input.from, input.to, grain, buckets.keys());
   const series = order.map((bucket) => {
     const f = figures(buckets.get(bucket) ?? newTally());
-    return { bucket, sales: f.sales, profit: f.profit, commission: f.commission, count: f.count, units: f.units };
+    return { bucket, ...(grain === "week" ? { start: weekStart(bucket) } : {}), sales: f.sales, profit: f.profit, commission: f.commission, count: f.count, units: f.units };
   });
 
-  const describe = (key: string | null, title: string | null): { label: string | null; color: string | null } => {
-    if (key === null) return { label: null, color: null };
-    if (by === "establishment") return labels.store(key) ?? { label: null, color: null };
-    if (by === "seller") return { label: labels.sellerName(key), color: null };
-    if (by === "product" && key !== "own_frame") return { label: title, color: null };
-    return { label: null, color: null };
+  const breakdownOf = (dim: Breakdown, groups: Map<string | null, Group>): InsightBreakdown => {
+    const describe = (key: string | null, title: string | null): { label: string | null; color: string | null } => {
+      if (key === null) return { label: null, color: null };
+      if (dim === "establishment") return labels.store(key) ?? { label: null, color: null };
+      if (dim === "seller") return { label: labels.sellerName(key), color: null };
+      if (dim === "product" && key !== "own_frame") return { label: title, color: null };
+      return { label: null, color: null };
+    };
+    const sumSales = [...groups.values()].reduce((s, g) => s + g.tally.sales, 0) || 1;
+    const ranked = [...groups.entries()].sort((a, b) => b[1].tally.sales - a[1].tally.sales);
+    const rows = ranked.slice(0, MAX_ROWS).map(([key, g]) => ({
+      ...figures(g.tally),
+      key,
+      ...describe(key, g.title),
+      share: Math.round((g.tally.sales / sumSales) * 1000) / 10,
+    }));
+    const compare = ranked
+      .filter(([key]) => key !== null)
+      .slice(0, COMPARE_SERIES)
+      .map(([key, g]) => {
+        const points = order.map((bucket) => figures(g.perBucket.get(bucket) ?? newTally()));
+        return {
+          key: key as string,
+          ...describe(key, g.title),
+          sales: points.map((p) => p.sales),
+          profit: points.map((p) => p.profit),
+          commission: points.map((p) => p.commission),
+        };
+      });
+    return { rows, compare };
   };
-  const sumSales = [...groups.values()].reduce((s, g) => s + g.tally.sales, 0) || 1;
-  const ranked = [...groups.entries()].sort((a, b) => b[1].tally.sales - a[1].tally.sales);
-  const rows = ranked.slice(0, MAX_ROWS).map(([key, g]) => ({
-    ...figures(g.tally),
-    key,
-    ...describe(key, g.title),
-    share: Math.round((g.tally.sales / sumSales) * 1000) / 10,
-  }));
-  const compare = ranked
-    .filter(([key]) => key !== null)
-    .slice(0, COMPARE_SERIES)
-    .map(([key, g]) => {
-      const points = order.map((bucket) => figures(g.perBucket.get(bucket) ?? newTally()));
-      return {
-        key: key as string,
-        ...describe(key, g.title),
-        sales: points.map((p) => p.sales),
-        profit: points.map((p) => p.profit),
-        commission: points.map((p) => p.commission),
-      };
-    });
+  const breakdowns: Partial<Record<Breakdown, InsightBreakdown>> = {};
+  for (const dim of dims) breakdowns[dim] = breakdownOf(dim, groupsOf.get(dim)!);
+  const main = breakdowns[by]!;
 
   return {
     grain,
@@ -368,8 +431,9 @@ export function buildInsights(input: {
     previous: input.previous,
     previous_range: input.previousRange,
     series,
-    rows,
-    compare,
+    rows: main.rows,
+    compare: main.compare,
+    breakdowns,
     missing_cost_lines: econ.filter((e) => e.missing_cost).length,
     cost_rules_missing: input.costRulesMissing,
     truncated: input.truncated,
@@ -397,13 +461,17 @@ export function redactInsights(data: Insights, access: InsightAccess): Insights 
     commission: access.commission ? f.commission : 0,
   });
   const zeros = (v: number[], allowed: boolean) => (allowed ? v : v.map(() => 0));
+  const compare = (list: CompareSeries[]) => list.map((c) => ({ ...c, profit: zeros(c.profit, access.profit), commission: zeros(c.commission, access.commission) }));
+  const breakdowns: Partial<Record<Breakdown, InsightBreakdown>> = {};
+  for (const [dim, b] of Object.entries(data.breakdowns ?? {}) as Array<[Breakdown, InsightBreakdown]>) breakdowns[dim] = { rows: b.rows.map(figure), compare: compare(b.compare) };
   return {
     ...data,
     totals: figure(data.totals),
     previous: figure(data.previous),
     rows: data.rows.map(figure),
     series: data.series.map((p) => ({ ...p, profit: access.profit ? p.profit : 0, commission: access.commission ? p.commission : 0 })),
-    compare: data.compare.map((c) => ({ ...c, profit: zeros(c.profit, access.profit), commission: zeros(c.commission, access.commission) })),
+    compare: compare(data.compare),
+    breakdowns,
     missing_cost_lines: access.profit ? data.missing_cost_lines : 0,
     cost_rules_missing: access.profit ? data.cost_rules_missing : false,
   };
@@ -472,7 +540,8 @@ async function loadOrderContext(pg: Knex, f: AnalyticsFilter): Promise<{ orders:
   };
 }
 
-export async function salesInsights(container: MedusaContainer, f: AnalyticsFilter, grain: Grain, by: Breakdown): Promise<Insights> {
+/** `by` is the main dimension; `bys` the others to group by in the same pass (one query, many tables). */
+export async function salesInsights(container: MedusaContainer, f: AnalyticsFilter, grain: Grain, by: Breakdown, bys: readonly Breakdown[] = []): Promise<Insights> {
   const pg = pgOf(container);
   const tz = tenant().timezone;
   const prev = previousPeriod(f.from, f.to);
@@ -501,6 +570,7 @@ export async function salesInsights(container: MedusaContainer, f: AnalyticsFilt
     to: f.to,
     grain,
     by,
+    bys,
     lines: cur.lines,
     econ,
     previous: totalsOf(old.lines, oldEcon),

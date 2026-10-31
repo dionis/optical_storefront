@@ -21,12 +21,17 @@ export const CashSession = model.define("cash_session", {
   note: model.text().nullable(),
 });
 
-/** Cash put in or taken out of the register (change float, a supplier paid in cash…). */
+/**
+ * Cash put in or taken out of the register (change float, a supplier paid in
+ * cash…). `category` is one of CASH_CATEGORIES (lib/cash.ts) so the cash report
+ * can group the reasons; rows from before the column have none.
+ */
 export const CashMovement = model.define("cash_movement", {
   id: model.id({ prefix: "cashm" }).primaryKey(),
   session_id: model.text(),
   kind: model.enum(["in", "out"]),
   amount_cents: model.number(),
+  category: model.text().nullable(),
   note: model.text().nullable(),
   created_by: model.text().nullable(),
 });

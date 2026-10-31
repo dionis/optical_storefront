@@ -4,7 +4,7 @@ import type { Knex } from "@mikro-orm/knex";
 import { listAudit, recordAudit } from "./audit";
 import { resolveEmailLocale, type EmailLocale } from "./email/copy";
 import type { PrescriptionForEmail } from "./email/order-confirmation";
-import { enrichLensItems } from "./email/order-enrich";
+import { productImageUrl } from "./email/order-enrich";
 import { loadOrderImages } from "./email/order-images";
 import { renderReceiptEmail } from "./email/pos-emails";
 import { listEstablishments } from "./establishments";
@@ -30,12 +30,28 @@ import { tenant } from "./tenant";
  *    the details (HIPAA, owner's decision), only to the address on the sale, and
  *    leaves a trace in the audit log. Never the worn prescription, the optical
  *    change or insurance member data.
+ *  - Receipt, two copies ("receipt_duo"): the same receipt data laid out by the
+ *    panel as one letter page with a customer copy and a store copy, for tills
+ *    with a regular (non-thermal) printer. Same data as "receipt"; the kind only
+ *    tells the audit log what came out of the printer.
+ *
+ * The printed documents carry the frame's photo (catalog photo, or the photo of
+ * the frame the customer brought through a short-lived presigned URL — the
+ * private bucket is never linked directly). The email keeps its own rule: photos
+ * only in the detailed version, own-frame photos attached, never linked.
  *
  * Every print is recorded in the audit log; from the second on, the document
- * says "REPRINT" with the date (HU-105).
+ * says "REPRINT" with the date (HU-105). The two receipt kinds share one counter:
+ * a roll receipt after a two-copy one is still a reprint.
  */
 
 type Bilingual = { es: string; en: string } | null;
+
+export const DOCUMENT_KINDS = ["job", "receipt", "receipt_duo"] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+export const isDocumentKind = (v: unknown): v is DocumentKind => DOCUMENT_KINDS.includes(v as DocumentKind);
+/** Kinds whose prints count together for "REPRINT". */
+const printFamily = (kind: DocumentKind): DocumentKind[] => (kind === "job" ? ["job"] : ["receipt", "receipt_duo"]);
 
 export interface DocLine {
   kind: "frame" | "own_frame";
@@ -47,7 +63,13 @@ export interface DocLine {
   tax_amount: number;
   frame_price: number;
   lens_price: number;
-  /** Public catalog photo; only for the detailed email (opts.forEmail). */
+  quantity: number;
+  /**
+   * Photo of the frame: the public catalog photo (resized) for a store frame; for
+   * the customer's own frame, a short-lived presigned URL, only when the caller
+   * asked for photo URLs (prints). Null when there is none — the panel draws a
+   * placeholder. The email ignores it unless detailed.
+   */
   image_url?: string | null;
   design_code: string | null;
   lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null } | null;
@@ -58,10 +80,11 @@ export interface DocLine {
 }
 
 export interface SaleDocument {
-  kind: "job" | "receipt";
+  kind: DocumentKind;
   business: { name: string; legal_name: string; url: string; support_email: string | null };
   store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null };
-  terminal: { code: string | null; receipt_locale: string; ticket_locale: string };
+  /** `printer`: the till's printer as configured (free text such as "thermal 80mm" or "HP LaserJet"); null when unknown. */
+  terminal: { code: string | null; receipt_locale: string; ticket_locale: string; printer: string | null };
   sale: {
     id: string;
     number: string;
@@ -74,13 +97,13 @@ export interface SaleDocument {
     voided_at: string | null;
     delivery: string;
   };
-  customer: { name: string };
+  customer: { name: string; phone: string | null };
   tracking_url: string;
   print: { count: number; reprint: boolean; first_at: string | null };
-  /** Receipt only. */
+  /** Receipt kinds only. */
   lines?: DocLine[];
   totals?: { list: number; discount: number; discount_pct: number; tax: number; total: number; paid: number; insurance: number; balance: number };
-  payments?: Array<{ method_code: string; method: Bilingual; amount: number; kind: string; created_at: string }>;
+  payments?: Array<{ method_code: string; method: Bilingual; amount: number; kind: string; reference: string | null; created_at: string }>;
   /** Job only: one ticket per line with lenses. */
   tickets?: Array<{ line: DocLine; rx: Record<string, unknown> | null; job_type: string }>;
 }
@@ -106,28 +129,60 @@ async function lensLabels(pg: Knex, codes: { designs: string[]; materials: strin
   return { designs, materials, photos, ars };
 }
 
-async function printCount(container: MedusaContainer, saleId: string, kind: string): Promise<{ count: number; first_at: string | null }> {
-  const events = (await listAudit(container, { action: "document.print", entity: "pos_sale", entityId: saleId }, 500)).filter(
-    (e) => (e.after as { kind?: string } | null)?.kind === kind
+async function printCount(container: MedusaContainer, saleId: string, kind: DocumentKind): Promise<{ count: number; first_at: string | null }> {
+  const family = printFamily(kind);
+  const events = (await listAudit(container, { action: "document.print", entity: "pos_sale", entityId: saleId }, 500)).filter((e) =>
+    family.includes((e.after as { kind?: DocumentKind } | null)?.kind as DocumentKind)
   );
   return { count: events.length, first_at: events.length ? events[events.length - 1].created_at : null };
+}
+
+/** The till's printer as free text ("thermal 80mm", "HP LaserJet"); the column is JSON, so a string or an object with a name/type/model. */
+async function terminalPrinter(pg: Knex, terminalId: string | null): Promise<string | null> {
+  if (!terminalId) return null;
+  try {
+    const row = (await pg("pos_terminal").where("id", terminalId).first("printer")) as { printer?: unknown } | undefined;
+    const p = row?.printer;
+    if (!p) return null;
+    if (typeof p === "string") return p;
+    const o = p as Record<string, unknown>;
+    const text = [o.type, o.kind, o.model, o.name, o.paper].filter((v) => typeof v === "string" && v).join(" ");
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Catalog thumbnails by product id, for the frame photo on paper. Missing or unreadable: no photo. */
+async function productThumbnails(pg: Knex, productIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return map;
+  try {
+    const rows = (await pg("product").whereIn("id", ids).select("id", "thumbnail")) as Array<Record<string, unknown>>;
+    for (const r of rows) if (r.thumbnail) map.set(String(r.id), String(r.thumbnail));
+  } catch {
+    // Without a photo the document shows the placeholder.
+  }
+  return map;
 }
 
 export async function buildSaleDocument(
   container: MedusaContainer,
   saleId: string,
-  kind: "job" | "receipt",
+  kind: DocumentKind,
   opts: { withPhotoUrls?: boolean; forEmail?: boolean } = {}
 ): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const pg = pgOf(container);
-  const [stores, terminals, methods, prints] = await Promise.all([
+  const [stores, terminals, methods, prints, printer] = await Promise.all([
     listEstablishments(container),
     sale.terminal_id ? listTerminals(container, [sale.establishment_id]) : Promise.resolve([]),
     listPaymentMethods(container),
     printCount(container, sale.id, kind),
+    terminalPrinter(pg, sale.terminal_id),
   ]);
   const store = stores.find((s) => s.id === sale.establishment_id);
   if (!store) throw new PosError("store_not_found", 404);
@@ -136,12 +191,12 @@ export async function buildSaleDocument(
   const { data: orders } = sale.order_id
     ? await query.graph({
         entity: "order",
-        fields: ["id", "created_at", "updated_at", "email", "shipping_address.first_name", "shipping_address.last_name", "items.*"],
+        fields: ["id", "created_at", "updated_at", "email", "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone", "items.*"],
         filters: { id: sale.order_id },
       })
     : { data: [] as unknown[] };
   const order = orders[0] as
-    | { updated_at?: string; shipping_address?: { first_name?: string; last_name?: string }; items?: Array<Record<string, unknown>> }
+    | { updated_at?: string; shipping_address?: { first_name?: string; last_name?: string; phone?: string | null }; items?: Array<Record<string, unknown>> }
     | undefined;
   const items = (order?.items ?? []) as Array<Record<string, unknown>>;
   const mdOf = (it: Record<string, unknown>) => (it.metadata ?? {}) as Record<string, unknown>;
@@ -153,7 +208,8 @@ export async function buildSaleDocument(
     photos: items.map((i) => sel(i).photo_code).filter((v): v is string => Boolean(v)),
     ars: items.map((i) => sel(i).ar_code).filter((v): v is string => Boolean(v)),
   });
-  const productMeta = await loadProductMetadata(pg, items.map((i) => String(i.product_id ?? "")).filter(Boolean));
+  const productIds = items.map((i) => String(i.product_id ?? "")).filter(Boolean);
+  const [productMeta, thumbs] = await Promise.all([loadProductMetadata(pg, productIds), productThumbnails(pg, productIds)]);
 
   const lines: DocLine[] = [];
   for (const it of items) {
@@ -164,6 +220,8 @@ export async function buildSaleDocument(
     const pm = it.product_id ? productMeta.get(String(it.product_id)) ?? {} : {};
     const n = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
     const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null } | null;
+    // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
+    const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
     lines.push({
       kind: own ? "own_frame" : "frame",
       title: String(own ? ownFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
@@ -174,6 +232,8 @@ export async function buildSaleDocument(
       tax_amount: Number(md.tax_amount ?? 0),
       frame_price: Number(md.frame_price ?? 0),
       lens_price: Number(md.lens_addon ?? 0),
+      quantity: Math.max(1, Number(it.quantity ?? 1) || 1),
+      image_url: own ? ownPhotoUrl : productImageUrl((it.thumbnail as string | null) || thumbs.get(String(it.product_id ?? "")) || null),
       design_code: s.design_code ?? null,
       lens: withLenses
         ? {
@@ -198,22 +258,12 @@ export async function buildSaleDocument(
         ? {
             description: ownFrame?.description ?? null,
             has_photo: Boolean(ownFrame?.photo_key),
-            ...(opts.withPhotoUrls ? { photo_url: await presignPrescriptionUrl(ownFrame?.photo_key ?? null) } : {}),
+            ...(opts.withPhotoUrls ? { photo_url: ownPhotoUrl } : {}),
             ...(opts.forEmail ? { photo_key: ownFrame?.photo_key ?? null } : {}),
           }
         : null,
       prescription_id: (md.prescription_id as string | null) ?? null,
     });
-  }
-
-  if (opts.forEmail) {
-    // One entry per item, in order. A photo that cannot be found just leaves the line without one.
-    try {
-      const enriched = await enrichLensItems(pg, items, "es");
-      lines.forEach((l, i) => { l.image_url = l.kind === "frame" ? enriched[i]?.image_url ?? null : null; });
-    } catch (e) {
-      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[pos] receipt ${sale.number}: frame photos unavailable: ${(e as Error).message}`);
-    }
   }
 
   const name = [order?.shipping_address?.first_name, order?.shipping_address?.last_name].filter(Boolean).join(" ");
@@ -222,7 +272,7 @@ export async function buildSaleDocument(
     kind,
     business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail },
     store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note },
-    terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en" },
+    terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en", printer },
     sale: {
       id: sale.id,
       number: sale.number,
@@ -235,13 +285,13 @@ export async function buildSaleDocument(
       voided_at: sale.voided_at,
       delivery: sale.delivery,
     },
-    customer: { name },
+    customer: { name, phone: order?.shipping_address?.phone ?? null },
     // The QR on the receipt opens the existing order tracking — no personal data in it.
     tracking_url: `${storefrontOrigin()}/my-orders`,
     print: { count: prints.count, reprint: prints.count > 0, first_at: prints.first_at },
   };
 
-  if (kind === "receipt") {
+  if (kind === "receipt" || kind === "receipt_duo") {
     const byCode = new Map(methods.map((m) => [m.code, m]));
     return {
       ...base,
@@ -264,6 +314,7 @@ export async function buildSaleDocument(
           method: m && !m.builtin ? { es: m.label ?? m.code, en: m.label_en ?? m.label ?? m.code } : null,
           amount: p.amount,
           kind: p.kind,
+          reference: p.reference,
           created_at: p.created_at,
         };
       }),
@@ -298,8 +349,12 @@ export async function buildSaleDocument(
   return { ...base, tickets };
 }
 
-/** Records a print (audit) and returns the document as printed: "REPRINT" from the second time (HU-105). */
-export async function printSaleDocument(container: MedusaContainer, saleId: string, kind: "job" | "receipt", actorId: string | null): Promise<SaleDocument> {
+/**
+ * Records a print (audit) and returns the document as printed: "REPRINT" from the
+ * second time (HU-105). The audit keeps the exact kind (roll or two copies); the
+ * counter is shared by both receipt kinds. Every print gets the photo URLs.
+ */
+export async function printSaleDocument(container: MedusaContainer, saleId: string, kind: DocumentKind, actorId: string | null): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
   const before = await printCount(container, saleId, kind);
@@ -311,7 +366,7 @@ export async function printSaleDocument(container: MedusaContainer, saleId: stri
     establishmentId: sale.establishment_id,
     after: { kind, copy: before.count + 1 },
   });
-  const doc = await buildSaleDocument(container, saleId, kind, { withPhotoUrls: kind === "job" });
+  const doc = await buildSaleDocument(container, saleId, kind, { withPhotoUrls: true });
   return { ...doc, print: { count: before.count + 1, reprint: before.count > 0, first_at: before.first_at ?? new Date().toISOString() } };
 }
 

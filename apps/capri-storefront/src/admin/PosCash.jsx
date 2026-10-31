@@ -1,7 +1,9 @@
-// Dónde se usa: pestaña «Caja» de /admin (HU-32): abrir la caja del punto de
-// venta con el fondo, registrar entradas y salidas de efectivo y cerrar con el
-// conteo. El efectivo cobrado en ese punto de venta entra solo; la diferencia
-// queda registrada y avisa por la regla «Diferencia de caja».
+// Dónde se usa: pestaña «Caja» de /admin (HU-32), en dos subpestañas:
+// «Caja del día» — abrir la caja del punto de venta con el fondo, registrar
+// entradas y salidas de efectivo (con motivo) y cerrar con el conteo; el
+// efectivo cobrado en ese punto de venta entra solo y la diferencia queda
+// registrada y avisa por la regla «Diferencia de caja». «Movimientos» —
+// el informe de caja del periodo (CashReport.jsx).
 import { Fragment, useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
@@ -9,8 +11,13 @@ import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
+import { SubTabs } from "./ui.jsx";
+import CashReport from "./CashReport.jsx";
 
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
+/** Same list as CASH_CATEGORIES in the backend (lib/cash.ts). */
+const CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
+const EMPTY_MV = { kind: "in", amount: "", category: "", note: "" };
 
 export default function PosCash() {
   const { t, lang } = useLang();
@@ -20,7 +27,8 @@ export default function PosCash() {
   const [terminalId, setTerminalId] = useState("");
   const [sessions, setSessions] = useState([]);
   const [opening, setOpening] = useState("");
-  const [mv, setMv] = useState({ kind: "in", amount: "", note: "" });
+  const [mv, setMv] = useState(EMPTY_MV);
+  const [view, setView] = useState("day");
   const [counted, setCounted] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +55,7 @@ export default function PosCash() {
   };
 
   const doOpen = () => run(() => adminFetch("/admin/pos/cash-sessions", { method: "POST", body: { store: storeId, terminal_id: terminalId, opening: opening || 0 } }), t("adm.cash.opened"));
-  const doMove = () => run(() => adminFetch(`/admin/pos/cash-sessions/${open.id}/movement`, { method: "POST", body: mv }), t("adm.cash.moved")).then(() => setMv({ kind: "in", amount: "", note: "" }));
+  const doMove = () => run(() => adminFetch(`/admin/pos/cash-sessions/${open.id}/movement`, { method: "POST", body: mv }), t("adm.cash.moved")).then(() => setMv(EMPTY_MV));
   const doClose = async () => {
     const diff = Math.round((Number(counted) - open.expected) * 100) / 100;
     if (!(await confirm({ title: t("adm.cash.closeConfirm"), message: diff === 0 ? t("adm.cash.noDiff") : t("adm.cash.diffWarn", { v: m(diff) }) }))) return;
@@ -60,7 +68,7 @@ export default function PosCash() {
     <div className="adm-section pos">
       <div className="adm-head-row">
         <h2>{t("adm.tab.cash")}</h2>
-        <div className="pos-where">
+        {view === "day" && <div className="pos-where">
           {ctx.stores.length > 1 ? (
             <select value={storeId} onChange={(e) => { setStoreId(e.target.value); setTerminalId(ctx.stores.find((s) => s.id === e.target.value)?.terminals[0]?.id || ""); }} aria-label={t("adm.pos.store")} title={t("adm.pos.store")}>
               {ctx.stores.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
@@ -71,11 +79,13 @@ export default function PosCash() {
               {store?.terminals.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}
             </select>
           ) : terminalId && <span className="adm-team-tag" title={t("adm.pos.terminal")}><Icon name="receipt" size={12} /> {termCode(terminalId)}</span>}
-        </div>
+        </div>}
       </div>
-      <p className="adm-sub">{t("adm.cash.sub")}</p>
+      <SubTabs value={view} onChange={setView} items={[{ key: "day", icon: "wallet", label: t("adm.cash.tab.day") }, { key: "report", icon: "history", label: t("adm.cash.tab.report") }]} />
+      {view === "report" && <CashReport ctx={ctx} />}
+      {view === "day" && <p className="adm-sub">{t("adm.cash.sub")}</p>}
 
-      {!open ? (
+      {view !== "day" ? null : !open ? (
         <div className="adm-card pos-card">
           <h3>{t("adm.cash.openTitle", { till: termCode(terminalId) })}</h3>
           <div className="pos-row">
@@ -89,7 +99,7 @@ export default function PosCash() {
           <dl className="pos-totals">
             <dt>{t("adm.cash.opening")}</dt><dd>{m(open.opening)}</dd>
             <dt>{t("adm.cash.cashSales")}</dt><dd>{m(open.cash_in_sales)}</dd>
-            {open.movements.map((x, i) => <Fragment key={i}><dt>{t(`adm.cash.mv.${x.kind}`)} · {x.note}</dt><dd>{x.kind === "out" ? "−" : ""}{m(x.amount)}</dd></Fragment>)}
+            {open.movements.map((x, i) => <Fragment key={x.id || i}><dt>{t(`adm.cash.mv.${x.kind}`)}{x.category ? ` · ${t(`adm.cash.cat.${x.category}`)}` : ""} · {x.note}</dt><dd>{x.kind === "out" ? "−" : ""}{m(x.amount)}</dd></Fragment>)}
             <dt className="big">{t("adm.cash.expected")}</dt><dd className="big">{m(open.expected)}</dd>
           </dl>
           <div className="pos-pay">
@@ -97,8 +107,12 @@ export default function PosCash() {
               <option value="in">{t("adm.cash.mv.in")}</option><option value="out">{t("adm.cash.mv.out")}</option>
             </select>
             <input inputMode="decimal" value={mv.amount} onChange={(e) => setMv((x) => ({ ...x, amount: e.target.value.replace(/[^\d.]/g, "") }))} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
+            <select value={mv.category} onChange={(e) => setMv((x) => ({ ...x, category: e.target.value }))} aria-label={t("adm.cash.category")} title={t("adm.cash.category")} required>
+              <option value="">{t("adm.cash.categoryPick")}</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{t(`adm.cash.cat.${c}`)}</option>)}
+            </select>
             <input value={mv.note} onChange={(e) => setMv((x) => ({ ...x, note: e.target.value }))} placeholder={t("adm.cash.mvNote")} aria-label={t("adm.cash.mvNote")} />
-            <button type="button" className="btn-sm" disabled={busy || !Number(mv.amount) || !mv.note.trim()} onClick={doMove}>{t("adm.cash.record")}</button>
+            <button type="button" className="btn-sm" disabled={busy || !Number(mv.amount) || !mv.category || !mv.note.trim()} onClick={doMove}>{t("adm.cash.record")}</button>
           </div>
           <div className="pos-pay">
             <input inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value.replace(/[^\d.]/g, ""))} placeholder={t("adm.cash.counted")} aria-label={t("adm.cash.counted")} />
@@ -109,7 +123,7 @@ export default function PosCash() {
         </div>
       )}
 
-      <div className="adm-card">
+      {view === "day" && <div className="adm-card">
         <h3>{t("adm.cash.history")}</h3>
         <table className="adm-table responsive">
           <thead><tr><th>{t("adm.pos.terminal")}</th><th>{t("adm.cash.openedAt")}</th><th>{t("adm.cash.expected")}</th><th>{t("adm.cash.counted")}</th><th>{t("adm.cash.diffCol")}</th></tr></thead>
@@ -126,7 +140,7 @@ export default function PosCash() {
             {!sessions.some((s) => s.closed_at) && <tr><td colSpan="5" className="full"><div className="adm-nodata">{t("adm.cash.none")}</div></td></tr>}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   );
 }

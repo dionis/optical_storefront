@@ -59,6 +59,9 @@ export const savePosSettings = (body) => call("/admin/pos/settings", { method: "
 export const listClaims = (filters) => call(`/admin/pos/insurance-claims${qs(filters)}`);
 export const setClaim = (id, status, paid) => call(`/admin/pos/insurance-claims/${encodeURIComponent(id)}`, { method: "POST", body: { status, paid } });
 
+/** Estado de cuenta de una tienda ({ establishment_id: id | "all", from, to } en YYYY-MM-DD; sin fechas = mes en curso). */
+export const fetchStatement = (params) => call(`/admin/pos/statement${qs(params)}`);
+
 export const listMethods = () => call("/admin/pos/payment-methods");
 export const createMethod = (body) => call("/admin/pos/payment-methods", { method: "POST", body });
 export const updateMethod = (id, body) => call(`/admin/pos/payment-methods/${encodeURIComponent(id)}`, { method: "POST", body });

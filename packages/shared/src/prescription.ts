@@ -85,7 +85,10 @@ export type PrescriptionWarningCode =
   | "pd_dual_out_of_range"
   | "pd_single_out_of_range"
   | "high_rx_index_recommended"
-  | "small_frame_high_rx";
+  | "small_frame_high_rx"
+  | "prism_out_of_range"
+  | "prism_base_required"
+  | "seg_height_out_of_range";
 
 export interface PrescriptionWarning {
   code: PrescriptionWarningCode;

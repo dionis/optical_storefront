@@ -95,7 +95,7 @@ function SaleDetail({ id, ctx, onChanged }) {
             <Icon name="undo" size={14} /> {ctx.can_void ? (s.void_requested_at ? t("adm.pos.sales.confirmVoid") : t("adm.pos.sales.void")) : t("adm.pos.sales.requestVoid")}
           </button>
         )}
-        <SaleDocuments saleId={s.id} compact />
+        <SaleDocuments saleId={s.id} compact printer={store?.terminals.find((x) => x.id === s.terminal_id)?.printer} />
       </div>
       {s.void_requested_at && s.status !== "voided" && <div className="adm-demo-banner">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}</div>}
       {s.status === "voided" && <div className="adm-demo-banner">{t("adm.pos.sales.voidedAt", { date: fmt(s.voided_at, lang), reason: t(`adm.pos.void.${s.void_reason}`) })}</div>}

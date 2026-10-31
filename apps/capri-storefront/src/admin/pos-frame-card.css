@@ -1,0 +1,76 @@
+/* Tarjeta de la montura en el punto de venta (PosFrameCard.jsx). Tokens --adm-*
+   de admin.css. Dos tamaños: la ficha completa (paso Montura, ~140 px de alto
+   en escritorio) y la fila compacta (~72 px) que encabeza los pasos siguientes
+   para que el vendedor nunca pierda de vista qué montura está vendiendo. */
+
+.pfc { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 0 14px; align-items: stretch; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface); box-shadow: var(--adm-shadow-card); overflow: hidden; min-width: 0; }
+.pfc-img { display: flex; align-items: center; justify-content: center; background: var(--adm-bg); border-right: 1px solid var(--adm-line-2); min-height: 140px; color: var(--adm-faint); }
+.pfc-img img { width: 100%; height: 140px; object-fit: contain; display: block; }
+.pfc-body { display: grid; grid-template-rows: auto auto 1fr; gap: 6px; padding: 10px 12px 10px 0; min-width: 0; }
+
+/* Cabecera: marca + modelo a la izquierda, precio y quitar a la derecha */
+.pfc-head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.pfc-title { min-width: 0; flex: 1 1 auto; display: grid; gap: 1px; }
+.pfc-brand { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pfc-model { margin: 0; font: 700 16px/1.2 var(--adm-font); color: var(--adm-navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pfc-price { flex: 0 0 auto; font: 800 17px/1.2 var(--adm-font); color: var(--adm-navy); font-variant-numeric: tabular-nums; text-align: right; }
+.pfc-price.none { font-weight: 600; font-size: 12.5px; color: var(--adm-muted); }
+.pfc-remove { flex: 0 0 auto; }
+
+/* Color + códigos */
+.pfc-ids { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; font-size: 12px; color: var(--adm-muted); }
+.pfc-color { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-ink); font-weight: 700; font-size: 12px; max-width: 100%; }
+.pfc-color.text { padding-left: 8px; }
+.pfc-swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--adm-ink) 25%, transparent); flex: 0 0 auto; }
+.pfc-color-select { font: 600 12px var(--adm-font); border: 1px solid var(--adm-line); border-radius: 999px; padding: 2px 8px; background: var(--adm-surface); color: var(--adm-ink); max-width: 180px; }
+.pfc-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; letter-spacing: .02em; color: var(--adm-ink); white-space: nowrap; }
+.pfc-code small { font-family: var(--adm-font); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--adm-faint); margin-right: 3px; }
+
+/* Ficha técnica en pastillas: medidas primero, en negrita */
+.pfc-specs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; align-self: end; min-width: 0; }
+.pfc-specs li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: var(--adm-blue-soft); color: var(--adm-navy); font-size: 11.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.pfc-specs li.size { background: var(--adm-navy-fill); color: #fff; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.pfc-specs li.empty { background: transparent; color: var(--adm-faint); font-weight: 500; padding-left: 0; }
+/* Rótulo de cada pastilla solo para lectores de pantalla (el valor habla solo). */
+.pfc .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Compacta: una fila, miniatura 56 px */
+.pfc.compact { grid-template-columns: 76px minmax(0, 1fr); gap: 0 10px; box-shadow: none; }
+.pfc.compact .pfc-img { min-height: 56px; }
+.pfc.compact .pfc-img img { height: 56px; }
+.pfc.compact .pfc-body { grid-template-rows: auto auto; gap: 3px; padding: 6px 10px 6px 0; }
+.pfc.compact .pfc-brand { font-size: 10px; }
+.pfc.compact .pfc-model { font-size: 14px; }
+.pfc.compact .pfc-price { font-size: 15px; }
+.pfc.compact .pfc-line { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.pfc.compact .pfc-ids { flex: 0 1 auto; flex-wrap: nowrap; gap: 8px; overflow: hidden; }
+.pfc.compact .pfc-specs { flex: 1 1 auto; flex-wrap: nowrap; overflow: hidden; align-self: center; }
+.pfc.compact .pfc-specs li { padding: 2px 7px; font-size: 11px; }
+
+/* Teléfono: la foto arriba, todo lo demás debajo */
+@media (max-width: 560px) {
+  .pfc { grid-template-columns: minmax(0, 1fr); }
+  .pfc-img { border-right: 0; border-bottom: 1px solid var(--adm-line-2); min-height: 110px; }
+  .pfc-img img { height: 110px; }
+  .pfc-body { padding: 8px 10px 10px; }
+  .pfc-model { white-space: normal; }
+  .pfc.compact { grid-template-columns: 76px minmax(0, 1fr); }
+  .pfc.compact .pfc-img { border-right: 1px solid var(--adm-line-2); border-bottom: 0; min-height: 56px; }
+  .pfc.compact .pfc-img img { height: 56px; }
+  .pfc.compact .pfc-body { padding: 6px 8px 6px 0; }
+  .pfc.compact .pfc-line { flex-wrap: wrap; }
+  .pfc.compact .pfc-specs { flex-wrap: wrap; }
+}
+
+/* Fila del autocompletado (PosFrameSearch.jsx): marca antes del modelo y
+   medidas antes del color. Viven aquí porque PosFrameSearch importa la tarjeta. */
+.pos-ac-brand { font-weight: 700; font-size: .82em; letter-spacing: .08em; text-transform: uppercase; color: var(--adm-muted); }
+.pos-ac-size { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--adm-navy); }
+
+/* La ficha ocupa toda la fila de la lista de líneas (PosSale, paso Montura). */
+.pos-lines li.pos-line-card { display: block; padding: 0; border: 0; }
+.pos-lines li.pos-line-card .pfc { width: 100%; }
+/* admin.css estira todo <span> de .pos-lines li (flex: 1): dentro de la ficha no aplica. */
+.pos-lines li.pos-line-card span { flex: initial; min-width: 0; }
+.pos-lines li.pos-line-card .pfc-title { flex: 1 1 auto; }
+.pos-lines li.pos-line-card .pfc-swatch { flex: 0 0 auto; }

@@ -5,9 +5,11 @@ import {
   bucketsOf,
   buildInsights,
   grainFor,
+  isoWeekOf,
   keysOf,
   lineEconomics,
   redactInsights,
+  weekStart,
   type EconomicsContext,
   type Figures,
   type InsightLine,
@@ -95,13 +97,30 @@ describe("time buckets", () => {
   it("picks a grain that suits the range", () => {
     expect(grainFor("2026-10-27", "2026-10-27")).toBe("hour");
     expect(grainFor("2026-10-01", "2026-10-31")).toBe("day");
+    expect(grainFor("2026-05-01", "2026-09-30")).toBe("week");
     expect(grainFor("2026-01-01", "2026-12-31")).toBe("month");
     expect(grainFor("2023-01-01", "2026-12-31")).toBe("year");
   });
 
   it("groups a line by hour of day, day, month and year", () => {
     const l = { sold_date_local: "2026-10-27", hour: 9 };
-    expect(["hour", "day", "month", "year"].map((g) => bucketOf(l, g as never))).toEqual(["09", "2026-10-27", "2026-10", "2026"]);
+    expect(["hour", "day", "week", "month", "year"].map((g) => bucketOf(l, g as never))).toEqual(["09", "2026-10-27", "2026-W44", "2026-10", "2026"]);
+  });
+
+  it("ISO weeks start on Monday and belong to the year of their Thursday", () => {
+    expect(isoWeekOf("2026-10-26")).toBe("2026-W44"); // Monday
+    expect(isoWeekOf("2026-11-01")).toBe("2026-W44"); // Sunday of the same week
+    expect(isoWeekOf("2026-11-02")).toBe("2026-W45");
+    expect(isoWeekOf("2024-12-30")).toBe("2025-W01");
+    expect(isoWeekOf("2027-01-01")).toBe("2026-W53");
+    expect(weekStart("2026-W44")).toBe("2026-10-26");
+    expect(weekStart("2025-W01")).toBe("2024-12-30");
+    expect(weekStart("2026-W53")).toBe("2026-12-28");
+  });
+
+  it("fills the weeks of a range, one bucket per ISO week, across a year change", () => {
+    expect(bucketsOf("2026-10-28", "2026-11-10", "week", [])).toEqual(["2026-W44", "2026-W45", "2026-W46"]);
+    expect(bucketsOf("2026-12-28", "2027-01-05", "week", [])).toEqual(["2026-W53", "2027-W01"]);
   });
 
   it("fills the days and months without sales, across a year change", () => {
@@ -139,6 +158,47 @@ describe("buildInsights", () => {
     expect(d.compare[1]).toMatchObject({ key: "ANA", sales: [108, 0] });
   });
 
+  it("a week series carries the Monday of each bucket", () => {
+    const d = buildInsights({
+      from: "2026-10-27",
+      to: "2026-11-03",
+      grain: "week",
+      by: "seller",
+      lines: [line(), line({ order_id: "o2", sale_id: "s2", sold_date_local: "2026-11-02" })],
+      econ: lineEconomics([line(), line()], ctx({ orders: new Map(), saleFees: new Map() })),
+      previous: ZERO,
+      previousRange: { from: "2026-10-19", to: "2026-10-26" },
+      labels: NO_LABELS,
+      costRulesMissing: false,
+      truncated: false,
+    });
+    expect(d.series.map((p) => [p.bucket, p.start, p.sales])).toEqual([["2026-W44", "2026-10-26", 108], ["2026-W45", "2026-11-02", 108]]);
+    expect(d.compare[0].sales).toEqual([108, 108]);
+  });
+
+  it("groups by several dimensions in one pass; rows and compare are the main one", () => {
+    const lines = [line(), line({ order_id: "o2", sale_id: "s2", seller_code: "LUZ", channel: "web", establishment_id: null, payment_methods: ["card"] })];
+    const d = buildInsights({
+      from: "2026-10-27",
+      to: "2026-10-27",
+      grain: "day",
+      by: "seller",
+      bys: ["establishment", "payment_method", "seller"],
+      lines,
+      econ: lineEconomics(lines, ctx({ orders: new Map(), saleFees: new Map() })),
+      previous: ZERO,
+      previousRange: { from: "2026-10-26", to: "2026-10-26" },
+      labels: NO_LABELS,
+      costRulesMissing: false,
+      truncated: false,
+    });
+    expect(Object.keys(d.breakdowns).sort()).toEqual(["establishment", "payment_method", "seller"]);
+    expect(d.rows).toBe(d.breakdowns.seller!.rows);
+    expect(d.breakdowns.establishment!.rows.map((r) => r.key).sort()).toEqual(["est_1", "web"]);
+    expect(d.breakdowns.payment_method!.rows.map((r) => [r.key, r.share])).toEqual([["cash", 50], ["card", 50]]);
+    expect(d.breakdowns.payment_method!.compare.map((c) => c.sales)).toEqual([[108], [108]]);
+  });
+
   it("a sale with two lines counts once and its units add up", () => {
     const d = build([line(), line({ product_id: "p2" })]);
     expect(d.totals.count).toBe(1);
@@ -167,6 +227,7 @@ describe("redactInsights", () => {
       to: "2026-10-27",
       grain: "day",
       by: "seller",
+      bys: ["establishment"],
       lines: [line()],
       econ: lineEconomics([line()], ctx()),
       previous: { ...ZERO, profit: 5, cost: 5, fee: 5, commission: 5, margin_pct: 5 },
@@ -184,6 +245,9 @@ describe("redactInsights", () => {
     expect(d.series[0].profit).toBe(0);
     expect(d.compare[0].profit).toEqual([0]);
     expect(d.compare[0].commission).toEqual([0]);
+    const est = d.breakdowns.establishment!;
+    expect([est.rows[0].profit, est.rows[0].cost, est.rows[0].margin_pct]).toEqual([0, 0, null]);
+    expect(est.compare[0].profit).toEqual([0]);
     expect(d.cost_rules_missing).toBe(false);
     expect(d.totals.sales).toBe(108);
   });

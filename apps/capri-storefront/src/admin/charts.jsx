@@ -6,16 +6,18 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // Enhanced with mount entrance animations, hover motion and rich Spanish
 // tooltips. All keyframes live in admin.css (prefixed `cx-` / `cx…`) and are
 // disabled under `prefers-reduced-motion: reduce`.
-// Brand palette
+// Brand palette. Neutrals follow the panel's --adm-* tokens (admin.css) so the
+// charts switch with light/dark mode; the hex is the fallback outside the panel.
 const BRAND = {
   primary: "#0E5AD0",
   accent: "#FD0E3F",
-  ink: "#16181d",
-  muted: "#5c6470",
-  line: "#e6e8ec",
-  soft: "#f5f6f8",
-  ok: "#2e7d46",
-  warn: "#b26a00",
+  ink: "var(--adm-ink, #16181d)",
+  muted: "var(--adm-muted, #5c6470)",
+  line: "var(--adm-line, #e6e8ec)",
+  soft: "var(--adm-surface-2, #f5f6f8)",
+  surface: "var(--adm-surface, #fff)",
+  ok: "var(--adm-green-dark, #2e7d46)",
+  warn: "var(--adm-gold-dark, #b26a00)",
 };
 
 // Categorical palette for donut / multi-series when no explicit color given.
@@ -147,7 +149,7 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
       style={{
         cursor: clickable ? "pointer" : undefined,
         fontFamily: FONT,
-        background: "#fff",
+        background: BRAND.surface,
         border: `1px solid ${BRAND.line}`,
         borderRadius: 14,
         padding: "16px 18px",
@@ -282,7 +284,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={t("adm.chart.ariaTrend", { n, series: series.map((s) => s.label).join(", ") })} style={{ display: "block" }}>
             {ticks.map((v) => (
               <g key={v}>
-                <line x1={padL} x2={W - padR} y1={yAt(v)} y2={yAt(v)} stroke={v === 0 ? "#c9cdd4" : BRAND.line} strokeWidth="1" />
+                <line x1={padL} x2={W - padR} y1={yAt(v)} y2={yAt(v)} stroke={v === 0 ? "var(--adm-faint, #c9cdd4)" : BRAND.line} strokeWidth="1" />
                 <text x={padL - 8} y={yAt(v) + 4} textAnchor="end" fontSize="11" fill={BRAND.muted}>{axis(v)}</text>
               </g>
             ))}
@@ -304,7 +306,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
               <path key={s.key} d={s.values.map((v, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)},${yAt(Number(v) || 0).toFixed(1)}`).join(" ")} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
             ))}
             {!bars && (hover !== null ? [hover] : n === 1 ? [0] : []).flatMap((i) => series.map((s) => (
-              <circle key={s.key + i} cx={xAt(i)} cy={yAt(Number(s.values[i]) || 0)} r="4.5" fill={s.color} stroke="#fff" strokeWidth="2" />
+              <circle key={s.key + i} cx={xAt(i)} cy={yAt(Number(s.values[i]) || 0)} r="4.5" fill={s.color} stroke={BRAND.surface} strokeWidth="2" />
             )))}
             <rect x={padL} y={padT} width={plotW} height={plotH} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} />
           </svg>
@@ -509,7 +511,7 @@ export function LineChart({
             cx={p.x}
             cy={p.y}
             r={hover && hover.i === p.i ? 5 : 2.5}
-            fill="#fff"
+            fill={BRAND.surface}
             stroke={color}
             strokeWidth={hover && hover.i === p.i ? 2.5 : 2}
             style={{
@@ -1094,7 +1096,7 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
       width={width}
       height={height}
       role="img"
-      aria-label={`Tendencia, ${n} puntos`}
+      aria-label={t("adm.chart.ariaSparkline", { n })}
       style={{ display: "inline-block", verticalAlign: "middle" }}
     >
       <path
@@ -1229,7 +1231,7 @@ export function Funnel({ steps }) {
                     pointerEvents: "none",
                   }}
                 >
-                  −{stepDrop.toFixed(0)}% vs paso previo
+                  {t("adm.chart.funnelDrop", { pct: stepDrop.toFixed(0) })}
                 </span>
               ) : null}
             </div>
@@ -1311,7 +1313,7 @@ export function AccessVsBuyChart({ data, height = 250 }) {
             );
           })}
           {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke="#0E5AD0" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
-          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill="#0E5AD0" stroke="#fff" strokeWidth="2" />}
+          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill="#0E5AD0" stroke={BRAND.surface} strokeWidth="2" />}
         </svg>
         {hd && (
           <Tip

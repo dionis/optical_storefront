@@ -4,8 +4,14 @@
  * any color, even a repeated one. Pure — no I/O.
  */
 
-/** Starting colors, far from each other and from the emails' navy and gold. Keep in step with the panel (adminStores.js) and CreateEstablishmentColor4. */
-export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569"];
+/**
+ * Starting colors, far from each other and from the emails' navy and gold. Keep
+ * in step with the panel (adminStores.js). CreateEstablishmentColor4 only seeded
+ * the first ten; the last four are the owner's picks for the panel theme (clinic
+ * green, copper, fuchsia, the storefront's brand blue) — which store gets which
+ * is data (Stores → Edit), never code.
+ */
+export const STORE_COLORS = ["#2563EB", "#DC2626", "#16A34A", "#7C3AED", "#EA580C", "#DB2777", "#0891B2", "#854D0E", "#65A30D", "#475569", "#1B7F4C", "#B5651D", "#C2185B", "#0E5AD0"];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 

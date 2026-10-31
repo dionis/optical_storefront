@@ -27,7 +27,7 @@ export default function Catalog() {
       path: "/catalogo",
     });
   }, [lang]);
-  const { products: PRODUCTS, cases: CASES } = useCatalog();
+  const { products: PRODUCTS, cases: CASES, loading } = useCatalog();
   const brand = slug ? BRAND_BY_SLUG[slug] : null;
   const q = (params.get("q") || "").toLowerCase().trim();
   const ageParam = params.get("age");
@@ -288,7 +288,11 @@ export default function Catalog() {
           </div>
         </div>
 
-        {results.length === 0 ? (
+        {loading && !PRODUCTS.length ? (
+          <div className={`product-grid ${view === "list" ? "list" : ""}`}>
+            {Array.from({ length: 12 }, (_, i) => <div className="card-skeleton" key={`skel-${i}`} />)}
+          </div>
+        ) : results.length === 0 ? (
           <div className="empty">{t("empty.text")} <button onClick={() => setSelected({})}>{t("empty.clear")}</button></div>
         ) : (
           <>

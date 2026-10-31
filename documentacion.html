@@ -33,7 +33,7 @@
 <body>
 <header>
   <h1>RUBI LENS — Documentación del proyecto</h1>
-  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 14-oct-2026</p>
+  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 31-oct-2026</p>
 </header>
 <main>
 
@@ -48,6 +48,19 @@
     <tr><td>Checkout + entrega (teléfono, email, dirección)</td><td><span class="tag ok">Funcional</span></td><td><code>MedusaCheckout.jsx</code>: Stripe, datos del paciente, confirmaciones email/SMS</td></tr>
     <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Completo</span></td><td>Dashboard EJECUTIVO (KPIs, alertas, pipeline), Pedidos (etapas + tracking con URL + email automático al cliente), catálogo (precios, descontinuar monturas/marcas, exportar a Excel/CSV), identidad propia navy/ADMIN</td></tr>
     <tr><td>Cuentas y seguimiento del cliente</td><td><span class="tag ok">Funcional</span></td><td>Cuentas con email+contraseña (auth de Medusa) que abren TODOS los pedidos de ese correo; enlace mágico como acceso sin contraseña; cancelación con política de plazos</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Panel de tienda — hitos del 31-oct-2026 (rama <code>develop_optical_storepos</code>)</h2>
+  <p class="muted">Detalle, decisiones optométricas y contables, y reglas de trabajo con Eyewear Dev en <code>docs/HITOS-PANEL-TIENDA.md</code>. Staging: <a href="https://rubilens-staging.vercel.app/admin_stores">rubilens-staging.vercel.app/admin_stores</a>.</p>
+  <table>
+    <tr><th>Hito</th><th>Estado</th><th>Qué entrega</th></tr>
+    <tr><td>1 · Receta óptica en el POS</td><td><span class="tag ok">Listo</span></td><td>Monofocal / Multifocal primero; cuadrícula compacta como la planilla (ESF · CIL · EJE · ADD · PRISMA · BASE · DNP · ALT); reglas optométricas al escribir (eje solo con cilindro, base solo con prisma, ADD espejada, paso 0,25 con signo); lentes filtrados por tipo; OCR con «Tomar foto» y «Subir archivo». <code>PosRx.jsx</code>, <code>rxRules.js</code>.</td></tr>
+    <tr><td>2 · Montura, impresos y colores</td><td><span class="tag ok">Listo</span></td><td>Ficha profesional de la montura al elegirla (y compacta en los pasos siguientes); recibo y ticket con la foto del espejuelo; <b>recibo doble en carta</b> (2 copias con línea de corte: cliente / archivo); colores por tienda (verde clínica, cobre, fucsia, azul online; gris/negro súper admin) cambiables en Tiendas; modo claro / oscuro / sistema junto al idioma; <code>$1,234.50</code> en todo el panel.</td></tr>
+    <tr><td>3 · Contabilidad</td><td><span class="tag ok">Listo</span></td><td>Ventas de tienda por día / <b>semana</b> / mes / año con filtros fijos y totalizadores; Caja → <b>Movimientos</b> (cobros por método, movimientos con motivo, arqueos, serie diaria); <b>Estado de cuenta</b> mensual por tienda (EST-tienda-AAAAMM, liquidación); PDF y <b>Excel</b> en todo.</td></tr>
+    <tr><td>Tras desplegar</td><td><span class="tag wip">Pendiente</span></td><td>Coolify: <code>medusa db:migrate</code> (photo_url, category de caja, colores por defecto). Revisar en staging: venta completa, ventas por semana, movimientos, estado de cuenta, modo oscuro.</td></tr>
+    <tr><td>Siguiente</td><td><span class="tag wip">Por hacer</span></td><td>Plantillas de lente para montura propia; optimización de espacios en Pedidos / Costos / Tiendas; toasts en modo oscuro; rotación del secreto del webhook y contraseña admin.</td></tr>
   </table>
 </section>
 

@@ -45,7 +45,8 @@ describe("cleanProfilePatch", () => {
 
 describe("viewProfile", () => {
   it("shows a teammate only identity", () => {
-    expect(viewProfile(full, { isAdmin: false, isSelf: false, managesThem: false })).toEqual({ display_name: "Carlos M.", seller_code: "CM07" });
+    // The photo is identity too: it is the avatar teammates see in the panel.
+    expect(viewProfile(full, { isAdmin: false, isSelf: false, managesThem: false })).toEqual({ display_name: "Carlos M.", seller_code: "CM07", photo_url: full.photo_url ?? null });
   });
 
   it("a manager of their store also sees contact", () => {

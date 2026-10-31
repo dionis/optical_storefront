@@ -17,11 +17,23 @@ const bySlug = (arr) => Object.fromEntries(arr.map((p) => [p.slug, p]));
 let rawFrames = SEED_FRAMES;
 let rawCases = SEED_CASES_RAW;
 
+// When Medusa is the source of truth the seed prices (wholesale × FRAME_MARKUP)
+// differ from the real Medusa prices. Showing the seed on first paint makes the
+// customer see the wrong price for a fraction of a second ("price flash") before
+// the Medusa fetch replaces them. To avoid this, under Medusa we start with an
+// EMPTY catalog and loading=true, so components show a placeholder / skeleton
+// instead of seed-priced cards. Once Medusa responds the real products appear
+// with the correct price from the start.
+// Without Medusa (static JSON path) the seed IS the authoritative price, so we
+// still show it on first paint for instant content.
+const INIT_PRODUCTS = USE_MEDUSA ? [] : SEED_PRODUCTS;
+const INIT_CASES    = USE_MEDUSA ? [] : SEED_CASES;
+
 let state = {
-  products: SEED_PRODUCTS,
-  cases: SEED_CASES,
-  productBySlug: bySlug(SEED_PRODUCTS),
-  caseBySlug: bySlug(SEED_CASES),
+  products: INIT_PRODUCTS,
+  cases: INIT_CASES,
+  productBySlug: bySlug(INIT_PRODUCTS),
+  caseBySlug: bySlug(INIT_CASES),
   meta: null,
   live: false,
   // `loading` is true from first paint until the startup live-load (loadLive)
@@ -133,9 +145,28 @@ async function doLoad() {
           // check stays expired, so the next trigger retries instead of waiting
           // out MAX_AGE_MS on data we never actually got.
           lastLoadedAt = Date.now();
+        } else if (!state.products.length) {
+          // Medusa returned nothing useful — fall back to seed so the site
+          // is not empty (approximate prices beat a blank catalogue).
+          set({
+            products: SEED_PRODUCTS,
+            cases: SEED_CASES,
+            productBySlug: bySlug(SEED_PRODUCTS),
+            caseBySlug: bySlug(SEED_CASES),
+          });
         }
       } catch (e) {
-        // network/SDK error → keep the bundled seed silently
+        // network/SDK error → fall back to seed so the store is not empty.
+        // Seed prices may differ from Medusa but an approximate catalog is
+        // better than a blank page.
+        if (!state.products.length) {
+          set({
+            products: SEED_PRODUCTS,
+            cases: SEED_CASES,
+            productBySlug: bySlug(SEED_PRODUCTS),
+            caseBySlug: bySlug(SEED_CASES),
+          });
+        }
       }
       return;
     }

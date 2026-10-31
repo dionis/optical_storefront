@@ -102,51 +102,62 @@ function RulesEditor({ data, onSaved }) {
           <button className="btn-sm primary" disabled={busy || !dirty.size} onClick={save}><Icon name="save" size={14} />{t("adm.cost.saveRules")}{dirty.size ? ` (${dirty.size})` : ""}</button>
         </div>
       </div>
-      <div className="adm-grid-2 tight">
+      <div className="cost-accordions">
         {RULE_GROUPS.map((g) => {
           const list = rules.filter((r) => g.kinds.includes(r.kind) && (!g.only || r.kind !== "order_percent" || g.only.includes(r.match_key)))
             .sort((a, b) => (a.kind > b.kind ? 1 : a.kind < b.kind ? -1 : String(ruleLabel(a, catalog, t)).localeCompare(ruleLabel(b, catalog, t))));
+          const undef = list.filter((r) => r.active && r.unit !== "percent" && !(Number(r.amount) > 0) && r.kind !== "shipping").length;
           return (
-            <Card key={g.key} icon={g.icon} title={t(`adm.cost.g.${g.key}`)} hint={t(`adm.cost.g.${g.key}.hint`)} exportable={false} className="tight">
-              <div className="cost-rules">
-                {list.map((r) => {
-                  const isActual = r.kind === "shipping" && r.match_key === "actual";
-                  const undefinedAmt = r.active && r.unit !== "percent" && !(Number(r.amount) > 0) && !isActual;
-                  return (
-                    <div className={`cost-rule ${undefinedAmt ? "undefined" : ""} ${r.active ? "" : "off"}`} key={r.id}>
-                      <div className="cost-rule-name">
-                        <b>{ruleLabel(r, catalog, t)}</b>
-                        <small>{t(isAllocationRule(r) ? "adm.cost.kind.order_percent_net" : `adm.cost.kind.${r.kind}`)}{r.kind === "frame_sku" ? <> · <a href={capriUrl(r.match_key)} target="_blank" rel="noopener noreferrer">{t("adm.cost.capriRef")}</a></> : null}</small>
-                      </div>
-                      {isActual ? <span className="cost-unit">{t("adm.cost.shippingActual")}</span> : (
-                        <NumInput value={r.amount} onCommit={(v) => patch(r.id, { amount: Number(v) || 0 })} step={r.unit === "percent" ? "0.1" : "0.01"} />
-                      )}
-                      <span className="cost-unit">{r.unit === "percent" ? "%" : "USD"}</span>
-                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                        <label className="adm-switch" title={t("adm.cost.active")}><input type="checkbox" checked={!!r.active} onChange={(e) => patch(r.id, { active: e.target.checked })} /></label>
-                        {(r.kind === "frame_sku" || (r.kind === "order_fixed" && !["lab", "packaging", "case"].includes(r.match_key))) && (
-                          <button type="button" className="btn-xs warn" onClick={() => remove(r)} title={t("adm.cost.remove")}><Icon name="trash" size={13} /></button>
+            <details key={g.key} className="cost-accordion" open>
+              <summary className="cost-acc-head">
+                <Icon name={g.icon} size={16} />
+                <span className="cost-acc-title">{t(`adm.cost.g.${g.key}`)}</span>
+                <small className="cost-acc-count">{list.length}</small>
+                {undef > 0 && <span className="adm-chip warn" style={{ fontSize: 11, padding: "1px 7px" }}><Icon name="alert" size={11} />{undef}</span>}
+                <Icon name="chevronDown" size={14} className="cost-acc-arrow" />
+              </summary>
+              <div className="cost-acc-body">
+                <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>{t(`adm.cost.g.${g.key}.hint`)}</p>
+                <div className="cost-rules">
+                  {list.map((r) => {
+                    const isActual = r.kind === "shipping" && r.match_key === "actual";
+                    const undefinedAmt = r.active && r.unit !== "percent" && !(Number(r.amount) > 0) && !isActual;
+                    return (
+                      <div className={`cost-rule ${undefinedAmt ? "undefined" : ""} ${r.active ? "" : "off"}`} key={r.id}>
+                        <div className="cost-rule-name">
+                          <b>{ruleLabel(r, catalog, t)}</b>
+                          <small>{t(isAllocationRule(r) ? "adm.cost.kind.order_percent_net" : `adm.cost.kind.${r.kind}`)}{r.kind === "frame_sku" ? <> · <a href={capriUrl(r.match_key)} target="_blank" rel="noopener noreferrer">{t("adm.cost.capriRef")}</a></> : null}</small>
+                        </div>
+                        {isActual ? <span className="cost-unit">{t("adm.cost.shippingActual")}</span> : (
+                          <NumInput value={r.amount} onCommit={(v) => patch(r.id, { amount: Number(v) || 0 })} step={r.unit === "percent" ? "0.1" : "0.01"} />
                         )}
+                        <span className="cost-unit">{r.unit === "percent" ? "%" : "$"}</span>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <label className="adm-switch" title={t("adm.cost.active")}><input type="checkbox" checked={!!r.active} onChange={(e) => patch(r.id, { active: e.target.checked })} /></label>
+                          {(r.kind === "frame_sku" || (r.kind === "order_fixed" && !["lab", "packaging", "case"].includes(r.match_key))) && (
+                            <button type="button" className="btn-xs warn" onClick={() => remove(r)} title={t("adm.cost.remove")}><Icon name="trash" size={13} /></button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-                {list.length === 0 && <div className="adm-nodata">{t("adm.cost.noRules")}</div>}
+                    );
+                  })}
+                  {list.length === 0 && <div className="adm-nodata">{t("adm.cost.noRules")}</div>}
+                </div>
+                {g.key === "frames" && (
+                  <form className="ord-edit-row adm-noprint" onSubmit={(e) => { e.preventDefault(); if (!newSku.trim()) return; add({ kind: "frame_sku", match_key: newSku.trim().toUpperCase(), label: newSku.trim().toUpperCase(), amount: Number(newSkuAmt) || 0 }); setNewSku(""); setNewSkuAmt(""); }}>
+                    <input value={newSku} placeholder={t("adm.cost.skuPh")} onChange={(e) => setNewSku(e.target.value)} />
+                    <input type="number" step="0.01" min="0" value={newSkuAmt} placeholder="0.00" style={{ maxWidth: 110 }} onChange={(e) => setNewSkuAmt(e.target.value)} />
+                    <button className="btn-sm"><Icon name="plus" size={14} />{t("adm.cost.addSku")}</button>
+                  </form>
+                )}
+                {g.key === "order" && (
+                  <form className="ord-edit-row adm-noprint" onSubmit={(e) => { e.preventDefault(); const name = newFixed.trim(); if (!name) return; add({ kind: "order_fixed", match_key: slug(name), label: name, amount: 0 }); setNewFixed(""); }}>
+                    <input value={newFixed} placeholder={t("adm.cost.fixedPh")} onChange={(e) => setNewFixed(e.target.value)} />
+                    <button className="btn-sm"><Icon name="plus" size={14} />{t("adm.cost.addFixed")}</button>
+                  </form>
+                )}
               </div>
-              {g.key === "frames" && (
-                <form className="ord-edit-row adm-noprint" onSubmit={(e) => { e.preventDefault(); if (!newSku.trim()) return; add({ kind: "frame_sku", match_key: newSku.trim().toUpperCase(), label: newSku.trim().toUpperCase(), amount: Number(newSkuAmt) || 0 }); setNewSku(""); setNewSkuAmt(""); }}>
-                  <input value={newSku} placeholder={t("adm.cost.skuPh")} onChange={(e) => setNewSku(e.target.value)} />
-                  <input type="number" step="0.01" min="0" value={newSkuAmt} placeholder="0.00" style={{ maxWidth: 110 }} onChange={(e) => setNewSkuAmt(e.target.value)} />
-                  <button className="btn-sm"><Icon name="plus" size={14} />{t("adm.cost.addSku")}</button>
-                </form>
-              )}
-              {g.key === "order" && (
-                <form className="ord-edit-row adm-noprint" onSubmit={(e) => { e.preventDefault(); const name = newFixed.trim(); if (!name) return; add({ kind: "order_fixed", match_key: slug(name), label: name, amount: 0 }); setNewFixed(""); }}>
-                  <input value={newFixed} placeholder={t("adm.cost.fixedPh")} onChange={(e) => setNewFixed(e.target.value)} />
-                  <button className="btn-sm"><Icon name="plus" size={14} />{t("adm.cost.addFixed")}</button>
-                </form>
-              )}
-            </Card>
+            </details>
           );
         })}
       </div>

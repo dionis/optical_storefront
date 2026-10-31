@@ -7,6 +7,8 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
+import "./admin-theme.css";
 
 /**
  * Secciones del panel en grupos pequeños, por tarea: cada grupo es un submenú
@@ -23,6 +25,7 @@ export const NAV_GROUPS = [
   { key: "stores", icon: "store", items: [
     { key: "stores", icon: "store" },
     { key: "storecosts", icon: "costs" },
+    { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
     { key: "alerts", icon: "bell" },
   ] },
@@ -73,6 +76,8 @@ export function navGroupsFor(me) {
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
     // Costos y resultado: privilegio por persona, sea cual sea el rol.
     ...((me.privileges || []).some((p) => p === "costs.view" || p === "costs.manage") ? [{ key: "storecosts", icon: "costs" }] : []),
+    // Estado de cuenta del período: supervisor y encargado, sobre sus tiendas.
+    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "statement", icon: "clipboard" }] : []),
   ];
   // El vendedor arranca en su panel («Mi panel»): primero en su menú, y la
   // primera pestaña es la que abre el panel cuando el enlace no pide otra.
@@ -142,7 +147,14 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   const go = (key) => { onTab(key); setDrawer(false); setFly(null); };
   const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
   const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
-  const userStore = me?.store_name || me?.store_code || "";
+  // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js),
+  // y su nombre siempre a la vista en la barra superior, también en el móvil.
+  const { theme, store, stores, multi } = useStoreTheme(me);
+  // Claro / oscuro / sistema: `data-mode` en el armazón; admin.css redefine los tokens.
+  const { mode, resolved: colorMode, cycle: cycleMode } = useColorMode();
+  const storeName = store ? (store.online ? t("adm.theme.online") : store.name) : "";
+  const userStore = store ? `${store.code} · ${storeName}` : me?.store_name || me?.store_code || "";
+  const storeLabel = store ? storeName : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
   const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   const item = (it, sub = false) => {
@@ -226,7 +238,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   ) : null;
 
   return (
-    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`}>
+    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
           <div className="adm-side-title" style={{ paddingLeft: 4 }}>
@@ -261,6 +273,11 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             <span className="adm-top-sec">{t(`adm.tab.${tab}`)}</span>
             {/* Solo dueño y superadmin: un vendedor o un encargado no administran el panel. */}
             {me?.is_admin !== false && <em className="adm-badge">ADMIN</em>}
+            {/* Dónde estoy: punto del color de la tienda + su nombre, siempre visible. */}
+            <span className="adm-store-pill" title={`${t("adm.theme.current")}: ${storeLabel}`} aria-label={`${t("adm.theme.current")}: ${storeLabel}`}>
+              <i className="adm-store-dot" aria-hidden="true" />
+              <span className="adm-store-pill-txt">{storeLabel}</span>
+            </span>
           </div>
           {find !== null && <label className="adm-find" title={t("adm.findPriceTitle")}>
             <Icon name="search" size={16} />
@@ -271,8 +288,14 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             <button type="button" className="adm-icobtn" onClick={toggle} title={t("lang.switch")}>
               <Icon name="globe" size={17} /><span>{lang === "es" ? "EN" : "ES"}</span>
             </button>
+            {/* Tres estados en ciclo: claro → oscuro → sistema. El icono dice el estado actual. */}
+            <button type="button" className="adm-icobtn adm-mode-btn" onClick={cycleMode} title={`${t(`adm.mode.${mode}`)} · ${t("adm.mode.next", { mode: t(`adm.mode.${COLOR_MODES[(COLOR_MODES.indexOf(mode) + 1) % 3]}`) })}`} aria-label={t(`adm.mode.${mode}`)}>
+              <Icon name={mode === "dark" ? "moon" : mode === "light" ? "sun" : "auto"} size={17} />
+            </button>
             <button type="button" className="adm-user-chip" title={user} onClick={() => setShowProfile(p => !p)} style={{ cursor: "pointer", position: "relative" }}>
-              <span className="adm-avatar">{initials}</span>
+              {me?.photo_url
+                ? <img className="adm-avatar adm-avatar-img" src={me.photo_url} alt={displayName} />
+                : <span className="adm-avatar">{initials}</span>}
               <span className="adm-user-mail">{displayName}{userRole ? ` · ${t(`adm.role.${userRole}`, userRole)}` : ""}{userStore ? ` — ${userStore}` : ""}</span>
             </button>
             <button type="button" className="adm-icobtn danger" onClick={onLogout} title={t("adm.logout")}>
@@ -287,7 +310,9 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
         <div className="adm-profile-popup-overlay" onClick={() => setShowProfile(false)}>
           <div className="adm-profile-popup" onClick={(e) => e.stopPropagation()}>
             <div className="adm-profile-popup-head">
-              <div className="adm-profile-popup-avatar">{initials}</div>
+              {me?.photo_url
+                ? <img className="adm-profile-popup-avatar adm-avatar-img" src={me.photo_url} alt={displayName} />
+                : <div className="adm-profile-popup-avatar">{initials}</div>}
               <div className="adm-profile-popup-info">
                 <b>{displayName}</b>
                 <small>{user}</small>

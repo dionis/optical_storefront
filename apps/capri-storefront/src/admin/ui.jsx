@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
+import { downloadXlsx } from "./exportXlsx.js";
 
 /**
  * Alto de gráfico proporcional a la pantalla (los SVG necesitan un número):
@@ -54,20 +55,41 @@ export function InfoTip({ text, title }) {
 
 /**
  * Menú de exportación de un nodo: CSV (de sus tablas/KPI, o de `csv` si se
- * pasan columnas+filas explícitas) y PDF (impresión aislada del nodo).
+ * pasan columnas+filas explícitas), PDF (impresión aislada del nodo) y, si se
+ * pasa `xlsx`, un libro Excel real (exportXlsx.js). `xlsx` es
+ * `{ filename, sheets }` o una función que lo devuelve en el momento del clic;
+ * `onCsv` sustituye el CSV del nodo por uno propio (p. ej. el del servidor);
+ * `meta` (texto o función) va bajo el título del PDF: los filtros aplicados;
+ * `beforePrint` se llama antes de clonar el nodo (abrir acordeones…) y puede
+ * devolver una función que lo deshace.
  */
-export function ExportMenu({ targetRef, title, csv, name = "export", compact = true }) {
+export function ExportMenu({ targetRef, title, csv, xlsx, onCsv: customCsv, meta, beforePrint, name = "export", compact = true }) {
   const { t } = useLang();
   const onCsv = (e) => {
     e.stopPropagation();
+    if (customCsv) return customCsv();
     const text = csv ? rowsToCsv(csv.cols, csv.rows) : elementToCsv(targetRef?.current);
-    downloadText(`${name}-${new Date().toISOString().slice(0, 10)}.csv`, text);
+    return downloadText(`${name}-${new Date().toISOString().slice(0, 10)}.csv`, text);
   };
-  const onPdf = (e) => { e.stopPropagation(); printElement(targetRef?.current, title); };
+  const onXlsx = (e) => {
+    e.stopPropagation();
+    const spec = typeof xlsx === "function" ? xlsx() : xlsx;
+    if (!spec?.sheets?.length) return;
+    downloadXlsx(spec.filename || `${name}-${new Date().toISOString().slice(0, 10)}.xlsx`, spec.sheets);
+  };
+  const onPdf = (e) => {
+    e.stopPropagation();
+    const restore = beforePrint?.();
+    printElement(targetRef?.current, title, typeof meta === "function" ? meta() : meta);
+    if (typeof restore === "function") restore();
+  };
+  const cls = compact ? "adm-mini" : "btn-xs";
+  const pdf = <button key="pdf" type="button" className={cls} title={t("adm.ui.pdf")} onClick={onPdf}><Icon name="printer" size={14} />{!compact && "PDF"}</button>;
+  const csvBtn = <button key="csv" type="button" className={cls} title={t("adm.ui.csv")} onClick={onCsv}><Icon name="excel" size={14} />{!compact && "CSV"}</button>;
+  const xlsxBtn = xlsx ? <button key="xlsx" type="button" className={cls} title={t("adm.ui.xlsx")} onClick={onXlsx}><Icon name="sheet" size={14} />{!compact && "Excel"}</button> : null;
   return (
     <span className="adm-export-menu adm-noprint">
-      <button type="button" className={compact ? "adm-mini" : "btn-xs"} title={t("adm.ui.csv")} onClick={onCsv}><Icon name="excel" size={14} />{!compact && "CSV"}</button>
-      <button type="button" className={compact ? "adm-mini" : "btn-xs"} title={t("adm.ui.pdf")} onClick={onPdf}><Icon name="printer" size={14} />{!compact && "PDF"}</button>
+      {xlsx ? [pdf, xlsxBtn, csvBtn] : [csvBtn, pdf]}
     </span>
   );
 }
