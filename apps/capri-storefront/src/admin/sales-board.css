@@ -10,13 +10,13 @@
 .sb-bar {
   position: sticky; top: var(--sb-top, var(--adm-top-h)); z-index: 30;
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  padding: 8px 0 6px; margin: 0 0 8px; background: var(--adm-bg); border-bottom: 1px solid var(--adm-line);
+  padding: 8px 0 6px; margin: 0 0 8px; background: var(--st-bg, var(--adm-bg)); border-bottom: 1px solid var(--adm-line);
 }
 .sb-bar.busy { opacity: .75; }
 .sb-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .sb-chips button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 4px 9px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; transition: background .15s, color .15s; }
 .sb-chips button:hover { color: var(--adm-blue); border-color: var(--adm-blue-line); }
-.sb-chips button.on { background: var(--adm-navy); color: #fff; border-color: var(--adm-navy); }
+.sb-chips button.on { background: var(--adm-navy-fill); color: #fff; border-color: var(--adm-navy-fill); }
 .sb-bar .adm-range { padding: 2px; gap: 1px; }
 .sb-bar .adm-range button { padding: 4px 9px; font-size: 12px; }
 .sb-bar .adm-range button:disabled { opacity: .4; cursor: not-allowed; }
@@ -41,8 +41,8 @@
 .sb-tile b { font-size: 17px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--adm-navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-tile i { font-style: normal; font-size: 11px; color: var(--adm-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-tile i.good { color: var(--adm-green); }
-.sb-tile i.bad { color: var(--adm-red); }
-.sb-tile b.neg { color: #b91c1c; }
+.sb-tile i.bad { color: var(--adm-red-dark); }
+.sb-tile b.neg { color: var(--adm-red-dark); }
 
 .sb-notes { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--adm-ink); }
 .sb-notes li { display: inline-flex; align-items: center; gap: 6px; }
@@ -79,7 +79,7 @@
 .sb-table tfoot td { font-weight: 700; border-top: 2px solid var(--adm-line); border-bottom: 0; background: var(--adm-bg); }
 .sb-table .sb-dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }
 .sb-table .sb-go { color: var(--adm-faint); vertical-align: middle; margin-left: 4px; }
-.sb-table .neg { color: #b91c1c; }
+.sb-table .neg { color: var(--adm-red-dark); }
 .sb-table .sb-share { display: inline-block; width: 46px; height: 5px; background: var(--adm-line-2); border-radius: 3px; vertical-align: middle; margin-left: 6px; overflow: hidden; }
 .sb-table .sb-share i { display: block; height: 100%; background: var(--adm-blue); }
 .sb-table + .btn-xs { margin-top: 6px; }

@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
-import { themeVars, useStoreTheme } from "./useStoreTheme.js";
+import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
 import "./admin-theme.css";
 
 /**
@@ -150,8 +150,11 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js),
   // y su nombre siempre a la vista en la barra superior, también en el móvil.
   const { theme, store, stores, multi } = useStoreTheme(me);
-  const userStore = store ? `${store.code} · ${store.name}` : me?.store_name || me?.store_code || "";
-  const storeLabel = store ? store.name : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
+  // Claro / oscuro / sistema: `data-mode` en el armazón; admin.css redefine los tokens.
+  const { mode, resolved: colorMode, cycle: cycleMode } = useColorMode();
+  const storeName = store ? (store.online ? t("adm.theme.online") : store.name) : "";
+  const userStore = store ? `${store.code} · ${storeName}` : me?.store_name || me?.store_code || "";
+  const storeLabel = store ? storeName : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
   const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   const item = (it, sub = false) => {
@@ -235,7 +238,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   ) : null;
 
   return (
-    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} style={themeVars(theme)}>
+    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
           <div className="adm-side-title" style={{ paddingLeft: 4 }}>
@@ -284,6 +287,10 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
           <div className="adm-top-right">
             <button type="button" className="adm-icobtn" onClick={toggle} title={t("lang.switch")}>
               <Icon name="globe" size={17} /><span>{lang === "es" ? "EN" : "ES"}</span>
+            </button>
+            {/* Tres estados en ciclo: claro → oscuro → sistema. El icono dice el estado actual. */}
+            <button type="button" className="adm-icobtn adm-mode-btn" onClick={cycleMode} title={`${t(`adm.mode.${mode}`)} · ${t("adm.mode.next", { mode: t(`adm.mode.${COLOR_MODES[(COLOR_MODES.indexOf(mode) + 1) % 3]}`) })}`} aria-label={t(`adm.mode.${mode}`)}>
+              <Icon name={mode === "dark" ? "moon" : mode === "light" ? "sun" : "auto"} size={17} />
             </button>
             <button type="button" className="adm-user-chip" title={user} onClick={() => setShowProfile(p => !p)} style={{ cursor: "pointer", position: "relative" }}>
               {me?.photo_url

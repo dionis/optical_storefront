@@ -8,7 +8,7 @@
 .cr-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .cr-chip { border: 1px solid var(--adm-line); background: var(--adm-bg); color: var(--adm-muted); border-radius: 999px; padding: 4px 11px; font: 600 12.5px var(--adm-font); cursor: pointer; transition: background .15s, color .15s, border-color .15s; white-space: nowrap; }
 .cr-chip:hover { color: var(--adm-blue); border-color: var(--adm-blue-line); }
-.cr-chip.on { background: var(--adm-navy); color: #fff; border-color: var(--adm-navy); }
+.cr-chip.on { background: var(--adm-navy-fill); color: #fff; border-color: var(--adm-navy-fill); }
 .cr-chip.cat.on { background: var(--adm-blue-soft); color: var(--adm-blue); border-color: var(--adm-blue-line); }
 .cr-dates { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--adm-muted); }
 .cr-dates input, .cr-filters select { border: 1px solid var(--adm-line); border-radius: 9px; padding: 4px 8px; font: 500 12.5px var(--adm-font); color: var(--adm-ink); background: var(--adm-surface); min-height: 30px; max-width: 200px; }

@@ -14,7 +14,7 @@
 
 /* ── El documento ─────────────────────────────────────────────────────── */
 .stmt-doc { background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: var(--adm-radius); padding: clamp(14px, 2vw, 28px); color: var(--adm-ink); }
-.stmt-head { display: grid; grid-template-columns: 1fr auto; gap: 16px 24px; align-items: start; padding-bottom: 14px; border-bottom: 2px solid var(--adm-navy); margin-bottom: 14px; }
+.stmt-head { display: grid; grid-template-columns: 1fr auto; gap: 16px 24px; align-items: start; padding-bottom: 14px; border-bottom: 2px solid var(--adm-navy-fill); margin-bottom: 14px; }
 .stmt-biz { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .stmt-biz img { height: 44px; max-width: 120px; object-fit: contain; }
 .stmt-biz b { display: block; font-family: var(--adm-display); font-size: 18px; letter-spacing: -.01em; }
@@ -49,10 +49,10 @@
 .stmt-tbl td.items small { color: var(--adm-muted); }
 .stmt-tbl tr.voided td { color: var(--adm-faint); text-decoration: line-through; }
 .stmt-tbl tr.voided td.status { text-decoration: none; }
-.stmt-tbl tr.total td { font-weight: 800; border-top: 2px solid var(--adm-navy); border-bottom: 0; background: var(--adm-bg); }
+.stmt-tbl tr.total td { font-weight: 800; border-top: 2px solid var(--adm-navy-fill); border-bottom: 0; background: var(--adm-bg); }
 .stmt-tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--adm-line-2); color: var(--adm-muted); }
-.stmt-tag.void { background: #fee2e2; color: var(--adm-red); }
-.stmt-tag.ok { background: #d1fae5; color: #047857; }
+.stmt-tag.void { background: var(--adm-red-soft); color: var(--adm-red); }
+.stmt-tag.ok { background: var(--adm-green-soft); color: var(--adm-green-dark); }
 .stmt-empty { padding: 18px; text-align: center; color: var(--adm-muted); font-size: 13px; }
 
 .stmt-foot { margin-top: 16px; display: grid; grid-template-columns: 1fr minmax(240px, 340px); gap: 16px; align-items: start; }

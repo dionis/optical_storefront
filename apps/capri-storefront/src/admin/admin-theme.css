@@ -4,17 +4,21 @@
      --st-accent      color de la tienda (barra superior, botones primarios, KPIs)
      --st-ink         texto legible sobre el acento (storeInk)
      --st-bg          fondo de la página: acento al 7 % sobre blanco (color-mix; --st-bg-fallback desde JS)
-     --st-surface     tarjetas: blanco siempre
+     --st-surface     píldoras y botones de la barra: la superficie del modo (--adm-surface)
      --st-chrome      barra lateral: acento oscurecido un 15 % (gris #111827 si neutro)
      --st-chrome-ink  texto legible sobre la barra lateral
      --st-soft        acento al 12 %: pestaña activa, chips (color-mix; --st-soft-fallback desde JS)
    Solo el cromo: tablas, formularios y tarjetas siguen con los tokens --adm-*.
    Todo cuelga de `.adm-shell[data-store-theme]`, así que sin tema no pasa nada.
+   Modo oscuro (`data-mode="dark"`): el cromo sigue siendo el color de la tienda
+   en los dos modos; el fondo de la página es el acento al 12 % sobre el fondo
+   oscuro y los «suaves» al 22 % sobre la superficie oscura.
    ============================================================================ */
 
 .adm-shell[data-store-theme] {
   --st-bg: var(--st-bg-fallback, #F3F4F6);
   --st-soft: var(--st-soft-fallback, #E5E7EB);
+  --st-surface: var(--adm-surface);
   --st-chrome-ink-70: var(--st-chrome-ink);
   --st-chrome-ink-45: var(--st-chrome-ink);
   --st-chrome-ink-12: rgba(255, 255, 255, .12);
@@ -38,6 +42,21 @@
   }
   .adm-shell[data-store-theme="neutral"] { --st-bg: #F3F4F6; }
 }
+/* Modo oscuro (solo en pantalla: impreso, siempre claro). */
+@media screen {
+  @supports (color: color-mix(in srgb, red 50%, white)) {
+    .adm-shell[data-mode="dark"][data-store-theme] {
+      --st-bg: color-mix(in srgb, var(--st-accent) 12%, var(--adm-bg));
+      --st-soft: color-mix(in srgb, var(--st-accent) 22%, var(--adm-surface));
+      --st-accent-line: color-mix(in srgb, var(--st-accent) 55%, white);
+    }
+    .adm-shell[data-mode="dark"][data-store-theme="neutral"] { --st-bg: var(--adm-bg); }
+  }
+}
+/* Oscuro y neutro: la barra lateral (#111827) se distingue del fondo por su borde. */
+.adm-shell[data-mode="dark"][data-store-theme="neutral"] .adm-side { border-right-color: var(--adm-line); }
+.adm-shell[data-mode="dark"][data-store-theme] .adm-top { box-shadow: 0 2px 12px -4px rgba(0, 0, 0, .6); }
+.adm-shell[data-mode="dark"][data-store-theme] .adm-store-pill { box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 /* ── Barra lateral: el cromo oscuro de la tienda ─────────────────────────── */
 .adm-shell[data-store-theme] .adm-side {
   background: linear-gradient(180deg, var(--st-chrome) 0%, var(--st-chrome) 100%);
@@ -108,6 +127,7 @@
 .adm-shell[data-store-theme] .adm-subtabs button.on { color: var(--adm-ink); border-bottom-color: var(--st-accent); }
 .adm-shell[data-store-theme] .adm-kpis .cx-kpi::after { background: var(--st-accent); }
 .adm-shell[data-store-theme] .adm-kpis .cx-kpi > div:nth-child(2) { color: var(--st-chrome) !important; }
+.adm-shell[data-mode="dark"][data-store-theme] .adm-kpis .cx-kpi > div:nth-child(2) { color: var(--adm-navy) !important; }
 .adm-shell[data-store-theme] .adm-card-head h3.go:hover { background: var(--st-soft); color: var(--adm-ink); }
 .adm-shell[data-store-theme] .btn-sm.primary,
 .adm-shell[data-store-theme] .btn-xs.primary { background: var(--st-accent); color: var(--st-ink); border-color: var(--st-accent); }

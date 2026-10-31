@@ -599,7 +599,7 @@ function Prices({ preQ }) {
         </div>
       </div>
       <p className="muted">{t("adm.prices.hint")}</p>
-      <div className="adm-demo-banner" style={{ background: "#e8f4fd", color: "#0b2f66", border: "1px solid #b3d4f0" }}>
+      <div className="adm-demo-banner" style={{ background: "var(--adm-blue-soft)", color: "var(--adm-navy)", borderColor: "var(--adm-blue-line)" }}>
         <Icon name="info" size={14} /> {t("adm.prices.markupRule")}
       </div>
 

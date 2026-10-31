@@ -13,11 +13,41 @@
 //    `setActiveStore()` (p. ej. el POS al elegir caja).
 import { useEffect, useMemo, useState } from "react";
 import { isDemoLogin } from "./adminAuth.js";
-import { fetchStores, storeInk } from "./adminStores.js";
+import { fetchStores, ONLINE_STORE_COLOR, storeInk } from "./adminStores.js";
 import { posContext } from "./posApi.js";
 
 /** Grises y negro: nadie está en una tienda concreta. */
 export const NEUTRAL_THEME = { chrome: "#111827", accent: "#374151", bg: "#F3F4F6" };
+
+/* Fondo y tarjetas del modo oscuro (los mismos valores que --adm-bg/--adm-surface
+   en admin.css bajo `[data-mode="dark"]`): la mezcla en JS es el respaldo del
+   navegador sin color-mix(). */
+const DARK_BG = "#0F1218";
+const DARK_SURFACE = "#171B24";
+
+/**
+ * Color por defecto de las tiendas del dueño, por nombre, para una tienda que
+ * aún no tiene color (la migración CreateEstablishmentThemeColor5 escribe la
+ * misma tabla en la base; esto cubre el caso de que falte). El dueño puede
+ * cambiarlo cuando quiera en Tiendas → Editar, y entonces manda lo guardado.
+ *   Fry Family Clinic → verde clínica  #1B7F4C
+ *   El Rancho 39      → cobre          #B5651D
+ *   El Rancho 41      → fucsia         #C2185B
+ *   Tienda online     → azul de la web #0E5AD0 (canal «web», no es establecimiento)
+ *   Dueño/superadmin sin tienda → grises y negro (NEUTRAL_THEME)
+ */
+export function defaultColorForStore(name) {
+  const n = String(name || "").toLowerCase();
+  if (!n) return null;
+  if (n.includes("fry")) return "#1B7F4C";
+  if (/rancho.*39/.test(n)) return "#B5651D";
+  if (/rancho.*41/.test(n)) return "#C2185B";
+  if (/online|\bweb\b/.test(n)) return ONLINE_STORE_COLOR;
+  return null;
+}
+
+/** La tienda online como pseudo-tienda del tema (`setActiveStore(WEB_STORE.id)`). */
+export const WEB_STORE = Object.freeze({ id: "web", code: "WEB", name: "", online: true, color: ONLINE_STORE_COLOR });
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -55,17 +85,56 @@ export function themeFor(color, { neutral = false, key = "neutral" } = {}) {
  * Variables CSS del tema, para el `style` del armazón (admin-theme.css las
  * consume). `--st-bg` y `--st-soft` las deriva la hoja con `color-mix()` del
  * acento; estas `*-fallback` son la misma mezcla hecha aquí, para el navegador
- * que no lo tenga (un valor en línea le ganaría siempre a la hoja).
+ * que no lo tenga (un valor en línea le ganaría siempre a la hoja). En modo
+ * oscuro la mezcla va sobre el fondo oscuro (acento al 12 %), no sobre blanco.
+ * Las tarjetas (`--st-surface`) las pone la hoja desde `--adm-surface`, que
+ * cambia con el modo.
  */
-export const themeVars = (th) => ({
+export const themeVars = (th, { dark = false } = {}) => ({
   "--st-accent": th.accent,
   "--st-ink": th.ink,
-  "--st-bg-fallback": th.bg,
-  "--st-surface": th.surface,
+  "--st-bg-fallback": dark ? (th.neutral ? DARK_BG : mixColor(DARK_BG, th.accent, 0.12)) : th.bg,
   "--st-chrome": th.chrome,
   "--st-chrome-ink": th.chromeInk,
-  "--st-soft-fallback": th.soft,
+  "--st-soft-fallback": dark ? mixColor(DARK_SURFACE, th.accent, 0.22) : th.soft,
 });
+
+/* ── Modo claro / oscuro / sistema ─────────────────────────────────────── */
+const MODE_KEY = "adm_color_mode";
+export const COLOR_MODES = ["light", "dark", "system"];
+const MQ = "(prefers-color-scheme: dark)";
+const readMode = () => { const m = read(MODE_KEY); return COLOR_MODES.includes(m) ? m : "system"; };
+const systemDark = () => typeof window !== "undefined" && !!window.matchMedia?.(MQ).matches;
+
+/**
+ * Modo de color del panel, guardado en `localStorage` (`adm_color_mode`):
+ * `light`, `dark` o `system` (sigue a `prefers-color-scheme` y cambia al vuelo).
+ * Devuelve { mode, resolved: "light"|"dark", cycle }; `cycle` pasa al siguiente
+ * (claro → oscuro → sistema). El armazón lo aplica como `data-mode`.
+ */
+export function useColorMode() {
+  const [mode, setMode] = useState(readMode);
+  const [sysDark, setSysDark] = useState(systemDark);
+  useEffect(() => {
+    const mq = window.matchMedia?.(MQ);
+    if (!mq) return undefined;
+    const onChange = (e) => setSysDark(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  useEffect(() => {
+    const refresh = () => setMode(readMode());
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, []);
+  const cycle = () => setMode((m) => {
+    const next = COLOR_MODES[(COLOR_MODES.indexOf(m) + 1) % COLOR_MODES.length];
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* noop */ }
+    return next;
+  });
+  const resolved = mode === "system" ? (sysDark ? "dark" : "light") : mode;
+  return { mode, resolved, cycle };
+}
 
 /* ── Tienda activa fijada desde fuera (POS, informes…) ── */
 const ACTIVE_KEY = "adm_active_store";
@@ -122,11 +191,13 @@ export function useStoreTheme(me) {
 
   return useMemo(() => {
     const { stores, assigned } = data;
-    const byId = (id) => (id ? stores.find((s) => s.id === id) || null : null);
+    // "web" es la tienda online: no está en la lista porque no es un establecimiento.
+    const byId = (id) => (id === WEB_STORE.id ? WEB_STORE : id ? stores.find((s) => s.id === id) || null : null);
     let store = null;
     if (!isAdmin) store = byId(assigned) || byId(hint) || (stores.length === 1 ? stores[0] : null);
     else store = byId(read(ACTIVE_KEY));
-    const theme = store ? themeFor(store.color, { key: store.id }) : themeFor(null, { neutral: true });
+    // Sin color guardado, el que le toca por nombre (defaultColorForStore); sin eso, neutro.
+    const theme = store ? themeFor(store.color || defaultColorForStore(store.name), { key: store.id }) : themeFor(null, { neutral: true });
     return { theme, store, stores, multi: !isAdmin && !store && stores.length > 1 };
   }, [data, hint, isAdmin]);
 }
