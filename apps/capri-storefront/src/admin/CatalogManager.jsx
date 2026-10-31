@@ -5,13 +5,12 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
+import { money } from "./adminOrders.js";
 import {
   setProductStatus, setBrandStatus, setFramePrice,
   fetchDiscontinued, exportCatalogCsv, exportCatalogExcel,
 } from "./catalogAdmin.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
-
-const usd = (n) => "$" + (Number(n) || 0).toFixed(2);
 
 /**
  * GESTIÓN DEL CATÁLOGO (real, vía Admin API de Medusa):
@@ -23,7 +22,8 @@ const usd = (n) => "$" + (Number(n) || 0).toFixed(2);
  * catálogo que modificar de verdad.
  */
 export default function CatalogManager() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const usd = (n) => money(n, "usd", lang);
   const { toast, confirm } = useFeedback();
   const { products, cases } = useCatalog();
   const demo = isDemoLogin();
