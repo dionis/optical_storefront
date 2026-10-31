@@ -31,7 +31,7 @@ function Part({ title, icon, onEdit, wide, children }) {
   );
 }
 
-export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, approval, delivery, notifyEmail, store, terminal, sellerCode, money, onEdit }) {
+export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, approval, delivery, notifyEmail, receiptDetail, store, terminal, sellerCode, money, onEdit }) {
   const { t, lang } = useLang();
   const L = (o) => (o ? o[lang] ?? o.es : "");
   const name = [customer.first_name, customer.last_name].filter(Boolean).join(" ");
@@ -104,7 +104,7 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
 
         <Part title={t("adm.pos.sum.sale")} icon="store">
           <p>{delivery === "ship" ? t("adm.pos.pay.ship") : t("adm.pos.pay.pickup")}{delivery === "ship" && address ? `: ${address}` : ""}</p>
-          <p className="muted">{notifyEmail ? t("adm.pos.sum.receiptTo", { email: customer.email }) : t("adm.pos.sum.noReceipt")}</p>
+          <p className="muted">{notifyEmail ? t(!receiptDetail ? "adm.pos.sum.receiptTo" : !noRx && eyeRows.length ? "adm.pos.sum.receiptToRx" : "adm.pos.sum.receiptToPhotos", { email: customer.email }) : t("adm.pos.sum.noReceipt")}</p>
           <p className="muted">{[store && `${store.code} · ${store.name}`, terminal?.code, sellerCode].filter(Boolean).join(" · ")}</p>
         </Part>
 

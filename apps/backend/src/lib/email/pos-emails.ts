@@ -1,12 +1,15 @@
 import type { EmailLocale } from "./copy";
 import type { SaleDocument } from "../pos-documents";
-import { esc, shell, type RenderedEmail } from "./order-confirmation";
+import type { ImageRef } from "./order-images";
+import { esc, renderPrescriptions, renderRxGlossary, rxTextLines, shell, type OrderEmailData, type PrescriptionForEmail, type RenderedEmail } from "./order-confirmation";
 import { colorCircle, storeBanner } from "../store-color";
 
 /**
  * Emails of the point of sale. Copy is kept here, in both languages, like
- * copy.ts does for the web emails. None of them carries prescription values,
- * insurance member data or the customer's personal data.
+ * copy.ts does for the web emails. The discount request carries no customer data.
+ * The receipt is simple unless someone asks for the details: only then does it
+ * carry photos and the prescription (HIPAA, owner's decision). Never insurance
+ * member data, the worn prescription or the optical change.
  */
 
 const COPY = {
@@ -46,6 +49,20 @@ const COPY = {
     receipt_promised: "Fecha estimada",
     receipt_tray: "Bandeja",
     receipt_track: "Ver el estado de tu pedido",
+    receipt_store: "Tienda",
+    receipt_phone: "Teléfono",
+    receipt_delivery: "Entrega",
+    receipt_pickup: "Recoger en la tienda",
+    receipt_ship: "Envío a tu dirección",
+    receipt_code: "Código",
+    receipt_frame: "Montura",
+    receipt_lenses: "Lentes",
+    receipt_brand: "Marca",
+    receipt_size: "Medida",
+    receipt_frame_only: "Solo montura",
+    receipt_list: "Precio de lista",
+    receipt_items: "Tu compra",
+    receipt_keep_rx: "Este correo incluye los datos de tu receta: guárdalo y compártelo solo con quien tú decidas.",
     receipt_no_rx: "Por privacidad, este recibo no incluye los valores de tu receta. Si los necesitas, pídelos en la tienda.",
     receipt_voided: "VENTA ANULADA",
     method_debit: "Tarjeta de débito",
@@ -90,6 +107,20 @@ const COPY = {
     receipt_promised: "Estimated date",
     receipt_tray: "Tray",
     receipt_track: "Check your order status",
+    receipt_store: "Store",
+    receipt_phone: "Phone",
+    receipt_delivery: "Delivery",
+    receipt_pickup: "Pick up at the store",
+    receipt_ship: "Shipping to your address",
+    receipt_code: "Code",
+    receipt_frame: "Frame",
+    receipt_lenses: "Lenses",
+    receipt_brand: "Brand",
+    receipt_size: "Size",
+    receipt_frame_only: "Frame only",
+    receipt_list: "List price",
+    receipt_items: "Your purchase",
+    receipt_keep_rx: "This email includes your prescription: keep it, and share it only with whom you choose.",
     receipt_no_rx: "For your privacy, this receipt does not include your prescription values. Ask at the store if you need them.",
     receipt_voided: "SALE VOIDED",
     method_debit: "Debit card",
@@ -181,18 +212,42 @@ const METHOD_KEYS: Record<string, Key> = {
   insurance: "method_insurance",
 };
 
-/** The customer's receipt (HU-27, HU-102): no prescription, no insurance member data. */
-export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): RenderedEmail {
+export interface ReceiptExtras {
+  prescriptions?: Record<string, PrescriptionForEmail>;
+  /** Attached photos of the frames the customer brought, by line position. */
+  itemImages?: Record<number, ImageRef>;
+  /** Photos, prescription and every purchase detail. Off unless explicitly true. */
+  detailed?: boolean;
+}
+
+/**
+ * The customer's receipt (HU-27, HU-102). Simple by default: what was bought and
+ * paid. Detailed only when asked for. No insurance member data in either.
+ */
+export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extras: ReceiptExtras = {}): RenderedEmail {
   const storeLabel = `${doc.business.name} · ${doc.store.name}`;
   const subject = posT(locale, "receipt_subject", { number: doc.sale.number, store: doc.store.name });
   const intro = posT(locale, "receipt_intro", { store: storeLabel });
   const when = new Date(doc.sale.created_at).toLocaleString(locale === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" });
   const lbl = (b: { es: string; en: string } | null) => (b ? b[locale] : "");
-  const lines = (doc.lines ?? []).map((l) => {
+  const detailed = extras.detailed === true;
+  const lines = (doc.lines ?? []).map((l, i) => {
     const name = l.kind === "own_frame" ? `${posT(locale, "own_frame")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · ");
     const lens = l.lens ? [lbl(l.lens.design), lbl(l.lens.material), lbl(l.lens.photo), lbl(l.lens.ar)].filter(Boolean).join(" · ") : "";
-    return { name, lens, price: l.unit_price };
+    const size = l.frame?.eye_size ? [l.frame.eye_size, l.frame.bridge].filter(Boolean).join("-") : "";
+    const specs = [l.sku && `${posT(locale, "receipt_code")}: ${l.sku}`, l.frame?.brand && `${posT(locale, "receipt_brand")}: ${l.frame.brand}`, size && `${posT(locale, "receipt_size")}: ${size}`].filter(Boolean).join(" · ");
+    const parts = [l.kind === "frame" && l.frame_price > 0 && `${posT(locale, "receipt_frame")}: ${money(l.frame_price, locale)}`, l.lens_price > 0 && `${posT(locale, "receipt_lenses")}: ${money(l.lens_price, locale)}`, l.tax_amount > 0 && `${posT(locale, "receipt_tax")}: ${money(l.tax_amount, locale)}`].filter(Boolean).join(" · ");
+    if (!detailed) return { name, lens, specs: "", parts: "", price: l.unit_price, image: null, cid: null };
+    return { name, lens: lens || (l.design_code === "frame-only" ? posT(locale, "receipt_frame_only") : ""), specs, parts, price: l.unit_price, image: l.image_url ?? null, cid: extras.itemImages?.[i]?.cid ?? null };
   });
+  // The shared prescription block, fed with this sale's lines.
+  const orderLike = {
+    id: doc.sale.id,
+    items: (doc.lines ?? []).map((l) => ({ title: l.kind === "own_frame" ? posT(locale, "own_frame") : l.title, variant_title: l.variant_title, metadata: { prescription_id: l.prescription_id } })),
+  } as unknown as OrderEmailData;
+  const showRx = detailed && (doc.lines ?? []).some((l) => l.prescription_id);
+  const rxList = Object.values(extras.prescriptions ?? {});
+  const hasHeight = rxList.some((rx) => rx.seg_height != null);
   const tot = doc.totals!;
   const pays = (doc.payments ?? []).map((p) => {
     const method = p.method ? p.method[locale] : METHOD_KEYS[p.method_code] ? posT(locale, METHOD_KEYS[p.method_code]) : p.method_code;
@@ -203,7 +258,7 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): Rend
   const itemRows = lines
     .map(
       (l) =>
-        `<tr><td style="padding:8px 0;border-bottom:1px solid #e7eaf0;font-size:14px"><b>${esc(l.name)}</b>${l.lens ? `<div style="color:#5b6472;font-size:12.5px">${esc(l.lens)}</div>` : ""}</td><td style="padding:8px 0;border-bottom:1px solid #e7eaf0;font-size:14px;text-align:right;white-space:nowrap">${esc(money(l.price, locale))}</td></tr>`
+        `<tr>${detailed ? `<td width="112" style="padding:10px 12px 10px 0;border-bottom:1px solid #e7eaf0;vertical-align:top">${l.image || l.cid ? `<img src="${esc(l.cid ? `cid:${l.cid}` : String(l.image))}" width="100" alt="${esc(l.name)}" style="display:block;width:100px;max-width:100%;height:auto;border:0;border-radius:6px">` : ""}</td>` : ""}<td style="padding:10px 0;border-bottom:1px solid #e7eaf0;font-size:14px;vertical-align:top"><b>${esc(l.name)}</b>${l.specs ? `<div style="color:#5b6472;font-size:12.5px">${esc(l.specs)}</div>` : ""}${l.lens ? `<div style="color:#374151;font-size:12.5px;margin-top:2px">${esc(l.lens)}</div>` : ""}${l.parts ? `<div style="color:#5b6472;font-size:12.5px;margin-top:2px">${esc(l.parts)}</div>` : ""}</td><td style="padding:10px 0 10px 10px;border-bottom:1px solid #e7eaf0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap;vertical-align:top">${esc(money(l.price, locale))}</td></tr>`
     )
     .join("");
   const sum = (label: string, value: string, strong = false) =>
@@ -216,9 +271,13 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): Rend
       ${row(posT(locale, "receipt_date"), when)}
       ${doc.sale.seller_code ? row(posT(locale, "receipt_served"), `${doc.sale.seller_code}${doc.terminal.code ? ` · ${doc.terminal.code}` : ""}`) : ""}
       ${doc.customer.name ? row(posT(locale, "receipt_customer"), doc.customer.name) : ""}
+      ${detailed ? row(posT(locale, "receipt_store"), [doc.store.name, doc.store.address].filter(Boolean).join(" · ")) : ""}
+      ${detailed && doc.store.phone ? row(posT(locale, "receipt_phone"), doc.store.phone) : ""}
     </table>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">${itemRows}</table>
+    ${detailed ? `<div style="margin-top:18px;font-size:15px;font-weight:800;color:#0b2f66">${esc(posT(locale, "receipt_items"))}</div>` : ""}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:${detailed ? 6 : 16}px">${itemRows}</table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px">
+      ${detailed && tot.discount > 0 ? sum(posT(locale, "receipt_list"), money(tot.list, locale)) : ""}
       ${tot.discount > 0 ? sum(posT(locale, "receipt_discount", { pct: tot.discount_pct }), `−${money(tot.discount, locale)}`) : ""}
       ${tot.tax > 0 ? sum(posT(locale, "receipt_tax"), money(tot.tax, locale)) : ""}
       ${sum(posT(locale, "receipt_total"), money(tot.total, locale), true)}
@@ -226,12 +285,16 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): Rend
       ${sum(posT(locale, "receipt_balance"), money(tot.balance, locale), true)}
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">
+      ${detailed ? row(posT(locale, "receipt_delivery"), posT(locale, doc.sale.delivery === "ship" ? "receipt_ship" : "receipt_pickup")) : ""}
       ${doc.sale.promised_on ? row(posT(locale, "receipt_promised"), doc.sale.promised_on) : ""}
       ${doc.sale.tray ? row(posT(locale, "receipt_tray"), doc.sale.tray) : ""}
     </table>
     <div style="margin-top:22px;text-align:center"><a href="${esc(doc.tracking_url)}" style="display:inline-block;background:#0b2f66;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px">${esc(posT(locale, "receipt_track"))}</a></div>
+    ${showRx ? renderPrescriptions(orderLike, extras.prescriptions ?? {}, locale) : ""}
+    ${showRx ? renderRxGlossary(rxList.length > 0, hasHeight, locale) : ""}
     ${doc.store.receipt_note ? `<div style="margin-top:20px;font-size:12px;color:#5b6472;line-height:1.6">${esc(doc.store.receipt_note)}</div>` : ""}
-    <div style="margin-top:12px;font-size:12px;color:#5b6472">${esc(posT(locale, "receipt_no_rx"))}</div>`;
+    ${detailed ? "" : `<div style="margin-top:12px;font-size:12px;color:#5b6472">${esc(posT(locale, "receipt_no_rx"))}</div>`}
+    ${showRx ? `<div style="margin-top:12px;font-size:12px;color:#5b6472">${esc(posT(locale, "receipt_keep_rx"))}</div>` : ""}`;
   return {
     subject,
     html: shell(posT(locale, "receipt_title"), intro, inner, locale),
@@ -240,15 +303,22 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale): Rend
       "",
       `${posT(locale, "receipt_sale")}: ${doc.sale.number}`,
       `${posT(locale, "receipt_date")}: ${when}`,
-      ...lines.map((l) => `${l.name}${l.lens ? ` — ${l.lens}` : ""}: ${money(l.price, locale)}`),
+      ...(detailed ? [`${posT(locale, "receipt_store")}: ${[doc.store.name, doc.store.address, doc.store.phone].filter(Boolean).join(" · ")}`] : []),
+      "",
+      ...lines.flatMap((l) => [`${l.name}: ${money(l.price, locale)}`, ...[l.specs, l.lens, l.parts].filter(Boolean).map((x) => `  ${x}`)]),
+      "",
       ...(tot.discount > 0 ? [`${posT(locale, "receipt_discount", { pct: tot.discount_pct })}: −${money(tot.discount, locale)}`] : []),
       `${posT(locale, "receipt_total")}: ${money(tot.total, locale)}`,
       ...pays.map((p) => `${p.label}: ${money(p.amount, locale)}`),
       `${posT(locale, "receipt_balance")}: ${money(tot.balance, locale)}`,
+      ...(detailed ? [`${posT(locale, "receipt_delivery")}: ${posT(locale, doc.sale.delivery === "ship" ? "receipt_ship" : "receipt_pickup")}`] : []),
       ...(doc.sale.promised_on ? [`${posT(locale, "receipt_promised")}: ${doc.sale.promised_on}`] : []),
       "",
       `${posT(locale, "receipt_track")}: ${doc.tracking_url}`,
+      ...(showRx ? rxTextLines(orderLike, extras.prescriptions ?? {}, locale) : []),
       ...(doc.store.receipt_note ? ["", doc.store.receipt_note] : []),
+      ...(detailed ? [] : ["", posT(locale, "receipt_no_rx")]),
+      ...(showRx ? ["", posT(locale, "receipt_keep_rx")] : []),
     ].join("\n"),
   };
 }

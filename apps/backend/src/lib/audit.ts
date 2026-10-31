@@ -27,6 +27,7 @@ export const AUDIT_ACTIONS = [
   "payment.collect",
   "insurance.paid",
   "document.print",
+  "document.email",
   "cost.change",
   "cash.close",
   "settings.change",

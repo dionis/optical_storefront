@@ -216,6 +216,8 @@ export default function PosSale({ me }) {
   const [payments, setPayments] = useState([{ method_code: "", amount: "", details: {} }]);
   const [delivery, setDelivery] = useState("pickup");
   const [notifyEmail, setNotifyEmail] = useState(true);
+  // Foto y receta en el correo: se decide en cada venta, nunca se recuerda.
+  const [receiptDetail, setReceiptDetail] = useState(false);
   const [result, setResult] = useState(null);
   const idem = useRef(null);
 
@@ -427,6 +429,7 @@ export default function PosSale({ me }) {
         prescriptions: { new: newBody(), worn: wornBody() },
         delivery,
         notify_email: notifyEmail,
+        receipt_detail: notifyEmail && receiptDetail,
         idempotency_key: idem.current,
       });
       setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null });
@@ -442,7 +445,7 @@ export default function PosSale({ me }) {
     setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setApproval(null); setReason("");
-    setPayments([{ method_code: "", amount: "", details: {} }]); setDelivery("pickup"); setNotifyEmail(true); setResult(null);
+    setPayments([{ method_code: "", amount: "", details: {} }]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
   };
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
@@ -730,7 +733,7 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
-            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
@@ -776,6 +779,12 @@ export default function PosSale({ me }) {
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
             <label className="pos-check"><input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} /> {t("adm.pos.pay.notify")}</label>
+            {notifyEmail && (
+              <div className="pos-receipt-detail">
+                <label className="pos-check"><input type="checkbox" checked={receiptDetail} onChange={(e) => setReceiptDetail(e.target.checked)} /> {t("adm.pos.pay.notifyDetail")}</label>
+                <small className="muted">{t(receiptDetail ? "adm.pos.pay.notifyDetailOn" : "adm.pos.pay.notifySimple")}</small>
+              </div>
+            )}
           </>
         )}
 

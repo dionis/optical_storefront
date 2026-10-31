@@ -51,7 +51,9 @@ const extOf = (contentType: string, key: string): string => {
 
 export async function loadOrderImages(
   displayId: string,
-  sources: OrderImageSources
+  sources: OrderImageSources,
+  /** What the attached file of a line is called. */
+  itemLabel = "prueba-virtual"
 ): Promise<OrderImages> {
   const out: OrderImages = { attachments: [], prescriptions: {}, items: {} };
   let budget = MAX_TOTAL_BYTES;
@@ -81,7 +83,7 @@ export async function loadOrderImages(
     if (ref) out.prescriptions[pid] = ref;
   }
   for (const [index, key] of Object.entries(sources.items)) {
-    const ref = await fetchOne(key, "prueba-virtual");
+    const ref = await fetchOne(key, itemLabel);
     if (ref) out.items[Number(index)] = ref;
   }
   return out;

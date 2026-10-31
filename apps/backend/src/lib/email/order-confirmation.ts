@@ -754,7 +754,7 @@ function hasUnloadedPrescription(
 }
 
 /** Renders every distinct prescription referenced by the order's line items. */
-function renderPrescriptions(
+export function renderPrescriptions(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
   locale: EmailLocale,
@@ -777,7 +777,7 @@ function renderPrescriptions(
  * Plain-text version of the prescriptions. Carries exactly the same fields as
  * the HTML block — this half is what gets forwarded to a lab or an optician.
  */
-function rxTextLines(
+export function rxTextLines(
   order: OrderEmailData,
   prescriptions: Record<string, PrescriptionForEmail> | undefined,
   locale: EmailLocale,
@@ -995,7 +995,7 @@ function renderPaymentAdmin(payment: PaymentInfo | null | undefined, locale: Ema
  * Plain-language glossary of the Rx table, for the CUSTOMER copy only. The store
  * copy goes to people who read these values for a living.
  */
-function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocale): string {
+export function renderRxGlossary(hasRx: boolean, hasHeight: boolean, locale: EmailLocale): string {
   if (!hasRx) return "";
   const lines = [
     t(locale, "rx_gloss_sph"),

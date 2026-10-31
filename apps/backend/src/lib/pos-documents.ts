@@ -3,11 +3,15 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
 import { listAudit, recordAudit } from "./audit";
 import { resolveEmailLocale, type EmailLocale } from "./email/copy";
+import type { PrescriptionForEmail } from "./email/order-confirmation";
+import { enrichLensItems } from "./email/order-enrich";
+import { loadOrderImages } from "./email/order-images";
 import { renderReceiptEmail } from "./email/pos-emails";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
 import { storefrontOrigin } from "./order-access";
 import { getSale, listPaymentMethods, listTerminals, PosError, type SaleRow } from "./pos-data";
+import { loadPrescriptionRecords } from "./prescription-read";
 import { presignPrescriptionUrl } from "./s3";
 import { tenant } from "./tenant";
 
@@ -20,9 +24,12 @@ import { tenant } from "./tenant";
  *  - Lab ticket (job): one per line with lenses. Carries the prescription the
  *    lab needs, never prices or payments. "Submitted By" is the seller code
  *    and the till, never a personal email.
- *  - Receipt: what was bought and paid, the balance and when to pick up.
- *    Never prescription values, the worn prescription, the optical change or
- *    insurance member data.
+ *  - Receipt: what was bought and paid, the balance and when to pick up. No
+ *    prescription values on paper or in the default email. The email adds the new
+ *    prescription and the frames' photos only when someone explicitly asks for
+ *    the details (HIPAA, owner's decision), only to the address on the sale, and
+ *    leaves a trace in the audit log. Never the worn prescription, the optical
+ *    change or insurance member data.
  *
  * Every print is recorded in the audit log; from the second on, the document
  * says "REPRINT" with the date (HU-105).
@@ -38,11 +45,15 @@ export interface DocLine {
   list: number;
   unit_price: number;
   tax_amount: number;
+  frame_price: number;
+  lens_price: number;
+  /** Public catalog photo; only for the detailed email (opts.forEmail). */
+  image_url?: string | null;
   design_code: string | null;
   lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null } | null;
   handling: "lenses_only" | "frame_supplied" | "patient_own_frame" | null;
   frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
-  own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null } | null;
+  own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null; photo_key?: string | null } | null;
   prescription_id: string | null;
 }
 
@@ -106,7 +117,7 @@ export async function buildSaleDocument(
   container: MedusaContainer,
   saleId: string,
   kind: "job" | "receipt",
-  opts: { withPhotoUrls?: boolean } = {}
+  opts: { withPhotoUrls?: boolean; forEmail?: boolean } = {}
 ): Promise<SaleDocument> {
   const sale = await getSale(container, saleId);
   if (!sale) throw new PosError("sale_not_found", 404);
@@ -161,6 +172,8 @@ export async function buildSaleDocument(
       list: Number(md.list_price ?? it.unit_price ?? 0),
       unit_price: Number(it.unit_price ?? 0),
       tax_amount: Number(md.tax_amount ?? 0),
+      frame_price: Number(md.frame_price ?? 0),
+      lens_price: Number(md.lens_addon ?? 0),
       design_code: s.design_code ?? null,
       lens: withLenses
         ? {
@@ -186,10 +199,21 @@ export async function buildSaleDocument(
             description: ownFrame?.description ?? null,
             has_photo: Boolean(ownFrame?.photo_key),
             ...(opts.withPhotoUrls ? { photo_url: await presignPrescriptionUrl(ownFrame?.photo_key ?? null) } : {}),
+            ...(opts.forEmail ? { photo_key: ownFrame?.photo_key ?? null } : {}),
           }
         : null,
       prescription_id: (md.prescription_id as string | null) ?? null,
     });
+  }
+
+  if (opts.forEmail) {
+    // One entry per item, in order. A photo that cannot be found just leaves the line without one.
+    try {
+      const enriched = await enrichLensItems(pg, items, "es");
+      lines.forEach((l, i) => { l.image_url = l.kind === "frame" ? enriched[i]?.image_url ?? null : null; });
+    } catch (e) {
+      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[pos] receipt ${sale.number}: frame photos unavailable: ${(e as Error).message}`);
+    }
   }
 
   const name = [order?.shipping_address?.first_name, order?.shipping_address?.last_name].filter(Boolean).join(" ");
@@ -291,17 +315,56 @@ export async function printSaleDocument(container: MedusaContainer, saleId: stri
   return { ...doc, print: { count: before.count + 1, reprint: before.count > 0, first_at: before.first_at ?? new Date().toISOString() } };
 }
 
-/** Sends the receipt by email (HU-27, HU-102). Throws PosError when there is no address. */
-export async function emailReceipt(container: MedusaContainer, sale: SaleRow, to?: string | null): Promise<string> {
+/** The prescriptions of a sale's lines, as the email shows them. Health data: only for the sale's own address. */
+async function receiptPrescriptions(container: MedusaContainer, lines: DocLine[]): Promise<Record<string, PrescriptionForEmail>> {
+  const pid = (l: DocLine) => l.prescription_id;
+  const records = await loadPrescriptionRecords(pgOf(container), lines.map(pid).filter((v): v is string => Boolean(v)));
+  const n = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const out: Record<string, PrescriptionForEmail> = {};
+  for (const [id, r] of records) {
+    const eye = (e: "od" | "os") => ({
+      sph: n(r[`${e}_sph`]),
+      cyl: n(r[`${e}_cyl`]),
+      axis: n(r[`${e}_axis`]),
+      add: n(r[`${e}_add`]),
+      prism: n(r[`${e}_prism`]),
+      base: (r[`${e}_base`] as string | null) ?? null,
+    });
+    out[id] = { od: eye("od"), os: eye("os"), pd: n(r.pd), pd_od: n(r.pd_od), pd_os: n(r.pd_os), seg_height: n(r.seg_height) } as PrescriptionForEmail;
+  }
+  return out;
+}
+
+/**
+ * Sends the receipt by email (HU-27, HU-102). Simple unless `detailed` is exactly
+ * true: then with the frames' photos and the prescription. Throws PosError when
+ * there is no address. An address other than the sale's never gets the details.
+ */
+export async function emailReceipt(
+  container: MedusaContainer,
+  sale: SaleRow,
+  opts: { to?: string | null; detailed?: boolean; actorId?: string | null } = {}
+): Promise<string> {
+  const to = opts.to ?? null;
+  const detailed = opts.detailed === true && !to;
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const doc = await buildSaleDocument(container, sale.id, "receipt");
-  let email = to ?? null;
+  const doc = await buildSaleDocument(container, sale.id, "receipt", { forEmail: detailed });
+  let email = to;
   if (!email && sale.order_id) {
     const { data } = await container.resolve(ContainerRegistrationKeys.QUERY).graph({ entity: "order", fields: ["id", "email"], filters: { id: sale.order_id } });
     email = (data[0] as { email?: string } | undefined)?.email ?? null;
   }
   if (!email) throw new PosError("no_email", 422);
   const locale: EmailLocale = resolveEmailLocale(doc.terminal.receipt_locale);
+  const prescriptions = detailed ? await receiptPrescriptions(container, doc.lines ?? []) : {};
+  // What the customer brought is in the private bucket: attached, never linked.
+  const ownPhotos = Object.fromEntries((doc.lines ?? []).map((l, i) => [i, l.own_frame?.photo_key ?? null]));
+  const images = detailed
+    ? await loadOrderImages(doc.sale.number, { prescriptions: {}, items: ownPhotos }, "montura").catch((e: Error) => {
+        logger.warn(`[pos] receipt ${sale.number}: own frame photos unavailable: ${e.message}`);
+        return { attachments: [], prescriptions: {}, items: {} };
+      })
+    : { attachments: [], prescriptions: {}, items: {} };
   await container.resolve<INotificationModuleService>(Modules.NOTIFICATION).createNotifications({
     to: email,
     channel: "email",
@@ -309,8 +372,18 @@ export async function emailReceipt(container: MedusaContainer, sale: SaleRow, to
     trigger_type: "pos.sale.receipt",
     resource_id: sale.id,
     resource_type: "pos_sale",
-    content: renderReceiptEmail(doc, locale),
+    content: renderReceiptEmail(doc, locale, { prescriptions, itemImages: images.items, detailed }),
+    ...(images.attachments.length ? { attachments: images.attachments } : {}),
   });
-  logger.info(`[pos] receipt ${sale.number} emailed`);
+  // Who sent health data by email, and when; the values and the address stay out of the log.
+  await recordAudit(container, {
+    actorId: opts.actorId ?? null,
+    action: "document.email",
+    entity: "pos_sale",
+    entityId: sale.id,
+    establishmentId: sale.establishment_id,
+    after: { kind: "receipt", detailed },
+  });
+  logger.info(`[pos] receipt ${sale.number} emailed (${detailed ? "detailed" : "simple"})`);
   return email;
 }

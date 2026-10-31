@@ -1109,6 +1109,7 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-discount { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .pos-discount label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; }
 .pos-discount input { width: min(120px, 30vw); min-height: clamp(38px, 4.5vh, 42px); font-size: clamp(14px, 1.4vw, 16px); }
+.pos-receipt-detail { display: grid; gap: 2px; margin-left: 22px; }
 .pos-sum { border: 1px solid var(--adm-line-2); border-radius: 12px; padding: 10px 12px; background: var(--adm-bg); }
 .pos-sum > summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--adm-ink); }
 .pos-sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 10px; margin-top: 10px; }

@@ -212,6 +212,7 @@ export default function SaleDocuments({ saleId, compact = false }) {
   const { toast } = useFeedback();
   const [busy, setBusy] = useState("");
   const [photo, setPhoto] = useState(null);
+  const [emailDetail, setEmailDetail] = useState(false);
 
   const print = async (kind) => {
     setBusy(kind);
@@ -233,8 +234,9 @@ export default function SaleDocuments({ saleId, compact = false }) {
   const send = async () => {
     setBusy("email");
     try {
-      const r = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/receipt`, { method: "POST", body: {} });
-      toast({ tone: "success", title: t("adm.doc.sent", { to: r.to }) });
+      const r = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/receipt`, { method: "POST", body: { receipt_detail: emailDetail } });
+      setEmailDetail(false);
+      toast({ tone: "success", title: t(r.detailed ? "adm.doc.sentDetail" : "adm.doc.sent", { to: r.to }) });
     } catch (e) {
       toast({ tone: "error", title: t(e.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic") });
     } finally { setBusy(""); }
@@ -245,6 +247,7 @@ export default function SaleDocuments({ saleId, compact = false }) {
       <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print("job")}><Icon name="printer" size={14} /> {busy === "job" ? "…" : t("adm.doc.printJob")}</button>
       <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={() => print("receipt")}><Icon name="receipt" size={14} /> {busy === "receipt" ? "…" : t("adm.doc.printReceipt")}</button>
       <button type="button" className="btn-sm" disabled={Boolean(busy)} onClick={send}><Icon name="mail" size={14} /> {busy === "email" ? "…" : t("adm.doc.emailReceipt")}</button>
+      <label className="pos-check" title={t("adm.pos.pay.notifyDetailOn")}><input type="checkbox" checked={emailDetail} disabled={Boolean(busy)} onChange={(e) => setEmailDetail(e.target.checked)} /> {t("adm.doc.emailDetail")}</label>
       {photo && <a className="btn-sm" href={photo} target="_blank" rel="noreferrer"><Icon name="camera" size={14} /> {t("adm.doc.ownPhoto")}</a>}
     </div>
   );
