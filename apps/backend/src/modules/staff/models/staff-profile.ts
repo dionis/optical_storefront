@@ -32,6 +32,8 @@ export const StaffProfile = model.define("staff_profile", {
   hire_date: model.text().nullable(),
   commission_pct: model.float().nullable(),
   monthly_goal: model.float().nullable(),
+  /** Base64 data URL or external URL for the person's profile photo. */
+  photo_url: model.text().nullable(),
   /** Extra privileges granted person by person (src/lib/staff-profile.ts PRIVILEGES). */
   privileges: model.json().nullable(),
   internal_notes: model.text().nullable(),

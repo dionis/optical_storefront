@@ -1,10 +1,129 @@
 // Dónde se usa: pestaña «Mi perfil» de /admin (cualquier rol) y el editor de
 // perfil de cada persona en la pestaña Equipo (dueño y superadmin).
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
+
+/* ── Photo helpers ─────────────────────────────────────────────── */
+const MAX_PHOTO_BYTES = 200_000; // 200 KB of base64 text
+const PHOTO_SIZE = 256;
+
+/** Resize an image file/blob to a PHOTO_SIZE×PHOTO_SIZE JPEG data URL. */
+function resizeToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = PHOTO_SIZE; c.height = PHOTO_SIZE;
+      const ctx = c.getContext("2d");
+      // Center-crop: use the shorter side as the square.
+      const s = Math.min(img.width, img.height);
+      const sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+      const dataUrl = c.toDataURL("image/jpeg", 0.82);
+      URL.revokeObjectURL(img.src);
+      if (dataUrl.length > MAX_PHOTO_BYTES) { reject(new Error("tooBig")); return; }
+      resolve(dataUrl);
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error("badFormat")); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/** Load an image from a URL into a data URL (via a temporary image). */
+function urlToDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = PHOTO_SIZE; c.height = PHOTO_SIZE;
+      const ctx = c.getContext("2d");
+      const s = Math.min(img.width, img.height);
+      const sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+      const dataUrl = c.toDataURL("image/jpeg", 0.82);
+      if (dataUrl.length > MAX_PHOTO_BYTES) { reject(new Error("tooBig")); return; }
+      resolve(dataUrl);
+    };
+    img.onerror = () => reject(new Error("urlFailed"));
+    img.src = url;
+  });
+}
+
+/** Photo upload/capture widget. */
+function PhotoUpload({ value, onChange, disabled, t }) {
+  const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const [urlMode, setUrlMode] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const handleFile = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr(null); setLoading(true);
+    try { onChange(await resizeToDataUrl(file)); }
+    catch (ex) { setErr(ex.message); }
+    finally { setLoading(false); e.target.value = ""; }
+  }, [onChange]);
+
+  const handleUrl = useCallback(async () => {
+    const u = urlInput.trim();
+    if (!u) return;
+    setErr(null); setLoading(true);
+    try { onChange(await urlToDataUrl(u)); setUrlMode(false); setUrlInput(""); }
+    catch (ex) { setErr(ex.message === "tooBig" ? "tooBig" : "urlFailed"); }
+    finally { setLoading(false); }
+  }, [urlInput, onChange]);
+
+  return (
+    <fieldset className="adm-profile-group adm-photo-group" disabled={disabled}>
+      <legend>{t("adm.profile.g.photo")}</legend>
+      <div className="adm-photo-wrap">
+        <div className="adm-photo-preview">
+          {value
+            ? <img src={value} alt="" className="adm-photo-img" />
+            : <span className="adm-photo-placeholder"><Icon name="user" size={36} /></span>}
+        </div>
+        <div className="adm-photo-actions">
+          {!disabled && <>
+            <button type="button" className="btn-xs" onClick={() => cameraRef.current?.click()}>
+              <Icon name="eye" size={13} /> {t("adm.profile.photo.camera")}
+            </button>
+            <button type="button" className="btn-xs" onClick={() => fileRef.current?.click()}>
+              <Icon name="products" size={13} /> {t("adm.profile.photo.file")}
+            </button>
+            <button type="button" className="btn-xs" onClick={() => setUrlMode(u => !u)}>
+              <Icon name="globe" size={13} /> {t("adm.profile.photo.url")}
+            </button>
+            {value && (
+              <button type="button" className="btn-xs danger" onClick={() => { onChange(null); setErr(null); }}>
+                <Icon name="close" size={13} /> {t("adm.profile.photo.remove")}
+              </button>
+            )}
+          </>}
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handleFile} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="user" style={{ display: "none" }} onChange={handleFile} />
+        </div>
+        {urlMode && !disabled && (
+          <div className="adm-photo-url-row">
+            <input type="url" placeholder={t("adm.profile.photo.urlPlaceholder")} value={urlInput} onChange={(e) => setUrlInput(e.target.value)} />
+            <button type="button" className="btn-xs primary" onClick={handleUrl} disabled={loading || !urlInput.trim()}>
+              {t("adm.profile.photo.urlLoad")}
+            </button>
+          </div>
+        )}
+        {loading && <small className="adm-photo-hint muted">…</small>}
+        {err && <small className="adm-photo-err">{t(`adm.profile.photo.${err}`)}</small>}
+        {!err && !loading && <small className="adm-photo-hint muted">{t("adm.profile.photo.hint")}</small>}
+      </div>
+    </fieldset>
+  );
+}
 
 /**
  * Grupos del perfil (documento funcional, «Perfil del vendedor»). Qué grupos
@@ -24,6 +143,7 @@ const toForm = (p) => {
   for (const g of GROUPS) for (const [k] of g.fields) f[k] = p?.[k] ?? "";
   f.privileges = p?.privileges ?? [];
   f.internal_notes = p?.internal_notes ?? "";
+  f.photo_url = p?.photo_url ?? null;
   return f;
 };
 
@@ -75,6 +195,8 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
       if (prev.length !== form.privileges.length || prev.some((p) => !form.privileges.includes(p))) patch.privileges = form.privileges;
       if ((form.internal_notes || "") !== (profile?.internal_notes || "")) patch.internal_notes = form.internal_notes || null;
     }
+    // Photo: always send if changed (available to both self and admin).
+    if ((form.photo_url || null) !== (profile?.photo_url || null)) patch.photo_url = form.photo_url;
     if (!Object.keys(patch).length) return;
     setBusy(true);
     try {
@@ -95,6 +217,12 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
 
   return (
     <form className="adm-profile" onSubmit={save}>
+      <PhotoUpload
+        value={form.photo_url}
+        onChange={(v) => { setBadField(null); setForm((f) => ({ ...f, photo_url: v })); }}
+        disabled={busy}
+        t={t}
+      />
       {GROUPS.filter((g) => g.fields[0][0] in (profile || {})).map((g) => (
         <fieldset key={g.key} className="adm-profile-group" disabled={!editable(g.key) || busy}>
           <legend>{t(`adm.profile.g.${g.key}`)}</legend>

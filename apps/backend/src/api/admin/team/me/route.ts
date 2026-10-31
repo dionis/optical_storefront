@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { IUserModuleService } from "@medusajs/framework/types";
 import { Modules } from "@medusajs/framework/utils";
+import { profileOf } from "../../../../lib/staff-profile-data";
 import { getStaffScope } from "../../../../lib/staff-scope";
 
 /**
@@ -18,7 +19,10 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   }
   // Reachable by every role (lib/staff-roles.ts allowlist), so it must not list
   // the team: only the caller's own scope.
-  const scope = await getStaffScope(req.scope, me.id);
+  const [scope, profile] = await Promise.all([
+    getStaffScope(req.scope, me.id),
+    profileOf(req.scope, me.id),
+  ]);
   res.json({
     id: me.id,
     email: me.email,
@@ -28,6 +32,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     is_admin: scope.is_admin,
     privileges: scope.privileges,
     seller_code: scope.seller_code,
+    display_name: profile.display_name ?? null,
+    photo_url: profile.photo_url ?? null,
+    phone_mobile: profile.phone_mobile ?? null,
     must_change_password: Boolean((me.metadata as Record<string, unknown> | null)?.["must_change_password"]),
   });
 }

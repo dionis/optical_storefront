@@ -180,7 +180,9 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
               <Icon name="globe" size={17} /><span>{lang === "es" ? "EN" : "ES"}</span>
             </button>
             <button type="button" className="adm-user-chip" title={user} onClick={() => setShowProfile(p => !p)} style={{ cursor: "pointer", position: "relative" }}>
-              <span className="adm-avatar">{initials}</span>
+              {me?.photo_url
+                ? <img className="adm-avatar adm-avatar-img" src={me.photo_url} alt={displayName} />
+                : <span className="adm-avatar">{initials}</span>}
               <span className="adm-user-mail">{displayName}{userRole ? ` · ${t(`adm.role.${userRole}`, userRole)}` : ""}{userStore ? ` — ${userStore}` : ""}</span>
             </button>
             <button type="button" className="adm-icobtn danger" onClick={onLogout} title={t("adm.logout")}>
@@ -195,7 +197,9 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
         <div className="adm-profile-popup-overlay" onClick={() => setShowProfile(false)}>
           <div className="adm-profile-popup" onClick={(e) => e.stopPropagation()}>
             <div className="adm-profile-popup-head">
-              <div className="adm-profile-popup-avatar">{initials}</div>
+              {me?.photo_url
+                ? <img className="adm-profile-popup-avatar adm-avatar-img" src={me.photo_url} alt={displayName} />
+                : <div className="adm-profile-popup-avatar">{initials}</div>}
               <div className="adm-profile-popup-info">
                 <b>{displayName}</b>
                 <small>{user}</small>

@@ -37,6 +37,7 @@ import SalesBoard from "./SalesBoard.jsx";
 import MySales from "./MySales.jsx";
 import PosCash from "./PosCash.jsx";
 import StoreCosts from "./StoreCosts.jsx";
+import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
@@ -638,15 +639,19 @@ function Prices({ preQ }) {
         {Object.entries(frames.reduce((m, p) => { (m[p.brand] = m[p.brand] || []).push(p); return m; }, {}))
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([brand, list]) => (
-            <div className="adm-brand-group" key={brand}>
-              <div className="adm-brand-h">
-                {BRAND_LOGO_BY_NAME[brand] && <img src={BRAND_LOGO_BY_NAME[brand]} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                <span>{brand}</span><small className="muted">({list.length})</small>
+            <details className="cost-accordion brand" key={brand} open={!!q}>
+              <summary className="cost-acc-head">
+                {BRAND_LOGO_BY_NAME[brand] && <img src={BRAND_LOGO_BY_NAME[brand]} alt="" className="cost-acc-logo" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                <span className="cost-acc-title">{brand}</span>
+                <small className="cost-acc-count">({list.length})</small>
+                <Icon name="chevronDown" size={14} className="cost-acc-arrow" />
+              </summary>
+              <div className="cost-acc-body">
+                <div className="adm-price-grid">
+                  {list.map((p) => <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />)}
+                </div>
               </div>
-              <div className="adm-price-grid">
-                {list.map((p) => <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />)}
-              </div>
-            </div>
+            </details>
           ))}
         {products.length > 200 && <p className="muted">{t("adm.prices.capped")}</p>}
       </div>
@@ -1178,6 +1183,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   const [find, setFind] = useState("");
   const [sellers, setSellers] = useState([]);
   const demo = isDemoLogin();
+  const [showBriefing, setShowBriefing] = useState(() => !demo && me && !briefingShown());
   useEffect(() => { if (demo) ensureSeed(); }, [demo]);
   const loadSellers = () => { if (demo || restricted) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
   useEffect(loadSellers, [demo]);
@@ -1204,6 +1210,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
 
   return (
     <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me}>
+      {showBriefing && <WelcomeBriefing me={me} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
         <ExecutiveHub preset={preset} setPreset={setPreset} go={go} sub={nav.params.sub} onSub={onSub}
           views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />

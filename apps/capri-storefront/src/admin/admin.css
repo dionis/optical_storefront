@@ -140,6 +140,7 @@
 .adm-icobtn.danger:hover { background: var(--adm-red-soft); color: var(--adm-red); }
 .adm-user-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 240px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--adm-bg); border: 1px solid var(--adm-line); }
 .adm-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--adm-grad-brand); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; flex: none; box-shadow: 0 2px 8px rgba(99,102,241,.25); transition: transform .25s var(--adm-ease-bounce), box-shadow .25s; }
+.adm-avatar-img { object-fit: cover; }
 .adm-user-chip:hover .adm-avatar { transform: scale(1.12) rotate(-3deg); box-shadow: 0 4px 14px rgba(99,102,241,.3); }
 .adm-user-mail { font-size: 12.5px; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -398,6 +399,23 @@
 .cost-rule .cost-rule-name small { font-size: 11.5px; color: var(--adm-faint); }
 .cost-rule .adm-price-input { width: 100%; }
 .cost-unit { font-size: 12px; color: var(--adm-muted); text-align: center; }
+
+/* ── Acordeones de costos / precios ────────────────────────────────────── */
+.cost-accordions { display: flex; flex-direction: column; gap: 8px; }
+.cost-accordion { border: 1px solid var(--adm-line); border-radius: 12px; background: var(--adm-card); overflow: hidden; }
+.cost-accordion > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; font-size: 14px; font-weight: 600; user-select: none; }
+.cost-accordion > summary::-webkit-details-marker { display: none; }
+.cost-accordion > summary::marker { content: ""; }
+.cost-acc-title { font-weight: 700; }
+.cost-acc-count { font-size: 12px; color: var(--adm-muted); font-weight: 400; }
+.cost-acc-warn { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--adm-gold-soft); color: var(--adm-amber); font-weight: 600; }
+.cost-acc-arrow { margin-left: auto; transition: transform .25s var(--adm-ease); flex-shrink: 0; }
+.cost-accordion[open] > summary .cost-acc-arrow { transform: rotate(180deg); }
+.cost-acc-body { padding: 0 14px 12px; }
+.cost-acc-logo { height: 20px; max-width: 80px; object-fit: contain; flex-shrink: 0; }
+/* override: dentro de un acordeón, los nombres NO se truncan */
+.cost-accordion .cost-rule-name b { white-space: normal; overflow: visible; text-overflow: unset; word-break: break-word; }
+
 .cost-line { display: grid; grid-template-columns: 1.4fr minmax(60px, 90px) minmax(40px, 60px) minmax(70px, 100px) auto; gap: clamp(4px, .7vw, 8px); align-items: center; padding: clamp(4px, .5vw, 6px) clamp(2px, .4vw, 4px); border-bottom: 1px solid var(--adm-line-2); font-size: clamp(12px, 1.05vw, 13.5px); }
 .cost-line.manual .cost-line-name::after { content: "✎"; margin-left: 6px; color: var(--adm-gold); }
 .cost-line .adm-price-input { width: 100%; }
@@ -1288,4 +1306,70 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 @media (max-width: 640px) {
   .adm-frame-card { padding: clamp(14px, 3vw, 20px) clamp(12px, 2.6vw, 16px); }
   .adm-frame-attrs { grid-template-columns: 1fr; }
+}
+
+/* ── Photo upload (StaffProfile) ─────────────────────────────────────── */
+.adm-photo-group { border-color: var(--adm-gold); }
+.adm-photo-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; }
+.adm-photo-preview {
+  width: 80px; height: 80px; border-radius: 50%; overflow: hidden; flex: none;
+  background: var(--adm-bg); border: 2px solid var(--adm-line);
+  display: grid; place-items: center;
+}
+.adm-photo-img { width: 100%; height: 100%; object-fit: cover; }
+.adm-photo-placeholder { color: var(--adm-faint); }
+.adm-photo-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.adm-photo-url-row { display: flex; gap: 6px; width: 100%; }
+.adm-photo-url-row input { flex: 1; min-width: 0; font-size: 13px; padding: 5px 8px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); background: var(--adm-bg); color: var(--adm-ink); }
+.adm-photo-hint { display: block; width: 100%; font-size: 12px; margin-top: 2px; }
+.adm-photo-err { display: block; width: 100%; font-size: 12px; margin-top: 2px; color: var(--adm-red); font-weight: 600; }
+
+/* ── Welcome briefing modal ──────────────────────────────────────────── */
+.adm-briefing-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(15,36,64,.65); backdrop-filter: blur(8px);
+  display: grid; place-items: center;
+  animation: admFade .3s ease both;
+}
+.adm-briefing-card {
+  background: var(--adm-surface); border: 1px solid var(--adm-line);
+  border-radius: calc(var(--adm-radius) * 1.5); padding: clamp(24px, 4vw, 36px);
+  min-width: min(340px, 88vw); max-width: min(420px, 92vw);
+  box-shadow: 0 16px 60px rgba(15,36,64,.35);
+  display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center;
+  animation: admPop .35s var(--adm-ease) both;
+}
+.adm-briefing-avatar {
+  width: 72px; height: 72px; border-radius: 50%; overflow: hidden;
+  background: linear-gradient(135deg, var(--adm-navy), var(--adm-navy-2));
+  color: #fff; font-size: 26px; font-weight: 800;
+  display: grid; place-items: center; flex: none;
+  border: 3px solid var(--adm-gold);
+  box-shadow: 0 6px 20px rgba(15,36,64,.3);
+}
+.adm-briefing-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.adm-briefing-greeting {
+  font-size: clamp(17px, 3.5vw, 20px); font-weight: 700; color: var(--adm-ink);
+  line-height: 1.35; margin: 0;
+}
+.adm-briefing-metric {
+  width: 100%; padding: 16px; border-radius: var(--adm-radius);
+  background: var(--adm-bg); border: 1px solid var(--adm-line);
+  animation: admSlideUp .4s var(--adm-ease) both;
+}
+.adm-briefing-metric-label { font-size: 13px; color: var(--adm-muted); font-weight: 600; margin-bottom: 6px; }
+.adm-briefing-metric-value { font-size: clamp(26px, 5vw, 34px); font-weight: 800; color: var(--adm-navy); }
+.adm-briefing-metric-value.gold { color: var(--adm-gold-dark, var(--adm-gold)); }
+.adm-briefing-footer { display: flex; gap: 10px; width: 100%; }
+.adm-briefing-footer .btn-sm { flex: 1; justify-content: center; }
+.adm-briefing-dots { display: flex; gap: 8px; }
+.adm-briefing-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--adm-line);
+  transition: background .2s, transform .2s;
+}
+.adm-briefing-dot.on { background: var(--adm-navy); transform: scale(1.3); }
+.adm-briefing-dot.done { background: var(--adm-gold); }
+@keyframes admSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
