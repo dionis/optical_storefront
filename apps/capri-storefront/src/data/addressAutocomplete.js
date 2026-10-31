@@ -50,9 +50,17 @@ function loadGoogleMaps() {
   scriptPromise = new Promise((resolve, reject) => {
     const existing = document.getElementById("gmaps-sdk");
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.google));
-      existing.addEventListener("error", reject);
-      if (window.google && window.google.maps) resolve(window.google);
+      // Otro módulo ya lo pidió (recarga en caliente): su callback no es el nuestro.
+      const wait = setInterval(() => {
+        if (window.google?.maps?.importLibrary) {
+          clearInterval(wait);
+          resolve(window.google);
+        }
+      }, 100);
+      existing.addEventListener("error", () => {
+        clearInterval(wait);
+        reject(new Error("gmaps-load-failed"));
+      });
       return;
     }
     const s = document.createElement("script");
@@ -61,10 +69,12 @@ function loadGoogleMaps() {
     s.defer = true;
     // `loading=async` es obligatorio con la API nueva; `v=weekly` trae
     // AutocompleteSuggestion. No se pide `libraries=` aquí: se importa luego.
+    // Se espera al `callback` y no a `onload`: con loading=async el script termina
+    // de cargar ANTES de que exista google.maps.importLibrary.
+    window.__gmapsReady = () => resolve(window.google);
     s.src =
-      "https://maps.googleapis.com/maps/api/js?v=weekly&loading=async&key=" +
+      "https://maps.googleapis.com/maps/api/js?v=weekly&loading=async&callback=__gmapsReady&key=" +
       encodeURIComponent(GOOGLE_KEY);
-    s.onload = () => resolve(window.google);
     s.onerror = () => reject(new Error("gmaps-load-failed"));
     document.head.appendChild(s);
     // Si Google rechaza la llave (referrer no autorizado, API sin habilitar)
