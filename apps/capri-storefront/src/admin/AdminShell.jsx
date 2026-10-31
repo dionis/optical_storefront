@@ -25,6 +25,7 @@ export const NAV_GROUPS = [
   { key: "stores", icon: "store", items: [
     { key: "stores", icon: "store" },
     { key: "storecosts", icon: "costs" },
+    { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
     { key: "alerts", icon: "bell" },
   ] },
@@ -75,6 +76,8 @@ export function navGroupsFor(me) {
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
     // Costos y resultado: privilegio por persona, sea cual sea el rol.
     ...((me.privileges || []).some((p) => p === "costs.view" || p === "costs.manage") ? [{ key: "storecosts", icon: "costs" }] : []),
+    // Estado de cuenta del período: supervisor y encargado, sobre sus tiendas.
+    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "statement", icon: "clipboard" }] : []),
   ];
   // El vendedor arranca en su panel («Mi panel»): primero en su menú, y la
   // primera pestaña es la que abre el panel cuando el enlace no pide otra.

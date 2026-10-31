@@ -7,22 +7,25 @@ import { GRAINS, grainFor, MAX_RANGE_DAYS, redactInsights, salesInsights, spanDa
 import { hasPrivilege } from "../../../../lib/staff-profile";
 
 /**
- * GET /admin/sales-analytics/insights?grain=hour|day|month|year&by=establishment|seller|product|…
+ * GET /admin/sales-analytics/insights?grain=hour|day|week|month|year&by=establishment|seller|product|…
  * plus the filters of the summary. Sales and profit over time and by
- * dimension. Without `grain`, the one that suits the range. Profit and
- * commissions leave only for those who may see them (redactInsights), and
- * `access` tells the panel which ones they are.
+ * dimension. Without `grain`, the one that suits the range. `by` takes a
+ * comma-separated list: the first is the main dimension (`rows`/`compare`),
+ * and every one comes back under `breakdowns`, all from the same single read.
+ * Profit and commissions leave only for those who may see them
+ * (redactInsights), and `access` tells the panel which ones they are.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
     const { filter, scope } = await analyticsFilter(req);
     if (spanDays(filter.from, filter.to) > MAX_RANGE_DAYS) throw new PosError("bad_range");
     const q = req.query as Record<string, unknown>;
-    const by = String(q.by ?? "establishment");
-    if (!(BREAKDOWNS as readonly string[]).includes(by)) throw new PosError("bad_breakdown");
+    const bys = String(q.by ?? "establishment").split(",").map((s) => s.trim()).filter(Boolean);
+    if (!bys.length || bys.some((b) => !(BREAKDOWNS as readonly string[]).includes(b))) throw new PosError("bad_breakdown");
     const grain = (GRAINS as readonly string[]).includes(String(q.grain)) ? (q.grain as Grain) : grainFor(filter.from, filter.to);
     const profit = hasPrivilege(scope, "costs.view") || hasPrivilege(scope, "costs.manage");
     const access = { profit, commission: profit || scope.role === "seller", role: scope.role };
-    res.json({ access, filter: { from: filter.from, to: filter.to }, ...redactInsights(await salesInsights(req.scope, filter, grain, by as Breakdown), access) });
+    const [by, ...more] = bys as Breakdown[];
+    res.json({ access, filter: { from: filter.from, to: filter.to }, ...redactInsights(await salesInsights(req.scope, filter, grain, by, more), access) });
   });
 }

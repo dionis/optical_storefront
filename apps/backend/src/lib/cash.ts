@@ -12,6 +12,15 @@ import { listTerminals, PosError } from "./pos-data";
  * that counts to square the register).
  */
 
+/**
+ * Why cash moved by hand (owner's list). Fixed so the cash report can group
+ * the reasons; the note stays free text for the detail.
+ */
+export const CASH_CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"] as const;
+export type CashCategory = (typeof CASH_CATEGORIES)[number];
+
+export const isCashCategory = (v: unknown): v is CashCategory => typeof v === "string" && (CASH_CATEGORIES as readonly string[]).includes(v);
+
 /** Pure: what should be in the drawer. */
 export function expectedCash(opening: number, cashPayments: number[], movements: Array<{ kind: "in" | "out"; amount: number }>): number {
   return opening + cashPayments.reduce((s, v) => s + v, 0) + movements.reduce((s, m) => s + (m.kind === "in" ? m.amount : -m.amount), 0);
@@ -33,7 +42,7 @@ export interface CashSessionView {
   diff: number | null;
   note: string | null;
   cash_in_sales: number;
-  movements: Array<{ kind: string; amount: number; note: string | null; created_at: string }>;
+  movements: Array<{ id: string; kind: string; amount: number; category: string | null; note: string | null; created_at: string }>;
 }
 
 async function view(container: MedusaContainer, s: Record<string, unknown>): Promise<CashSessionView> {
@@ -60,7 +69,14 @@ async function view(container: MedusaContainer, s: Record<string, unknown>): Pro
     diff: s.diff_cents == null ? null : Number(s.diff_cents) / 100,
     note: (s.note as string | null) ?? null,
     cash_in_sales: cashPayments.reduce((a, b) => a + b, 0) / 100,
-    movements: movements.map((m) => ({ kind: m.kind, amount: Number(m.amount_cents) / 100, note: m.note ?? null, created_at: iso(m.created_at) as string })),
+    movements: movements.map((m) => ({
+      id: String(m.id),
+      kind: m.kind,
+      amount: Number(m.amount_cents) / 100,
+      category: m.category ?? null,
+      note: m.note ?? null,
+      created_at: iso(m.created_at) as string,
+    })),
   };
 }
 
@@ -94,9 +110,21 @@ export async function openSession(container: MedusaContainer, input: { establish
   return view(container, s as unknown as Record<string, unknown>);
 }
 
-export async function addMovement(container: MedusaContainer, session: CashSessionView, input: { kind: "in" | "out"; amountCents: number; note: string | null; actorId: string }): Promise<CashSessionView> {
+export async function addMovement(
+  container: MedusaContainer,
+  session: CashSessionView,
+  input: { kind: "in" | "out"; amountCents: number; category: unknown; note: string | null; actorId: string }
+): Promise<CashSessionView> {
   if (session.closed_at) throw new PosError("cash_closed", 409);
-  await svc(container).createCashMovements({ session_id: session.id, kind: input.kind, amount_cents: input.amountCents, note: input.note, created_by: input.actorId });
+  if (!isCashCategory(input.category)) throw new PosError("bad_category");
+  await svc(container).createCashMovements({
+    session_id: session.id,
+    kind: input.kind,
+    amount_cents: input.amountCents,
+    category: input.category,
+    note: input.note,
+    created_by: input.actorId,
+  });
   return (await getSession(container, session.id)) as CashSessionView;
 }
 

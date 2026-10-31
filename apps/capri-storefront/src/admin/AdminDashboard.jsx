@@ -38,6 +38,7 @@ import StoreStatus from "./StoreStatus.jsx";
 import MySales from "./MySales.jsx";
 import PosCash from "./PosCash.jsx";
 import StoreCosts from "./StoreCosts.jsx";
+import StoreStatement from "./StoreStatement.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
@@ -1240,6 +1241,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "mysales" && <MySales go={go} />}
       {tab === "cash" && <PosCash />}
       {tab === "storecosts" && <StoreCosts me={me} />}
+      {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>
