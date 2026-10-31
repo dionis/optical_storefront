@@ -1109,6 +1109,22 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos-discount { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .pos-discount label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; }
 .pos-discount input { width: min(120px, 30vw); min-height: clamp(38px, 4.5vh, 42px); font-size: clamp(14px, 1.4vw, 16px); }
+.pos-sum { border: 1px solid var(--adm-line-2); border-radius: 12px; padding: 10px 12px; background: var(--adm-bg); }
+.pos-sum > summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--adm-ink); }
+.pos-sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 10px; margin-top: 10px; }
+.pos-sum-part { background: var(--adm-surface); border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 12px; min-width: 0; font-size: 13.5px; }
+.pos-sum-part.wide { grid-column: 1 / -1; }
+.pos-sum-part header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pos-sum-part h4 { margin: 0; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; color: var(--adm-ink); }
+.pos-sum-part p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.pos-sum-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pos-sum-items li { display: flex; align-items: center; gap: 10px; }
+.pos-sum-item { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.pos-sum-item small { overflow-wrap: anywhere; }
+.pos-sum-price { white-space: nowrap; }
+.pos-sum-rx { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 4px; }
+.pos-sum-rx th, .pos-sum-rx td { padding: 2px 4px; text-align: center; border-bottom: 1px solid var(--adm-line-2); font-weight: 500; }
+.pos-sum-rx tbody th { font-weight: 700; text-align: left; }
 .pos-totals { display: grid; grid-template-columns: 1fr auto; gap: 4px clamp(10px, 1.4vw, 14px); margin: 0; font-size: clamp(13px, 1.2vw, 14px); max-width: min(420px, 100%); }
 .pos-totals dt { color: var(--adm-muted); }
 .pos-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }

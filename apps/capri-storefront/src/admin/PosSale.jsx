@@ -30,6 +30,7 @@ import { resolveImageSized } from "../data/imageUrl.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
+import PosSaleSummary from "./PosSaleSummary.jsx";
 import { customerProblems, LIMITS, paymentProblem, typedDecimal, typedEmail, typedPhone, typedSigned, typedZip } from "../data/fieldRules.js";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
@@ -729,6 +730,7 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
