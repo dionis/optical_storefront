@@ -56,6 +56,7 @@ const WORK_GROUP = { key: "work", icon: "dollar", items: [
 /** Dueño y superadmin: el punto de venta con las aprobaciones; su perfil, desde la cabecera. */
 const ADMIN_WORK_GROUP = { key: "work", icon: "dollar", items: [
   ...WORK_GROUP.items.map((i) => (i.key === "profile" ? { ...i, navHidden: true } : i)),
+  { key: "pendingbalances", icon: "hand" },
   { key: "approvals", icon: "hand" },
 ] };
 
@@ -66,11 +67,24 @@ const ADMIN_WORK_GROUP = { key: "work", icon: "dollar", items: [
  */
 export function navGroupsFor(me) {
   if (!me || me.is_admin !== false) return [NAV_GROUPS[0], ADMIN_WORK_GROUP, ...NAV_GROUPS.slice(1)];
+  // Regla del dueño: el vendedor no ve el estado general de nada, ni de su
+  // tienda. Solo sus ventas, lo que va a cobrar y su comisión («Mi panel»,
+  // primero y por defecto), vender, los cobros pendientes de su tienda (los de
+  // sus compañeros incluidos: cobrar un saldo atrasado), su caja y su perfil.
+  if (me.role === "seller") {
+    return [{ ...WORK_GROUP, items: [
+      { key: "mysales", icon: "trendUp" },
+      { key: "pos", icon: "dollar" },
+      { key: "pendingbalances", icon: "hand" },
+      { key: "cash", icon: "wallet" },
+      { key: "profile", icon: "user" },
+    ] }];
+  }
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
   const extra = [
-    // El panel de ventas, cada cual sobre lo suyo: sus tiendas (HU-67) o, el vendedor, sus ventas.
-    ...(me.role === "supervisor" || me.role === "manager" || me.role === "seller" ? [{ key: "salesboard", icon: "sales" }] : []),
+    // El panel de ventas, cada cual sobre sus tiendas (HU-67).
+    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "salesboard", icon: "sales" }] : []),
     ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
     // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
@@ -79,13 +93,13 @@ export function navGroupsFor(me) {
     // Estado de cuenta del período: supervisor y encargado, sobre sus tiendas.
     ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "statement", icon: "clipboard" }] : []),
   ];
-  // El vendedor arranca en su panel («Mi panel»): primero en su menú, y la
-  // primera pestaña es la que abre el panel cuando el enlace no pide otra.
-  // El supervisor y el encargado arrancan en «Estado de tienda» (sus tiendas).
-  const lead = me.role === "supervisor" || me.role === "manager" ? [{ key: "storestatus", icon: "store" }] : [];
-  const items = me.role === "seller"
-    ? [...WORK_GROUP.items.filter((i) => i.key === "mysales"), ...WORK_GROUP.items.filter((i) => i.key !== "mysales")]
-    : [...lead, ...WORK_GROUP.items];
+  // El supervisor y el encargado arrancan en «Estado de tienda» (sus tiendas),
+  // con el ejecutivo y los pedidos de sus tiendas, y cobran saldos pendientes.
+  const lead = me.role === "supervisor" || me.role === "manager"
+    ? [{ key: "storestatus", icon: "store" }, { key: "exec", icon: "dashboard" }]
+    : [];
+  const items = [...lead, ...WORK_GROUP.items, { key: "pendingbalances", icon: "hand" }];
+  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" });
   return [{ ...WORK_GROUP, items: [...items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { money } from "./adminOrders.js";
 import {
   createMethod,
@@ -89,7 +90,7 @@ function Methods({ stores, canEditStores }) {
   };
   return (
     <div className="adm-card">
-      <h3>{t("adm.pos.cfg.methods")}</h3>
+      <h3>{t("adm.pos.cfg.methods")}<HelpTip topic="posconfig.methods" /></h3>
       <p className="adm-sub">{t("adm.pos.cfg.methodsSub")}</p>
       <table className="adm-table responsive">
         <thead><tr><th>{t("adm.pos.pay.method")}</th><th>{t("adm.pos.cfg.fee")}</th><th>{t("adm.pos.cfg.stores")}</th><th>{t("adm.pos.cfg.active")}</th></tr></thead>

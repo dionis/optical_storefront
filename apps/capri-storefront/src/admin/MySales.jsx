@@ -1,29 +1,140 @@
 // Dónde se usa: pestaña «Mi panel» de /admin — el panel del vendedor (E8) y la
 // pantalla con la que arranca un usuario vendedor: su tienda y punto de venta
 // (con la caja abierta o no), accesos a vender y a la caja, sus cifras de hoy,
-// semana y mes, las ventas de la tienda hoy y su parte, comisión y meta, sus
-// últimas ventas y los pedidos que volvieron del laboratorio (HU-50, HU-52,
-// HU-53). La lista completa de sus ventas (HU-51) está en «Ventas de tienda».
-import { useEffect, useState } from "react";
+// semana y mes, comisión y meta, sus últimas ventas y los pedidos que volvieron
+// del laboratorio (HU-50, HU-52, HU-53); debajo, la lista de sus ventas del
+// período (HU-51, GET /admin/sales-analytics/sales) y los cobros pendientes de
+// su tienda (PendingBalances). Regla del dueño: el vendedor no ve el estado de
+// la tienda — `store_today` solo llega para los demás roles.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
+import Accordion from "./Accordion.jsx";
+import PendingBalances from "./PendingBalances.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { ExportMenu } from "./ui.jsx";
 import "./screens.css";
+import "./roles.css";
 
 const PERIODS = ["today", "week", "month"];
 const ZERO = { total: 0, count: 0, avg_ticket: 0 };
 
-/** Props: `go` (navegación) y `me` (GET /admin/team/me): el filtro de tienda solo sale si vende en varias. */
-export default function MySales({ go, me }) {
+/** Primer y último día (YYYY-MM-DD, hora local) de hoy, la semana ISO (lunes) o el mes. */
+export function periodRange(period, now = new Date()) {
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const to = ymd(now);
+  if (period === "week") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return { from: ymd(d), to };
+  }
+  if (period === "month") return { from: `${to.slice(0, 8)}01`, to };
+  return { from: to, to };
+}
+
+/** Las ventas propias del período: número, fecha, cliente, artículos, total, cobrado, saldo y comisión. */
+function MySalesList({ me, period, storeParam, openSale }) {
+  const { t, lang } = useLang();
+  const [rows, setRows] = useState(null);
+  const [state, setState] = useState("loading");
+  const bodyRef = useRef(null);
+  const range = useMemo(() => periodRange(period), [period]);
+  const m = (v) => money(v, "usd", lang);
+  useEffect(() => {
+    setState("loading");
+    const p = new URLSearchParams({ from: range.from, to: range.to });
+    // El servidor ya fuerza «solo las mías» a un vendedor; para los demás roles se pide explícitamente.
+    if (me?.id) p.set("sellers", me.id);
+    if (storeParam) p.set("stores", storeParam);
+    adminFetch(`/admin/sales-analytics/sales?${p.toString()}`)
+      .then((r) => { setRows((r.sales || []).filter((s) => s.sale_id)); setState("ok"); })
+      .catch(() => setState("error"));
+  }, [range.from, range.to, storeParam, me?.id]);
+  const list = rows || [];
+  const sum = (k) => Math.round(list.reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
+  const hasCommission = list.some((r) => r.commission != null);
+  const cols = [
+    { header: t("adm.pb.number"), key: "number" },
+    { header: t("adm.pb.date"), get: (r) => r.sold_at.slice(0, 10), type: "date" },
+    { header: t("adm.pb.customer"), key: "customer" },
+    { header: t("adm.my.items"), key: "items" },
+    { header: t("adm.pb.total"), key: "total", type: "money" },
+    { header: t("adm.pb.paid"), key: "paid", type: "money" },
+    { header: t("adm.pb.balance"), key: "balance", type: "money" },
+    ...(hasCommission ? [{ header: t("adm.my.commissionCol"), key: "commission", type: "money" }] : []),
+  ];
+  const xlsx = () => ({
+    filename: `${t("adm.my.list")}-${range.from}-${range.to}.xlsx`,
+    sheets: [{ name: t("adm.my.list"), cols, rows: list, totals: { total: sum("total"), paid: sum("paid"), balance: sum("balance"), ...(hasCommission ? { commission: sum("commission") } : {}) }, totalsLabel: t("adm.my.totalRow") }],
+  });
+  const csv = { cols: cols.map((c) => [c.header, c.get || c.key]), rows: list };
+  const summary = [
+    { label: t("adm.my.sales"), value: list.length },
+    { label: t("adm.pb.total"), value: m(sum("total")), strong: true },
+    { label: t("adm.pb.balance"), value: m(sum("balance")), tone: sum("balance") > 0 ? "warn" : "good" },
+    ...(hasCommission ? [{ label: t("adm.my.commissionCol"), value: m(sum("commission")) }] : []),
+  ];
+  return (
+    <Accordion id="my-sales-list" icon="receipt" title={t("adm.my.list")} subtitle={`${t("adm.my.listSub")} · ${range.from} – ${range.to}`} summary={summary} defaultOpen
+      right={<ExportMenu targetRef={bodyRef} title={`${t("adm.my.list")} · ${range.from} – ${range.to}`} name="mis-ventas" csv={csv} xlsx={xlsx} />}>
+      <div ref={bodyRef}>
+        {state === "loading" && !rows ? <div className="adm-src-note loading">{t("adm.my.listLoading")}</div>
+          : state === "error" ? <div className="adm-demo-banner">{t("adm.err.pos.generic")}</div>
+          : !list.length ? <div className="adm-nodata">{t("adm.my.listEmpty")}</div> : (
+          <table className="adm-table responsive pb-table">
+            <thead>
+              <tr>
+                <th>{t("adm.pb.number")}</th><th>{t("adm.pb.date")}</th><th>{t("adm.pb.customer")}</th><th>{t("adm.my.items")}</th>
+                <th className="r">{t("adm.pb.total")}</th><th className="r">{t("adm.pb.paid")}</th><th className="r">{t("adm.pb.balance")}</th>
+                {hasCommission && <th className="r">{t("adm.my.commissionCol")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r.order_id}>
+                  <td data-label={t("adm.pb.number")} className="pb-num">
+                    {openSale && r.sale_id ? <button type="button" onClick={() => openSale(r.sale_id)} title={t("adm.pb.open", { n: r.number })}>{r.number}</button> : r.number}
+                    {r.status === "voided" && <span className="adm-chip bad"> {t("adm.my.voided")}</span>}
+                  </td>
+                  <td data-label={t("adm.pb.date")}>{shortDate(r.sold_at, lang)}</td>
+                  <td data-label={t("adm.pb.customer")}>{r.customer || "—"}</td>
+                  <td data-label={t("adm.my.items")}><small>{r.items}</small></td>
+                  <td data-label={t("adm.pb.total")} className="r num">{m(r.total)}</td>
+                  <td data-label={t("adm.pb.paid")} className="r num">{m(r.paid)}</td>
+                  <td data-label={t("adm.pb.balance")} className="r num">{r.balance > 0 ? <b>{m(r.balance)}</b> : m(r.balance)}</td>
+                  {hasCommission && <td data-label={t("adm.my.commissionCol")} className="r num">{r.commission == null ? "—" : m(r.commission)}</td>}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4}>{t("adm.my.totalRow")} · {list.length} {t("adm.my.sales")}</td>
+                <td className="r num">{m(sum("total"))}</td>
+                <td className="r num">{m(sum("paid"))}</td>
+                <td className="r num"><b>{m(sum("balance"))}</b></td>
+                {hasCommission && <td className="r num"><b>{m(sum("commission"))}</b></td>}
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </div>
+    </Accordion>
+  );
+}
+
+/** Props: `go` (navegación), `me` (GET /admin/team/me; el filtro de tienda solo sale si vende en varias) y `openSale(id)` (ficha de una venta). */
+export default function MySales({ go, me, openSale }) {
   const { t, lang } = useLang();
   const [d, setD] = useState(null);
   const [state, setState] = useState("loading");
+  const [period, setPeriod] = useState("month");
   const { storeId, stores, isAll, isWeb } = useStoreFilter(me);
   // Solo con varias tiendas tiene sentido elegir; la online no tiene mostrador.
   const multi = Boolean(me) && stores.length > 1;
   const storeParam = multi && !isAll && !isWeb ? storeId : "";
+  const seller = me?.role === "seller";
   const load = () => {
     setState("loading");
     adminFetch(`/admin/sales-analytics/me${storeParam ? `?store=${encodeURIComponent(storeParam)}` : ""}`).then((r) => { setD(r); setState("ok"); }).catch(() => setState("error"));
@@ -35,9 +146,12 @@ export default function MySales({ go, me }) {
 
   const pct = d.goal ? Math.min(100, Math.round((d.goal.done / (d.goal.amount || 1)) * 100)) : 0;
   const wp = d.workplace;
-  const st = d.store_today;
+  // Solo para quien no es vendedor: el vendedor nunca recibe el estado de la tienda.
+  const st = seller ? null : d.store_today;
   const share = st && st.total > 0 ? Math.round((st.mine / st.total) * 100) : 0;
   const tillName = wp?.terminal ? (wp.terminal.name ? `${wp.terminal.code} · ${wp.terminal.name}` : wp.terminal.code) : null;
+  // Donde se ven las ventas: el vendedor, en su propia lista; los demás, en «Ventas de tienda».
+  const seeSales = () => (seller ? document.querySelector('[data-acc="my-sales-list"]')?.scrollIntoView({ behavior: "smooth", block: "start" }) : go?.("possales"));
 
   return (
     <div className="adm-section pos my-dash">
@@ -67,8 +181,12 @@ export default function MySales({ go, me }) {
         <div className="my-actions">
           <button type="button" className="btn-sm primary big" onClick={() => go("pos")}><Icon name="plus" size={15} /> {t("adm.tab.pos")}</button>
           <button type="button" className="btn-sm" onClick={() => go("cash")}><Icon name="wallet" size={14} /> {t("adm.tab.cash")}</button>
-          <button type="button" className="btn-sm" onClick={() => go("possales")}><Icon name="receipt" size={14} /> {t("adm.tab.possales")}</button>
-          <button type="button" className="btn-sm" onClick={() => go("salesboard")}><Icon name="sales" size={14} /> {t("adm.tab.salesboard")}</button>
+          {seller
+            ? <button type="button" className="btn-sm" onClick={() => go("pendingbalances")}><Icon name="hand" size={14} /> {t("adm.tab.pendingbalances")}</button>
+            : <>
+              <button type="button" className="btn-sm" onClick={() => go("possales")}><Icon name="receipt" size={14} /> {t("adm.tab.possales")}</button>
+              <button type="button" className="btn-sm" onClick={() => go("salesboard")}><Icon name="sales" size={14} /> {t("adm.tab.salesboard")}</button>
+            </>}
         </div>
       )}
 
@@ -76,7 +194,7 @@ export default function MySales({ go, me }) {
         {PERIODS.map((k) => {
           const s = d[k] || ZERO;
           return (
-            <button type="button" key={k} className={`my-period ${k === "today" ? "hero" : ""}`} onClick={() => go?.("possales")}>
+            <button type="button" key={k} className={`my-period ${k === "today" ? "hero" : ""} ${seller && k === period ? "active" : ""}`} onClick={() => { setPeriod(k); seeSales(); }} aria-pressed={seller ? k === period : undefined}>
               <small>{t(`adm.my.${k}`)}</small>
               <b>{m(s.total)}</b>
               <span className="muted">{t("adm.my.periodSub", { n: s.count, avg: m(s.avg_ticket) })}</span>
@@ -117,7 +235,10 @@ export default function MySales({ go, me }) {
             <ul className="my-recent">
               {d.recent.map((r) => (
                 <li key={r.id}>
-                  <span className="my-recent-main"><b>{r.number}</b><small className="muted">{shortDate(r.created_at, lang)}</small></span>
+                  <span className="my-recent-main">
+                    {openSale ? <button type="button" className="pb-link" onClick={() => openSale(r.id)}><b>{r.number}</b></button> : <b>{r.number}</b>}
+                    <small className="muted">{shortDate(r.created_at, lang)}</small>
+                  </span>
                   <span className="my-recent-tags">
                     {r.status === "voided" && <span className="adm-chip bad">{t("adm.my.voided")}</span>}
                     {r.status !== "voided" && r.balance > 0 && <span className="adm-chip neutral">{t("adm.my.toCollect", { v: m(r.balance) })}</span>}
@@ -128,7 +249,7 @@ export default function MySales({ go, me }) {
               ))}
             </ul>
           )}
-          {go && (d.recent || []).length > 0 && <button type="button" className="btn-xs" onClick={() => go("possales")}>{t("adm.my.seeAll")} <Icon name="arrowRight" size={12} /></button>}
+          {(d.recent || []).length > 0 && <button type="button" className="btn-xs" onClick={seeSales}>{t("adm.my.seeAll")} <Icon name="arrowRight" size={12} /></button>}
         </div>
 
         <div className="adm-card">
@@ -139,13 +260,27 @@ export default function MySales({ go, me }) {
                 <li key={r.id}>
                   <Icon name="hand" size={16} />
                   <span><b>{r.number}</b> · {t(`adm.my.stage.${r.stage}`)}{r.balance > 0 ? ` · ${t("adm.my.toCollect", { v: m(r.balance) })}` : ""}</span>
-                  {go && <button type="button" className="btn-xs" onClick={() => go("possales")}>{t("adm.my.open")}</button>}
+                  {openSale ? <button type="button" className="btn-xs" onClick={() => openSale(r.id)}>{t("adm.my.open")}</button>
+                    : go && !seller && <button type="button" className="btn-xs" onClick={() => go("possales")}>{t("adm.my.open")}</button>}
                 </li>
               ))}
             </ul>
           )}
         </div>
       </div>
+
+      {seller && (
+        <>
+          <div className="adm-head-row adm-noprint">
+            <span className="muted">{t("adm.my.period")}</span>
+            <div className="pos-filters">
+              {PERIODS.map((k) => <button type="button" key={k} className={`btn-xs ${k === period ? "primary" : ""}`} onClick={() => setPeriod(k)} aria-pressed={k === period}>{t(`adm.my.${k}`)}</button>)}
+            </div>
+          </div>
+          <MySalesList me={me} period={period} storeParam={storeParam} openSale={openSale} />
+          <PendingBalances me={me} openSale={openSale} embedded />
+        </>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { money as fmtMoney } from "./adminOrders.js";
 import { ExportMenu } from "./ui.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { periodRange } from "./SalesBoard.jsx";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
 import "./exec.css";
 
 export const PERIODS = ["today", "yesterday", "week", "lastWeek", "month", "lastMonth", "year", "range"];
@@ -143,19 +144,21 @@ export function salesSheets(rows, totals, { t, lang, storeLabel }) {
 
 /**
  * La tabla. `data` viene de useStoreSales (el Ejecutivo la comparte con sus
- * KPI); en solitario la carga ella misma.
+ * KPI); en solitario la carga ella misma. Pulsar una venta de tienda abre su
+ * ficha (SaleDetailPanel) con la economía de la fila; `onOpen`, si se pasa,
+ * sustituye ese comportamiento. Un pedido de la web no tiene ficha de venta.
  */
-export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false }) {
+export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false, me }) {
   const { t, lang } = useLang();
   const { rows, access, state, truncated, totals } = data;
+  const sp = useSalePanel({ me });
   const m = (v) => fmtMoney(v, "usd", lang);
   const when = (iso) => new Date(iso).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" });
   const showEcon = access?.profit === true;
   const showCommission = access?.commission === true;
   const hidden = <span className="muted" title={t("adm.ex.so.hiddenHint")}>{t("adm.ex.so.hidden")}</span>;
-  // PosSales (pestaña "possales") no recibe parámetros de búsqueda todavía: sin
-  // `onOpen` la fila no salta a ningún sitio (quien la monte decide).
-  const onRow = typeof onOpen === "function" ? onOpen : null;
+  const onRow = typeof onOpen === "function" ? onOpen : (r) => (r.sale_id ? sp.open(r.sale_id, { economics: r }) : null);
+  const clickable = (r) => typeof onOpen === "function" || Boolean(r.sale_id);
   if (state === "loading" && !rows.length) return <div className="adm-skel" style={{ height: 120 }} />;
   if (state === "error") return <div className="adm-demo-banner">{t("adm.ex.loadFailed")}</div>;
   if (state === "demo") return <div className="adm-demo-banner">{t("adm.ex.demo")}</div>;
@@ -187,7 +190,7 @@ export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false }) 
             const voided = r.status === "voided";
             const profit = r.profit == null ? null : Number(r.profit);
             return (
-              <tr key={r.order_id} className={`${onRow ? "ord-row" : ""} ${voided ? "so-voided" : ""}`} onClick={onRow ? () => onRow(r) : undefined} title={onRow ? t("adm.ex.so.open") : undefined}>
+              <tr key={r.order_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${sp.saleId && sp.saleId === r.sale_id ? "sd-current" : ""} ${voided ? "so-voided" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? t("adm.sd.openHint") : undefined}>
                 <td data-label={t("adm.ex.so.number")}><b>{r.number || `${t("adm.ex.so.web")} ${r.order_id.slice(-6)}`}</b>{storeLabel && <small className="muted so-store"> · {storeLabel(r)}</small>}</td>
                 <td data-label={t("adm.ex.so.date")}>{when(r.sold_at)}</td>
                 <td data-label={t("adm.ex.so.customer")}>{r.customer || "—"}</td>
@@ -222,6 +225,7 @@ export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false }) 
           </tr>
         </tfoot>
       </table>
+      {sp.panel}
     </div>
   );
 }
@@ -250,7 +254,7 @@ export default function StoreOrders({ me, go, embedded = false, data: given, sto
   const ref = useRef(null);
   // `openSale(row, go)` abre una venta cuando la pestaña de Ventas acepte una búsqueda por número.
   const onOpen = typeof openSale === "function" ? (r) => openSale(r, go) : undefined;
-  if (embedded) return <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} compact />;
+  if (embedded) return <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} compact me={me} />;
   const scope = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb ? t("adm.ex.scope.web") : `${sf.store?.code || ""} ${sf.store?.name || ""}`.trim();
   const meta = `${scope} · ${per.range.from} → ${per.range.to}`;
   return (
@@ -269,7 +273,7 @@ export default function StoreOrders({ me, go, embedded = false, data: given, sto
         </span>
       </div>
       <div ref={ref}>
-        <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} />
+        <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} me={me} />
       </div>
     </div>
   );

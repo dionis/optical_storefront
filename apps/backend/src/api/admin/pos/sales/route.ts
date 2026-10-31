@@ -24,17 +24,32 @@ import {
   type RxMeta,
 } from "../../../../lib/pos-data";
 import { runAfterSale } from "../../../../lib/pos-after-sale";
-import { ownSalesOnly, posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
+import {
+  customerContacts,
+  limitedSale,
+  ownSalesOnly,
+  posHandler,
+  posScope,
+  saleAccessFor,
+  saleWithContact,
+  scopeStoreIds,
+  sellableStore,
+} from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
 
 /**
  * VENTAS DEL PUNTO DE VENTA.
  *
- *   GET  /admin/pos/sales?store=&terminal=&number=&customer=&with_balance=1&from=&to=
+ *   GET  /admin/pos/sales?store=&terminal=&number=&customer=&with_balance=1&pending=1&mine=1&from=&to=
  *        Ventas dentro del alcance de quien pregunta (matriz de permisos):
- *        dueño y superadmin todas, supervisor y encargado las de sus tiendas,
- *        el vendedor las suyas. Buscar por número o cliente (cobrar un saldo,
- *        entregar) abre las de su tienda aunque las vendiera un compañero.
+ *        dueño y superadmin todas, supervisor y encargado las de sus tiendas.
+ *        El vendedor (regla del dueño, lib/pos-route.ts saleAccessFor): las
+ *        suyas completas y, de sus compañeros de tienda, SOLO las que deben
+ *        dinero y reducidas a lo necesario para cobrar (`limited: true`, sin
+ *        artículos, receta ni economía). Nunca el estado general de la tienda.
+ *        `pending=1`: solo ventas con saldo pendiente (cualquier rol, en su
+ *        alcance), con nombre y teléfono del cliente para cobrar.
+ *        `mine=1`: solo las ventas propias de quien pregunta (cualquier rol).
  *   POST /admin/pos/sales — registra una venta (ver Body). El servidor vuelve a
  *        calcular precio y descuento (nunca se fía de un total del cliente);
  *        un descuento fuera de límite exige una aprobación vigente.
@@ -46,8 +61,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const scope = await posScope(req);
     const q = req.query as Record<string, string | undefined>;
     const ids = q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope);
-    // Looking a sale up (number, customer) is store-wide; browsing is "my sales" for a seller.
-    const lookingUp = Boolean(q.number || q.customer);
+    const seller = ownSalesOnly(scope);
+    const mine = q.mine === "1";
+    const pending = q.pending === "1" || q.with_balance === "1";
     const sales =
       ids && !ids.length
         ? []
@@ -55,18 +71,27 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
             req.scope,
             {
               establishmentIds: ids,
-              sellerId: ownSalesOnly(scope) && !lookingUp ? scope.user_id : q.seller || undefined,
+              // A seller never filters by another seller: their list is "mine, or owed".
+              sellerId: mine ? scope.user_id : seller ? undefined : q.seller || undefined,
+              ownOrPendingFor: seller && !mine ? scope.user_id : undefined,
               terminalId: q.terminal || undefined,
               customerId: q.customer || undefined,
               number: q.number?.trim() || undefined,
-              withBalance: q.with_balance === "1",
+              withBalance: pending,
               status: q.status === "voided" || q.status === "completed" ? q.status : undefined,
               from: q.from || undefined,
               to: q.to || undefined,
             },
             Math.min(200, Number(q.limit) || 50)
           );
-    res.json({ sales });
+    // Collecting needs the customer's name and phone; the plain list does not carry them.
+    const contacts = pending || seller ? await customerContacts(req.scope, sales.map((s) => s.customer_id)) : new Map();
+    const rows = sales.map((s) => {
+      const contact = s.customer_id ? contacts.get(s.customer_id) : undefined;
+      if (seller && saleAccessFor(scope, s) !== "full") return limitedSale(s, contact);
+      return pending || seller ? saleWithContact(s, contact) : s;
+    });
+    res.json({ sales: rows });
   });
 }
 

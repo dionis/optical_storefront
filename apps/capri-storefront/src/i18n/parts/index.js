@@ -10,5 +10,9 @@ import cashReport from "./cash-report.js";
 import statement from "./statement.js";
 import exec from "./exec.js";
 import screens from "./screens.js";
+import saleDetail from "./sale-detail.js";
+import help from "./help.js";
+import fit from "./fit.js";
+import roles from "./roles.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles];

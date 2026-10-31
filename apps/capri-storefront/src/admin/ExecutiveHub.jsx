@@ -20,6 +20,7 @@ import { money as fmtMoney } from "./adminOrders.js";
 import { fetchBoardWindow } from "./realAnalytics.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { ExportMenu } from "./ui.jsx";
+import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import Executive, { CatalogMini } from "./Executive.jsx";
@@ -35,15 +36,22 @@ const CARD_KINDS = new Set(["card", "debit", "credit"]);
 const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es-US");
 const cents = (c) => (Number(c) || 0) / 100;
 
-function Kpi({ label, value, sub, tone, hint, onClick, neg = false, loading = false }) {
+// `help` es el tema de HelpTip: va en la esquina, fuera del botón de "ir a",
+// porque un botón no puede contener otro.
+function Kpi({ label, value, sub, tone, hint, help, onClick, neg = false, loading = false }) {
   const click = typeof onClick === "function";
-  const Tag = click ? "button" : "div";
-  return (
-    <Tag type={click ? "button" : undefined} className={`ex-kpi ${click ? "click" : ""} ${loading ? "skel" : ""}`} title={hint || undefined} onClick={onClick}>
+  const body = (
+    <>
       <small>{label}</small>
       <b className={neg ? "neg" : ""}>{loading ? "0" : value}</b>
       {sub && <i className={tone || ""}>{sub}</i>}
-    </Tag>
+    </>
+  );
+  return (
+    <div className={`ex-kpi ${click ? "click" : ""} ${loading ? "skel" : ""} ${help ? "has-help" : ""}`} title={hint || undefined}>
+      {click ? <button type="button" className="ex-kpi-go" onClick={onClick}>{body}</button> : body}
+      {help && <HelpTip topic={help} size={12} className="ex-kpi-help" />}
+    </div>
   );
 }
 
@@ -207,13 +215,15 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   return (
     <div className="adm-section ex-root adm-exec-hub">
       <div className="ex-head">
-        <h2>{title}</h2>
+        <h2>{title}<HelpTip topic="exec.overview" size={16} /></h2>
         <p>{t("adm.ex.sub")}</p>
       </div>
 
       <div className={`ex-bar adm-noprint ${state === "loading" ? "busy" : ""}`} ref={barRef}>
         <StoreFilter me={me} compact />
+        <HelpTip topic="exec.storeFilter" />
         <PeriodBar {...per} />
+        <HelpTip topic="exec.period" />
         <span className="ex-export">
           <ExportMenu targetRef={bodyRef} title={title} name={t("adm.ex.export.name")} compact={false} meta={meta} xlsx={xlsx} beforePrint={beforePrint} />
         </span>
@@ -224,20 +234,20 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
         {demo && <div className="adm-demo-banner">{t("adm.ex.demo")}</div>}
 
         <div className="ex-kpis">
-          <Kpi label={t("adm.ex.kpi.sales")} value={m(tot.sales)} sub={dSales ? `${dSales.text} ${t("adm.ex.kpi.vsPrev")}` : undefined} tone={dSales?.tone} hint={t("adm.ex.kpi.h.sales")} loading={loading} onClick={() => go("salesboard")} />
+          <Kpi label={t("adm.ex.kpi.sales")} value={m(tot.sales)} sub={dSales ? `${dSales.text} ${t("adm.ex.kpi.vsPrev")}` : undefined} tone={dSales?.tone} hint={t("adm.ex.kpi.h.sales")} help="exec.kpi.sales" loading={loading} onClick={() => go("salesboard")} />
           <Kpi label={t("adm.ex.kpi.count")} value={int(tot.count, lang)} hint={t("adm.ex.kpi.h.count")} loading={loading} onClick={() => go("possales")} />
           <Kpi label={t("adm.ex.kpi.units")} value={int(tot.units, lang)} hint={t("adm.ex.kpi.h.units")} loading={loading} />
           <Kpi label={t("adm.ex.kpi.ticket")} value={m(tot.avg_ticket)} hint={t("adm.ex.kpi.h.ticket")} loading={loading} />
-          <Kpi label={t("adm.ex.kpi.paid")} value={m(sales.totals.paid)} hint={t("adm.ex.kpi.h.paid")} loading={sales.state === "loading" && !sales.rows.length} onClick={isAdmin || physical ? () => go("cash") : undefined} />
-          <Kpi label={t("adm.ex.kpi.balance")} value={m(sales.totals.balance)} neg={sales.totals.balance > 0} hint={t("adm.ex.kpi.h.balance")} loading={sales.state === "loading" && !sales.rows.length} onClick={() => go("possales")} />
-          {showProfit && <Kpi label={t("adm.ex.kpi.cost")} value={m(realCost)} sub={missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined} tone="warn" hint={t("adm.ex.kpi.h.cost")} loading={loading} onClick={isAdmin ? () => go("costs", { sub: "rules" }) : undefined} />}
-          {showProfit && <Kpi label={t("adm.ex.kpi.profit")} value={m(tot.profit)} neg={Number(tot.profit) < 0} sub={dProfit ? `${dProfit.text} ${t("adm.ex.kpi.vsPrev")}` : undefined} tone={dProfit?.tone} hint={t("adm.ex.kpi.h.profit")} loading={loading} onClick={isAdmin ? () => go("costs", { sub: "profit" }) : undefined} />}
-          {showProfit && <Kpi label={t("adm.ex.kpi.margin")} value={pct(tot.margin_pct)} hint={t("adm.ex.kpi.h.margin")} loading={loading} />}
-          {!sf.isWeb && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "—"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} hint={t("adm.ex.kpi.h.cashNet")} loading={loading} onClick={() => go("cash")} />}
+          <Kpi label={t("adm.ex.kpi.paid")} value={m(sales.totals.paid)} hint={t("adm.ex.kpi.h.paid")} help="exec.kpi.collected" loading={sales.state === "loading" && !sales.rows.length} onClick={isAdmin || physical ? () => go("cash") : undefined} />
+          <Kpi label={t("adm.ex.kpi.balance")} value={m(sales.totals.balance)} neg={sales.totals.balance > 0} hint={t("adm.ex.kpi.h.balance")} help="exec.kpi.balance" loading={sales.state === "loading" && !sales.rows.length} onClick={() => go("possales")} />
+          {showProfit && <Kpi label={t("adm.ex.kpi.cost")} value={m(realCost)} sub={missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined} tone="warn" hint={t("adm.ex.kpi.h.cost")} help="exec.kpi.cost" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "rules" }) : undefined} />}
+          {showProfit && <Kpi label={t("adm.ex.kpi.profit")} value={m(tot.profit)} neg={Number(tot.profit) < 0} sub={dProfit ? `${dProfit.text} ${t("adm.ex.kpi.vsPrev")}` : undefined} tone={dProfit?.tone} hint={t("adm.ex.kpi.h.profit")} help="exec.kpi.profit" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "profit" }) : undefined} />}
+          {showProfit && <Kpi label={t("adm.ex.kpi.margin")} value={pct(tot.margin_pct)} hint={t("adm.ex.kpi.h.margin")} help="exec.kpi.margin" loading={loading} />}
+          {!sf.isWeb && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "—"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
         </div>
 
         <AccordionGroup>
-          <Accordion id="ex-orders" icon="receipt" title={t("adm.ex.acc.orders")} subtitle={t("adm.ex.acc.ordersSub")} badge={sales.totals.count || null}
+          <Accordion id="ex-orders" icon="receipt" title={t("adm.ex.acc.orders")} subtitle={t("adm.ex.acc.ordersSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}
             summary={[
               { label: t("adm.ex.pill.sales"), value: m(sales.totals.total), strong: true },
               { label: t("adm.ex.pill.paid"), value: m(sales.totals.paid) },
@@ -249,7 +259,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
           </Accordion>
 
           {!sf.isWeb && (
-            <Accordion id="ex-cash" icon="wallet" title={t("adm.ex.acc.cash")} subtitle={t("adm.ex.acc.cashSub")}
+            <Accordion id="ex-cash" icon="wallet" title={t("adm.ex.acc.cash")} subtitle={t("adm.ex.acc.cashSub")} right={<HelpTip topic="exec.cash" />}
               summary={cashTot ? [
                 { label: t("adm.ex.pill.cash"), value: m(cents(byMethod.cash)), strong: true },
                 { label: t("adm.ex.pill.cards"), value: m(cents(byMethod.cards)) },

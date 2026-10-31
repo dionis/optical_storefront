@@ -8,6 +8,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
@@ -68,7 +69,7 @@ export default function PosCash({ me }) {
   return (
     <div className="adm-section pos">
       <div className="adm-head-row">
-        <h2>{t("adm.tab.cash")}</h2>
+        <h2>{t("adm.tab.cash")}<HelpTip topic="cash.session" size={16} /></h2>
         <div className="pos-where">
           {who && <StoreFilter me={who} />}
           {view === "day" && store && (!globalStore || globalStore.id !== store.id) && (
@@ -87,7 +88,7 @@ export default function PosCash({ me }) {
 
       {view !== "day" ? null : !open ? (
         <div className="adm-card pos-card">
-          <h3>{t("adm.cash.openTitle", { till: termCode(terminalId) })}</h3>
+          <h3>{t("adm.cash.openTitle", { till: termCode(terminalId) })}<HelpTip topic="cash.session" /></h3>
           <div className="pos-row">
             <label>{t("adm.cash.opening")}<input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
           </div>
@@ -95,7 +96,7 @@ export default function PosCash({ me }) {
         </div>
       ) : (
         <div className="adm-card pos-card">
-          <h3>{t("adm.cash.openSince", { till: termCode(open.terminal_id), date: new Date(open.opened_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" }) })}</h3>
+          <h3>{t("adm.cash.openSince", { till: termCode(open.terminal_id), date: new Date(open.opened_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" }) })}<HelpTip topic="cash.session" /></h3>
           <dl className="pos-totals">
             <dt>{t("adm.cash.opening")}</dt><dd>{m(open.opening)}</dd>
             <dt>{t("adm.cash.cashSales")}</dt><dd>{m(open.cash_in_sales)}</dd>
@@ -103,6 +104,7 @@ export default function PosCash({ me }) {
             <dt className="big">{t("adm.cash.expected")}</dt><dd className="big">{m(open.expected)}</dd>
           </dl>
           <div className="pos-pay">
+            <HelpTip topic="cash.movement" />
             <select value={mv.kind} onChange={(e) => setMv((x) => ({ ...x, kind: e.target.value }))} aria-label={t("adm.cash.movement")} title={t("adm.cash.movement")}>
               <option value="in">{t("adm.cash.mv.in")}</option><option value="out">{t("adm.cash.mv.out")}</option>
             </select>

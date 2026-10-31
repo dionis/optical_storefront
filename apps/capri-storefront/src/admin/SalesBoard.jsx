@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useLensCatalog } from "../data/lensCatalog.js";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { TrendChart } from "./charts.jsx";
 import { ExportMenu, SubTabs } from "./ui.jsx";
 import { money } from "./adminOrders.js";
@@ -511,7 +512,7 @@ export default function SalesBoard({ go, tabs = [], me }) {
   return (
     <div className="adm-section pos sb-root">
       <div className="sb-head">
-        <h2>{t("adm.tab.salesboard")}</h2>
+        <h2>{t("adm.tab.salesboard")}<HelpTip topic="salesboard.what" size={16} /></h2>
         <p>{t(isSeller ? "adm.ins.subSeller" : "adm.ins.sub")}</p>
       </div>
 
@@ -527,6 +528,7 @@ export default function SalesBoard({ go, tabs = [], me }) {
         <div className="adm-range" role="group" aria-label={t("adm.ins.seeBy")}>
           {GRAINS.map((g) => <button key={g} type="button" className={usedGrain === g ? "on" : ""} disabled={!useful[g]} title={useful[g] ? undefined : t("adm.ins.grainNotUseful")} onClick={() => setGrain(g)}>{t(`adm.ins.grain.${g}`)}</button>)}
         </div>
+        <HelpTip topic="salesboard.grain" />
         {moreStores && who && <StoreFilter me={who} />}
         {moreStores && globalAll && storeFocus && (
           <button type="button" className="adm-chip neutral" onClick={() => setFocusOne("establishment", null)} aria-label={t("adm.ins.removeFocus", { label: storeFocus.label })} title={t("adm.ins.removeFocus", { label: storeFocus.label })}>

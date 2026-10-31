@@ -1389,6 +1389,12 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
 export interface SalesFilter {
   establishmentIds: string[] | null;
   sellerId?: string;
+  /**
+   * A seller's list (owner's rule, lib/pos-route.ts saleAccessFor): their own
+   * sales plus the colleagues' sales that still owe money, so the balance can
+   * be collected by whoever is at the counter. The route reduces those rows.
+   */
+  ownOrPendingFor?: string;
   terminalId?: string;
   customerId?: string;
   number?: string;
@@ -1404,6 +1410,7 @@ export async function listSales(container: MedusaContainer, f: SalesFilter, take
   const where: Record<string, unknown> = {};
   if (f.establishmentIds !== null) where.establishment_id = f.establishmentIds;
   if (f.sellerId) where.seller_id = f.sellerId;
+  else if (f.ownOrPendingFor) where.$or = [{ seller_id: f.ownOrPendingFor }, { balance_cents: { $gt: 0 } }];
   if (f.terminalId) where.terminal_id = f.terminalId;
   if (f.customerId) where.customer_id = f.customerId;
   if (f.number) where.number = f.number;

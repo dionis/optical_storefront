@@ -9,11 +9,13 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { useLensCatalog } from "../data/lensCatalog.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { money } from "./adminOrders.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
 import { fetchStatement, posContext } from "./posApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
 import "./store-statement.css";
 import "./screens.css";
 
@@ -67,6 +69,9 @@ export default function StoreStatement({ me }) {
   const [printing, setPrinting] = useState(false);
   const ref = useRef(null);
   const isAdmin = Boolean(ctx?.is_admin ?? me?.is_admin);
+  // El número de cada venta abre su ficha (SaleDetailPanel); cobrar o anular desde ahí vuelve a pedir el estado de cuenta.
+  const [reload, setReload] = useState(0);
+  const sp = useSalePanel({ me, onChanged: () => setReload((n) => n + 1) });
   // La tienda la fija el filtro global del panel: «Todas» (o la online, que no tiene estado de cuenta)
   // es el negocio entero para un administrador y la primera de las suyas para los demás.
   const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
@@ -84,7 +89,7 @@ export default function StoreStatement({ me }) {
       .then((d) => { if (!cancelled) { setData(d); setState("ready"); } })
       .catch((e) => { if (!cancelled) { setError(errKey(e)); setState("error"); } });
     return () => { cancelled = true; };
-  }, [storeId, range.from, range.to]);
+  }, [storeId, range.from, range.to, reload]);
 
   // Para imprimir se abren todos los acordeones (un <details> cerrado no se clona con contenido).
   useEffect(() => {
@@ -212,7 +217,7 @@ export default function StoreStatement({ me }) {
   return (
     <div className="adm-section stmt">
       <div className="adm-head-row">
-        <h2><Icon name="clipboard" size={20} /> {t("adm.stmt.title")}</h2>
+        <h2><Icon name="clipboard" size={20} /> {t("adm.stmt.title")}<HelpTip topic="statement.what" size={16} /></h2>
       </div>
       <p className="adm-sub">{t("adm.stmt.sub")}</p>
 
@@ -300,7 +305,7 @@ export default function StoreStatement({ me }) {
                   <tbody>
                     {data.sales.map((s) => (
                       <tr key={s.id} className={s.status === "voided" ? "voided" : ""}>
-                        <td className="mono">{s.number}</td>
+                        <td className="mono"><button type="button" className="sd-link" onClick={() => sp.open(s.id)} title={t("adm.sd.openHint")}>{s.number}</button></td>
                         <td className="mono">{dayLabel(s.day, lang)}</td>
                         {all && <td className="mono">{s.store_code}</td>}
                         <td>{s.customer_name || <span className="muted">{t("adm.stmt.noCustomer")}</span>}</td>
@@ -395,6 +400,7 @@ export default function StoreStatement({ me }) {
           </footer>
         </div>
       )}
+      {sp.panel}
     </div>
   );
 }

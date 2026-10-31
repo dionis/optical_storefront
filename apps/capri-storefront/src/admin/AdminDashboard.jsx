@@ -8,7 +8,7 @@ import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalyt
 import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
 import { isDemoLogin } from "./adminAuth.js";
 import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
-import { Card } from "./ui.jsx";
+import { Card, useChartHeight } from "./ui.jsx";
 import { printElement } from "./exportUtils.js";
 import CatalogManager from "./CatalogManager.jsx";
 import Team from "./Team.jsx";
@@ -40,6 +40,8 @@ import PosCash from "./PosCash.jsx";
 import StoreCosts from "./StoreCosts.jsx";
 import StoreStatement from "./StoreStatement.jsx";
 import StoreOrders from "./StoreOrders.jsx";
+import PendingBalances from "./PendingBalances.jsx";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
@@ -158,11 +160,14 @@ function SourceNote({ source, truncated, scanLimit }) {
 }
 
 /* ---------------- Overview ---------------- */
+// Una vista: KPI + dos filas de gráficos a altura acotada (useChartHeight) y la
+// pareja Accesos/Compras + Día de la semana en UNA fila (.adm-grid-2.pair).
 function Overview({ preset, setPreset, go }) {
   const { t } = useLang();
   const { s, source, truncated, scanLimit } = useRealSummary(preset);
   const k = s.kpis;
   const { products } = useCatalog();
+  const H = useChartHeight(0.14, 100, 150);
   const imgByName = useMemo(() => Object.fromEntries(products.map((p) => [p.name, p.colors?.[0]?.image])), [products]);
   // summarize() hands back dictionary keys for the labels it invents (weekdays,
   // funnel steps). Resolve them here, at the boundary, so the chart components
@@ -186,16 +191,18 @@ function Overview({ preset, setPreset, go }) {
         <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} hint={t("adm.kpi.h.access")} />
         <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} hint={t("adm.kpi.h.conversion")} />
       </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.chart.salesByDay")} name="salesByDay" hint={t("adm.chart.salesByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" color="#0E5AD0" /></Card>
-        <Card title={t("adm.chart.funnel")} name="funnel" hint={t("adm.chart.funnel.h")}><Funnel steps={funnel} /></Card>
+      <div className="adm-grid-2 pair">
+        <Card title={t("adm.chart.salesByDay")} name="salesByDay" hint={t("adm.chart.salesByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" height={H} /></Card>
+        <Card title={t("adm.chart.funnel")} name="funnel" hint={t("adm.chart.funnel.h")}><Funnel steps={funnel} height={H} /></Card>
       </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.chart.salesByBrand")} name="salesByBrand" hint={t("adm.chart.salesByBrand.h")}><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} /></Card>
+      <div className="adm-grid-2 pair">
+        <Card title={t("adm.chart.salesByBrand")} name="salesByBrand" hint={t("adm.chart.salesByBrand.h")}><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={Math.min(140, H)} /></Card>
         <Card title={t("adm.chart.topProducts")} name="topProducts" hint={t("adm.chart.topProducts.h")}><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg={t("adm.chart.noSales")} /></Card>
       </div>
-      <Card title={t("adm.chart.accessVsBuy")} name="accessVsBuy" hint={t("adm.chart.accessVsBuy.h")}><p className="adm-sub">{t("adm.chart.accessVsBuySub")}</p><AccessVsBuyChart data={s.accessVsBuy} /></Card>
-      <Card title={t("adm.chart.weekday")} name="weekday" hint={t("adm.chart.weekday.h")}><p className="adm-sub">{t("adm.chart.weekdaySub")}</p><WeekdayChart data={weekday} /></Card>
+      <div className="adm-grid-2 pair">
+        <Card title={t("adm.chart.accessVsBuy")} name="accessVsBuy" hint={t("adm.chart.accessVsBuy.h")}><AccessVsBuyChart data={s.accessVsBuy} height={H} /></Card>
+        <Card title={t("adm.chart.weekday")} name="weekday" hint={t("adm.fit.weekdayHint")}><WeekdayChart data={weekday} height={H} /></Card>
+      </div>
     </div>
   );
 }
@@ -204,6 +211,7 @@ function Overview({ preset, setPreset, go }) {
 function Sales({ preset, setPreset, go }) {
   const { t, lang } = useLang();
   const { s, source, truncated, scanLimit } = useRealSummary(preset);
+  const H = useChartHeight(0.18, 110, 170);
   const recent = s.orders.slice(0, 40);
   return (
     <div className="adm-exec">
@@ -216,8 +224,8 @@ function Sales({ preset, setPreset, go }) {
         <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} hint={t("adm.kpi.h.units")} onClick={() => go("products")} />
       </div>
       <div className="adm-grid-2">
-        <Card title={t("adm.sales.revByDay")} name="revByDay" hint={t("adm.sales.revByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" /></Card>
-        <Card title={t("adm.sales.ordersByDay")} name="ordersByDay" hint={t("adm.sales.ordersByDay.h")}><BarChart data={s.ordersSeries} color="#FD0E3F" /></Card>
+        <Card title={t("adm.sales.revByDay")} name="revByDay" hint={t("adm.sales.revByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" height={H} /></Card>
+        <Card title={t("adm.sales.ordersByDay")} name="ordersByDay" hint={t("adm.sales.ordersByDay.h")}><BarChart data={s.ordersSeries} height={H} /></Card>
       </div>
       <Card icon="clock" title={t("adm.sales.recent", { n: int(s.orders.length) })} name="pedidos-recientes" hint={t("adm.sales.recent.h")}>
         <div className="adm-table-wrap">
@@ -1193,6 +1201,8 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   useEffect(loadSellers, [demo]);
 
   /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
+  // Ficha de una venta delante de cualquier pantalla (Mi panel, Cobros pendientes…).
+  const salePanel = useSalePanel({ me });
   const go = (tab, params = {}) => {
     const wanted = LEGACY_TABS[tab] ? LEGACY_TABS[tab][0] : tab;
     const target = tabs.includes(wanted) ? wanted : tabs[0];
@@ -1239,7 +1249,9 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "alerts" && <AlertRules />}
       {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
-      {tab === "mysales" && <MySales go={go} me={me} />}
+      {tab === "mysales" && <MySales go={go} me={me} openSale={salePanel.open} />}
+      {tab === "pendingbalances" && <PendingBalances me={me} go={go} openSale={salePanel.open} />}
+      {salePanel.panel}
       {tab === "cash" && <PosCash me={me} />}
       {tab === "storecosts" && <StoreCosts me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}

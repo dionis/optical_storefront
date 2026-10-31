@@ -19,8 +19,10 @@ import { tenant } from "../../../../lib/tenant";
  * The list of their sales (HU-51) is Store sales.
  *
  * It is also where a seller lands when they open the panel, so it carries the
- * day at a glance: their store and till (with the register open or not), the
- * store's sales today and their share, and their latest sales.
+ * day at a glance: their store and till (with the register open or not) and
+ * their latest sales. `store_today` (the store's sales today and the person's
+ * share) only leaves for the other roles: by the owner's rule a seller never
+ * sees the general status of anything, not even of their own store.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
@@ -51,7 +53,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const [stores, tills, storeToday, recent, cashOpen] = await Promise.all([
       storeId ? listEstablishments(req.scope) : Promise.resolve([]),
       storeId ? listTerminals(req.scope, [storeId]) : Promise.resolve([]),
-      storeId ? salesSummary(req.scope, { from: today.date, to: today.date, stores: [storeId], sellers: null }) : Promise.resolve(null),
+      storeId && scope.role !== "seller" ? salesSummary(req.scope, { from: today.date, to: today.date, stores: [storeId], sellers: null }) : Promise.resolve(null),
       listSales(req.scope, { establishmentIds: null, sellerId: userId }, 6),
       terminalId ? openSessionFor(req.scope, terminalId) : Promise.resolve(null),
     ]);

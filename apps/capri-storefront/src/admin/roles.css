@@ -1,0 +1,21 @@
+/* Cobros pendientes (PendingBalances.jsx) y la lista «Mis ventas» (MySales.jsx). */
+.pb-table td.r, .pb-table th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.pb-table .pb-num { font-weight: 700; }
+.pb-table .pb-num button { all: unset; cursor: pointer; color: var(--adm-accent); font-weight: 700; }
+.pb-table .pb-num button:hover { text-decoration: underline; }
+.pb-table .pb-cust small { display: block; color: var(--adm-muted); }
+.pb-table tfoot td { font-weight: 700; border-top: 2px solid var(--adm-line); }
+.pb-days { display: inline-block; min-width: 44px; text-align: center; padding: 1px 7px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--adm-surface-2, var(--adm-accent-soft)); color: var(--adm-ink); }
+.pb-days.warn { background: var(--adm-gold-soft, #fdf3d8); color: var(--adm-gold-dark, #8a6300); }
+.pb-days.late { background: var(--adm-red-soft); color: var(--adm-red-dark); }
+.pb-form td { padding: 6px 8px 10px !important; background: var(--adm-accent-soft); }
+.pb-form .pos-pay { border: none; padding: 0; background: transparent; }
+.pb-form .pos-pay select, .pb-form .pos-pay input { min-height: 36px; font-size: 14px; }
+.pb-sum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .pb-table.responsive tfoot { display: block; }
+  .pb-table.responsive tfoot tr { display: flex; justify-content: space-between; padding: 8px 0; }
+}
+.pb-link { all: unset; cursor: pointer; color: var(--adm-accent); }
+.pb-link:hover { text-decoration: underline; }
+.my-period.active { outline: 2px solid var(--adm-accent); outline-offset: -2px; }

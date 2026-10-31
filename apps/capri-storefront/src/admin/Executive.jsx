@@ -20,6 +20,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { Card, useChartHeight } from "./ui.jsx";
 import { SOURCE_ICON } from "./sellerShared.jsx";
+import { StageBarCard } from "./StageBar.jsx";
+import "./fit.css";
 
 export const STAGE_ICON = { confirmed: "receipt", in_lab: "lab", shipped: "box", in_transit: "truck", delivered: "checkCircle", payment_pending: "clock", canceled: "alert", refunded: "undo" };
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
@@ -143,7 +145,6 @@ export default function Executive({ preset, range: givenRange, store = "web", go
 
   const toPrepare = ops.by.confirmed.n + ops.by.in_lab.n;
   const inDelivery = ops.by.shipped.n + ops.by.in_transit.n;
-  const maxStage = Math.max(1, ...Object.values(ops.by).map((x) => x.n));
   const recent = state === "real" ? boardOrders.slice(0, 7) : [];
   const alerts = [];
   if (state === "real") {
@@ -153,19 +154,27 @@ export default function Executive({ preset, range: givenRange, store = "web", go
   }
   const brandSlug = (label) => BRAND_SLUG_BY_NAME[label] || String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const H = useChartHeight(0.14, 90, 150);
+  // Tira de etapas (StageBar): una fila con conteo, importe y % por etapa.
+  const stages = useMemo(() => Object.entries(ops.by).map(([key, v]) => {
+    const st = STAGE_BY_KEY[key];
+    return { key, label: st ? t(st.label) : key, icon: STAGE_ICON[key] || "box", count: v.n, amount: v.v };
+  }), [ops.by, t]);
 
+  // Suelto (no «compact» dentro del acordeón del Ejecutivo) ocupa UNA vista: .adm-fit (fit.css).
   return (
-    <div className="adm-exec">
-      {state === "loading" && <div className="adm-src-note loading">{t("adm.real.loading")}</div>}
-      {state === "error" && <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>}
-      {demo && <div className="adm-demo-banner">{t("adm.exec.demoNote")}</div>}
-      {state === "real" && (
-        <div className="adm-exec-alerts">
-          {alerts.length === 0
-            ? <button type="button" className="exec-alert ok" onClick={() => go("orders")}><Icon name="checkCircle" size={14} /> {t("adm.exec.allClear")}</button>
-            : alerts.map((a, i) => <button type="button" key={i} className={`exec-alert ${a.tone}`} onClick={a.go}>{a.txt}{a.go && <Icon name="arrowRight" size={13} />}</button>)}
-        </div>
-      )}
+    <div className={`adm-exec ${compact ? "" : "adm-fit"}`}>
+      <div className="adm-exec-top">
+        {state === "loading" && <div className="adm-src-note loading">{t("adm.real.loading")}</div>}
+        {state === "error" && <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>}
+        {demo && <div className="adm-demo-banner">{t("adm.exec.demoNote")}</div>}
+        {state === "real" && (
+          <div className="adm-exec-alerts">
+            {alerts.length === 0
+              ? <button type="button" className="exec-alert ok" onClick={() => go("orders")}><Icon name="checkCircle" size={14} /> {t("adm.exec.allClear")}</button>
+              : alerts.map((a, i) => <button type="button" key={i} className={`exec-alert ${a.tone}`} onClick={a.go}>{a.txt}{a.go && <Icon name="arrowRight" size={13} />}</button>)}
+          </div>
+        )}
+      </div>
 
       <div className="adm-kpis adm-exec-kpis">
         <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue, lang)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units, lang) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
@@ -176,39 +185,23 @@ export default function Executive({ preset, range: givenRange, store = "web", go
         <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery, lang)} icon={<Icon name="truck" />} hint={t("adm.kpi.h.inDelivery")} onClick={() => go("orders", { stage: "in_transit" })} />
       </div>
 
-      <div className="exec-grid cols-3-1">
-        <Card icon="layers" title={t("adm.exec.pipeline")} hint={t("adm.exec.pipelineHint")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pipeline">
-          {state !== "real" ? <div className="adm-nodata">{t("adm.sales.noneInRange")}</div> : (
-            <div className="exec-pipe">
-              {Object.entries(ops.by).map(([key, v]) => {
-                const st = STAGE_BY_KEY[key];
-                return (
-                  <button type="button" key={key} className="exec-pipe-col" onClick={() => go("orders", { stage: key })} title={t("adm.exec.goOrdersStage", { stage: st ? t(st.label) : key })}>
-                    <span className="exec-pipe-n">{int(v.n, lang)}</span>
-                    <span className="exec-pipe-bar"><i style={{ height: `${Math.max(8, (v.n / maxStage) * 100)}%` }} /></span>
-                    <span className="exec-pipe-k"><Icon name={STAGE_ICON[key] || "box"} size={13} />{st ? t(st.label) : key}</span>
-                    <span className="exec-pipe-v">{usd(v.v, lang)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+      <div className={compact ? "adm-exec-body" : "adm-fit-body adm-exec-body"}>
+      <StageBarCard icon="layers" title={t("adm.exec.pipeline")} hint={t("adm.exec.pipelineHint")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pipeline"
+        stages={state === "real" ? stages : []} emptyText={t("adm.sales.noneInRange")} onPick={(st) => go("orders", { stage: st.key })} />
+
+      <div className="adm-fit-row cols-3 tight">
+        <Card icon="sales" title={t("adm.chart.salesByDay")} hint={t("adm.chart.h.salesByDay")} onGo={() => go("exec", { sub: "detail" })} goLabel={t("adm.tab.sales")} name="ventas-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.salesSeries }}>
+          <LineChart data={s.salesSeries} valuePrefix="$" height={H} />
+        </Card>
+        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.chart.h.ordersByDay")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
+          <BarChart data={s.ordersSeries} height={H} />
         </Card>
         <SellersMini range={range} store={store} go={go} lang={lang} />
       </div>
 
-      <div className="exec-grid cols-2">
-        <Card icon="sales" title={t("adm.chart.salesByDay")} hint={t("adm.chart.h.salesByDay")} onGo={() => go("exec", { sub: "detail" })} goLabel={t("adm.tab.sales")} name="ventas-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.salesSeries }}>
-          <LineChart data={s.salesSeries} valuePrefix="$" color="#0b2f66" height={H} />
-        </Card>
-        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.chart.h.ordersByDay")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
-          <BarChart data={s.ordersSeries} color="#0e5ad0" height={H} />
-        </Card>
-      </div>
-
       <div className={`exec-grid ${compact ? "cols-1-2" : "cols-1-2-1"}`}>
         <Card icon="tagIcon" title={t("adm.chart.salesByBrand")} hint={t("adm.chart.h.salesByBrand")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="ventas-marca" csv={{ cols: [[t("adm.exec.brands"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.topBrands }}>
-          <DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={120} onSelect={(label) => go("costs", { sub: "prices", q: label, brand: brandSlug(label) })} />
+          <DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={Math.min(120, H)} onSelect={(label) => go("costs", { sub: "prices", q: label, brand: brandSlug(label) })} />
         </Card>
         <Card icon="clock" title={t("adm.exec.recent")} hint={t("adm.exec.recentHint")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="ultimos-pedidos">
           {recent.length === 0 ? <div className="adm-nodata">{t("adm.sales.noneInRange")}</div> : (
@@ -233,6 +226,7 @@ export default function Executive({ preset, range: givenRange, store = "web", go
           )}
         </Card>
         {!compact && <CatalogMini go={go} />}
+      </div>
       </div>
     </div>
   );

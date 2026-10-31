@@ -9,6 +9,7 @@ import { fetchStores, createStore, updateStore, freeStoreColor, storeInk, STORE_
 import { formatAddressLine } from "../data/addressAutocomplete.js";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
@@ -24,7 +25,7 @@ function ColorPicker({ value, onChange, disabled }) {
   const current = String(value || "").toUpperCase();
   return (
     <span className="adm-store-colors" role="group" aria-label={t("adm.stores.color")}>
-      <small className="muted">{t("adm.stores.color")}</small>
+      <small className="muted">{t("adm.stores.color")}<HelpTip topic="stores.color" /></small>
       {STORE_COLORS.map((c) => (
         <button key={c} type="button" disabled={disabled} className={`adm-store-swatch ${current === c ? "on" : ""}`} style={{ background: c }} aria-label={c} aria-pressed={current === c} title={c} onClick={() => onChange(c)} />
       ))}

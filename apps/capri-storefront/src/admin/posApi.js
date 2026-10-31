@@ -42,6 +42,8 @@ export const decideApproval = (id, decision, note) =>
 export const createSale = (body) => call("/admin/pos/sales", { method: "POST", body }, "adm.err.pos.sale_failed");
 export const listSales = (filters) => call(`/admin/pos/sales${qs(filters)}`);
 export const fetchSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}`);
+/** Datos de un documento de la venta SIN registrar impresión (líneas con foto, cliente, totales; `job` trae la receta). */
+export const fetchSaleDocument = (id, kind) => call(`/admin/pos/sales/${encodeURIComponent(id)}/documents${qs({ kind })}`);
 export const collectPayment = (id, payments) => call(`/admin/pos/sales/${encodeURIComponent(id)}/payments`, { method: "POST", body: { payments } });
 export const deliverSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: {} });
 export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } });

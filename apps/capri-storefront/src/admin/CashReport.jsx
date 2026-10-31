@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { adminFetch } from "./adminApi.js";
 import { money } from "./adminOrders.js";
 import { BarChart } from "./charts.jsx";
@@ -225,6 +226,7 @@ export default function CashReport({ ctx, me }) {
           </select>
         )}
         <span className="cr-actions">
+          <HelpTip topic="cash.report" />
           <button type="button" className="btn-xs" onClick={onXlsx} disabled={!data} title={t("adm.cash.rep.excel")}><Icon name="excel" size={13} /> Excel</button>
           <button type="button" className="btn-xs" onClick={onPdf} disabled={!data} title={t("adm.cash.rep.pdf")}><Icon name="printer" size={13} /> PDF</button>
         </span>

@@ -1,0 +1,132 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Sistema «una vista» (fit.css). Reutilizable por cualquier pantalla del panel.
+   La página NUNCA se desplaza: cabecera y KPI fijos arriba y el detalle se
+   desplaza por dentro. Solo cambia lo vertical con la altura de pantalla;
+   los anchos se reparten con rejillas auto-fit. Tokens --adm-* (admin.css).
+
+   .adm-fit        Sección de una vista: grid de 3 filas (auto, auto, 1fr) con
+                   alto = 100dvh − barra superior − margen. Hijos en orden:
+                     1. .adm-fit-bar   barra de filtros/acciones (sticky, 1.ª fila)
+                     2. .adm-fit-kpis  tira de cifras compacta (2.ª fila, ≤ 60 px)
+                     3. .adm-fit-body  detalle: se desplaza por dentro (3.ª fila)
+                   Dentro de un acordeón o de otra pantalla (p. ej. Executive
+                   «compact») NO se usa .adm-fit: se queda como bloque normal.
+   .adm-fit-bar    Fila de filtros: título a la izquierda, filtros y exportar a
+                   la derecha; envuelve en pantallas estrechas.
+   .adm-fit-kpis   Rejilla auto-fit de .adm-fit-kpi (min 118 px); cada tile es
+                   un <button> (clicable) con <small> etiqueta, <b> cifra e
+                   <i> nota; .hero = acento, .on = con pendientes.
+   .adm-fit-body   Columna con los bloques; min-height:0 + overflow:auto.
+   .adm-fit-row    Fila de tarjetas/gráficos: repeat(auto-fit, minmax(220px,1fr)).
+                   .cols-3 fuerza tres de escritorio; .tight reduce el hueco.
+   .acc-scroll     Envoltorio de tabla dentro de un acordeón: alto máximo 40vh,
+                   desplazamiento interno y cabecera pegada (.adm-table th ya
+                   es sticky). .dense compacta las celdas a 5 px / 12 px.
+   .adm-fit-table  Tabla densa (12 px, filas de 30 px) con .row-go clicable.
+   .stg-*          Tira de etapas (StageBar.jsx): tiles + barra apilada.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.adm-fit {
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px;
+  /* 100dvh − barra superior − relleno vertical de .adm-body (18 + 44 px). */
+  height: calc(100dvh - var(--adm-top-h, 56px) - var(--adm-fit-chrome, 64px)); min-height: 0;
+}
+.adm-fit > .adm-fit-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 1px 2px 8px; scrollbar-width: thin; }
+.adm-fit-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  position: sticky; top: 0; z-index: 3; background: var(--adm-bg); padding: 2px 0 6px; border-bottom: 1px solid var(--adm-line);
+}
+.adm-fit-bar h2 { margin: 0; font-size: clamp(16px, 1.5vw, 20px); }
+.adm-fit-bar .adm-fit-sub { margin: 0; font-size: 12px; color: var(--adm-muted); }
+.adm-fit-bar .adm-fit-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; margin-right: auto; }
+.adm-fit-bar .adm-fit-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.adm-fit-bar .adm-fit-tools select { min-width: 160px; }
+.adm-fit-export { display: inline-flex; align-items: center; gap: 4px; }
+.adm-fit-export .btn-xs { min-height: 30px; }
+
+.adm-fit-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(118px, 100%), 1fr)); gap: 6px; }
+.adm-fit-kpi {
+  min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 6px 10px;
+  border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface); min-width: 0; text-align: left;
+  font-family: var(--adm-font); color: inherit; cursor: pointer; position: relative; overflow: hidden;
+  transition: border-color .15s, background .15s, box-shadow .2s var(--adm-ease);
+}
+.adm-fit-kpi::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--adm-accent); opacity: .5; }
+.adm-fit-kpi:hover:not(:disabled) { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); }
+.adm-fit-kpi:disabled { cursor: default; }
+.adm-fit-kpi small { font-size: 11px; line-height: 1.1; text-transform: uppercase; letter-spacing: .04em; color: var(--adm-muted); font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.adm-fit-kpi b { font-size: 17px; line-height: 1.15; font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; letter-spacing: -.015em; font-variant-numeric: tabular-nums; color: var(--adm-accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adm-fit-kpi i { font-style: normal; font-size: 11px; line-height: 1.2; color: var(--adm-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.adm-fit-kpi i.good { color: var(--adm-green-dark); }
+.adm-fit-kpi i.bad { color: var(--adm-red-dark); }
+.adm-fit-kpi.hero { background: var(--adm-accent); border-color: transparent; color: #fff; }
+.adm-fit-kpi.hero::before { display: none; }
+.adm-fit-kpi.hero small, .adm-fit-kpi.hero i, .adm-fit-kpi.hero i.good, .adm-fit-kpi.hero i.bad { color: inherit; opacity: .85; }
+.adm-fit-kpi.hero b { color: inherit; }
+.adm-fit-kpi.hero:hover:not(:disabled) { background: var(--adm-accent-deep, var(--adm-accent)); }
+.adm-fit-kpi.on { border-color: var(--adm-accent-line); }
+.adm-fit-kpi.on::before { opacity: 1; }
+
+.adm-fit-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px; align-items: stretch; }
+.adm-fit-row.tight { gap: 8px; }
+.adm-fit-row > .adm-card { min-width: 0; display: flex; flex-direction: column; }
+.adm-fit-row > .adm-card > *:last-child { flex: 1; min-height: 0; }
+@media (min-width: 1100px) { .adm-fit-row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.acc-scroll { max-height: 40vh; overflow: auto; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); scrollbar-width: thin; }
+.acc-scroll .adm-table th { position: sticky; top: 0; z-index: 1; }
+.acc-scroll.dense .adm-table th, .acc-scroll.dense .adm-table td { padding: 5px 8px; font-size: 12px; }
+.adm-fit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.adm-fit-table th, .adm-fit-table td { padding: 5px 8px; height: 30px; }
+.adm-fit-table tr.row-go { cursor: pointer; transition: background .12s; }
+.adm-fit-table tr.row-go:hover { background: var(--adm-row-hover, var(--adm-surface-2)); }
+.adm-fit-table tr.off td { opacity: .6; }
+.adm-fit-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.adm-fit-table th.r, .adm-fit-table td.r { text-align: right; }
+.adm-fit-table .adm-chip { font-size: 11px; }
+.adm-fit-links { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 6px; }
+
+/* Avisos dentro del acordeón: una línea cada uno, sin márgenes extra. */
+.adm-fit-alerts { display: grid; gap: 4px; }
+.adm-fit-alerts .ss-alert { min-height: 32px; padding: 5px 10px; font-size: 12.5px; }
+.adm-fit-alerts .ss-allgood { margin: 0; }
+
+/* ── StageBar: tira de etapas en UNA fila ────────────────────────────────── */
+.stg { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stg-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(118px, 100%), 1fr)); gap: 6px; }
+.stg-tile {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center;
+  min-height: 46px; padding: 5px 9px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface);
+  color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; position: relative;
+  transition: transform .15s var(--adm-ease), border-color .15s, box-shadow .2s var(--adm-ease), background .15s;
+}
+.stg-tile:hover, .stg-tile:focus-visible { transform: translateY(-1px); border-color: var(--adm-accent-line); box-shadow: var(--adm-shadow-hover, 0 6px 16px rgba(27,31,58,.08)); outline: none; }
+.stg-tile.is-on { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+.stg-tile::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--stg-tint, var(--adm-accent)); }
+.stg-ico { grid-row: 1 / 3; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--adm-accent-soft); color: var(--adm-accent-ink); margin-left: 3px; }
+.stg-name { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stg-nums { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.stg-n { font-size: 17px; line-height: 1.1; font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; letter-spacing: -.015em; font-variant-numeric: tabular-nums; color: var(--adm-accent-ink); }
+.stg-v { font-size: 11px; color: var(--adm-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stg-pct { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--adm-muted); font-variant-numeric: tabular-nums; }
+.stg-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--adm-line-2); }
+.stg-seg { height: 100%; background: var(--stg-tint); transition: filter .15s, flex-basis .4s var(--adm-ease); min-width: 2px; }
+.stg-seg.is-on { filter: brightness(.88); }
+.stg-empty { font-size: 12px; color: var(--adm-muted); padding: 12px 0; text-align: center; }
+@media (max-width: 720px) {
+  .adm-fit { height: auto; display: flex; flex-direction: column; }
+  .adm-fit > .adm-fit-body { overflow: visible; }
+  .stg-tiles { grid-template-columns: repeat(auto-fit, minmax(min(96px, 100%), 1fr)); }
+  .stg-v { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .stg-tile, .stg-seg, .adm-fit-kpi { transition: none; } }
+@media print {
+  .adm-fit { height: auto; display: block; }
+  .adm-fit > .adm-fit-body, .acc-scroll { overflow: visible; max-height: none; }
+  .adm-fit-bar { position: static; }
+}
+
+/* Executive.jsx: cabecera (notas + alertas), KPI y cuerpo como tres bloques,
+   para que suelto sea .adm-fit y dentro del acordeón siga siendo una columna. */
+.adm-exec-top, .adm-exec-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.adm-exec-top:empty { display: none; }

@@ -88,6 +88,18 @@
   --adm-grad-dark: linear-gradient(135deg, #1b1f3a, #2c3160);
   --adm-grad-glow: linear-gradient(135deg, rgba(79,91,213,.1), rgba(79,91,213,.04));
   --adm-grad-surface: linear-gradient(180deg, rgba(79,91,213,.02) 0%, transparent 100%);
+  /* ── Paleta de gráficos (charts.jsx): acento + azules/grises apagados; el
+     verde/rojo semántico solo para variaciones. Rejilla y ejes, un pelo más
+     suaves que --adm-line / --adm-muted para que no compitan con los datos. */
+  --adm-chart-1: var(--adm-accent, #4f5bd5);
+  --adm-chart-2: #7d8bbf;
+  --adm-chart-3: #a3acc4;
+  --adm-chart-4: #c3b48a;
+  --adm-chart-5: #6f9bb3;
+  --adm-chart-6: #b8bfcf;
+  --adm-chart-grid: #e9ebf0;
+  --adm-chart-axis: #7b8294;
+  --adm-chart-area: .16;
 }
 
 /* El acento del panel es el color de la tienda (useStoreTheme.js pone --st-accent
@@ -170,6 +182,14 @@
   --adm-grad-dark: linear-gradient(135deg, #2c3160, #3f4ac0);
   --adm-grad-glow: linear-gradient(135deg, rgba(141,151,242,.16), rgba(141,151,242,.08));
   --adm-grad-surface: linear-gradient(180deg, rgba(141,151,242,.04) 0%, transparent 100%);
+  --adm-chart-2: #8f9cd1;
+  --adm-chart-3: #7f8aa8;
+  --adm-chart-4: #cdbb86;
+  --adm-chart-5: #7fb0c9;
+  --adm-chart-6: #5f6882;
+  --adm-chart-grid: rgba(255,255,255,.07);
+  --adm-chart-axis: #98a0b3;
+  --adm-chart-area: .2;
 }
 @supports (color: color-mix(in srgb, red 50%, white)) {
   .adm-shell[data-mode="dark"] {
@@ -243,7 +263,7 @@
 .adm-burger { display: none; }
 .adm-top-crumb { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .adm-top-sec { font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; font-size: clamp(16px, 1.5vw, 21px); letter-spacing: -.015em; white-space: nowrap; }
-.adm-badge { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; background: var(--adm-navy-fill); color: var(--adm-gold); border-radius: 6px; padding: 3px 7px; line-height: 1.2; }
+.adm-badge { font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; background: var(--adm-navy-fill); color: var(--adm-gold); border-radius: 6px; padding: 3px 7px; line-height: 1.2; }
 .adm-find { display: flex; align-items: center; gap: 8px; flex: 1; max-width: 440px; min-height: var(--adm-ctl-h); margin-left: auto; background: var(--adm-bg); border: 1px solid var(--adm-line); border-radius: 999px; padding: 4px 12px; color: var(--adm-muted); transition: box-shadow .22s var(--adm-ease), border-color .18s, background .18s, max-width .3s var(--adm-ease); }
 .adm-find:focus-within { max-width: 520px; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); background: var(--adm-surface); }
 .adm-find input { border: none; outline: none; font: inherit; font-size: 13px; font-weight: 500; width: 100%; background: transparent; color: var(--adm-ink); min-width: 0; }
@@ -934,6 +954,9 @@
 .adm-foot { text-align: center; font-size: 11.5px; margin: 22px 0 0; }
 .adm-card.tight { padding: 10px 12px; }
 .adm-grid-2.tight { gap: 12px; margin-bottom: 12px; }
+/* Pareja de gráficos en UNA fila (Resumen): sin margen inferior, mínimo 320 px por tarjeta y sin desbordar. */
+.adm-grid-2.pair { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 10px; margin-bottom: 0; }
+.adm-grid-2 > .adm-card, .adm-grid-3 > .adm-card { min-width: 0; }
 .adm-stack { display: flex; flex-direction: column; gap: 10px; }
 
 /* cabecera de tarjeta accionable */
@@ -1061,7 +1084,7 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .adm-exec-hub .adm-subtabs { margin-bottom: 10px; }
 .adm-exec-hub .adm-subtabs button { padding: 7px 12px; font-size: 13px; }
 .adm-exec .adm-kpis .cx-kpi { padding: 8px 12px !important; gap: 2px !important; }
-.adm-exec .adm-kpis .cx-kpi > div:first-child span:first-child { font-size: 10px !important; }
+.adm-exec .adm-kpis .cx-kpi > div:first-child span:first-child { font-size: 11px !important; }
 .adm-exec .adm-kpis .cx-kpi > div:nth-child(2) { font-size: clamp(17px, 1.35vw, 22px) !important; }
 .adm-exec .exec-grid .adm-card { padding: 10px 12px; }
 .adm-exec .adm-card-head { margin-bottom: 4px; }

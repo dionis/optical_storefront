@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import type { Logger } from "@medusajs/framework/types";
+import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { canSellAt, sellableStores } from "./pos";
 import { getSale, PosError, type SaleRow } from "./pos-data";
@@ -41,7 +42,7 @@ export async function scopeStoreIds(req: AuthenticatedMedusaRequest, scope: Staf
 }
 
 /** Sellers see their own sales in lists; everyone else, their stores'. */
-export const ownSalesOnly = (scope: StaffScope): boolean => !scope.is_admin && scope.role === "seller";
+export const ownSalesOnly = (scope: Pick<StaffScope, "is_admin" | "role">): boolean => !scope.is_admin && scope.role === "seller";
 
 /**
  * A sale the user may open: in one of their stores. A seller may open a
@@ -54,6 +55,112 @@ export async function saleInScope(req: AuthenticatedMedusaRequest, scope: StaffS
   if (!sale) throw new PosError("sale_not_found", 404);
   if (!canSellAt(scope, sale.establishment_id)) throw new PosError("forbidden_store", 403);
   return sale;
+}
+
+// ---------------------------------------------------------------------------
+// The owner's rule for sellers ("Qué ve un vendedor")
+// ---------------------------------------------------------------------------
+
+/**
+ * "Sellers do not see the general status of anything, not even of their own
+ * store. They only see the details of THEIR sales, what they will receive in
+ * money and their commission; and they can handle the overdue or pending
+ * payments of OTHER sellers' sales (collect balances)."
+ *
+ *   full     everything the sale carries (own sale; any other role, their stores)
+ *   limited  a colleague's sale of their store that still owes money: only what
+ *            is needed to collect it (limitedSale), never the items, the
+ *            prescription or the economics
+ *   null     nothing: not their store, or a colleague's sale with nothing due
+ */
+export type SaleAccess = "full" | "limited" | null;
+
+export function saleAccessFor(
+  scope: Pick<StaffScope, "is_admin" | "role" | "establishment_ids" | "user_id">,
+  sale: Pick<SaleRow, "seller_id" | "establishment_id" | "balance" | "status">
+): SaleAccess {
+  if (!canSellAt(scope, sale.establishment_id)) return null;
+  if (!ownSalesOnly(scope)) return "full";
+  if (sale.seller_id != null && sale.seller_id === scope.user_id) return "full";
+  return sale.status !== "voided" && sale.balance > 0 ? "limited" : null;
+}
+
+/** Name and phone of the customer of a sale, for the collection list and the limited view. */
+export interface CustomerContact {
+  name: string | null;
+  phone: string | null;
+}
+
+/** The collection view of a sale (saleAccessFor "limited"). `payments` only when a single sale is opened. */
+export interface LimitedSaleRow {
+  id: string;
+  number: string;
+  establishment_id: string;
+  created_at: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  seller_code: string | null;
+  total: number;
+  paid: number;
+  balance: number;
+  promised_on: string | null;
+  status: string;
+  limited: true;
+  payments?: SaleRow["payments"];
+}
+
+export function limitedSale(sale: SaleRow, contact?: CustomerContact | null, withPayments = false): LimitedSaleRow {
+  const row: LimitedSaleRow = {
+    id: sale.id,
+    number: sale.number,
+    establishment_id: sale.establishment_id,
+    created_at: sale.created_at,
+    customer_name: contact?.name ?? null,
+    customer_phone: contact?.phone ?? null,
+    seller_code: sale.seller_code,
+    total: sale.total,
+    paid: sale.paid,
+    balance: sale.balance,
+    promised_on: sale.promised_on,
+    status: sale.status,
+    limited: true,
+  };
+  if (withPayments) row.payments = sale.payments;
+  return row;
+}
+
+/** A full sale with the customer's name and phone on it (the collection list of the other roles). */
+export function saleWithContact(sale: SaleRow, contact?: CustomerContact | null): SaleRow & { customer_name: string | null; customer_phone: string | null } {
+  return { ...sale, customer_name: contact?.name ?? null, customer_phone: contact?.phone ?? null };
+}
+
+/** Name (or email) and phone of Medusa customers, by id. */
+export async function customerContacts(container: MedusaContainer, ids: Array<string | null | undefined>): Promise<Map<string, CustomerContact>> {
+  const wanted = [...new Set(ids.filter((v): v is string => Boolean(v)))];
+  if (!wanted.length) return new Map();
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const rows = (await pg("customer").whereIn("id", wanted).select("id", "first_name", "last_name", "email", "phone")) as Array<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+  }>;
+  return new Map(rows.map((c) => [c.id, { name: [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || c.email || null, phone: c.phone ?? null }]));
+}
+
+/**
+ * The sale behind an id, as the user may see it: full, limited (a seller
+ * collecting a colleague's balance) or 403 `forbidden_sale`. Used by the
+ * detail and the payments routes; the other actions keep saleInScope.
+ */
+export async function saleForUser(req: AuthenticatedMedusaRequest, scope: StaffScope, saleId: string): Promise<{ sale: SaleRow; access: Exclude<SaleAccess, null> }> {
+  const sale = await getSale(req.scope, saleId);
+  if (!sale) throw new PosError("sale_not_found", 404);
+  if (!canSellAt(scope, sale.establishment_id)) throw new PosError("forbidden_store", 403);
+  const access = saleAccessFor(scope, sale);
+  if (!access) throw new PosError("forbidden_sale", 403);
+  return { sale, access };
 }
 
 /** Void directly (otherwise the request goes to someone who can). */
