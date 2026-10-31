@@ -97,16 +97,20 @@ describe("cleanCustomer", () => {
 });
 
 describe("cleanLines", () => {
-  it("accepts a catalog frame and a customer's own frame", () => {
-    const r = cleanLines([
-      { kind: "frame", variant_id: "variant_1", selection: { design_code: "frame-only" } },
-      { kind: "own_frame", description: "Ray-Ban negro", photo: "data:image/jpeg;base64,AAAA", selection: { design_code: "sv", material_code: "cr39" } },
-    ]);
-    expect("lines" in r && r.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([
-      ["frame", "variant_1", false],
-      ["own_frame", null, true],
-    ]);
-    expect("lines" in r && needsPrescription(r.lines)).toBe(true);
+  it("accepts a catalog frame or a customer's own frame", () => {
+    const stock = cleanLines([{ kind: "frame", variant_id: "variant_1", selection: { design_code: "frame-only" } }]);
+    expect("lines" in stock && stock.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([["frame", "variant_1", false]]);
+    const own = cleanLines([{ kind: "own_frame", description: "Ray-Ban negro", photo: "data:image/jpeg;base64,AAAA", selection: { design_code: "sv", material_code: "cr39" } }]);
+    expect("lines" in own && own.lines.map((l) => [l.kind, l.variant_id, l.photo !== null])).toEqual([["own_frame", null, true]]);
+    expect("lines" in own && needsPrescription(own.lines)).toBe(true);
+  });
+
+  it("refuses more than one frame in a sale, stock or the customer's own", () => {
+    const frame = { kind: "frame", variant_id: "v", selection: { design_code: "frame-only" } };
+    const own = { kind: "own_frame", description: "Ray-Ban negro", selection: { design_code: "sv" } };
+    expect(cleanLines([frame, own])).toEqual({ reason: "too_many_lines" });
+    expect(cleanLines([frame, frame])).toEqual({ reason: "too_many_lines" });
+    expect(cleanLines([own, own])).toEqual({ reason: "too_many_lines" });
   });
 
   it("refuses an empty sale, a frame without variant and an own frame without lenses", () => {

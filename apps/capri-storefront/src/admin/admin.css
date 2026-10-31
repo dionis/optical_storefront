@@ -1246,6 +1246,8 @@ button.cost-kpi:focus-visible { outline: 3px solid rgba(37,99,235,.35); }
 .pos .pos-rx-grid input { padding: 4px 2px; }
 .pos-own label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--adm-muted); }
 .pos-own label input { width: 100%; }
+.pos-own-photo { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-own label.pos-file { flex-direction: row; color: inherit; }
 .pos-cfg-add > input, .pos-cfg-add > select { flex: 1 1 180px; }
 .pos-filters > select, .pos-filters > input, .pos-filters > .pos-cust-filter { flex: 1 1 150px; }
 .pos-cust-filter input { width: 100%; }

@@ -39,6 +39,9 @@ const EMPTY_EYE = { sph: "", cyl: "", axis: "", add: "", prism: "", base: "" };
 const EMPTY_RX = { od: { ...EMPTY_EYE }, os: { ...EMPTY_EYE }, pd: "", seg_height: "", rx_date: "" };
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
+const EMPTY_OWN = { open: false, description: "", photo: null };
+// Móvil o tablet: en un ordenador `capture` no abre la cámara, solo repetiría el selector de archivos.
+const hasTouchCamera = () => window.matchMedia?.("(pointer: coarse)").matches === true;
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
@@ -194,7 +197,7 @@ export default function PosSale({ me }) {
   // 2 · monturas
   const [lines, setLines] = useState([]);
   const [frameListOpen, setFrameListOpen] = useState(false);
-  const [own, setOwn] = useState({ open: false, description: "", photo: null });
+  const [own, setOwn] = useState(EMPTY_OWN);
   const [cardProduct, setCardProduct] = useState(null);
   const { products: catProducts = [], cases: catCases = [] } = useCatalog();
   // Ficha completa de una montura (AdminFrameCard) desde el buscador, o null si el catálogo local no la tiene.
@@ -266,15 +269,18 @@ export default function PosSale({ me }) {
   const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); setTouched({}); setShowCustErrors(false); };
 
   const addFrame = (p, v) => {
-    setLines((ls) => [...ls, { key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, image: v.image || p.thumbnail || null, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
+    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, image: v.image || p.thumbnail || null, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
+    setOwn(EMPTY_OWN);
   };
   const addOwn = () => {
     if (!own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
-    setLines((ls) => [...ls, { key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null } }]);
-    setOwn({ open: false, description: "", photo: null });
+    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null } }]);
+    setOwn(EMPTY_OWN);
   };
   const onOwnPhoto = async (e) => {
     const f = e.target.files?.[0];
+    // Sin esto, volver a elegir el mismo archivo no dispara onChange.
+    e.target.value = "";
     if (!f) return;
     try { setOwn((o) => ({ ...o, photo: null })); const url = await photoDataUrl(f); setOwn((o) => ({ ...o, photo: url })); } catch (err) { toast({ tone: "error", title: t(err.message) }); }
   };
@@ -609,22 +615,35 @@ export default function PosSale({ me }) {
 
         {stepName === "frame" && (
           <>
-            <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />
-            <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
-              <Icon name="camera" size={14} /> {t("adm.pos.own.add")}
-            </button>
-            {own.open && (
-              <div className="pos-own">
-                <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
-                <label className="pos-file">
-                  <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
-                  <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
-                </label>
-                {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.photo")} />}
-                <small className="muted">{t("adm.pos.own.hint")}</small>
-                <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
-              </div>
-            )}
+            {/* Una sola montura por venta: del inventario o la del cliente. Elegida una, las dos vías se cierran hasta quitarla. */}
+            {lines.length === 0 ? (
+              <>
+                {!own.open && <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />}
+                <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
+                  <Icon name={own.open ? "barcode" : "camera"} size={14} /> {t(own.open ? "adm.pos.own.useStock" : "adm.pos.own.add")}
+                </button>
+                {own.open && (
+                  <div className="pos-own">
+                    <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
+                    <div className="pos-own-photo">
+                      {hasTouchCamera() && (
+                        <label className="pos-file">
+                          <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
+                          <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
+                        </label>
+                      )}
+                      <label className="pos-file">
+                        <Icon name="upload" size={16} /> {t("adm.pos.own.file")}
+                        <input type="file" accept="image/*" onChange={onOwnPhoto} />
+                      </label>
+                    </div>
+                    {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.tag")} />}
+                    <small className="muted">{t("adm.pos.own.hint")}</small>
+                    <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
+                  </div>
+                )}
+              </>
+            ) : <small className="muted">{t("adm.pos.frame.onlyOne")}</small>}
             <ul className="pos-lines">
               {lines.map((l) => (
                 <li key={l.key}>

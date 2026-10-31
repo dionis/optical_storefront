@@ -254,7 +254,8 @@ export interface PosLine {
   photo: string | null;
 }
 
-export const MAX_LINES = 10;
+/** A sale carries one frame: either from the catalog or the customer's own, never both. */
+export const MAX_LINES = 1;
 
 const code = (v: unknown): string | null => {
   const s = text(v, 40);
