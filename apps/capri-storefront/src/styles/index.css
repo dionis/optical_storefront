@@ -9495,3 +9495,21 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
    barra de scroll no salte cuando entran en pantalla. */
 .product-grid > .card { content-visibility: auto; contain-intrinsic-size: auto 430px; }
 .product-grid.list > .card { contain-intrinsic-size: auto 190px; }
+
+/* ── SKELETON: placeholder cards while the catalog loads from Medusa ─────── */
+@keyframes skeletonPulse {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.card-skeleton {
+  border-radius: 14px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+  min-height: 380px;
+}
+.product-scroller > .scroller-item > .card-skeleton { min-height: 350px; min-width: 220px; }
+@media (max-width: 600px) {
+  .card-skeleton { min-height: 300px; }
+  .product-scroller > .scroller-item > .card-skeleton { min-height: 280px; min-width: 180px; }
+}

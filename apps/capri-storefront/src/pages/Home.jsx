@@ -124,7 +124,7 @@ export default function Home() {
       path: "/",
     });
   }, [lang]);
-  const { products: PRODUCTS } = useCatalog();
+  const { products: PRODUCTS, loading } = useCatalog();
   const featured = PRODUCTS.slice(0, 12);
 
   // Carrusel del hero (avance automático + control manual)
@@ -338,9 +338,13 @@ export default function Home() {
           <Link to="/catalogo" className="see-all">{t("section.seeall")}</Link>
         </div>
         <div className="product-scroller">
-          {featured.map((p) => (
-            <div className="scroller-item" key={p.slug}><ProductCard product={p} /></div>
-          ))}
+          {loading && !featured.length
+            ? Array.from({ length: 6 }, (_, i) => (
+                <div className="scroller-item" key={`skel-${i}`}><div className="card-skeleton" /></div>
+              ))
+            : featured.map((p) => (
+                <div className="scroller-item" key={p.slug}><ProductCard product={p} /></div>
+              ))}
         </div>
       </section>
 
