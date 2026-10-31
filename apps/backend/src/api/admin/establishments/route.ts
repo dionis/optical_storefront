@@ -3,6 +3,7 @@ import { createTerminal } from "../../../lib/pos-data";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { cleanText, createEstablishment, listEstablishments } from "../../../lib/establishments";
+import { isValidPhone } from "../../../lib/field-rules";
 import { normalizeColor } from "../../../lib/store-color";
 
 /**
@@ -35,6 +36,11 @@ export async function POST(req: AuthenticatedMedusaRequest<CreateBody>, res: Med
     res.status(422).json({ type: "invalid_data", reason: "name_required", message: "A store name is required." });
     return;
   }
+  const phone = cleanText(body.phone, 40);
+  if (phone && !isValidPhone(phone)) {
+    res.status(422).json({ type: "invalid_data", reason: "bad_phone", message: "The store's phone is not valid." });
+    return;
+  }
   if (body.color !== undefined && !normalizeColor(body.color)) {
     res.status(422).json({ type: "invalid_data", reason: "bad_color", message: "A color must be #RRGGBB." });
     return;
@@ -43,7 +49,7 @@ export async function POST(req: AuthenticatedMedusaRequest<CreateBody>, res: Med
   const created = await createEstablishment(req.scope, {
     name,
     address: cleanText(body.address, 160),
-    phone: cleanText(body.phone, 40),
+    phone,
     color: body.color,
     actorId,
   });

@@ -5,6 +5,7 @@
  * Every validator returns a reason code (the panel shows
  * `adm.err.pos.<reason>`) or the cleaned value — never prose.
  */
+import { FIELD_LIMITS, isValidEmail, isValidName, isValidPhone, isValidUsZip } from "./field-rules";
 
 /** `Op2-000147`: the store's code and its own six-digit sequence. */
 export function saleNumber(storeCode: string, seq: number): string {
@@ -181,7 +182,6 @@ export interface PosCustomer {
 }
 
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
  * The customer data the owner asked for: full name, email, phone and birth
@@ -189,16 +189,16 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  */
 export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date()): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
-  const first_name = text(c.first_name, 80);
-  const last_name = text(c.last_name, 80);
-  if (!first_name || !last_name) return { reason: "customer_name" };
+  // Longer than allowed is refused, not cut: a silently shortened email or phone is a wrong one.
+  const first_name = text(c.first_name, FIELD_LIMITS.name + 1);
+  const last_name = text(c.last_name, FIELD_LIMITS.name + 1);
+  if (!isValidName(first_name) || !isValidName(last_name)) return { reason: "customer_name" };
 
-  const email = text(c.email, 200).toLowerCase();
-  if (!EMAIL.test(email)) return { reason: "customer_email" };
+  const email = text(c.email, FIELD_LIMITS.email + 1).toLowerCase();
+  if (!isValidEmail(email)) return { reason: "customer_email" };
 
-  const phone = text(c.phone, 30);
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 7 || digits.length > 15) return { reason: "customer_phone" };
+  const phone = text(c.phone, FIELD_LIMITS.phone + 1);
+  if (!isValidPhone(phone)) return { reason: "customer_phone" };
 
   const birth_date = text(c.birth_date, 10);
   const born = /^\d{4}-\d{2}-\d{2}$/.test(birth_date) ? new Date(`${birth_date}T00:00:00Z`) : null;
@@ -211,10 +211,10 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
   let address: PosCustomer["address"] = null;
   const a = c.address;
   if (a && (text(a.address_1, 160) || text(a.city, 80) || text(a.postal_code, 20))) {
-    const address_1 = text(a.address_1, 160);
-    const city = text(a.city, 80);
+    const address_1 = text(a.address_1, FIELD_LIMITS.street);
+    const city = text(a.city, FIELD_LIMITS.city);
     const postal_code = text(a.postal_code, 20);
-    if (!address_1 || !city || !postal_code) return { reason: "customer_address" };
+    if (!address_1 || !city || !isValidUsZip(postal_code)) return { reason: "customer_address" };
     address = {
       address_1,
       city,

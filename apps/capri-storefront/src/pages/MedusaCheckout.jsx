@@ -14,6 +14,8 @@ import { attachAddressAutocomplete, hasGooglePlaces } from "../data/addressAutoc
 import { resolveImage } from "../data/imageUrl.js";
 import { shipping as shippingConfig } from "../admin/priceStore.js";
 import { materialById, PHOTO, AR_OPTIONS, L as LBL } from "../data/lensPricing.js";
+import FieldError from "../components/FieldError.jsx";
+import { checkoutProblems, LIMITS, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 
 const PK = (import.meta.env && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) || "";
 
@@ -199,7 +201,24 @@ export default function MedusaCheckout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const set = (k, typed = (v) => v) => (e) => setF((p) => ({ ...p, [k]: typed(e.target.value) }));
+  const [touched, setTouched] = useState({});
+  const [showErrors, setShowErrors] = useState(false);
+  const problems = checkoutProblems(f, { smsRequested: notify.sms });
+  const hasProblems = Object.keys(problems).length > 0;
+  // Un error se enseña al salir del campo, o de golpe al intentar pagar.
+  const fieldOf = (k) => {
+    const problem = showErrors || touched[k] ? problems[k] : null;
+    return { problem, props: { name: k, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
+  };
+  const tryPay = () => {
+    if (hasProblems) {
+      setShowErrors(true);
+      requestAnimationFrame(() => document.querySelector('.co-form [aria-invalid="true"]')?.focus());
+      return;
+    }
+    goToPay();
+  };
   const shippingAddress = () => ({
     first_name: f.first_name, last_name: f.last_name, address_1: f.address_1,
     city: f.city, province: f.state, postal_code: f.postal_code,
@@ -236,8 +255,8 @@ export default function MedusaCheckout() {
   const quoteSigRef = useRef("");
   useEffect(() => {
     if (step !== "contact" || loading || !cart) return undefined;
-    const emailOk = /\S+@\S+\.\S+/.test(f.email);
-    const ready = emailOk && f.address_1.trim().length >= 5 && f.city.trim().length >= 2 && f.state.trim().length >= 2 && f.postal_code.trim().length >= 5;
+    const { email, address_1, city, state, postal_code } = problems;
+    const ready = !email && !address_1 && !city && !state && !postal_code;
     const sig = [f.email, f.address_1, f.city, f.state, f.postal_code].join("|");
     if (!ready) { quoteSigRef.current = ""; setShip([]); setCarriers(null); setCarrierSel(""); return undefined; }
     if (sig === quoteSigRef.current) return undefined;
@@ -629,17 +648,17 @@ export default function MedusaCheckout() {
             <div className="co-form">
               <div className="co-h">👤 {L("contact")}</div>
               <div className="co-fields">
-                <input type="email" placeholder={L("email")} value={f.email} onChange={set("email")} autoComplete="email" />
+                <div className="co-f"><input type="email" maxLength={LIMITS.email} placeholder={L("email")} value={f.email} onChange={set("email", typedEmail)} autoComplete="email" {...fieldOf("email").props} /><FieldError error={fieldOf("email").problem} /></div>
                 <div className="co-two">
-                  <input placeholder={L("first")} value={f.first_name} onChange={set("first_name")} />
-                  <input placeholder={L("last")} value={f.last_name} onChange={set("last_name")} />
+                  <div className="co-f"><input maxLength={LIMITS.name} placeholder={L("first")} value={f.first_name} onChange={set("first_name")} {...fieldOf("first_name").props} /><FieldError error={fieldOf("first_name").problem} /></div>
+                  <div className="co-f"><input maxLength={LIMITS.name} placeholder={L("last")} value={f.last_name} onChange={set("last_name")} {...fieldOf("last_name").props} /><FieldError error={fieldOf("last_name").problem} /></div>
                 </div>
                 {/* Celular del paciente: se toma de forma orgánica junto al resto
                     del contacto; sirve para SMS de confirmación y contacto. Va en
                     pareja con el país (fijo EE. UU.) para ahorrar una fila y que
                     todo el paso quepa en una vista en el móvil. */}
                 <div className="co-two">
-                  <input type="tel" placeholder={L("phone")} value={f.phone} onChange={set("phone")} autoComplete="tel" />
+                  <div className="co-f"><input type="tel" maxLength={LIMITS.phone} placeholder={L("phone")} value={f.phone} onChange={set("phone", typedPhone)} autoComplete="tel" {...fieldOf("phone").props} /><FieldError error={fieldOf("phone").problem} /></div>
                   <input value={t("ship.usOnlyVal")} disabled aria-label={L("country")} title={t("ship.usOnlyNote")} />
                 </div>
               </div>
@@ -653,13 +672,14 @@ export default function MedusaCheckout() {
               </div>
               <div className="co-fields">
                 <div className="co-addr-wrap">
-                  <input ref={addrRef} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" />
+                  <input ref={addrRef} maxLength={LIMITS.street} placeholder={L("address")} value={f.address_1} onChange={set("address_1")} autoComplete="street-address" {...fieldOf("address_1").props} />
+                  <FieldError error={fieldOf("address_1").problem} />
                 </div>
                 <small className="co-hint">📍 {L("addrHint")}</small>
                 <div className="co-three">
-                  <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
-                  <input placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" />
-                  <span className="addr-host"><input ref={zipRef} inputMode="numeric" placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" /></span>
+                  <div className="co-f"><input maxLength={LIMITS.city} placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" {...fieldOf("city").props} /><FieldError error={fieldOf("city").problem} /></div>
+                  <div className="co-f"><input maxLength={LIMITS.state} placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" {...fieldOf("state").props} /><FieldError error={fieldOf("state").problem} /></div>
+                  <div className="co-f"><span className="addr-host"><input ref={zipRef} inputMode="numeric" maxLength={LIMITS.zip} placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code", typedZip)} autoComplete="postal-code" {...fieldOf("postal_code").props} /></span><FieldError error={fieldOf("postal_code").problem} /></div>
                 </div>
                 {/* Solo USA por ahora (el campo fijo vive junto al celular); el
                     backend lo verifica igualmente (422 us_only). */}
@@ -703,7 +723,7 @@ export default function MedusaCheckout() {
                   </div>
                 );
               })()}
-              <button className="btn btn-primary big" disabled={busy || (carriers ? !carrierSel : !shipId)} onClick={goToPay}>
+              <button className="btn btn-primary big" disabled={busy || (!hasProblems && (carriers ? !carrierSel : !shipId))} onClick={tryPay}>
                 {busy ? <><span className="btn-spin" aria-hidden="true" /> {L("processing")}</> : (PK ? L("pay") : L("payNow"))}
               </button>
             </div>

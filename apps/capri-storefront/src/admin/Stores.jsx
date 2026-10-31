@@ -13,6 +13,8 @@ import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
 import PriceImport from "./PriceImport.jsx";
 import StoreTerminals from "./StoreTerminals.jsx";
+import FieldError from "../components/FieldError.jsx";
+import { LIMITS, phoneProblem, typedPhone } from "../data/fieldRules.js";
 
 const EMPTY = { name: "", address: "", phone: "" };
 
@@ -82,11 +84,13 @@ export default function Stores() {
 
   const create = async (e) => {
     e.preventDefault();
+    if (phoneProblem(form.phone)) return;
     const ok = await run(() => createStore({ ...form, color: newColor }), t("adm.stores.created"));
     if (ok) setForm(EMPTY);
   };
 
   const save = async (s) => {
+    if (phoneProblem(draft.phone)) return;
     const ok = await run(() => updateStore(s.id, draft), t("adm.stores.saved", { code: s.code }));
     if (ok) setEditing(null);
   };
@@ -112,7 +116,7 @@ export default function Stores() {
         <div className="adm-form-grid">
           <label className="adm-field">{t("adm.stores.name")}<input className="adm-input" required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t("adm.stores.namePh")} /></label>
           <label className="adm-field">{t("adm.stores.address")}<AddressInput className="adm-input" maxLength={160} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} onPick={(p) => setForm((v) => ({ ...v, address: formatAddressLine(p) }))} /></label>
-          <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+          <label className="adm-field">{t("adm.stores.phone")}<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={phoneProblem(form.phone) ? true : undefined} value={form.phone} onChange={(e) => setForm({ ...form, phone: typedPhone(e.target.value) })} /><FieldError error={phoneProblem(form.phone)} /></label>
         </div>
         <div style={{ marginTop: 12 }}><ColorPicker value={newColor} disabled={demo || busy} onChange={(color) => setForm({ ...form, color })} /></div>
         <div className="adm-actions" style={{ marginTop: 12 }}>
@@ -133,7 +137,8 @@ export default function Stores() {
                 <span className="adm-team-main adm-store-edit">
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                   <AddressInput className="adm-input" aria-label={t("adm.stores.address")} placeholder={t("adm.stores.address")} maxLength={160} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} onPick={(p) => setDraft((v) => ({ ...v, address: formatAddressLine(p) }))} />
-                  <input className="adm-input" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={40} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+                  <input className="adm-input" type="tel" aria-label={t("adm.stores.phone")} placeholder={t("adm.stores.phone")} maxLength={LIMITS.phone} aria-invalid={phoneProblem(draft.phone) ? true : undefined} value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: typedPhone(e.target.value) })} />
+                  <FieldError error={phoneProblem(draft.phone)} />
                   <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
                     {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}

@@ -16,6 +16,8 @@ import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
 import { Card } from "./ui.jsx";
+import FieldError from "../components/FieldError.jsx";
+import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
 
 const ymd = (d) => new Date(d).toISOString().slice(0, 10);
 const RANGES = ["30d", "90d", "ytd", "all"];
@@ -46,7 +48,11 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
   const storeOpts = stores.filter((x) => x.is_active || x.id === f.establishment_id);
   const termOpts = terminals.filter((p) => p.establishment_id === f.establishment_id && (p.is_active || p.id === f.terminal_id));
   const missing = placementMissing(f);
+  const problems = { name: nameProblem(f.name, true), email: emailProblem(f.email), phone: phoneProblem(f.phone), whatsapp: phoneProblem(f.social.whatsapp) };
+  const [showErrors, setShowErrors] = useState(false);
+  const shown = (k) => (showErrors || (f[k] ?? f.social[k]) ? problems[k] : null);
   const submit = (extra = {}) => {
+    if (Object.values(problems).some(Boolean)) { setShowErrors(true); return; }
     if (missing) return;
     const { address_link: _link, ...rest } = f;
     onSubmit({ ...rest, ...extra, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0 });
@@ -57,20 +63,20 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
     <form className="adm-card" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <h3><Icon name={initial.id ? "edit" : "plus"} size={16} />{initial.id ? t("adm.sel.editTitle", { name: initial.name }) : t("adm.sel.newTitle")}</h3>
       <div className="adm-form-grid">
-        <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /></label>
+        <label className="adm-field">{t("adm.sel.name")}<input className="adm-input" required maxLength={LIMITS.name} aria-invalid={shown("name") ? true : undefined} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={t("adm.sel.namePh")} /><FieldError error={shown("name")} /></label>
         {/* El código lo genera el sistema y no cambia: va en los enlaces de referido ya compartidos. */}
         <div className="adm-field">{t("adm.sel.code")}
           {initial.id ? <span className="sel-code adm-code-ro" title={t("adm.sel.codeFixed")}>{initial.code}</span> : <span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span>}
         </div>
         <label className="adm-field">{t("adm.sel.commission")}<input className="adm-input" type="number" min="0" max="100" step="0.5" value={f.commission_pct} onChange={(e) => set("commission_pct", e.target.value)} /></label>
-        <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
-        <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>
+        <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" maxLength={LIMITS.email} aria-invalid={shown("email") ? true : undefined} value={f.email || ""} onChange={(e) => set("email", typedEmail(e.target.value))} /><FieldError error={shown("email")} /></label>
+        <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={shown("phone") ? true : undefined} value={f.phone || ""} onChange={(e) => set("phone", typedPhone(e.target.value))} /><FieldError error={shown("phone")} /></label>
         <label className="adm-field">{t("adm.sel.address")}<AddressInput className="adm-input" maxLength={200} value={f.address || ""} onChange={(e) => set("address", e.target.value)} onPick={(p) => set("address", formatAddressLine(p))} /></label>
         {addrLink && <div style={{ gridColumn: "1 / -1" }}><AddressChoice state={addrLink.state} other={addrLink.other} place="profile" busy={busy} onChoose={(address_choice) => submit({ address_choice })} /></div>}
         <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder="@usuario" /></label>
         <label className="adm-field">Facebook<input className="adm-input" value={f.social.facebook} onChange={(e) => setS("facebook", e.target.value)} /></label>
         <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder="@usuario" /></label>
-        <label className="adm-field">WhatsApp<input className="adm-input" value={f.social.whatsapp} onChange={(e) => setS("whatsapp", e.target.value)} placeholder="+1 …" /></label>
+        <label className="adm-field">WhatsApp<input className="adm-input" type="tel" maxLength={LIMITS.phone} aria-invalid={shown("whatsapp") ? true : undefined} value={f.social.whatsapp} onChange={(e) => setS("whatsapp", typedPhone(e.target.value))} placeholder="+1 …" /><FieldError error={shown("whatsapp")} /></label>
         <label className="adm-field">{t("adm.sel.status")}
           <select className="adm-input" value={f.active ? "1" : "0"} onChange={(e) => set("active", e.target.value === "1")}>
             <option value="1">{t("adm.sel.statusActive")}</option>

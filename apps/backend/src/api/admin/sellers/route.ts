@@ -5,6 +5,7 @@ import { listEstablishments } from "../../../lib/establishments";
 import { sellerWithAddress } from "../../../lib/seller-address";
 import { takenCodes } from "../../../lib/staff-code";
 import { listTerminals } from "../../../lib/pos-data";
+import { isValidEmail, isValidName, isValidPhone } from "../../../lib/field-rules";
 import {
   deriveSellerCode,
   listSellers,
@@ -47,7 +48,7 @@ export interface SellerBody {
 }
 
 export class SellerInputError extends Error {
-  constructor(readonly reason: "name_required" | "code_taken" | "code_invalid" | "commission_invalid" | "not_found" | SellerPlacementReason, message: string, readonly status = 400) {
+  constructor(readonly reason: "name_required" | "name_invalid" | "email_invalid" | "phone_invalid" | "code_taken" | "code_invalid" | "commission_invalid" | "not_found" | SellerPlacementReason, message: string, readonly status = 400) {
     super(message);
     this.name = "SellerInputError";
   }
@@ -68,6 +69,7 @@ export async function validateSellerBody(
   if (body.name !== undefined || !current) {
     const name = str(body.name, 120);
     if (!name) throw new SellerInputError("name_required", "Seller name is required.");
+    if (!isValidName(name)) throw new SellerInputError("name_invalid", "The seller's name has characters a name cannot have.");
     out["name"] = name;
   }
   // Codes are generated, never typed (lib/staff-code.ts): a sent `code` is ignored.
@@ -77,8 +79,16 @@ export async function validateSellerBody(
     if (pct === null) throw new SellerInputError("commission_invalid", "Commission must be a percentage between 0 and 100.");
     out["commission_pct"] = pct;
   }
-  if (body.email !== undefined) out["email"] = str(body.email)?.toLowerCase() ?? null;
-  if (body.phone !== undefined) out["phone"] = str(body.phone, 40);
+  if (body.email !== undefined) {
+    const email = str(body.email, 255)?.toLowerCase() ?? null;
+    if (email && !isValidEmail(email)) throw new SellerInputError("email_invalid", "The seller's email is not valid.");
+    out["email"] = email;
+  }
+  if (body.phone !== undefined) {
+    const phone = str(body.phone, 40);
+    if (phone && !isValidPhone(phone)) throw new SellerInputError("phone_invalid", "The seller's phone is not valid.");
+    out["phone"] = phone;
+  }
   if (body.address !== undefined) out["address"] = str(body.address, 200);
   if (body.notes !== undefined) out["notes"] = str(body.notes, 2000);
   if (body.social !== undefined) out["social"] = normalizeSocial(body.social);

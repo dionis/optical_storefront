@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { ESTABLISHMENT_MODULE } from "../../../../modules/establishment";
 import type EstablishmentModuleService from "../../../../modules/establishment/service";
 import { cleanText, listEstablishments, STORE_KINDS } from "../../../../lib/establishments";
+import { isValidPhone } from "../../../../lib/field-rules";
 import { normalizeColor } from "../../../../lib/store-color";
 
 /**
@@ -42,7 +43,14 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
     patch.name = name;
   }
   if ("address" in body) patch.address = cleanText(body.address, 160);
-  if ("phone" in body) patch.phone = cleanText(body.phone, 40);
+  if ("phone" in body) {
+    const phone = cleanText(body.phone, 40);
+    if (phone && !isValidPhone(phone)) {
+      res.status(422).json({ type: "invalid_data", reason: "bad_phone", message: "The store's phone is not valid." });
+      return;
+    }
+    patch.phone = phone;
+  }
   if ("color" in body) {
     const color = normalizeColor(body.color);
     if (!color) {

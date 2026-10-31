@@ -10,6 +10,8 @@ import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
 import StaffProfile from "./StaffProfile.jsx";
+import FieldError from "../components/FieldError.jsx";
+import { emailProblem, LIMITS, nameProblem, typedEmail } from "../data/fieldRules.js";
 
 const isAdminRole = (role) => role === "owner" || role === "superadmin";
 
@@ -187,9 +189,13 @@ export default function Team() {
   };
   useEffect(load, [demo]);
 
+  const newProblems = { email: emailProblem(form.email, true), firstName: nameProblem(form.firstName), lastName: nameProblem(form.lastName) };
+  const [showNew, setShowNew] = useState(false);
+  const shownNew = (k) => (showNew || form[k] ? newProblems[k] : null);
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
+    if (Object.values(newProblems).some(Boolean)) { setShowNew(true); return; }
     setBusy(true);
     try {
       const r = await createAdmin({ ...form, role: newRole, seller: newRole === "seller" ? linkPayload(newLink) : undefined });
@@ -273,10 +279,13 @@ export default function Team() {
         <h3>{t("adm.team.newTitle")}</h3>
         <p className="adm-sub">{t("adm.team.newSub")}</p>
         <form className="adm-team-form" onSubmit={submit}>
-          <input type="email" required placeholder={t("adm.team.email")} value={form.email} onChange={set("email")} autoComplete="off" />
+          <input type="email" required maxLength={LIMITS.email} aria-invalid={shownNew("email") ? true : undefined} placeholder={t("adm.team.email")} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: typedEmail(e.target.value) }))} autoComplete="off" />
+          <FieldError error={shownNew("email")} />
           <input type="text" required minLength={8} placeholder={t("adm.team.tempPass")} value={form.password} onChange={set("password")} autoComplete="off" />
-          <input placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
-          <input placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
+          <input maxLength={LIMITS.name} aria-invalid={shownNew("firstName") ? true : undefined} placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
+          <FieldError error={shownNew("firstName")} />
+          <input maxLength={LIMITS.name} aria-invalid={shownNew("lastName") ? true : undefined} placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
+          <FieldError error={shownNew("lastName")} />
           <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
             {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
           </select>

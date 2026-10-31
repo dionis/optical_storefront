@@ -9276,6 +9276,11 @@ a.btn-primary:active, a.btn-outline:active, a.btn:active,
 .addr-sugg-it + .addr-sugg-it { border-top: 1px solid var(--line); }
 .addr-sugg-by { padding: 5px 12px; border-top: 1px solid var(--line); font-size: 11px; color: #5b6472; text-align: right; }
 .addr-host { display: block; position: relative; }
+.field-err { display: block; margin-top: 4px; color: #b42318; font-size: 12px; font-weight: 500; line-height: 1.35; flex-basis: 100%; }
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: #d92d20 !important; box-shadow: 0 0 0 1px #d92d20; }
+.co-f { min-width: 0; }
+.co-f > input, .co-f > .addr-host > input { width: 100%; box-sizing: border-box; }
+.btn-sm.is-blocked { opacity: .6; }
 .addr-host > input { width: 100%; box-sizing: border-box; }
 /* Carrito: marca de agua del logo + mensajes de confianza + precios navy */
 .side-panel .side-panel-body { position: relative; }

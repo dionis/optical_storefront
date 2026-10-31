@@ -199,8 +199,8 @@
 .btn-sm:hover, .btn-xs:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -12px rgba(10,25,60,.5); border-color: var(--adm-line); background: var(--adm-surface); }
 .btn-sm:active, .btn-xs:active { transform: translateY(0); }
 .btn-sm:disabled, .btn-xs:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
-.btn-sm.primary, .btn-xs.primary { background: var(--adm-grad-dark); color: #fff; border-color: var(--adm-navy); position: relative; overflow: hidden; }
-.btn-sm.primary::after, .btn-xs.primary::after { content: ""; position: absolute; inset: 0; background: var(--adm-grad-brand); opacity: 0; transition: opacity .25s var(--adm-ease); }
+.btn-sm.primary, .btn-xs.primary { background: var(--adm-grad-dark); color: #fff; border-color: var(--adm-navy); position: relative; overflow: hidden; isolation: isolate; }
+.btn-sm.primary::after, .btn-xs.primary::after { content: ""; position: absolute; inset: 0; background: var(--adm-grad-brand); z-index: -1; opacity: 0; transition: opacity .25s var(--adm-ease); }
 .btn-sm.primary:hover::after, .btn-xs.primary:hover::after { opacity: 1; }
 .btn-sm.primary > *, .btn-xs.primary > * { position: relative; z-index: 1; }
 .btn-sm.primary:hover, .btn-xs.primary:hover { border-color: var(--adm-blue); box-shadow: 0 8px 28px -8px rgba(99,102,241,.4), var(--adm-shadow-glow); transform: translateY(-2px); }

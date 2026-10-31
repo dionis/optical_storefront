@@ -8,6 +8,8 @@ import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
+import FieldError from "../components/FieldError.jsx";
+import { emailProblem, LIMITS, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
 
 /**
  * Grupos del perfil (documento funcional, «Perfil del vendedor»). Qué grupos
@@ -101,7 +103,10 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
   const editable = (group) => isAdmin || group === "contact" || group === "prefs";
   // El código de recibos lo genera el sistema (lib/staff-code.ts): nadie lo escribe.
   const readOnly = (k) => k === "seller_code";
-  const set = (k) => (e) => { setBadField(null); setForm((f) => ({ ...f, [k]: e.target.value })); };
+  const set = (k, typed = (v) => v) => (e) => { setBadField(null); setForm((f) => ({ ...f, [k]: typed(e.target.value) })); };
+  const typedOf = (type) => (type === "tel" ? typedPhone : type === "email" ? typedEmail : undefined);
+  const problemOf = (k, type) => (type === "tel" ? phoneProblem(form[k]) : type === "email" ? emailProblem(form[k]) : null);
+  const fieldsWithProblems = GROUPS.filter((g) => editable(g.key) && g.fields[0][0] in (profile || {})).flatMap((g) => g.fields).filter(([k, type]) => problemOf(k, type));
   const togglePriv = (p) => setForm((f) => ({ ...f, privileges: f.privileges.includes(p) ? f.privileges.filter((x) => x !== p) : [...f.privileges, p] }));
 
   const chooseAddress = async (address_choice) => {
@@ -122,7 +127,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
 
   const save = async (e) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || fieldsWithProblems.length) return;
     // Solo lo que cambió y lo que este modo puede escribir.
     const patch = {};
     for (const g of GROUPS) {
@@ -180,13 +185,15 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
                     type={type === "code" ? "text" : type === "number" ? "number" : type}
                     step={type === "number" ? "0.01" : undefined}
                     value={form[k]}
-                    onChange={set(k)}
-                    maxLength={type === "code" ? 12 : undefined}
+                    onChange={set(k, typedOf(type))}
+                    aria-invalid={problemOf(k, type) ? true : undefined}
+                    maxLength={type === "code" ? 12 : type === "tel" ? LIMITS.phone : type === "email" ? LIMITS.email : undefined}
                     readOnly={readOnly(k)}
                     disabled={readOnly(k) || undefined}
                     placeholder={readOnly(k) ? t("adm.sel.codeAuto") : undefined}
                   />
                 )}
+                <FieldError error={problemOf(k, type)} />
               </label>
             ))}
           </div>
@@ -227,7 +234,7 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
       )}
 
       <div className="adm-profile-actions">
-        <button className="btn-sm primary" disabled={busy}><Icon name="save" size={14} /> {busy ? "…" : t("adm.profile.save")}</button>
+        <button className="btn-sm primary" disabled={busy || fieldsWithProblems.length > 0}><Icon name="save" size={14} /> {busy ? "…" : t("adm.profile.save")}</button>
         {!isAdmin && <small className="muted">{t("adm.profile.selfHint")}</small>}
       </div>
     </form>

@@ -1,3 +1,4 @@
+import { isValidEmail, isValidPhone } from "./field-rules";
 /**
  * Seller profile rules (HU-98 to HU-100). Pure — no I/O.
  *
@@ -79,8 +80,6 @@ export const EMPTY_PROFILE: StaffProfileData = {
   internal_notes: null,
 };
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE = /^\+?[\d\s().-]{7,25}$/;
 const CODE = /^[A-Z]{1,4}\d{1,4}$/;
 
 const text = (v: unknown, max: number): string | null => {
@@ -108,14 +107,14 @@ export function cleanProfilePatch(
       case "phone_landline":
       case "emergency_phone": {
         const v = text(raw, 25);
-        if (v && !PHONE.test(v)) return { reason: "bad_phone", field: key };
+        if (v && !isValidPhone(v)) return { reason: "bad_phone", field: key };
         out[key] = v;
         break;
       }
       case "email_alt":
       case "alert_email": {
         const v = text(raw, 200)?.toLowerCase() ?? null;
-        if (v && !EMAIL.test(v)) return { reason: "bad_email", field: key };
+        if (v && !isValidEmail(v)) return { reason: "bad_email", field: key };
         out[key] = v;
         break;
       }

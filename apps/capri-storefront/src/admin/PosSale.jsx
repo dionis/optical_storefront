@@ -29,6 +29,8 @@ import PosFrameSearch from "./PosFrameSearch.jsx";
 import { resolveImageSized } from "../data/imageUrl.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
+import FieldError from "../components/FieldError.jsx";
+import { customerProblems, LIMITS, paymentProblem, typedDecimal, typedEmail, typedPhone, typedSigned, typedZip } from "../data/fieldRules.js";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
@@ -69,7 +71,7 @@ function RxGrid({ value, onChange, disabled, idp, measures = true }) {
               <th scope="row">{t(`adm.pos.rx.${eye}`)}</th>
               {EYE_FIELDS.map((k) => (
                 <td key={k}>
-                  <input inputMode="decimal" disabled={disabled} value={value[eye][k]} onChange={set(eye, k)}
+                  <input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value[eye][k]} onChange={(e) => set(eye, k)({ target: { value: typedSigned(e.target.value) } })}
                     aria-label={`${t(`adm.pos.rx.${eye}`)} ${t(`adm.pos.rx.${k}`)}`} id={`${idp}-${eye}-${k}`} />
                 </td>
               ))}
@@ -78,8 +80,8 @@ function RxGrid({ value, onChange, disabled, idp, measures = true }) {
         </tbody>
       </table>
       {measures && <div className="pos-row">
-        <label>{t("adm.pos.rx.pd")}<input inputMode="decimal" disabled={disabled} value={value.pd} onChange={(e) => onChange({ ...value, pd: e.target.value })} /></label>
-        <label>{t("adm.pos.rx.seg")}<input inputMode="decimal" disabled={disabled} value={value.seg_height} onChange={(e) => onChange({ ...value, seg_height: e.target.value })} /></label>
+        <label>{t("adm.pos.rx.pd")}<input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value.pd} onChange={(e) => onChange({ ...value, pd: typedDecimal(e.target.value) })} /></label>
+        <label>{t("adm.pos.rx.seg")}<input inputMode="decimal" maxLength={LIMITS.measure} disabled={disabled} value={value.seg_height} onChange={(e) => onChange({ ...value, seg_height: typedDecimal(e.target.value) })} /></label>
       </div>}
     </div>
   );
@@ -182,6 +184,9 @@ export default function PosSale({ me }) {
   const [custQ, setCustQ] = useState("");
   const [custHits, setCustHits] = useState([]);
   const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
+  const [touched, setTouched] = useState({});
+  const [showCustErrors, setShowCustErrors] = useState(false);
+  const addressRef = useRef(null);
   const [customerId, setCustomerId] = useState(null);
   const [custInfo, setCustInfo] = useState(null);
   const [wears, setWears] = useState(null);
@@ -255,7 +260,7 @@ export default function PosSale({ me }) {
       }
     } catch { setCustInfo(null); }
   };
-  const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); };
+  const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); setTouched({}); setShowCustErrors(false); };
 
   const addFrame = (p, v) => {
     setLines((ls) => [...ls, { key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, title: p.title, variant_title: v.title, image: v.image || p.thumbnail || null, price: p.price, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
@@ -370,9 +375,10 @@ export default function PosSale({ me }) {
   const wornReady = rxFilled(rxWorn) && (worn.dateMode === "approx" ? worn.months !== "" : Boolean(worn.date));
   const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
   const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
+  const custProblems = customerProblems(customer, { requireAddress: delivery === "ship" });
   const canNext = () => {
     switch (STEPS[step]) {
-      case "customer": return customer.first_name && customer.last_name && customer.email && customer.phone && customer.birth_date && wears !== null
+      case "customer": return Object.keys(customerProblems(customer)).length === 0 && wears !== null
         && (!wears || wornReady);
       case "frame": return lines.length > 0;
       case "rx":
@@ -382,9 +388,22 @@ export default function PosSale({ me }) {
       case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
         && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
       case "price": return Boolean(q) && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
-      case "payment": return payState.balance >= 0 && (delivery === "pickup" || (customer.address_1 && customer.city && customer.postal_code));
+      case "payment": return payState.balance >= 0
+        && (total <= 0 || payState.paid + payState.ins > 0)
+        && !payments.some((p) => paymentProblem(p, methods.find((x) => x.code === p.method_code)))
+        && (delivery === "pickup" || Object.keys(custProblems).length === 0);
       default: return false;
     }
+  };
+
+  // Bloqueado en el primer paso: en vez de un botón mudo, marca qué falta y lleva hasta ahí.
+  const next = () => {
+    if (canNext()) { setShowCustErrors(false); setStep((s) => s + 1); return; }
+    if (stepName !== "customer") return;
+    setShowCustErrors(true);
+    const fields = Object.keys(customerProblems(customer));
+    if (fields.some((k) => ["address_1", "city", "state", "postal_code"].includes(k)) && addressRef.current) addressRef.current.open = true;
+    requestAnimationFrame(() => document.querySelector('.pos-card [aria-invalid="true"]')?.focus());
   };
 
   const confirmSale = async () => {
@@ -418,7 +437,7 @@ export default function PosSale({ me }) {
 
   const reset = () => {
     idem.current = null;
-    setStep(0); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
+    setStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
     setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setApproval(null); setReason("");
@@ -430,7 +449,12 @@ export default function PosSale({ me }) {
   if (ctx.seller_block) return <div className="adm-section"><div className="adm-empty"><Icon name="lock" size={36} /><b>{t(`adm.err.pos.${ctx.seller_block}`)}</b><p>{t("adm.pos.sellerBlockHint")}</p></div></div>;
   if (!ctx.stores.length) return <div className="adm-section"><div className="adm-empty"><Icon name="store" size={36} /><b>{t("adm.pos.noStores")}</b></div></div>;
 
-  const setC = (k) => (e) => setCustomer((c) => ({ ...c, [k]: e.target.value }));
+  const setC = (k, typed = (v) => v) => (e) => setCustomer((c) => ({ ...c, [k]: typed(e.target.value) }));
+  // Un error se enseña al salir del campo, o de golpe al intentar avanzar: no mientras se escribe.
+  const custField = (k) => {
+    const problem = (showCustErrors || touched[k]) ? custProblems[k] || (k === "province" ? custProblems.state : null) : null;
+    return { problem, props: { name: k, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
+  };
   const stepName = STEPS[step];
   const m = (v) => money(v, "usd", lang);
 
@@ -469,7 +493,7 @@ export default function PosSale({ me }) {
           <>
             <label className="pos-search">
               <Icon name="search" size={16} />
-              <input value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
+              <input maxLength={80} value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
             </label>
             {custHits.length > 0 && (
               <ul className="pos-hits">
@@ -489,25 +513,26 @@ export default function PosSale({ me }) {
               </div>
             )}
             <div className="pos-form">
-              <label>{t("adm.pos.cust.first")}<input value={customer.first_name} onChange={setC("first_name")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.last")}<input value={customer.last_name} onChange={setC("last_name")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.email")}<input type="email" value={customer.email} onChange={setC("email")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.phone")}<input type="tel" value={customer.phone} onChange={setC("phone")} autoComplete="off" /></label>
-              <label>{t("adm.pos.cust.birth")}<input type="date" value={customer.birth_date} onChange={setC("birth_date")} /></label>
+              <label>{t("adm.pos.cust.first")}<input maxLength={LIMITS.name} value={customer.first_name} onChange={setC("first_name")} autoComplete="off" {...custField("first_name").props} /><FieldError error={custField("first_name").problem} /></label>
+              <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
+              <label>{t("adm.pos.cust.email")}<input type="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
+              <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
+              <label>{t("adm.pos.cust.birth")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} /><FieldError error={custField("birth_date").problem} /></label>
             </div>
-            <details className="pos-address">
+            <details className="pos-address" ref={addressRef}>
               <summary>{t("adm.pos.cust.address")}</summary>
               <div className="pos-form">
-                <label>{t("adm.pos.cust.address1")}<AddressInput value={customer.address_1} onChange={setC("address_1")} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.area ? "" : p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /></label>
-                <label>{t("adm.pos.cust.city")}<input value={customer.city} onChange={setC("city")} /></label>
-                <label>{t("adm.pos.cust.state")}<input value={customer.province} onChange={setC("province")} /></label>
-                <label>{t("adm.pos.cust.zip")}<AddressInput mode="zip" inputMode="numeric" value={customer.postal_code} onChange={setC("postal_code")} onPick={(p) => setCustomer((c) => ({ ...c, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /></label>
+                <label>{t("adm.pos.cust.address1")}<AddressInput maxLength={LIMITS.street} value={customer.address_1} onChange={setC("address_1")} {...custField("address_1").props} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.area ? "" : p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("address_1").problem} /></label>
+                <label>{t("adm.pos.cust.city")}<input maxLength={LIMITS.city} value={customer.city} onChange={setC("city")} {...custField("city").props} /><FieldError error={custField("city").problem} /></label>
+                <label>{t("adm.pos.cust.state")}<input maxLength={LIMITS.state} value={customer.province} onChange={setC("province")} {...custField("province").props} /><FieldError error={custField("province").problem} /></label>
+                <label>{t("adm.pos.cust.zip")}<AddressInput mode="zip" inputMode="numeric" maxLength={LIMITS.zip} value={customer.postal_code} onChange={setC("postal_code", typedZip)} {...custField("postal_code").props} onPick={(p) => setCustomer((c) => ({ ...c, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("postal_code").problem} /></label>
               </div>
             </details>
             <fieldset className="pos-wears">
               <legend>{t("adm.pos.cust.wears")}</legend>
               <label><input type="radio" checked={wears === true} onChange={() => setWears(true)} /> {t("adm.pos.yes")}</label>
               <label><input type="radio" checked={wears === false} onChange={() => setWears(false)} /> {t("adm.pos.no")}</label>
+              <FieldError error={showCustErrors && wears === null ? "val.wears" : null} />
             </fieldset>
             {/* Usa espejuelos: se mide lo que usa hoy aquí mismo, para compararlo con la receta nueva
                 y ver si la vista ha empeorado (aviso de cambio óptico en Precio y en el recibo). */}
@@ -551,19 +576,19 @@ export default function PosSale({ me }) {
                     <p className="muted" style={{ fontSize: "0.85em", margin: "0 0 0.5rem" }}>{t("adm.pos.worn.frameHint")}</p>
                     <div className="pos-form pos-worn-frame">
                       <label>{t("adm.pos.worn.lensWidth")} <small>(A) mm</small>
-                        <input inputMode="decimal" value={wornFrame.lens_width} onChange={(e) => setWornFrame((f) => ({ ...f, lens_width: e.target.value }))} placeholder="50" />
+                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.lens_width} onChange={(e) => setWornFrame((f) => ({ ...f, lens_width: typedDecimal(e.target.value) }))} placeholder="50" />
                       </label>
                       <label>{t("adm.pos.worn.bridge")} <small>(DBL) mm</small>
-                        <input inputMode="decimal" value={wornFrame.bridge} onChange={(e) => setWornFrame((f) => ({ ...f, bridge: e.target.value }))} placeholder="18" />
+                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.bridge} onChange={(e) => setWornFrame((f) => ({ ...f, bridge: typedDecimal(e.target.value) }))} placeholder="18" />
                       </label>
                       <label>{t("adm.pos.worn.temple")} <small>mm</small>
-                        <input inputMode="decimal" value={wornFrame.temple} onChange={(e) => setWornFrame((f) => ({ ...f, temple: e.target.value }))} placeholder="140" />
+                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.temple} onChange={(e) => setWornFrame((f) => ({ ...f, temple: typedDecimal(e.target.value) }))} placeholder="140" />
                       </label>
                       <label>{t("adm.pos.worn.lensHeight")} <small>(B) mm</small>
-                        <input inputMode="decimal" value={wornFrame.lens_height} onChange={(e) => setWornFrame((f) => ({ ...f, lens_height: e.target.value }))} placeholder="35" />
+                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.lens_height} onChange={(e) => setWornFrame((f) => ({ ...f, lens_height: typedDecimal(e.target.value) }))} placeholder="35" />
                       </label>
                       <label>{t("adm.pos.worn.totalWidth")} <small>mm</small>
-                        <input inputMode="decimal" value={wornFrame.total_width} onChange={(e) => setWornFrame((f) => ({ ...f, total_width: e.target.value }))} placeholder="136" />
+                        <input inputMode="decimal" maxLength={LIMITS.measure} value={wornFrame.total_width} onChange={(e) => setWornFrame((f) => ({ ...f, total_width: typedDecimal(e.target.value) }))} placeholder="136" />
                       </label>
                       <label>{t("adm.pos.worn.condition")}
                         <select value={wornFrame.condition} onChange={(e) => setWornFrame((f) => ({ ...f, condition: e.target.value }))}>
@@ -586,7 +611,7 @@ export default function PosSale({ me }) {
             </button>
             {own.open && (
               <div className="pos-own">
-                <label>{t("adm.pos.own.description")}<input value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
+                <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
                 <label className="pos-file">
                   <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
                   <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
@@ -674,7 +699,7 @@ export default function PosSale({ me }) {
                   </tbody>
                 </table>
                 <div className="pos-discount">
-                  <label>{t("adm.pos.price.discount")}<input inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
+                  <label>{t("adm.pos.price.discount")}<input inputMode="decimal" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
                   <small className="muted">{ctx.discount_limit_pct == null ? t("adm.pos.price.noLimit") : t("adm.pos.price.limit", { n: ctx.discount_limit_pct })}</small>
                 </div>
                 <dl className="pos-totals">
@@ -690,7 +715,7 @@ export default function PosSale({ me }) {
                     <b><Icon name="lock" size={14} /> {q.quote.below_minimum ? t("adm.pos.approval.belowMin") : t("adm.pos.approval.needed")}</b>
                     {!approval && (
                       <>
-                        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} />
+                        <input maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} />
                         <button type="button" className="btn-sm primary" disabled={busy} onClick={askApproval}>{t("adm.pos.approval.ask")}</button>
                       </>
                     )}
@@ -717,19 +742,20 @@ export default function PosSale({ me }) {
                     <option value="">{t("adm.pos.pay.method")}</option>
                     {methods.map((x) => <option key={x.code} value={x.code}>{methodName(x, t, lang)}</option>)}
                   </select>
-                  <input inputMode="decimal" value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
+                  <input inputMode="decimal" maxLength={LIMITS.amount} value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
                   <button type="button" className="btn-xs" onClick={() => set({ amount: String(Math.max(0, Math.round((payState.balance + (Number(p.amount) || 0)) * 100) / 100)) })}>{t("adm.pos.pay.rest")}</button>
                   {meth?.reference_fields?.map((f) => (
-                    <input key={f.key} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: e.target.value } })}
+                    <input key={f.key} maxLength={f.key === "last4" ? 4 : 80} inputMode={f.key === "last4" ? "numeric" : undefined} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: f.key === "last4" ? e.target.value.replace(/\D/g, "") : e.target.value } })}
                       placeholder={`${meth.builtin ? t(`adm.pos.ref.${f.key}`) : (lang === "en" && f.label_en) || f.label || f.key}${f.required ? " *" : ""}`}
                       aria-label={meth.builtin ? t(`adm.pos.ref.${f.key}`) : f.label || f.key} />
                   ))}
                   {meth?.counts_as_cash && (
                     <>
-                      <input inputMode="decimal" value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
+                      <input inputMode="decimal" maxLength={LIMITS.amount} value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
                       {tendered > 0 && <small className="pos-change-due">{t("adm.pos.pay.change", { v: m(Math.max(0, tendered - (Number(p.amount) || 0))) })}</small>}
                     </>
                   )}
+                  <FieldError error={paymentProblem(p, meth)} />
                   {payments.length > 1 && <button type="button" className="btn-xs warn" onClick={() => setPayments((ps) => ps.filter((_, j) => j !== i))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>}
                 </div>
               );
@@ -779,7 +805,7 @@ export default function PosSale({ me }) {
               {busy ? "…" : t("adm.pos.confirm", { total: m(total) })}
             </button>
           ) : (
-            <button type="button" className="btn-sm primary" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
+            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={stepName !== "customer" && !canNext()} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
           )}
         </div>
       )}
