@@ -20,6 +20,8 @@ export const Seller = model.define("seller", {
   name: model.text(),
   email: model.text().nullable(),
   phone: model.text().nullable(),
+  /** Personal data: returned by the admin routes only, never by the public dashboard. */
+  address: model.text().nullable(),
   /**
    * Uppercase A-Z0-9, 3–12 chars. The referral code. Unique among live rows
    * (partial index in the migration; enforced in code so a soft-deleted seller

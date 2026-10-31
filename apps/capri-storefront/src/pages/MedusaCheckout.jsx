@@ -106,6 +106,7 @@ export default function MedusaCheckout() {
   const payMountRef = useRef(null); // instancia montada del Payment Element
   const paySecRef = useRef(null); // sección de pago (para traerla a la vista)
   const addrRef = useRef(null);
+  const zipRef = useRef(null);
 
   // Requirement 15: Google-Maps-style address autocomplete. When a Maps key is
   // configured we attach Places autocomplete to the street input and, on pick,
@@ -133,6 +134,20 @@ export default function MedusaCheckout() {
       }));
     });
     return cleanup;
+  }, [step, loading]);
+
+  // The ZIP fills city and state and leaves the street alone.
+  useEffect(() => {
+    if (step !== "contact" || loading || !zipRef.current) return;
+    return attachAddressAutocomplete(zipRef.current, (parts) => {
+      setF((p) => ({
+        ...p,
+        postal_code: parts.postal_code || p.postal_code,
+        city: parts.city || p.city,
+        state: parts.state || p.state,
+        country_code: parts.country_code || p.country_code || "us",
+      }));
+    }, { mode: "zip" });
   }, [step, loading]);
 
   useEffect(() => {
@@ -644,7 +659,7 @@ export default function MedusaCheckout() {
                 <div className="co-three">
                   <input placeholder={L("city")} value={f.city} onChange={set("city")} autoComplete="address-level2" />
                   <input placeholder={L("state")} value={f.state} onChange={set("state")} autoComplete="address-level1" />
-                  <input placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" />
+                  <span className="addr-host"><input ref={zipRef} inputMode="numeric" placeholder={L("zip")} value={f.postal_code} onChange={set("postal_code")} autoComplete="postal-code" /></span>
                 </div>
                 {/* Solo USA por ahora (el campo fijo vive junto al celular); el
                     backend lo verifica igualmente (422 us_only). */}

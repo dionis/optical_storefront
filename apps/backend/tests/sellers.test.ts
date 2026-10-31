@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 /**
  * Sellers: referral codes, dashboard-link tokens and stats grouping. Pure
  * functions only — no database, no HTTP.
@@ -16,8 +18,7 @@ import {
   sellerPlacementProblem,
   sellerSourceOf,
   signSellerToken,
-  verifySellerToken,
-} from "../src/lib/sellers";
+  verifySellerToken, projectSeller } from "../src/lib/sellers";
 import { normalizeSellerCodeLoose } from "../src/lib/order-board";
 import { EMPTY_TERMINAL_USAGE, sellerTillProblem, terminalDeactivateProblem, terminalDeleteProblem, type TerminalUsage } from "../src/lib/pos";
 
@@ -309,5 +310,18 @@ describe("terminal delete / deactivate rules", () => {
     expect(terminalDeactivateProblem({ id: "t1" }, [{ id: "t1", is_active: true }, { id: "t3", is_active: false }], usage())).toBe("last_terminal");
     expect(terminalDeactivateProblem({ id: "t2" }, store, usage({ active_sellers: 1 }))).toBe("terminal_has_sellers");
     expect(terminalDeactivateProblem({ id: "t2" }, store, usage({ open_cash: 1 }))).toBe("terminal_cash_open");
+  });
+});
+
+describe("seller address", () => {
+  it("is part of the admin's record", () => {
+    expect(projectSeller({ id: "s", name: "A", code: "ANA", address: "1 Main St, Katy, TX 77449" }).address).toBe("1 Main St, Katy, TX 77449");
+    expect(projectSeller({ id: "s", name: "A", code: "ANA" }).address).toBeNull();
+  });
+
+  it("never reaches the seller's public dashboard, which picks its fields by name", () => {
+    const route = readFileSync(join(__dirname, "..", "src", "api", "store", "seller-dashboard", "route.ts"), "utf8");
+    expect(route).not.toMatch(/\baddress\s*:/);
+    expect(route).not.toMatch(/\.\.\.seller\b/);
   });
 });

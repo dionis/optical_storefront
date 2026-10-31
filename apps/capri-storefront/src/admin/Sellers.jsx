@@ -10,6 +10,8 @@ import { fetchStores } from "./adminStores.js";
 import { listTerminals } from "./posApi.js";
 import { fetchSellers, createSeller, updateSeller, deleteSeller, rotateSellerLink, fetchSellerStats, copyText, onThisOrigin } from "./adminSellers.js";
 import { TENANT } from "../config/tenant.js";
+import { formatAddressLine } from "../data/addressAutocomplete.js";
+import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
 import { Card } from "./ui.jsx";
@@ -21,7 +23,7 @@ function rangeFrom(k) {
   if (k === "ytd") return `${new Date().getFullYear()}-01-01`;
   return ymd(Date.now() - ({ "30d": 30, "90d": 90 }[k] || 30) * 864e5);
 }
-const EMPTY = { name: "", email: "", phone: "", code: "", commission_pct: "10", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
+const EMPTY = { name: "", email: "", phone: "", address: "", code: "", commission_pct: "10", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
 // Un vendedor activo siempre tiene tienda y un único punto de venta de esa
 // tienda; inactivo puede no tener ninguno. El servidor aplica la misma regla
 // (sellerPlacementProblem); esto solo evita el viaje de ida y vuelta.
@@ -55,6 +57,7 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
         <label className="adm-field">{t("adm.sel.commission")}<input className="adm-input" type="number" min="0" max="100" step="0.5" value={f.commission_pct} onChange={(e) => set("commission_pct", e.target.value)} /></label>
         <label className="adm-field">{t("adm.login.email")}<input className="adm-input" type="email" value={f.email || ""} onChange={(e) => set("email", e.target.value)} /></label>
         <label className="adm-field">{t("adm.sel.phone")}<input className="adm-input" value={f.phone || ""} onChange={(e) => set("phone", e.target.value)} /></label>
+        <label className="adm-field">{t("adm.sel.address")}<AddressInput className="adm-input" maxLength={200} value={f.address || ""} onChange={(e) => set("address", e.target.value)} onPick={(p) => set("address", formatAddressLine(p))} /></label>
         <label className="adm-field">Instagram<input className="adm-input" value={f.social.instagram} onChange={(e) => setS("instagram", e.target.value)} placeholder="@usuario" /></label>
         <label className="adm-field">Facebook<input className="adm-input" value={f.social.facebook} onChange={(e) => setS("facebook", e.target.value)} /></label>
         <label className="adm-field">TikTok<input className="adm-input" value={f.social.tiktok} onChange={(e) => setS("tiktok", e.target.value)} placeholder="@usuario" /></label>

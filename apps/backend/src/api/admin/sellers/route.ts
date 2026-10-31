@@ -33,6 +33,7 @@ export interface SellerBody {
   name?: string;
   email?: string | null;
   phone?: string | null;
+  address?: string | null;
   code?: string | null;
   commission_pct?: number | string | null;
   notes?: string | null;
@@ -75,6 +76,7 @@ export async function validateSellerBody(
   }
   if (body.email !== undefined) out["email"] = str(body.email)?.toLowerCase() ?? null;
   if (body.phone !== undefined) out["phone"] = str(body.phone, 40);
+  if (body.address !== undefined) out["address"] = str(body.address, 200);
   if (body.notes !== undefined) out["notes"] = str(body.notes, 2000);
   if (body.social !== undefined) out["social"] = normalizeSocial(body.social);
   if (body.active !== undefined) out["active"] = body.active !== false;
@@ -120,6 +122,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SellerBody>, res: Med
       code: data["code"] as string,
       email: (data["email"] as string | null) ?? null,
       phone: (data["phone"] as string | null) ?? null,
+      address: (data["address"] as string | null) ?? null,
       commission_pct: (data["commission_pct"] as number | undefined) ?? 0,
       notes: (data["notes"] as string | null) ?? null,
       social: (data["social"] as Record<string, unknown> | null) ?? null,

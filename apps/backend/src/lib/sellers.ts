@@ -173,6 +173,7 @@ export interface SellerRow {
   name: string;
   email: string | null;
   phone: string | null;
+  address: string | null;
   code: string;
   commission_pct: number;
   active: boolean;
@@ -238,6 +239,7 @@ export function projectSeller(row: Record<string, unknown>): Seller {
     name: String(row["name"] ?? ""),
     email: (row["email"] as string | null) ?? null,
     phone: (row["phone"] as string | null) ?? null,
+    address: (row["address"] as string | null) ?? null,
     code: String(row["code"] ?? "").toUpperCase(),
     commission_pct: Number(row["commission_pct"] ?? 0) || 0,
     active: row["active"] !== false,

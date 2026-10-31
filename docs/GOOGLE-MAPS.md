@@ -1,6 +1,6 @@
 # Autocompletado de direcciones con Google Maps
 
-Al escribir una dirección se proponen direcciones reales de EE. UU. y, al elegir una, se rellena el campo. Funciona en el checkout de la tienda y en el panel: **Tiendas** (alta y edición), **perfil de la persona** (datos del vendedor) y **cliente de una venta** en el punto de venta.
+Al escribir una dirección se proponen direcciones reales de EE. UU. y, al elegir una, se rellena el campo. Funciona en el checkout de la tienda y en el panel: **Tiendas** (alta y edición), **perfil de la persona**, **ficha de vendedor** y **cliente de una venta** en el punto de venta.
 
 La clave vive solo en el storefront (`VITE_GOOGLE_MAPS_KEY`): se compila en el navegador, así que su protección es la restricción por dominio, no el secreto. El backend no la usa.
 
@@ -25,7 +25,7 @@ La clave vive solo en el storefront (`VITE_GOOGLE_MAPS_KEY`): se compila en el n
 
 ## Por código postal
 
-En el punto de venta, al escribir el ZIP completo se rellenan ciudad y estado sin tocar la calle. Si Google da varias opciones, se elige en el desplegable. En Tiendas y en el perfil, escribir el ZIP en el campo de dirección también propone la zona.
+En el punto de venta y en el checkout, al escribir el ZIP completo se rellenan ciudad y estado sin tocar la calle. Si Google da varias opciones, se elige en el desplegable. En Tiendas, en el perfil y en la ficha de vendedor, escribir el ZIP en el campo de dirección también propone la zona.
 
 Un ZIP puede abarcar varias ciudades: Google propone una y se puede corregir a mano. Con OpenStreetMap solo se rellena el estado, porque suele no conocer la ciudad o da la de al lado.
 
