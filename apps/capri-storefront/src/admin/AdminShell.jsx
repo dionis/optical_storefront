@@ -30,18 +30,23 @@ export const NAV_GROUPS = [
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
   ] },
+  // Regla del dueño: «en Comercial va todo lo que tenga que ver con manejo de
+  // precios, costos, etc.». El catálogo (Productos) es precisamente eso —
+  // costo de proveedor, precio por regla y precio propio de cada modelo—, así
+  // que vive aquí, junto a Precios y costos, y ya no en un grupo propio.
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
     { key: "pricing", icon: "prices" },
+    { key: "products", icon: "products" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
-  { key: "catalog", icon: "products", items: [
-    { key: "products", icon: "products" },
-    { key: "catalogsync", icon: "refresh" },
-  ] },
   { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },
+    // Sincronizar el catálogo es mantenimiento, no manejo de precios ni de
+    // costos: por eso no está en Comercial, donde el dueño quiso que viviera
+    // todo lo de precios. Productos sí está allí.
+    { key: "catalogsync", icon: "refresh" },
     // Las alertas se configuran desde Administración (decisión del dueño), no
     // dentro de Tiendas: son reglas del negocio, no de una tienda. El
     // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).

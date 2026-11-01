@@ -1,9 +1,10 @@
 // Diccionario de «Precios y costos» (admin/PricingPanel.jsx + admin/pricing/*).
-// UN solo panel para todo lo que el dueño cambia de precio, costo y ganancia:
-// la regla de monturas y estuches con sus excepciones, la matriz de lentes, los
-// fotocromáticos, los antirreflejos, las comisiones, los costos con su
-// interruptor por tienda y el impuesto. Español primero, inglés con las mismas
-// claves (scripts/check-i18n.mjs falla si una falta en el otro idioma).
+// UN solo panel para todo lo que el dueño cambia de precio, costo y ganancia,
+// repartido en VISTAS EN PESTAÑAS (adm.price.tab.*): monturas, lentes por tipo
+// de diseño, tratamientos (fotocromáticos y antirreflejos), comisiones y costos
+// con su interruptor por tienda, y las fichas por pedido. Español primero,
+// inglés con las mismas claves (scripts/check-i18n.mjs falla si una falta en el
+// otro idioma).
 
 const es = {
   "adm.tab.pricing": "Precios y costos",
@@ -22,6 +23,15 @@ const es = {
   "adm.price.remove": "Quitar",
   "adm.price.none": "Sin definir",
   "adm.price.reportTitle": "Lista de precios y costos",
+
+  // ── Las pestañas del panel ──
+  "adm.price.tab.frames": "Monturas",
+  "adm.price.tab.lenses": "Lentes",
+  "adm.price.tab.treatments": "Tratamientos",
+  "adm.price.tab.costs": "Comisiones y costos",
+  "adm.price.tab.sheets": "Fichas por pedido",
+  "adm.price.tab.costsSub":
+    "Lo que se lleva quien vende y lo que te cuesta la venta y el mes. Cada tienda puede apagar los costos que no paga.",
 
   // ── Monturas y estuches ──
   "adm.price.frames.title": "Monturas y estuches",
@@ -60,7 +70,7 @@ const es = {
 
   // ── Lentes ──
   "adm.price.lenses.title": "Lentes",
-  "adm.price.lenses.sub": "La matriz diseño × material, los fotocromáticos y los antirreflejos.",
+  "adm.price.lenses.sub": "La matriz diseño × material, por tipo de diseño: elige el tipo y ves solo sus precios.",
   "adm.price.lenses.matrix": "Matriz: diseño × material",
   "adm.price.lenses.design": "Diseño",
   "adm.price.lenses.photo": "Fotocromáticos y Transitions",
@@ -83,6 +93,19 @@ const es = {
   "adm.price.lenses.pills.materials": "materiales",
   "adm.price.lenses.masterIs": "Maestro: {v}",
   "adm.price.lenses.editCell": "Precio de {design} en {material}",
+  "adm.price.lenses.catNav": "Tipo de diseño",
+  "adm.price.lenses.catCount": "{n} diseños",
+  "adm.price.lenses.catEmpty": "Ningún diseño de ese tipo con esa gama.",
+  "adm.price.lenses.tier": "Gama",
+  "adm.price.lenses.tierAll": "Todas las gamas",
+  "adm.price.lenses.tierNone": "Sin gama",
+
+  // ── Tratamientos (fotocromáticos y antirreflejos) ──
+  "adm.price.treat.sub": "Lo que se le añade al lente: fotocromáticos y antirreflejos, con su precio por tipo de diseño.",
+  "adm.price.treat.photoCol": "Tratamiento",
+  "adm.price.treat.empty": "Sin tratamientos en la lista.",
+  "adm.price.treat.pills.photo": "fotocromáticos",
+  "adm.price.treat.pills.ar": "antirreflejos",
 
   // ── Comisiones ──
   "adm.price.comm.title": "Comisiones",
@@ -120,6 +143,8 @@ const es = {
     "Solo se cobra cuando la compra no lleva receta: los lentes recetados están exentos. Es el mismo valor que usa el punto de venta y la tienda web.",
   "adm.price.costs.taxEnv": "Valor del entorno (todavía no guardado en la base)",
   "adm.price.costs.target": "Ganancia objetivo",
+  "adm.price.costs.perSale": "Costos de cada venta",
+  "adm.price.costs.perStore": "Costos e impuesto de la tienda",
   "adm.price.costs.pills.rules": "reglas",
   "adm.price.costs.pills.off": "apagados",
 
@@ -166,6 +191,14 @@ const en = {
   "adm.price.none": "Not set",
   "adm.price.reportTitle": "Price and cost list",
 
+  "adm.price.tab.frames": "Frames",
+  "adm.price.tab.lenses": "Lenses",
+  "adm.price.tab.treatments": "Treatments",
+  "adm.price.tab.costs": "Commissions and costs",
+  "adm.price.tab.sheets": "Sheets per order",
+  "adm.price.tab.costsSub":
+    "What the person who sells takes and what the sale and the month cost you. Each store can switch off the costs it does not pay.",
+
   "adm.price.frames.title": "Frames and cases",
   "adm.price.frames.sub": "One rule for all of them, and the models you gave a price of their own.",
   "adm.price.frames.ruleFrames": "Rule for every frame",
@@ -201,7 +234,7 @@ const en = {
   "adm.price.frames.needStore": "Pick a store above to give this frame a price for that store only.",
 
   "adm.price.lenses.title": "Lenses",
-  "adm.price.lenses.sub": "The design × material matrix, the photochromics and the anti-reflective coatings.",
+  "adm.price.lenses.sub": "The design × material matrix, by design type: pick the type and you see only its prices.",
   "adm.price.lenses.matrix": "Matrix: design × material",
   "adm.price.lenses.design": "Design",
   "adm.price.lenses.photo": "Photochromic and Transitions",
@@ -224,6 +257,18 @@ const en = {
   "adm.price.lenses.pills.materials": "materials",
   "adm.price.lenses.masterIs": "Master: {v}",
   "adm.price.lenses.editCell": "Price of {design} in {material}",
+  "adm.price.lenses.catNav": "Design type",
+  "adm.price.lenses.catCount": "{n} designs",
+  "adm.price.lenses.catEmpty": "No design of that type in that tier.",
+  "adm.price.lenses.tier": "Tier",
+  "adm.price.lenses.tierAll": "Every tier",
+  "adm.price.lenses.tierNone": "No tier",
+
+  "adm.price.treat.sub": "What is added to the lens: photochromics and anti-reflective coatings, priced by design type.",
+  "adm.price.treat.photoCol": "Treatment",
+  "adm.price.treat.empty": "No treatments in the list.",
+  "adm.price.treat.pills.photo": "photochromics",
+  "adm.price.treat.pills.ar": "anti-reflective",
 
   "adm.price.comm.title": "Commissions",
   "adm.price.comm.sub": "What the person who sells takes. It is a real cost of every sale: changing it re-computes the past too.",
@@ -259,6 +304,8 @@ const en = {
     "Charged only when the purchase carries no prescription: prescription lenses are exempt. It is the same value the point of sale and the web store use.",
   "adm.price.costs.taxEnv": "Value from the environment (not saved in the database yet)",
   "adm.price.costs.target": "Target profit",
+  "adm.price.costs.perSale": "What every sale costs",
+  "adm.price.costs.perStore": "The store's costs and tax",
   "adm.price.costs.pills.rules": "rules",
   "adm.price.costs.pills.off": "switched off",
 

@@ -1,10 +1,10 @@
 // Banco de pruebas del Ejecutivo: el AdminShell real con ExecutiveHub dentro y
 // un backend simulado (fetch interceptado) para mirar la barra de filtros, el
 // selector de tienda y la tira de KPI con sus variaciones, en claro y oscuro.
-//   /harness/exec.html?mode=light|dark&tab=exec|salesboard|audit|sellers|storecosts|mysales|pos&store=all|web|<id>&role=owner|manager|seller&lang=es|en&period=month|range…
+//   /harness/exec.html?mode=light|dark&tab=exec|salesboard|audit|sellers|storecosts|mysales|products|pos&store=all|web|<id>&role=owner|manager|seller&lang=es|en&period=month|range…
 // La barra de filtros global (GlobalFilterBar.jsx) sale en todas las pestañas
 // de BAR_TABS: tienda · período · rango · PDF/Excel/CSV, pegada bajo la cabecera.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "/src/i18n/LanguageContext.jsx";
@@ -22,6 +22,8 @@ import MySales from "/src/admin/MySales.jsx";
 import { setPeriodState } from "/src/admin/periodStore.js";
 import PricingPanel from "../src/admin/PricingPanel.jsx";
 import EmptyPeriod from "/src/admin/EmptyPeriod.jsx";
+import CatalogManager from "/src/admin/CatalogManager.jsx";
+import { loadLive } from "/src/data/catalogStore.js";
 
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get("mode") || "light";
@@ -57,14 +59,139 @@ const figures = (from, to, stores) => {
   return { sales, net, tax: sales - net, cost, fee, commission, profit, margin_pct: Math.round((profit / net) * 1000) / 10, count, units: Math.round(count * 1.8), avg_ticket: Math.round((sales / count) * 100) / 100 };
 };
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+
+/* ── Permisos simulados, como los calcula el servidor ──────────────────────
+   lib/sales-insights.ts insightAccess: `profit` para el administrador y para
+   quien tenga costs.view / costs.manage; `commission` para esos y, además,
+   para el vendedor (ve la suya). El banco los aplica y REDACTA las cifras
+   igual que redactInsights / attachSaleEconomics, que es la única manera de
+   ver de verdad qué le queda en pantalla a un vendedor. */
+const ROLE_PRIVS = { owner: [], manager: ["costs.view"], seller: [] };
+const IS_ADMIN = ROLE === "owner";
+const ACCESS = {
+  profit: IS_ADMIN || (ROLE_PRIVS[ROLE] || []).some((x) => x === "costs.view" || x === "costs.manage"),
+  commission: IS_ADMIN || (ROLE_PRIVS[ROLE] || []).some((x) => x === "costs.view" || x === "costs.manage") || ROLE === "seller",
+};
+/** Totales de insights redactados: cost/fee/profit a 0 y margen a null (redactInsights). */
+const redactTotals = (f) => (ACCESS.profit ? f : { ...f, cost: 0, fee: 0, profit: 0, margin_pct: null });
+/** Economía de una venta redactada: a null, como attachSaleEconomics. */
+const redactSale = (r) => ({
+  ...r,
+  cost: ACCESS.profit ? r.cost : null,
+  fee: ACCESS.profit ? r.fee : null,
+  profit: ACCESS.profit ? r.profit : null,
+  margin_pct: ACCESS.profit ? r.margin_pct : null,
+  missing_cost: ACCESS.profit ? r.missing_cost ?? false : null,
+  commission: ACCESS.commission ? r.commission : null,
+});
+
+/* ── Catálogo simulado (pestaña «products» = CatalogManager.jsx) ───────────
+   Las monturas reales del repo no traen `medusaId` ni medidas exactas, así que
+   el banco sirve su propio catálogo por /catalog.json: ocho marcas con modelos,
+   colores, medidas en milímetros y los costos de proveedor reales de la lista
+   de Capri, para mirar el acordeón por marca con cifras creíbles. */
+const CM_BRANDS = [
+  ["di-caprio", "Di Caprio", "DC", ["Black Gold", "Tortoise", "Gunmetal", "Navy", "Burgundy", "Crystal", "Matt Gold"], 7],
+  ["peachtree", "Peachtree", "PT", ["Black", "Pink", "Purple", "Light Blue", "Rose"], 6],
+  ["flexure", "Flexure", "FX", ["Black", "Silver", "Blue", "Brown"], 5],
+  ["4u", "Four You", "U", ["Black", "Grey", "Tortoise", "Red"], 6],
+  ["trendy", "Trendy", "TY", ["Pink", "Aqua", "Violet", "Green"], 4],
+  ["millennial", "Millennial", "ML", ["Black", "Crystal", "Demi"], 4],
+  ["grande", "Grande", "GR", ["Black", "Brown", "Gold"], 3],
+  ["prorx", "ProRx", "PRX", ["Gunmetal", "Silver"], 3],
+];
+const SHAPES = ["Cuadrado", "Redondo", "Ovalado", "Rectangular", "Mariposa"];
+const HEX = { "black gold": "#1a1a1a", tortoise: "#6b4423", gunmetal: "#4b4f56", navy: "#1f2a44", burgundy: "#6d1f2e", crystal: "#e8ecf1", "matt gold": "#c9a44a", black: "#1a1a1a", pink: "#e79cc2", purple: "#7b4aa0", "light blue": "#8fbde8", rose: "#d98695", silver: "#c0c0c0", blue: "#2f5fa8", brown: "#6b4423", grey: "#8a8a8a", red: "#c0392b", aqua: "#4bb8c4", violet: "#7b4aa0", green: "#3f8f5f", demi: "#8b5a2b", gold: "#c9a44a", multi: "#9aa3b0" };
+// Foto de la montura: una silueta en el color del modelo, suficiente para ver
+// la miniatura de cada fila sin depender de la red.
+const photo = (name) => {
+  const c = HEX[String(name).toLowerCase()] || "#b8bec8";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><rect width="120" height="60" fill="#f4f5f7"/><g fill="none" stroke="${c}" stroke-width="5"><circle cx="36" cy="30" r="18"/><circle cx="84" cy="30" r="18"/><path d="M54 28h12M18 22 6 18M102 22l12-4"/></g></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+const CM_FRAMES = CM_BRANDS.flatMap(([slug, name, prefix, colors, n], bi) =>
+  Array.from({ length: n }, (_, i) => {
+    const sku = `${prefix}${200 + bi * 40 + i * 3}`;
+    const eye = 48 + ((bi + i) % 7);
+    const bridge = 16 + ((bi * 2 + i) % 5);
+    const temple = 135 + ((i % 3) * 5);
+    const cols = colors.slice(0, 2 + ((bi + i) % (colors.length - 1)));
+    return {
+      sku, name: sku, brand: name, brand_slug: slug, medusaId: `prod_${sku}`,
+      colors: cols.map((c) => ({ name: c, image: photo(c) })),
+      attributes: {
+        shape: SHAPES[(bi + i) % SHAPES.length], material: ["Acetato"], gender: i % 2 ? "Mujeres" : "Hombres", age: slug === "trendy" ? "Niños" : "Adulto",
+        eye, bridge, temple,
+        eye_size: `${eye}-${eye + 2} mm`, bridge_size: `${bridge}-${bridge + 1} mm`, temple_length: `${temple}-${temple + 5} mm`,
+      },
+    };
+  })
+);
+const CM_CASES = ["CASEC-1", "CASEC-15", "CASESC-4", "DICAPRIOCASE", "GRANDECASE"].map((sku) => ({
+  sku, name: sku.replace(/-/g, " "), medusaId: `prod_${sku}`, colors: [{ name: "Multi", image: photo("multi") }],
+}));
+const CM_HISTORY = [
+  { date: "2026-10-28", added: ["DC203", "PT283"], removed: [] },
+  { date: "2026-10-21", added: ["FX323"], removed: ["U366"] },
+  { date: "2026-09-30", added: ["TY440"], removed: [] },
+];
+// Surtido de la tienda EN MEMORIA: al mover un interruptor el banco lo recuerda,
+// así se puede ver el estado «oculta» y la precedencia modelo > marca.
+const CM_RULES = new Map([["brand:trendy", false], ["product:prod_DC203", false]]);
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input.url, location.origin);
+  if (url.pathname === "/catalog.json") return json(CM_FRAMES);
+  if (url.pathname === "/cases.json") return json(CM_CASES);
+  if (url.pathname === "/catalog-meta.json") return json({ lastSync: "2026-10-28T06:00:00Z", added: [], removed: [] });
+  if (url.pathname === "/catalog-history.json") return json(CM_HISTORY);
   if (!url.pathname.startsWith("/medusa/admin/")) return realFetch(input, init);
   const p = url.pathname.replace("/medusa", "");
   const g = (k) => url.searchParams.get(k) || "";
   await new Promise((r) => setTimeout(r, 120));
   if (p === "/admin/establishments") return json({ establishments: STORES });
+  // Surtido por tienda (/admin/store-assortment/:id[/products|/rule]): lo que
+  // lee y escribe el acordeón por marca de «Productos».
+  if (p.startsWith("/admin/store-assortment/")) {
+    if (p.endsWith("/rule")) {
+      const body = JSON.parse(init?.body || "{}");
+      const k = `${body.scope}:${body.target}`;
+      if (body.exposed === null) CM_RULES.delete(k); else CM_RULES.set(k, body.exposed);
+      return json({ ok: true });
+    }
+    const exposedOf = (f) => {
+      const own = CM_RULES.get(`product:${f.medusaId}`);
+      if (own !== undefined) return own;
+      return CM_RULES.get(`brand:${f.brand_slug}`) !== false;
+    };
+    if (p.endsWith("/products")) {
+      const brand = g("brand");
+      return json({ products: CM_FRAMES.filter((f) => !brand || f.brand_slug === brand).map((f) => ({ id: f.medusaId, title: f.name, brand: f.brand_slug, is_case: false, thumbnail: f.colors[0].image, exposed: exposedOf(f) })) });
+    }
+    const brands = CM_BRANDS.map(([slug, name]) => {
+      const list = CM_FRAMES.filter((f) => f.brand_slug === slug);
+      return { slug, name, products: list.length, exposed_products: list.filter(exposedOf).length, rule: CM_RULES.has(`brand:${slug}`) ? CM_RULES.get(`brand:${slug}`) : null };
+    });
+    return json({
+      establishment: STORES.find((x) => p.includes(x.id)) || STORES[1],
+      brands,
+      exceptions: [...CM_RULES.entries()].filter(([k]) => k.startsWith("product:")).map(([k, v]) => {
+        const id = k.slice(8);
+        const f = CM_FRAMES.find((x) => x.medusaId === id);
+        return { product_id: id, title: f?.name || id, brand: f?.brand_slug || null, exposed: v };
+      }),
+      total_products: CM_FRAMES.length,
+      exposed_products: CM_FRAMES.filter(exposedOf).length,
+    });
+  }
+  // Monturas descontinuadas (status draft) que lista fetchDiscontinued().
+  if (p === "/admin/products") {
+    return json({ products: [
+      { id: "prod_DC999", title: "DC999", handle: "dc999-di-caprio", thumbnail: photo("navy"), status: "draft" },
+      { id: "prod_U701", title: "U701", handle: "u701-4u", thumbnail: photo("red"), status: "draft" },
+    ] });
+  }
   // Buscador global de la barra (OmniSearch.jsx): el contrato de
   // GET /admin/search?q=&limit= — grupos por tipo, los vacíos NO se mandan.
   if (p === "/admin/search") {
@@ -100,60 +227,136 @@ window.fetch = async (input, init) => {
     return json({ q: g("q"), groups });
   }
   // Panel de precios y costos: maestro (todas las tiendas) o la variación de una.
+  // El payload imita CAMPO A CAMPO a `loadPricingOverview` (apps/backend/src/lib/
+  // pricing-overview.ts): los diseños y materiales tal como salen de la tabla
+  // (con `category` y `tier`, que es de donde la pantalla saca el tipo de
+  // lente), la matriz en `base` con los precios en CENTAVOS, y los
+  // tratamientos y costos con los nombres de campo del servidor. Va la lista
+  // 2026 COMPLETA (13 diseños, 6 materiales) a propósito: la vista de lentes
+  // está hecha justo para que esas 13 filas no obliguen a bajar.
   if (p === "/admin/pricing/overview") {
     const store = g("store");
     const perStore = store && store !== "all";
-    const design = (code, label, tier, prices) => ({ code, label_es: label, label_en: label, category: code === "sv" ? "sv" : code === "bifocal" ? "bifocal" : "prog", tier, prices });
+    const MATS = [
+      ["cr39", "CR-39 (Resina)", "CR-39 (Resin)"],
+      ["poly", "Policarbonato", "Polycarbonate"],
+      ["1.56", "Índice 1.56", "Index 1.56"],
+      ["1.61", "Índice 1.61", "Index 1.61"],
+      ["1.67", "Índice 1.67", "Index 1.67"],
+      ["1.74", "Índice 1.74", "Index 1.74"],
+    ];
+    // Progresivo con nombre: precio «desde» para CR-39/Poly/1.56/1.61 y el
+    // escalón de la gama en 1.67 y 1.74 (igual que `progressive()` del backend).
+    const prog = (from, hi) => [from, from, from, from, from + (hi ? 40 : 20), from + (hi ? 90 : 50)];
+    const DESIGNS = [
+      ["sv", "sv", "Visión Sencilla", "Single Vision", null, null, null, [60, 90, 100, 100, 120, 150]],
+      ["bifocal", "bifocal", "Bifocal FT-28", "Bifocal FT-28", null, null, null, [130, 140, 140, 140, 160, 160]],
+      ["prog-mid", "prog", "Progresivo Gama Media", "Progressive · Mid", null, null, null, [180, 180, 180, 180, 200, 230]],
+      ["prog-high", "prog", "Progresivo Gama Alta", "Progressive · Premium", null, null, null, [240, 240, 240, 240, 280, 300]],
+      ["purity-basic", "prog", "Purity Basic", "Purity Basic", "Básico", "Nuevos usuarios / uso diario", "New wearers / everyday use", prog(160, false)],
+      ["purity-plus", "prog", "Purity Plus", "Purity Plus", "Intermedio", "Uso diario, más campo visual", "Everyday use, wider field", prog(180, false)],
+      ["dvg-distinct", "prog", "DVG Distinct", "DVG Distinct", "Avanzado", "Uso general equilibrado", "Balanced general use", prog(240, true)],
+      ["dvg-drive", "prog", "DVG Drive", "DVG Drive", "Avanzado", "Conducción frecuente", "Frequent driving", prog(250, true)],
+      ["purity-office", "prog", "Purity Office", "Purity Office", "Premium", "Oficina y computadora", "Office and computer", prog(200, true)],
+      ["dvg-cubicle", "prog", "DVG Cubicle", "DVG Cubicle", "Premium", "Oficina y computadora (campo cercano amplio)", "Office and computer (wide near field)", prog(210, true)],
+      ["dvg-aqueous", "prog", "DVG Aqueous", "DVG Aqueous", "Premium superior", "Profesionales y ejecutivos", "Professionals and executives", prog(260, true)],
+      ["dvg-maverick", "prog", "DVG Maverick (Pilot)", "DVG Maverick (Pilot)", "Premium superior", "Alto desempeño y viajeros", "High performance and travellers", prog(280, true)],
+      ["dvg-camber", "prog", "DVG Camber", "DVG Camber", "Elite", "Máxima tecnología", "Top technology", prog(300, true)],
+    ];
+    const PHOTO = [
+      ["photo-grey", "Fotocromático Grey", "Photochromic Grey", 85, 110, 90],
+      ["photo-brown", "Fotocromático Brown", "Photochromic Brown", null, 110, 90],
+      ["trans-s-grey", "Transitions Gen S Grey", "Transitions Gen S Grey", 105, 105, 105],
+      ["trans-s-brown", "Transitions Gen S Brown", "Transitions Gen S Brown", 105, 105, 105],
+      ["trans-s-green", "Transitions Gen S Graphite Green", "Transitions Gen S Graphite Green", 105, 105, 105],
+      ["trans-x-grey", "Transitions XTRActive Grey", "Transitions XTRActive Grey", 130, 130, 130],
+      ["trans-x-brown", "Transitions XTRActive Brown (RAM)", "Transitions XTRActive Brown (RAM)", 130, 130, 130],
+    ];
+    const AR = [
+      ["ar-green-basic", "AR Green Básico", "AR Green Basic", "sv", 60],
+      ["ar-green-plus", "AR Green Plus", "AR Green Plus", "sv", 90],
+      ["ar-blue-protect", "AR Blue Protect", "AR Blue Protect", "sv", 90],
+      ["adequate", "Adequate", "Adequate", "bifprog", 50],
+      ["crystal", "Crystal", "Crystal", "bifprog", 80],
+      ["flawless", "Flawless", "Flawless", "bifprog", 120],
+      ["blue-uv-445", "Blue UV 445", "Blue UV 445", "bifprog", 120],
+    ];
+    const ADJUST = 5; // % de la tienda sobre el maestro
+    // Una sola casilla con precio PROPIO de la tienda, para ver la pastilla
+    // «con precio propio» y la celda resaltada.
+    const OWN = { "base:sv:poly": 9500 };
+    const cents = (usd) => (usd == null ? null : Math.round(usd * 100));
+    const withStore = (master, key) => {
+      if (!perStore || master == null) return null;
+      if (OWN[key] != null) return OWN[key];
+      return Math.round(master * (1 + ADJUST / 100));
+    };
+    const base = [];
+    for (const [code, , , , , , , prices] of DESIGNS) {
+      MATS.forEach((m, i) => {
+        const c = cents(prices[i]);
+        const key = `base:${code}:${m[0]}`;
+        base.push({ design_code: code, material_code: m[0], cents: c, store_cents: withStore(c, key) });
+      });
+    }
     return json({
       store: perStore ? STORES.find((x) => x.id === store) || null : null,
       frames: {
-        rule: { scope: "frame", mode: "percent", value: 35, since: "2026-09-01" },
-        case_rule: { scope: "case", mode: "percent", value: 20, since: "2026-09-01" },
+        rule: { scope: "frame", mode: "percent", value: 35, since: "2026-09-01T00:00:00Z", inherited: false },
+        case_rule: { scope: "case", mode: "percent", value: 20, since: "2026-09-01T00:00:00Z", inherited: perStore },
         overrides: [
-          { product_id: "p1", variant_id: null, title: "DC241", brand: "DiCaprio", sku: "DC241-BG", kind: "frame", base: 66.67, price: 90, since: "2026-10-12", by: "Rubí" },
-          { product_id: "p2", variant_id: null, title: "FL 118", brand: "Flexure", sku: "FL118-SV", kind: "frame", base: 51.85, price: 65, since: "2026-10-20", by: "Rubí" },
-          { product_id: "p3", variant_id: null, title: "Estuche rígido", brand: "Cases", sku: "CS-RIG", kind: "case", base: 8.33, price: 12, since: "2026-10-02", by: "Rubí" },
+          { product_id: "prod_DC206", variant_id: null, title: "DC241", brand: "DiCaprio", sku: "DC241-BG", kind: "frame", base: 66.67, price: 90, since: "2026-10-12T00:00:00Z", by: "Rubí", inherited: false },
+          { product_id: "prod_FX286", variant_id: null, title: "FL 118", brand: "Flexure", sku: "FL118-SV", kind: "frame", base: 51.85, price: 65, since: "2026-10-20T00:00:00Z", by: "Rubí", inherited: perStore },
+          { product_id: "prod_CASEC-1", variant_id: null, title: "Estuche rígido", brand: "Cases", sku: "CS-RIG", kind: "case", base: 8.33, price: 12, since: "2026-10-02T00:00:00Z", by: "Rubí", inherited: false },
         ],
-        counts: { frames: 550, cases: 28 },
+        counts: { frames: CM_FRAMES.length, cases: CM_CASES.length },
       },
       lenses: {
-        materials: [{ code: "cr39", label_es: "CR-39 (Resina)" }, { code: "poly", label_es: "Policarbonato" }, { code: "1.56", label_es: "Índice 1.56" }, { code: "1.61", label_es: "Índice 1.61" }, { code: "1.67", label_es: "Índice 1.67" }, { code: "1.74", label_es: "Índice 1.74" }],
-        designs: [
-          design("sv", "Visión Sencilla", null, { cr39: 60, poly: 90, "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150 }),
-          design("bifocal", "Bifocal FT-28", null, { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 }),
-          design("prog-mid", "Progresivo Gama Media", null, { cr39: 180, poly: 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230 }),
-          design("prog-high", "Progresivo Gama Alta", null, { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 }),
-          design("purity-basic", "Purity Basic", "Básico", { cr39: 160, poly: 160, "1.56": 160, "1.61": 160, "1.67": 180, "1.74": 210 }),
-          design("dvg-camber", "DVG Camber", "Elite", { cr39: 300, poly: 300, "1.56": 300, "1.61": 300, "1.67": 340, "1.74": 390 }),
-        ],
-        photo: [
-          { code: "photo-grey", label_es: "Fotocromático Grey", sv: 85, bifocal: 110, prog: 90 },
-          { code: "trans-s-grey", label_es: "Transitions Gen S Grey", sv: 105, bifocal: 105, prog: 105 },
-          { code: "trans-x-grey", label_es: "Transitions XTRActive Grey", sv: 130, bifocal: 130, prog: 130 },
-        ],
-        ar: [
-          { code: "ar-green-basic", label_es: "AR Green Básico", ar_group: "sv", price: 60 },
-          { code: "ar-blue-protect", label_es: "AR Blue Protect", ar_group: "sv", price: 90 },
-          { code: "adequate", label_es: "Adequate", ar_group: "bifprog", price: 50 },
-          { code: "flawless", label_es: "Flawless", ar_group: "bifprog", price: 120 },
-        ],
-        store: perStore ? { adjust_pct: 5, cells: [{ kind: "base", key: "sv:poly", value: 9500 }] } : null,
+        designs: DESIGNS.map(([code, category, label_es, label_en, tier, use_es, use_en], i) => ({
+          code, category, label_es, label_en, tier, use_es, use_en, sort: i, requires_rx: true, requires_add: category !== "sv",
+        })),
+        materials: MATS.map(([code, label_es, label_en], i) => ({ code, label_es, label_en, sort: i })),
+        base,
+        photo: PHOTO.map(([code, label_es, label_en, sv, bifocal, prog_]) => {
+          const perCat = { sv: cents(sv), bifocal: cents(bifocal), prog: cents(prog_) };
+          const st = {};
+          if (perStore) for (const c of ["sv", "bifocal", "prog"]) if (perCat[c] != null) st[c] = withStore(perCat[c], `photo:${code}:${c}`);
+          return { code, label_es, label_en, colors: [], ...perCat, store: st };
+        }),
+        ar: AR.map(([code, label_es, label_en, ar_group, price]) => ({
+          code, label_es, label_en, ar_group, cents: cents(price), store_cents: withStore(cents(price), `ar:${code}`),
+        })),
+        store: perStore ? { adjust_pct: ADJUST, cells: [{ kind: "base", key: "sv:poly", value: OWN["base:sv:poly"] }] } : null,
       },
-      commissions: { default_pct: 5, sellers: [{ code: "DAN", name: "Daniela Ruiz", pct: 6 }, { code: "JOS", name: "José Pérez", pct: 5 }] },
+      commissions: {
+        default_pct: 5,
+        sellers: [
+          { id: "s1", code: "DAN", name: "Daniela Ruiz", pct: 6, active: true },
+          { id: "s2", code: "JOS", name: "José Pérez", pct: 5, active: true },
+          { id: "s3", code: "MAR", name: "María Soto", pct: 4, active: false },
+        ],
+      },
       costs: {
         rules: [
-          { id: "r1", kind: "frame_brand", label: "Montura DiCaprio", value: 24, enabled: true },
-          { id: "r2", kind: "lens_design", label: "Lente progresivo gama alta", value: 101, enabled: true },
-          { id: "r3", kind: "order_percent", label: "Laboratorio", value: 8, enabled: !perStore },
-          { id: "r4", kind: "order_fixed", label: "Empaque", value: 2.5, enabled: true },
+          { id: "r1", kind: "frame_brand", match_key: "dicaprio", label: "Montura DiCaprio", value: 24, unit: "usd", enabled: true, group: "frames" },
+          { id: "r5", kind: "frame_sku", match_key: "FL118-SV", label: "Flexure FL 118", value: 19, unit: "usd", enabled: true, group: "frames" },
+          { id: "r2", kind: "lens_design", match_key: "prog-high", label: "Lente progresivo gama alta", value: 101, unit: "usd", enabled: true, group: "lenses" },
+          { id: "r6", kind: "lens_material", match_key: "1.67", label: "Índice 1.67", value: 34, unit: "usd", enabled: true, group: "lenses" },
+          { id: "r4", kind: "order_fixed", match_key: "empaque", label: "Empaque", value: 2.5, unit: "usd", enabled: true, group: "order" },
+          { id: "r3", kind: "order_percent", match_key: "laboratorio", label: "Laboratorio", value: 8, unit: "percent", enabled: !perStore, group: "percent" },
         ],
-        fixed: [{ id: "f1", label: "Renta del local", amount: 213, frequency: "monthly" }, { id: "f2", label: "Sueldos", amount: 484, frequency: "monthly" }],
-        variable: [{ id: "v1", label: "Mensajería", amount: 30, frequency: "monthly" }],
-        taxes: { rate_pct: 8.25, source: "store_setting" },
+        fixed: [
+          { id: "f1", description: "Renta del local", category: "rent", amount: 213, frequency: "monthly", shared: false, enabled: true },
+          { id: "f2", description: "Sueldos", category: "payroll", amount: 484, frequency: "monthly", shared: false, enabled: true },
+          { id: "f3", description: "Internet y teléfono", category: "utilities", amount: 60, frequency: "monthly", shared: true, enabled: !perStore },
+        ],
+        variable: [{ id: "v1", description: "Mensajería", category: "shipping", amount: 30, frequency: "monthly", shared: false, enabled: true }],
+        taxes: { rate_pct: 8.25, source: "database" },
+        profit_target_pct: 30,
       },
     });
   }
-  if (p === "/admin/pos/context") return json({ role: ROLE, is_admin: ROLE === "owner", stores: ROLE === "owner" ? STORES : STORES.slice(1, 2), assigned: { establishment_id: "est_02" }, privileges: [], payment_methods: [{ code: "cash", builtin: true }, { code: "card", builtin: true }] });
+  if (p === "/admin/pos/context") return json({ role: ROLE, is_admin: IS_ADMIN, stores: IS_ADMIN ? STORES : STORES.slice(1, 2), assigned: { establishment_id: "est_02" }, privileges: ROLE_PRIVS[ROLE] || [], payment_methods: [{ code: "cash", builtin: true }, { code: "card", builtin: true }] });
   if (p === "/admin/sales-analytics/summary") { const f = figures(g("from"), g("to"), g("stores")); return json({ current: { discount: Math.round(f.sales * 0.03) }, previous: { discount: 100 }, balance_due: 1240.5, insurance_due: 380 }); }
   if (p === "/admin/sales-analytics/me") { const f = figures("2026-10-01", "2026-10-31", ""); return json({ today: { total: 820, count: 4, avg_ticket: 205 }, week: { total: 3900, count: 19, avg_ticket: 205 }, month: f, seller_code: "DAN", workplace: { store: STORES[1], terminal: { code: "T1", name: "Mostrador" }, cash_open: true }, commission: { pct: 5, amount: 412 }, goal: { amount: 12000, done: f.sales, left: Math.max(0, 12000 - f.sales) }, balance_due: 310, recent: [], ready: [] }); }
   if (p === "/admin/audit") { const mk = (i, action) => ({ id: `ev${i}`, actor_user_id: "u1", establishment_id: i % 2 ? "est_02" : null, action, entity: "seller", entity_id: null, before: { pct: 5 }, after: { pct: 6 }, created_at: new Date(Date.now() - i * 36e5 * 7).toISOString() }); return json({ events: [mk(1, "seller.update"), mk(2, "seller.update"), mk(3, "price.update"), mk(40, "price.update")], actions: ["seller.update", "price.update"] }); }
@@ -210,7 +413,8 @@ window.fetch = async (input, init) => {
   if (p === "/admin/sales-analytics/insights") {
     const f = figures(g("from"), g("to"), g("stores"));
     const rows = [["DAN", "Daniela Ruiz", 0.46], ["JOS", "José Pérez", 0.34], [null, null, 0.2]].map(([key, label, sh]) => ({ key, label, sales: Math.round(f.sales * sh * 100) / 100, count: Math.round(f.count * sh), units: Math.round(f.units * sh), profit: Math.round(f.profit * sh * 100) / 100, commission: Math.round(f.commission * sh * 100) / 100, margin_pct: f.margin_pct, share: sh * 100 }));
-    return json({ totals: f, previous: f, rows, access: { profit: true, commission: true }, series: [], compare: [] });
+    const rr = rows.map((r) => ({ ...r, profit: ACCESS.profit ? r.profit : 0, margin_pct: ACCESS.profit ? r.margin_pct : null, commission: ACCESS.commission ? r.commission : 0 }));
+    return json({ totals: redactTotals(f), previous: redactTotals(f), rows: rr, access: ACCESS, series: [], compare: [] });
   }
   if (p === "/admin/sales-analytics/sales") {
     const f = figures(g("from"), g("to"), g("stores"));
@@ -218,9 +422,22 @@ window.fetch = async (input, init) => {
     const sales = Array.from({ length: n }, (_, i) => {
       const total = Math.round((f.sales / f.count) * (0.6 + ((i * 37) % 10) / 12) * 100) / 100;
       const paid = i % 4 === 0 ? Math.round(total * 0.5 * 100) / 100 : total;
-      return { id: `s${i}`, number: `R39-0001${10 + i}`, created_at: `${g("from")}T10:${String(10 + i).padStart(2, "0")}:00Z`, customer_name: ["Marilin García", "Ana Ruiz", "Luis Soto"][i % 3], seller_code: i % 2 ? "DAN" : "JOS", units: 2, total, discount: 0, net: total / 1.07, cost: total * 0.4, fee: total * 0.02, commission: total * 0.05, profit: total * 0.45, margin_pct: 45, paid, balance: total - paid, status: "completed", establishment_id: "est_02", items: "DiCaprio DC241 · lentes" };
+      return {
+        order_id: `order_${i}`, sale_id: `sale_${i}`, number: `R39-0001${10 + i}`, channel: "pos",
+        establishment_id: "est_02", seller_code: i % 2 ? "DAN" : "JOS",
+        customer: ["Marilin García", "Ana Ruiz", "Luis Soto"][i % 3], customer_phone: "(305) 555-0100",
+        sold_at: `${g("from") || "2026-10-01"}T${String(8 + i).padStart(2, "0")}:${String(10 + i).padStart(2, "0")}:00Z`,
+        units: 2, total, discount: i % 3 === 1 ? 15 : 0, net: total / 1.07,
+        cost: Math.round(total * 0.4 * 100) / 100, fee: Math.round(total * 0.02 * 100) / 100,
+        commission: Math.round(total * 0.05 * 100) / 100, profit: Math.round(total * 0.45 * 100) / 100,
+        margin_pct: 45, missing_cost: i === 3, paid, balance: Math.round((total - paid) * 100) / 100,
+        status: i === 7 ? "voided" : "completed", items: "Di Caprio DC241 · lentes",
+        frame_brand: "Di Caprio", frame_model: "DC241", frame_color: "Black Gold", frame_sku: "DC241",
+        has_rx: i % 3 !== 0, own_frame: i === 5,
+        lens_summary: { es: "Monofocal · CR-39 · AR Premium", en: "Single vision · CR-39 · Premium AR" },
+      };
     });
-    return json({ sales, access: { profit: true, commission: true }, has_more: false });
+    return json({ sales: sales.map(redactSale), access: ACCESS, has_more: false });
   }
   if (p === "/admin/pos/cash-report") {
     const f = figures(g("from"), g("to"), g("establishment_id"));
@@ -234,7 +451,7 @@ window.fetch = async (input, init) => {
   if (p === "/admin/pos/start-map") {
     if (Q.get("backlog") === "fail") return new Response("boom", { status: 500 });
     const clear = Q.get("backlog") === "clear";
-    const per = (from, to, sales, count) => ({ from, to, sales_cents: Math.round(sales * 100), count, units: count * 2, cost_cents: Math.round(sales * 42), fee_cents: Math.round(sales * 2), profit_cents: Math.round(sales * 45), commission_cents: Math.round(sales * 5), avg_ticket_cents: count ? Math.round((sales / count) * 100) : 0, avg_profit_per_sale_cents: null, prev: null });
+    const per = (from, to, sales, count) => ({ from, to, sales_cents: Math.round(sales * 100), count, units: count * 2, ...(ACCESS.profit ? { cost_cents: Math.round(sales * 42), fee_cents: Math.round(sales * 2), profit_cents: Math.round(sales * 45) } : { cost_cents: null, fee_cents: null, profit_cents: null }), commission_cents: ACCESS.commission ? Math.round(sales * 5) : null, avg_ticket_cents: count ? Math.round((sales / count) * 100) : 0, avg_profit_per_sale_cents: null, prev: null });
     const bucket = (count, cents, balance) => ({ count, cents: Math.round(cents * 100), balance_cents: Math.round(balance * 100) });
     return json({
       today: "2026-11-01",
@@ -260,12 +477,20 @@ window.fetch = async (input, init) => {
       stores: STORES.slice(1, 4).map((s, i) => ({ id: s.id, code: s.code, name: s.name, color: s.color, today_cents: i ? 0 : 31050, week_cents: 90000 - i * 20000, month_cents: 31050, on_street_cents: 180000 - i * 40000, in_lab: 9 - i * 3, to_deliver: 3 - i })),
       me: { role: ROLE, seller_code: ROLE === "seller" ? "DAN" : null, store_code: null, store_name: null, store_color: null, commission_month_cents: null },
       subject: null,
-      access: { profit: true, commission: true },
+      access: ACCESS,
       truncated: false,
       pending_truncated: false,
     });
   }
-  if (p === "/admin/order-board") return json({ orders: [], total: 0, truncated: false });
+  if (p === "/admin/order-board") {
+    const STG = ["confirmed", "in_lab", "shipped", "in_transit", "delivered"];
+    const orders = Array.from({ length: 12 }, (_, i) => ({
+      id: `order_${i}`, stage: STG[(i * 2 + i % 3) % 5],
+      next_stages: STG.slice(Math.min(4, ((i * 2 + i % 3) % 5) + 1)),
+      terminal: i === 7 ? "canceled" : null, history: [], pos_delivered_at: null,
+    }));
+    return json({ orders, total: orders.length, truncated: false, scan_limit: 300 });
+  }
   if (p === "/admin/sellers/stats") return json({ sellers: [{ id: "s1", code: "DAN", name: "Daniela Ruiz", orders: 23, revenue: 8420, commission_pct: 5, commission: 421, share_pct: 61, last_order_at: "2026-10-30T10:00:00Z", by_source: [] }, { id: "s2", code: "JOS", name: "José Pérez", orders: 14, revenue: 5300, commission_pct: 5, commission: 265, share_pct: 39, last_order_at: "2026-10-29T10:00:00Z", by_source: [] }], unattributed: { orders: 3, revenue: 600 }, sources: [] });
   return json({});
 };
@@ -275,6 +500,10 @@ const MANAGER = { id: "u2", role: "manager", is_admin: false, display_name: "Dan
 const SELLER = { id: "u3", role: "seller", is_admin: false, display_name: "Daniela Ruiz", privileges: [], seller_code: "DAN", store_ids: ["est_02"] };
 const me = ROLE === "owner" ? OWNER : ROLE === "seller" ? SELLER : MANAGER;
 const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go) => <Sellers me={me} go={go} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
+  // «Productos» del grupo Comercial: el acordeón por marca con el catálogo
+  // simulado de arriba (CM_FRAMES/CM_CASES). `loadLive` lo mete en el store del
+  // catálogo, que en el banco no lo carga nadie al arrancar.
+  products: () => <CatalogScreen />,
   // Estado «el período elegido no tiene nada»: las tres variantes juntas para
   // revisarlas de un vistazo en claro y en oscuro (ver harness/README).
   empty: () => (
@@ -285,6 +514,11 @@ const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />
       <EmptyPeriod kind="cash" compact />
     </div>
   ) };
+
+function CatalogScreen() {
+  useEffect(() => { loadLive({ force: true }).catch(() => {}); }, []);
+  return <CatalogManager me={me} />;
+}
 
 function App() {
   const [tab, setTab] = useState(TAB0);

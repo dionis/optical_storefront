@@ -11,6 +11,7 @@ import "/src/admin/admin.css";
 import PosFrameSearch from "/src/admin/PosFrameSearch.jsx";
 import PosFrameCard, { frameLineFields } from "/src/admin/PosFrameCard.jsx";
 import PosSale from "/src/admin/PosSale.jsx";
+import AdminFrameCard from "/src/admin/AdminFrameCard.jsx";
 
 // adminFetch exige sesión antes de llamar: sin esto el buscador contesta
 // «no se pudo buscar en el catálogo» y nunca se llega al fallo que se busca.
@@ -57,20 +58,87 @@ class Boundary extends React.Component {
 
 const ME = { id: "u1", role: "owner", is_admin: true, display_name: "Rubí Dacosta", privileges: [] };
 
+
+// Modelo COMPLETO para la ficha de montura (AdminFrameCard): medidas enteras,
+// tres colores con foto y marca CON logo (di-caprio) — es el caso que el dueño
+// usa para revisar el rediseño. La forma del objeto es la del catálogo local
+// (public/catalog.json → catalogStore.js): colors[].name, attributes.*.
+const CARD_PRODUCT = {
+  sku: "DC252", name: "DC252", brand: "Di Caprio", brand_slug: "di-caprio",
+  price: 50.97, originalPrice: 69.0, medusaId: "prod_dc252",
+  colors: [
+    { name: "Negro / Dorado", image: "/lookbook/model-01.jpg", hex: "#141414" },
+    { name: "Carey", image: "/lookbook/model-02.jpg", hex: "#8a5a2b" },
+    { name: "Plata", image: "/lookbook/model-03.jpg", hex: "#c8ccd2" },
+  ],
+  attributes: {
+    shape: "Cuadrado", material: ["Acetato", "Metal"], gender: "Hombres",
+    age: "Adulto", rim: "Full frame",
+    eye_size: "51-53 mm", bridge_size: "18-19 mm", temple_length: "145-150 mm",
+    lens_height: "38-40 mm",
+  },
+};
+
+// Marca SIN logo en data/brands.js: comprueba que la ficha cae con elegancia al
+// nombre de la marca en vez de dejar un hueco.
+const CARD_PRODUCT_NOLOGO = {
+  ...CARD_PRODUCT, sku: "ZZ100", name: "ZZ100", brand: "Marca Sin Logo",
+  brand_slug: "marca-sin-logo", originalPrice: null,
+  colors: [CARD_PRODUCT.colors[0]],
+};
+
+// Pantalla aislada de la ficha: el modal se repinta siempre (sin cerrar) para
+// poder capturarlo en claro y en oscuro sin tocar el buscador.
+function CardOnly() {
+  const nologo = new URLSearchParams(location.search).get("nologo") === "1";
+  const mode = new URLSearchParams(location.search).get("mode") === "dark" ? "dark" : "light";
+  return (
+    <div className="adm-shell" data-mode={mode} style={{ minHeight: "100vh" }}>
+      <AdminFrameCard product={nologo ? CARD_PRODUCT_NOLOGO : CARD_PRODUCT} onClose={() => {}} />
+    </div>
+  );
+}
+
 function App() {
   // ?screen=sale monta el paso de venta REAL (PosSale), que es donde el dueño
   // ve la pantalla en blanco; sin parámetro, solo el buscador y la tarjeta.
-  if (new URLSearchParams(location.search).get("screen") === "sale") return <PosSale me={ME} />;
+  const screen = new URLSearchParams(location.search).get("screen");
+  if (screen === "sale") return <PosSale me={ME} />;
+  // ?screen=card monta SOLO la ficha de montura (el modal del ojo del buscador).
+  if (screen === "card") return <CardOnly />;
   return <Mini />;
+}
+
+// Traduce el producto que devuelve el buscador del POS a la forma del catálogo
+// local, que es lo que la ficha espera. En la aplicación real ese salto lo da
+// `frameCardOf()` en PosSale.jsx buscando el modelo en `useCatalog()`; aquí se
+// hace a mano para poder probar «ojo del buscador → ficha» sin backend y sin
+// tener que crear antes un cliente (el paso «Montura» está cerrado hasta eso).
+function cardFromSearch(p) {
+  const sp = p.specs || {};
+  const mm = (v) => (v == null ? "" : `${v} mm`);
+  return {
+    sku: p.model || p.title, name: p.title, brand: p.brand,
+    brand_slug: String(p.brand || "").toLowerCase().replace(/\s+/g, "-"),
+    price: p.price, medusaId: p.product_id,
+    colors: (p.variants || []).map((v) => ({ name: v.color || v.title, image: v.image })),
+    attributes: {
+      shape: sp.shape, material: sp.material, gender: sp.gender, age: sp.age_group, rim: sp.rim,
+      eye_size: mm(sp.eye), bridge_size: mm(sp.bridge), temple_length: mm(sp.temple), lens_height: mm(sp.lens_height),
+    },
+  };
 }
 
 function Mini() {
   const [lines, setLines] = useState([]);
+  const [card, setCard] = useState(null);
+  const mode = new URLSearchParams(location.search).get("mode") === "dark" ? "dark" : "light";
   const m = (n) => `$${(Number(n) || 0).toFixed(2)}`;
   const addFrame = (p, v) => setLines([{ key: `${v.id}-1`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v) }]);
   return (
-    <div className="adm-shell" data-mode="light" style={{ padding: 24, maxWidth: 820 }}>
-      <PosFrameSearch storeId="est_02" money={m} onAdd={addFrame} />
+    <div className="adm-shell" data-mode={mode} style={{ padding: 24, maxWidth: 820 }}>
+      <PosFrameSearch storeId="est_02" money={m} onAdd={addFrame} onView={(p) => setCard(cardFromSearch(p))} />
+      {card && <AdminFrameCard product={card} onClose={() => setCard(null)} />}
       <ul className="pos-lines">
         {lines.map((l) => (
           <li key={l.key} className="pos-line-card">

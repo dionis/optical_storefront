@@ -1462,6 +1462,10 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 }
 
 /* ── Ficha de montura (AdminFrameCard) ────────────────────────────────── */
+/* Rediseño pedido por el dueño: medidas con los iconos de la tienda, marca por
+   su logo, colores como muestras y sin aire muerto. Dos columnas de proporción
+   fija (foto ~45 % / datos ~55 %) en vez de `auto-fit`, que repartía al 50 % y
+   dejaba media ficha vacía cuando la columna de datos era corta. */
 .adm-frame-overlay {
   position: fixed; inset: 0; z-index: 200;
   background: var(--adm-overlay); backdrop-filter: blur(6px) saturate(1.3);
@@ -1470,85 +1474,151 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 }
 .adm-frame-card {
   background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: 18px;
-  box-shadow: 0 32px 80px -20px rgba(5,13,26,.45), 0 0 0 1px rgba(255,255,255,.08); max-width: min(780px, 92vw); width: 100%;
+  box-shadow: 0 32px 80px -20px rgba(5,13,26,.45), 0 0 0 1px rgba(255,255,255,.08); max-width: min(860px, 94vw); width: 100%;
   max-height: 90vh; overflow-y: auto; position: relative;
-  padding: clamp(20px, 2.8vw, 32px) clamp(18px, 2.4vw, 28px) clamp(18px, 2.4vw, 28px);
+  padding: clamp(18px, 2.4vw, 26px);
   animation: admPop .3s var(--adm-ease) both;
 }
 .adm-frame-close {
-  position: absolute; top: 14px; right: 14px; border: none; background: var(--adm-line-2);
+  position: absolute; top: 12px; right: 12px; z-index: 2; border: none; background: var(--adm-line-2);
   cursor: pointer; color: var(--adm-muted); padding: 6px; width: 32px; height: 32px;
   display: grid; place-items: center;
   border-radius: 50%; transition: background .18s var(--adm-ease), color .15s, transform .15s;
 }
 .adm-frame-close:hover { background: var(--adm-red-soft); color: var(--adm-red); transform: rotate(90deg); }
-.adm-frame-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: clamp(14px, 2vw, 24px); }
+.adm-frame-layout { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr); gap: clamp(16px, 2.2vw, 26px); align-items: start; }
 
-/* Imagen */
-.adm-frame-img-area { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.adm-frame-main-img {
-  width: 100%; max-height: 340px; object-fit: contain;
-  border-radius: var(--adm-radius-sm); background: var(--adm-bg);
+/* Imagen — caja de proporción fija: la foto llena su columna sin dejar hueco
+   debajo, y una foto apaisada o cuadrada ocupa lo mismo (object-fit: contain). */
+.adm-frame-img-area { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+.adm-frame-stage {
+  width: 100%; aspect-ratio: 4 / 3; border-radius: var(--adm-radius-sm);
+  background: var(--adm-bg); border: 1px solid var(--adm-line);
+  display: grid; place-items: center; overflow: hidden;
 }
-.adm-frame-no-img {
-  width: 100%; height: 220px; display: flex; align-items: center; justify-content: center;
-  background: var(--adm-line-2); border-radius: var(--adm-radius-sm); color: var(--adm-faint);
-}
+.adm-frame-main-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.adm-frame-no-img { color: var(--adm-faint); display: grid; place-items: center; }
 
-/* Swatches de color */
-.adm-frame-colors { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+/* Muestras de color (antes: el texto «3 colores») */
+.adm-frame-colors { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; }
 .adm-frame-swatch {
-  width: 44px; height: 44px; border-radius: 10px; border: 2px solid var(--adm-line-2);
-  overflow: hidden; cursor: pointer; padding: 2px; background: var(--adm-surface);
+  width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--adm-line-2);
+  overflow: hidden; cursor: pointer; padding: 2px; background: var(--adm-surface); flex: none;
   transition: border-color .2s var(--adm-ease), box-shadow .2s var(--adm-ease), transform .15s;
 }
 .adm-frame-swatch:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(15,36,64,.12); }
 .adm-frame-swatch.on { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
-.adm-frame-swatch img { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+.adm-frame-swatch img { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; display: block; }
+/* Color sin foto ni tono conocido: trama diagonal en vez de un cuadro vacío,
+   para que se lea «color sin definir» y no «muestra rota». El nombre del color
+   sigue en el title/aria-label del botón. */
 .adm-frame-swatch-dot {
-  display: block; width: 100%; height: 100%; border-radius: 5px;
-  background: var(--adm-line-2);
+  display: block; width: 100%; height: 100%; border-radius: 5px; background: var(--adm-line-2);
+  background-image: repeating-linear-gradient(45deg, var(--adm-line) 0 3px, transparent 3px 7px);
 }
 .adm-frame-color-label { color: var(--adm-muted); font-size: 12px; text-align: center; }
 
 /* Info */
-.adm-frame-info { display: flex; flex-direction: column; gap: 8px; }
-.adm-frame-title { font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; font-size: clamp(18px, 1.8vw, 24px); margin: 0; color: var(--adm-ink); }
-.adm-frame-brand { color: var(--adm-muted); font-size: 14px; margin: 0; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.adm-frame-info { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* Cabecera: modelo + SKU a la izquierda, logo de marca a la derecha. El hueco
+   del botón de cerrar se reserva con padding-right para que el logo no quede
+   debajo de la X. */
+.adm-frame-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-right: 44px; }
+.adm-frame-ident { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.adm-frame-title { font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; font-size: clamp(19px, 1.9vw, 25px); margin: 0; line-height: 1.1; color: var(--adm-ink); }
+.adm-frame-sku {
+  font-size: 11px; color: var(--adm-muted); font-family: ui-monospace, monospace; letter-spacing: .02em;
+  display: inline-flex; align-items: center; gap: 5px; align-self: flex-start;
+  background: var(--adm-line-2); border-radius: 5px; padding: 2px 7px;
+}
+.adm-frame-sku i { font-style: normal; color: var(--adm-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Sello de marca — misma receta que el sello del PDP de la tienda: plancha
+   clara con borde, para que un wordmark oscuro (Di Caprio) y uno claro se lean
+   los dos, en modo claro y en modo oscuro. */
+.adm-frame-seal { flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.adm-frame-seal.has-logo {
+  height: 40px; min-width: 48px; max-width: 128px; padding: 4px 8px; border-radius: 9px;
+  background: #fff; border: 1px solid var(--adm-line); box-shadow: 0 3px 10px -4px rgba(16,34,84,.3);
+}
+.adm-frame-seal.has-logo img { height: 100%; width: auto; max-width: 112px; object-fit: contain; display: block; }
+.adm-frame-seal.is-text {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--adm-muted); background: var(--adm-line-2); border-radius: 7px; padding: 7px 10px;
+  text-align: center; max-width: 140px; line-height: 1.2;
+}
 
 /* Precio */
 .adm-frame-price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.adm-frame-price { font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; font-family: var(--adm-display); font-optical-sizing: auto; color: var(--adm-accent-ink); font-variant-numeric: tabular-nums; }
+.adm-frame-price { font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; font-family: var(--adm-display); font-optical-sizing: auto; color: var(--adm-accent-ink); font-variant-numeric: tabular-nums; line-height: 1; }
 .adm-frame-old-price { font-size: 16px; color: var(--adm-faint); text-decoration: line-through; }
 .adm-frame-discount {
   font-size: 12px; font-weight: 700; color: #fff;
   background: linear-gradient(135deg, var(--adm-red), var(--adm-red-line)); border-radius: 6px; padding: 3px 9px; letter-spacing: .02em;
 }
-.adm-frame-sku { font-size: 12px; color: var(--adm-faint); margin: 0; font-family: monospace; }
 
-/* Atributos */
-.adm-frame-attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 6px 0; }
-.adm-frame-attr { display: flex; gap: 6px; font-size: 13px; }
-.adm-frame-attr dt { color: var(--adm-muted); font-weight: 600; min-width: 70px; }
-.adm-frame-attr dd { margin: 0; color: var(--adm-ink); }
+/* Atributos — datos compactos: rótulo pequeño encima del valor, dos columnas.
+   Antes eran filas «rótulo … valor» con una sangría fija que abría un canal
+   blanco en medio de la ficha. */
+.adm-frame-attrs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.adm-frame-attr {
+  flex: 1 1 132px; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 10px; background: var(--adm-bg); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm);
+}
+.adm-frame-attr dt { color: var(--adm-faint); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.adm-frame-attr dd { margin: 0; color: var(--adm-ink); font-size: 13px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
 
-/* Medidas */
-.adm-frame-measures h4 { font-size: 13px; color: var(--adm-muted); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
-.adm-frame-measure-row { display: flex; gap: 16px; flex-wrap: wrap; }
-.adm-frame-measure { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.adm-frame-measure-val { font-size: 18px; font-weight: 700; color: var(--adm-ink); }
-.adm-frame-measure-val small { font-size: 11px; color: var(--adm-faint); margin-left: 2px; }
-.adm-frame-measure-label { font-size: 11px; color: var(--adm-muted); text-transform: uppercase; }
+/* Medidas — icono + número + unidad en una sola línea de fichas. El rótulo
+   ("Tamaño del ojo") se fue al title/aria-label: ocupaba un renglón entero por
+   medida y obligaba a partir la fila en dos. */
+.adm-frame-measures { display: flex; flex-direction: column; gap: 6px; }
+.adm-frame-measures h4 { font-size: 10px; color: var(--adm-faint); margin: 0; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+.adm-frame-measure-row { display: flex; gap: 8px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.adm-frame-measure {
+  flex: 1 1 0; min-width: 84px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 8px 6px; border-radius: var(--adm-radius-sm);
+  background: var(--adm-bg); border: 1px solid var(--adm-line); cursor: help;
+}
+/* `white-space: nowrap`: un rango como 145-150 no debe partirse en dos
+   renglones dentro de su ficha — era justo lo que pasaba en móvil. */
+.adm-frame-measure-val { display: inline-flex; align-items: baseline; gap: 2px; color: var(--adm-ink); white-space: nowrap; }
+.adm-frame-measure-val b { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.adm-frame-measure-val small { font-size: 10px; color: var(--adm-faint); font-weight: 600; }
+
+/* Iconos de medida: el arte de la tienda (public/ui/icons3d). Viene en pareja
+   navy/white; aquí se pintan las dos y se esconde la que no toca, que es más
+   barato que cambiar el src al vuelo al alternar claro/oscuro. */
+.adm-frame-mi-wrap { display: grid; place-items: center; height: 24px; }
+img.adm-frame-mi { height: 24px; width: auto; max-width: 52px; object-fit: contain; display: block; }
+img.adm-frame-mi-white { display: none; }
+.adm-shell[data-mode="dark"] img.adm-frame-mi-navy { display: none; }
+.adm-shell[data-mode="dark"] img.adm-frame-mi-white { display: block; }
+/* Respaldo vectorial (measureIcons.jsx) si el PNG no carga: hereda el color del
+   texto, así que se ve igual en los dos modos. */
+.adm-frame-mi-svg { height: 24px; width: auto; max-width: 54px; color: var(--adm-muted); }
 
 /* Meta / pie */
-.adm-frame-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 13px; }
+.adm-frame-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: auto; padding-top: 2px; font-size: 12px; }
 .adm-frame-meta-item { display: inline-flex; align-items: center; gap: 5px; color: var(--adm-muted); }
-.adm-frame-meta-item.muted { color: var(--adm-faint); font-family: monospace; font-size: 11px; }
+.adm-frame-meta-item.muted { color: var(--adm-faint); font-family: ui-monospace, monospace; font-size: 11px; }
 
-/* Responsive: stack en móvil — auto-fit handles columns; clamp handles sizes */
-@media (max-width: 640px) {
+/* Modo oscuro: la plancha del sello se apaga un poco para no deslumbrar, pero
+   sigue siendo clara — los wordmarks de las marcas son casi todos oscuros. */
+.adm-shell[data-mode="dark"] .adm-frame-seal.has-logo { background: #eef1f6; border-color: rgba(255,255,255,.14); box-shadow: none; }
+
+/* Una sola columna cuando no caben dos: la foto se encoge para que la ficha
+   siga entrando en pantalla sin scroll. */
+@media (max-width: 700px) {
   .adm-frame-card { padding: clamp(14px, 3vw, 20px) clamp(12px, 2.6vw, 16px); }
-  .adm-frame-attrs { grid-template-columns: 1fr; }
+  .adm-frame-layout { grid-template-columns: 1fr; gap: 14px; }
+  .adm-frame-stage { aspect-ratio: 3 / 2; max-height: 38vh; }
+  .adm-frame-head { padding-right: 32px; }
+  /* En pantalla estrecha las cuatro fichas comparten poco ancho: el número
+     baja un punto para que el rango más largo siga cabiendo en una línea. */
+  .adm-frame-measure { min-width: 66px; padding: 7px 4px; }
+  .adm-frame-measure-val b { font-size: 14px; }
 }
 
 /* ── Photo upload (StaffProfile) ─────────────────────────────────────── */

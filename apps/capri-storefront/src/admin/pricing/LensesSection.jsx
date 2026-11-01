@@ -1,234 +1,149 @@
-// Dónde se usa: «Precios y costos» → acordeón «Lentes».
-// La matriz del dueño (diseño × material) editable en la propia celda, con el
-// nombre de cada progresivo digital y su gama; debajo, los fotocromáticos por
-// categoría de diseño y los antirreflejos en sus dos grupos. Con una tienda
-// elegida arriba aparece el «% sobre el maestro» de esa tienda y cada celda
-// puede llevar un precio propio, que manda sobre el porcentaje.
-import { useEffect, useState } from "react";
+// Dónde se usa: «Precios y costos» → pestaña «Lentes».
+//
+// La matriz del dueño (diseño × material) editable en la propia celda, PARTIDA
+// POR TIPO DE DISEÑO: «tienen que estar en visión sencilla, multifocal, etc.».
+// Antes eran 13 filas seguidas y había que bajar para ver los monofocales; ahora
+// se entra por el tipo (visión sencilla / bifocal / progresivo) y solo se pinta
+// ese tipo. El tipo NO se adivina del nombre: viene del servidor en `category`
+// (sv/bifocal/prog), que es lo mismo que usa el cálculo del precio.
+//
+// Dentro de los progresivos hay muchos modelos con nombre propio, así que
+// además se pueden filtrar por su gama (`tier`, texto del dueño, no copy de la
+// interfaz) — el filtro solo aparece cuando hay más de una gama que elegir.
+//
+// Los fotocromáticos y los antirreflejos se fueron a su propia pestaña
+// (TreatmentsSection.jsx): son tratamientos, no diseños de lente.
+import { useMemo, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
-import { money } from "../adminOrders.js";
 import HelpTip from "../HelpTip.jsx";
-import { savePricingLens } from "./api.js";
+import Icon from "../icons.jsx";
+import { AdjustRow, Cell, labelOf, useLensWriter } from "./lensShared.jsx";
 
-const CATS = ["sv", "bifocal", "prog"];
-const dollars = (cents) => (cents == null ? "" : (Math.round(Number(cents)) / 100).toFixed(2));
+/** Orden de las pestañas de tipo: como se vende, de lo simple a lo complejo. */
+const CAT_ORDER = ["sv", "bifocal", "prog"];
+const CAT_ICON = { sv: "eye", bifocal: "layers", prog: "sparkles" };
 
-/**
- * Una celda de precio: se escribe el número y se guarda al salir del campo (o
- * con Enter). Guardar al salir del campo y no con un botón por celda es lo que
- * hace que la matriz se pueda repasar de corrido, que es como el dueño la lee.
- */
-function Cell({ cents, masterCents, own, title, disabled, onSave }) {
-  const { lang } = useLang();
-  const [value, setValue] = useState(dollars(cents));
-  const [busy, setBusy] = useState(false);
-  // Tras guardar, el panel vuelve a leer el payload: la celda se pone al día
-  // con lo que contestó el servidor (y no con lo que se tecleó).
-  useEffect(() => { setValue(dollars(cents)); }, [cents]);
-  const commit = async () => {
-    const next = value.trim();
-    if (busy || next === dollars(cents)) return;
-    if (next === "") { setValue(dollars(cents)); return; }
-    setBusy(true);
-    try {
-      await onSave(Number(next));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <input
-      className={`pp-cell ${own ? "own" : ""}`}
-      type="number"
-      step="0.01"
-      min="0"
-      inputMode="decimal"
-      disabled={disabled || busy}
-      aria-label={title}
-      title={masterCents != null && masterCents !== cents ? `${title} · ${money(Number(masterCents) / 100, "usd", lang)}` : title}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
-    />
-  );
-}
-
-export default function LensesSection({ lenses, store, onSaved, onError }) {
+export default function LensesSection({ lenses, store, cat, onCat, onSaved, onError }) {
   const { t, lang } = useLang();
-  const isStore = Boolean(lenses.store);
-  const [adjust, setAdjust] = useState(lenses.store?.adjust_pct == null ? "" : String(lenses.store.adjust_pct));
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    setAdjust(lenses.store?.adjust_pct == null ? "" : String(lenses.store.adjust_pct));
-  }, [lenses.store?.adjust_pct]);
+  const { save, isOwn, isStore } = useLensWriter({ lenses, store, onSaved, onError });
+  const [tier, setTier] = useState(null);
 
-  const save = async (payload) => {
-    try {
-      onSaved(await savePricingLens({ ...payload, store }));
-    } catch (err) {
-      onError(err.message);
+  // Los diseños agrupados por su categoría del servidor. Una categoría sin
+  // diseños no saca pestaña: el panel no inventa tipos que la lista no tiene.
+  const byCat = useMemo(() => {
+    const map = new Map();
+    for (const d of lenses.designs) {
+      const key = CAT_ORDER.includes(d.category) ? d.category : "sv";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(d);
     }
-  };
+    return map;
+  }, [lenses.designs]);
 
-  const cellOf = (kind, key) => (lenses.store?.cells || []).find((c) => c.kind === kind && c.key === key) ?? null;
-  const baseCell = (design, material) => lenses.base.find((b) => b.design_code === design && b.material_code === material) ?? null;
+  const cats = CAT_ORDER.filter((c) => byCat.has(c));
+  const active = cats.includes(cat) ? cat : cats[0] || null;
+  const designs = active ? byCat.get(active) : [];
 
-  const saveAdjust = async (e) => {
-    e.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    try {
-      onSaved(await savePricingLens({ kind: "adjust", key: "all", value: adjust === "" ? null : Number(adjust), store }));
-    } catch (err) {
-      onError(err.message);
-    } finally {
-      setBusy(false);
+  // Gamas de ESTE tipo, en el orden en que las manda el servidor (`sort`).
+  const tiers = useMemo(() => {
+    const seen = [];
+    for (const d of designs) {
+      const v = d.tier || null;
+      if (!seen.some((x) => x === v)) seen.push(v);
     }
-  };
+    return seen;
+  }, [designs]);
+  const picked = tiers.some((x) => x === tier) ? tier : null;
+  const rows = picked === null ? designs : designs.filter((d) => (d.tier || null) === picked);
 
-  const label = (row) => String((lang === "en" ? row.label_en : row.label_es) || row.code);
+  const baseCell = (design, material) =>
+    lenses.base.find((b) => b.design_code === design && b.material_code === material) ?? null;
 
   return (
     <>
-      {isStore && (
-        <form className="pp-row" onSubmit={saveAdjust}>
-          <label htmlFor="pp-lens-adjust">
-            {t("adm.price.lenses.adjust")}
-            <HelpTip topic="price.storeVariation" />
-          </label>
-          <span className="pp-now">
-            {lenses.store.adjust_pct == null
-              ? t("adm.price.lenses.adjustNone")
-              : t("adm.price.lenses.adjustNow", { v: lenses.store.adjust_pct })}
-          </span>
-          <input
-            id="pp-lens-adjust"
-            className="pp-input pp-num"
-            type="number"
-            step="0.01"
-            value={adjust}
-            onChange={(e) => setAdjust(e.target.value)}
-          />
-          <span className="pp-unit">%</span>
-          <button className="btn-xs primary" disabled={busy}>{t("adm.price.save")}</button>
-          {Boolean(lenses.store.cells.length) && (
-            <span className="pp-badge">{t("adm.price.lenses.cellsChanged", { n: lenses.store.cells.length })}</span>
-          )}
-        </form>
-      )}
-      {isStore && <p className="pp-hint">{t("adm.price.lenses.adjustHint")}</p>}
-
-      <div className="pp-block">
-        <h4>
+      <div className="pp-bar">
+        {/* El título de la matriz vive aquí y no en un <caption>: la cabecera
+            de la tabla es pegajosa y un caption dentro del marco se le mete
+            debajo al bajar. Aquí además comparte línea con el selector. */}
+        <h4 className="pp-bar-t">
           {t("adm.price.lenses.matrix")}
           <HelpTip topic="price.lensMatrix" />
-          <HelpTip topic="price.progressive" />
+          {active === "prog" && <HelpTip topic="price.progressive" />}
         </h4>
-        <div className="pp-grid-wrap">
-          <table className="pp-grid">
-            <thead>
-              <tr>
-                <th>{t("adm.price.lenses.design")}</th>
-                {lenses.materials.map((m) => <th key={m.code}>{label(m)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {lenses.designs.map((d) => (
-                <tr key={d.code}>
-                  <th scope="row">
-                    {label(d)}
-                    {d.tier && <span className="pp-tier">{d.tier}</span>}
-                    {(lang === "en" ? d.use_en : d.use_es) && <span className="pp-use">{lang === "en" ? d.use_en : d.use_es}</span>}
-                  </th>
-                  {lenses.materials.map((m) => {
-                    const cell = baseCell(d.code, m.code);
-                    const key = `${d.code}:${m.code}`;
-                    const own = isStore && Boolean(cellOf("base", key));
-                    const shown = isStore ? (cell?.store_cents ?? cell?.cents ?? 0) : (cell?.cents ?? 0);
-                    return (
-                      <td key={m.code}>
-                        <Cell
-                          cents={shown}
-                          masterCents={cell?.cents ?? null}
-                          own={own}
-                          title={t("adm.price.lenses.editCell", { design: label(d), material: label(m) })}
-                          onSave={(v) => save({ kind: "base", key, value: v })}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="pp-block">
-        <h4>
-          {t("adm.price.lenses.photo")}
-          <HelpTip topic="price.photo" />
-        </h4>
-        <div className="pp-grid-wrap">
-          <table className="pp-grid">
-            <thead>
-              <tr>
-                <th>{t("adm.price.lenses.photo")}</th>
-                {CATS.map((c) => <th key={c}>{t(`adm.price.lenses.cat.${c}`)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {lenses.photo.map((p) => (
-                <tr key={p.code}>
-                  <th scope="row">{label(p)}</th>
-                  {CATS.map((cat) => {
-                    const master = p[cat];
-                    if (master == null) return <td key={cat}><span className="pp-cell na">{t("adm.price.lenses.na")}</span></td>;
-                    const key = `${p.code}:${cat}`;
-                    const shown = isStore ? (p.store?.[cat] ?? master) : master;
-                    return (
-                      <td key={cat}>
-                        <Cell
-                          cents={shown}
-                          masterCents={master}
-                          own={isStore && Boolean(cellOf("photo", key))}
-                          title={`${label(p)} · ${t(`adm.price.lenses.cat.${cat}`)}`}
-                          onSave={(v) => save({ kind: "photo", key, value: v })}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="pp-block">
-        <h4>
-          {t("adm.price.lenses.ar")}
-          <HelpTip topic="price.ar" />
-        </h4>
-        <ul className="pp-list">
-          {lenses.ar.map((a) => (
-            <li key={a.code}>
-              <span className="pp-name">{label(a)}</span>
-              <span className="pp-sub">{t(`adm.price.lenses.arGroup.${a.ar_group === "sv" || a.ar_group === "bifprog" ? a.ar_group : "all"}`)}</span>
-              {isStore && a.store_cents !== a.cents && (
-                <span className="pp-badge">{t("adm.price.lenses.masterIs", { v: money(a.cents / 100, "usd", lang) })}</span>
-              )}
-              <Cell
-                cents={isStore ? (a.store_cents ?? a.cents) : a.cents}
-                masterCents={a.cents}
-                own={isStore && Boolean(cellOf("ar", a.code))}
-                title={label(a)}
-                onSave={(v) => save({ kind: "ar", key: a.code, value: v })}
-              />
-            </li>
+        <div className="pp-seg" role="tablist" aria-label={t("adm.price.lenses.catNav")}>
+          {cats.map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="tab"
+              aria-selected={c === active}
+              className={c === active ? "on" : ""}
+              title={t("adm.price.lenses.catCount", { n: byCat.get(c).length })}
+              onClick={() => { setTier(null); onCat(c); }}
+            >
+              <Icon name={CAT_ICON[c]} size={14} />
+              {t(`adm.price.lenses.cat.${c}`)}
+              <span className="pp-seg-n">{byCat.get(c).length}</span>
+            </button>
           ))}
-        </ul>
+        </div>
+        <AdjustRow lenses={lenses} store={store} onSaved={onSaved} onError={onError} />
+      </div>
+
+      {tiers.length > 1 && (
+        <div className="pp-chips" role="group" aria-label={t("adm.price.lenses.tier")}>
+          <button type="button" className={picked === null ? "on" : ""} onClick={() => setTier(null)}>
+            {t("adm.price.lenses.tierAll")}
+          </button>
+          {tiers.map((x) => (
+            <button key={x || "none"} type="button" className={picked === x ? "on" : ""} onClick={() => setTier(x)}>
+              {x || t("adm.price.lenses.tierNone")}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="pp-grid-wrap tall">
+        <table className="pp-grid">
+          <thead>
+            <tr>
+              <th>{t("adm.price.lenses.design")}</th>
+              {lenses.materials.map((m) => <th key={m.code}>{labelOf(m, lang)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.code}>
+                <th scope="row">
+                  {labelOf(d, lang)}
+                  {d.tier && <span className="pp-tier">{d.tier}</span>}
+                  {(lang === "en" ? d.use_en : d.use_es) && <span className="pp-use">{lang === "en" ? d.use_en : d.use_es}</span>}
+                </th>
+                {lenses.materials.map((m) => {
+                  const cell = baseCell(d.code, m.code);
+                  const key = `${d.code}:${m.code}`;
+                  const shown = isStore ? (cell?.store_cents ?? cell?.cents ?? 0) : (cell?.cents ?? 0);
+                  return (
+                    <td key={m.code}>
+                      <Cell
+                        cents={shown}
+                        masterCents={cell?.cents ?? null}
+                        own={isStore && isOwn("base", key)}
+                        title={t("adm.price.lenses.editCell", { design: labelOf(d, lang), material: labelOf(m, lang) })}
+                        onSave={(v) => save({ kind: "base", key, value: v })}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td className="pp-empty" colSpan={lenses.materials.length + 1}>{t("adm.price.lenses.catEmpty")}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </>
   );
