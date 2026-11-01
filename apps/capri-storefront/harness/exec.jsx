@@ -65,6 +65,40 @@ window.fetch = async (input, init) => {
   const g = (k) => url.searchParams.get(k) || "";
   await new Promise((r) => setTimeout(r, 120));
   if (p === "/admin/establishments") return json({ establishments: STORES });
+  // Buscador global de la barra (OmniSearch.jsx): el contrato de
+  // GET /admin/search?q=&limit= — grupos por tipo, los vacíos NO se mandan.
+  if (p === "/admin/search") {
+    const k = g("q").trim().toLowerCase();
+    const limit = Number(g("limit")) || 6;
+    const pool = [
+      { kind: "sale", items: [
+        { id: "s_1041", label: "Op2-000141 · Marilin García", sub: "El Rancho 39 · 28 oct · DAN", amount: 284.5, store_id: "est_02", extra: { order_id: "order_01J9X7" } },
+        { id: "s_1038", label: "Op3-000118 · Ana Ruiz", sub: "El Rancho 41 · 24 oct · JOS", amount: 412, store_id: "est_03", extra: { order_id: "order_01J9W2" } },
+      ] },
+      { kind: "order", items: [
+        { id: "order_01J9X7", label: "#1041 · En laboratorio", sub: "Marilin García · DiCaprio DC241 · progresivo", amount: 284.5, store_id: "est_02", extra: { order_id: "order_01J9X7" } },
+      ] },
+      { kind: "patient", items: [
+        { id: "cus_7", label: "Ana Ruiz", sub: "3 pedidos · último 24 oct · El Rancho 41", extra: { phone: "(305) 555-0188" } },
+        { id: "cus_9", label: "Daniel Ruiz Soto", sub: "1 pedido · 12 sep · Doral Plaza", extra: { phone: "(305) 555-0244" } },
+      ] },
+      { kind: "seller", items: [
+        { id: "s1", label: "Daniela Ruiz", sub: "DAN · El Rancho 39 · comisión 6 %", extra: { code: "DAN" } },
+      ] },
+      { kind: "store", items: [
+        { id: "est_03", label: "Op3 · El Rancho 41", sub: "Miami FL · familiar 40 %" },
+      ] },
+      { kind: "frame", items: [
+        { id: "p1", label: "DiCaprio DC241", sub: "Black Gold · acetato · 52-18-140", amount: 90, extra: { sku: "DC241-BG" } },
+        { id: "p2", label: "Flexure FL 118", sub: "Silver · titanio flexible", amount: 65, extra: { sku: "FL118-SV" } },
+      ] },
+    ];
+    const hit = (it) => `${it.label} ${it.sub || ""} ${Object.values(it.extra || {}).join(" ")}`.toLowerCase().includes(k);
+    const groups = pool
+      .map((grp) => ({ kind: grp.kind, items: grp.items.filter(hit).slice(0, limit) }))
+      .filter((grp) => grp.items.length);
+    return json({ q: g("q"), groups });
+  }
   // Panel de precios y costos: maestro (todas las tiendas) o la variación de una.
   if (p === "/admin/pricing/overview") {
     const store = g("store");
@@ -192,6 +226,44 @@ window.fetch = async (input, init) => {
     const f = figures(g("from"), g("to"), g("establishment_id"));
     const c = Math.round(f.sales * 100);
     return json({ totals: { payments_cents: c, cash_net_cents: Math.round(c * 0.31), movements_in_cents: 20000, movements_out_cents: 45000 }, by_method: [{ code: "cash", builtin: true, kind: "cash", counts_as_cash: true, in_count: 20, in_cents: Math.round(c * 0.33), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.33) }, { code: "card", builtin: true, kind: "card", in_count: 30, in_cents: Math.round(c * 0.5), refund_cents: 2000, fee_cents: 4000, net_cents: Math.round(c * 0.5) - 6000 }, { code: "zelle", builtin: true, kind: "transfer", in_count: 6, in_cents: Math.round(c * 0.17), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.17) }], movements: [] });
+  }
+  // Mapa de inicio: lo que hay VIVO ahora mismo. Lo leen WelcomeBriefing.jsx y
+  // la franja de pendientes del Ejecutivo (BacklogStrip.jsx), que es
+  // independiente del período. Con ?backlog=clear sale todo en cero (la franja
+  // se reduce a su línea tranquila) y con ?backlog=fail la lectura falla.
+  if (p === "/admin/pos/start-map") {
+    if (Q.get("backlog") === "fail") return new Response("boom", { status: 500 });
+    const clear = Q.get("backlog") === "clear";
+    const per = (from, to, sales, count) => ({ from, to, sales_cents: Math.round(sales * 100), count, units: count * 2, cost_cents: Math.round(sales * 42), fee_cents: Math.round(sales * 2), profit_cents: Math.round(sales * 45), commission_cents: Math.round(sales * 5), avg_ticket_cents: count ? Math.round((sales / count) * 100) : 0, avg_profit_per_sale_cents: null, prev: null });
+    const bucket = (count, cents, balance) => ({ count, cents: Math.round(cents * 100), balance_cents: Math.round(balance * 100) });
+    return json({
+      today: "2026-11-01",
+      periods: {
+        // El día 1 del mes: hoy casi en cero y ayer con las ventas de verdad.
+        today: per("2026-11-01", "2026-11-01", clear ? 0 : 310.5, clear ? 0 : 2),
+        yesterday: per("2026-10-31", "2026-10-31", 1840.75, 9),
+        this_week: per("2026-10-26", "2026-11-01", 2151.25, 11),
+        last_week: per("2026-10-19", "2026-10-25", 4920.4, 24),
+        this_month: per("2026-11-01", "2026-11-01", clear ? 0 : 310.5, clear ? 0 : 2),
+        last_month: per("2026-10-01", "2026-10-31", 21480.9, 104),
+      },
+      pending: clear
+        ? { in_lab: bucket(0, 0, 0), to_deliver: bucket(0, 0, 0), on_street: { count: 0, cents: 0 }, overdue_balances: { count: 0, cents: 0 }, approvals: 0, open_tills: 0 }
+        : {
+            in_lab: bucket(23, 7420.5, 3180),
+            to_deliver: bucket(8, 2360, 940.25),
+            on_street: { count: 31, cents: 486075 },
+            overdue_balances: { count: 6, cents: 128040 },
+            approvals: 2,
+            open_tills: 1,
+          },
+      stores: STORES.slice(1, 4).map((s, i) => ({ id: s.id, code: s.code, name: s.name, color: s.color, today_cents: i ? 0 : 31050, week_cents: 90000 - i * 20000, month_cents: 31050, on_street_cents: 180000 - i * 40000, in_lab: 9 - i * 3, to_deliver: 3 - i })),
+      me: { role: ROLE, seller_code: ROLE === "seller" ? "DAN" : null, store_code: null, store_name: null, store_color: null, commission_month_cents: null },
+      subject: null,
+      access: { profit: true, commission: true },
+      truncated: false,
+      pending_truncated: false,
+    });
   }
   if (p === "/admin/order-board") return json({ orders: [], total: 0, truncated: false });
   if (p === "/admin/sellers/stats") return json({ sellers: [{ id: "s1", code: "DAN", name: "Daniela Ruiz", orders: 23, revenue: 8420, commission_pct: 5, commission: 421, share_pct: 61, last_order_at: "2026-10-30T10:00:00Z", by_source: [] }, { id: "s2", code: "JOS", name: "José Pérez", orders: 14, revenue: 5300, commission_pct: 5, commission: 265, share_pct: 39, last_order_at: "2026-10-29T10:00:00Z", by_source: [] }], unattributed: { orders: 3, revenue: 600 }, sources: [] });

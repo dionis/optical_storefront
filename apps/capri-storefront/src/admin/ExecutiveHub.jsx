@@ -4,7 +4,12 @@
 // las pestañas; aquí no hay ninguna barra propia), tira de diez KPI (ventas,
 // nº, unidades, ticket, cobrado, por cobrar, costo real, ganancia, margen,
 // efectivo en caja — la ÚNICA tira: ningún acordeón la repite) y acordeones
-// con resumen ejecutivo en la cabecera, de modo que todo se lee sin abrir nada:
+// con resumen ejecutivo en la cabecera, de modo que todo se lee sin abrir nada.
+// ANTES de la tira de KPI va la franja de pendientes (BacklogStrip.jsx): lo que
+// hay vivo AHORA (laboratorio, por entregar, atrasados, dinero en la calle, por
+// aprobar, cajas abiertas) más las ventas de ayer y hoy. No sigue el período, a
+// propósito: es el saldo vivo que hay que planificar hoy, no el flujo del
+// período. Los acordeones:
 //   · Pedidos y etapas (StoreOrders.OrdersStagesView): todo lo vendido en el
 //     período con su etapa, StageBar + chips (pendientes primero), «Avanzar» en
 //     la fila y la ficha (SaleDetailPanel) al pulsar. Sigue el filtro global de
@@ -35,6 +40,7 @@ import { ExportMenu } from "./ui.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import EmptyPeriod from "./EmptyPeriod.jsx";
+import BacklogStrip from "./BacklogStrip.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
@@ -422,6 +428,14 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
           {state === "error" && <em className="ex-note err">{t("adm.ex.loadFailed")}</em>}
         </span>
       </div>
+
+      {/* Primero qué hay que hacer HOY, después cómo fue el período: lo que hay
+          pendiente ahora mismo (laboratorio, por entregar, atrasados, dinero en
+          la calle…) no depende del período, así que el día 1 del mes la pantalla
+          sigue diciendo algo en vez de salir a ceros. Va FUERA de `bodyRef` a
+          propósito: el reporte en PDF/Excel es del período elegido y esta franja
+          es el estado de hoy. */}
+      <BacklogStrip me={me} go={go} />
 
       <div ref={bodyRef}>
         {demo && <div className="adm-demo-banner">{t("adm.ex.demo")}</div>}

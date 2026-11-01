@@ -1,6 +1,9 @@
 /* Barra de filtros global del panel (GlobalFilterBar.jsx): pegada bajo la
    cabecera (.adm-top) en TODAS las pestañas, misma posición y mismo orden —
-   [tienda] [período segmentado] [rango] … [PDF · Excel · CSV]. Tokens --adm-*
+   [buscador] [tienda] [período segmentado] [rango] … [PDF · Excel · CSV]. El
+   buscador global (`.adm-bar-search`) va primero y sale siempre; sus reglas de
+   hueco en la barra viven en omni-search.css, junto al propio componente, para
+   que esta hoja siga siendo solo la de los filtros. Tokens --adm-*
    (admin.css) y --st-* (tema de tienda, admin-theme.css). AdminShell mide la
    cabecera real (--adm-top-real: en el móvil crece) y la propia barra
    (--adm-bar-h) para que lo que va debajo pueda contar con ellas (fit.css). */

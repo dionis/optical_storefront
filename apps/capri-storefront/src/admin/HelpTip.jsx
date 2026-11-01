@@ -27,7 +27,7 @@ import "./help.css";
 export const HELP_GROUPS = {
   rx: ["pos.rx.howToRead", "pos.rx.type", "pos.rx.sph", "pos.rx.cyl", "pos.rx.axis", "pos.rx.add", "pos.rx.prism", "pos.rx.base", "pos.rx.pd", "pos.rx.seg", "pos.rx.ocr", "pos.rx.worn"],
   sale: ["pos.step.customer", "pos.step.frame", "pos.ownFrame", "pos.step.lenses", "pos.step.price", "pos.step.payment"],
-  exec: ["exec.overview", "exec.period", "exec.storeFilter", "exec.kpi.sales", "exec.kpi.collected", "exec.kpi.balance", "exec.kpi.cost", "exec.kpi.profit", "exec.kpi.margin", "exec.orders", "exec.cash", "exec.sellers.quota", "exec.sellers.avgProfit", "exec.sellers.commission"],
+  exec: ["exec.overview", "exec.period", "exec.storeFilter", "exec.kpi.sales", "exec.kpi.collected", "exec.kpi.balance", "exec.kpi.cost", "exec.kpi.profit", "exec.kpi.margin", "exec.orders", "exec.cash", "exec.sellers.quota", "exec.sellers.avgProfit", "exec.sellers.commission", "backlog.street", "backlog.overdue"],
   cost: ["cost.paid", "cost.net", "cost.cost", "cost.profit", "cost.target", "cost.incomplete", "cost.split", "cost.materials", "cost.percent", "cost.deductions", "cost.commission", "cost.marginChart"],
   cash: ["cash.session", "cash.movement", "cash.report", "cash.close"],
   reports: ["statement.what", "salesboard.what", "salesboard.grain"],

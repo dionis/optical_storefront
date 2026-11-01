@@ -21,5 +21,7 @@ import costs from "./costs.js";
 import catalogSync from "./catalog-sync.js";
 import aiUsage from "./ai-usage.js";
 import period from "./period.js";
+import backlog from "./backlog.js";
+import search from "./search.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search];

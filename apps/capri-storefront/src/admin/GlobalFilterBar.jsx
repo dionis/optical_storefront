@@ -16,11 +16,14 @@
 // props de un <ExportMenu> (targetRef/report/xlsx/csv/meta/beforePrint) en esos
 // tres manejadores, para que adoptar la barra sea una línea.
 //
-// Qué pestañas la enseñan y con qué piezas: BAR_TABS. Una pestaña que no está
-// en el mapa no tiene barra (el formulario de una tienda, el catálogo…).
+// Qué piezas enseña cada pestaña: BAR_TABS. La barra sale en TODAS las
+// pestañas (regla del dueño: «los filtros deberían estar para todo y así
+// siempre poder filtrar en cualquier momento»), y lo que cambia de una a otra
+// es QUÉ piezas se activan — nunca si la barra está o no.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import OmniSearch from "./OmniSearch.jsx";
 import StoreFilter from "./StoreFilter.jsx";
 import { PERIODS, usePeriodFilter, usePeriodNotice } from "./periodStore.js";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
@@ -33,28 +36,94 @@ import "./empty-period.css";
 
 /**
  * Pestaña → piezas de la barra. `store`: selector de tienda; `period`: período
- * y rango; `export`: PDF · Excel · CSV. Pestañas ausentes → sin barra.
+ * y rango; `export`: PDF · Excel · CSV. El buscador global (OmniSearch) NO
+ * está en el mapa porque va en TODAS sin excepción: es la pieza que enseña al
+ * operador dónde se filtra, y buscar un pedido o un paciente tiene sentido
+ * desde cualquier pantalla.
+ *
+ * ── CRITERIO (para no tener que adivinarlo mañana) ─────────────────────────
+ * Una pieza se activa solo donde FILTRA ALGO de verdad. Un control que no
+ * cambia nada es peor que no tenerlo: el operador lo mueve, no pasa nada y deja
+ * de creerse la barra.
+ *   · `store`  → la pantalla lee la tienda activa (useStoreFilter) o su
+ *                contenido es de una tienda.  No: catálogo maestro, equipo,
+ *                seguridad, perfil, reglas de alerta, configuración del POS.
+ *   · `period` → la pantalla lee el período global (usePeriodFilter), es decir
+ *                enseña hechos ENTRE DOS FECHAS. No: formularios y
+ *                configuración (una tienda, un precio, una regla, un perfil) ni
+ *                los «estado AHORA» (Estado de tienda, Aprobaciones).
+ *   · `export` → la pantalla registra manejadores con useRegisterExport. Si no
+ *                los registra, los tres botones saldrían apagados: fuera.
+ *
+ * ── PESTAÑA POR PESTAÑA ────────────────────────────────────────────────────
+ * Con las tres piezas (dinero por tienda y período, y un informe que sacar):
+ *   exec, salesboard, storeorders, possales, pendingbalances, cash, statement,
+ *   sellers, storecosts, mysales.
+ * Casos con matiz:
+ *   pricing      un precio no es un informe → sin período; la tienda SÍ (decide
+ *                qué variación se edita sobre el maestro).
+ *   costs        reglas de costo: ni período ni exportación propia.
+ *   storestatus  foto de AHORA (caja abierta, saldos, pendientes) → sin período.
+ *   approvals    cola de aprobaciones vivas → sin período y sin exportación.
+ *   audit        sí filtra por tienda y fechas, pero no registra exportación.
+ *   orders       pedidos de la WEB: no hay tienda que elegir; sí período.
+ * Solo el buscador (la pantalla no depende de tienda ni de fechas, y exporta
+ * por su cuenta o no exporta):
+ *   products/catalog  el catálogo es el MAESTRO, no el surtido de una tienda, y
+ *                     CatalogManager ya tiene su propio Excel/CSV dentro.
+ *   stores            el directorio y el formulario de una tienda.
+ *   team, security, posconfig, alerts, profile, pos.
+ *   `pos` aparte: la venta se hace en el terminal asignado (contexto del POS),
+ *   no en la tienda del filtro global — activar `store` ahí daría a entender
+ *   que se puede cobrar en otra tienda cambiando una píldora.
+ * Claves de GRUPO del menú (overview, work, commercial, catalog, admin): no son
+ * pestañas reales (AdminShell las usa como acordeón, y `overview` es además una
+ * pestaña antigua que LEGACY_TABS manda a `exec`). Van listadas para que ni un
+ * enlace viejo ni un `?tab=` a mano se queden sin barra.
  */
+const NONE = { store: false, period: false, export: false };
+const ALL = { store: true, period: true, export: true };
 export const BAR_TABS = {
-  // Precios y costos: la tienda decide qué variación se edita; no hay período.
+  // ── Dinero por tienda y período, con informe ──
+  exec: ALL,
+  salesboard: ALL,
+  storeorders: ALL,
+  possales: ALL,
+  pendingbalances: ALL,
+  cash: ALL,
+  statement: ALL,
+  sellers: ALL,
+  storecosts: ALL,
+  mysales: ALL,
+  // ── Con matiz ──
   pricing: { store: true, period: false, export: true },
-  exec: { store: true, period: true, export: true },
-  storeorders: { store: true, period: true, export: true },
-  possales: { store: true, period: true, export: true },
-  pendingbalances: { store: true, period: true, export: true },
-  cash: { store: true, period: true, export: true },
-  salesboard: { store: true, period: true, export: true },
-  statement: { store: true, period: true, export: true },
-  storestatus: { store: true, period: false, export: true },
-  audit: { store: true, period: true, export: false },
-  sellers: { store: true, period: true, export: true },
-  storecosts: { store: true, period: true, export: true },
-  mysales: { store: true, period: true, export: true },
-  approvals: { store: true, period: false, export: false },
-  orders: { store: false, period: true, export: true },
   costs: { store: true, period: false, export: false },
+  storestatus: { store: true, period: false, export: true },
+  approvals: { store: true, period: false, export: false },
+  audit: { store: true, period: true, export: false },
+  orders: { store: false, period: true, export: true },
+  // ── Solo el buscador ──
+  products: NONE,
+  stores: NONE,
+  team: NONE,
+  security: NONE,
+  posconfig: NONE,
+  alerts: NONE,
+  profile: NONE,
+  pos: NONE,
+  // ── Claves de grupo del menú / pestañas antiguas ──
+  overview: NONE,
+  work: NONE,
+  commercial: NONE,
+  catalog: NONE,
+  admin: NONE,
 };
-export const barOptionsFor = (tab) => BAR_TABS[tab] || null;
+/**
+ * Las piezas de una pestaña. Una pestaña que NO esté en el mapa (una nueva que
+ * nadie añadió aquí) cae en `NONE`: barra con buscador, sin filtros que no
+ * filtren. Nunca devuelve `null` — la barra ya no se esconde.
+ */
+export const barOptionsFor = (tab) => BAR_TABS[tab] || NONE;
 
 // ── Registro de exportación ────────────────────────────────────────────────
 // Dos contextos a propósito: las acciones (estables) para quien registra y el
@@ -232,14 +301,16 @@ function ExportGroup() {
 }
 
 /**
- * La barra. `tab` decide las piezas (BAR_TABS); `me` va al selector de tienda.
- * Con una pestaña sin barra no pinta nada (y el armazón pone --adm-bar-h: 0).
+ * La barra. Sale en TODAS las pestañas; `tab` decide qué piezas se activan
+ * (BAR_TABS) y `me` va al selector de tienda. `go(tab, params)` es el salto del
+ * panel, que usa el buscador para llevar a cada resultado: es opcional porque
+ * hoy AdminShell todavía no lo baja hasta aquí — sin él OmniSearch navega por
+ * la URL (ver su cabecera).
  */
-export default function GlobalFilterBar({ tab, me, barRef }) {
+export default function GlobalFilterBar({ tab, me, barRef, go = null }) {
   const { t } = useLang();
   const { notice } = usePeriodNotice();
   const opts = barOptionsFor(tab);
-  if (!opts) return null;
   // El aviso solo tiene sentido donde se ve el período, y va DENTRO de la barra
   // para que el alto que mide AdminShell (--adm-bar-h) lo incluya y no tape el
   // principio de la pantalla. `data-notice` deja que la barra envuelva a dos
@@ -248,6 +319,10 @@ export default function GlobalFilterBar({ tab, me, barRef }) {
   return (
     <div className="adm-bar adm-noprint" ref={barRef} role="region" aria-label={t("adm.bar.aria")} data-tab={tab} data-notice={showNotice ? "1" : undefined}>
       <div className="adm-bar-filters">
+        {/* Primero el buscador, y en todas las pestañas: es lo único que está
+            SIEMPRE, así que es lo que ancla la barra y lo que el operador
+            aprende a buscar con los ojos. */}
+        <span className="adm-bar-item adm-bar-search"><OmniSearch me={me} go={go} /></span>
         {opts.store && <span className="adm-bar-item adm-bar-store"><StoreFilter me={me} compact /></span>}
         {opts.period && <span className="adm-bar-item adm-bar-period"><PeriodControl /></span>}
       </div>

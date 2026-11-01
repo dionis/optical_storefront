@@ -120,7 +120,7 @@ const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"
  * El cajón móvil se cierra solo al elegir sección, al pulsar Escape o al tocar
  * el fondo; en escritorio la barra recuerda si estaba contraída.
  */
-export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
+export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
   const { t, lang, toggle } = useLang();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
@@ -356,7 +356,9 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             a la pantalla abierta: ExportRegistry guarda lo que registra con
             useRegisterExport. */}
         <ExportRegistry>
-          <GlobalFilterBar tab={tab} me={me} barRef={barRef} />
+          {/* `go` baja hasta el buscador global de la barra: sin él navegaría
+              cambiando la URL, que recarga la página entera. */}
+          <GlobalFilterBar tab={tab} me={me} barRef={barRef} go={goTo} />
           <main className="adm-body" key={tab}>{children}</main>
         </ExportRegistry>
       </div>
