@@ -13,6 +13,7 @@ import HelpTip from "./HelpTip.jsx";
 import { money } from "./adminOrders.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
+import { inkOn } from "./ReportDoc.jsx";
 import { fetchStatement, posContext } from "./posApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
@@ -95,7 +96,8 @@ export default function StoreStatement({ me }) {
   useEffect(() => {
     if (!printing) return undefined;
     const id = setTimeout(() => {
-      printElement(ref.current, `${t("adm.stmt.title")} ${data?.number || ""}`, data ? `${data.store.code} · ${data.store.name}` : "");
+      // El encabezado del navegador lleva «Óptica — Estado de cuenta EST-…», no el título de la tienda online.
+      printElement(ref.current, { title: `${t("adm.stmt.title")} ${data?.number || ""}`, meta: data ? `${data.store.code} · ${data.store.name}` : "", docTitle: `${TENANT.name} — ${t("adm.stmt.title")} ${data?.number || ""}`.trim() });
       setPrinting(false);
     }, 50);
     return () => clearTimeout(id);
@@ -213,6 +215,9 @@ export default function StoreStatement({ me }) {
   if (!ctx.stores.length && !isAdmin) return <div className="adm-section"><div className="adm-empty"><Icon name="store" size={36} /><b>{t("adm.stmt.noStores")}</b></div></div>;
 
   const all = data?.store.kind === "all";
+  // Franja en el color de la tienda sobre la cabecera impresa (como los reportes de ReportDoc).
+  const bandColor = (!all && (ctx.stores.find((x) => x.id === storeId)?.color)) || "#1f2a44";
+  const bandInk = inkOn(bandColor);
   const settlement = data?.settlement;
   return (
     <div className="adm-section stmt">
@@ -246,6 +251,11 @@ export default function StoreStatement({ me }) {
 
       {data && (
         <div className="stmt-doc" ref={ref} style={state === "loading" ? { opacity: 0.6 } : undefined}>
+          <div className="stmt-band" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: bandColor, color: bandInk, borderRadius: 8, padding: "6px 12px", marginBottom: 10, fontSize: 12, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
+            <span style={{ fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", fontSize: 10, opacity: 0.9 }}>{TENANT.name}</span>
+            <b style={{ fontFamily: "var(--adm-display)", fontSize: 15 }}>{t("adm.stmt.title")} · {all ? t("adm.stmt.allStores") : data.store.name || data.store.code}</b>
+            <span style={{ fontSize: 11, opacity: 0.9 }}>{dayLabel(data.period.from, lang)} – {dayLabel(data.period.to, lang)}</span>
+          </div>
           <header className="stmt-head">
             <div className="stmt-biz">
               {TENANT.logo && <img src={TENANT.logo} alt="" />}

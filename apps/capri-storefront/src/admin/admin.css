@@ -297,7 +297,7 @@
 .adm-card:hover { box-shadow: var(--adm-shadow-hover); border-color: var(--adm-accent-line); }
 /* La tarjeta recorta su contenido: mientras hay un elemento flotante abierto dentro
    (lista, globo de ayuda, menú, tooltip) deja de recortar y sube sobre sus vecinas. */
-.adm-card:has(.pos-ac-pop, .adm-tip-pop, .addr-sugg[style*="block"], details[open] > .adm-team-stores-menu, .pos-cust-filter .pos-hits, .cx-tip) { overflow: visible; z-index: 6; }
+.adm-card:has(.pos-ac-pop, .adm-tip-pop, .addr-sugg[style*="block"], details[open] > .adm-team-stores-menu, .pos-cust-filter .pos-hits, .cx-tip, .adm-sf-pop) { overflow: visible; z-index: 6; }
 .adm-card h3 { margin: 0 0 8px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-ink); display: flex; align-items: center; gap: 6px; }
 .adm-card h3 .adm-ico { color: var(--adm-accent-ink); }
 .adm-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }

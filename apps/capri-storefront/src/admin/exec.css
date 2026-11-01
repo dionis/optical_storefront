@@ -3,41 +3,96 @@
    resumen en la cabecera. Tokens --adm-* (admin.css) y --st-* (tema de tienda,
    admin-theme.css). Nada de aquí se aplica fuera de .ex-root. */
 
-.ex-root .ex-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 4px; }
-.ex-root .ex-head h2 { margin: 0; font-size: clamp(17px, 1.6vw, 21px); }
-.ex-root .ex-head p { margin: 0; color: var(--adm-faint); font-size: 12px; }
+/* ── Cabecera: título legible en claro y oscuro (tinta del modo, nunca navy) ─ */
+.ex-root .ex-head { display: flex; flex-direction: column; gap: 2px; margin: 0 0 8px; }
+.ex-root .ex-head h2 { margin: 0; font-size: clamp(19px, 1.7vw, 23px); color: var(--adm-ink); display: inline-flex; align-items: center; gap: 8px; }
+.ex-root .ex-head h2::after { display: none; }
+.ex-root .ex-head p { margin: 0; color: var(--adm-muted); font-size: 12.5px; max-width: 72ch; }
 
-/* ── Barra de filtros: tienda · período · desde–hasta · exportar ─────────── */
+/* ── Barra de filtros: una fila. Izquierda = tienda · período segmentado ·
+   rango; derecha = exportar en grupo. En el móvil se parte en dos filas. ──── */
 .ex-bar {
   position: sticky; top: var(--ex-top, var(--adm-top-h)); z-index: 30;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
-  min-height: 44px; padding: 6px 0; margin: 0 0 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  min-height: 48px; padding: 7px 0; margin: 0 0 10px;
   background: var(--st-bg, var(--adm-bg)); border-bottom: 1px solid var(--adm-line);
 }
-.ex-bar.busy { opacity: .8; }
-.ex-bar .adm-store-filter { margin-right: 2px; }
+.ex-bar.busy .ex-bar-filters { opacity: .75; }
+.ex-bar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; flex: 1 1 auto; }
+.ex-bar-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ex-bar-item .adm-help-btn { flex: 0 0 auto; }
+.ex-bar-period { flex-wrap: wrap; gap: 6px 8px; }
+
+/* Control segmentado: un contenedor redondeado; el activo va relleno con el
+   acento y su tinta (botón, no texto: siempre con borde y fondo). */
+.ex-seg { display: inline-flex; align-items: stretch; padding: 3px; gap: 2px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ex-seg::-webkit-scrollbar { display: none; }
+.ex-seg button { flex: 0 0 auto; border: 1px solid transparent; background: transparent; border-radius: 999px; padding: 4px 11px; min-height: 26px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.ex-seg button:hover { color: var(--adm-ink); background: var(--adm-surface-2); border-color: var(--adm-line); }
+.ex-seg button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.ex-seg button.on:hover { color: var(--st-ink, #fff); background: var(--adm-accent-deep, var(--adm-accent)); }
+.ex-seg button:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+
+/* Chips sueltos y fechas de la lista en solitario (PeriodBar en StoreOrders.jsx). */
 .ex-chips { display: inline-flex; flex-wrap: wrap; gap: 3px; }
 .ex-chips button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 4px 9px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; transition: background .15s, color .15s, border-color .15s; }
-.ex-chips button:hover { color: var(--st-accent, var(--adm-blue)); border-color: var(--st-accent-line, var(--adm-blue-line)); }
-.ex-chips button.on { background: var(--st-accent, var(--adm-navy-fill)); color: #fff; border-color: var(--st-accent, var(--adm-navy-fill)); }
+.ex-chips button:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.ex-chips button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); }
 .ex-dates { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--adm-muted); }
-.ex-bar input[type="date"] { min-height: 30px; height: 30px; font: 600 12px var(--adm-font); color: var(--adm-ink); padding: 2px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); max-width: 150px; }
-.ex-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-.ex-export .adm-export-menu { display: inline-flex; gap: 4px; }
-.ex-export .btn-xs { min-height: 30px; }
+.ex-dates input[type="date"] { min-height: 30px; height: 30px; font: 600 12px var(--adm-font); color: var(--adm-ink); padding: 2px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); max-width: 150px; }
+
+/* Rango: dos fechas en una sola píldora, unidas por «–». Resaltada cuando manda. */
+.ex-range { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 8px 2px 10px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); box-shadow: var(--adm-shadow-card); transition: border-color .15s, box-shadow .15s; }
+.ex-range .adm-ico { flex: 0 0 auto; }
+.ex-range-sep { color: var(--adm-faint); font-weight: 700; padding: 0 1px; }
+.ex-range input[type="date"] { min-height: 26px; height: 26px; width: 118px; font: 600 12px var(--adm-font); color: var(--adm-muted); padding: 0 2px; border: 0; border-radius: 6px; background: transparent; }
+.ex-range input[type="date"]:focus { outline: none; color: var(--adm-ink); background: var(--adm-surface-2); }
+.ex-range:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-range.on { border-color: var(--adm-accent-line); color: var(--adm-ink); }
+.ex-range.on input[type="date"] { color: var(--adm-ink); }
+/* Rango cerrado: un botón con las fechas en corto; pulsarlo abre las dos fechas. */
+.ex-range-btn { font: 600 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; padding-right: 11px; white-space: nowrap; }
+.ex-range-btn:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.ex-range-btn:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-range input[type="date"]::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+.ex-range input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+/* Exportar: PDF · Excel · CSV como un solo grupo segmentado, a la derecha. */
+.ex-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.ex-export .adm-export-menu { display: inline-flex; gap: 0; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); overflow: hidden; }
+.ex-export .adm-export-menu .btn-xs { min-height: 30px; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0 11px; font-weight: 700; color: var(--adm-ink); gap: 5px; }
+.ex-export .adm-export-menu .btn-xs + .btn-xs { border-left: 1px solid var(--adm-line); }
+.ex-export .adm-export-menu .btn-xs:hover { background: var(--adm-accent-soft); color: var(--adm-accent-ink); transform: none; }
+.ex-export .adm-export-menu .btn-xs:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+.ex-export .adm-export-menu .btn-xs .adm-ico { color: var(--adm-muted); }
+.ex-export .adm-export-menu .btn-xs:hover .adm-ico { color: inherit; }
 .ex-note { font-size: 12px; color: var(--adm-muted); flex-basis: 100%; }
 .ex-note.err { color: var(--adm-red-dark); }
 
-/* ── Tira de KPI: diez cifras en una fila de escritorio, ≤ 60 px de alto ── */
-.ex-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(112px, 100%), 1fr)); gap: 6px; margin: 0 0 8px; }
-.ex-kpi { min-height: 54px; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 6px 9px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface); min-width: 0; text-align: left; font-family: var(--adm-font); cursor: default; position: relative; overflow: hidden; }
-.ex-kpi::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--st-accent, var(--adm-navy)); opacity: .55; }
-.ex-kpi.click { cursor: pointer; transition: border-color .15s, background .15s; }
-.ex-kpi.click:hover { border-color: var(--st-accent-line, var(--adm-blue-line)); background: var(--st-soft, var(--adm-blue-soft)); }
-.ex-kpi small { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ex-kpi b { font-size: 16.5px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--st-accent, var(--adm-navy)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ex-kpi b.neg { color: var(--adm-red-dark); }
+/* ── Tira de KPI: diez cifras en una fila de escritorio, cada una con su
+   variación contra el período anterior (misma línea, mismo contrato). ──── */
+.ex-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr)); gap: 6px; margin: 0 0 8px; }
+.ex-kpi { min-height: 62px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 7px 10px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface); min-width: 0; text-align: left; font-family: var(--adm-font); cursor: default; position: relative; overflow: hidden; box-shadow: var(--adm-shadow-card); }
+.ex-kpi::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--adm-accent); opacity: .6; }
+.ex-kpi.click { cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; }
+.ex-kpi.click:hover { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); box-shadow: var(--adm-shadow-hover); }
+.ex-kpi.click:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-kpi small { display: flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpi-flag { display: inline-flex; align-items: center; gap: 2px; text-transform: none; letter-spacing: 0; font-style: normal; font-size: 10px; padding: 0 5px; border-radius: 999px; color: var(--adm-amber-dark, #92400e); background: var(--adm-amber-soft); }
+.ex-kpi b { font-size: 16.5px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--adm-accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* En oscuro la cifra va en la tinta del modo: el acento aclarado del neutro (gris) quedaba por debajo de la etiqueta. */
+.adm-shell[data-mode="dark"] .ex-kpi b { color: var(--adm-ink); }
+.ex-kpi b.neg, .adm-shell[data-mode="dark"] .ex-kpi b.neg { color: var(--adm-red-dark); }
 .ex-kpi i { font-style: normal; font-size: 10.5px; color: var(--adm-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* La variación: cifra en negrita y, si no cabe al lado, «vs. …» en su propia línea. */
+.ex-delta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; font-variant-numeric: tabular-nums; white-space: normal; line-height: 1.3; }
+.ex-delta-arrow { font-size: 8px; align-self: center; }
+.ex-delta-txt { font-weight: 800; white-space: nowrap; }
+.ex-delta-vs { color: var(--adm-faint); font-weight: 600; white-space: nowrap; }
+.ex-delta.good .ex-delta-txt, .ex-delta.good .ex-delta-arrow { color: var(--adm-green-dark, #116633); }
+.ex-delta.bad .ex-delta-txt, .ex-delta.bad .ex-delta-arrow { color: var(--adm-red-dark); }
+.ex-delta.flat .ex-delta-txt { color: var(--adm-muted); }
+.ex-delta.wait .ex-delta-txt { color: var(--adm-faint); font-weight: 600; }
 .ex-kpi i.good { color: var(--adm-green-dark, #116633); }
 .ex-kpi i.bad { color: var(--adm-red-dark); }
 .ex-kpi i.warn { color: var(--adm-amber-dark, #92400e); }
@@ -83,7 +138,13 @@
 }
 @media (max-width: 720px) {
   .ex-kpis { grid-template-columns: 1fr 1fr; gap: 6px; }
-  .ex-bar { position: static; }
+  .ex-bar { position: static; gap: 8px; }
+  .ex-bar-filters { gap: 8px; }
+  .ex-bar-period { flex-basis: 100%; }
+  .ex-seg { max-width: 100%; flex-wrap: wrap; overflow: visible; border-radius: 16px; }
+  .ex-seg button { padding: 4px 9px; }
+  .ex-range { flex: 0 1 auto; justify-content: center; }
+  .ex-range input[type="date"] { width: 112px; }
   .ex-export { margin-left: 0; flex-basis: 100%; justify-content: flex-end; }
   .so-wrap, .so-wrap.compact { max-height: none; overflow: visible; }
   .so-table td.so-items { max-width: none; white-space: normal; }

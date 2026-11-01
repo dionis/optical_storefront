@@ -10,8 +10,10 @@
 //
 // UNA vista (fit.css): barra de filtros + exportar arriba, tira de KPI y los
 // bloques como acordeones con resumen en la cabecera; las tablas se desplazan
-// por dentro (.acc-scroll). Exporta TODO: Excel con una hoja por bloque, CSV
-// de las ventas recientes y PDF del estado completo (abre los acordeones).
+// por dentro (.acc-scroll). Exporta TODO como reporte formal (ReportDoc.jsx):
+// PDF apaisado con cabecera en el color de la tienda, KPI, resúmenes y las
+// tablas; Excel con hoja «Resumen» + una por bloque; CSV con el resumen arriba
+// y las ventas recientes debajo.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
@@ -19,8 +21,7 @@ import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
-import { downloadXlsx } from "./exportXlsx.js";
-import { downloadText, printElement, rowsToCsv } from "./exportUtils.js";
+import { exportReport } from "./ReportDoc.jsx";
 import "./screens.css";
 import "./fit.css";
 
@@ -43,11 +44,10 @@ const CACHE_MS = 60_000;
 /** Props: `go`/`tabs` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda. */
 export default function StoreStatus({ go, tabs = [], me }) {
   const { t, lang } = useLang();
-  const { storeId: globalId, isAll, isWeb, setStoreId, store: globalStore } = useStoreFilter(me);
+  const { storeId: globalId, isAll, isWeb, setStoreId, store: globalStore, stores: allStores } = useStoreFilter(me);
   const storeId = isAll || isWeb ? "" : globalId;
   const [data, setData] = useState(() => CACHE.get(storeId)?.data || null);
   const [state, setState] = useState("loading");
-  const [printing, setPrinting] = useState(false);
   const [openMap, setOpenMap] = useState({});
   const bodyRef = useRef(null);
   const can = (tab) => tabs.includes(tab);
@@ -71,7 +71,6 @@ export default function StoreStatus({ go, tabs = [], me }) {
   const m = (v) => money(v, "usd", lang);
   const s = data?.status;
   const storeLabel = s ? `${s.store.code} · ${s.store.name}` : "";
-  const meta = () => t("adm.fit.ss.asOf", { when: new Date().toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" }) }) + ` · ${storeLabel}`;
 
   // Datos derivados, calculados una vez por respuesta.
   const d = useMemo(() => {
@@ -93,15 +92,6 @@ export default function StoreStatus({ go, tabs = [], me }) {
     const urgent = first === "register_open_long" || first === "till_without_register" || first === "no_active_till" ? "tills" : first ? "pending" : "tills";
     return { attention, sev, openRegisters, activeTills, cashExpected, pendingN, sellersActive, sellersToday, sellersCount, recentTotal, urgent, dToday: pctDelta(s.today.total, s.yesterday.total) };
   }, [s]);
-
-  // PDF: abre todos los acordeones, imprime el clon y los devuelve a su estado.
-  useEffect(() => {
-    if (!printing) return undefined;
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => { printElement(bodyRef.current, t("adm.tab.storestatus"), meta()); setPrinting(false); }); });
-    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [printing]);
 
   if (state === "loading" && !data) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (state === "error" && !data) {
@@ -128,37 +118,66 @@ export default function StoreStatus({ go, tabs = [], me }) {
     { header: t("adm.fit.ss.col.total"), key: "total", type: "money", width: 12 },
     { header: t("adm.fit.ss.col.balance"), key: "balance", type: "money", width: 12 },
   ];
-  const xlsx = () => downloadXlsx(`${fileBase}.xlsx`, [
-    { name: t("adm.fit.ss.sheet.summary"), cols: [{ header: t("adm.fit.ss.col.kpi"), key: "k", width: 32 }, { header: t("adm.fit.ss.col.value"), key: "v", width: 18 }], rows: [
-      { k: t("adm.theme.current"), v: storeLabel }, { k: t("adm.fit.ss.asOf", { when: "" }).trim(), v: new Date().toLocaleString() },
-      { k: `${t("adm.my.today")} · ${t("adm.scr.total")}`, v: s.today.total }, { k: `${t("adm.my.today")} · ${t("adm.scr.count")}`, v: s.today.count },
-      { k: `${t("adm.my.week")} · ${t("adm.scr.total")}`, v: s.week.total }, { k: `${t("adm.my.week")} · ${t("adm.scr.count")}`, v: s.week.count },
-      { k: `${t("adm.my.month")} · ${t("adm.scr.total")}`, v: s.month.total }, { k: `${t("adm.my.month")} · ${t("adm.scr.count")}`, v: s.month.count },
-      { k: t("adm.ss.pend.approvals"), v: p.approvals }, { k: t("adm.ss.pend.voids"), v: p.voids }, { k: t("adm.ss.pend.ready"), v: p.ready.length },
-      { k: t("adm.ss.pend.balance"), v: p.with_balance.amount }, { k: t("adm.ss.pend.insurance"), v: s.insurance_due }, { k: t("adm.ss.balanceFoot", { v: "" }).replace(/:\s*$/, ""), v: s.balance_due },
-    ] },
-    { name: t("adm.fit.ss.sheet.alerts"), cols: [{ header: t("adm.fit.ss.col.severity"), get: (a) => sevText(a.tone), width: 12 }, { header: t("adm.fit.ss.col.alert"), get: attText, width: 70 }], rows: d.attention },
-    { name: t("adm.fit.ss.sheet.tills"), cols: [
-      { header: t("adm.fit.ss.col.till"), get: (x) => `${x.code}${x.name ? ` · ${x.name}` : ""}`, width: 24 },
-      { header: t("adm.fit.ss.col.sellers"), get: (x) => x.sellers.map((v) => v.code).join(", "), width: 20 },
-      { header: t("adm.fit.ss.col.status"), get: tillStatus, width: 12 },
-      { header: t("adm.fit.ss.col.opened"), get: (x) => (x.register ? timeOf(x.register.opened_at, lang) : ""), width: 12 },
-      { header: t("adm.fit.ss.col.opening"), get: (x) => x.register?.opening ?? "", type: "money", width: 12 },
-      { header: t("adm.fit.ss.col.expected"), get: (x) => x.register?.expected ?? "", type: "money", width: 14 },
-    ], rows: s.tills },
-    { name: t("adm.fit.ss.sheet.pending"), cols: [{ header: t("adm.fit.ss.col.item"), key: "k", width: 28 }, { header: t("adm.fit.ss.col.n"), key: "n", type: "int", width: 10 }, { header: t("adm.fit.ss.col.amount"), key: "v", type: "money", width: 14 }], rows: [
-      { k: t("adm.ss.pend.approvals"), n: p.approvals }, { k: t("adm.ss.pend.voids"), n: p.voids }, { k: t("adm.ss.pend.ready"), n: p.ready.length },
-      { k: t("adm.ss.pend.balance"), n: p.with_balance.count, v: p.with_balance.amount }, { k: t("adm.ss.pend.insurance"), n: p.insurance_claims, v: s.insurance_due },
-    ] },
-    { name: t("adm.fit.ss.sheet.ready"), cols: [{ header: t("adm.fit.ss.col.sale"), key: "number", width: 14 }, { header: t("adm.fit.ss.col.seller"), key: "seller_code", width: 10 }, { header: t("adm.fit.ss.col.stage"), get: (r) => t(`adm.my.stage.${r.stage}`), width: 24 }, { header: t("adm.fit.ss.col.balance"), key: "balance", type: "money", width: 12 }], rows: p.ready },
-    { name: t("adm.fit.ss.sheet.sellers"), cols: [
-      { header: t("adm.fit.ss.col.seller"), key: "name", width: 24 }, { header: t("adm.fit.ss.col.code"), key: "code", width: 10 }, { header: t("adm.fit.ss.col.terminal"), key: "terminal_code", width: 10 },
-      { header: t("adm.fit.ss.col.kind"), get: sellerKind, width: 18 }, { header: t("adm.fit.ss.col.status"), get: (v) => (v.active ? t("adm.fit.ss.active") : t("adm.stores.tills.status.inactive")), width: 10 },
-      { header: t("adm.fit.ss.col.today"), key: "today_total", type: "money", width: 12 }, { header: t("adm.fit.ss.col.count"), key: "today_count", type: "int", width: 10 },
-    ], rows: s.sellers, totals: { today_total: d.sellersToday, today_count: d.sellersCount }, totalsLabel: t("adm.fit.stage.total") },
-    { name: t("adm.fit.ss.sheet.recent"), cols: recentCols, rows: s.recent, totals: { total: d.recentTotal }, totalsLabel: t("adm.fit.stage.total") },
-  ]);
-  const csv = () => downloadText(`${fileBase}.csv`, rowsToCsv(recentCols.map((c) => [c.header, c.get || c.key]), s.recent));
+  // El reporte (ReportDoc): cabecera con la tienda y su color, KPI, los resúmenes
+  // de cada acordeón como pastillas y una tabla por bloque. `recent` es la tabla
+  // principal (va al CSV debajo del resumen).
+  const report = () => {
+    const theme = (allStores || []).find((x) => x.id === s.store.id) || globalStore || null;
+    const store = { code: s.store.code, name: s.store.name, color: theme?.color || null, address: theme?.address || null, phone: theme?.phone || null };
+    const now = new Date();
+    const noSummary = [{ label: "", value: t("adm.fit.ss.pill.none"), tone: "good" }];
+    return {
+      title: t("adm.rpt.statusTitle", { store: s.store.name || s.store.code }),
+      subtitle: t("adm.rpt.asOf", { when: now.toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) }),
+      store, period: null, generatedAt: now, lang, t,
+      filename: fileBase,
+      kpis: [
+        { label: t("adm.my.today"), value: m(s.today.total), raw: s.today.total, sub: `${d.dToday !== null ? `${d.dToday > 0 ? "+" : ""}${d.dToday}% ${t("adm.fit.ss.vs")} · ` : ""}${s.today.count} ${t("adm.scr.count")}`, tone: d.dToday !== null ? (d.dToday >= 0 ? "good" : "bad") : "" },
+        { label: t("adm.my.week"), value: m(s.week.total), raw: s.week.total, sub: `${s.week.count} ${t("adm.scr.count")} · ${t("adm.fit.ss.avg", { v: m(s.week.avg_ticket) })}` },
+        { label: t("adm.my.month"), value: m(s.month.total), raw: s.month.total, sub: `${s.month.count} ${t("adm.scr.count")} · ${t("adm.fit.ss.avg", { v: m(s.month.avg_ticket) })}` },
+        { label: t("adm.ss.pend.approvals"), value: String(p.approvals), raw: p.approvals },
+        { label: t("adm.ss.pend.voids"), value: String(p.voids), raw: p.voids },
+        { label: t("adm.ss.pend.ready"), value: String(p.ready.length), raw: p.ready.length },
+        { label: t("adm.ss.pend.balance"), value: String(p.with_balance.count), raw: p.with_balance.count, sub: p.with_balance.count > 0 ? m(p.with_balance.amount) : undefined, neg: p.with_balance.count > 0 },
+        { label: t("adm.ss.pend.insurance"), value: String(p.insurance_claims), raw: p.insurance_claims, sub: p.insurance_claims > 0 ? m(s.insurance_due) : undefined },
+        { label: t("adm.fit.ss.pill.cash"), value: m(d.cashExpected), raw: d.cashExpected, sub: t("adm.ss.tillsNote", { open: d.openRegisters, active: d.activeTills }) },
+      ],
+      summaries: [
+        { title: t("adm.fit.ss.alerts"), pills: d.attention.length ? [
+          d.sev.bad ? { label: t("adm.fit.ss.pill.bad"), value: d.sev.bad, tone: "bad", strong: true } : null,
+          d.sev.warn ? { label: t("adm.fit.ss.pill.warn"), value: d.sev.warn, tone: "warn" } : null,
+          d.sev.info ? { label: t("adm.fit.ss.pill.info"), value: d.sev.info, tone: "muted" } : null,
+        ] : noSummary },
+        { title: t("adm.ss.tills"), pills: [{ label: t("adm.fit.ss.pill.open"), value: `${d.openRegisters}/${d.activeTills}`, tone: d.activeTills && !d.openRegisters ? "warn" : "" }, { label: t("adm.fit.ss.pill.cash"), value: m(d.cashExpected), strong: true }] },
+        { title: t("adm.fit.ss.pending"), pills: [{ label: t("adm.fit.ss.pill.pending"), value: d.pendingN, tone: d.pendingN ? "warn" : "muted", strong: !!d.pendingN }, { label: t("adm.fit.ss.pill.ready"), value: p.ready.length }, { label: t("adm.fit.ss.pill.balance"), value: m(p.with_balance.amount) }] },
+        { title: t("adm.ss.sellersToday"), pills: [{ label: t("adm.fit.ss.pill.sellers"), value: `${d.sellersActive}/${s.sellers.length}` }, { label: t("adm.fit.ss.pill.sales"), value: d.sellersCount }, { label: t("adm.fit.ss.pill.today"), value: m(d.sellersToday), strong: true }] },
+        { title: t("adm.ss.recent"), pills: [{ label: t("adm.fit.ss.pill.sales"), value: s.recent.length }, { label: t("adm.scr.total"), value: m(d.recentTotal), strong: true }] },
+      ],
+      tables: [
+        { title: t("adm.ss.recent"), sheet: t("adm.fit.ss.sheet.recent"), cols: recentCols, rows: s.recent, totals: { total: d.recentTotal }, totalsLabel: t("adm.fit.stage.total"), empty: t("adm.ss.noRecent"), main: true, rowCls: (r) => (r.status === "voided" ? "voided" : "") },
+        { title: t("adm.fit.ss.alerts"), sheet: t("adm.fit.ss.sheet.alerts"), cols: [{ header: t("adm.fit.ss.col.severity"), get: (a) => sevText(a.tone), width: 10, tag: true, cls: (a) => (a.tone === "bad" ? "bad" : a.tone === "warn" ? "on" : "") }, { header: t("adm.fit.ss.col.alert"), get: attText, width: 70 }], rows: d.attention, empty: t("adm.ss.allGood") },
+        { title: t("adm.ss.tills"), sheet: t("adm.fit.ss.sheet.tills"), cols: [
+          { header: t("adm.fit.ss.col.till"), get: (x) => `${x.code}${x.name ? ` · ${x.name}` : ""}`, width: 24 },
+          { header: t("adm.fit.ss.col.sellers"), get: (x) => x.sellers.map((v) => v.code).join(", "), width: 20 },
+          { header: t("adm.fit.ss.col.status"), get: tillStatus, width: 12, tag: true, cls: (x) => (!x.is_active ? "bad" : x.register ? "good" : "") },
+          { header: t("adm.fit.ss.col.opened"), get: (x) => (x.register ? timeOf(x.register.opened_at, lang) : ""), width: 12 },
+          { header: t("adm.fit.ss.col.opening"), get: (x) => x.register?.opening ?? "", type: "money", width: 12 },
+          { header: t("adm.fit.ss.col.expected"), get: (x) => x.register?.expected ?? "", type: "money", width: 14 },
+        ], rows: s.tills, empty: t("adm.stores.tills.empty") },
+        { title: t("adm.fit.ss.pending"), sheet: t("adm.fit.ss.sheet.pending"), cols: [{ header: t("adm.fit.ss.col.item"), key: "k", width: 28 }, { header: t("adm.fit.ss.col.n"), key: "n", type: "int", width: 10 }, { header: t("adm.fit.ss.col.amount"), key: "v", type: "money", width: 14, text: (r) => (r.v != null && r.n > 0 ? m(r.v) : "—") }], rows: [
+          { k: t("adm.ss.pend.approvals"), n: p.approvals }, { k: t("adm.ss.pend.voids"), n: p.voids }, { k: t("adm.ss.pend.ready"), n: p.ready.length },
+          { k: t("adm.ss.pend.balance"), n: p.with_balance.count, v: p.with_balance.amount }, { k: t("adm.ss.pend.insurance"), n: p.insurance_claims, v: s.insurance_due },
+        ] },
+        ...(p.ready.length ? [{ title: t("adm.ss.pend.ready"), sheet: t("adm.fit.ss.sheet.ready"), cols: [{ header: t("adm.fit.ss.col.sale"), key: "number", width: 14 }, { header: t("adm.fit.ss.col.seller"), key: "seller_code", width: 10 }, { header: t("adm.fit.ss.col.stage"), get: (r) => t(`adm.my.stage.${r.stage}`), width: 24 }, { header: t("adm.fit.ss.col.balance"), key: "balance", type: "money", width: 12 }], rows: p.ready }] : []),
+        { title: t("adm.ss.sellersToday"), sheet: t("adm.fit.ss.sheet.sellers"), cols: [
+          { header: t("adm.fit.ss.col.seller"), key: "name", width: 24 }, { header: t("adm.fit.ss.col.code"), key: "code", width: 10 }, { header: t("adm.fit.ss.col.terminal"), key: "terminal_code", width: 10 },
+          { header: t("adm.fit.ss.col.kind"), get: sellerKind, width: 18 }, { header: t("adm.fit.ss.col.status"), get: (v) => (v.active ? t("adm.fit.ss.active") : t("adm.stores.tills.status.inactive")), width: 10, tag: true, cls: (v) => (v.active ? "good" : "bad") },
+          { header: t("adm.fit.ss.col.today"), key: "today_total", type: "money", width: 12 }, { header: t("adm.fit.ss.col.count"), key: "today_count", type: "int", width: 10 },
+        ], rows: s.sellers, totals: { today_total: d.sellersToday, today_count: d.sellersCount }, totalsLabel: t("adm.fit.stage.total"), empty: t("adm.ss.noSellersStore") },
+      ],
+      landscape: true,
+    };
+  };
 
   const kpi = (key, { label, value, note, tone, onClick, hero, on }) => (
     <button type="button" key={key} className={`adm-fit-kpi ${hero ? "hero" : ""} ${on ? "on" : ""}`} onClick={onClick} disabled={!onClick}>
@@ -166,7 +185,7 @@ export default function StoreStatus({ go, tabs = [], me }) {
     </button>
   );
   // Acordeones controlados: lo recordado (localStorage) o el valor por defecto; al imprimir, todos abiertos.
-  const openIf = (id, fallback = false) => (printing ? true : (openMap[id] ?? readOpen(id, fallback)));
+  const openIf = (id, fallback = false) => openMap[id] ?? readOpen(id, fallback);
   const toggled = (id) => (o) => setOpenMap((prev) => ({ ...prev, [id]: o }));
 
   return (
@@ -186,9 +205,9 @@ export default function StoreStatus({ go, tabs = [], me }) {
           )}
           <button type="button" className="btn-xs" onClick={() => load(storeId, { force: true })} disabled={state === "loading"} aria-label={t("adm.my.refresh")} title={t("adm.my.refresh")}><Icon name="refresh" size={13} /></button>
           <span className="adm-fit-export adm-export-menu">
-            <button type="button" className="btn-xs" title={t("adm.ui.pdf")} onClick={() => setPrinting(true)}><Icon name="printer" size={14} />PDF</button>
-            <button type="button" className="btn-xs" title={t("adm.ui.xlsx")} onClick={xlsx}><Icon name="sheet" size={14} />Excel</button>
-            <button type="button" className="btn-xs" title={t("adm.ui.csv")} onClick={csv}><Icon name="excel" size={14} />CSV</button>
+            <button type="button" className="btn-xs" title={t("adm.ui.pdf")} onClick={() => exportReport("pdf", report())}><Icon name="printer" size={14} />PDF</button>
+            <button type="button" className="btn-xs" title={t("adm.ui.xlsx")} onClick={() => exportReport("xlsx", report())}><Icon name="sheet" size={14} />Excel</button>
+            <button type="button" className="btn-xs" title={t("adm.ui.csv")} onClick={() => exportReport("csv", report())}><Icon name="excel" size={14} />CSV</button>
           </span>
         </div>
       </div>

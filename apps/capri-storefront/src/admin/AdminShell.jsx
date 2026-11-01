@@ -161,14 +161,19 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   const go = (key) => { onTab(key); setDrawer(false); setFly(null); };
   const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
   const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
-  // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js),
-  // y su nombre siempre a la vista en la barra superior, también en el móvil.
-  const { theme, store, stores, multi } = useStoreTheme(me);
+  // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js)
+  // solo donde se opera (OPERATIONAL_TABS; el administrador ve neutro en las
+  // pestañas informativas), y su nombre siempre a la vista en la barra
+  // superior, también en el móvil, con el punto de SU color aunque el cromo
+  // vaya en neutro (`storeTheme`).
+  const { theme, storeTheme, store, stores, multi } = useStoreTheme(me, { tab });
   // Claro / oscuro / sistema: `data-mode` en el armazón; admin.css redefine los tokens.
   const { mode, resolved: colorMode, cycle: cycleMode } = useColorMode();
-  const storeName = store ? (store.online ? t("adm.theme.online") : store.name) : "";
-  const userStore = store ? `${store.code} · ${storeName}` : me?.store_name || me?.store_code || "";
+  // El nombre es el guardado en Tiendas (`name`), tal cual; el código delante.
+  const storeName = store ? (store.online ? t("adm.theme.online") : String(store.name || store.code || "")) : "";
+  const userStore = store ? [store.code, storeName].filter(Boolean).join(" · ") : me?.store_name || me?.store_code || "";
   const storeLabel = store ? storeName : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
+  const dotStyle = store && !storeTheme.neutral ? { background: storeTheme.accent } : undefined;
   const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   const item = (it, sub = false) => {
@@ -289,7 +294,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             {me?.is_admin !== false && <em className="adm-badge">ADMIN</em>}
             {/* Dónde estoy: punto del color de la tienda + su nombre, siempre visible. */}
             <span className="adm-store-pill" title={`${t("adm.theme.current")}: ${storeLabel}`} aria-label={`${t("adm.theme.current")}: ${storeLabel}`}>
-              <i className="adm-store-dot" aria-hidden="true" />
+              <i className="adm-store-dot" aria-hidden="true" style={dotStyle} />
               <span className="adm-store-pill-txt">{storeLabel}</span>
             </span>
           </div>

@@ -168,8 +168,47 @@ function deltaLine(value, ref, labelText) {
 
 // ---------------------------------------------------------------------------
 // 1. KpiCard
+const SIGN = (n) => (n > 0 ? "+" : n < 0 ? "−" : "");
+const LOCALE = (lang) => (lang === "en" ? "en-US" : "es-US");
+
+/**
+ * Variación de un KPI contra el período anterior — el MISMO contrato en todas
+ * las tarjetas del panel (ExecutiveHub.jsx la usa en su tira, KpiCard la
+ * acepta en `delta`). Devuelve null mientras no haya período anterior
+ * (cargando / sin dato); si no, { value, pct, good, zero, text }:
+ *   value  cur − prev, en la unidad del KPI
+ *   pct    variación en %, o null si prev es 0 (no hay con qué comparar)
+ *   good   si la variación es buena: subir, salvo `invert` (un costo que baja es bueno)
+ *   zero   sin cambio (se pinta en gris con «=»)
+ *   text   `+$123.00 (+12%)` (money) · `+3` / `−2` (count) · `+1.5 pt` (pct) · `=`
+ * `fmt` da formato al importe absoluto (p. ej. (v) => money(v, "usd", lang)).
+ */
+export function kpiDelta(cur, prev, { kind = "count", invert = false, lang = "es", fmt } = {}) {
+  const a = Number(cur);
+  const b = Number(prev);
+  if (prev == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const value = a - b;
+  const eps = kind === "count" ? 0.5 : 0.005;
+  const zero = Math.abs(value) < eps;
+  const pct = b !== 0 && kind !== "pct" ? Math.round((value / Math.abs(b)) * 1000) / 10 : null;
+  const good = zero ? null : invert ? value < 0 : value > 0;
+  const abs = Math.abs(value);
+  let text;
+  if (zero) text = "=";
+  else if (kind === "money") text = `${SIGN(value)}${fmt ? fmt(abs) : abs.toFixed(2)}${pct == null ? "" : ` (${SIGN(pct)}${Math.abs(pct).toLocaleString(LOCALE(lang), { maximumFractionDigits: Math.abs(pct) < 10 ? 1 : 0 })}%)`}`;
+  else if (kind === "pct") text = `${SIGN(value)}${abs.toLocaleString(LOCALE(lang), { maximumFractionDigits: 1 })} pt`;
+  else text = `${SIGN(value)}${Math.round(abs).toLocaleString(LOCALE(lang))}`;
+  return { value, pct, good, zero, text };
+}
+
 export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hint }) {
-  const good = !!deltaGood;
+  // `delta` puede ser el objeto de kpiDelta() o, como antes, un texto con `deltaGood`.
+  const obj = delta && typeof delta === "object" ? delta : null;
+  const deltaText = obj ? obj.text : delta;
+  const flat = obj ? obj.zero : false;
+  const good = obj ? !!obj.good : !!deltaGood;
+  // La flecha dice hacia dónde fue la cifra; el color, si eso es bueno (un costo que baja: ▼ en verde).
+  const up = obj ? obj.value > 0 : good;
   const clickable = typeof onClick === "function";
   return (
     <div
@@ -236,8 +275,9 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         {value}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {delta !== undefined && delta !== null && delta !== "" ? (
+        {deltaText !== undefined && deltaText !== null && deltaText !== "" ? (
           <span
+            className={`cx-kpi-delta ${flat ? "flat" : good ? "good" : "bad"}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -246,12 +286,13 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
               fontWeight: 700,
               padding: "1px 7px",
               borderRadius: 999,
-              color: good ? "var(--adm-green-dark, #10754d)" : "var(--adm-red-dark, #b02a37)",
-              background: good ? "var(--adm-green-soft, #ebf8f2)" : "var(--adm-red-soft, #fdf1f2)",
+              fontVariantNumeric: "tabular-nums",
+              color: flat ? BRAND.muted : good ? "var(--adm-green-dark, #10754d)" : "var(--adm-red-dark, #b02a37)",
+              background: flat ? BRAND.soft : good ? "var(--adm-green-soft, #ebf8f2)" : "var(--adm-red-soft, #fdf1f2)",
             }}
           >
-            <span aria-hidden="true">{good ? "▲" : "▼"}</span>
-            {delta}
+            {!flat && <span aria-hidden="true">{up ? "▲" : "▼"}</span>}
+            {deltaText}
           </span>
         ) : null}
         {sub ? (

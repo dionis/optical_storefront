@@ -157,6 +157,7 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "DELETE", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
   { method: "GET", path: /^\/admin\/pos\/cash-sessions$/ },
+  { method: "GET", path: /^\/admin\/pos\/start-map$/ },
   // Cash movements report and the store statement: each route scopes to the person's stores (lib/pos-route.ts).
   { method: "GET", path: /^\/admin\/pos\/(cash-report|statement)$/ },
   { method: "POST", path: /^\/admin\/pos\/cash-sessions(\/[^/]+\/(movement|close))?$/ },

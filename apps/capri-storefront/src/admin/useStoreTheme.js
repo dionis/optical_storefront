@@ -10,7 +10,17 @@
 //    elegida en el punto de venta (`pos_store`) o la fijada con
 //    `setActiveStore()`; si ninguna, neutro y la barra lista sus códigos.
 //  · `owner`/`superadmin`: neutro, salvo que algo fije una tienda con
-//    `setActiveStore()` (p. ej. el POS al elegir caja).
+//    `setActiveStore()` (p. ej. el POS al elegir caja o el filtro de tienda).
+//
+// Política de color (decisión del dueño): el color de una tienda es señal de
+// que SE ESTÁ OPERANDO en ella. Para dueño y superadmin el cromo solo se tiñe
+// en las pestañas operativas (`OPERATIONAL_TABS`: vender, caja, ventas,
+// cobros) y mientras haya una tienda elegida; en las informativas (Ejecutivo,
+// Estado de tienda, Pedidos, Tiendas, Equipo…) el cromo es el del superadmin,
+// gris y negro, aunque el filtro tenga una tienda: el filtro y la píldora
+// siguen enseñando el punto de su color, pero no la barra. El personal de
+// tienda (vendedor, supervisor, encargado) vive en una tienda y la ve en
+// color en todas partes.
 import { useEffect, useMemo, useState } from "react";
 import { isDemoLogin } from "./adminAuth.js";
 import { fetchStores, ONLINE_STORE_COLOR, storeInk } from "./adminStores.js";
@@ -18,6 +28,13 @@ import { posContext } from "./posApi.js";
 
 /** Grises y negro: nadie está en una tienda concreta. */
 export const NEUTRAL_THEME = { chrome: "#111827", accent: "#374151", bg: "#F3F4F6" };
+
+/**
+ * Pestañas en las que se OPERA una tienda (vender, caja, ventas del día,
+ * cobros pendientes): las únicas en las que dueño y superadmin ven el panel
+ * del color de la tienda elegida. El resto es información y sale en neutro.
+ */
+export const OPERATIONAL_TABS = new Set(["pos", "cash", "possales", "pendingbalances"]);
 
 /* Fondo y tarjetas del modo oscuro (los mismos valores que --adm-bg/--adm-surface
    en admin.css bajo `[data-mode="dark"]`): la mezcla en JS es el respaldo del
@@ -151,11 +168,19 @@ export function setActiveStore(id) {
 const activeHint = () => read(ACTIVE_KEY) || read(POS_KEY);
 
 /**
- * Tema del panel para `me` (GET /admin/team/me). Devuelve { theme, store, stores, multi }:
- * `store` es la activa (o null), `stores` las suyas con color, `multi` si tiene
- * varias y ninguna activa (la barra enseña sus códigos).
+ * Tema del panel para `me` (GET /admin/team/me). Devuelve
+ * { theme, storeTheme, store, stores, multi, operational }:
+ *  · `store` es la activa (o null) y `stores` las suyas con color; `multi` si
+ *    tiene varias y ninguna activa (la barra enseña sus códigos).
+ *  · `storeTheme` es el tema de la tienda activa, siempre (el punto de color
+ *    del filtro y de la píldora salen de aquí).
+ *  · `theme` es el que viste el cromo: para dueño y superadmin es `storeTheme`
+ *    solo en una pestaña de `OPERATIONAL_TABS` (`tab`, la que AdminShell
+ *    pasa) y neutro en las demás; para el personal de tienda, siempre
+ *    `storeTheme`. Sin `tab` (otros consumidores, p. ej. el filtro de tienda)
+ *    no se aplica la política y `theme` es `storeTheme`.
  */
-export function useStoreTheme(me) {
+export function useStoreTheme(me, { tab } = {}) {
   const isAdmin = !me || me.is_admin !== false;
   const [data, setData] = useState({ stores: [], assigned: null });
   const [hint, setHint] = useState(activeHint);
@@ -197,7 +222,11 @@ export function useStoreTheme(me) {
     if (!isAdmin) store = byId(assigned) || byId(hint) || (stores.length === 1 ? stores[0] : null);
     else store = byId(read(ACTIVE_KEY));
     // Sin color guardado, el que le toca por nombre (defaultColorForStore); sin eso, neutro.
-    const theme = store ? themeFor(store.color || defaultColorForStore(store.name), { key: store.id }) : themeFor(null, { neutral: true });
-    return { theme, store, stores, multi: !isAdmin && !store && stores.length > 1 };
-  }, [data, hint, isAdmin]);
+    const neutral = themeFor(null, { neutral: true });
+    const storeTheme = store ? themeFor(store.color || defaultColorForStore(store.name), { key: store.id }) : neutral;
+    // Política: el administrador solo "viste" la tienda donde opera (OPERATIONAL_TABS).
+    const operational = tab == null ? true : OPERATIONAL_TABS.has(tab);
+    const theme = isAdmin && !operational ? neutral : storeTheme;
+    return { theme, storeTheme, store, stores, multi: !isAdmin && !store && stores.length > 1, operational };
+  }, [data, hint, isAdmin, tab]);
 }

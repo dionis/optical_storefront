@@ -1,6 +1,6 @@
 import type { CostRule } from "../src/lib/costing";
 import { filterBoardRows, matchesStore, projectBoardOrder } from "../src/lib/order-board";
-import type { SaleListRow } from "../src/lib/sales-analytics";
+import { lensSummaryOf, saleListRowOf, type SaleListRaw, type SaleListRow } from "../src/lib/sales-analytics";
 import {
   attachSaleEconomics,
   insightAccess,
@@ -117,6 +117,79 @@ describe("attachSaleEconomics", () => {
     const [r] = attachSaleEconomics([row({ order_id: "o9" })], econ, { profit: true, commission: true });
     expect(r.profit).toBeNull();
     expect(r.margin_pct).toBeNull();
+  });
+});
+
+describe("saleListRowOf (the report columns of a sale)", () => {
+  const raw = (over: Partial<SaleListRaw> = {}): SaleListRaw => ({
+    order_id: "o1",
+    sale_id: "s1",
+    number: "Op1-000001",
+    channel: "pos",
+    establishment_id: "est_1",
+    seller_code: "ANA",
+    customer_id: "c1",
+    sold_at: "2026-10-27T15:00:00.000Z",
+    total: "21600",
+    discount: "0",
+    units: 2,
+    status: "active",
+    items: "Flex 1 · Flex 1",
+    frame_brand: "Flexure",
+    frame_model: "Flex 1",
+    frame_sku: "FX1-BLK",
+    frame_line_id: "li_1",
+    own_frame: false,
+    has_rx: true,
+    lens_design: "sv",
+    lens_material: "cr39",
+    lens_photo: null,
+    lens_ar: "ar_premium",
+    ...over,
+  });
+  const labels = {
+    designs: new Map([["sv", { label_es: "Monofocal", label_en: "Single vision" }]]),
+    materials: new Map([["cr39", { label_es: "CR-39", label_en: "CR-39" }]]),
+    photos: new Map(),
+    ars: new Map(),
+  };
+
+  it("a catalog frame with prescription lenses: brand, model, colour from the variant, lenses labelled per language", () => {
+    const r = saleListRowOf(raw(), {
+      sale: { paid_cents: 10000, balance_cents: 11600 },
+      customer: { first_name: "Ana", last_name: "García", email: "ana@x.com", phone: "+1 832 555 0100" },
+      line: { variant_title: "Negro mate", metadata: null },
+      labels,
+    });
+    expect(r).toMatchObject({
+      order_id: "o1", number: "Op1-000001", total: 216, paid: 100, balance: 116,
+      customer: "Ana García", customer_phone: "+1 832 555 0100",
+      frame_brand: "Flexure", frame_model: "Flex 1", frame_color: "Negro mate", frame_sku: "FX1-BLK",
+      own_frame: false, has_rx: true,
+      lens: { design: "sv", material: "cr39", photo: null, ar: "ar_premium" },
+      lens_summary: { es: "Monofocal · CR-39 · ar_premium", en: "Single vision · CR-39 · ar_premium" },
+    });
+  });
+
+  it("an own frame takes the customer's description as model and has no colour nor SKU; a web order is paid in full", () => {
+    const r = saleListRowOf(raw({ sale_id: null, channel: "web", frame_brand: null, frame_model: null, frame_sku: null, own_frame: true, lens_ar: null }), {
+      customer: { first_name: null, last_name: null, email: "web@x.com", phone: null },
+      line: { variant_title: null, metadata: { own_frame: { description: "Ray-Ban del cliente" } } },
+      labels,
+    });
+    expect(r).toMatchObject({ customer: "web@x.com", customer_phone: null, paid: 216, balance: 0, frame_brand: null, frame_model: "Ray-Ban del cliente", frame_color: null, frame_sku: null, own_frame: true, has_rx: true });
+    expect(r.lens_summary).toEqual({ es: "Monofocal · CR-39", en: "Single vision · CR-39" });
+  });
+
+  it("a frame-only sale has no lenses, no prescription and keeps the old fields untouched", () => {
+    const r = saleListRowOf(raw({ has_rx: false, lens_design: null, lens_material: null, lens_photo: null, lens_ar: null }));
+    expect(r).toMatchObject({ has_rx: false, own_frame: false, lens: null, lens_summary: null, customer: null, frame_color: null, items: "Flex 1 · Flex 1", units: 2, discount: 0 });
+    expect(lensSummaryOf({ design: null, material: null, photo: null, ar: null })).toBeNull();
+  });
+
+  it("the lens summary falls back to the code when the catalog has no label, and to the other language's label", () => {
+    const s = lensSummaryOf({ design: "sv", material: "poly", photo: "trans", ar: null }, { ...labels, photos: new Map([["trans", { label_es: "Transitions", label_en: null }]]) });
+    expect(s).toEqual({ es: "Monofocal · poly · Transitions", en: "Single vision · poly · Transitions" });
   });
 });
 

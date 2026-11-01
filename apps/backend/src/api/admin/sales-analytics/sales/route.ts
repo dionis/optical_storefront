@@ -13,6 +13,9 @@ import { attachSaleEconomics, insightAccess, orderEconomics } from "../../../../
  * Cost, fee, profit and margin come back null unless the caller may see the
  * store's profit (insightAccess: admins, costs.view, costs.manage); the
  * commission also for a seller over their own sales. `access` says which.
+ * Each row also describes the sale for the printed reports: `frame_brand`,
+ * `frame_model`, `frame_color`, `frame_sku`, `own_frame`, `has_rx`, `lens`
+ * (codes) and `lens_summary` ({es, en} labels), plus `customer_phone`.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {

@@ -1,0 +1,129 @@
+/* Dónde se usa: ReportDoc.jsx — la hoja de los reportes impresos (PDF) del
+   panel: Estado de tienda, Pedidos de la tienda y Ejecutivo. Se inyecta tal
+   cual (import "?inline") en el iframe aislado donde se imprime, así que no
+   depende de admin.css ni de sus variables: todo color es literal salvo el de
+   la tienda, que llega en --rp-accent. Carta apaisada, sin márgenes del
+   navegador (la cabecera/pie los pone el propio documento), 9.5–10px en
+   tablas, una línea por venta. */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
+
+:root {
+  --rp-accent: #1f2a44;
+  --rp-accent-ink: #ffffff;
+  --rp-ink: #17191f;
+  --rp-muted: #5b6472;
+  --rp-faint: #8a93a1;
+  --rp-line: #d9dde3;
+  --rp-line-2: #eceef2;
+  --rp-zebra: #f6f7f9;
+  --rp-soft: #f1f3f6;
+  --rp-good: #10754d;
+  --rp-bad: #b3261e;
+  --rp-warn: #8a5a0c;
+  --rp-font: "Manrope", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --rp-display: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+@page { size: letter landscape; margin: 0; }
+@page portrait { size: letter portrait; }
+
+html, body { margin: 0; padding: 0; background: #fff; }
+body { font-family: var(--rp-font); color: var(--rp-ink); font-size: 10px; line-height: 1.3; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+* { box-sizing: border-box; }
+
+/* Hoja: el relleno sustituye al margen de @page (así el navegador no imprime
+   su propio encabezado/URL) y la tabla de maquetación reserva sitio al pie en
+   cada página (tfoot se repite al paginar). */
+.rp-doc { width: 100%; }
+.rp-doc.portrait { page: portrait; }
+.rp-layout { width: 100%; border-collapse: collapse; }
+.rp-layout > thead > tr > td, .rp-layout > tbody > tr > td, .rp-layout > tfoot > tr > td { padding: 0; vertical-align: top; }
+.rp-layout > thead > tr > td { height: 7mm; }
+.rp-layout > tfoot > tr > td { height: 9mm; }
+.rp-body { padding: 0 10mm; }
+
+/* Cabecera: franja en el color de la tienda. */
+.rp-head { display: flex; justify-content: space-between; align-items: stretch; gap: 8mm; background: var(--rp-accent); color: var(--rp-accent-ink); border-radius: 3mm; padding: 4mm 6mm; margin-bottom: 4mm; break-inside: avoid; }
+.rp-head-main { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1mm; }
+.rp-tenant { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
+.rp-title { font-family: var(--rp-display); font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; margin: 0; }
+.rp-subtitle { font-size: 10.5px; opacity: .9; }
+.rp-head-side { display: grid; grid-template-columns: auto auto; gap: 1mm 6mm; align-content: center; text-align: right; font-size: 9.5px; white-space: nowrap; }
+.rp-head-side small { display: block; font-size: 8px; text-transform: uppercase; letter-spacing: .1em; opacity: .75; font-weight: 700; }
+.rp-head-side b { font-weight: 700; font-size: 10.5px; }
+.rp-head-store { display: flex; align-items: center; gap: 2mm; justify-content: flex-end; }
+.rp-head-store .rp-code { display: inline-block; padding: 0 2mm; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; font-weight: 800; font-size: 9px; letter-spacing: .06em; }
+.rp-head-addr { grid-column: 1 / -1; font-size: 9px; opacity: .85; white-space: normal; }
+
+/* Indicadores: una sola fila compacta; nunca se pinta una caja vacía. */
+.rp-kpis { display: flex; flex-wrap: wrap; gap: 2mm; margin-bottom: 3.5mm; break-inside: avoid; }
+.rp-kpi { flex: 1 1 0; min-width: 24mm; border: 1px solid var(--rp-line); border-left: 3px solid var(--rp-accent); border-radius: 2mm; padding: 1.6mm 2.4mm; display: flex; flex-direction: column; gap: .3mm; background: #fff; }
+.rp-kpi small { font-size: 7.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--rp-muted); line-height: 1.15; }
+.rp-kpi b { font-family: var(--rp-display); font-size: 14px; letter-spacing: -.02em; color: var(--rp-ink); white-space: nowrap; }
+.rp-kpi b.neg, .rp-kpi i.bad { color: var(--rp-bad); }
+.rp-kpi i { font-style: normal; font-size: 8px; color: var(--rp-faint); line-height: 1.15; }
+.rp-kpi i.good { color: var(--rp-good); }
+.rp-kpi i.warn { color: var(--rp-warn); }
+
+/* Resúmenes de los acordeones: título + pastillas en una fila. */
+.rp-summaries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6mm 4mm; margin-bottom: 3.5mm; break-inside: avoid; }
+.rp-summaries.one { grid-template-columns: 1fr; }
+.rp-summary { display: flex; align-items: center; gap: 2mm; min-width: 0; padding: 1.2mm 0; border-bottom: 1px solid var(--rp-line-2); }
+.rp-summary-title { font-weight: 800; font-size: 9px; color: var(--rp-ink); white-space: nowrap; min-width: 26mm; text-transform: uppercase; letter-spacing: .05em; }
+.rp-summary-title::before { content: ""; display: inline-block; width: 1.6mm; height: 1.6mm; border-radius: 50%; background: var(--rp-accent); margin-right: 1.4mm; vertical-align: 1px; }
+.rp-pills { display: flex; flex-wrap: wrap; gap: 1mm 1.5mm; min-width: 0; }
+.rp-pill { display: inline-flex; align-items: baseline; gap: 1mm; padding: .4mm 1.8mm; border-radius: 999px; background: var(--rp-soft); font-size: 8.5px; white-space: nowrap; color: var(--rp-ink); }
+.rp-pill small { font-size: 7.5px; color: var(--rp-muted); font-weight: 600; }
+.rp-pill b { font-weight: 700; }
+.rp-pill.strong { background: var(--rp-accent); color: var(--rp-accent-ink); }
+.rp-pill.strong small { color: inherit; opacity: .8; }
+.rp-pill.good b { color: var(--rp-good); }
+.rp-pill.bad b { color: var(--rp-bad); }
+.rp-pill.warn b { color: var(--rp-warn); }
+.rp-pill.muted { color: var(--rp-muted); }
+
+/* Gráficos: pequeños, lado a lado. */
+.rp-charts { display: flex; gap: 3mm; margin-bottom: 3.5mm; break-inside: avoid; }
+.rp-chart { flex: 1 1 0; min-width: 0; border: 1px solid var(--rp-line); border-radius: 2mm; padding: 2mm 2.5mm 1.5mm; }
+.rp-chart-title { font-size: 8.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--rp-muted); margin: 0 0 1mm; }
+.rp-chart svg { display: block; width: 100%; height: auto; max-height: 38mm; }
+.rp-chart.tall svg { max-height: 50mm; }
+
+/* Tablas: densas, cabecera repetida, una línea por fila. */
+.rp-section { margin-bottom: 4mm; }
+.rp-section-title { font-family: var(--rp-display); font-size: 13px; font-weight: 700; margin: 0 0 1.5mm; color: var(--rp-ink); break-after: avoid; display: flex; align-items: baseline; gap: 2mm; }
+.rp-section-title small { font-family: var(--rp-font); font-size: 8.5px; color: var(--rp-muted); font-weight: 600; }
+.rp-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+.rp-table thead { display: table-header-group; }
+.rp-table tfoot { display: table-footer-group; }
+.rp-table th, .rp-table td { padding: 1mm 0.9mm; border-bottom: 1px solid var(--rp-line-2); text-align: left; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-table th { font-size: 7px; line-height: 1.1; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--rp-muted); border-bottom: 1.5px solid var(--rp-ink); background: #fff; white-space: normal; vertical-align: bottom; }
+.rp-table th.r, .rp-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.rp-table th.c, .rp-table td.c { text-align: center; }
+.rp-table tbody tr:nth-child(even) td { background: var(--rp-zebra); }
+.rp-table tbody tr { break-inside: avoid; }
+.rp-table td.num { font-variant-numeric: tabular-nums; }
+.rp-table td.muted, .rp-table .muted { color: var(--rp-muted); }
+.rp-table td.neg, .rp-table .neg { color: var(--rp-bad); }
+.rp-table td.pos, .rp-table .pos { color: var(--rp-good); }
+.rp-table tr.voided td { color: var(--rp-faint); text-decoration: line-through; }
+.rp-table tfoot td { font-weight: 800; border-top: 1.5px solid var(--rp-ink); border-bottom: 0; background: var(--rp-soft); }
+.rp-table .rp-tag { display: inline-block; padding: 0 1.2mm; border-radius: 999px; font-size: 7px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--rp-line); color: var(--rp-muted); line-height: 1.6; }
+.rp-table .rp-tag.on { border-color: var(--rp-accent); color: var(--rp-accent); }
+.rp-table .rp-tag.good { border-color: var(--rp-good); color: var(--rp-good); }
+.rp-table .rp-tag.bad { border-color: var(--rp-bad); color: var(--rp-bad); }
+.rp-empty { padding: 3mm; border: 1px dashed var(--rp-line); border-radius: 2mm; color: var(--rp-muted); text-align: center; font-size: 9px; }
+
+/* Pie fijo (se repite en cada página; el tfoot de .rp-layout le deja el hueco). */
+.rp-foot { position: fixed; left: 10mm; right: 10mm; bottom: 0; height: 9mm; display: flex; align-items: center; justify-content: space-between; gap: 4mm; border-top: 1px solid var(--rp-line); font-size: 8px; color: var(--rp-muted); background: #fff; }
+.rp-foot b { color: var(--rp-ink); }
+.rp-foot .rp-foot-dot { display: inline-block; width: 2mm; height: 2mm; border-radius: 50%; background: var(--rp-accent); margin-right: 1.5mm; vertical-align: -0.2mm; }
+
+/* Vista en pantalla (si alguna vez se monta fuera del iframe): mismo aspecto, con sombra de hoja. */
+@media screen {
+  body { background: #e9ebef; padding: 8mm; }
+  .rp-doc { width: 279.4mm; min-height: 215.9mm; margin: 0 auto; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.14); position: relative; }
+  .rp-doc.portrait { width: 215.9mm; min-height: 279.4mm; }
+  .rp-foot { position: absolute; }
+}
