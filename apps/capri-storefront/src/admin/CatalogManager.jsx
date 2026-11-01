@@ -21,11 +21,14 @@
 //     (src/admin/pricing/api.js). Aquí no se recalcula ningún precio;
 //   · habilitar/deshabilitar → surtido por tienda, /admin/store-assortment/:id
 //     y …/rule, con la precedencia del backend (modelo > marca > expuesto);
-//   · costo de proveedor → /admin/pricing/frames/costs, por la caché de
-//     lecturas del panel (TTL largo: un costo cambia cuando llega lista nueva).
-//     Ya NO sale del navegador: el costo es lo que hace fiable la contabilidad y
-//     tiene que ser el mismo para el dueño, la caja y el informe. Se edita con
-//     POST /admin/pricing/frames/cost (pricing/api.js), igual que el precio;
+//   · costo → /admin/pricing/frames/costs?store=…, por la caché de lecturas del
+//     panel (TTL largo: un costo cambia cuando llega lista nueva). Ya NO sale
+//     del navegador: el costo es lo que hace fiable la contabilidad y tiene que
+//     ser el mismo para el dueño, la caja y el informe. Tiene las MISMAS dos
+//     capas que el precio: «Todas las tiendas» es el maestro (lo que paga la
+//     cadena) y con una tienda elegida se ve y se edita lo que paga ELLA, con
+//     «Heredado» donde cae al maestro. Se edita con POST
+//     /admin/pricing/frames/cost (pricing/api.js), igual que el precio;
 //   · «Descontinuar» → Admin API de Medusa (catalogAdmin.js). NO es lo mismo
 //     que el interruptor: uno saca el modelo del catálogo entero, el otro solo
 //     lo oculta en una tienda. Lo explica el HelpTip «catalog.assortVsOff».
@@ -137,16 +140,17 @@ export default function CatalogManager({ me = null, params = null }) {
     return () => { on = false; };
   }, [demo, priceScope]);
 
-  // Costos del proveedor: una lectura para TODAS las marcas (no cuelga de la
-  // tienda — lo que cuesta un modelo es lo mismo en todos los mostradores) y
-  // cacheada con TTL largo, así que abrir y cerrar acordeones no pide nada.
+  // Costos: una lectura para TODAS las marcas, del MISMO alcance que los
+  // precios (`priceScope`: el maestro, o la tienda elegida arriba) y cacheada
+  // con TTL largo, así que abrir y cerrar acordeones no pide nada. Al cambiar
+  // de tienda se vacía primero: no se enseña el costo de la tienda anterior.
   const loadCosts = useCallback(async (force = false) => {
     if (demo) return null;
-    const index = await loadFrameCosts({ force });
+    const index = await loadFrameCosts({ force, store: priceScope });
     setCosts(index);
     return index;
-  }, [demo]);
-  useEffect(() => { loadCosts(); }, [loadCosts]);
+  }, [demo, priceScope]);
+  useEffect(() => { setCosts(null); loadCosts(); }, [loadCosts]);
 
   // Surtido: solo existe por tienda. Una sola lectura trae la regla de cada
   // marca y las excepciones por modelo; la precedencia se resuelve al pintar.
@@ -273,12 +277,14 @@ export default function CatalogManager({ me = null, params = null }) {
 
   /**
    * Resumen de una marca para su cabecera cerrada. El costo medio y el margen
-   * medio salen SOLO de los modelos con costo real; los que no lo tienen se
-   * cuentan aparte (`noCost`) en vez de entrar como cero, que es lo que haría
-   * que la cabecera presumiera de un margen que no existe.
+   * medio salen SOLO de los modelos con costo real — y del costo EFECTIVO del
+   * alcance abierto, así que con una tienda elegida la cabecera resume lo que
+   * paga ELLA; los que no lo tienen se cuentan aparte (`noCost`) en vez de
+   * entrar como cero, que es lo que haría que la cabecera presumiera de un
+   * margen que no existe. `storeCosts` son los que esa tienda maneja aparte.
    */
   const statsOf = useCallback((list) => {
-    let colors = 0, min = null, max = null, costSum = 0, costN = 0, marginSum = 0, marginN = 0, noCost = 0;
+    let colors = 0, min = null, max = null, costSum = 0, costN = 0, marginSum = 0, marginN = 0, noCost = 0, storeCosts = 0;
     for (const p of list) {
       colors += (p.colors || []).length;
       const price = overrideOf(p)?.price ?? p.price;
@@ -286,7 +292,9 @@ export default function CatalogManager({ me = null, params = null }) {
         min = min == null ? price : Math.min(min, price);
         max = max == null ? price : Math.max(max, price);
       }
-      const cents = costOfProduct(p)?.cents ?? null;
+      const descriptor = costOfProduct(p);
+      if (descriptor?.storeOwn) storeCosts += 1;
+      const cents = descriptor?.cents ?? null;
       if (cents == null) { noCost += 1; continue; }
       const cost = cents / 100;
       costSum += cost; costN += 1;
@@ -302,6 +310,8 @@ export default function CatalogManager({ me = null, params = null }) {
       // Mientras el servidor no haya contestado no se acusa a nadie de estar
       // sin costo: todavía no se sabe.
       noCost: costs ? noCost : 0,
+      // Cuántos de estos modelos maneja la tienda abierta con costo propio.
+      storeCosts,
     };
   }, [overrideOf, costOfProduct, costs]);
 
@@ -351,38 +361,54 @@ export default function CatalogManager({ me = null, params = null }) {
   }, [priceScope, toast, t]);
 
   /**
-   * Costo del proveedor de un modelo: POST /admin/pricing/frames/cost. Va por
-   * SKU (no por `medusaId`): el costo es del modelo del proveedor, así que un
-   * modelo del catálogo semilla todavía sin enlazar también puede llevarlo.
-   * No cuelga de la tienda — lo que cuesta no cambia de mostrador.
+   * Costo de un modelo: POST /admin/pricing/frames/cost. Va por SKU (no por
+   * `medusaId`): el costo es del modelo del proveedor, así que un modelo del
+   * catálogo semilla todavía sin enlazar también puede llevarlo.
+   *
+   * Escribe en la capa que se está viendo (`priceScope`): con «Todas las
+   * tiendas», el maestro — lo que paga la cadena, y lo que heredan todas; con
+   * una tienda elegida, lo que paga ESA tienda.
    */
   const onSaveCost = useCallback(async (p, value) => {
     const cost = Number(value);
     if (!p.sku || !Number.isFinite(cost) || cost < 0) return false;
     setBusy(p.slug || p.sku);
     try {
-      await saveFrameCost({ sku: p.sku, costUsd: cost });
+      await saveFrameCost({ sku: p.sku, costUsd: cost, store: priceScope });
       await loadCosts(true);
-      toast({ tone: "success", title: t("adm.cm.costSaved", { name: p.name, cost: usd(cost) }) });
+      toast({
+        tone: "success",
+        title: realStore
+          ? t("adm.cm.costSavedStore", { name: p.name, cost: usd(cost), store: storeInfo.label })
+          : t("adm.cm.costSaved", { name: p.name, cost: usd(cost) }),
+      });
       return true;
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
       return false;
     } finally { setBusy(null); }
-  }, [loadCosts, toast, t, usd]);
+  }, [priceScope, realStore, storeInfo.label, loadCosts, toast, t, usd]);
 
-  /** Quitar el costo propio: el modelo vuelve al de la lista del proveedor. */
+  /**
+   * Quitar el costo propio de la capa que se está viendo: el maestro vuelve al
+   * de la lista del proveedor, y una tienda vuelve a heredar el maestro.
+   */
   const onClearCost = useCallback(async (p) => {
     if (!p.sku) return;
     setBusy(p.slug || p.sku);
     try {
-      await saveFrameCost({ sku: p.sku, costUsd: null });
+      await saveFrameCost({ sku: p.sku, costUsd: null, store: priceScope });
       await loadCosts(true);
-      toast({ tone: "success", title: t("adm.cm.costCleared", { name: p.name }) });
+      toast({
+        tone: "success",
+        title: realStore
+          ? t("adm.cm.costClearedStore", { name: p.name, store: storeInfo.label })
+          : t("adm.cm.costCleared", { name: p.name }),
+      });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(null); }
-  }, [loadCosts, toast, t]);
+  }, [priceScope, realStore, storeInfo.label, loadCosts, toast, t]);
 
   /** Surtido de la tienda: una regla por marca o por modelo (el modelo manda). */
   const writeRule = useCallback(async (rule, key, title) => {

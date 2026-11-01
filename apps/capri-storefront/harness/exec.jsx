@@ -146,18 +146,26 @@ const CM_HISTORY = [
 // así se puede ver el estado «oculta» y la precedencia modelo > marca.
 const CM_RULES = new Map([["brand:trendy", false], ["product:prod_DC203", false]]);
 
-/* ── Costos del proveedor (GET /admin/pricing/frames/costs) ────────────────
-   El contrato tal cual: filas { sku, model, book_cents, cost_cents, source,
-   updated_at } y el resumen { with_cost, without_cost }. Los pares
-   «lista → descuento» son los reales de Capri 2026 (DC 89.99 → 20.99, PT 49.99
-   → 3.75, FX 89.99 → 16.99, ML 54.99 → 6.25…).
+/* ── Costo de las monturas (GET /admin/pricing/frames/costs?store=…) ───────
+   El contrato tal cual: `costs` con filas { sku, model, book_cents, cost_cents,
+   origin, source, master_cost_cents, inherited, updated_at } y el resumen
+   { with_cost, without_cost, store_variations }. Los pares «lista → descuento»
+   son los reales de Capri 2026 (DC 89.99 → 20.99, PT 49.99 → 3.75, FX 89.99 →
+   16.99, ML 54.99 → 6.25…).
 
-   Tres casos a propósito, porque son los tres que hay que poder mirar:
-     · lo normal: costo de la lista del proveedor (`source: "supplier"`);
-     · lo que el dueño cambió a mano (`source: "owner"`, pastilla «Propio»);
+   El MAESTRO (todas las tiendas) tiene tres casos a propósito, porque son los
+   tres que hay que poder mirar:
+     · lo normal: costo de la lista del proveedor (`supplier_list`);
+     · lo que el dueño cambió a mano (`owner_edit`, pastilla «Propio»);
      · lo que NO tiene costo (`cost_cents: null`) — los dos estuches del caso
        real (el de Grande y el de SimplyLite) y tres monturas, para ver el aviso
-       de cobertura, el filtro «solo los que faltan» y la fila destacada.    */
+       de cobertura, el filtro «solo los que faltan» y la fila destacada.
+
+   Y encima, LA VARIACIÓN POR TIENDA (store_frame_cost_variation): El Rancho 39
+   (est_02) maneja tres modelos aparte — uno más caro que el maestro, uno más
+   barato y un estuche que la cadena no sabe cuánto cuesta — para ver «Heredado»
+   en todo lo demás, la columna «Maestro» al lado y la cobertura de ESA tienda.
+   Se recuerda en memoria: fijar y deshacer se puede probar de verdad.         */
 const COST_TIERS = [
   ["PRX", 10999, 2999], ["DC", 8999, 1699], ["FX", 8999, 1699], ["GR", 7999, 1699],
   ["TY", 5999, 850], ["ML", 5499, 625], ["PT", 4999, 375], ["U", 3999, 299],
@@ -182,7 +190,7 @@ const addCost = (sku, model, isCase) => {
     sku, model,
     book_cents: book,
     cost_cents: missing ? null : own ?? list,
-    source: own ? "owner" : "supplier",
+    source: own ? "owner_edit" : "supplier_list",
     updated_at: own ? "2026-10-24T09:10:00Z" : "2026-07-01T00:00:00Z",
   });
 };
@@ -195,6 +203,29 @@ addCost("SIMPLYLITECASE", "SimplyLite Case", true);
 addCost("DC241", "DC241", false);
 addCost("FL118", "FL 118", false);
 addCost("CS-RIG", "Estuche rígido", true);
+
+/** Costo propio de cada tienda: Map<establishment_id, Map<sku, cents>>. */
+const CM_STORE_COSTS = new Map([
+  ["est_02", new Map([
+    ["DC206", 2650],        // más caro que el maestro (que ya era del dueño)
+    ["FX323", 1250],        // más barato que la lista del proveedor
+    ["GRANDECASE", 420],    // la cadena no lo sabe; esta tienda sí
+  ])],
+  ["est_01", new Map([["ML8", 700]])],
+]);
+
+/**
+ * El costo EFECTIVO de un modelo en un alcance, con la misma precedencia del
+ * servidor: variación de la tienda → maestro → desconocido (nunca 0).
+ */
+const costRowFor = (row, storeId) => {
+  const own = storeId ? CM_STORE_COSTS.get(storeId)?.get(ckey(row.sku)) : undefined;
+  const master = row.cost_cents;
+  if (own != null) {
+    return { ...row, cost_cents: own, origin: "store_variation", master_cost_cents: master, inherited: false, updated_at: "2026-10-31T16:40:00Z" };
+  }
+  return { ...row, origin: row.source, master_cost_cents: master, inherited: Boolean(storeId) };
+};
 
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -245,33 +276,57 @@ window.fetch = async (input, init) => {
   // Costos del proveedor: los lee «Productos» (acordeón por marca) y la vista
   // Monturas de «Precios y costos», por la misma entrada de caché.
   if (p === "/admin/pricing/frames/costs") {
-    const rows = [...CM_COSTS.values()];
+    const asked = g("store");
+    const storeId = asked && asked !== "all" && asked !== "web" ? asked : null;
+    const rows = [...CM_COSTS.values()].map((r) => costRowFor(r, storeId));
     return json({
-      rows,
+      store: storeId,
+      costs: rows,
       summary: {
         with_cost: rows.filter((r) => r.cost_cents != null).length,
         without_cost: rows.filter((r) => r.cost_cents == null).length,
+        store_variations: storeId ? CM_STORE_COSTS.get(storeId)?.size ?? 0 : 0,
       },
     });
   }
-  // Fijar o devolver el costo de un modelo. El banco lo recuerda EN MEMORIA, así
-  // que se puede ver la pastilla «Propio» aparecer y el botón de deshacer
-  // devolver el modelo al costo de la lista.
+  // Fijar o devolver el costo de un modelo, en el MAESTRO o en una tienda. El
+  // banco lo recuerda EN MEMORIA, así que se puede ver aparecer la pastilla
+  // «Propio» y el botón de deshacer devolver el modelo a la capa de arriba: el
+  // maestro a la lista del proveedor, y una tienda a heredar el maestro.
   if (p === "/admin/pricing/frames/cost") {
     const body = JSON.parse(init?.body || "{}");
     const k = ckey(body.sku);
-    const row = CM_COSTS.get(k) || { sku: body.sku, model: body.sku, book_cents: null };
-    if (body.cost_cents == null) {
-      const [, list] = tierOf(body.sku, ckey(body.sku).includes("CASE"));
+    const asked = body.store;
+    const storeId = asked && asked !== "all" && asked !== "web" ? asked : null;
+    const row = CM_COSTS.get(k) || { sku: body.sku, model: body.sku, book_cents: null, cost_cents: null, source: "supplier_list" };
+    if (storeId) {
+      const own = CM_STORE_COSTS.get(storeId) || new Map();
+      if (body.cost_cents == null) own.delete(k);
+      else own.set(k, Number(body.cost_cents));
+      CM_STORE_COSTS.set(storeId, own);
+    } else if (body.cost_cents == null) {
+      const [, list] = tierOf(body.sku, k.includes("CASE"));
       row.cost_cents = COST_MISSING.has(k) ? null : list;
-      row.source = "supplier";
+      row.source = "supplier_list";
+      row.updated_at = new Date().toISOString();
+      CM_COSTS.set(k, row);
     } else {
       row.cost_cents = Number(body.cost_cents);
-      row.source = "owner";
+      row.source = "owner_edit";
+      row.updated_at = new Date().toISOString();
+      CM_COSTS.set(k, row);
     }
-    row.updated_at = new Date().toISOString();
-    CM_COSTS.set(k, row);
-    return json({ ok: true, sku: row.sku, cost_cents: row.cost_cents, source: row.source });
+    const rows = [...CM_COSTS.values()].map((r) => costRowFor(r, storeId));
+    return json({
+      store: storeId,
+      cost: costRowFor(CM_COSTS.get(k) || row, storeId),
+      costs: rows,
+      summary: {
+        with_cost: rows.filter((r) => r.cost_cents != null).length,
+        without_cost: rows.filter((r) => r.cost_cents == null).length,
+        store_variations: storeId ? CM_STORE_COSTS.get(storeId)?.size ?? 0 : 0,
+      },
+    });
   }
   // Monturas descontinuadas (status draft) que lista fetchDiscontinued().
   if (p === "/admin/products") {

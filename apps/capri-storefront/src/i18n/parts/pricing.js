@@ -104,6 +104,25 @@ const es = {
   "adm.price.frames.cost.col.margin": "Margen",
   "adm.price.frames.cost.col.since": "Cambiado",
 
+  // El costo por tienda: la segunda capa, la misma que ya tienen los precios.
+  // Con «Todas las tiendas» se edita el maestro; con una tienda elegida, lo que
+  // paga ELLA, y lo que no maneja se hereda del maestro.
+  "adm.price.frames.cost.titleStore": "Costo de esta tienda",
+  "adm.price.frames.cost.subStore":
+    "Lo que le cuesta cada modelo A ESTA TIENDA. Lo que no cambies aquí lo hereda del maestro (todas las tiendas).",
+  "adm.price.frames.cost.storeBadge": "Propio",
+  "adm.price.frames.cost.storeHint": "Costo propio de esta tienda: no sigue al maestro.",
+  "adm.price.frames.cost.inheritHint": "Esta tienda no maneja su propio costo: usa el del maestro.",
+  "adm.price.frames.cost.master": "Maestro {v}",
+  "adm.price.frames.cost.masterHint": "Lo que le cuesta a la cadena (maestro, todas las tiendas).",
+  "adm.price.frames.cost.ariaStore": "Costo de {name} en esta tienda, en dólares",
+  "adm.price.frames.cost.saveStore": "Guardar el costo de {name} en esta tienda",
+  "adm.price.frames.cost.clearStore": "Devolver {name} al costo del maestro",
+  "adm.price.frames.cost.variations": "{n} con costo propio",
+  "adm.price.frames.cost.variationsHint": "Modelos cuyo costo maneja esta tienda aparte del maestro.",
+  "adm.price.frames.cost.col.master": "Maestro",
+  "adm.price.frames.cost.col.costStore": "Costo de la tienda",
+
   // ── Lentes ──
   "adm.price.lenses.title": "Lentes",
   "adm.price.lenses.sub": "La matriz diseño × material, por tipo de diseño: elige el tipo y ves solo sus precios.",
@@ -301,6 +320,22 @@ const en = {
   "adm.price.frames.cost.col.price": "Sale price",
   "adm.price.frames.cost.col.margin": "Margin",
   "adm.price.frames.cost.col.since": "Changed",
+
+  "adm.price.frames.cost.titleStore": "This store's cost",
+  "adm.price.frames.cost.subStore":
+    "What each model costs THIS STORE. Anything you do not change here it inherits from the master (all stores).",
+  "adm.price.frames.cost.storeBadge": "Own",
+  "adm.price.frames.cost.storeHint": "This store's own cost: it does not follow the master.",
+  "adm.price.frames.cost.inheritHint": "This store does not manage its own cost: it uses the master's.",
+  "adm.price.frames.cost.master": "Master {v}",
+  "adm.price.frames.cost.masterHint": "What it costs the chain (master, all stores).",
+  "adm.price.frames.cost.ariaStore": "Cost of {name} at this store, in dollars",
+  "adm.price.frames.cost.saveStore": "Save the cost of {name} at this store",
+  "adm.price.frames.cost.clearStore": "Send {name} back to the master cost",
+  "adm.price.frames.cost.variations": "{n} with their own cost",
+  "adm.price.frames.cost.variationsHint": "Models whose cost this store manages apart from the master.",
+  "adm.price.frames.cost.col.master": "Master",
+  "adm.price.frames.cost.col.costStore": "Store cost",
 
   "adm.price.lenses.title": "Lenses",
   "adm.price.lenses.sub": "The design × material matrix, by design type: pick the type and you see only its prices.",

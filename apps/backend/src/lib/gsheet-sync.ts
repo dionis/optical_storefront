@@ -55,12 +55,18 @@ import { tenantName } from "./tenant";
 import {
   frameCostCentsFrom,
   frameCostRowFrom,
+  frameCostVariationFrom,
+  indexFrameCostVariations,
+  listFrameCostVariations,
   listFrameCosts,
   loadCatalogModels,
   type CatalogModel,
   type FrameCostRow,
   type FrameCostSource,
+  type FrameCostVariationIndex,
+  type FrameCostVariationRow,
 } from "./frame-cost";
+import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { projectBoardOrder } from "./order-board";
 import { loadPricingOverview, type PricingOverview } from "./pricing-overview";
 import {
@@ -2810,6 +2816,27 @@ const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
 };
 
 /**
+ * UNA COLUMNA POR TIENDA, no una fila por (modelo, tienda).
+ *
+ * El dueño lee esta pestaña modelo por modelo: quiere abrir «Costos monturas»,
+ * buscar DC406 y ver de un golpe lo que cuesta. Con una fila por par serían
+ * 6 tiendas × ~600 modelos = 3.600 filas, el mismo modelo repetido seis veces,
+ * y comparar «lo que paga el maestro» con «lo que paga Rancho» obligaría a
+ * ordenar y saltar entre filas. Con una columna por tienda la pestaña sigue
+ * teniendo ~600 filas (una por modelo, como hoy), la columna `Costo` sigue
+ * siendo el maestro, y cada tienda añade una columna que está VACÍA cuando
+ * hereda — así se ve, de una pasada por la columna, qué modelos maneja esa
+ * tienda aparte. Seis tiendas son seis columnas; si algún día fueran cuarenta,
+ * esta decisión se revisa (y entonces lo caro sería el ancho, no las filas).
+ *
+ * Encabezado de cada columna: el código de la tienda, que es como el dueño las
+ * nombra en el panel y en el asunto de los correos.
+ */
+export function frameCostsSheetHeaders(stores: readonly EstablishmentRow[] = []): string[] {
+  return [...FRAME_COSTS_HEADERS, ...stores.map((s) => `Costo ${s.code || s.name}`)];
+}
+
+/**
  * Filas de la pestaña Costos monturas. Pura, para poder probarla sin la API.
  *
  * Recorre el CATÁLOGO (lo que la tienda vende) y le une su costo por SKU, así
@@ -2817,27 +2844,49 @@ const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
  * VACÍAS y «Sin costo» en Fuente: un 0 ahí convertiría un estuche sin costo en
  * un margen del 100 %. Si el catálogo no se pudo leer, lista las filas de
  * costo que haya, sin precio, para que la hoja nunca quede vacía.
+ *
+ * `stores` + `variations` añaden una columna por tienda (ver
+ * `frameCostsSheetHeaders`): lleva lo que paga ESA tienda cuando tiene costo
+ * propio y queda vacía cuando hereda el maestro. Sin tiendas la pestaña es
+ * exactamente la de antes.
  */
-export function frameCostsSheetRows(costs: readonly FrameCostRow[], catalog: readonly CatalogModel[]): Cell[][] {
+export function frameCostsSheetRows(
+  costs: readonly FrameCostRow[],
+  catalog: readonly CatalogModel[],
+  stores: readonly EstablishmentRow[] = [],
+  variations: FrameCostVariationIndex = new Map()
+): Cell[][] {
   const rows: Cell[][] = [];
+  const headers = frameCostsSheetHeaders(stores);
+  const byKey = new Map(costs.map((c) => [c.sku, c]));
   const withCost = catalog.length
-    ? catalog.filter((m) => frameCostCentsFrom(new Map(costs.map((c) => [c.sku, c])), m.sku) !== null).length
+    ? catalog.filter((m) => frameCostCentsFrom(byKey, m.sku) !== null).length
     : costs.length;
+  /** Lo que paga cada tienda, o "" cuando hereda: una celda por tienda. */
+  const storeCells = (sku: string): Cell[] =>
+    stores.map((st) => {
+      const own = frameCostVariationFrom(variations, sku, st.id);
+      return own ? dollarsOf(own.cost_cents) : "";
+    });
+  const varied = stores.reduce((n, st) => n + (variations.get(st.id)?.size ?? 0), 0);
+
   rows[0] = [`${tenantName()} · Costo y precio por modelo`];
   rows[1] = [
     "Solo lectura: lo que se le paga al proveedor por cada montura o estuche y el precio al que se vende. " +
       `Se refresca al guardar un costo en el panel y cada 30 minutos. ${withCost} de ${catalog.length || costs.length} modelos con costo conocido; ` +
-      "un modelo sin costo deja las celdas vacías (no vale 0) y su margen se reporta como desconocido.",
+      "un modelo sin costo deja las celdas vacías (no vale 0) y su margen se reporta como desconocido." +
+      (stores.length
+        ? ` La columna «Costo» es el MAESTRO (todas las tiendas); cada columna «Costo <tienda>» lleva lo que paga esa tienda cuando maneja su propio costo y queda vacía cuando hereda el maestro (${varied} ${varied === 1 ? "costo propio" : "costos propios"} de tienda en total).`
+        : ""),
   ];
   rows[2] = [];
-  rows[FRAME_COSTS_HEADER_ROW] = [...FRAME_COSTS_HEADERS];
+  rows[FRAME_COSTS_HEADER_ROW] = [...headers];
 
-  const byKey = new Map(costs.map((c) => [c.sku, c]));
   const stamp = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 
   if (!catalog.length) {
     for (const c of costs) {
-      rows.push([c.model, c.sku, "", dollarsOf(c.cost_cents), "", "", "", FRAME_COST_SOURCE_LABEL[c.source], stamp(c.updated_at)]);
+      rows.push([c.model, c.sku, "", dollarsOf(c.cost_cents), "", "", "", FRAME_COST_SOURCE_LABEL[c.source], stamp(c.updated_at), ...storeCells(c.sku)]);
     }
     return rows.map((r) => r ?? []);
   }
@@ -2859,6 +2908,7 @@ export function frameCostsSheetRows(costs: readonly FrameCostRow[], catalog: rea
       margin == null || !m.price_cents ? "" : Number(((margin / m.price_cents) * 100).toFixed(1)),
       cost ? FRAME_COST_SOURCE_LABEL[cost.source] : "Sin costo",
       cost ? stamp(cost.updated_at) : "",
+      ...storeCells(m.sku),
     ]);
   }
   return rows.map((r) => r ?? []);
@@ -2873,11 +2923,18 @@ export function frameCostsSheetRows(costs: readonly FrameCostRow[], catalog: rea
 export async function writeFrameCostsSheet(
   cfg: GsheetConfig,
   costs: readonly FrameCostRow[],
-  catalog: readonly CatalogModel[]
+  catalog: readonly CatalogModel[],
+  stores: readonly EstablishmentRow[] = [],
+  variations: FrameCostVariationIndex = new Map()
 ): Promise<void> {
   const sheets = await readSheetsMeta(cfg);
-  const rows = frameCostsSheetRows(costs, catalog);
-  const n = FRAME_COSTS_HEADERS.length;
+  const rows = frameCostsSheetRows(costs, catalog, stores, variations);
+  // El ancho de la tabla CRECE con las tiendas (una columna por tienda), así
+  // que todo lo que formatea por índice de columna sale de aquí, nunca de la
+  // lista fija de encabezados.
+  const n = frameCostsSheetHeaders(stores).length;
+  /** Primera columna de tienda (y, sin tiendas, el final de la tabla). */
+  const firstStoreCol = FRAME_COSTS_HEADERS.length;
   const lastRow = Math.max(rows.length, 60);
   const gridRows = Math.max(rows.length + 100, 800);
 
@@ -2935,8 +2992,19 @@ export async function writeFrameCostsSheet(
     fmt(range(H + 1, lastRow, 3, 6), { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" }),
     fmt(range(H + 1, lastRow, 6, 7), { numberFormat: { type: "NUMBER", pattern: "#,##0.0" }, horizontalAlignment: "RIGHT" }),
     fmt(range(H + 1, lastRow, 7, 9), { textFormat: { fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    // Las columnas por tienda son dinero como la del maestro, y en gris: lo que
+    // se lee primero es el maestro, y la celda vacía significa «hereda».
+    ...(stores.length
+      ? [
+          fmt(range(H + 1, lastRow, firstStoreCol, n), {
+            numberFormat: { type: "NUMBER", pattern: "#,##0.00" },
+            horizontalAlignment: "RIGHT",
+            textFormat: { bold: false, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } },
+          }),
+        ]
+      : []),
     { updateBorders: { range: range(H + 1, Math.max(rows.length, H + 2), 0, n), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    ...[200, 120, 140, 90, 90, 90, 80, 160, 110].map((px, i) => ({
+    ...[200, 120, 140, 90, 90, 90, 80, 160, 110, ...stores.map(() => 100)].map((px, i) => ({
       updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: px }, fields: "pixelSize" },
     })),
     { setBasicFilter: { filter: { range: range(H, Math.max(rows.length, H + 2), 0, n) } } },
@@ -2986,9 +3054,20 @@ export async function mirrorFrameCostsToSheet(container: MedusaContainer): Promi
   const cfg = gsheetConfig();
   if (!cfg || privateKeyProblem(cfg.privateKey)) return;
   try {
-    const [costs, catalog] = await Promise.all([listFrameCosts(container), loadCatalogModels(container)]);
-    await writeFrameCostsSheet(cfg, costs, catalog);
-    logger.info(`[gsheet] pestaña ${FRAME_COSTS_SHEET} actualizada (${costs.length} costos, ${catalog.length} modelos).`);
+    // Las tiendas y sus costos propios caen solos: si alguno de los dos falla
+    // (base sin migrar, módulo caído) la pestaña se escribe como antes, con el
+    // maestro y sin columnas por tienda, en vez de no escribirse.
+    const [costs, catalog, stores, variations] = await Promise.all([
+      listFrameCosts(container),
+      loadCatalogModels(container),
+      listEstablishments(container).catch(() => [] as EstablishmentRow[]),
+      listFrameCostVariations(container).catch(() => [] as FrameCostVariationRow[]),
+    ]);
+    const active = stores.filter((st) => st.is_active);
+    await writeFrameCostsSheet(cfg, costs, catalog, active, indexFrameCostVariations(variations));
+    logger.info(
+      `[gsheet] pestaña ${FRAME_COSTS_SHEET} actualizada (${costs.length} costos, ${catalog.length} modelos, ${active.length} tiendas, ${variations.length} costos propios de tienda).`
+    );
   } catch (error) {
     logger.warn(`[gsheet] pestaña ${FRAME_COSTS_SHEET} no actualizada: ${(error as Error).message}`);
   }

@@ -33,6 +33,7 @@ const es = {
   "adm.cm.b.margin": "margen medio",
   "adm.cm.b.off": "descatalogados",
   "adm.cm.b.noCost": "sin costo",
+  "adm.cm.b.storeCosts": "costo propio de {store}",
   "adm.cm.b.hidden": "oculta en {store}",
   "adm.cm.b.range": "{min} – {max}",
 
@@ -61,6 +62,18 @@ const es = {
   "adm.cm.clearCost": "Devolver {name} al costo de la lista del proveedor",
   "adm.cm.costSaved": "{name}: costo {cost}.",
   "adm.cm.costCleared": "{name} vuelve al costo de la lista del proveedor.",
+  // El costo por tienda: la segunda capa, la misma que ya tienen los precios.
+  // Con «Todas las tiendas» la fila edita el maestro; con una tienda elegida,
+  // lo que paga ELLA, y lo que no maneja lo hereda del maestro.
+  "adm.cm.col.costStore": "Costo de la tienda",
+  "adm.cm.costStoreHint": "Costo propio de esta tienda: no sigue al maestro.",
+  "adm.cm.costMaster": "Maestro {v}",
+  "adm.cm.costMasterHint": "Lo que le cuesta a la cadena (maestro, todas las tiendas).",
+  "adm.cm.costAriaStore": "Costo de {name} en esta tienda, en dólares",
+  "adm.cm.saveCostStore": "Guardar el costo de {name} en esta tienda",
+  "adm.cm.clearCostStore": "Devolver {name} al costo del maestro",
+  "adm.cm.costSavedStore": "{name}: costo {cost} en {store}.",
+  "adm.cm.costClearedStore": "{name} vuelve al costo del maestro en {store}.",
   "adm.cm.costsOffline":
     "El servidor no dio los costos: se enseña la última lista de Capri guardada en el navegador y el costo no se puede editar hasta que vuelva.",
   "adm.cm.noCost": "Sin costo",
@@ -142,6 +155,7 @@ const en = {
   "adm.cm.b.margin": "avg. margin",
   "adm.cm.b.off": "discontinued",
   "adm.cm.b.noCost": "no cost",
+  "adm.cm.b.storeCosts": "own cost at {store}",
   "adm.cm.b.hidden": "hidden in {store}",
   "adm.cm.b.range": "{min} – {max}",
 
@@ -168,6 +182,15 @@ const en = {
   "adm.cm.clearCost": "Send {name} back to the supplier list cost",
   "adm.cm.costSaved": "{name}: cost {cost}.",
   "adm.cm.costCleared": "{name} is back on the supplier list cost.",
+  "adm.cm.col.costStore": "Store cost",
+  "adm.cm.costStoreHint": "This store's own cost: it does not follow the master.",
+  "adm.cm.costMaster": "Master {v}",
+  "adm.cm.costMasterHint": "What it costs the chain (master, all stores).",
+  "adm.cm.costAriaStore": "Cost of {name} at this store, in dollars",
+  "adm.cm.saveCostStore": "Save the cost of {name} at this store",
+  "adm.cm.clearCostStore": "Send {name} back to the master cost",
+  "adm.cm.costSavedStore": "{name}: cost {cost} at {store}.",
+  "adm.cm.costClearedStore": "{name} is back on the master cost at {store}.",
   "adm.cm.costsOffline":
     "The server did not return the costs: the last Capri list kept in the browser is shown and the cost cannot be edited until it is back.",
   "adm.cm.noCost": "No cost",

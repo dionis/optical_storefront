@@ -8,3 +8,4 @@
 export * from "./price-rule";
 export * from "./cost-toggle";
 export * from "./frame-cost";
+export * from "./frame-cost-variation";

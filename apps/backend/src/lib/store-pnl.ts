@@ -184,6 +184,10 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
   const cogsByStore = new Map<string, number>();
   for (const lines of byOrder.values()) {
     const order: CostOrderLike = {
+      // The store that sold it: a frame's cost is that store's own when it
+      // holds one, the chain's otherwise (lib/frame-cost.ts). Without this the
+      // store's own P&L would be built from the chain's cost.
+      establishment_id: lines[0] ? String(lines[0].establishment_id ?? "") || null : null,
       total: lines.reduce((s, l) => s + Number(l.total_cents), 0) / 100,
       tax_total: lines.reduce((s, l) => s + Number(l.tax_cents), 0) / 100,
       paid: true,

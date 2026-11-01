@@ -159,11 +159,18 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
 
   const memo = new Map<string, { cost: number; missing: boolean }>();
   const materialCost = (l: InsightLine) => {
-    const key = [l.sku, l.brand_slug, l.category, l.lens_design, l.lens_material, l.lens_photo, l.lens_ar, l.qty].join("|");
+    // The store is part of the key: each store may hold its own cost for a
+    // model (store_frame_cost_variation), so two stores selling the same
+    // frame must not share a memo entry — that would cost one with the
+    // other's money.
+    const key = [l.establishment_id, l.sku, l.brand_slug, l.category, l.lens_design, l.lens_material, l.lens_photo, l.lens_ar, l.qty].join("|");
     const hit = memo.get(key);
     if (hit) return hit;
     const sheet = computeCostSheet(
       {
+        // Which store sold it: the frame's cost is resolved against that
+        // store's own cost first, then the chain's (lib/frame-cost.ts).
+        establishment_id: l.establishment_id,
         items: [{
           quantity: l.qty,
           sku: l.sku,

@@ -32,8 +32,9 @@ import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-tog
  *   - RULES (`cost_rule` table): the owner's template. "A Flexure frame costs
  *     me 18", "the lab charges 12 per order", "Stripe keeps 2.9% + 0.30".
  *     Amount 0 means "not defined yet" and the panel highlights it.
- *   - THE FRAME'S REAL COST (`store_frame_cost`, lib/frame-cost.ts): what the
- *     supplier charges for that exact model, or what the owner typed over it.
+ *   - THE FRAME'S REAL COST (`store_frame_cost` + its per-store variations,
+ *     lib/frame-cost.ts): what THIS store pays for that exact model, else what
+ *     the supplier charges for it, else what the owner typed over that.
  *     It REPLACES the frame rule for its line (never adds to it), because a
  *     real invoice beats an average the owner once estimated. A model nothing
  *     knows the cost of stays "undefined", never 0.
@@ -414,6 +415,14 @@ export interface CostOrderLike {
   shipping_total?: unknown;
   tax_total?: unknown;
   paid?: boolean;
+  /**
+   * The store the sale belongs to, when it belongs to one. It is what makes the
+   * frame's cost THAT store's cost (`store_frame_cost_variation`, see
+   * lib/frame-cost.ts): the owner's rule is that every store manages its costs
+   * separately, so a sale of store A must never be costed with store B's
+   * figure. Absent (a web order, a chain-wide projection) means the master.
+   */
+  establishment_id?: string | null;
   items: Array<{
     title?: string;
     quantity?: unknown;
@@ -539,7 +548,9 @@ function suggestedPrice(m: SheetModel, manual: boolean): number | null {
  *
  * `frameCost` defaults to the process cache + the compiled supplier list, so
  * every existing caller gets the real cost without passing anything; tests and
- * any caller that already holds the rows inject their own lookup.
+ * any caller that already holds the rows inject their own lookup. It is asked
+ * for `order.establishment_id`, so a sale of a store is costed with THAT
+ * store's figure and falls back to the chain's only where the store inherits.
  */
 export function computeCostSheet(
   order: CostOrderLike,
@@ -550,6 +561,9 @@ export function computeCostSheet(
   frameCost: FrameCostLookup = frameCostCents
 ): CostSheet {
   const gross = round2(num(order.total));
+  // Which store's costs this sale is priced with. Read once: every frame line
+  // of one order belongs to the same store.
+  const storeId = order.establishment_id ? String(order.establishment_id) : null;
   const target_pct = targetPct === undefined ? profitTargetPct(rules) : targetPct !== null && targetPct > 0 ? round2(targetPct) : null;
   const orderShipping = round2(Math.max(0, num(order.shipping_total)));
   const orderTax = round2(Math.max(0, num(order.tax_total)));
@@ -646,7 +660,7 @@ export function computeCostSheet(
     // that would have matched — exactly one `frame:` line per item either way,
     // because `summarizeCostSheets` pairs frame lines with items by position
     // and adding a second one would both double the cost and shift that pairing.
-    const supplierCents = sku ? frameCost(sku) : null;
+    const supplierCents = sku ? frameCost(sku, storeId) : null;
     if (supplierCents !== null) {
       const amount = round2(supplierCents / 100);
       materials.push({
@@ -1094,7 +1108,15 @@ export async function costSheetForOrder(
   // Without toggles every rule counts, which is what the chain-wide views want.
   const live = rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, order.establishment_id, toggles));
   return computeCostSheet(
-    { total: order.total, shipping_total: order.shipping_total, tax_total: order.tax_total, paid: order.paid, items: order.items },
+    {
+      total: order.total,
+      shipping_total: order.shipping_total,
+      tax_total: order.tax_total,
+      paid: order.paid,
+      // The store is what decides WHICH frame cost this sale is priced with.
+      establishment_id: order.establishment_id ?? null,
+      items: order.items,
+    },
     live,
     seller,
     stored

@@ -12,6 +12,12 @@
 // primero que se ve es cuántos modelos del catálogo tienen costo y cuántos NO,
 // con un atajo para quedarse solo con los que faltan: un modelo sin costo no
 // enseña «0 %» de margen, enseña que falta, porque es lo único honesto.
+//
+// El costo tiene las MISMAS dos capas que el precio, y se leen igual: con
+// «Todas las tiendas» se ve y se edita el MAESTRO (lo que paga la cadena) y con
+// una tienda elegida arriba se ve y se edita LA VARIACIÓN DE ESA TIENDA, con la
+// pastilla «Heredado» y el maestro a la vista cuando no maneja costo propio.
+// El alcance viaja en `store`, el mismo que ya usan la regla y el precio exacto.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import { money } from "../adminOrders.js";
@@ -114,26 +120,44 @@ function Margin({ price, cost }) {
 
 /**
  * Costo de un modelo, editable: escribir, guardar, y un botón para devolverlo
- * al de la lista del proveedor — el MISMO gesto que el precio.
+ * a la capa de arriba — el MISMO gesto que el precio.
+ *
+ * `store` es el alcance: "all" escribe el maestro (lo que paga la cadena) y un
+ * id de tienda escribe LA VARIACIÓN de esa tienda. Con una tienda abierta la
+ * cifra grande es la de la tienda; si la hereda, se dice con la pastilla
+ * «Heredado» y el botón de deshacer no aparece (no hay nada propio que quitar),
+ * y si es propia se enseña el maestro al lado para poder comparar las dos.
  *
  * Los dos botones son `type="button"` a propósito: este campo también vive
  * dentro del <form> del precio exacto y no debe enviarlo. La escritura va por
  * SKU (así la acepta el servidor), no por el id de Medusa.
  */
-function CostField({ sku, name, cost, onSaved, onError }) {
+function CostField({ sku, name, cost, store = "all", onSaved, onError }) {
   const { t, lang } = useLang();
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const usd = (c) => money(c / 100, "usd", lang);
   const cents = cost?.cents ?? null;
   const own = Boolean(cost?.own);
+  // Alcance de tienda: lo dice el descriptor (de dónde se leyó), no el prop,
+  // para que no se pinte «Heredado» sobre cifras que son del maestro.
+  const inStore = Boolean(cost?.store);
+  const storeOwn = Boolean(cost?.storeOwn);
+  const inherited = inStore && Boolean(cost?.inherited);
+  const masterCents = cost?.masterCents ?? null;
   // Sin SKU no hay a qué escribirle; `editable: false` = el servidor no
   // contestó y lo que se ve es el respaldo del navegador (no se puede guardar).
   const can = Boolean(sku) && cost?.editable !== false && !busy;
+  const valueHint = storeOwn
+    ? t("adm.price.frames.cost.storeHint")
+    : own
+      ? t("adm.price.frames.cost.ownHint")
+      : t("adm.price.frames.cost.listHint");
 
   const write = async (value) => {
     setBusy(true);
     try {
-      await saveFrameCost({ sku, costUsd: value });
+      await saveFrameCost({ sku, costUsd: value, store });
       setDraft("");
       onSaved();
     } catch (err) {
@@ -147,14 +171,23 @@ function CostField({ sku, name, cost, onSaved, onError }) {
     <span className="pp-cost">
       {cents == null
         ? <span className="pp-now">{t("adm.price.none")}</span>
-        : <b className={`pp-cost-v ${own ? "own" : ""}`} title={own ? t("adm.price.frames.cost.ownHint") : t("adm.price.frames.cost.listHint")}>{money(cents / 100, "usd", lang)}</b>}
-      {own && <span className="pp-badge" title={t("adm.price.frames.cost.ownHint")}>{t("adm.price.frames.cost.ownBadge")}</span>}
+        : <b className={`pp-cost-v ${own ? "own" : ""}`} title={valueHint}>{usd(cents)}</b>}
+      {storeOwn && <span className="pp-badge" title={t("adm.price.frames.cost.storeHint")}>{t("adm.price.frames.cost.storeBadge")}</span>}
+      {!inStore && own && <span className="pp-badge" title={t("adm.price.frames.cost.ownHint")}>{t("adm.price.frames.cost.ownBadge")}</span>}
+      {inherited && <span className="pp-badge inherit" title={t("adm.price.frames.cost.inheritHint")}>{t("adm.price.inherited")}</span>}
+      {/* Las dos cifras juntas: con costo propio de tienda, el maestro al lado
+          para saber de qué se está separando esta tienda. */}
+      {storeOwn && masterCents != null && (
+        <span className="pp-now" title={t("adm.price.frames.cost.masterHint")}>
+          {t("adm.price.frames.cost.master", { v: usd(masterCents) })}
+        </span>
+      )}
       <input
         className="pp-input pp-num"
         inputMode="decimal"
         placeholder={t("adm.price.frames.cost.placeholder")}
-        aria-label={t("adm.price.frames.cost.aria", { name })}
-        title={t("adm.price.frames.cost.aria", { name })}
+        aria-label={t(inStore ? "adm.price.frames.cost.ariaStore" : "adm.price.frames.cost.aria", { name })}
+        title={t(inStore ? "adm.price.frames.cost.ariaStore" : "adm.price.frames.cost.aria", { name })}
         disabled={!can}
         value={draft}
         onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -163,19 +196,21 @@ function CostField({ sku, name, cost, onSaved, onError }) {
         type="button"
         className="btn-xs primary"
         disabled={!can || !draft}
-        title={t("adm.price.frames.cost.save", { name })}
-        aria-label={t("adm.price.frames.cost.save", { name })}
+        title={t(inStore ? "adm.price.frames.cost.saveStore" : "adm.price.frames.cost.save", { name })}
+        aria-label={t(inStore ? "adm.price.frames.cost.saveStore" : "adm.price.frames.cost.save", { name })}
         onClick={() => write(draft)}
       >
         <Icon name="save" size={12} />
       </button>
-      {own && (
+      {/* Deshacer solo cuando hay algo propio que quitar: en el maestro, la
+          edición del dueño; en una tienda, su variación. */}
+      {(inStore ? storeOwn : own) && (
         <button
           type="button"
           className="btn-xs"
           disabled={!can}
-          title={t("adm.price.frames.cost.clear", { name })}
-          aria-label={t("adm.price.frames.cost.clear", { name })}
+          title={t(inStore ? "adm.price.frames.cost.clearStore" : "adm.price.frames.cost.clear", { name })}
+          aria-label={t(inStore ? "adm.price.frames.cost.clearStore" : "adm.price.frames.cost.clear", { name })}
           onClick={() => write(null)}
         >
           <Icon name="undo" size={12} />
@@ -277,7 +312,7 @@ function OverrideForm({ store, storeId, costs, onCostSaved, onSaved, onError, t 
           {costs && (
             <>
               <label className="pp-lbl">{t("adm.price.frames.cost.col.cost")}</label>
-              <CostField sku={pickedSku} name={picked.title} cost={pickedCost} onSaved={onCostSaved} onError={onError} />
+              <CostField sku={pickedSku} name={picked.title} cost={pickedCost} store={store} onSaved={onCostSaved} onError={onError} />
             </>
           )}
           <label className="pp-lbl" htmlFor="pp-exact-price">{t("adm.price.frames.exactPrice")}</label>
@@ -314,7 +349,7 @@ function OverrideForm({ store, storeId, costs, onCostSaved, onSaved, onError, t 
  * aquí se dice que sigue la regla en vez de inventarlo (en el informe queda
  * pedido `price_cents` en las filas de costos, que lo resuelve de raíz).
  */
-function CostsBlock({ costs, overrides, onCostSaved, onError }) {
+function CostsBlock({ costs, overrides, store = "all", onCostSaved, onError }) {
   const { t, lang } = useLang();
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [q, setQ] = useState("");
@@ -329,12 +364,17 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
     return m;
   }, [overrides]);
 
+  // `cost` es el costo EFECTIVO del alcance leído (el maestro, o lo que paga la
+  // tienda abierta) y `master` el de la cadena: el margen de la fila sale del
+  // efectivo, que es el que de verdad se cobra en ese mostrador.
   const rows = useMemo(() => (costs?.rows || []).map((r) => {
     const cost = r.cost_cents == null ? null : r.cost_cents / 100;
+    const masterCents = r.master_cost_cents ?? r.cost_cents;
     const price = priceOf.get(skuKey(r.sku)) ?? priceOf.get(skuKey(r.model)) ?? null;
     return {
       ...r,
       cost,
+      master: masterCents == null ? null : masterCents / 100,
       book: r.book_cents == null ? null : r.book_cents / 100,
       price,
       margin: cost == null ? null : marginPct(price, cost),
@@ -350,6 +390,9 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
 
   const withCost = costs?.summary?.with_cost ?? null;
   const without = costs?.summary?.without_cost ?? null;
+  // Con una tienda abierta: cuántos modelos maneja ELLA aparte del maestro.
+  const inStore = Boolean(costs?.store);
+  const variations = inStore ? costs?.summary?.store_variations ?? 0 : 0;
 
   const cols = useMemo(() => [
     {
@@ -362,18 +405,42 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
       sortValue: (r) => String(r.model || r.sku || ""),
     },
     { key: "book", header: t("adm.price.frames.cost.col.book"), type: "money" },
+    // El maestro solo cuando hay una tienda abierta: con «Todas las tiendas» la
+    // columna «Costo» YA es el maestro y repetirlo sería ruido.
+    ...(inStore
+      ? [{
+        key: "master",
+        header: t("adm.price.frames.cost.col.master"),
+        type: "money",
+        essential: true,
+        text: (r) => (r.master == null ? "" : String(r.master)),
+        render: (r) => (r.master == null
+          ? <span className="pp-now">{t("adm.price.none")}</span>
+          : <span className="pp-now" title={t("adm.price.frames.cost.masterHint")}>{money(r.master, "usd", lang)}</span>),
+        sortValue: (r) => (r.master == null ? -1 : r.master),
+      }]
+      : []),
     {
       key: "cost",
-      header: t("adm.price.frames.cost.col.cost"),
+      header: t(inStore ? "adm.price.frames.cost.col.costStore" : "adm.price.frames.cost.col.cost"),
       type: "money",
       essential: true,
-      minWidth: 210,
+      minWidth: 240,
       // Editable en la propia fila: es donde el dueño está mirando el agujero.
       render: (r) => (
         <CostField
           sku={r.sku}
           name={r.model || r.sku}
-          cost={{ cents: r.cost_cents ?? null, own: !costs?.offline && isOwnCost(r.source), editable: !costs?.offline }}
+          store={store}
+          cost={{
+            cents: r.cost_cents ?? null,
+            own: !costs?.offline && isOwnCost(r.origin || r.source),
+            storeOwn: !costs?.offline && (r.origin || r.source) === "store_variation",
+            inherited: inStore && r.inherited !== false,
+            masterCents: r.master_cost_cents ?? r.cost_cents ?? null,
+            store: costs?.store || null,
+            editable: !costs?.offline,
+          }}
           onSaved={onCostSaved}
           onError={onError}
         />
@@ -401,13 +468,13 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
       sortValue: (r) => (r.cost == null ? -1000 : r.margin ?? -999),
     },
     { key: "updated_at", header: t("adm.price.frames.cost.col.since"), type: "date", hiddenByDefault: true },
-  ], [t, lang, costs, onCostSaved, onError]);
+  ], [t, lang, costs, store, inStore, onCostSaved, onError]);
 
   return (
     <div className="pp-block">
       <h4>
-        {t("adm.price.frames.cost.title")}
-        <small>{t("adm.price.frames.cost.sub")}</small>
+        {t(inStore ? "adm.price.frames.cost.titleStore" : "adm.price.frames.cost.title")}
+        <small>{t(inStore ? "adm.price.frames.cost.subStore" : "adm.price.frames.cost.sub")}</small>
       </h4>
 
       {/* El aviso que el dueño tiene que ver sin buscarlo. Mientras el servidor
@@ -420,6 +487,11 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
             {without
               ? t("adm.price.frames.cost.coverage", { withCost, without })
               : t("adm.price.frames.cost.allCovered", { withCost })}
+            {inStore && (
+              <span className="pp-badge" title={t("adm.price.frames.cost.variationsHint")}>
+                {t("adm.price.frames.cost.variations", { n: variations })}
+              </span>
+            )}
             {without > 0 && (
               <button
                 type="button"
@@ -463,16 +535,21 @@ function CostsBlock({ costs, overrides, onCostSaved, onError }) {
 export default function FramesSection({ frames, store, storeId, onSaved, onError }) {
   const { t, lang } = useLang();
   const [busy, setBusy] = useState("");
-  // Los costos no cuelgan de la tienda (lo que cuesta un modelo es lo mismo en
-  // todos los mostradores) y cambian cuando llega lista nueva: una lectura
-  // cacheada con TTL largo, la misma entrada que usa la pantalla «Productos».
+  // Los costos cuelgan del ALCANCE elegido arriba, igual que las reglas y los
+  // precios: «Todas las tiendas» es el maestro y una tienda trae lo que paga
+  // ella con el maestro al lado. Cambian cuando llega lista nueva, así que la
+  // lectura va cacheada con TTL largo y con una entrada por tienda — la misma
+  // que usa la pantalla «Productos».
   const [costs, setCosts] = useState(null);
-  const reloadCosts = useCallback(() => loadFrameCosts({ force: true }).then(setCosts), []);
+  const reloadCosts = useCallback(() => loadFrameCosts({ force: true, store }).then(setCosts), [store]);
   useEffect(() => {
     let on = true;
-    loadFrameCosts().then((d) => { if (on) setCosts(d); });
+    // Cambiar de tienda invalida lo que se estaba viendo: mientras llega lo
+    // nuevo no se enseña el costo de la otra tienda.
+    setCosts(null);
+    loadFrameCosts({ store }).then((d) => { if (on) setCosts(d); });
     return () => { on = false; };
-  }, []);
+  }, [store]);
   // Guardar un costo no cambia nada del `overview`, así que se avisa con un
   // `slice` vacío: el panel enseña su «Guardado.» y no fusiona datos ajenos.
   const onCostSaved = useCallback(() => { reloadCosts(); onSaved({}); }, [reloadCosts, onSaved]);
@@ -536,7 +613,7 @@ export default function FramesSection({ frames, store, storeId, onSaved, onError
         onError={onError}
         t={t}
       />
-      <CostsBlock costs={costs} overrides={frames.overrides} onCostSaved={onCostSaved} onError={onError} />
+      <CostsBlock costs={costs} overrides={frames.overrides} store={store} onCostSaved={onCostSaved} onError={onError} />
       <div className="pp-block">
         <h4>
           {t("adm.price.frames.modified")}

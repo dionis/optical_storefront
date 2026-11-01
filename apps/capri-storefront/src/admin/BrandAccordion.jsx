@@ -100,8 +100,15 @@ function Swatches({ colors, name }) {
  *
  * Las dos escrituras son la misma pareja de gestos (escribir + guardar, y un
  * botón para devolverlo a lo heredado): el precio vuelve a la regla
- * (/admin/pricing/frames/override) y el costo vuelve a la lista del proveedor
+ * (/admin/pricing/frames/override) y el costo vuelve a la capa de arriba
  * (/admin/pricing/frames/cost con cost_cents null).
+ *
+ * El costo tiene DOS capas, las mismas que el precio: con «Todas las tiendas»
+ * la fila enseña y edita el MAESTRO (lo que paga la cadena) y con una tienda
+ * elegida enseña y edita LO QUE PAGA ESA TIENDA, con la pastilla «Heredado»
+ * cuando no maneja costo propio y el maestro a la vista cuando sí. De qué capa
+ * es la cifra lo dice el propio descriptor (`cost.store` / `cost.inherited`),
+ * no esta fila.
  */
 function ModelRow({
   p, cost, override, store, exposed, ownRule, busy, isCase,
@@ -127,11 +134,22 @@ function ModelRow({
   const costUsd = cost?.cents != null ? cost.cents / 100 : null;
   const missingCost = !costLoading && costUsd == null;
   const ownCost = Boolean(cost?.own);
+  // Alcance del costo que llegó: tienda abierta, su cifra propia, o heredada.
+  const costInStore = Boolean(cost?.store);
+  const storeCost = Boolean(cost?.storeOwn);
+  const inheritedCost = costInStore && Boolean(cost?.inherited);
+  const masterUsd = cost?.masterCents != null ? cost.masterCents / 100 : null;
   // El costo se escribe por SKU, no por `medusaId`: no hace falta que el modelo
   // esté enlazado con Medusa. Sí hace falta que el servidor haya contestado.
   const canEditCost = Boolean(p.sku) && !costLoading && cost?.editable !== false && !busy;
   const margin = costUsd == null ? null : marginPct(price, costUsd);
-  const costTitle = ownCost ? t("adm.cm.costOwnHint") : t("adm.cm.costHint");
+  const costTitle = storeCost
+    ? t("adm.cm.costStoreHint")
+    : inheritedCost
+      ? t("adm.price.inheritedHint")
+      : ownCost
+        ? t("adm.cm.costOwnHint")
+        : t("adm.cm.costHint");
 
   return (
     <div className={`cm-row ${exposed === false ? "hidden" : ""} ${missingCost ? "nocost" : ""}`}>
@@ -161,20 +179,28 @@ function ModelRow({
         {costUsd != null
           ? <span className={`cm-mono ${ownCost ? "own" : ""}`}>{usd(costUsd)}</span>
           : <span className="cm-dash">{t("adm.cm.none")}</span>}
-        {ownCost && <span className="cm-badge" title={t("adm.cm.costOwnHint")}>{t("adm.cm.ownBadge")}</span>}
+        {/* Qué capa es esta cifra. En el maestro, «Propio» = el dueño la
+            tecleó; en una tienda, «Propio» = la maneja ella y «Heredado» = la
+            toma del maestro, que entonces se enseña al lado para comparar. */}
+        {storeCost && <span className="cm-badge" title={t("adm.cm.costStoreHint")}>{t("adm.cm.ownBadge")}</span>}
+        {!costInStore && ownCost && <span className="cm-badge" title={t("adm.cm.costOwnHint")}>{t("adm.cm.ownBadge")}</span>}
+        {inheritedCost && <span className="cm-dash" title={t("adm.price.inheritedHint")}>{t("adm.price.inherited")}</span>}
+        {storeCost && masterUsd != null && (
+          <span className="cm-dash" title={t("adm.cm.costMasterHint")}>{t("adm.cm.costMaster", { v: usd(masterUsd) })}</span>
+        )}
       </span>
 
       {/* Costo editable: el mismo gesto que el precio propio de más a la
-          derecha. El marcador de posición enseña el costo de la lista del
-          proveedor cuando se conoce, para saber sobre qué se está escribiendo. */}
+          derecha. Escribe en la capa que se está viendo — el maestro con
+          «Todas las tiendas», la variación de la tienda con una elegida. */}
       <span className="cm-cell cm-costown">
-        <small className="cm-lbl">{t("adm.cm.col.costOwn")}</small>
+        <small className="cm-lbl">{t(costInStore ? "adm.cm.col.costStore" : "adm.cm.col.costOwn")}</small>
         <input
           inputMode="decimal"
           className="cm-input"
           placeholder={t("adm.cm.costPlaceholder")}
-          aria-label={t("adm.cm.costAria", { name })}
-          title={t("adm.cm.costAria", { name })}
+          aria-label={t(costInStore ? "adm.cm.costAriaStore" : "adm.cm.costAria", { name })}
+          title={t(costInStore ? "adm.cm.costAriaStore" : "adm.cm.costAria", { name })}
           disabled={!canEditCost}
           value={costDraft}
           onChange={(e) => setCostDraft(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -183,19 +209,20 @@ function ModelRow({
           type="button"
           className="btn-xs primary"
           disabled={!canEditCost || !costDraft}
-          title={t("adm.cm.saveCost", { name })}
-          aria-label={t("adm.cm.saveCost", { name })}
+          title={t(costInStore ? "adm.cm.saveCostStore" : "adm.cm.saveCost", { name })}
+          aria-label={t(costInStore ? "adm.cm.saveCostStore" : "adm.cm.saveCost", { name })}
           onClick={() => onSaveCost(p, costDraft).then((ok) => { if (ok) setCostDraft(""); })}
         >
           <Icon name="save" size={12} />
         </button>
-        {ownCost && (
+        {/* Deshacer solo si hay algo propio que quitar en ESTA capa. */}
+        {(costInStore ? storeCost : ownCost) && (
           <button
             type="button"
             className="btn-xs"
             disabled={!canEditCost}
-            title={t("adm.cm.clearCost", { name })}
-            aria-label={t("adm.cm.clearCost", { name })}
+            title={t(costInStore ? "adm.cm.clearCostStore" : "adm.cm.clearCost", { name })}
+            aria-label={t(costInStore ? "adm.cm.clearCostStore" : "adm.cm.clearCost", { name })}
             onClick={() => onClearCost(p)}
           >
             <Icon name="undo" size={12} />
@@ -316,6 +343,9 @@ export default function BrandAccordion({
     stats.cost != null && { label: t("adm.cm.b.cost"), value: usd(stats.cost) },
     stats.margin != null && { label: t("adm.cm.b.margin"), value: `${stats.margin} %`, tone: stats.margin >= 50 ? "good" : stats.margin >= 30 ? "warn" : "bad" },
     stats.noCost > 0 && { label: t("adm.cm.b.noCost"), value: stats.noCost, tone: "bad" },
+    // Cuántos modelos de la marca maneja ESTA tienda con costo propio: la
+    // cabecera cerrada ya dice de dónde sale el costo medio de arriba.
+    stats.storeCosts > 0 && { label: t("adm.cm.b.storeCosts", { store: store.label }), value: stats.storeCosts },
     // Los descatalogados van APARTE del conteo activo: el dueño no quiere que
     // una marca parezca más grande por lo que ya no vende.
     offCount > 0 && { label: t("adm.cm.b.off"), value: offCount, tone: "muted" },
