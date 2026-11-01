@@ -83,7 +83,9 @@ function ruleText(rule, t, lang) {
   return t("adm.cm.rule", { rule: v });
 }
 
-export default function CatalogManager({ me = null }) {
+// `params.q`: el buscador global abre esta pantalla ya filtrada por el modelo
+// elegido (OmniSearch → go("products", { q })). Sin él, el catálogo entero.
+export default function CatalogManager({ me = null, params = null }) {
   const { t, lang } = useLang();
   const usd = (n) => money(n, "usd", lang);
   const { toast, confirm } = useFeedback();
@@ -104,7 +106,11 @@ export default function CatalogManager({ me = null }) {
   }), [realStore]);
 
   const [preset, setPreset] = useState("30d");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => String(params?.q || ""));
+  // Un salto nuevo desde el buscador global (mismo tab, otro modelo) cambia
+  // la búsqueda; escribir a mano después manda, hasta el siguiente salto.
+  const jumpQ = params?.q ?? null;
+  useEffect(() => { if (jumpQ) setQ(String(jumpQ)); }, [jumpQ]);
   const [busy, setBusy] = useState(null);         // slug | "brand:<slug>" | "export"
   const [off, setOff] = useState([]);             // descontinuadas (draft en Medusa)
   const [pricing, setPricing] = useState(null);   // /admin/pricing/overview

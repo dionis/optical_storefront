@@ -356,7 +356,7 @@ window.fetch = async (input, init) => {
       },
     });
   }
-  if (p === "/admin/pos/context") return json({ role: ROLE, is_admin: IS_ADMIN, stores: IS_ADMIN ? STORES : STORES.slice(1, 2), assigned: { establishment_id: "est_02" }, privileges: ROLE_PRIVS[ROLE] || [], payment_methods: [{ code: "cash", builtin: true }, { code: "card", builtin: true }] });
+  if (p === "/admin/pos/context") return json({ role: ROLE, is_admin: IS_ADMIN, stores: IS_ADMIN ? STORES : STORES.slice(1, 2), assigned: { establishment_id: "est_02" }, privileges: ROLE_PRIVS[ROLE] || [], payment_methods: [{ code: "cash", builtin: true }, { code: "debit", builtin: true }, { code: "credit", builtin: true }] });
   if (p === "/admin/sales-analytics/summary") { const f = figures(g("from"), g("to"), g("stores")); return json({ current: { discount: Math.round(f.sales * 0.03) }, previous: { discount: 100 }, balance_due: 1240.5, insurance_due: 380 }); }
   if (p === "/admin/sales-analytics/me") { const f = figures("2026-10-01", "2026-10-31", ""); return json({ today: { total: 820, count: 4, avg_ticket: 205 }, week: { total: 3900, count: 19, avg_ticket: 205 }, month: f, seller_code: "DAN", workplace: { store: STORES[1], terminal: { code: "T1", name: "Mostrador" }, cash_open: true }, commission: { pct: 5, amount: 412 }, goal: { amount: 12000, done: f.sales, left: Math.max(0, 12000 - f.sales) }, balance_due: 310, recent: [], ready: [] }); }
   if (p === "/admin/audit") { const mk = (i, action) => ({ id: `ev${i}`, actor_user_id: "u1", establishment_id: i % 2 ? "est_02" : null, action, entity: "seller", entity_id: null, before: { pct: 5 }, after: { pct: 6 }, created_at: new Date(Date.now() - i * 36e5 * 7).toISOString() }); return json({ events: [mk(1, "seller.update"), mk(2, "seller.update"), mk(3, "price.update"), mk(40, "price.update")], actions: ["seller.update", "price.update"] }); }
@@ -442,7 +442,7 @@ window.fetch = async (input, init) => {
   if (p === "/admin/pos/cash-report") {
     const f = figures(g("from"), g("to"), g("establishment_id"));
     const c = Math.round(f.sales * 100);
-    return json({ totals: { payments_cents: c, cash_net_cents: Math.round(c * 0.31), movements_in_cents: 20000, movements_out_cents: 45000 }, by_method: [{ code: "cash", builtin: true, kind: "cash", counts_as_cash: true, in_count: 20, in_cents: Math.round(c * 0.33), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.33) }, { code: "card", builtin: true, kind: "card", in_count: 30, in_cents: Math.round(c * 0.5), refund_cents: 2000, fee_cents: 4000, net_cents: Math.round(c * 0.5) - 6000 }, { code: "zelle", builtin: true, kind: "transfer", in_count: 6, in_cents: Math.round(c * 0.17), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.17) }], movements: [] });
+    return json({ totals: { payments_cents: c, cash_net_cents: Math.round(c * 0.31), movements_in_cents: 20000, movements_out_cents: 45000 }, by_method: [{ code: "cash", builtin: true, kind: "cash", counts_as_cash: true, in_count: 20, in_cents: Math.round(c * 0.33), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.33) }, { code: "credit", builtin: true, kind: "card", in_count: 30, in_cents: Math.round(c * 0.5), refund_cents: 2000, fee_cents: 4000, net_cents: Math.round(c * 0.5) - 6000 }, { code: "zelle", builtin: true, kind: "transfer", in_count: 6, in_cents: Math.round(c * 0.17), refund_cents: 0, fee_cents: 0, net_cents: Math.round(c * 0.17) }], movements: [] });
   }
   // Mapa de inicio: lo que hay VIVO ahora mismo. Lo leen WelcomeBriefing.jsx y
   // la franja de pendientes del Ejecutivo (BacklogStrip.jsx), que es
@@ -499,11 +499,11 @@ const OWNER = { id: "u1", role: "owner", is_admin: true, display_name: "Rubí Da
 const MANAGER = { id: "u2", role: "manager", is_admin: false, display_name: "Daniela Ruiz", privileges: ["costs.view"], store_ids: ["est_02"] };
 const SELLER = { id: "u3", role: "seller", is_admin: false, display_name: "Daniela Ruiz", privileges: [], seller_code: "DAN", store_ids: ["est_02"] };
 const me = ROLE === "owner" ? OWNER : ROLE === "seller" ? SELLER : MANAGER;
-const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go) => <Sellers me={me} go={go} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
+const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go, params) => <Sellers me={me} go={go} params={params} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
   // «Productos» del grupo Comercial: el acordeón por marca con el catálogo
   // simulado de arriba (CM_FRAMES/CM_CASES). `loadLive` lo mete en el store del
   // catálogo, que en el banco no lo carga nadie al arrancar.
-  products: () => <CatalogScreen />,
+  products: (go, params) => <CatalogScreen params={params} />,
   // Estado «el período elegido no tiene nada»: las tres variantes juntas para
   // revisarlas de un vistazo en claro y en oscuro (ver harness/README).
   empty: () => (
@@ -515,18 +515,22 @@ const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />
     </div>
   ) };
 
-function CatalogScreen() {
+function CatalogScreen({ params = null }) {
   useEffect(() => { loadLive({ force: true }).catch(() => {}); }, []);
-  return <CatalogManager me={me} />;
+  return <CatalogManager me={me} params={params} />;
 }
 
 function App() {
   const [tab, setTab] = useState(TAB0);
-  const go = (t, params) => { setTab(t); console.log("go", t, params); };
+  // Los parámetros del salto se guardan y se pasan a la pantalla, como hace
+  // AdminDashboard: sin esto no se puede probar que el buscador global abre
+  // el catálogo por un modelo o la ficha de un vendedor.
+  const [navParams, setNavParams] = useState(() => Object.fromEntries(new URLSearchParams(location.search)));
+  const go = (t, params) => { setTab(t); setNavParams(params || {}); console.log("go", t, params); };
   return (
     <MemoryRouter>
       <AdminShell tab={tab} onTab={setTab} user="dueno@optica.com" onLogout={() => {}} find={null} me={me} groups={navGroupsFor(me)}>
-        {SCREENS[tab] ? SCREENS[tab](go) : (
+        {SCREENS[tab] ? SCREENS[tab](go, navParams) : (
           <div className="adm-section"><h2>{tab}</h2><p className="adm-sub">Pestaña «{tab}»: aquí el cromo sigue la política de color (operativa = color de la tienda; informativa = neutro).</p></div>
         )}
       </AdminShell>

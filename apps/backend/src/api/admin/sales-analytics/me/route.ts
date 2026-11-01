@@ -55,7 +55,11 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       storeId ? listTerminals(req.scope, [storeId]) : Promise.resolve([]),
       storeId && scope.role !== "seller" ? salesSummary(req.scope, { from: today.date, to: today.date, stores: [storeId], sellers: null }) : Promise.resolve(null),
       listSales(req.scope, { establishmentIds: null, sellerId: userId }, 6),
-      terminalId ? openSessionFor(req.scope, terminalId) : Promise.resolve(null),
+      // Over the STORE, not the till: openSessionFor takes an establishment id,
+      // and a till id never matches one, so `cash_open` was always false — the
+      // seller's panel could not tell an open register from a closed one.
+      // Opening and closing are store-wide by the owner's decision anyway.
+      storeId ? openSessionFor(req.scope, storeId) : Promise.resolve(null),
     ]);
     const store = stores.find((x) => x.id === storeId) ?? null;
     const till = tills.find((x) => x.id === terminalId) ?? null;

@@ -97,11 +97,13 @@ export function destinationFor(kind, item) {
     case "patient":
       return { tab: "storeorders", params: clean({ q: x.label || extra.phone, store: x.store_id }) };
     case "seller":
-      return { tab: "storeorders", params: clean({ seller: extra.code || x.id, store: x.store_id }) };
+      // Su ficha, no sus pedidos: quien busca a una persona quiere ver cómo va.
+      return { tab: "sellers", params: clean({ seller: extra.code || x.id, store: x.store_id }) };
     case "store":
       return { store: x.id };
     case "frame":
-      return { tab: "products", params: {} };
+      // El catálogo abierto por ese modelo, no el catálogo entero.
+      return { tab: "products", params: clean({ q: extra.sku || x.label }) };
     default:
       return { tab: "storeorders", params: clean({ q: x.label }) };
   }

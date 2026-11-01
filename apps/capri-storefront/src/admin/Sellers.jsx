@@ -147,7 +147,9 @@ function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete
 }
 
 /** Props: `onChanged`, `go` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda global. */
-export default function Sellers({ onChanged, go, me }) {
+// `params.seller`: el buscador global (y cualquier salto) abre directamente la
+// ficha de ese vendedor en vez de dejar la lista sin filtrar.
+export default function Sellers({ onChanged, go, me, params = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
@@ -198,6 +200,20 @@ export default function Sellers({ onChanged, go, me }) {
   };
   const statBy = useMemo(() => Object.fromEntries((stats?.sellers || []).map((s) => [s.id, s])), [stats]);
   const list = sellers.filter((s) => (!storeOnly || s.establishment_id === storeOnly) && (!q || `${s.name} ${s.code} ${s.email || ""}`.toLowerCase().includes(q.toLowerCase())));
+  // `params.seller`: el buscador global salta aquí con un código de vendedor y
+  // se le abre su ficha directamente. Va DESPUÉS de `list` a propósito: leerla
+  // más arriba sería usarla antes de declararla y la pantalla reventaría.
+  // Una sola vez por código (jumpedRef), porque abrir el panel re-renderiza.
+  const jumpSeller = params?.seller ?? null;
+  const jumpedRef = useRef(null);
+  useEffect(() => {
+    if (!jumpSeller || jumpedRef.current === jumpSeller) return;
+    const hit = list.find((x) => x.code === jumpSeller || x.id === jumpSeller);
+    if (!hit) return;
+    jumpedRef.current = jumpSeller;
+    openPanel(hit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpSeller, list]);
   // El ranking y los totales siguen a la tienda elegida a través de la ficha de cada vendedor.
   const inStore = useMemo(() => (storeOnly ? new Set(sellers.filter((s) => s.establishment_id === storeOnly).map((s) => s.id)) : null), [sellers, storeOnly]);
   const statRows = useMemo(() => (stats?.sellers || []).filter((s) => !inStore || inStore.has(s.id)), [stats, inStore]);

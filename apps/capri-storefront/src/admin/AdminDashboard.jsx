@@ -1014,13 +1014,13 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
       {tab === "pricing" && <PricingPanel key={`pricing-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
-      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} />}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} params={nav.params} />}
       {/* CatalogManager es ahora TODA la pantalla: cabecera con tarjetas y
           acordeón por marca. La vieja <Products> repetía «Catálogo por marca»
           debajo, que es justo lo que el acordeón sustituye. `me` hace falta:
           sin él useStoreFilter no ve las tiendas y los interruptores de
           surtido quedan bloqueados. */}
-      {tab === "products" && <CatalogManager me={me} />}
+      {tab === "products" && <CatalogManager me={me} params={nav.params} />}
       {tab === "catalogsync" && <CatalogSync />}
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
