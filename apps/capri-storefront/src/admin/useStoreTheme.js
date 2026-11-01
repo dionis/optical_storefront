@@ -21,14 +21,85 @@
 // siguen enseñando el punto de su color, pero no la barra. El personal de
 // tienda (vendedor, supervisor, encargado) vive en una tienda y la ve en
 // color en todas partes.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { isDemoLogin } from "./adminAuth.js";
 import { adminGet } from "./adminApi.js";
+import { peek } from "./adminCache.js";
 import { ONLINE_STORE_COLOR, storeInk } from "./adminStores.js";
 import { posContext } from "./posApi.js";
 
 /** Las tiendas con su color, con caché (adminCache.js): cada `useStoreFilter` del panel la comparte. */
 const fetchStoresCached = () => adminGet("/admin/establishments", { ttl: 300_000 });
+
+/**
+ * La lista de tiendas vive en el MÓDULO, no en cada pantalla.
+ *
+ * Antes cada `useStoreFilter` tenía su propio `useState({ stores: [] })`, así
+ * que al cambiar de pestaña la pantalla nueva arrancaba con la lista vacía y
+ * la tienda elegida no se podía resolver (`stores.find(...)` sobre nada) hasta
+ * que volvía la promesa: el filtro parpadeaba a «Todas las tiendas» y parecía
+ * que la elección se perdía al moverse de una ventana a otra. Compartiéndola
+ * aquí, la segunda pantalla ya la tiene en el primer render.
+ *
+ * La petición se hace UNA vez por sesión (`loading` la comparte quien llegue a
+ * la vez) y, si la caché de lecturas ya la tiene, se siembra sin esperar nada.
+ */
+const STORES_URL = "/admin/establishments";
+let snapshot = { stores: [], assigned: null, loaded: false, forUser: null };
+let loading = null;
+const listeners = new Set();
+const emit = () => { for (const fn of listeners) fn(); };
+const subscribeStores = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+const getStoresSnapshot = () => snapshot;
+
+/** Lo que la caché ya tenga, sin esperar: evita el primer render en blanco. */
+function seedFromCache() {
+  if (snapshot.loaded) return;
+  const cached = peek(STORES_URL);
+  const stores = (cached?.establishments || []).filter((x) => x.is_active !== false);
+  if (stores.length) snapshot = { ...snapshot, stores };
+}
+
+/**
+ * Carga las tiendas una sola vez por persona; `isAdmin` decide de qué ruta
+ * salen. La instantánea recuerda de QUIÉN es: si entra otra persona (cerrar
+ * sesión y volver a entrar), sus tiendas no son las de la anterior y se
+ * vuelven a pedir. Así no hace falta que el cierre de sesión sepa de esto.
+ */
+function loadStores(isAdmin, userId = null) {
+  // Solo se tira lo cargado cuando ya era de OTRA persona conocida: `forUser`
+  // nulo es lo sembrado desde la caché al cargar el módulo, que todavía no
+  // tiene dueño y no hay que descartar — era justo lo que evitaba el parpadeo.
+  if (snapshot.forUser !== null && snapshot.forUser !== userId && !loading) {
+    snapshot = { stores: [], assigned: null, loaded: false, forUser: userId };
+    emit();
+  }
+  if (snapshot.loaded || loading) return loading;
+  loading = (async () => {
+    let stores = [];
+    let assigned = null;
+    if (isAdmin) {
+      // Dueño/superadmin leen las tiendas con su color (/admin/establishments).
+      try { stores = ((await fetchStoresCached())?.establishments || []).filter((x) => x.is_active !== false); } catch { /* sin tema */ }
+    } else {
+      // Los demás roles solo llegan a /admin/pos/context (sus tiendas y su caja).
+      try {
+        const c = await posContext();
+        stores = c?.stores || [];
+        assigned = c?.assigned?.establishment_id ?? null;
+      } catch { /* sin tema */ }
+    }
+    snapshot = { stores, assigned, loaded: true, forUser: userId };
+    loading = null;
+    emit();
+  })();
+  return loading;
+}
+
+// Se siembra al cargar el módulo, no dentro de un efecto: `useSyncExternalStore`
+// exige que la instantánea no cambie a mitad de un render, y sembrarla después
+// la habría cambiado sin avisar a los suscritos.
+seedFromCache();
 
 /** Grises y negro: nadie está en una tienda concreta. */
 export const NEUTRAL_THEME = { chrome: "#111827", accent: "#374151", bg: "#F3F4F6" };
@@ -186,29 +257,13 @@ const activeHint = () => read(ACTIVE_KEY) || read(POS_KEY);
  */
 export function useStoreTheme(me, { tab } = {}) {
   const isAdmin = !me || me.is_admin !== false;
-  const [data, setData] = useState({ stores: [], assigned: null });
+  const data = useSyncExternalStore(subscribeStores, getStoresSnapshot, getStoresSnapshot);
   const [hint, setHint] = useState(activeHint);
 
   useEffect(() => {
-    if (!me || isDemoLogin()) { setData({ stores: [], assigned: null }); return undefined; }
-    let alive = true;
-    (async () => {
-      let stores = [];
-      let assigned = null;
-      if (isAdmin) {
-        // Dueño/superadmin leen las tiendas con su color (/admin/establishments).
-        try { stores = ((await fetchStoresCached())?.establishments || []).filter((s) => s.is_active !== false); } catch { /* sin tema */ }
-      } else {
-        // Los demás roles solo llegan a /admin/pos/context (sus tiendas y su caja).
-        try {
-          const c = await posContext();
-          stores = c?.stores || [];
-          assigned = c?.assigned?.establishment_id ?? null;
-        } catch { /* sin tema */ }
-      }
-      if (alive) setData({ stores, assigned });
-    })();
-    return () => { alive = false; };
+    if (!me || isDemoLogin()) return;
+    // Una sola petición por sesión; lo que la caché tuviera ya se sembró arriba.
+    loadStores(isAdmin, me?.id ?? null);
   }, [me?.id, me?.role, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

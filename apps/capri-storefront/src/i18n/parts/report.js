@@ -92,8 +92,8 @@ export default {
     "adm.tbl.delivery.pickup": "Recoge en tienda",
     "adm.tbl.delivery.ship": "Envío",
     "adm.tbl.delivered": "Entregada",
-    "adm.tbl.completing": "Completando cliente, montura y lentes…",
-    "adm.tbl.partial": "Cliente, montura y lentes no se pudieron completar en esta carga.",
+    "adm.tbl.completing": "Completando costo, comisión y ganancia…",
+    "adm.tbl.partial": "Costo, comisión y ganancia no se pudieron completar en esta carga.",
   },
   en: {
     "adm.rpt.statusTitle": "Status report · {store}",
@@ -181,7 +181,7 @@ export default {
     "adm.tbl.delivery.pickup": "Store pickup",
     "adm.tbl.delivery.ship": "Shipping",
     "adm.tbl.delivered": "Delivered",
-    "adm.tbl.completing": "Completing customer, frame and lenses…",
-    "adm.tbl.partial": "Customer, frame and lenses could not be completed on this load.",
+    "adm.tbl.completing": "Completing cost, commission and profit…",
+    "adm.tbl.partial": "Cost, commission and profit could not be completed on this load.",
   },
 };

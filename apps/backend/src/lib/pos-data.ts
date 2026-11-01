@@ -36,6 +36,7 @@ import {
   type TerminalUsage,
   type VariantCodes,
 } from "./pos";
+import { EMPTY_SALE_DETAIL, loadSaleDetails, type LensCodes } from "./pos-sale-detail";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
@@ -1386,6 +1387,24 @@ export interface SaleRow {
   void_requested_at: string | null;
   created_at: string;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
+  /**
+   * Who the sale was for and what was sold, when the caller asked for it
+   * (`listSales` with `withDetail`). Read from the source tables — the
+   * customer, the order's lines, the product — by lib/pos-sale-detail.ts, with
+   * the field names the analytics list uses, so a panel never has to tell
+   * where a value came from. Absent (not null) when it was not asked for.
+   */
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  frame_brand?: string | null;
+  frame_model?: string | null;
+  frame_color?: string | null;
+  frame_sku?: string | null;
+  own_frame?: boolean;
+  has_rx?: boolean;
+  lens?: LensCodes | null;
+  lens_summary?: { es: string; en: string } | null;
+  items?: string;
 }
 
 function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
@@ -1446,8 +1465,20 @@ export interface SalesFilter {
   to?: string;
 }
 
+/** What `listSales` may add to each row beyond the sale itself. */
+export interface ListSalesOptions {
+  /**
+   * Also read who the sale was for and what was sold (customer, frame, lenses,
+   * items) from the source tables — lib/pos-sale-detail.ts. Opt-in because it
+   * costs a handful of extra queries per page, and the callers that only need
+   * the money (the store's status, a seller's own panel) should not pay for
+   * them. Batched: the cost does not grow with the number of sales.
+   */
+  withDetail?: boolean;
+}
+
 /** Sales, newest first, within the caller's scope (the route sets it). */
-export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50): Promise<SaleRow[]> {
+export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50, opts: ListSalesOptions = {}): Promise<SaleRow[]> {
   const svc = pos(container);
   const where: Record<string, unknown> = {};
   if (f.establishmentIds !== null) where.establishment_id = f.establishmentIds;
@@ -1461,7 +1492,11 @@ export async function listSales(container: MedusaContainer, f: SalesFilter, take
   if (f.from || f.to) where.created_at = { ...(f.from ? { $gte: new Date(f.from) } : {}), ...(f.to ? { $lte: new Date(f.to) } : {}) };
   const sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
   const payments = sales.length ? await svc.listPosSalePayments({ sale_id: sales.map((s) => s.id) }, { take: sales.length * 12 }) : [];
-  return sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  const rows = sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  if (!opts.withDetail || !rows.length) return rows;
+  // A sale with no order or no customer simply gets nulls: the list never fails over its description.
+  const details = await loadSaleDetails(container, rows);
+  return rows.map((r) => ({ ...r, ...(details.get(r.id) ?? EMPTY_SALE_DETAIL) }));
 }
 
 export async function getSale(container: MedusaContainer, id: string): Promise<SaleRow | null> {

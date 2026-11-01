@@ -32,7 +32,14 @@ const STORE = Q.get("store") || "all";
 const ROLE = Q.get("role") || "owner";
 try { localStorage.setItem("adm_color_mode", MODE); } catch {}
 try { localStorage.setItem("oer_lang", Q.get("lang") || "es"); } catch {}
-try { if (STORE === "all") localStorage.removeItem("adm_active_store"); else localStorage.setItem("adm_active_store", STORE); } catch {}
+// Solo se toca la tienda activa cuando la URL la nombra: borrarla por defecto
+// hacía que una recarga pareciera «el filtro se pierde» cuando en el panel
+// real la elección sigue guardada.
+try {
+  const qStore = Q.get("store");
+  if (qStore === "all") localStorage.removeItem("adm_active_store");
+  else if (qStore) localStorage.setItem("adm_active_store", qStore);
+} catch {}
 if (Q.get("period")) setPeriodState({ period: Q.get("period"), from: Q.get("from") || "2026-10-01", to: Q.get("to") || "2026-10-31" });
 try { sessionStorage.setItem("oer_admin_session", JSON.stringify({ user: "dueno@optica.com", token: "harness", exp: Date.now() + 3600e3 })); } catch {}
 
