@@ -1,9 +1,10 @@
 // Dónde se usa: sección Ejecutivo de /admin (pestaña "exec"). La cabina del
-// dueño en UNA pantalla: barra fija (tienda · período · desde–hasta · PDF/Excel),
-// tira de diez KPI (ventas, nº, unidades, ticket, cobrado, por cobrar, costo
-// real, ganancia, margen, efectivo en caja — la ÚNICA tira: ningún acordeón la
-// repite) y acordeones con resumen ejecutivo en la cabecera, de modo que todo
-// se lee sin abrir nada:
+// dueño en UNA pantalla: la barra de filtros GLOBAL del panel (AdminShell →
+// GlobalFilterBar: tienda · período · rango · PDF/Excel/CSV, la misma en todas
+// las pestañas; aquí no hay ninguna barra propia), tira de diez KPI (ventas,
+// nº, unidades, ticket, cobrado, por cobrar, costo real, ganancia, margen,
+// efectivo en caja — la ÚNICA tira: ningún acordeón la repite) y acordeones
+// con resumen ejecutivo en la cabecera, de modo que todo se lee sin abrir nada:
 //   · Pedidos y etapas (StoreOrders.OrdersStagesView): todo lo vendido en el
 //     período con su etapa, StageBar + chips (pendientes primero), «Avanzar» en
 //     la fila y la ficha (SaleDetailPanel) al pulsar. Sigue el filtro global de
@@ -15,7 +16,10 @@
 //     sola vez, de las mismas ventas que la tira y la lista. Sustituye a «Resumen».
 //   · Catálogo.
 // Costo y ganancia solo se pintan cuando el servidor los manda (`access.profit`);
-// la tienda elegida es la global del panel (useStoreFilter).
+// la tienda elegida es la global del panel (useStoreFilter) y el período el
+// global (periodStore.js → usePeriodFilter). Exportar se registra en la barra
+// con useRegisterExport (PDF = reporte formal; Excel = libro con KPI, ventas,
+// vendedores y caja).
 //
 //   <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
 // `params` sigue el contrato de StoreOrders.jsx (seller / stage / q / period /
@@ -23,20 +27,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
-import { adminFetch } from "./adminApi.js";
+import { adminGet } from "./adminApi.js";
 import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney } from "./adminOrders.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { ExportMenu } from "./ui.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
+import { applyPeriodParams, usePeriodFilter } from "./periodStore.js";
 import Trends, { CatalogMini } from "./Executive.jsx";
 import ExecutiveCosts from "./ExecutiveCosts.jsx";
-import { OrdersStagesView, PERIODS, datesOf, isStuck, paramsKey, pct, salesReportSpec, salesSheets, stageOfRow, storeLabelFor, useOrderStages, usePeriod, useStoreSales, ymd } from "./StoreOrders.jsx";
+import { OrdersStagesView, datesOf, isStuck, paramsKey, pct, salesReportSpec, salesSheets, stageOfRow, storeLabelFor, useOrderStages, useStoreSales } from "./StoreOrders.jsx";
 import { collectCharts, summariesFromAccordions } from "./ReportDoc.jsx";
-import { periodRange } from "./SalesBoard.jsx";
 import { kpiDelta } from "./charts.jsx";
 import { fetchSellers } from "./adminSellers.js";
 import { sellerRowsFromInsights, sellerRowsTotals, sellersReportSpec, useSellerPanel, SellerChannels } from "./SellerPanel.jsx";
@@ -54,37 +59,19 @@ const CARD_KINDS = new Set(["card", "debit", "credit"]);
 const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es-US");
 const cents = (c) => (Number(c) || 0) / 100;
 
-/**
- * El período EQUIVALENTE anterior, con el que se comparan todos los KPI:
- *   hoy → ayer · ayer → anteayer · esta semana (lunes→hoy) → la pasada, los
- *   mismos días · semana pasada → la anterior · este mes (1→hoy) → el pasado
- *   hasta el mismo día · mes pasado → el anterior entero · este año → el
- *   pasado hasta la misma fecha · rango → el rango anterior de igual largo.
- */
-export function previousRangeOf(period, range, now = new Date()) {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const shift = (days) => new Date(y, m, d - days);
-  const clampDay = (yy, mm, dd) => new Date(yy, mm, Math.min(dd, new Date(yy, mm + 1, 0).getDate()));
-  switch (period) {
-    case "today": return periodRange("yesterday", now);
-    case "yesterday": return periodRange("yesterday", shift(1));
-    case "week": { const r = periodRange("week", shift(7)); return r; }
-    case "lastWeek": return periodRange("lastWeek", shift(7));
-    case "month": return { from: ymd(new Date(y, m - 1, 1)), to: ymd(clampDay(y, m - 1, d)) };
-    case "lastMonth": return periodRange("lastMonth", new Date(y, m - 1, 1));
-    case "year": return { from: `${y - 1}-01-01`, to: ymd(clampDay(y - 1, m, d)) };
-    default: {
-      const day = 86400_000;
-      const a = Date.parse(`${range.from}T00:00:00Z`);
-      const b = Date.parse(`${range.to}T00:00:00Z`);
-      if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
-      const len = Math.round((b - a) / day) + 1;
-      const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
-      return { from: iso(a - len * day), to: iso(a - day) };
-    }
+/** Las dos lecturas de la tira (insights y caja) con caché: al volver a la pestaña se pintan al instante. */
+const INSIGHTS_TTL = 60_000;
+/** Lo que pide el Ejecutivo para un rango y una tienda (también lo usa AdminShell.prefetchTab). */
+export function execQueries({ from, to, storeId, isAll, isWeb }) {
+  const q = { from, to, by: "seller" };
+  if (!isAll) q.stores = storeId;
+  const out = [{ path: "/admin/sales-analytics/insights", query: q }];
+  if (!isWeb) {
+    const cq = { from, to };
+    if (!isAll) cq.establishment_id = storeId;
+    out.push({ path: "/admin/pos/cash-report", query: cq });
   }
+  return out;
 }
 
 /**
@@ -118,54 +105,14 @@ function Kpi({ label, value, delta, vs, prevHint, flag, hint, help, onClick, neg
   );
 }
 
-/**
- * Barra de período del Ejecutivo: control segmentado (un solo contenedor
- * redondeado con los ocho períodos) y el rango desde–hasta en una píldora;
- * el rango queda resaltado cuando manda («Rango» o fechas a mano).
- */
-function ExecPeriod({ period, range, pick, setDate }) {
-  const { t, lang } = useLang();
-  const custom = period === "range";
-  // Con un período de la lista, el rango se lee en corto («1 nov – 15 nov»);
-  // pulsarlo pasa a «Rango» y abre las dos fechas.
-  const short = (s) => {
-    const d = new Date(`${s}T00:00:00`);
-    const sameYear = d.getFullYear() === new Date().getFullYear();
-    return d.toLocaleDateString(lang === "en" ? "en-US" : "es-ES", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) }).replace(/\.$/, "");
-  };
-  return (
-    <>
-      <div className="ex-seg" role="group" aria-label={t("adm.ex.period")}>
-        {PERIODS.map((p) => (
-          <button key={p} type="button" className={period === p ? "on" : ""} aria-pressed={period === p} onClick={() => pick(p)} title={t(`adm.ex.period.${p}`)}>
-            {t(`adm.ex.per.${p}`)}
-          </button>
-        ))}
-      </div>
-      {custom ? (
-        <span className="ex-range on" title={`${t("adm.ex.from")} – ${t("adm.ex.to")}`}>
-          <Icon name="calendar" size={13} />
-          <input type="date" value={range.from} max={range.to} aria-label={t("adm.ex.from")} onChange={(e) => setDate("from", e.target.value)} />
-          <span className="ex-range-sep" aria-hidden="true">–</span>
-          <input type="date" value={range.to} min={range.from} aria-label={t("adm.ex.to")} onChange={(e) => setDate("to", e.target.value)} />
-        </span>
-      ) : (
-        <button type="button" className="ex-range ex-range-btn" onClick={() => pick("range")} title={`${t("adm.ex.from")} ${range.from} – ${t("adm.ex.to")} ${range.to}`}>
-          <Icon name="calendar" size={13} />
-          <span>{range.from === range.to ? short(range.from) : `${short(range.from)} – ${short(range.to)}`}</span>
-        </button>
-      )}
-    </>
-  );
-}
-
 export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const { t, lang } = useLang();
   const demo = isDemoLogin();
   const sf = useStoreFilter(me);
   const isAdmin = !me || me.is_admin !== false;
-  const per = usePeriod("month");
-  const { from, to } = per.range;
+  // Período GLOBAL del panel (la barra de AdminShell): aquí solo se lee.
+  const per = usePeriodFilter();
+  const { from, to } = per;
   const dates = useMemo(() => datesOf(per.range), [per.range]);
   const storeId = sf.storeId;
   const physical = !sf.isAll && !sf.isWeb;
@@ -182,14 +129,14 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   useEffect(() => {
     if (!params) return;
     if (params.store) sf.setStoreId(params.store);
-    per.applyParams(params);
+    applyPeriodParams(params);
     if (params.seller || params.stage || params.q || params.order) { setListParams(params); setForcedAcc("ex-stages"); }
   }, [pkey]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasOrdersTab = useMemo(() => tabsOf(navGroupsFor(me)).includes("storeorders"), [me]);
   const goFromPanel = (tab, p = {}) => {
     if (tab === "storeorders" && !hasOrdersTab) {
       if (p.store) sf.setStoreId(p.store);
-      per.applyParams(p);
+      applyPeriodParams(p);
       setListParams({ ...p, _n: Date.now() });
       setForcedAcc("ex-stages");
       onSub?.("stages");
@@ -202,9 +149,9 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const [ins, setIns] = useState(null);
   const [cash, setCash] = useState(null);
   const [tick, setTick] = useState(0);
-  // El período equivalente anterior (previousRangeOf): sus cifras llegan en
-  // paralelo con las actuales y alimentan la variación de TODAS las tarjetas.
-  const prevRange = useMemo(() => previousRangeOf(per.period, per.range), [per.period, per.range]);
+  // El período equivalente anterior (periodStore.previousRangeOf): sus cifras
+  // llegan en paralelo con las actuales y alimentan la variación de TODAS las tarjetas.
+  const prevRange = per.prevRange;
   const [prevIns, setPrevIns] = useState(null);
   const [prevCash, setPrevCash] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
@@ -213,7 +160,6 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const prevSales = useStoreSales({ from: prevRange?.from, to: prevRange?.to, storeId }, !!prevRange);
   const { products, cases } = useCatalog();
   const bodyRef = useRef(null);
-  const barRef = useRef(null);
   // Vendedores (solo el dueño/superadmin los ve): la lista de fichas da la tienda
   // de cada uno (bloques por tienda del reporte) y el panel se abre al pulsar una fila.
   const [sellerList, setSellerList] = useState([]);
@@ -225,37 +171,29 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
     return () => { on = false; };
   }, [demo, isAdmin]);
 
-  // La barra se pega justo debajo de la cabecera del panel, mida lo que mida.
-  useEffect(() => {
-    const top = document.querySelector(".adm-top");
-    if (!top || !barRef.current) return undefined;
-    const apply = () => barRef.current?.style.setProperty("--ex-top", `${top.offsetHeight}px`);
-    apply();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
-    ro?.observe(top);
-    return () => ro?.disconnect();
-  }, []);
-
   // Cifras del período: insights (ventas, costo, ganancia, por vendedor) y caja
   // (cobros por método, movimientos), y las mismas dos llamadas para el período
-  // anterior, todo en paralelo. Depende de `storeId`: cambiar el filtro de
-  // tienda (evento adm:active-store → useStoreFilter) recarga todo.
+  // anterior, todo en paralelo y con caché (adminGet: al volver a la pestaña
+  // se pintan al instante y se refrescan por detrás). Depende de `storeId`:
+  // cambiar el filtro de tienda (evento adm:active-store → useStoreFilter)
+  // recarga todo. `tick` (tras cobrar, entregar, anular…) salta la caché.
   useEffect(() => {
     if (demo) return undefined;
     let on = true;
     setState("loading");
     setPrevIns(null);
     setPrevCash(null);
+    const force = tick > 0;
     const insightsOf = (r) => {
       const q = { from: r.from, to: r.to, by: "seller" };
       if (!sf.isAll) q.stores = storeId;
-      return adminFetch("/admin/sales-analytics/insights", { query: q });
+      return adminGet("/admin/sales-analytics/insights", { query: q, ttl: INSIGHTS_TTL, force });
     };
     const cashOf = (r) => {
       if (sf.isWeb) return Promise.resolve(null);
       const cq = { from: r.from, to: r.to };
       if (physical) cq.establishment_id = storeId;
-      return adminFetch("/admin/pos/cash-report", { query: cq }).catch(() => null);
+      return adminGet("/admin/pos/cash-report", { query: cq, ttl: INSIGHTS_TTL, force }).catch(() => null);
     };
     const prev = prevRange || null;
     Promise.all([
@@ -439,29 +377,18 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       });
     } finally { restore?.(); }
   };
+  // PDF (reporte formal) · Excel (libro) · CSV: en la barra global del panel. En demo no hay nada que exportar.
+  useRegisterExport(demo ? null : menuHandlers({ targetRef: bodyRef, title, name: t("adm.ex.export.name"), meta, xlsx, beforePrint, report }));
 
   return (
     <div className="adm-section ex-root adm-exec-hub">
       <div className="ex-head">
         <h2>{title}<HelpTip topic="exec.overview" size={16} /></h2>
-        <p>{t("adm.ex.sub")}</p>
-      </div>
-
-      <div className={`ex-bar adm-noprint ${state === "loading" ? "busy" : ""}`} ref={barRef}>
-        <div className="ex-bar-filters">
-          <span className="ex-bar-item">
-            <StoreFilter me={me} compact />
-            <HelpTip topic="exec.storeFilter" size={13} />
-          </span>
-          <span className="ex-bar-item ex-bar-period">
-            <ExecPeriod {...per} />
-            <HelpTip topic="exec.period" size={13} />
-          </span>
-        </div>
-        <span className="ex-export">
-          <ExportMenu targetRef={bodyRef} title={title} name={t("adm.ex.export.name")} compact={false} meta={meta} xlsx={xlsx} beforePrint={beforePrint} report={report} />
+        <p>{t("adm.ex.sub")} <HelpTip topic="exec.storeFilter" size={12} /> <HelpTip topic="exec.period" size={12} /></p>
+        <span className={`ex-scope adm-noprint ${state === "loading" ? "busy" : ""}`} title={prevHint || undefined}>
+          <Icon name="calendar" size={12} />{scopeText} · {from} → {to}
+          {state === "error" && <em className="ex-note err">{t("adm.ex.loadFailed")}</em>}
         </span>
-        {state === "error" && <span className="ex-note err">{t("adm.ex.loadFailed")}</span>}
       </div>
 
       <div ref={bodyRef}>

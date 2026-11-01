@@ -2,6 +2,7 @@
 // errores viajan como CLAVES adm.err.pos.<reason> y traduce quien pinta; el
 // servidor calcula todos los importes, aquí nunca se suma un precio.
 import { adminFetch, adminUpload } from "./adminApi.js";
+import { cachedGet, invalidate } from "./adminCache.js";
 import { preparePrescriptionFile } from "../lib/imagePrep.js";
 
 /** Error con la clave de traducción y los datos extra del servidor (método, validación…). */
@@ -22,68 +23,82 @@ const call = async (path, options, fallback) => {
 };
 const qs = (o) => {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(o || {})) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+  // Claves ordenadas: la misma consulta siempre da la misma URL (clave de la caché).
+  for (const [k, v] of Object.entries(o || {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
   const s = p.toString();
   return s ? `?${s}` : "";
 };
+/**
+ * Lectura con caché (adminCache.js): lo ya leído se devuelve al instante y se
+ * refresca por detrás pasado `ttl`; dos pantallas pidiendo lo mismo = una
+ * petición. Las mutaciones de abajo invalidan por prefijo (`after`).
+ */
+const cached = (path, ttl, fallback) => cachedGet(path, { ttl, fetcher: () => call(path, undefined, fallback) });
+/** Tras una mutación: olvida esas lecturas y vuelve a pedir las que estén en pantalla. */
+const after = (prefixes) => (r) => { prefixes.forEach((p) => invalidate(p)); return r; };
+/** Lo que cambia al registrar, cobrar, entregar o anular una venta. */
+const SALE_READS = ["/admin/pos/sales", "/admin/sales-analytics", "/admin/pos/cash", "/admin/pos/statement", "/admin/order-board", "/admin/store-costs/pnl", "/admin/start-map", "/admin/pos/customers"];
+const CASH_READS = ["/admin/pos/cash", "/admin/start-map"];
+const CONTEXT_READS = ["/admin/pos/context", "/admin/pos/terminals", "/admin/pos/payment-methods", "/admin/pos/settings", "/admin/establishments"];
+const TTL = { context: 300_000, list: 60_000, short: 30_000 };
 
-export const posContext = () => call("/admin/pos/context");
+export const posContext = () => cached("/admin/pos/context", TTL.context);
 export const searchProducts = (store, q) => call(`/admin/pos/products${qs({ store, q })}`);
 export const searchCustomers = (q) => call(`/admin/pos/customers${qs({ q })}`);
-export const fetchCustomer = (id) => call(`/admin/pos/customers/${encodeURIComponent(id)}`);
+export const fetchCustomer = (id) => cached(`/admin/pos/customers/${encodeURIComponent(id)}`, TTL.short);
 export const quote = (body) => call("/admin/pos/quote", { method: "POST", body });
 
 export const requestApproval = (body) => call("/admin/pos/discount-approvals", { method: "POST", body });
 export const fetchApproval = (id) => call(`/admin/pos/discount-approvals/${encodeURIComponent(id)}`);
-export const listApprovals = (status) => call(`/admin/pos/discount-approvals${qs({ status })}`);
+export const listApprovals = (status) => cached(`/admin/pos/discount-approvals${qs({ status })}`, TTL.short);
 export const decideApproval = (id, decision, note) =>
-  call(`/admin/pos/discount-approvals/${encodeURIComponent(id)}/decide`, { method: "POST", body: { decision, note } });
+  call(`/admin/pos/discount-approvals/${encodeURIComponent(id)}/decide`, { method: "POST", body: { decision, note } }).then(after(["/admin/pos/discount-approvals", "/admin/start-map"]));
 
-export const createSale = (body) => call("/admin/pos/sales", { method: "POST", body }, "adm.err.pos.sale_failed");
-export const listSales = (filters) => call(`/admin/pos/sales${qs(filters)}`);
+export const createSale = (body) => call("/admin/pos/sales", { method: "POST", body }, "adm.err.pos.sale_failed").then(after(SALE_READS));
+export const listSales = (filters) => cached(`/admin/pos/sales${qs(filters)}`, TTL.list);
 export const fetchSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}`);
 /** Datos de un documento de la venta SIN registrar impresión (líneas con foto, cliente, totales; `job` trae la receta). */
 export const fetchSaleDocument = (id, kind) => call(`/admin/pos/sales/${encodeURIComponent(id)}/documents${qs({ kind })}`);
-export const collectPayment = (id, payments) => call(`/admin/pos/sales/${encodeURIComponent(id)}/payments`, { method: "POST", body: { payments } });
-export const deliverSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: {} });
-export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } });
+export const collectPayment = (id, payments) => call(`/admin/pos/sales/${encodeURIComponent(id)}/payments`, { method: "POST", body: { payments } }).then(after(SALE_READS));
+export const deliverSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: {} }).then(after(SALE_READS));
+export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
 
-export const listTerminals = (store) => call(`/admin/pos/terminals${qs({ store })}`);
-export const createTerminal = (body) => call("/admin/pos/terminals", { method: "POST", body });
-export const updateTerminal = (id, body) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "POST", body });
+export const listTerminals = (store) => cached(`/admin/pos/terminals${qs({ store })}`, TTL.context);
+export const createTerminal = (body) => call("/admin/pos/terminals", { method: "POST", body }).then(after(CONTEXT_READS));
+export const updateTerminal = (id, body) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "POST", body }).then(after(CONTEXT_READS));
 /** Con el uso de cada uno (ventas, cajas, vendedores): lo que decide si se puede borrar o desactivar. */
 export const listTerminalsWithUsage = (store) => call(`/admin/pos/terminals${qs({ store, usage: 1 })}`);
-export const deleteTerminal = (id) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const deleteTerminal = (id) => call(`/admin/pos/terminals/${encodeURIComponent(id)}`, { method: "DELETE" }).then(after(CONTEXT_READS));
 
-export const fetchPosSettings = () => call("/admin/pos/settings");
-export const savePosSettings = (body) => call("/admin/pos/settings", { method: "POST", body });
+export const fetchPosSettings = () => cached("/admin/pos/settings", TTL.context);
+export const savePosSettings = (body) => call("/admin/pos/settings", { method: "POST", body }).then(after(CONTEXT_READS));
 
 export const listClaims = (filters) => call(`/admin/pos/insurance-claims${qs(filters)}`);
-export const setClaim = (id, status, paid) => call(`/admin/pos/insurance-claims/${encodeURIComponent(id)}`, { method: "POST", body: { status, paid } });
+export const setClaim = (id, status, paid) => call(`/admin/pos/insurance-claims/${encodeURIComponent(id)}`, { method: "POST", body: { status, paid } }).then(after(["/admin/pos/insurance-claims", ...SALE_READS]));
 
 /** Estado de cuenta de una tienda ({ establishment_id: id | "all", from, to } en YYYY-MM-DD; sin fechas = mes en curso). */
-export const fetchStatement = (params) => call(`/admin/pos/statement${qs(params)}`);
+export const fetchStatement = (params) => cached(`/admin/pos/statement${qs(params)}`, TTL.list);
 
 /** Caja de la TIENDA (HU-32): sesiones con su libro de movimientos; `store` = id de la tienda. */
-export const listCashSessions = (store, limit) => call(`/admin/pos/cash-sessions${qs({ store, limit })}`);
+export const listCashSessions = (store, limit) => cached(`/admin/pos/cash-sessions${qs({ store, limit })}`, TTL.short);
 /** Una sesión con su libro completo, las ventas enlazadas ({ [sale_id]: { number, customer_name… } }) y su auditoría. */
 export const fetchCashSession = (id) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}`);
 /** { store, opening, signature (iniciales), note?, terminal_id? } abre la caja de la tienda. */
-export const openCashSession = (body) => call("/admin/pos/cash-sessions", { method: "POST", body });
+export const openCashSession = (body) => call("/admin/pos/cash-sessions", { method: "POST", body }).then(after(CASH_READS));
 /** { kind, amount, category, note, terminal_id? } entrada o salida manual. */
-export const addCashMovement = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/movement`, { method: "POST", body });
+export const addCashMovement = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/movement`, { method: "POST", body }).then(after(CASH_READS));
 /** { counted, signature, note?, approval_signature? } cierra con el conteo y las iniciales. */
-export const closeCashSession = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/close`, { method: "POST", body });
+export const closeCashSession = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/close`, { method: "POST", body }).then(after(CASH_READS));
 /** { approval_signature } el dueño autoriza una diferencia con sus iniciales. */
-export const approveCashSession = (id, approvalSignature) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/approve`, { method: "POST", body: { approval_signature: approvalSignature } });
+export const approveCashSession = (id, approvalSignature) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/approve`, { method: "POST", body: { approval_signature: approvalSignature } }).then(after(CASH_READS));
 /** Documento de apertura o cierre; `print` registra la impresión en auditoría. */
 export const fetchCashDocument = (id, kind, print = false) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/document${qs({ kind, print: print ? 1 : "" })}`);
 /** Reenvía el documento al dueño y a la lista de administradores. */
 export const emailCashDocument = (id, kind) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/email`, { method: "POST", body: { kind } });
 
-export const listMethods = () => call("/admin/pos/payment-methods");
-export const createMethod = (body) => call("/admin/pos/payment-methods", { method: "POST", body });
-export const updateMethod = (id, body) => call(`/admin/pos/payment-methods/${encodeURIComponent(id)}`, { method: "POST", body });
+export const listMethods = () => cached("/admin/pos/payment-methods", TTL.context);
+export const createMethod = (body) => call("/admin/pos/payment-methods", { method: "POST", body }).then(after(CONTEXT_READS));
+export const updateMethod = (id, body) => call(`/admin/pos/payment-methods/${encodeURIComponent(id)}`, { method: "POST", body }).then(after(CONTEXT_READS));
 
 /** Lectura automática de la receta (mismo lector que la web). Devuelve { prescription, validation }. */
 export async function ocrPrescription(file) {

@@ -114,6 +114,19 @@ export function setPeriodState(next) {
 /** Lo guardado, ya normalizado; para módulos sin hook. */
 export const readPeriod = () => getSnapshot();
 
+/**
+ * Aplica `period` o `from`/`to` de unos `params` de salto (contrato de
+ * StoreOrders.jsx: go("exec", { period: "week" }) · go("storeorders", { from,
+ * to })) al período GLOBAL; ignora lo que no venga. Un período con nombre
+ * manda (sigue vivo al cambiar de día); from/to solo definen un rango a medida.
+ */
+export function applyPeriodParams(p) {
+  if (!p) return false;
+  if (p.period && PERIODS.includes(p.period) && p.period !== "range") { setPeriodState({ period: p.period }); return true; }
+  if (DAY_RE.test(p.from || "") && DAY_RE.test(p.to || "") && p.from <= p.to) { setPeriodState({ period: "range", from: p.from, to: p.to }); return true; }
+  return false;
+}
+
 function subscribe(cb) {
   const onEvent = () => cb();
   const onStorage = (e) => { if (!e || e.key === null || e.key === KEY) { snapshot = read(); cb(); } };

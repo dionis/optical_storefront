@@ -31,20 +31,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
-import { adminFetch } from "./adminApi.js";
+import { adminGet } from "./adminApi.js";
 import { isDemoLogin } from "./adminAuth.js";
 import { STAGES, STAGE_BY_KEY, money as fmtMoney, setOrderStage, stageErrorText } from "./adminOrders.js";
-import { ExportMenu } from "./ui.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import { WEB_STORE } from "./useStoreTheme.js";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
-import { periodRange } from "./SalesBoard.jsx";
+import { PERIODS, applyPeriodParams, usePeriodFilter } from "./periodStore.js";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import { StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import "./exec.css";
 
-export const PERIODS = ["today", "yesterday", "week", "lastWeek", "month", "lastMonth", "year", "range"];
+/** Los períodos del panel (periodStore.js); se re-exportan por compatibilidad (SellerPanel). */
+export { PERIODS };
 /** Pages of 100 sales read for one list: beyond it the panel says `truncated`. */
 const MAX_PAGES = 10;
 /** Chips de filtro por etapa, las pendientes primero. */
@@ -62,36 +63,18 @@ export const pct = (v) => (v == null || Number.isNaN(Number(v)) ? "—" : `${Mat
 const shiftDay = (day, n) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + n); return ymd(d); };
 const DAY_MS = 86400_000;
 
-/** Período (chips + desde/hasta) compartido por el Ejecutivo y la lista en solitario. */
-export function usePeriod(initial = "month") {
-  const [period, setPeriod] = useState(initial);
-  const [range, setRange] = useState(() => periodRange(initial));
-  const pick = useCallback((p) => { setPeriod(p); if (p !== "range") setRange(periodRange(p)); }, []);
-  const setDate = useCallback((k, v) => { if (!v) return; setPeriod("range"); setRange((r) => ({ ...r, [k]: v })); }, []);
-  /** Aplica `period` o `from`/`to` de unos `params` (contrato de arriba); ignora lo que no venga. */
-  const applyParams = useCallback((p) => {
-    if (!p) return;
-    // Un período con nombre manda (sigue vivo al cambiar de día); from/to solo definen un rango a medida.
-    if (p.period && PERIODS.includes(p.period) && p.period !== "range") { pick(p.period); return; }
-    if (p.from && p.to && /^\d{4}-\d{2}-\d{2}$/.test(p.from) && /^\d{4}-\d{2}-\d{2}$/.test(p.to)) { setPeriod("range"); setRange({ from: p.from, to: p.to }); }
-  }, [pick]);
-  return { period, range, pick, setDate, applyParams };
-}
+// El período (chips + desde/hasta) ya no vive aquí: es el GLOBAL del panel
+// (periodStore.js → usePeriodFilter, pintado por GlobalFilterBar en AdminShell).
 
-export function PeriodBar({ period, range, pick, setDate }) {
-  const { t } = useLang();
-  return (
-    <>
-      <div className="ex-chips" role="group" aria-label={t("adm.ex.period")}>
-        {PERIODS.map((p) => <button key={p} type="button" className={period === p ? "on" : ""} onClick={() => pick(p)}>{t(`adm.ex.period.${p}`)}</button>)}
-      </div>
-      <span className="ex-dates">
-        <input type="date" value={range.from} max={range.to} aria-label={t("adm.ex.from")} title={t("adm.ex.from")} onChange={(e) => setDate("from", e.target.value)} />
-        –
-        <input type="date" value={range.to} min={range.from} aria-label={t("adm.ex.to")} title={t("adm.ex.to")} onChange={(e) => setDate("to", e.target.value)} />
-      </span>
-    </>
-  );
+/** Las lecturas de la lista con caché (adminCache.js): volver a la pestaña pinta al instante. */
+const LIST_TTL = 60_000;
+/** Lo que pide la lista para un rango y una tienda (también lo usa AdminShell.prefetchTab). */
+export function storeOrdersQueries({ from, to, storeId }) {
+  const q = { from, to, page: 0 };
+  if (storeId && storeId !== "all") q.stores = storeId;
+  const b = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
+  if (storeId && storeId !== "all") b.store = storeId;
+  return [{ path: "/admin/sales-analytics/sales", query: q }, { path: "/admin/order-board", query: b }];
 }
 
 /** Suma de la lista: la fila en negrita del final y las pastillas del acordeón. */
@@ -138,7 +121,7 @@ export function useStoreSales({ from, to, storeId }, enabled = true) {
       for (let page = 0; page < MAX_PAGES; page++) {
         const q = { from, to, page };
         if (storeId && storeId !== "all") q.stores = storeId;
-        const r = await adminFetch("/admin/sales-analytics/sales", { query: q });
+        const r = await adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
         rows.push(...(r.sales || []));
         access = r.access || access;
         if (!r.has_more) break;
@@ -171,7 +154,7 @@ export function useOrderStages({ from, to, storeId }, enabled = true) {
     setSt((s) => ({ ...s, state: "loading" }));
     const q = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
     if (storeId && storeId !== "all") q.store = storeId;
-    adminFetch("/admin/order-board", { query: q })
+    adminGet("/admin/order-board", { query: q, ttl: LIST_TTL, force: tick > 0 })
       .then((r) => {
         if (!on) return;
         const byOrder = new Map((r.orders || []).map((o) => [o.id, o]));
@@ -639,50 +622,47 @@ export function OrdersStagesView({ data, stages, storeLabel, params, me, compact
 }
 
 /**
- * Standalone (pestaña "storeorders"): tienda, período y exportación propios, y
- * la misma vista de etapas + lista del Ejecutivo. `params`: contrato de arriba.
- * `embedded` (compatibilidad) pinta solo la tabla con `data` ya cargada.
+ * Standalone (pestaña "storeorders"): tienda y período de la barra GLOBAL del
+ * panel (useStoreFilter + usePeriodFilter), exportación registrada en esa misma
+ * barra (useRegisterExport) y la misma vista de etapas + lista del Ejecutivo.
+ * `params`: contrato de arriba. `embedded` (compatibilidad) pinta solo la
+ * tabla con `data` ya cargada; también entonces el período es el global.
  */
 export default function StoreOrders({ me, go, params = null, embedded = false, data: given, storeLabel: givenLabel, openSale }) {
   const { t, lang } = useLang();
   const sf = useStoreFilter(me);
-  const per = usePeriod("month");
+  const per = usePeriodFilter();
   const pkey = paramsKey(params);
-  // store / period / from / to de los params → filtro global y período, una vez por salto.
+  // store / period / from / to de los params → filtro global de tienda y período global, una vez por salto.
   useEffect(() => {
     if (!params) return;
     if (params.store) sf.setStoreId(params.store);
-    per.applyParams(params);
+    applyPeriodParams(params);
   }, [pkey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const own = useStoreSales({ from: per.range.from, to: per.range.to, storeId: sf.storeId }, !embedded);
-  const stages = useOrderStages({ from: per.range.from, to: per.range.to, storeId: sf.storeId }, !embedded);
+  const own = useStoreSales({ from: per.from, to: per.to, storeId: sf.storeId }, !embedded);
+  const stages = useOrderStages({ from: per.from, to: per.to, storeId: sf.storeId }, !embedded);
   const data = embedded && given ? given : own;
   const storeLabel = givenLabel || storeLabelFor(sf.stores, t);
   const ref = useRef(null);
   // `openSale(row, go)` abre una venta cuando la pestaña de Ventas acepte una búsqueda por número.
   const onOpen = typeof openSale === "function" ? (r) => openSale(r, go) : undefined;
-  if (embedded) return <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} compact me={me} />;
-  const scope = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb ? t("adm.ex.scope.web") : `${sf.store?.code || ""} ${sf.store?.name || ""}`.trim();
-  const meta = `${scope} · ${per.range.from} → ${per.range.to}`;
   const stageOf = (r) => stageOfRow(r, stages.byOrder);
+  const scope = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb ? t("adm.ex.scope.web") : `${sf.store?.code || ""} ${sf.store?.name || ""}`.trim();
+  const meta = `${scope} · ${per.from} → ${per.to}`;
   // PDF / Excel / CSV: el reporte formal (ReportDoc) con la lista completa, una línea por venta.
   const report = () => salesReportSpec({
     rows: data.rows, totals: data.totals, access: data.access, t, lang, storeLabel, stores: sf.stores, stageOf,
-    scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from: per.range.from, to: per.range.to },
+    scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from: per.from, to: per.to },
   });
+  const xlsx = () => ({ filename: `${t("adm.ex.so.exportName")}-${per.from}-${per.to}.xlsx`, sheets: salesSheets(data.rows, data.totals, { t, lang, storeLabel, access: data.access, stageOf }) });
+  useRegisterExport(embedded || data.state !== "ok" ? null : menuHandlers({ targetRef: ref, title: t("adm.ex.acc.stages"), name: t("adm.ex.so.exportName"), meta, report, xlsx }));
+  if (embedded) return <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} compact me={me} />;
   return (
     <div className="adm-section ex-root so-root">
       <div className="ex-head">
         <h2>{t("adm.ex.acc.stages")}</h2>
         <p>{t("adm.ex.so.sub")}</p>
-      </div>
-      <div className="ex-bar adm-noprint">
-        <StoreFilter me={me} compact />
-        <PeriodBar {...per} />
-        <span className="ex-export">
-          <ExportMenu targetRef={ref} title={t("adm.ex.acc.stages")} name={t("adm.ex.so.exportName")} compact={false} meta={meta} report={report}
-            xlsx={() => ({ filename: `${t("adm.ex.so.exportName")}-${per.range.from}-${per.range.to}.xlsx`, sheets: salesSheets(data.rows, data.totals, { t, lang, storeLabel, access: data.access, stageOf }) })} />
-        </span>
+        <span className="ex-scope adm-noprint"><Icon name="calendar" size={12} />{meta}</span>
       </div>
       <div ref={ref}>
         <OrdersStagesView data={data} stages={stages} storeLabel={sf.isAll ? storeLabel : null} params={params} me={me} />

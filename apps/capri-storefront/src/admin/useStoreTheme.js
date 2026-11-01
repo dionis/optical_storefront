@@ -23,8 +23,12 @@
 // color en todas partes.
 import { useEffect, useMemo, useState } from "react";
 import { isDemoLogin } from "./adminAuth.js";
-import { fetchStores, ONLINE_STORE_COLOR, storeInk } from "./adminStores.js";
+import { adminGet } from "./adminApi.js";
+import { ONLINE_STORE_COLOR, storeInk } from "./adminStores.js";
 import { posContext } from "./posApi.js";
+
+/** Las tiendas con su color, con caché (adminCache.js): cada `useStoreFilter` del panel la comparte. */
+const fetchStoresCached = () => adminGet("/admin/establishments", { ttl: 300_000 });
 
 /** Grises y negro: nadie está en una tienda concreta. */
 export const NEUTRAL_THEME = { chrome: "#111827", accent: "#374151", bg: "#F3F4F6" };
@@ -193,7 +197,7 @@ export function useStoreTheme(me, { tab } = {}) {
       let assigned = null;
       if (isAdmin) {
         // Dueño/superadmin leen las tiendas con su color (/admin/establishments).
-        try { stores = ((await fetchStores())?.establishments || []).filter((s) => s.is_active !== false); } catch { /* sin tema */ }
+        try { stores = ((await fetchStoresCached())?.establishments || []).filter((s) => s.is_active !== false); } catch { /* sin tema */ }
       } else {
         // Los demás roles solo llegan a /admin/pos/context (sus tiendas y su caja).
         try {
