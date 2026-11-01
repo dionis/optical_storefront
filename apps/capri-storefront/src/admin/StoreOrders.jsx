@@ -6,6 +6,16 @@
 // ETAPA del pedido (confirmado → laboratorio → preparado → en camino →
 // entregado), con «Avanzar» en la fila y la ficha (SaleDetailPanel) al pulsar.
 //
+// QUIÉN VE EL DINERO (privacidad, no estética):
+//   · Costo, ganancia y margen: solo si el servidor los manda (`access.profit`
+//     de /admin/sales-analytics/sales). Si no, la columna NO existe — ni
+//     cabecera ni celda: un «Costo: oculto» sigue siendo un dato de costo
+//     delante de quien no le corresponde.
+//   · Comisión: `access.commission` (un vendedor ve la suya).
+//   · Importe de las tarjetas por etapa (StageStrip): solo el administrador
+//     (`me.is_admin !== false`) — por regla del dueño, al resto solo la
+//     cantidad y el porcentaje.
+//
 // Datos — dos fuentes, UNA lista:
 //   GET /admin/sales-analytics/sales   el dinero y la descripción de cada venta
 //                                      (cost/fee/profit null si no se pueden ver);
@@ -41,7 +51,8 @@ import SortTh from "./SortTh.jsx";
 import { PERIODS, applyPeriodParams, usePeriodFilter } from "./periodStore.js";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
-import { StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
+import { StageBar, StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
+import { InfoTip } from "./ui.jsx";
 import "./exec.css";
 
 /** Los períodos del panel (periodStore.js); se re-exportan por compatibilidad (SellerPanel). */
@@ -366,15 +377,23 @@ export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, sto
   const store = scope?.store && !scope.isAll && !scope.isWeb ? scope.store : null;
   const scopeName = store ? store.name || store.code : scope?.isWeb ? t("adm.rpt.web") : t("adm.rpt.allStores");
   const m = (v) => fmtMoney(v, "usd", lang);
+  // Manda `access` (lo que el servidor dijo), y solo a falta de él los totales
+  // calculados aquí: si alguna vez llegara una cifra de costo a quien no puede
+  // verla, el PDF tampoco la imprimiría — la pantalla y el papel enseñan lo mismo.
+  const showEcon = access ? access.profit === true : totals.hasEcon;
+  const showCommission = access ? access.commission === true : totals.hasCommission;
+  // `key` identifica el CONCEPTO de cada tarjeta (ReportDoc.specForAudience lo
+  // usa para decidir qué sale en la versión para compartir). Nunca por el
+  // rótulo traducido: cambiaría con el idioma y un costo se colaría en inglés.
   const baseKpis = kpis.length ? kpis : [
-    { label: t("adm.ex.so.price"), value: m(totals.total), raw: totals.total, sub: t("adm.ex.so.rows", { n: totals.count }) },
-    { label: t("adm.ex.so.paid"), value: m(totals.paid), raw: totals.paid },
-    { label: t("adm.ex.so.balance"), value: m(totals.balance), raw: totals.balance, neg: totals.balance > 0 },
-    totals.discount > 0 ? { label: t("adm.ex.so.discount"), value: m(totals.discount), raw: totals.discount } : null,
-    totals.hasEcon ? { label: t("adm.ex.so.cost"), value: m(totals.cost), raw: totals.cost } : null,
-    totals.hasEcon ? { label: t("adm.ex.so.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
-    totals.hasEcon && totals.margin_pct != null ? { label: t("adm.ex.so.margin"), value: pct(totals.margin_pct), raw: totals.margin_pct } : null,
-    totals.hasCommission ? { label: t("adm.ex.so.commission"), value: m(totals.commission), raw: totals.commission } : null,
+    { key: "sales", label: t("adm.ex.so.price"), value: m(totals.total), raw: totals.total, sub: t("adm.ex.so.rows", { n: totals.count }) },
+    { key: "paid", label: t("adm.ex.so.paid"), value: m(totals.paid), raw: totals.paid },
+    { key: "balance", label: t("adm.ex.so.balance"), value: m(totals.balance), raw: totals.balance, neg: totals.balance > 0 },
+    totals.discount > 0 ? { key: "discount", label: t("adm.ex.so.discount"), value: m(totals.discount), raw: totals.discount } : null,
+    showEcon && totals.hasEcon ? { key: "cost", label: t("adm.ex.so.cost"), value: m(totals.cost), raw: totals.cost } : null,
+    showEcon && totals.hasEcon ? { key: "profit", label: t("adm.ex.so.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
+    showEcon && totals.hasEcon && totals.margin_pct != null ? { key: "margin", label: t("adm.ex.so.margin"), value: pct(totals.margin_pct), raw: totals.margin_pct } : null,
+    showCommission && totals.hasCommission ? { key: "commission", label: t("adm.ex.so.commission"), value: m(totals.commission), raw: totals.commission } : null,
   ];
   return {
     title: title || t("adm.rpt.salesTitle", { store: scopeName }),
@@ -426,13 +445,21 @@ export function useListFilters(params) {
 }
 
 /**
- * La tira de etapas: StageBar con las cinco etapas (cuántas y cuánto suman,
- * pulsar filtra), chips por grupo (pendientes primero), la línea de alertas
- * («N llevan más de 7 días sin salir») y los filtros activos como chips quitables.
+ * La tira de etapas: StageBar con las cinco etapas (cuántas y, SOLO para el
+ * administrador, cuánto suman), chips por grupo (pendientes primero), la línea
+ * de alertas («N llevan más de 7 días sin salir») y los filtros activos como
+ * chips quitables.
+ *
+ * Regla del dueño: en los pedidos por etapa, a todo el mundo salvo el
+ * administrador solo le sale la CANTIDAD y el porcentaje — «ese valor monetario
+ * solo concierne a super admin». Por eso para quien no administra la tarjeta se
+ * pinta sin importes y SIN el menú de exportación, que se llevaría el dinero
+ * (StageBar.jsx: la hoja de StageBarCard siempre trae la columna «Importe»).
  */
-export function StageStrip({ rows, byOrder, stages, filters, compact = false }) {
+export function StageStrip({ rows, byOrder, stages, filters, compact = false, me = null }) {
   const { t, lang } = useLang();
   const m = (v) => fmtMoney(v, "usd", lang);
+  const isAdmin = !me || me.is_admin !== false;
   const stats = useMemo(() => {
     const by = Object.fromEntries([...STAGES.map((s) => s.key), "payment_pending", "voided", "none"].map((k) => [k, { n: 0, v: 0 }]));
     let stuck = 0;
@@ -446,10 +473,12 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
     const group = (keys) => keys.reduce((acc, k) => ({ n: acc.n + by[k].n, v: acc.v + by[k].v }), { n: 0, v: 0 });
     return { by, stuck, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
   }, [rows, byOrder]);
-  const tiles = STAGES.map((s) => ({ key: s.key, label: t(s.label), icon: STAGE_ICON[s.key], count: stats.by[s.key].n, amount: stats.by[s.key].v }));
+  // Sin `amount` para quien no administra: así no hay importe que pintar ni que
+  // exportar, en vez de mandar un 0 que se leería como «no se vendió nada».
+  const tiles = STAGES.map((s) => ({ key: s.key, label: t(s.label), icon: STAGE_ICON[s.key], count: stats.by[s.key].n, ...(isAdmin ? { amount: stats.by[s.key].v } : {}) }));
   const pick = (key) => filters.set("stage", filters.stage === key ? "" : key);
   const chip = (key, label, n, v) => (
-    <button key={key} type="button" className={`so-chip ${filters.stage === key ? "on" : ""} ${key}`} aria-pressed={filters.stage === key} onClick={() => pick(key)} title={v != null ? m(v) : undefined}>
+    <button key={key} type="button" className={`so-chip ${filters.stage === key ? "on" : ""} ${key}`} aria-pressed={filters.stage === key} onClick={() => pick(key)} title={isAdmin && v != null ? m(v) : undefined}>
       <Icon name={STAGE_ICON[key] || "lab"} size={12} />{label}<b>{n}</b>
     </button>
   );
@@ -459,8 +488,21 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
   if (filters.q) el.push({ k: "q", label: t("adm.ex.flt.q"), value: filters.q });
   return (
     <div className={`so-strip ${compact ? "compact" : ""}`}>
-      <StageBarCard icon="layers" title={t("adm.ex.stg.title")} hint={t("adm.ex.stg.hint")} name="etapas" className="so-stagebar"
-        stages={tiles} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+      {isAdmin ? (
+        <StageBarCard icon="layers" title={t("adm.ex.stg.title")} hint={t("adm.ex.stg.hint")} name="etapas" className="so-stagebar"
+          stages={tiles} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+      ) : (
+        /* La misma tarjeta, pero sin importes y sin ExportMenu: su hoja de
+           cálculo lleva la columna «Importe» y ese dinero solo lo ve el
+           administrador. Mismas clases para que se vea igual. */
+        <div className="adm-card so-stagebar">
+          <div className="adm-card-head">
+            <h3><Icon name="layers" size={16} />{t("adm.ex.stg.title")}</h3>
+            <span className="adm-card-tools"><InfoTip text={t("adm.ex.stg.hint")} title={t("adm.ex.stg.title")} /></span>
+          </div>
+          <StageBar stages={tiles} showAmount={false} lang={lang} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+        </div>
+      )}
       <div className="so-chips adm-noprint" role="group" aria-label={t("adm.ex.flt.stage")}>
         <button type="button" className={`so-chip all ${!filters.stage ? "on" : ""}`} aria-pressed={!filters.stage} onClick={() => filters.set("stage", "")}>{t("adm.ex.stg.all")}<b>{rows.length}</b></button>
         {chip("pending", t("adm.ex.stg.pending"), stats.groups.pending.n, stats.groups.pending.v)}
@@ -559,10 +601,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               <SortTh col="lens" sort={sorted.sort} onSort={sorted.toggle} className="so-items">{t("adm.rpt.col.lens")}</SortTh>
               {th("total", t("adm.ex.so.price"), "r")}
               {th("discount", t("adm.ex.so.discount"), "r")}
-              {th("cost", t("adm.ex.so.cost"), "r")}
+              {showEcon && th("cost", t("adm.ex.so.cost"), "r")}
               {th("commission", t("adm.ex.so.commission"), "r")}
-              {th("profit", t("adm.ex.so.profit"), "r")}
-              {th("margin_pct", t("adm.ex.so.margin"), "r")}
+              {showEcon && th("profit", t("adm.ex.so.profit"), "r")}
+              {showEcon && th("margin_pct", t("adm.ex.so.margin"), "r")}
               {th("paid", t("adm.ex.so.paid"), "r")}
               {th("balance", t("adm.ex.so.balance"), "r")}
             </tr>
@@ -600,10 +642,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
                   <td data-label={t("adm.rpt.col.lens")} className="so-items muted" title={r.items}>{saleLens(r, { t, lang }) || "—"}</td>
                   <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(r.total)}</b></td>
                   <td data-label={t("adm.ex.so.discount")} className="r num muted">{Number(r.discount) > 0 ? `−${m(r.discount)}` : "—"}</td>
-                  <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon ? (costOf(r) == null ? "—" : m(costOf(r))) : hidden}{showEcon && r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>
+                  {showEcon && <td data-label={t("adm.ex.so.cost")} className="r num">{costOf(r) == null ? "—" : m(costOf(r))}{r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>}
                   <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission ? (r.commission == null ? "—" : m(r.commission)) : hidden}</td>
-                  <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon ? (profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>) : hidden}</td>
-                  <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon ? <span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span> : hidden}</td>
+                  {showEcon && <td data-label={t("adm.ex.so.profit")} className="r num">{profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>}</td>}
+                  {showEcon && <td data-label={t("adm.ex.so.margin")} className="r num"><span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span></td>}
                   <td data-label={t("adm.ex.so.paid")} className="r num">{m(r.paid)}</td>
                   <td data-label={t("adm.ex.so.balance")} className="r num">{Number(r.balance) > 0 ? <b className="neg">{m(r.balance)}</b> : <span className="muted">—</span>}</td>
                 </tr>
@@ -616,10 +658,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               <td className="so-items muted">{totals.units}</td>
               <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(totals.total)}</b></td>
               <td data-label={t("adm.ex.so.discount")} className="r num">{totals.discount > 0 ? `−${m(totals.discount)}` : "—"}</td>
-              <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon && totals.hasEcon ? <b>{m(totals.cost)}</b> : hidden}</td>
+              {showEcon && <td data-label={t("adm.ex.so.cost")} className="r num">{totals.hasEcon ? <b>{m(totals.cost)}</b> : "—"}</td>}
               <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission && totals.hasCommission ? <b>{m(totals.commission)}</b> : hidden}</td>
-              <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon && totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : hidden}</td>
-              <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon && totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : hidden}</td>
+              {showEcon && <td data-label={t("adm.ex.so.profit")} className="r num">{totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : "—"}</td>}
+              {showEcon && <td data-label={t("adm.ex.so.margin")} className="r num">{totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : "—"}</td>}
               <td data-label={t("adm.ex.so.paid")} className="r num"><b>{m(totals.paid)}</b></td>
               <td data-label={t("adm.ex.so.balance")} className="r num"><b className={totals.balance > 0 ? "neg" : ""}>{m(totals.balance)}</b></td>
             </tr>
@@ -673,7 +715,7 @@ export function OrdersStagesView({ data, stages, storeLabel, params, me, compact
   };
   return (
     <div className="so-view">
-      <StageStrip rows={base} byOrder={stages.byOrder} stages={stages} filters={filters} compact={compact} />
+      <StageStrip rows={base} byOrder={stages.byOrder} stages={stages} filters={filters} compact={compact} me={me} />
       <StoreOrdersTable data={data} rows={rows} storeLabel={storeLabel} compact={compact} me={me} byOrder={stages.byOrder} onAdvance={advance} onChanged={changed} busyId={busyId}
         autoOpen={params?.order ? { id: String(params.order) } : null} />
     </div>

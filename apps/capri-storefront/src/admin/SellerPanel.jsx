@@ -204,13 +204,15 @@ export function sellersReportSpec({ rows, groups = null, zero = 0, t, lang, titl
   const totalsOf = (tt) => ({ sales: tt.sales, count: tt.count, units: tt.units, ticket: tt.ticket, profit: showProfit ? tt.profit : undefined, avg_profit: showProfit ? tt.avg_profit : undefined, commission: showCommission ? tt.commission : undefined, share: tt.share });
   const note = zero ? t("adm.sp.rpt.zero", { n: zero }) : undefined;
   const m = (v) => fmtMoney(v, "usd", lang);
+  // `key` nombra el concepto de cada tarjeta para que ReportDoc sepa qué puede
+  // salir en la versión para compartir (nunca por el rótulo, que es traducible).
   const baseKpis = kpis.length ? kpis : [
-    { label: t("adm.ex.sellers.sales"), value: m(totals.sales), raw: totals.sales, sub: t("adm.sp.k.sales.n", { n: int(totals.count, lang) }) },
-    { label: t("adm.sp.col.ticket"), value: m(totals.ticket), raw: totals.ticket },
-    showProfit ? { label: t("adm.ex.sellers.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
-    showProfit ? { label: t("adm.sp.col.avgProfit"), value: m(totals.avg_profit || 0), raw: totals.avg_profit } : null,
-    showCommission ? { label: t("adm.ex.sellers.commission"), value: m(totals.commission), raw: totals.commission } : null,
-    { label: t("adm.ex.sellers.name"), value: int(rows.length, lang), raw: rows.length, sub: note },
+    { key: "sales", label: t("adm.ex.sellers.sales"), value: m(totals.sales), raw: totals.sales, sub: t("adm.sp.k.sales.n", { n: int(totals.count, lang) }) },
+    { key: "ticket", label: t("adm.sp.col.ticket"), value: m(totals.ticket), raw: totals.ticket },
+    showProfit ? { key: "profit", label: t("adm.ex.sellers.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
+    showProfit ? { key: "avg_profit", label: t("adm.sp.col.avgProfit"), value: m(totals.avg_profit || 0), raw: totals.avg_profit } : null,
+    showCommission ? { key: "commission", label: t("adm.ex.sellers.commission"), value: m(totals.commission), raw: totals.commission } : null,
+    { key: "count", label: t("adm.ex.sellers.name"), value: int(rows.length, lang), raw: rows.length, sub: note },
   ];
   const tables = groups && groups.length > 1
     ? [

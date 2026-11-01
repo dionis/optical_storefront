@@ -2,6 +2,9 @@
 // general del Excel/CSV, las columnas de la lista de ventas (StoreOrders.jsx),
 // los bloques por grupo del PDF, las cabeceras que ordenan (SortTh.jsx) y la
 // tabla común con selector de columnas (DataTable.jsx, prefijo adm.tbl.).
+// `adm.rpt.share.*` es lo que se imprime en la versión del reporte que se
+// socializa (sin costos) y `adm.rpt.aud.*` la elección entre las dos versiones
+// en la barra de filtros.
 export default {
   es: {
     "adm.rpt.statusTitle": "Reporte de estado · {store}",
@@ -41,6 +44,20 @@ export default {
     "adm.rpt.groupRows": "{n} líneas",
     "adm.rpt.dropZero": "{n} sin ventas en el período",
     "adm.rpt.group": "Grupo",
+    "adm.rpt.share.subtitle": "Versión para compartir · sin costos ni saldos",
+    "adm.rpt.share.totalSales": "Total de ventas del período",
+    "adm.rpt.share.salesCount": "{n} ventas",
+    "adm.rpt.share.fileTag": "compartir",
+    "adm.rpt.aud.title": "¿Para quién es este {format}?",
+    "adm.rpt.aud.owner": "Reporte del dueño",
+    "adm.rpt.aud.ownerHint": "Completo: costo real, ganancia, margen, comisiones y saldos.",
+    "adm.rpt.aud.share": "Estado por tienda · para compartir",
+    "adm.rpt.aud.shareHint": "Solo el total vendido y la lista de lo vendido. Sin costos, ganancia, margen, comisiones ni saldos.",
+    "adm.rpt.aud.pick": "Elegir versión del reporte en {format}",
+    "adm.rpt.aud.close": "Cerrar",
+    "adm.rpt.aud.note.all": "Ahora está elegido «Todas las tiendas»: sale un bloque por tienda, sin costos. Para el estado de una sola, elige su tienda arriba.",
+    "adm.rpt.aud.note.web": "Ahora está elegida la tienda online, que no es una tienda física: sale su venta, sin costos.",
+    "adm.rpt.aud.note.noStore": "Esta pantalla no es de una tienda concreta: sale el mismo reporte sin costos ni saldos.",
     "adm.tbl.sort": "Ordenar",
     "adm.tbl.sortBy": "Ordenar por {col}",
     "adm.tbl.columns": "Columnas",
@@ -116,6 +133,20 @@ export default {
     "adm.rpt.groupRows": "{n} lines",
     "adm.rpt.dropZero": "{n} with no sales in the period",
     "adm.rpt.group": "Group",
+    "adm.rpt.share.subtitle": "Shareable version · no costs or balances",
+    "adm.rpt.share.totalSales": "Total sales in the period",
+    "adm.rpt.share.salesCount": "{n} sales",
+    "adm.rpt.share.fileTag": "shareable",
+    "adm.rpt.aud.title": "Who is this {format} for?",
+    "adm.rpt.aud.owner": "Owner's report",
+    "adm.rpt.aud.ownerHint": "Complete: real cost, profit, margin, commissions and balances.",
+    "adm.rpt.aud.share": "Store statement · to share",
+    "adm.rpt.aud.shareHint": "Only the total sold and the list of what was sold. No costs, profit, margin, commissions or balances.",
+    "adm.rpt.aud.pick": "Choose which version of the {format} report",
+    "adm.rpt.aud.close": "Close",
+    "adm.rpt.aud.note.all": "«All stores» is selected right now: you get one block per store, with no costs. For a single store's statement, pick that store above.",
+    "adm.rpt.aud.note.web": "The online store is selected right now, and it is not a physical store: you get its sales, with no costs.",
+    "adm.rpt.aud.note.noStore": "This screen is not about one store: you get the same report with no costs or balances.",
     "adm.tbl.sort": "Sort",
     "adm.tbl.sortBy": "Sort by {col}",
     "adm.tbl.columns": "Columns",

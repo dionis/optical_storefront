@@ -20,6 +20,15 @@
 //   · Tendencias (Executive.jsx Trends): las gráficas del período, cada una una
 //     sola vez, de las mismas ventas que la tira y la lista. Sustituye a «Resumen».
 //   · Catálogo.
+// Quien lo abre decide lo que ve (privacidad, no estética):
+//   · Costo, ganancia y margen SOLO cuando el servidor los manda
+//     (`access.profit`, lib/sales-insights.ts redactInsights): tarjetas,
+//     resúmenes de acordeón, tablas, gráficos y exportaciones cuelgan de ahí.
+//   · Caja (efectivo en caja y el acordeón de cobros) fuera para el VENDEDOR:
+//     es el estado general de la tienda, y por regla del dueño un vendedor no
+//     lo ve «ni siquiera de su propia tienda». Ve lo suyo: ventas, nº, unidades,
+//     ticket, cobrado, por cobrar y su comisión.
+//   · Importes de las tarjetas por etapa: solo administrador (StoreOrders.jsx).
 // Costo y ganancia solo se pintan cuando el servidor los manda (`access.profit`);
 // la tienda elegida es la global del panel (useStoreFilter) y el período el
 // global (periodStore.js → usePeriodFilter). Exportar se registra en la barra
@@ -117,6 +126,12 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const demo = isDemoLogin();
   const sf = useStoreFilter(me);
   const isAdmin = !me || me.is_admin !== false;
+  // Regla del dueño: «un vendedor no ve el estado general de nada, ni siquiera
+  // de su propia tienda». De ahí cuelga todo lo de caja (efectivo en caja y el
+  // acordeón de cobros): es el estado de la tienda, no sus ventas. Misma noción
+  // de vendedor que MySales.jsx (me.role === "seller"); el costo NO cuelga de
+  // aquí, sino de `showProfit` (lo decide el servidor en `access.profit`).
+  const isSeller = me?.role === "seller";
   // Período GLOBAL del panel (la barra de AdminShell): aquí solo se lee.
   const per = usePeriodFilter();
   const { from, to } = per;
@@ -352,7 +367,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       [t("adm.ex.kpi.sales"), tot.sales], [t("adm.ex.kpi.count"), tot.count], [t("adm.ex.kpi.units"), tot.units], [t("adm.ex.kpi.ticket"), tot.avg_ticket],
       [t("adm.ex.kpi.paid"), sales.totals.paid], [t("adm.ex.kpi.balance"), sales.totals.balance],
       ...(showProfit ? [[t("adm.ex.kpi.cost"), realCost], [t("adm.ex.kpi.profit"), tot.profit], [t("adm.ex.kpi.margin"), tot.margin_pct]] : []),
-      ...(cashTot ? [[t("adm.ex.kpi.cashNet"), cents(cashTot.cash_net_cents)]] : []),
+      ...(cashTot && !isSeller ? [[t("adm.ex.kpi.cashNet"), cents(cashTot.cash_net_cents)]] : []),
     ];
     const sheets = [
       { name: t("adm.ex.export.kpis"), cols: [{ header: t("adm.ex.export.kpi"), key: "label", width: 30 }, { header: t("adm.ex.export.value"), key: "value", type: "money", width: 16 }], rows: [{ label: t("adm.ex.period"), value: meta }, ...kpis.map(([label, value]) => ({ label, value: value ?? "" }))] },
@@ -369,7 +384,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         ],
         rows: sellerRows.rows,
       }] : []),
-      ...(cash ? [{
+      ...(cash && !isSeller ? [{
         name: t("adm.ex.export.cash"),
         cols: [{ header: t("adm.ex.cash.method"), get: methodLabel, width: 22 }, { header: t("adm.ex.cash.count"), key: "in_count", type: "int" }, { header: t("adm.ex.cash.collected"), get: (r) => cents(r.in_cents), type: "money" }, { header: t("adm.ex.cash.refunds"), get: (r) => cents(r.refund_cents), type: "money" }, { header: t("adm.ex.cash.fee"), get: (r) => cents(r.fee_cents), type: "money" }, { header: t("adm.ex.cash.net"), get: (r) => cents(r.net_cents), type: "money" }],
         rows: cash.by_method,
@@ -392,6 +407,8 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const report = () => {
     const restore = beforePrint();
     try {
+      // `extra.key` nombra el CONCEPTO de la tarjeta: ReportDoc decide con él
+      // qué sale en la versión para compartir, nunca por el rótulo traducido.
       const kpiOf = (label, value, raw, extra = {}) => ({ label, value, raw, ...extra });
       const d = (k) => (deltas[k] ? { sub: `${deltas[k].text} ${vs}`, tone: deltas[k].zero ? undefined : deltas[k].good ? "good" : "bad" } : {});
       return salesReportSpec({
@@ -399,16 +416,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from, to },
         title: t("adm.rpt.execTitle", { store: sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "" }),
         kpis: [
-          kpiOf(t("adm.ex.kpi.sales"), m(tot.sales), tot.sales, d("sales")),
-          kpiOf(t("adm.ex.kpi.count"), int(tot.count, lang), tot.count, d("count")),
-          kpiOf(t("adm.ex.kpi.units"), int(tot.units, lang), tot.units, d("units")),
-          kpiOf(t("adm.ex.kpi.ticket"), m(tot.avg_ticket), tot.avg_ticket, d("ticket")),
-          kpiOf(t("adm.ex.kpi.paid"), m(sales.totals.paid), sales.totals.paid),
-          kpiOf(t("adm.ex.kpi.balance"), m(sales.totals.balance), sales.totals.balance, { neg: sales.totals.balance > 0 }),
-          showProfit ? kpiOf(t("adm.ex.kpi.cost"), m(realCost), realCost, { sub: missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined, tone: missing ? "warn" : undefined }) : null,
-          showProfit ? kpiOf(t("adm.ex.kpi.profit"), m(tot.profit), tot.profit, { neg: Number(tot.profit) < 0, ...d("profit") }) : null,
-          showProfit ? kpiOf(t("adm.ex.kpi.margin"), pct(tot.margin_pct), tot.margin_pct) : null,
-          !sf.isWeb && cashTot ? kpiOf(t("adm.ex.kpi.cashNet"), m(cents(cashTot.cash_net_cents)), cents(cashTot.cash_net_cents), { neg: cashTot.cash_net_cents < 0 }) : null,
+          kpiOf(t("adm.ex.kpi.sales"), m(tot.sales), tot.sales, { key: "sales", ...d("sales") }),
+          kpiOf(t("adm.ex.kpi.count"), int(tot.count, lang), tot.count, { key: "count", ...d("count") }),
+          kpiOf(t("adm.ex.kpi.units"), int(tot.units, lang), tot.units, { key: "units", ...d("units") }),
+          kpiOf(t("adm.ex.kpi.ticket"), m(tot.avg_ticket), tot.avg_ticket, { key: "ticket", ...d("ticket") }),
+          kpiOf(t("adm.ex.kpi.paid"), m(sales.totals.paid), sales.totals.paid, { key: "paid" }),
+          kpiOf(t("adm.ex.kpi.balance"), m(sales.totals.balance), sales.totals.balance, { key: "balance", neg: sales.totals.balance > 0 }),
+          showProfit ? kpiOf(t("adm.ex.kpi.cost"), m(realCost), realCost, { key: "cost", sub: missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined, tone: missing ? "warn" : undefined }) : null,
+          showProfit ? kpiOf(t("adm.ex.kpi.profit"), m(tot.profit), tot.profit, { key: "profit", neg: Number(tot.profit) < 0, ...d("profit") }) : null,
+          showProfit ? kpiOf(t("adm.ex.kpi.margin"), pct(tot.margin_pct), tot.margin_pct, { key: "margin" }) : null,
+          !sf.isWeb && !isSeller && cashTot ? kpiOf(t("adm.ex.kpi.cashNet"), m(cents(cashTot.cash_net_cents)), cents(cashTot.cash_net_cents), { key: "cash", neg: cashTot.cash_net_cents < 0 }) : null,
         ],
         summaries: summariesFromAccordions(bodyRef.current),
         charts: collectCharts(bodyRef.current, { max: 2 }),
@@ -450,7 +467,9 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
           {showProfit && <Kpi label={t("adm.ex.kpi.cost")} value={m(realCost)} flag={missingFlag} delta={deltas.cost} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cost")} help="exec.kpi.cost" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "rules" }) : undefined} />}
           {showProfit && <Kpi label={t("adm.ex.kpi.profit")} value={m(tot.profit)} neg={Number(tot.profit) < 0} delta={deltas.profit} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.profit")} help="exec.kpi.profit" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "profit" }) : undefined} />}
           {showProfit && <Kpi label={t("adm.ex.kpi.margin")} value={pct(tot.margin_pct)} delta={deltas.margin} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.margin")} help="exec.kpi.margin" loading={loading} />}
-          {!sf.isWeb && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "—"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} delta={deltas.cashNet} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
+          {/* Sin cifra de caja la tarjeta NO se pinta: un «—» o un «$0.00» se lee
+              como «la caja está a cero», que es peor que no decir nada. */}
+          {!sf.isWeb && !isSeller && (cashTot || loading) && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "0"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} delta={deltas.cashNet} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
         </div>
 
         {noSales && <EmptyPeriod kind="sales" />}
@@ -468,7 +487,8 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
             <OrdersStagesView data={sales} stages={stages} storeLabel={sf.isAll ? storeLabel : null} params={listParams} me={me} compact onChanged={refresh} />
           </Accordion>
 
-          {!sf.isWeb && (
+          {/* Cobros y caja = estado de la tienda: el vendedor no lo ve. */}
+          {!sf.isWeb && !isSeller && (
             <Accordion id="ex-cash" icon="wallet" title={t("adm.ex.acc.cash")} subtitle={t("adm.ex.acc.cashSub")} right={<HelpTip topic="exec.cash" />}
               summary={cashTot ? [
                 { label: t("adm.ex.pill.cash"), value: m(cents(byMethod.cash)), strong: true },

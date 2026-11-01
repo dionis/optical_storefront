@@ -12,7 +12,12 @@
 //                                                    // dejan su botón apagado
 //
 // y la barra los llama. Sin pantalla registrada, los tres botones quedan
-// apagados con su explicación en el título. `menuHandlers(props)` convierte las
+// apagados con su explicación en el título.
+//
+// Exportar pregunta PARA QUIÉN: el reporte del dueño (completo) o el estado por
+// tienda que se socializa (sin costo real, ganancia, margen, comisiones ni
+// saldos). Lo recorta ReportDoc (specForAudience) y la elección llega hasta
+// allí con `withReportAudience`; ver ExportGroup más abajo. `menuHandlers(props)` convierte las
 // props de un <ExportMenu> (targetRef/report/xlsx/csv/meta/beforePrint) en esos
 // tres manejadores, para que adoptar la barra sea una línea.
 //
@@ -24,11 +29,11 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import OmniSearch from "./OmniSearch.jsx";
-import StoreFilter from "./StoreFilter.jsx";
+import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { PERIODS, usePeriodFilter, usePeriodNotice } from "./periodStore.js";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
 import { downloadXlsx } from "./exportXlsx.js";
-import { exportReport } from "./ReportDoc.jsx";
+import { exportReport, withReportAudience } from "./ReportDoc.jsx";
 import "./filter-bar.css";
 // El aviso de salto automático comparte hoja con EmptyPeriod.jsx: es el mismo
 // asunto (un período sin datos) visto desde la barra.
@@ -134,9 +139,9 @@ const ExportState = createContext(null);
 
 /** Lo pone AdminShell alrededor del contenido; la barra lee `entry`. */
 export function ExportRegistry({ children }) {
-  const [entry, setEntry] = useState(null); // { ref, has: { pdf, xlsx, csv }, label }
+  const [entry, setEntry] = useState(null); // { ref, has: { pdf, xlsx, csv }, label, audiences }
   const actions = useMemo(() => ({
-    register: (ref, has, label) => setEntry({ ref, has, label }),
+    register: (ref, has, label, audiences) => setEntry({ ref, has, label, audiences }),
     unregister: (ref) => setEntry((e) => (e && e.ref === ref ? null : e)),
   }), []);
   return <ExportActions.Provider value={actions}><ExportState.Provider value={entry}>{children}</ExportState.Provider></ExportActions.Provider>;
@@ -157,11 +162,18 @@ export function useRegisterExport(handlers) {
   const hasXlsx = typeof handlers?.xlsx === "function";
   const hasCsv = typeof handlers?.csv === "function";
   const label = handlers?.label || "";
+  // `audiences`: la pantalla exporta un REPORTE formal (una especificación de
+  // ReportDoc), así que el mismo botón puede dar la versión del dueño y la de
+  // compartir. Sin esa marca la barra no ofrece elegir: una pantalla que
+  // imprime su propio nodo o arma sus propias hojas ignoraría la audiencia y
+  // sacaría los costos igual — ofrecer una opción que no se cumple es peor
+  // que no ofrecerla. `menuHandlers` la pone cuando recibe `report`.
+  const audiences = handlers?.audiences === true;
   useEffect(() => {
     if (!ctx || !active) return undefined;
-    ctx.register(ref, { pdf: hasPdf, xlsx: hasXlsx, csv: hasCsv }, label);
+    ctx.register(ref, { pdf: hasPdf, xlsx: hasXlsx, csv: hasCsv }, label, audiences);
     return () => ctx.unregister(ref);
-  }, [ctx, active, hasPdf, hasXlsx, hasCsv, label]);
+  }, [ctx, active, hasPdf, hasXlsx, hasCsv, label, audiences]);
 }
 
 /**
@@ -197,7 +209,9 @@ export function menuHandlers({ targetRef, title, csv, xlsx, onCsv, meta, beforeP
     const text = csv ? rowsToCsv(csv.cols, csv.rows) : elementToCsv(targetRef?.current);
     return downloadText(`${name}-${stamp()}.csv`, text);
   };
-  return { pdf, xlsx: xlsx || report ? toXlsx : undefined, csv: toCsv, label: title };
+  // Con `report` el documento sale de ReportDoc: se puede imprimir para el
+  // dueño o para compartir (ver `audiences` en useRegisterExport).
+  return { pdf, xlsx: xlsx || report ? toXlsx : undefined, csv: toCsv, label: title, audiences: typeof report === "function" };
 }
 
 // ── Piezas ─────────────────────────────────────────────────────────────────
@@ -278,24 +292,130 @@ function AutoNotice() {
   );
 }
 
-function ExportGroup() {
+/**
+ * Los tres formatos de la barra. `label` es el nombre largo (título y
+ * `aria-label`); `text` lo que se lee en el botón, que es una sigla y no se
+ * traduce.
+ */
+const FORMATS = [
+  { kind: "pdf", icon: "printer", text: "PDF", label: "adm.ui.pdf" },
+  { kind: "xlsx", icon: "sheet", text: "Excel", label: "adm.ui.xlsx" },
+  { kind: "csv", icon: "excel", text: "CSV", label: "adm.ui.csv" },
+];
+
+/**
+ * Exportar: los tres formatos y, al pulsar uno, PARA QUIÉN es.
+ *
+ * El dueño pidió dos versiones del mismo reporte: la suya, completa, y el
+ * estado de la tienda que se socializa (a un encargado, a un socio, al
+ * contable) sin costo real, ganancia, margen, comisiones ni saldos. Quién
+ * recorta qué es ReportDoc (specForAudience); aquí solo se ELIGE, y la
+ * elección viaja hasta `exportReport` con `withReportAudience`.
+ *
+ * Se pregunta en los TRES formatos, no solo en el PDF: el Excel y el CSV
+ * salen de la misma especificación y llevan los mismos costos en su hoja
+ * «Resumen» y en sus columnas; de hecho una hoja de cálculo es lo más fácil
+ * de reenviar. Preguntar solo al imprimir dejaría abierta la puerta ancha.
+ *
+ * Si la pantalla no exporta un reporte formal (`audiences`), el botón hace lo
+ * de siempre con una sola pulsación: ver useRegisterExport.
+ */
+function ExportGroup({ me, storeScoped }) {
   const { t } = useLang();
   const entry = useContext(ExportState);
+  const { store, isAll, isWeb } = useStoreFilter(me);
+  // `pick` = el formato pulsado que está esperando audiencia (y el botón al
+  // que hay que devolver el foco si se cierra sin elegir).
+  const [pick, setPick] = useState(null);
+  const rootRef = useRef(null);
+  const popRef = useRef(null);
   const none = !entry;
-  const run = (kind) => () => { const fn = entry?.ref?.current?.[kind]; if (typeof fn === "function") fn(); };
-  const titleOf = (kind, label) => (none ? t("adm.bar.export.none") : !entry.has[kind] ? t("adm.bar.export.noFormat", { format: label }) : entry.label ? `${label} · ${entry.label}` : label);
-  const btn = (kind, icon, text, label) => (
-    <button key={kind} type="button" className="btn-xs" disabled={none || !entry.has[kind]} title={titleOf(kind, label)} aria-label={label} onClick={run(kind)}>
-      <Icon name={icon} size={14} />{text}
-    </button>
-  );
+  const audiences = entry?.audiences === true;
+
+  const close = (focusBack = true) => {
+    const btn = pick?.btn;
+    setPick(null);
+    if (focusBack) btn?.focus?.();
+  };
+  // Escape, clic fuera y, si la pantalla deja de exportar, cerrar.
+  useEffect(() => {
+    if (!pick) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) close(false); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    popRef.current?.querySelector(".adm-aud-opt")?.focus();
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onDown); };
+  }, [pick]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (none || !audiences) setPick(null); }, [none, audiences]);
+
+  /** Llama al manejador de la pantalla con la audiencia elegida. */
+  const call = (kind, audience) => {
+    setPick(null);
+    const fn = entry?.ref?.current?.[kind];
+    if (typeof fn === "function") withReportAudience(audience, fn);
+  };
+  // El título del botón: `label` es el nombre largo («Exportar a PDF /
+  // imprimir») y `f.text` la sigla, que es la que cabe en una pregunta.
+  const titleOf = (f, label) => (none ? t("adm.bar.export.none") : !entry.has[f.kind] ? t("adm.bar.export.noFormat", { format: label }) : audiences ? t("adm.rpt.aud.pick", { format: f.text }) : entry.label ? `${label} · ${entry.label}` : label);
+  const press = (f) => (e) => {
+    if (!audiences) return call(f.kind, "owner");
+    const btn = e.currentTarget;
+    return setPick((p) => (p?.kind === f.kind ? null : { kind: f.kind, text: f.text, btn }));
+  };
+  const btn = (f) => {
+    const label = t(f.label);
+    return (
+      <button key={f.kind} type="button" className={`btn-xs ${pick?.kind === f.kind ? "on" : ""}`} disabled={none || !entry.has[f.kind]}
+        title={titleOf(f, label)} aria-label={label} aria-haspopup={audiences ? "menu" : undefined} aria-expanded={audiences ? pick?.kind === f.kind : undefined}
+        onClick={press(f)}>
+        <Icon name={f.icon} size={14} />{f.text}
+      </button>
+    );
+  };
+  // Qué significa «estado por tienda» en la pantalla que está abierta. Si no
+  // hay una tienda concreta detrás, se DICE en la propia interfaz en vez de
+  // sacar un documento ambiguo: con «Todas las tiendas» sale un bloque por
+  // tienda, y en una pantalla que no es de una tienda sale lo mismo que se ve.
+  const note = !storeScoped ? t("adm.rpt.aud.note.noStore") : isAll ? t("adm.rpt.aud.note.all") : isWeb ? t("adm.rpt.aud.note.web") : "";
+  // Nombre y código de la tienda: nombres propios, no texto de interfaz.
+  const storeName = storeScoped && !isAll && !isWeb && store ? [store.code, store.name].filter(Boolean).join(" · ") : "";
+  // Las flechas recorren las dos opciones, como en cualquier menú del panel.
+  const onPopKey = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = [...(popRef.current?.querySelectorAll(".adm-aud-opt") || [])];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+  };
   return (
-    <span className="adm-bar-export" role="group" aria-label={t("adm.bar.export")}>
+    <span className="adm-bar-export" role="group" aria-label={t("adm.bar.export")} ref={rootRef}>
       <span className={`adm-export-menu ${none ? "idle" : ""}`}>
-        {btn("pdf", "printer", "PDF", t("adm.ui.pdf"))}
-        {btn("xlsx", "sheet", "Excel", t("adm.ui.xlsx"))}
-        {btn("csv", "excel", "CSV", t("adm.ui.csv"))}
+        {FORMATS.map(btn)}
       </span>
+      {pick && (
+        <div className="adm-aud-pop" role="menu" aria-label={t("adm.rpt.aud.title", { format: pick.text })} ref={popRef} onKeyDown={onPopKey}>
+          <div className="adm-aud-head">
+            <span>{t("adm.rpt.aud.title", { format: pick.text })}</span>
+            <button type="button" className="adm-aud-x" onClick={() => close()} title={t("adm.rpt.aud.close")} aria-label={t("adm.rpt.aud.close")}>
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+          <button type="button" className="adm-aud-opt" role="menuitem" onClick={() => call(pick.kind, "owner")} title={t("adm.rpt.aud.ownerHint")}>
+            <Icon name="lock" size={15} />
+            <span><b>{t("adm.rpt.aud.owner")}</b><small>{t("adm.rpt.aud.ownerHint")}</small></span>
+          </button>
+          <button type="button" className="adm-aud-opt share" role="menuitem" onClick={() => call(pick.kind, "share")} title={t("adm.rpt.aud.shareHint")}>
+            <Icon name="share" size={15} />
+            <span>
+              <b>{t("adm.rpt.aud.share")}</b>
+              <small>{t("adm.rpt.aud.shareHint")}</small>
+              {storeName && <em>{storeName}</em>}
+            </span>
+          </button>
+          {note && <p className="adm-aud-note"><Icon name="info" size={12} />{note}</p>}
+        </div>
+      )}
     </span>
   );
 }
@@ -326,7 +446,7 @@ export default function GlobalFilterBar({ tab, me, barRef, go = null }) {
         {opts.store && <span className="adm-bar-item adm-bar-store"><StoreFilter me={me} compact /></span>}
         {opts.period && <span className="adm-bar-item adm-bar-period"><PeriodControl /></span>}
       </div>
-      {opts.export && <ExportGroup />}
+      {opts.export && <ExportGroup me={me} storeScoped={opts.store} />}
       {showNotice && <AutoNotice />}
     </div>
   );

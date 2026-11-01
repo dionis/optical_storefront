@@ -100,6 +100,12 @@ export interface Person {
 export interface CashReport {
   from: string;
   to: string;
+  /**
+   * What the caller may see. `fees` is the payment processor's charge: money
+   * the store loses on every card, so a cost — and the panel must not have to
+   * decide that for itself. Absent on an unredacted report (an admin's).
+   */
+  access?: { fees: boolean };
   by_method: Array<{
     code: string;
     label: { es: string | null; en: string | null };
@@ -110,7 +116,8 @@ export interface CashReport {
     in_count: number;
     in_cents: number;
     refund_cents: number;
-    fee_cents: number;
+    /** What the processor charged. `null` for a caller who may not see costs. */
+    fee_cents: number | null;
     net_cents: number;
   }>;
   movements: Array<{
@@ -161,7 +168,8 @@ export interface CashReport {
     movements_in_cents: number;
     movements_out_cents: number;
     cash_net_cents: number;
-    fees_cents: number;
+    /** Processor charges of the period. `null` when the caller may not see costs. */
+    fees_cents: number | null;
     sessions_diff_cents: number;
   };
   /** Users seen in the period (for the seller filter). */
@@ -569,4 +577,23 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
     cents: n(r.cents),
   }));
   return buildCashReport({ from: f.from, to: f.to, payments, movements, sessions, methods, people, truncated, movementAgg });
+}
+
+/**
+ * Takes the processor's charge out of a report for a caller who may not see
+ * costs — here, not in the panel: hiding a column in the browser would still
+ * have sent it over the wire. A seller reads this screen to reconcile their
+ * till, and what the store pays the card network is none of their business.
+ *
+ * `null`, never zero: a zero reads as "this cost is nothing", which is a lie
+ * the panel would print without blinking. Pure, so it can be tested on its own.
+ */
+export function redactCashReport(report: CashReport, canSeeFees: boolean): CashReport {
+  if (canSeeFees) return { ...report, access: { fees: true } };
+  return {
+    ...report,
+    access: { fees: false },
+    by_method: report.by_method.map((m) => ({ ...m, fee_cents: null })),
+    totals: { ...report.totals, fees_cents: null },
+  };
 }
