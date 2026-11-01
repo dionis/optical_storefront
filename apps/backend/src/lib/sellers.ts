@@ -4,6 +4,7 @@ import { SELLER_MODULE } from "../modules/seller/index";
 import type SellerModuleService from "../modules/seller/service";
 import { storefrontOrigin } from "./order-access";
 import { matchesStore, normalizeSellerCodeLoose, normalizeSellerSourceLoose, scanBoardWindow, type BoardOrder } from "./order-board";
+import type { AnalyticsFilter } from "./sales-analytics";
 
 /**
  * Sellers (vendedores): referral codes, dashboard links and sales stats.
@@ -405,6 +406,16 @@ export interface SellerStatRow {
   orders: number;
   revenue: number;
   commission: number;
+  /** Items sold (line quantities). */
+  units: number;
+  /** Revenue over orders; 0 without orders. */
+  avg_ticket: number;
+  /** Gross profit of those orders (lib/sales-insights.ts); null when the caller may not see it. */
+  profit: number | null;
+  /** Profit over orders; null with the profit. */
+  avg_profit: number | null;
+  /** % of every sale in the window (attributed or not) — the seller's quota. */
+  share_pct: number;
   last_order_at: string | null;
   /** Where this seller's sales came from (orders without a source → "link"). */
   by_source: SourceStatRow[];
@@ -417,10 +428,13 @@ export interface SellerStats {
   unattributed: { orders: number; revenue: number };
   /** Across every attributed (seller-matched) order in the window. */
   sources: SourceStatRow[];
+  /** Whether `profit` / `avg_profit` carry a figure for this caller. */
+  access: { profit: boolean };
   truncated: boolean;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Source of an order for the stats: the stored token, or "link" when none. */
 export function sellerSourceOf(order: { seller_source?: string | null }): string {
@@ -447,17 +461,30 @@ export function isoAt(value: unknown): string {
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
+/** A board-like order as the stats read it. */
+export type StatOrder = Pick<BoardOrder, "seller_code" | "total" | "terminal" | "created_at"> & {
+  id?: string;
+  seller_source?: string | null;
+  items?: Array<{ quantity?: number | null }>;
+};
+
 /**
  * Pure grouping: board-like rows × sellers → per-seller totals. Orders in a
  * terminal state (canceled / refunded / payment pending) count for nobody.
- * Every seller is listed, with zeros when they sold nothing.
+ * Every seller is listed, with zeros when they sold nothing, biggest revenue
+ * first. `profitByOrder` (dollars per order id, lib/sales-insights.ts) fills
+ * `profit`/`avg_profit`; without it they stay null (the caller may not see
+ * them). `share_pct` is the seller's part of EVERY sale in the window,
+ * attributed or not: the quota.
  */
 export function groupSellerStats(
-  orders: Array<Pick<BoardOrder, "seller_code" | "total" | "terminal" | "created_at"> & { seller_source?: string | null }>,
-  sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active">>
+  orders: StatOrder[],
+  sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active">>,
+  profitByOrder: Map<string, number> | null = null
 ): { sellers: SellerStatRow[]; unattributed: { orders: number; revenue: number }; sources: SourceStatRow[] } {
   const byCode = new Map<string, SellerStatRow>();
   const sourcesByCode = new Map<string, Map<string, SourceStatRow>>();
+  const profitOf = new Map<string, number>();
   for (const s of sellers) {
     byCode.set(s.code.toUpperCase(), {
       id: s.id,
@@ -468,6 +495,11 @@ export function groupSellerStats(
       orders: 0,
       revenue: 0,
       commission: 0,
+      units: 0,
+      avg_ticket: 0,
+      profit: null,
+      avg_profit: null,
+      share_pct: 0,
       last_order_at: null,
       by_source: [],
     });
@@ -487,27 +519,57 @@ export function groupSellerStats(
     }
     row.orders++;
     row.revenue = round2(row.revenue + total);
+    row.units += (o.items ?? []).reduce((n, it) => n + (Number(it?.quantity ?? 1) || 0), 0);
+    if (profitByOrder && o.id !== undefined) profitOf.set(row.code, round2((profitOf.get(row.code) ?? 0) + (profitByOrder.get(o.id) ?? 0)));
     const at = isoAt(o.created_at) || null;
     if (at && (!row.last_order_at || at > row.last_order_at)) row.last_order_at = at;
     const source = sellerSourceOf(o);
     tallySource(sourcesByCode.get(row.code)!, source, total);
     tallySource(allSources, source, total);
   }
+  const everything = round2([...byCode.values()].reduce((s, r) => s + r.revenue, 0) + unattributed.revenue);
   for (const row of byCode.values()) {
     row.commission = round2((row.revenue * row.commission_pct) / 100);
+    row.avg_ticket = row.orders ? round2(row.revenue / row.orders) : 0;
+    if (profitByOrder) {
+      row.profit = profitOf.get(row.code) ?? 0;
+      row.avg_profit = row.orders ? round2(row.profit / row.orders) : 0;
+    }
+    row.share_pct = everything > 0 ? round1((row.revenue / everything) * 100) : 0;
     row.by_source = sortedSources(sourcesByCode.get(row.code) ?? new Map());
   }
   return {
-    sellers: [...byCode.values()].sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, "es")),
+    sellers: [...byCode.values()].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders || a.name.localeCompare(b.name, "es")),
     unattributed,
     sources: sortedSources(allSources),
   };
 }
 
-/** Stats over the board window (`MAX_BOARD_SCAN` most recent orders in range). */
+/**
+ * The local-day analytics filter that covers the board window (`from`/`to`
+ * ISO instants or null): what lib/sales-insights.ts orderEconomics takes.
+ * Without `to`, tomorrow (UTC) so no local day is cut off. Pure.
+ */
+export function statsDayFilter(range: { from?: string | null; to?: string | null; store?: string | null }, now = new Date()): AnalyticsFilter {
+  const day = (v: string | null | undefined, fallback: string) => (v && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback);
+  const tomorrow = new Date(now.getTime() + 86400_000).toISOString().slice(0, 10);
+  const store = range.store && range.store !== "all" ? range.store : null;
+  return { from: day(range.from, "2000-01-01"), to: day(range.to, tomorrow), stores: store ? [store] : null };
+}
+
+/** Gross profit per order id, in dollars (the route passes lib/sales-insights.ts orderEconomics; sellers.ts does not import it: costing.ts already imports this file). */
+export type ProfitLoader = (filter: AnalyticsFilter, orderIds: string[]) => Promise<Map<string, { profit: number }>>;
+
+/**
+ * Stats over the board window (`MAX_BOARD_SCAN` most recent orders in range).
+ * With `profitLoader` (only when the caller may see profit, insightAccess)
+ * each seller gets the gross profit of their orders, from the same rules as
+ * the Executive.
+ */
 export async function sellerStats(
   container: MedusaContainer,
-  range: { from?: string | null; to?: string | null; store?: string | null }
+  range: { from?: string | null; to?: string | null; store?: string | null },
+  profitLoader: ProfitLoader | null = null
 ): Promise<SellerStats> {
   const [sellers, window] = await Promise.all([
     listSellers(container),
@@ -515,11 +577,18 @@ export async function sellerStats(
   ]);
   // `store`: one establishment's till sales, or "web" for the online store; empty = everything.
   const orders = range.store ? window.orders.filter((o) => matchesStore(o, range.store)) : window.orders;
-  const grouped = groupSellerStats(orders, sellers);
+  let profitByOrder: Map<string, number> | null = null;
+  if (profitLoader) {
+    const ids = orders.filter((o) => countsForRevenue(o) && normalizeSellerCodeLoose(o.seller_code)).map((o) => o.id);
+    const econ = await profitLoader(statsDayFilter(range), ids);
+    profitByOrder = new Map([...econ].map(([id, e]) => [id, e.profit / 100]));
+  }
+  const grouped = groupSellerStats(orders, sellers, profitByOrder);
   return {
     from: range.from ?? null,
     to: range.to ?? null,
     ...grouped,
+    access: { profit: profitLoader !== null },
     truncated: window.truncated,
   };
 }

@@ -4,7 +4,8 @@
    depende de admin.css ni de sus variables: todo color es literal salvo el de
    la tienda, que llega en --rp-accent. Carta apaisada, sin márgenes del
    navegador (la cabecera/pie los pone el propio documento), 9.5–10px en
-   tablas, una línea por venta. */
+   tablas, una línea por venta. Con `groupBy` la tabla se parte en bloques
+   (banda del grupo + filas + subtotal) y el total general queda al pie. */
 
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
 
@@ -101,7 +102,7 @@ body { font-family: var(--rp-font); color: var(--rp-ink); font-size: 10px; line-
 .rp-table th { font-size: 7px; line-height: 1.1; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--rp-muted); border-bottom: 1.5px solid var(--rp-ink); background: #fff; white-space: normal; vertical-align: bottom; }
 .rp-table th.r, .rp-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
 .rp-table th.c, .rp-table td.c { text-align: center; }
-.rp-table tbody tr:nth-child(even) td { background: var(--rp-zebra); }
+.rp-table tbody tr.alt td { background: var(--rp-zebra); }
 .rp-table tbody tr { break-inside: avoid; }
 .rp-table td.num { font-variant-numeric: tabular-nums; }
 .rp-table td.muted, .rp-table .muted { color: var(--rp-muted); }
@@ -109,10 +110,24 @@ body { font-family: var(--rp-font); color: var(--rp-ink); font-size: 10px; line-
 .rp-table td.pos, .rp-table .pos { color: var(--rp-good); }
 .rp-table tr.voided td { color: var(--rp-faint); text-decoration: line-through; }
 .rp-table tfoot td { font-weight: 800; border-top: 1.5px solid var(--rp-ink); border-bottom: 0; background: var(--rp-soft); }
+/* Las sumas en negrita son más anchas: un pelo más pequeñas para que no se corten en columnas estrechas. */
+.rp-table tfoot td.num, .rp-table tr.rp-subtotal td.num { font-size: 8.5px; letter-spacing: -.01em; }
 .rp-table .rp-tag { display: inline-block; padding: 0 1.2mm; border-radius: 999px; font-size: 7px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--rp-line); color: var(--rp-muted); line-height: 1.6; }
 .rp-table .rp-tag.on { border-color: var(--rp-accent); color: var(--rp-accent); }
 .rp-table .rp-tag.good { border-color: var(--rp-good); color: var(--rp-good); }
 .rp-table .rp-tag.bad { border-color: var(--rp-bad); color: var(--rp-bad); }
+/* Bloques por grupo (tienda, vendedor…): banda con punto de color + nombre + contador,
+   sus filas, subtotal en negrita; el total general sigue en el tfoot. */
+.rp-table tr.rp-group td { padding: 0; border-bottom: 0; background: #fff; overflow: visible; }
+.rp-table tr.rp-group { break-after: avoid; }
+.rp-group-band { display: flex; align-items: center; gap: 2mm; margin: 2.6mm 0 .6mm; padding: 1.3mm 2.2mm; border-left: 1.2mm solid var(--rp-group, var(--rp-accent)); background: var(--rp-soft); border-radius: 0 1.5mm 1.5mm 0; font-size: 9.5px; line-height: 1.2; }
+.rp-table tbody tr.rp-group:first-child .rp-group-band { margin-top: .8mm; }
+.rp-group-dot { flex: none; width: 2.4mm; height: 2.4mm; border-radius: 50%; background: var(--rp-group, var(--rp-accent)); }
+.rp-group-band b { font-weight: 800; letter-spacing: .01em; color: var(--rp-ink); }
+.rp-group-band small { color: var(--rp-muted); font-weight: 600; font-size: 8.5px; }
+.rp-table tr.rp-subtotal td { font-weight: 800; border-top: 1px solid var(--rp-ink); border-bottom: 1px solid var(--rp-line); background: #fff; }
+.rp-table tr.rp-subtotal td:first-child { font-size: 7.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--rp-muted); }
+.rp-footnote { margin-top: 1.2mm; font-size: 8.5px; color: var(--rp-muted); }
 .rp-empty { padding: 3mm; border: 1px dashed var(--rp-line); border-radius: 2mm; color: var(--rp-muted); text-align: center; font-size: 9px; }
 
 /* Pie fijo (se repite en cada página; el tfoot de .rp-layout le deja el hueco). */

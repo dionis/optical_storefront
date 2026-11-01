@@ -1,0 +1,33 @@
+/* Dónde se usa: SortTh.jsx — las cabeceras que ordenan las tablas del panel
+   (adm-table, adm-fit-table, stmt-tbl, sb-table…). admin.css ya pinta
+   `th.sortable` (cursor, color al pasar y `.on`); aquí va solo el botón de
+   dentro y la flecha, para que la cabecera siga pareciendo una cabecera y no
+   un botón: mismo tipo, mismo color, sin fondo ni borde. La flecha se apaga en
+   las columnas que no mandan y se enciende (color de acento) en la activa.
+   Funciona en modo claro y oscuro porque solo usa tokens --adm-*. */
+
+th.sortable { padding: 0 !important; }
+th.sortable .sort-btn {
+  appearance: none; background: none; border: 0; margin: 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; width: 100%; min-height: 100%;
+  padding: 6px 10px; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-align: inherit; white-space: nowrap; border-radius: 4px; transition: color .15s, background .15s;
+}
+.adm-fit-table th.sortable .sort-btn, .stmt-tbl th.sortable .sort-btn { padding: 5px 8px; }
+.stmt-tbl th.sortable .sort-btn { padding: 5px 7px; }
+th.sortable.r .sort-btn, th.sortable.num .sort-btn { justify-content: flex-end; }
+th.sortable.c .sort-btn { justify-content: center; }
+th.sortable .sort-btn:hover { color: var(--adm-accent-ink, var(--adm-ink)); }
+th.sortable .sort-btn:focus-visible { outline: 2px solid var(--adm-accent, #c9a227); outline-offset: -2px; }
+th.sortable .sort-arr { font-size: 8px; line-height: 1; opacity: .3; transform: translateY(-.5px); transition: opacity .15s; }
+th.sortable .sort-btn:hover .sort-arr { opacity: .6; }
+th.sortable.on .sort-arr { opacity: 1; color: var(--adm-accent, #c9a227); }
+th.sortable.on .sort-label { color: var(--adm-accent-ink, var(--adm-ink)); }
+/* Las tablas que no son .adm-table (fit, estado de cuenta) no traen `.r` en admin.css */
+.adm-fit-table th.sortable.r, .stmt-tbl th.sortable.r { text-align: right; }
+
+/* Al imprimir la cabecera va limpia: sin flechas apagadas, sin aspecto de control. */
+@media print {
+  th.sortable .sort-arr { display: none; }
+  th.sortable.on .sort-arr { display: inline; opacity: 1; color: inherit; }
+}

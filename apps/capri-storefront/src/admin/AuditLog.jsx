@@ -11,6 +11,8 @@ import { isDemoLogin } from "./adminAuth.js";
 import Icon from "./icons.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./screens.css";
 
 const fmtWhen = (v, lang) =>
@@ -24,6 +26,45 @@ const compact = (v) => {
     .map(([k, x]) => `${k}: ${x === null ? "—" : typeof x === "object" ? JSON.stringify(x) : x}`)
     .join(" · ");
 };
+
+/** La tabla de un grupo de eventos; cada cabecera ordena (useSortable.js, una memoria por acción). */
+function AuditTable({ id, list, who, people, stores }) {
+  const { t, lang } = useLang();
+  const sorted = useSortable(list, {
+    id: `audit-${id}`, defaultKey: "created_at", defaultDir: "desc", deps: [people, stores, lang],
+    getters: { who: (e) => who(e.actor_user_id), what: (e) => `${t(`adm.audit.action.${e.action}`)} ${people[e.entity_id]?.email || e.entity_id || ""}`, store: (e) => (e.establishment_id ? stores[e.establishment_id] || "" : null), before: (e) => compact(e.before), after: (e) => compact(e.after) },
+  });
+  const th = (col, label) => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle}>{label}</SortTh>;
+  return (
+    <table className="adm-table responsive">
+      <thead>
+        <tr>
+          {th("created_at", t("adm.audit.when"))}
+          {th("who", t("adm.audit.who"))}
+          {th("what", t("adm.audit.what"))}
+          {th("store", t("adm.audit.store"))}
+          {th("before", t("adm.audit.before"))}
+          {th("after", t("adm.audit.after"))}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.rows.map((e) => (
+          <tr key={e.id}>
+            <td data-label={t("adm.audit.when")}>{fmtWhen(e.created_at, lang)}</td>
+            <td data-label={t("adm.audit.who")}>{who(e.actor_user_id)}</td>
+            <td data-label={t("adm.audit.what")}>
+              <b>{t(`adm.audit.action.${e.action}`)}</b>
+              {e.entity_id && <small className="muted"> · {people[e.entity_id]?.email || e.entity_id}</small>}
+            </td>
+            <td data-label={t("adm.audit.store")}>{e.establishment_id ? stores[e.establishment_id] || "…" : "—"}</td>
+            <td data-label={t("adm.audit.before")}><code className="adm-audit-val">{compact(e.before)}</code></td>
+            <td data-label={t("adm.audit.after")}><code className="adm-audit-val">{compact(e.after)}</code></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 /** Props: `me` (GET /admin/team/me) para el filtro de tienda. */
 export default function AuditLog({ me }) {
@@ -75,35 +116,7 @@ export default function AuditLog({ me }) {
     return [...map.entries()];
   }, [events]);
 
-  const table = (list) => (
-    <table className="adm-table responsive">
-      <thead>
-        <tr>
-          <th>{t("adm.audit.when")}</th>
-          <th>{t("adm.audit.who")}</th>
-          <th>{t("adm.audit.what")}</th>
-          <th>{t("adm.audit.store")}</th>
-          <th>{t("adm.audit.before")}</th>
-          <th>{t("adm.audit.after")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {list.map((e) => (
-          <tr key={e.id}>
-            <td data-label={t("adm.audit.when")}>{fmtWhen(e.created_at, lang)}</td>
-            <td data-label={t("adm.audit.who")}>{who(e.actor_user_id)}</td>
-            <td data-label={t("adm.audit.what")}>
-              <b>{t(`adm.audit.action.${e.action}`)}</b>
-              {e.entity_id && <small className="muted"> · {people[e.entity_id]?.email || e.entity_id}</small>}
-            </td>
-            <td data-label={t("adm.audit.store")}>{e.establishment_id ? stores[e.establishment_id] || "…" : "—"}</td>
-            <td data-label={t("adm.audit.before")}><code className="adm-audit-val">{compact(e.before)}</code></td>
-            <td data-label={t("adm.audit.after")}><code className="adm-audit-val">{compact(e.after)}</code></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+  const table = (action, list) => <AuditTable id={action} list={list} who={who} people={people} stores={stores} />;
 
   return (
     <div className="adm-section">
@@ -128,7 +141,7 @@ export default function AuditLog({ me }) {
         {groups.map(([a, list], i) => (
           <Accordion key={a} id={`audit-${a}`} icon="history" title={t(`adm.audit.action.${a}`)} badge={list.length} defaultOpen={i === 0 || groups.length === 1} bodyClassName="scr-acc-table"
             summary={[{ label: t("adm.scr.events"), value: list.length, strong: true }, { label: t("adm.audit.when"), value: fmtWhen(list[0].created_at, lang), tone: "muted" }]}>
-            {table(list)}
+            {table(a, list)}
           </Accordion>
         ))}
       </AccordionGroup>

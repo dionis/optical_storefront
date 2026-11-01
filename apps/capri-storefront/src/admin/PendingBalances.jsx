@@ -14,6 +14,8 @@ import { collectPayment, listSales, methodName, posContext } from "./posApi.js";
 import Accordion from "./Accordion.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { ExportMenu } from "./ui.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./screens.css";
 import "./roles.css";
 
@@ -103,6 +105,9 @@ export default function PendingBalances({ me, openSale, embedded = false }) {
     balance: Math.round(rows.reduce((a, r) => a + r.balance, 0) * 100) / 100,
     late: rows.filter((r) => r.days > OVERDUE_DAYS).length,
   }), [rows]);
+  // Las cabeceras ordenan (useSortable.js): por defecto lo más atrasado arriba. El pie de totales va aparte.
+  const sorted = useSortable(rows, { id: "pending-balances", defaultKey: "days", defaultDir: "desc" });
+  const th = (col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
   const summary = [
     { label: t("adm.pb.count"), value: totals.count },
     { label: t("adm.pb.balanceTotal"), value: m(totals.balance), strong: true },
@@ -136,12 +141,12 @@ export default function PendingBalances({ me, openSale, embedded = false }) {
         <table className="adm-table responsive pb-table">
           <thead>
             <tr>
-              <th>{t("adm.pb.number")}</th><th>{t("adm.pb.date")}</th><th>{t("adm.pb.customer")}</th><th>{t("adm.pb.seller")}</th>
-              <th className="r">{t("adm.pb.total")}</th><th className="r">{t("adm.pb.paid")}</th><th className="r">{t("adm.pb.balance")}</th><th className="r">{t("adm.pb.overdue")}</th><th className="adm-noprint" />
+              {th("number", t("adm.pb.number"))}{th("created_at", t("adm.pb.date"))}{th("customer_name", t("adm.pb.customer"))}{th("seller_code", t("adm.pb.seller"))}
+              {th("total", t("adm.pb.total"), "r")}{th("paid", t("adm.pb.paid"), "r")}{th("balance", t("adm.pb.balance"), "r")}{th("days", t("adm.pb.overdue"), "r")}<th className="adm-noprint" />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sorted.rows.map((r) => (
               <Fragment key={r.id}>
                 <tr>
                   <td data-label={t("adm.pb.number")} className="pb-num">

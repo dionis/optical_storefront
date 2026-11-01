@@ -562,6 +562,42 @@ const TOPICS_ES = {
     why: "La comisión correcta es lo que hace que la ganancia sea real (una tarjeta al 3 % en una venta de 400 son 12 dólares). Y «cuenta como efectivo» es lo que decide si el cierre de caja cuadra.",
     pitfalls: ["Marcar la tarjeta como efectivo: el cierre siempre dará sobrante."],
   },
+  /* ─────────────── Vendedores (Ejecutivo y panel del vendedor) ─────────────── */
+  "exec.sellers.quota": {
+    title: "Cuota del vendedor",
+    short: "Qué parte de TODAS las ventas del período (de la tienda elegida, o de todas) hizo este vendedor. 25 % = una de cada cuatro ventas en dinero es suya.",
+    what: "Es el porcentaje de sus ventas sobre el total vendido en el mismo período y el mismo filtro de tienda: ventas del vendedor ÷ ventas totales × 100. Se calcula en dinero (no en número de ventas) y cuenta también las ventas que no tienen vendedor asignado, así que las cuotas de todos los vendedores no tienen por qué sumar 100 %.",
+    how: [
+      "Elige el período y la tienda arriba: la cuota se recalcula con ese filtro.",
+      "Compara la cuota con la comisión: un vendedor con cuota alta y comisión baja te sale barato; al revés, revisa su porcentaje.",
+      "En el reporte de vendedores la cuota va en la última columna, ordenada de mayor a menor venta.",
+    ],
+    why: "Dice de quién depende la tienda. Si una sola persona tiene el 70 %, un día libre suyo se nota en caja; si las cuotas están repartidas, el equipo vende parejo.",
+    example: "La tienda vendió 10 000 en el mes; Ana vendió 2 500 → cuota 25 %. Si 1 000 fueron ventas web sin vendedor, la suma de las cuotas del equipo será 90 %.",
+    pitfalls: ["Leerla como «porcentaje de comisión»: la comisión es lo que se le paga; la cuota es lo que vendió respecto al resto."],
+  },
+  "exec.sellers.avgProfit": {
+    title: "Ganancia promedio por venta",
+    short: "Lo que te deja, de media, cada venta de este vendedor después de materiales, costos fijos, comisiones del cobro y su propia comisión.",
+    what: "Ganancia bruta de sus ventas del período ÷ número de ventas. La ganancia es la del Panel de ventas: neto − costo de monturas y lentes − costos fijos por pedido − comisión del cobro (tarjeta) − comisión del vendedor. La renta y los gastos del mes no entran.",
+    how: [
+      "Solo la ve quien puede ver costos (dueño, superadmin o con el permiso «ver costos»).",
+      "Compárala entre vendedores con un ticket medio parecido: uno que vende caro pero con mucho descuento puede dejar menos por venta que otro que vende menos.",
+    ],
+    why: "Vender mucho no es lo mismo que ganar: esta cifra dice qué vendedor convierte cada venta en dinero para la tienda.",
+    pitfalls: ["Juzgar con pocas ventas: con dos o tres ventas una montura sin costo definido mueve mucho el promedio (mira el aviso de «ventas sin costo»)."],
+  },
+  "exec.sellers.commission": {
+    title: "Comisión a pagar",
+    short: "Lo que le debes al vendedor por sus ventas del período: su porcentaje aplicado al neto de cada venta (sin impuestos).",
+    what: "Suma de la comisión de cada una de sus ventas: neto de la venta × su porcentaje. El porcentaje se toma de su perfil de Equipo o, si no tiene, de su ficha de Vendedores. Cambiar el porcentaje recalcula también el pasado.",
+    how: [
+      "Elige el período de pago (normalmente «Mes pasado») y lee la columna Comisión; el reporte PDF/Excel la lleva por vendedor.",
+      "Si un vendedor no aparece es que no vendió en el período: el Ejecutivo quita a los que no venden.",
+    ],
+    why: "Es un costo real de cada venta: ya está restado en la ganancia. Pagarla con otra base (el total con impuestos, por ejemplo) descuadra el margen.",
+    pitfalls: ["Pagar sobre el total cobrado en caja: la comisión se calcula sobre lo vendido en el período, no sobre lo cobrado."],
+  },
 };
 
 const TOPICS_EN = {
@@ -1079,6 +1115,42 @@ const TOPICS_EN = {
     ],
     why: "The right fee is what makes the profit real (a 3% card on a $400 sale is $12). And \"counts as cash\" is what decides whether the till closing balances.",
     pitfalls: ["Marking the card as cash: the closing will always show a surplus."],
+  },
+  /* ─────────────── Sellers (Executive and seller panel) ─────────────── */
+  "exec.sellers.quota": {
+    title: "Seller quota",
+    short: "What part of ALL the sales of the period (of the chosen store, or of every store) this seller made. 25% = one sale in four, in money, is theirs.",
+    what: "Their sales as a percentage of everything sold in the same period under the same store filter: seller's sales ÷ total sales × 100. It is computed in money (not in number of sales) and the total includes sales with no seller assigned, so the quotas of every seller need not add up to 100%.",
+    how: [
+      "Pick the period and the store at the top: the quota is recomputed with that filter.",
+      "Compare the quota with the commission: a seller with a high quota and a low commission is cheap for you; the other way round, review their percentage.",
+      "In the sellers report the quota is the last column, biggest sales first.",
+    ],
+    why: "It says who the store depends on. If one person holds 70%, their day off shows in the till; spread quotas mean the team sells evenly.",
+    example: "The store sold 10,000 in the month; Ana sold 2,500 → quota 25%. If 1,000 were web sales with no seller, the team's quotas add up to 90%.",
+    pitfalls: ["Reading it as the commission percentage: the commission is what you pay them; the quota is what they sold compared with everyone else."],
+  },
+  "exec.sellers.avgProfit": {
+    title: "Average profit per sale",
+    short: "What each sale of this seller leaves you, on average, after materials, fixed costs, payment fees and their own commission.",
+    what: "Gross profit of their sales in the period ÷ number of sales. The profit is the one of the Sales panel: net − frame and lens cost − fixed costs per order − payment fee (card) − seller's commission. Rent and the month's expenses are not in it.",
+    how: [
+      "Only whoever may see costs sees it (owner, superadmin or the \"view costs\" privilege).",
+      "Compare it between sellers with a similar average ticket: one who sells high but discounts a lot can leave less per sale than one who sells less.",
+    ],
+    why: "Selling a lot is not earning: this figure says which seller turns each sale into money for the store.",
+    pitfalls: ["Judging on a few sales: with two or three sales one frame without a defined cost moves the average a lot (watch the \"sales without cost\" notice)."],
+  },
+  "exec.sellers.commission": {
+    title: "Commission to pay",
+    short: "What you owe the seller for their sales of the period: their percentage applied to the net of each sale (before tax).",
+    what: "The sum of the commission of each of their sales: net of the sale × their percentage. The percentage comes from their Team profile or, failing that, from their Sellers record. Changing the percentage recomputes the past too.",
+    how: [
+      "Pick the pay period (usually \"Last month\") and read the Commission column; the PDF/Excel report carries it per seller.",
+      "A seller who is missing did not sell in the period: the Executive drops those who do not sell.",
+    ],
+    why: "It is a real cost of each sale: it is already subtracted from the profit. Paying it on another base (the total with tax, say) throws the margin off.",
+    pitfalls: ["Paying on what the till collected: the commission is computed on what was sold in the period, not on what was collected."],
   },
 };
 

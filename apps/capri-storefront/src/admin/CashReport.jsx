@@ -13,6 +13,8 @@ import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
 import "./cash-report.css";
 import { useStoreFilter } from "./StoreFilter.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 
 const PERIODS = ["today", "week", "month", "year", "range"];
 const CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
@@ -108,6 +110,12 @@ export default function CashReport({ ctx, me }) {
     for (const x of data?.movements || []) { const k = x.category || "none"; out[k] = (out[k] || 0) + 1; }
     return out;
   }, [data]);
+  // Cabeceras que ordenan (useSortable.js); los pies de totales van aparte y quedan abajo.
+  const methodsSorted = useSortable(data?.by_method || [], { id: "cash-methods", defaultKey: "net_cents", defaultDir: "desc", deps: [lang], getters: { method: methodLabel } });
+  const movesSorted = useSortable(movements, { id: "cash-moves", defaultKey: "at", defaultDir: "desc", deps: [lang], getters: { kind: (x) => t(`adm.cash.mv.${x.kind}`), category: (x) => catLabel(x.category), who: (x) => personLabel(x.by), amount: (x) => (x.kind === "out" ? -x.amount_cents : x.amount_cents) } });
+  const sessionsSorted = useSortable(data?.sessions || [], { id: "cash-sessions", defaultKey: "opened_at", defaultDir: "desc" });
+  const daysSorted = useSortable(data?.series || [], { id: "cash-days", defaultKey: "date", defaultDir: "asc" });
+  const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
   const periodText = `${range.from} → ${range.to}`;
   const scopeText = `${storeId ? storeLabel(storeId) : t("adm.cash.rep.allStores")}${personId ? ` · ${personLabel(people.find((p) => p.id === personId))}` : ""}`;
   const title = t("adm.cash.rep.title");
@@ -254,9 +262,9 @@ export default function CashReport({ ctx, me }) {
             sum={<><span>{t("adm.cash.rep.net")}</span><b>{m(totals.payments_cents)}</b></>}>
             {data.by_method.length ? (
               <table className="adm-table responsive">
-                <thead><tr><th>{t("adm.cash.rep.method")}</th><th className="r">{t("adm.cash.rep.count")}</th><th className="r">{t("adm.cash.rep.collected")}</th><th className="r">{t("adm.cash.rep.refunds")}</th><th className="r">{t("adm.cash.rep.fee")}</th><th className="r">{t("adm.cash.rep.net")}</th></tr></thead>
+                <thead><tr>{sth(methodsSorted, "method", t("adm.cash.rep.method"))}{sth(methodsSorted, "in_count", t("adm.cash.rep.count"), "r")}{sth(methodsSorted, "in_cents", t("adm.cash.rep.collected"), "r")}{sth(methodsSorted, "refund_cents", t("adm.cash.rep.refunds"), "r")}{sth(methodsSorted, "fee_cents", t("adm.cash.rep.fee"), "r")}{sth(methodsSorted, "net_cents", t("adm.cash.rep.net"), "r")}</tr></thead>
                 <tbody>
-                  {data.by_method.map((r) => (
+                  {methodsSorted.rows.map((r) => (
                     <tr key={r.code}>
                       <td data-label={t("adm.cash.rep.method")}><b>{methodLabel(r)}</b>{r.receivable && <small className="cr-note"> · {t("adm.cash.rep.receivable")}</small>}</td>
                       <td className="r num" data-label={t("adm.cash.rep.count")}>{r.in_count}</td>
@@ -285,9 +293,9 @@ export default function CashReport({ ctx, me }) {
             {data.truncated && <div className="cr-trunc">{t("adm.cash.rep.truncated", { n: data.movements.length })}</div>}
             {movements.length ? (
               <table className="adm-table responsive">
-                <thead><tr><th>{t("adm.cash.rep.when")}</th><th>{t("adm.cash.rep.till")}</th><th>{t("adm.cash.rep.type")}</th><th>{t("adm.cash.category")}</th><th>{t("adm.cash.rep.note")}</th><th>{t("adm.cash.rep.who")}</th><th className="r">{t("adm.cash.rep.amount")}</th></tr></thead>
+                <thead><tr>{sth(movesSorted, "at", t("adm.cash.rep.when"))}{sth(movesSorted, "terminal_code", t("adm.cash.rep.till"))}{sth(movesSorted, "kind", t("adm.cash.rep.type"))}{sth(movesSorted, "category", t("adm.cash.category"))}{sth(movesSorted, "note", t("adm.cash.rep.note"))}{sth(movesSorted, "who", t("adm.cash.rep.who"))}{sth(movesSorted, "amount", t("adm.cash.rep.amount"), "r")}</tr></thead>
                 <tbody>
-                  {movements.map((x) => (
+                  {movesSorted.rows.map((x) => (
                     <tr key={x.id}>
                       <td data-label={t("adm.cash.rep.when")}>{when(x.at)}</td>
                       <td data-label={t("adm.cash.rep.till")}>{x.terminal_code || "—"}{!storeId && stores.length > 1 && <small className="cr-note"> · {storeLabel(x.establishment_id)}</small>}</td>
@@ -308,9 +316,9 @@ export default function CashReport({ ctx, me }) {
             sum={<><span>{t("adm.cash.diffCol")}</span><b className={tone(totals.sessions_diff_cents) === "" ? "" : "cr-neg"}>{m(totals.sessions_diff_cents)}</b></>} open={data.sessions.length > 0}>
             {data.sessions.length ? (
               <table className="adm-table responsive">
-                <thead><tr><th>{t("adm.cash.openedAt")}</th><th>{t("adm.cash.rep.closedAt")}</th><th>{t("adm.cash.rep.till")}</th><th className="r">{t("adm.cash.opening")}</th><th className="r">{t("adm.cash.expected")}</th><th className="r">{t("adm.cash.counted")}</th><th className="r">{t("adm.cash.diffCol")}</th></tr></thead>
+                <thead><tr>{sth(sessionsSorted, "opened_at", t("adm.cash.openedAt"))}{sth(sessionsSorted, "closed_at", t("adm.cash.rep.closedAt"))}{sth(sessionsSorted, "terminal_code", t("adm.cash.rep.till"))}{sth(sessionsSorted, "opening_cents", t("adm.cash.opening"), "r")}{sth(sessionsSorted, "expected_cents", t("adm.cash.expected"), "r")}{sth(sessionsSorted, "counted_cents", t("adm.cash.counted"), "r")}{sth(sessionsSorted, "diff_cents", t("adm.cash.diffCol"), "r")}</tr></thead>
                 <tbody>
-                  {data.sessions.map((s) => (
+                  {sessionsSorted.rows.map((s) => (
                     <tr key={s.id}>
                       <td data-label={t("adm.cash.openedAt")}>{when(s.opened_at)}</td>
                       <td data-label={t("adm.cash.rep.closedAt")}>{s.closed_at ? when(s.closed_at) : <span className="adm-chip ok">{t("adm.cash.rep.stillOpen")}</span>}</td>
@@ -338,9 +346,9 @@ export default function CashReport({ ctx, me }) {
                   </div>
                 )}
                 <table className="adm-table responsive">
-                  <thead><tr><th>{t("adm.cash.rep.date")}</th><th className="r">{t("adm.cash.rep.t.payments")}</th><th className="r">{t("adm.cash.rep.cashIn")}</th><th className="r">{t("adm.cash.rep.cashOut")}</th><th className="r">{t("adm.cash.rep.cashNet")}</th></tr></thead>
+                  <thead><tr>{sth(daysSorted, "date", t("adm.cash.rep.date"))}{sth(daysSorted, "payments_cents", t("adm.cash.rep.t.payments"), "r")}{sth(daysSorted, "cash_in_cents", t("adm.cash.rep.cashIn"), "r")}{sth(daysSorted, "cash_out_cents", t("adm.cash.rep.cashOut"), "r")}{sth(daysSorted, "cash_net_cents", t("adm.cash.rep.cashNet"), "r")}</tr></thead>
                   <tbody>
-                    {data.series.map((r) => (
+                    {daysSorted.rows.map((r) => (
                       <tr key={r.date}>
                         <td data-label={t("adm.cash.rep.date")}>{r.date}</td>
                         <td className="r num" data-label={t("adm.cash.rep.t.payments")}>{m(r.payments_cents)}</td>

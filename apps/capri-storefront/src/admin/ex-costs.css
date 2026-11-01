@@ -1,0 +1,111 @@
+/* Ejecutivo → «Costos y margen» (ExecutiveCosts.jsx). Tokens --adm-* de
+   admin.css; el modo oscuro llega por los tokens (.adm-shell[data-mode="dark"]),
+   aquí solo se afina lo que no sale de un token. Nada se aplica fuera de .exc-root. */
+
+/* Colores de grupo del reparto en oscuro: el navy y el morado se aclaran para
+   despegarse de la superficie; los demás ya contrastan. */
+.adm-shell[data-mode="dark"] .exc-root { --exc-g-deduction: #9aa3b4; --exc-g-material: #4d80e4; --exc-g-percent: #d1a93a; --exc-g-seller: #9b84d8; --exc-g-manual: #4a9bff; --exc-g-profit: #2fbf77; }
+
+/* ── KPI: etiqueta de una palabra + «?» en la misma línea ────────────────── */
+.exc-root .exc-kpis { grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); }
+.exc-root .exc-kpis .cx-kpi-label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.exc-root .exc-kpis .cx-kpi-label .adm-help-btn { text-transform: none; letter-spacing: 0; }
+
+/* ── Acordeones internos (glosario, detalle del reparto): más planos que los del Ejecutivo ── */
+.exc-root .exc-acc { border: 1px solid var(--adm-line); border-radius: 12px; background: var(--adm-surface); box-shadow: none; }
+.exc-root .exc-acc > summary { min-height: 40px; padding: 6px 12px; }
+.exc-root .exc-acc .acc-title { font-size: 13px; }
+.exc-root .exc-acc .acc-sub { font-size: 11.5px; }
+.exc-root .exc-acc-body { padding: 4px 12px 10px; }
+.exc-root .alloc .exc-acc { margin-top: 2px; }
+.exc-root .alloc .exc-acc > summary { min-height: 34px; padding: 4px 10px; }
+
+/* Glosario: pasos numerados con el color de su grupo, definición en una línea y la lista de conceptos en pequeño. */
+.exc-gl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 6px 14px; }
+.exc-gl-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 6px 4px; border-radius: 8px; }
+.exc-gl-row:hover { background: var(--adm-surface-2); }
+.exc-gl-step { width: 22px; height: 22px; border-radius: 7px; color: #fff; font: 800 11px var(--adm-font); display: grid; place-items: center; margin-top: 1px; }
+.exc-gl-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.exc-gl-name { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--adm-ink); }
+.exc-gl-name .adm-ico { color: var(--adm-muted); }
+.exc-gl-def { font-size: 12.5px; color: var(--adm-ink); line-height: 1.4; }
+.exc-gl-items { font-size: 11.5px; color: var(--adm-muted); line-height: 1.4; }
+.exc-gl-go { opacity: 0; transition: opacity .15s; margin-top: 2px; }
+.exc-gl-row:hover .exc-gl-go, .exc-gl-go:focus-visible { opacity: 1; }
+@media (hover: none) { .exc-gl-go { opacity: 1; } }
+
+/* ── Detalle del reparto: tabla compacta concepto · grupo · importe · % ─────── */
+.exc-split { width: 100%; table-layout: fixed; }
+.exc-split th, .exc-split td { padding: 4px 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exc-split th:nth-child(1) { width: 48%; }
+.exc-split th:nth-child(2) { width: 22%; }
+.exc-split th:nth-child(3) { width: 18%; }
+.exc-split th:nth-child(4) { width: 12%; }
+.exc-split tfoot td { font-weight: 800; border-top: 2px solid var(--adm-line); }
+.exc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+/* ── Ventas por vendedor: avatar · nombre y barra · total grande · redes ──── */
+.exc-sellers { display: flex; flex-direction: column; gap: 4px; }
+.exc-seller { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-areas: "av top total" "av bar ch"; align-items: center; gap: 3px 10px; width: 100%; padding: 5px 6px; border: 1px solid transparent; border-radius: 10px; background: transparent; font: inherit; color: var(--adm-ink); text-align: left; cursor: pointer; transition: background .15s, border-color .15s, transform .14s var(--adm-ease); }
+.exc-seller:hover { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); transform: translateX(2px); }
+.exc-seller:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.exc-seller-av { grid-area: av; }
+.exc-seller-top { grid-area: top; display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
+.exc-seller-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exc-seller-top small { font-size: 11px; white-space: nowrap; }
+.exc-seller-bar { grid-area: bar; display: block; align-self: center; }
+.exc-seller .adm-tb-fill { display: block; }
+.exc-seller-total { grid-area: total; font-family: var(--adm-display); font-optical-sizing: auto; font-weight: 600; font-size: 17px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--adm-accent-ink); white-space: nowrap; }
+.adm-shell[data-mode="dark"] .exc-seller-total { color: var(--adm-ink); }
+.exc-seller-ch { grid-area: ch; display: inline-flex; align-items: center; justify-content: flex-end; }
+.exc-unassigned { display: block; margin-top: 4px; padding-left: 6px; }
+
+/* Redes: un icono por red con el número de ventas debajo; sin ventas, atenuado. */
+.exc-channels { display: inline-flex; gap: 2px; }
+.exc-ch { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; width: 26px; color: var(--adm-faint); line-height: 1; }
+.exc-ch b { font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--adm-faint); }
+.exc-ch.on { color: var(--adm-accent-ink); }
+.exc-ch.on b { color: var(--adm-ink); }
+.adm-shell[data-mode="dark"] .exc-ch.on { color: var(--adm-ink); }
+
+/* ── Ventas vs costo por día: a todo el ancho; herramientas a la derecha ──── */
+.exc-root .exc-cmp { padding: 10px 12px; }
+.exc-root .exc-cmp .adm-card-tools { gap: 6px; }
+.exc-root .cx-compare .chart-legend { margin-bottom: 6px; flex-wrap: wrap; }
+.exc-root .cx-compare-pctkey { color: var(--adm-faint); font-weight: 700; }
+.exc-root .cx-compare-pctkey b { font-size: 10px; font-weight: 800; color: var(--adm-muted); }
+
+/* ── Tres tarjetas abajo: caben en 1366 px sin desplazamiento interno ─────── */
+.exc-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.exc-bottom .adm-card { padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; }
+.exc-bottom .adm-card > *:last-child { flex: 1; min-height: 0; }
+
+/* Últimos pedidos: columnas fijas, cliente con puntos suspensivos, neto en pequeño bajo el total. */
+.exc-recent { width: 100%; table-layout: fixed; }
+.exc-recent td { padding: 4px 6px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.exc-recent .exc-id { width: 62px; }
+.exc-recent .exc-id b { font-size: 12px; }
+.exc-recent .exc-warn { color: var(--adm-amber-dark, #92400e); margin-left: 3px; vertical-align: -1px; }
+.exc-recent .exc-date { width: 48px; color: var(--adm-muted); font-size: 11.5px; }
+.exc-recent .exc-cust span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.exc-recent .exc-total { width: 84px; }
+.exc-recent .exc-total b { display: block; line-height: 1.15; }
+.exc-recent .exc-total small { display: block; font-size: 10px; color: var(--adm-faint); line-height: 1.15; }
+.exc-recent .exc-margin { width: 96px; }
+.exc-recent .margin-pct { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; }
+.exc-recent .margin-pct em { font-style: normal; font-size: 10.5px; opacity: .85; }
+.exc-recent .margin-pct.good { color: var(--adm-green-dark, #116633); }
+.exc-recent .margin-pct.mid { color: var(--adm-amber-dark, #92400e); }
+.exc-recent .margin-pct.bad { color: var(--adm-red-dark); }
+
+@media (max-width: 1180px) {
+  .exc-bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .exc-bottom > :nth-child(2) { grid-column: 1 / -1; order: -1; }
+}
+@media (max-width: 760px) {
+  .exc-bottom { grid-template-columns: 1fr; }
+  .exc-bottom > :nth-child(2) { grid-column: auto; }
+  .exc-seller { grid-template-areas: "av top total" "av bar bar" "av ch ch"; }
+  .exc-seller-ch { justify-content: flex-start; }
+  .exc-recent .exc-date { display: none; }
+}

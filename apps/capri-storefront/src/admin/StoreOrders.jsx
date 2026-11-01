@@ -13,6 +13,9 @@ import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney } from "./adminOrders.js";
 import { ExportMenu } from "./ui.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { WEB_STORE } from "./useStoreTheme.js";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import { periodRange } from "./SalesBoard.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import "./exec.css";
@@ -134,7 +137,7 @@ export function salesReportCols({ t, lang, storeLabel, access, withStore = false
   return [
     { header: t("adm.ex.so.number"), get: (r) => saleNumber(r, t), width: 12, pw: 14 },
     { header: t("adm.ex.so.date"), get: (r) => when(r.sold_at), text: (r) => shortDate(r.sold_at), width: 13, pw: 12 },
-    ...(withStore && storeLabel ? [{ header: t("adm.ex.so.store"), get: (r) => storeLabel(r), width: 9, pw: 9 }] : []),
+    ...(withStore && storeLabel ? [{ header: t("adm.ex.so.store"), get: (r) => storeLabel(r), width: 9, pw: 9, groupHide: true }] : []),
     { header: t("adm.rpt.col.brand"), get: (r) => saleBrand(r, t), width: 11, pw: 12 },
     { header: t("adm.rpt.col.model"), get: saleModel, width: 15, pw: 18 },
     { header: t("adm.rpt.col.color"), get: saleColor, width: 10, pw: 12 },
@@ -146,7 +149,7 @@ export function salesReportCols({ t, lang, storeLabel, access, withStore = false
     { header: t("adm.ex.so.price"), key: "total", type: "money", width: 9, pw: 13 },
     { header: t("adm.ex.so.discount"), key: "discount", type: "money", width: 8, pw: 12, text: (r) => (Number(r.discount) > 0 ? `−${fmtMoney(r.discount, "usd", lang)}` : "—"), cls: () => "muted" },
     { header: t("adm.ex.so.paid"), key: "paid", type: "money", width: 9, pw: 13 },
-    { header: t("adm.ex.so.balance"), key: "balance", type: "money", width: 9, pw: 12, text: (r) => (Number(r.balance) > 0 ? fmtMoney(r.balance, "usd", lang) : "—"), cls: (r) => (Number(r.balance) > 0 ? "neg" : "muted") },
+    { header: t("adm.ex.so.balance"), key: "balance", type: "money", width: 9, pw: 13, text: (r) => (Number(r.balance) > 0 ? fmtMoney(r.balance, "usd", lang) : "—"), cls: (r) => (Number(r.balance) > 0 ? "neg" : "muted") },
     ...(showEcon ? [
       { header: t("adm.ex.so.cost"), get: (r) => m(costOf(r)), key: "cost", type: "money", width: 9, pw: 13 },
       { header: t("adm.ex.so.profit"), get: (r) => m(r.profit), key: "profit", type: "money", width: 9, pw: 13, cls: (r) => (r.profit == null ? "" : Number(r.profit) < 0 ? "neg" : "pos") },
@@ -166,10 +169,36 @@ export function salesReportTotals(totals) {
   };
 }
 
-/** La tabla de ventas como bloque de ReportDoc (`tables: [salesReportTable(...)]`). */
-export function salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore = false }) {
+/**
+ * Con «Todas las tiendas» el PDF se lee por bloques: un grupo por tienda (la
+ * online como «Tienda online»), ordenados por total vendido, con subtotal; el
+ * total general al pie. `stores` (id, code, name, color) da nombre y color a
+ * cada banda; sin la lista se usa `storeLabel`. Ver groupBy en ReportDoc.jsx.
+ */
+export function salesGroupBy({ t, stores, storeLabel }) {
+  const byId = new Map((stores || []).map((s) => [s.id, s]));
+  return {
+    get: (r) => (r.channel === "web" ? WEB_STORE.id : r.establishment_id || ""),
+    label: (k) => {
+      if (k === WEB_STORE.id) return t("adm.rpt.web");
+      const s = byId.get(k);
+      if (s) return [s.code, s.name].filter(Boolean).join(" · ");
+      return (storeLabel ? storeLabel({ establishment_id: k }) : "") || k || "—";
+    },
+    colorOf: (k) => (k === WEB_STORE.id ? WEB_STORE.color : byId.get(k)?.color || null),
+    order: "total-desc",
+    totalKey: "total",
+    subtotals: (rows) => salesReportTotals(salesTotals(rows)),
+    count: (rows) => salesTotals(rows).count,
+    countLabel: (n) => t("adm.ex.so.rows", { n }),
+  };
+}
+
+/** La tabla de ventas como bloque de ReportDoc (`tables: [salesReportTable(...)]`). `groupBy` parte el PDF en bloques (salesGroupBy). */
+export function salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore = false, groupBy = null }) {
   const active = rows.filter((r) => r.status !== "voided");
   return {
+    ...(groupBy ? { groupBy } : {}),
     title: t("adm.rpt.salesTable"),
     sheet: t("adm.ex.so.sheet"),
     note: t("adm.rpt.salesNote", { n: active.length }),
@@ -186,9 +215,10 @@ export function salesReportTable(rows, totals, { t, lang, storeLabel, access, wi
 /**
  * El reporte de la lista (StoreOrders en solitario; el Ejecutivo le añade sus
  * KPI, resúmenes y gráficos). `scope` = { store (code, name, color, address,
- * phone) | null, isAll, isWeb }; `period` = { from, to }.
+ * phone) | null, isAll, isWeb }; `period` = { from, to }; `stores` (opcional,
+ * las de useStoreFilter) nombra y colorea los bloques por tienda cuando isAll.
  */
-export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, scope, period, title, kpis = [], summaries = [], charts = [] }) {
+export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, stores, scope, period, title, kpis = [], summaries = [], charts = [] }) {
   const store = scope?.store && !scope.isAll && !scope.isWeb ? scope.store : null;
   const scopeName = store ? store.name || store.code : scope?.isWeb ? t("adm.rpt.web") : t("adm.rpt.allStores");
   const m = (v) => fmtMoney(v, "usd", lang);
@@ -210,7 +240,7 @@ export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, sco
     kpis: baseKpis,
     summaries,
     charts,
-    tables: [salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore: Boolean(scope?.isAll) })],
+    tables: [salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore: Boolean(scope?.isAll), groupBy: scope?.isAll ? salesGroupBy({ t, stores, storeLabel }) : null })],
     landscape: true,
     lang,
     t,
@@ -246,6 +276,12 @@ export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false, me
   const hidden = <span className="muted" title={t("adm.ex.so.hiddenHint")}>{t("adm.ex.so.hidden")}</span>;
   const onRow = typeof onOpen === "function" ? onOpen : (r) => (r.sale_id ? sp.open(r.sale_id, { economics: r }) : null);
   const clickable = (r) => typeof onOpen === "function" || Boolean(r.sale_id);
+  // Las cabeceras ordenan (useSortable.js); la fila de totales va aparte y queda siempre abajo.
+  const sorted = useSortable(rows, {
+    id: "store-orders", defaultKey: "sold_at", defaultDir: "desc", deps: [lang],
+    getters: { number: (r) => saleNumber(r, t), brand: (r) => saleBrand(r, t), model: saleModel, color: saleColor, rx: (r) => r.has_rx, own: (r) => r.own_frame, lens: (r) => saleLens(r, { t, lang }), cost: costOf, status: (r) => (r.status === "voided" ? 1 : 0) },
+  });
+  const th = (col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
   if (state === "loading" && !rows.length) return <div className="adm-skel" style={{ height: 120 }} />;
   if (state === "error") return <div className="adm-demo-banner">{t("adm.ex.loadFailed")}</div>;
   if (state === "demo") return <div className="adm-demo-banner">{t("adm.ex.demo")}</div>;
@@ -256,29 +292,29 @@ export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false, me
       <table className="adm-table responsive so-table">
         <thead>
           <tr>
-            <th>{t("adm.ex.so.number")}</th>
-            <th>{t("adm.ex.so.date")}</th>
-            <th>{t("adm.ex.so.customer")}</th>
-            <th>{t("adm.ex.so.seller")}</th>
-            <th>{t("adm.rpt.col.brand")}</th>
-            <th>{t("adm.rpt.col.model")}</th>
-            <th>{t("adm.rpt.col.color")}</th>
-            <th>{t("adm.rpt.col.rx")}</th>
-            <th>{t("adm.rpt.col.own")}</th>
-            <th className="so-items">{t("adm.rpt.col.lens")}</th>
-            <th className="r">{t("adm.ex.so.price")}</th>
-            <th className="r">{t("adm.ex.so.discount")}</th>
-            <th className="r">{t("adm.ex.so.cost")}</th>
-            <th className="r">{t("adm.ex.so.commission")}</th>
-            <th className="r">{t("adm.ex.so.profit")}</th>
-            <th className="r">{t("adm.ex.so.margin")}</th>
-            <th className="r">{t("adm.ex.so.paid")}</th>
-            <th className="r">{t("adm.ex.so.balance")}</th>
-            <th>{t("adm.ex.so.status")}</th>
+            {th("number", t("adm.ex.so.number"))}
+            {th("sold_at", t("adm.ex.so.date"))}
+            {th("customer", t("adm.ex.so.customer"))}
+            {th("seller_code", t("adm.ex.so.seller"))}
+            {th("brand", t("adm.rpt.col.brand"))}
+            {th("model", t("adm.rpt.col.model"))}
+            {th("color", t("adm.rpt.col.color"))}
+            {th("rx", t("adm.rpt.col.rx"))}
+            {th("own", t("adm.rpt.col.own"))}
+            <SortTh col="lens" sort={sorted.sort} onSort={sorted.toggle} className="so-items">{t("adm.rpt.col.lens")}</SortTh>
+            {th("total", t("adm.ex.so.price"), "r")}
+            {th("discount", t("adm.ex.so.discount"), "r")}
+            {th("cost", t("adm.ex.so.cost"), "r")}
+            {th("commission", t("adm.ex.so.commission"), "r")}
+            {th("profit", t("adm.ex.so.profit"), "r")}
+            {th("margin_pct", t("adm.ex.so.margin"), "r")}
+            {th("paid", t("adm.ex.so.paid"), "r")}
+            {th("balance", t("adm.ex.so.balance"), "r")}
+            {th("status", t("adm.ex.so.status"))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {sorted.rows.map((r) => {
             const voided = r.status === "voided";
             const profit = r.profit == null ? null : Number(r.profit);
             return (
@@ -356,7 +392,7 @@ export default function StoreOrders({ me, go, embedded = false, data: given, sto
   const meta = `${scope} · ${per.range.from} → ${per.range.to}`;
   // PDF / Excel / CSV: el reporte formal (ReportDoc) con la lista completa, una línea por venta.
   const report = () => salesReportSpec({
-    rows: data.rows, totals: data.totals, access: data.access, t, lang, storeLabel,
+    rows: data.rows, totals: data.totals, access: data.access, t, lang, storeLabel, stores: sf.stores,
     scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from: per.range.from, to: per.range.to },
   });
   return (

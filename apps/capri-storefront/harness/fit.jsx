@@ -1,4 +1,7 @@
-// Harness del sistema «una vista» (fit.css): ?v=status | charts | stage, &mode=light|dark.
+// Harness del sistema «una vista» (fit.css): ?v=status | charts | stage | costchart, &mode=light|dark.
+// costchart = el acordeón «Costos y margen» completo (ExecutiveCosts) con un
+// GET /admin/costing/summary simulado: KPI de una palabra, glosario, reparto,
+// vendedores con sus redes y la gráfica Ventas vs costo.
 // Monta StoreStatus con un GET /admin/store-status simulado, la pareja de
 // gráficos del Resumen a 150 px y la tira de etapas, dentro del AdminShell real.
 import React, { useState } from "react";
@@ -8,16 +11,20 @@ import { LanguageProvider } from "/src/i18n/LanguageContext.jsx";
 import { FeedbackProvider } from "/src/components/Feedback.jsx";
 import { T } from "/src/i18n/translations.js";
 import fit from "/src/i18n/parts/fit.js";
+import costs from "/src/i18n/parts/costs.js";
 import "/src/admin/admin.css";
 import AdminShell from "/src/admin/AdminShell.jsx";
 import StoreStatus from "/src/admin/StoreStatus.jsx";
 import { StageBarCard } from "/src/admin/StageBar.jsx";
-import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "/src/admin/charts.jsx";
+import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart, CompareBarChart } from "/src/admin/charts.jsx";
+import ExecutiveCosts from "/src/admin/ExecutiveCosts.jsx";
 import { Card, useChartHeight } from "/src/admin/ui.jsx";
 import Icon from "/src/admin/icons.jsx";
 
 // El diccionario de fit.js aún no está en parts/index.js: se funde aquí.
 Object.assign(T.es, fit.es); Object.assign(T.en, fit.en);
+// Idem costs.js mientras no esté registrado en parts/index.js (no rompe si ya lo está).
+Object.assign(T.es, costs.es); Object.assign(T.en, costs.en);
 
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get("mode") || "light";
@@ -66,6 +73,7 @@ window.fetch = (url, opts) => {
   const json = (b) => Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { "Content-Type": "application/json" } }));
   if (u.includes("/admin/store-status")) return new Promise((r) => setTimeout(() => r(json(STATUS)), 120));
   if (u.includes("/admin/establishments")) return json(STORES);
+  if (u.includes("/admin/costing/summary")) return new Promise((r) => setTimeout(() => r(json(COSTING)), 80));
   if (u.includes("/admin/")) return json({});
   return realFetch(url, opts);
 };
@@ -87,6 +95,47 @@ const stages = [
   { key: "delivered", label: "Entregado", icon: "checkCircle", count: 41, amount: 7210.75 },
 ];
 const money = (v) => "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ── Costos y margen: 30 días de ventas con su costo (un martes en pérdida). ──
+const rc = rnd(11);
+const r2 = (v) => Math.round(v * 100) / 100;
+const costDays = days.map((label, i) => {
+  const date = new Date(now - (29 - i) * 864e5);
+  const orders = i % 7 === 5 ? 0 : Math.round(1 + rc() * 5);
+  const revenue = orders === 0 ? 0 : r2(orders * (180 + rc() * 160));
+  const cost = orders === 0 ? 0 : r2(revenue * (i === 16 ? 1.07 : 0.52 + rc() * 0.2));
+  return { date: `${date.getFullYear()}-${label}`, orders, revenue, cost, margin: r2(revenue - cost) };
+});
+const totRev = r2(costDays.reduce((a, d) => a + d.revenue, 0));
+const totCost = r2(costDays.reduce((a, d) => a + d.cost, 0));
+const ded = r2(totRev * 0.163), mat = r2(totRev * 0.28), pc = r2(totRev * 0.17), com = r2(totRev * 0.04);
+const net = r2(totRev - ded);
+const SELLERS = [["DAN", "Daniel Pérez"], ["MAR", "Marilin García"], ["JOS", "José Ruiz"], ["ANA", "Ana Torres"]];
+const SRC = ["whatsapp", "instagram", "tiktok", "facebook", "link", "instagram", "whatsapp"];
+const costOrders = Array.from({ length: 24 }, (_, i) => {
+  const gross = r2(140 + rc() * 420); const d = r2(gross * 0.163); const nb = r2(gross - d); const cost = r2(nb * (i === 3 ? 1.1 : 0.45 + rc() * 0.3)); const margin = r2(nb - cost);
+  const seller = i % 5 === 4 ? null : SELLERS[i % 4];
+  return { id: `o${i}`, display_id: 180 - i, created_at: new Date(now - i * 7.3 * 36e5).toISOString(), customer_name: ["María Fernanda Rodríguez de la Torre", "Juan Pérez", "Ana Lucía Gómez", "Carlos Méndez", "Sofía Castro Villanueva"][i % 5],
+    seller_code: seller?.[0] ?? null, seller_source: seller ? SRC[i % SRC.length] : null, gross, revenue: gross, deductions_total: d, net_base: nb, cost_total: cost, margin, margin_pct: r2((margin / gross) * 100), profit_pct_net: r2((margin / nb) * 100),
+    profit_target_amount: r2(nb * 0.3), profit_gap: r2(margin - nb * 0.3), undefined_costs: i === 7 || i === 12 ? 1 : 0 };
+});
+const bySeller = SELLERS.map(([code, name]) => { const os = costOrders.filter((o) => o.seller_code === code); const revenue = r2(os.reduce((a, o) => a + o.gross, 0)); return { code, name, orders: os.length, revenue, cost: r2(os.reduce((a, o) => a + o.cost_total, 0)), margin: r2(os.reduce((a, o) => a + o.margin, 0)), commission: r2(revenue * 0.05) }; });
+const noneOs = costOrders.filter((o) => !o.seller_code);
+const COSTING = {
+  from: costDays[0].date, to: costDays[29].date, truncated: false, rules_defined: true,
+  totals: { orders: 86, gross: totRev, revenue: totRev, deductions: ded, net_base: net, materials: mat, percent_items: pc, commission: com, cost: totCost, profit: r2(totRev - totCost), margin: r2(totRev - totCost), margin_pct: r2(((totRev - totCost) / totRev) * 100), profit_pct_net: r2(((totRev - totCost) / net) * 100), profit_target_pct: 30, profit_target_amount: r2(net * 0.3), profit_gap: r2(totRev - totCost - net * 0.3) },
+  by_kind: [
+    { kind: "frame_brand", key: "frame:dicaprio", label: "Montura DiCaprio", amount: r2(mat * 0.3) }, { kind: "lens_design", key: "lens:sv", label: "Lente monofocal", amount: r2(mat * 0.25) }, { kind: "frame_brand", key: "frame:flexure", label: "Montura Flexure", amount: r2(mat * 0.18) },
+    { kind: "shipping", key: "shipping", label: "Envío", amount: r2(ded * 0.5) }, { kind: "tax", key: "tax", label: "Impuestos", amount: r2(ded * 0.32) }, { kind: "order_percent", key: "order_percent:payment_fee", label: "Stripe 2.9 % + $0.30", amount: r2(ded * 0.18) },
+    { kind: "order_percent", key: "order_percent:rent", label: "Renta 10 %", amount: r2(pc * 0.5) }, { kind: "order_percent", key: "order_percent:lab", label: "Laboratorio 8 %", amount: r2(pc * 0.3) }, { kind: "order_percent", key: "order_percent:packaging", label: "Empaque 2 %", amount: r2(pc * 0.1) }, { kind: "order_percent", key: "order_percent:service", label: "Atención al cliente 2 %", amount: r2(pc * 0.1) },
+    { kind: "lens_ar", key: "lens_ar:ar", label: "Antirreflejo", amount: r2(mat * 0.12) }, { kind: "lens_photo", key: "lens_photo:photo", label: "Fotocromático", amount: r2(mat * 0.08) }, { kind: "frame_brand", key: "frame:mileniall", label: "Montura Mileniall", amount: r2(mat * 0.07) },
+    { kind: "seller_commission", key: "seller:all", label: "Comisión vendedor", amount: com }, { kind: "manual", key: "manual:courier", label: "Mensajería extra", amount: 38 },
+  ].sort((a, b) => b.amount - a.amount),
+  by_seller: [...bySeller, { code: null, name: "none", orders: noneOs.length, revenue: r2(noneOs.reduce((a, o) => a + o.gross, 0)), cost: 0, margin: 0, commission: 0 }],
+  by_day: costDays,
+  by_brand: [{ slug: "dicaprio", name: "DiCaprio", orders: 31, revenue: 8420, frame_cost: 1240, margin_share: 0 }, { slug: "flexure", name: "Flexure", orders: 19, revenue: 5120, frame_cost: 760, margin_share: 0 }, { slug: "mileniall", name: "Mileniall", orders: 12, revenue: 3310, frame_cost: 420, margin_share: 0 }, { slug: "peachtrie", name: "Peachtrie", orders: 8, revenue: 1980, frame_cost: 280, margin_share: 0 }, { slug: "trendy", name: "Trendy", orders: 5, revenue: 760, frame_cost: 110, margin_share: 0 }],
+  orders: costOrders,
+};
 
 function ChartsView() {
   const H = useChartHeight(0.14, 100, 150);
@@ -111,6 +160,25 @@ function ChartsView() {
         <div className="adm-grid-2 pair">
           <Card title="Accesos vs Compras por día" name="accessVsBuy" hint="…"><AccessVsBuyChart data={avb} height={H} /></Card>
           <Card title="Por día de la semana" name="weekday" hint="…"><WeekdayChart data={weekday} height={H} /></Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Costos y margen completo (ExecutiveCosts) + la gráfica suelta a dos alturas.
+function CostChartView() {
+  const H = useChartHeight(0.14, 100, 150);
+  const [seller, setSeller] = useState(null);
+  const range = { from: new Date(now - 29 * 864e5), to: new Date(now) };
+  return (
+    <div className="adm-section">
+      {seller && <div className="adm-demo-banner">onSeller("{seller}")</div>}
+      <ExecutiveCosts range={range} store="" go={(tab, p) => console.log("go", tab, p)} onSeller={(code) => setSeller(code)} />
+      <div className="adm-exec" style={{ marginTop: 14 }}>
+        <div className="adm-grid-2 pair">
+          <Card title="CompareBarChart · 14 días · 120 px" name="cmp14" hint="…"><CompareBarChart data={costDays.slice(-14).map((d) => ({ label: d.date.slice(5), sales: d.revenue, cost: d.cost }))} height={120} format={money} /></Card>
+          <Card title="CompareBarChart · 90 días · 150 px" name="cmp90" hint="…"><CompareBarChart data={Array.from({ length: 90 }, (_, i) => { const d = costDays[i % 30]; return { label: d.date.slice(5), sales: d.revenue * (0.8 + (i % 7) * 0.06), cost: d.cost }; })} height={H} format={money} /></Card>
         </div>
       </div>
     </div>
@@ -142,6 +210,7 @@ function App() {
         {VIEW === "status" && <StoreStatus go={(t) => console.log("go", t)} tabs={tabs} me={ME} />}
         {VIEW === "charts" && <ChartsView />}
         {VIEW === "stage" && <StageView />}
+        {VIEW === "costchart" && <CostChartView />}
       </AdminShell>
     </MemoryRouter>
   );

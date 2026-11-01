@@ -1,0 +1,124 @@
+/* Panel del vendedor (SellerPanel.jsx): capa sobre el ÁREA DE CONTENIDO del
+   panel (.adm-main, como el mapa de inicio: la barra lateral sigue usable),
+   fondo difuminado y una tarjeta centrada con el resumen de UN vendedor. Cada
+   cifra es un botón que lleva a operar. Solo tokens --adm-*: claro, oscuro y
+   el color de la tienda activa. z-index 50 como el mapa de inicio. */
+
+.sp-overlay { position: fixed; top: 0; right: 0; bottom: 0; left: var(--sp-left, 0px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: clamp(12px, 3vh, 36px) 16px; overflow: auto; -webkit-overflow-scrolling: touch; }
+.sp-backdrop { position: fixed; inset: 0 0 0 var(--sp-left, 0px); background: rgba(27, 31, 58, .35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 0; padding: 0; margin: 0; cursor: pointer; }
+.adm-shell[data-mode="dark"] .sp-backdrop { background: rgba(3, 5, 16, .5); }
+
+.sp-card {
+  position: relative; z-index: 1; width: min(980px, 100%); max-width: 92vw; margin: auto 0;
+  display: grid; gap: 14px; padding: 20px 22px 18px;
+  background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius); box-shadow: var(--adm-shadow-lg); overflow: hidden;
+  animation: spIn .22s var(--adm-ease, ease-out);
+}
+.sp-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--sp-color, var(--adm-accent)), var(--adm-gold)); }
+.sp-card:focus { outline: none; }
+@keyframes spIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sp-card { animation: none; } }
+
+/* Cabecera: avatar · nombre · código · tienda · comisión; exportar + cerrar a la derecha */
+.sp-head { display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 36px; flex-wrap: wrap; }
+.sp-avatar { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--sp-color, var(--adm-grad-dark, var(--adm-navy-fill))); color: #fff; font-weight: 800; font-size: 18px; border: 2px solid var(--adm-gold); letter-spacing: .02em; }
+.sp-who { min-width: 0; display: grid; gap: 3px; flex: 1; }
+.sp-who h2 { margin: 0; font: 800 clamp(18px, 2.2vw, 22px)/1.15 var(--adm-display); color: var(--adm-ink); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sp-who h2 .adm-chip { font-size: 10.5px; }
+.sp-who small { font-size: 12.5px; color: var(--adm-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sp-who small .sep { opacity: .5; }
+.sp-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; box-shadow: 0 0 0 2px var(--adm-surface); }
+.sp-code { font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; padding: 3px 7px; border-radius: 6px; background: var(--adm-gold-soft); color: var(--adm-gold-dark); border: 1px solid var(--adm-gold-line); }
+.sp-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.sp-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-muted); cursor: pointer; border-radius: 50%; display: grid; place-items: center; transition: background .15s, color .15s, border-color .15s; }
+.sp-close:hover { background: var(--adm-surface-2); color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.sp-close:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+
+/* Período: control segmentado + fechas (siempre aplicado) */
+.sp-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sp-seg { display: inline-flex; border: 1px solid var(--adm-line); border-radius: 999px; padding: 2px; background: var(--adm-surface-2); gap: 2px; flex-wrap: wrap; }
+.sp-seg button { border: 0; background: transparent; color: var(--adm-muted); font: 700 11.5px/1 var(--adm-font); padding: 6px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.sp-seg button:hover { color: var(--adm-ink); background: var(--adm-surface); }
+.sp-seg button.on { background: var(--adm-accent); color: var(--st-ink, #fff); }
+.sp-seg button:focus-visible { outline: none; box-shadow: var(--adm-shadow-glow); }
+.sp-dates { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--adm-muted); }
+.sp-dates input { font: 600 12px/1 var(--adm-font); color: var(--adm-ink); background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: 8px; padding: 5px 7px; }
+.sp-dates input:focus { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+
+/* Filas y teselas (mismo lenguaje que el mapa de inicio) */
+.sp-row { display: grid; gap: 7px; min-width: 0; }
+.sp-row-head { display: flex; align-items: center; gap: 8px; }
+.sp-row-head h3 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--adm-muted); display: flex; align-items: center; gap: 6px; }
+.sp-row-head span { font-size: 11.5px; color: var(--adm-muted); }
+.sp-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+.sp-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sp-tile {
+  position: relative; display: grid; gap: 3px; align-content: start; min-width: 0; min-height: 76px; text-align: left;
+  padding: 10px 26px 10px 12px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface-2); color: var(--adm-ink); cursor: pointer; font: inherit;
+  transition: transform .14s var(--adm-ease, ease), box-shadow .18s, border-color .15s, background .15s;
+}
+.sp-tile.static { cursor: default; }
+.sp-tile:not(.static):hover { transform: translateY(-2px); border-color: var(--adm-accent-line); background: var(--adm-accent-soft); box-shadow: var(--adm-shadow-hover); }
+.sp-tile:active:not(.static) { transform: translateY(0); }
+.sp-tile:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.sp-tile .chev { position: absolute; top: 10px; right: 8px; color: var(--adm-muted); opacity: .55; transition: opacity .15s, transform .15s, color .15s; }
+.sp-tile:hover .chev { opacity: 1; color: var(--adm-accent-ink); transform: translateX(2px); }
+.sp-tile .sp-tile-help { position: absolute; top: 8px; right: 8px; }
+.sp-tile small { font-size: 11px; font-weight: 700; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 14px; }
+.sp-tile b { font: 700 clamp(17px, 2vw, 21px)/1.15 var(--adm-display); color: var(--adm-ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-tile.hero { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+.sp-tile.hero b { color: var(--adm-accent-ink); }
+.sp-tile.good b { color: var(--adm-green-dark); }
+.sp-tile.bad b { color: var(--adm-red-dark); }
+.sp-tile.warn b { color: var(--adm-amber-dark); }
+.sp-tile.gold b { color: var(--adm-gold-dark); }
+.sp-tile span { font-size: 11.5px; color: var(--adm-muted); display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-tile .adm-skel { height: 22px; width: 70%; }
+.sp-tile .adm-skel.sm { height: 12px; width: 50%; }
+
+/* Canales: chips con icono de la red, nº de ventas e importe */
+.sp-channels { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sp-channel { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font: 700 12px/1.2 var(--adm-font); border: 1px solid var(--adm-line); background: var(--adm-surface-2); color: var(--adm-ink); cursor: default; }
+.sp-channel svg { color: var(--adm-accent-ink); }
+.sp-channel em { font-style: normal; color: var(--adm-muted); font-weight: 600; }
+.sp-channel.compact { padding: 2px 6px; font-size: 11px; gap: 4px; }
+.sp-channel.compact em { display: none; }
+.sp-channels.compact { gap: 4px; display: inline-flex; vertical-align: middle; }
+.sp-channels-none { font-size: 12px; color: var(--adm-muted); margin: 0; }
+
+/* Últimas ventas */
+.sp-last .adm-table td, .sp-last .adm-table th { padding: 6px 8px; font-size: 12.5px; }
+.sp-last .adm-table tr.ord-row { cursor: pointer; }
+.sp-last .adm-table tr.ord-row:hover td { background: var(--adm-accent-soft); }
+.sp-more { font-size: 12px; color: var(--adm-muted); }
+
+/* Pie: botones que se ven como botones */
+.sp-foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--adm-line-2); padding-top: 12px; }
+.sp-foot .sp-err { margin: 0 auto 0 0; font-size: 12px; color: var(--adm-red-dark); }
+.sp-foot .sp-note { margin: 0 auto 0 0; font-size: 12px; color: var(--adm-muted); }
+.sp-foot .btn-sm { min-width: 124px; }
+.sp-foot .btn-sm.ghost { border-color: transparent; background: transparent; color: var(--adm-muted); }
+.sp-foot .btn-sm.ghost:hover { background: var(--adm-surface-2); color: var(--adm-ink); border-color: var(--adm-line); }
+.sp-foot .btn-sm.outline { border: 1px solid var(--adm-accent-line); color: var(--adm-accent-ink); background: var(--adm-surface); }
+.sp-foot .btn-sm.outline:hover { background: var(--adm-accent-soft); border-color: var(--adm-accent); }
+
+/* Fila clicable en las tablas que abren el panel (Ejecutivo › Vendedores, Vendedores) */
+.sp-rowlink { cursor: pointer; }
+.sp-rowlink:hover td { background: var(--adm-accent-soft); }
+.sp-zero { font-size: 12px; color: var(--adm-muted); margin: 8px 0 0; }
+.sp-cell-channels { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+
+@media (max-width: 900px) {
+  .sp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .sp-overlay { padding: 8px; }
+  .sp-card { max-width: 100%; padding: 16px 14px 14px; gap: 12px; }
+  .sp-grid, .sp-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sp-tile { min-height: 68px; padding: 9px 22px 9px 10px; }
+  .sp-foot .btn-sm { flex: 1; min-width: 0; }
+  .sp-foot .sp-err, .sp-foot .sp-note { flex-basis: 100%; }
+}
+@media print { .sp-overlay { display: none !important; } }

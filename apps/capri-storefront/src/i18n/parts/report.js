@@ -1,5 +1,6 @@
 // Reportes impresos y exportados del panel (ReportDoc.jsx): cabecera, bloque
-// general del Excel/CSV y las columnas de la lista de ventas (StoreOrders.jsx).
+// general del Excel/CSV, las columnas de la lista de ventas (StoreOrders.jsx),
+// los bloques por grupo del PDF y las cabeceras que ordenan (SortTh.jsx).
 export default {
   es: {
     "adm.rpt.statusTitle": "Reporte de estado · {store}",
@@ -35,6 +36,12 @@ export default {
     "adm.rpt.own.no": "Stock",
     "adm.rpt.frameOnly": "Solo montura",
     "adm.rpt.ownFrame": "Montura del cliente",
+    "adm.rpt.subtotal": "Subtotal · {group}",
+    "adm.rpt.groupRows": "{n} líneas",
+    "adm.rpt.dropZero": "{n} sin ventas en el período",
+    "adm.rpt.group": "Grupo",
+    "adm.tbl.sort": "Ordenar",
+    "adm.tbl.sortBy": "Ordenar por {col}",
   },
   en: {
     "adm.rpt.statusTitle": "Status report · {store}",
@@ -70,5 +77,11 @@ export default {
     "adm.rpt.own.no": "Stock",
     "adm.rpt.frameOnly": "Frame only",
     "adm.rpt.ownFrame": "Customer's frame",
+    "adm.rpt.subtotal": "Subtotal · {group}",
+    "adm.rpt.groupRows": "{n} lines",
+    "adm.rpt.dropZero": "{n} with no sales in the period",
+    "adm.rpt.group": "Group",
+    "adm.tbl.sort": "Sort",
+    "adm.tbl.sortBy": "Sort by {col}",
   },
 };

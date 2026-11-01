@@ -20,6 +20,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { Card, useChartHeight } from "./ui.jsx";
 import { SOURCE_ICON } from "./sellerShared.jsx";
+import { SellerChannels, sellerRowsFromStats, useSellerPanel } from "./SellerPanel.jsx";
 import { StageBarCard } from "./StageBar.jsx";
 import "./fit.css";
 
@@ -33,38 +34,50 @@ const ymd = (d) => { const x = new Date(d); const p = (n) => String(n).padStart(
 const daysSince = (iso) => (Date.now() - new Date(iso).getTime()) / 864e5;
 const demoSnap = () => { try { return (localStorage.getItem("oer_orders") || "").length; } catch { return 0; } };
 
-/** Ventas por vendedor referido (top 5) + por red social (GET /admin/sellers/stats?from&to&store). */
-export function SellersMini({ range, store = "", go, lang, showCommission = false }) {
+/**
+ * Ventas por vendedor (top 5) + por red social (GET /admin/sellers/stats?from&to&store):
+ * total vendido por cada uno con los iconos de las redes por las que vendió y el
+ * nº por red; de mayor a menor y sin los que no vendieron. Pulsar un vendedor
+ * abre su panel (SellerPanel) delante de la pantalla.
+ */
+export function SellersMini({ range, store = "", go, lang, showCommission = false, me }) {
   const { t } = useLang();
   const [stats, setStats] = useState(null);
+  const sp = useSellerPanel({ go, me });
   const from = range?.from ? ymd(range.from) : "";
   const to = range?.to ? ymd(range.to) : "";
+  const storeQ = store === "all" ? "" : store;
   useEffect(() => {
     if (isDemoLogin()) return undefined;
     let on = true;
-    adminFetch("/admin/sellers/stats", { query: { from, to, store: store === "all" ? "" : store } }).then((s) => { if (on) setStats(s); }).catch(() => {});
+    adminFetch("/admin/sellers/stats", { query: { from, to, store: storeQ } }).then((s) => { if (on) setStats(s); }).catch(() => {});
     return () => { on = false; };
-  }, [from, to, store]);
-  const rows = (stats?.sellers || []).filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  }, [from, to, storeQ]);
+  const { rows: all, zero } = useMemo(() => sellerRowsFromStats(stats?.sellers), [stats]);
+  const rows = all.slice(0, 5);
+  const max = Math.max(1, ...rows.map((r) => r.sales));
   const sources = (stats?.sources || []).slice(0, 5);
   return (
     <Card icon="sellers" title={t("adm.exec.bySeller")} hint={t("adm.exec.bySellerHint")} onGo={() => go("sellers")} goLabel={t("adm.tab.sellers")} name="vendedores"
-      csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], [t("adm.sel.commissions"), "commission"]], rows: stats?.sellers || [] }}>
+      csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "count"], [t("adm.sel.sales"), "sales"], [t("adm.sel.commissions"), "commission"], [t("adm.ex.sellers.share"), "share"]], rows: all }}>
       {!stats ? <div className="adm-skel" style={{ height: 80 }} /> : rows.length === 0 ? (
         <div className="adm-empty compact" onClick={() => go("sellers")} role="button"><Icon name="megaphone" size={26} /><b>{t("adm.exec.noSellerSales")}</b><p>{t("adm.exec.noSellerSalesHint", { n: stats.unattributed?.orders ?? 0 })}</p></div>
       ) : (
         <div className="adm-thumbbars tight">
           {rows.map((r) => (
-            <div className="adm-tb-row clickable" key={r.id} onClick={() => go("orders", { seller: r.code })} title={t("adm.exec.goOrdersSeller", { code: r.code })}>
+            <div className="adm-tb-row clickable" key={r.id} onClick={() => sp.open(r.code, { from, to, store: storeQ })} title={t("adm.sp.open")}>
               <div className="adm-tb-thumb sm"><span className="sel-avatar mini">{String(r.name || "?").slice(0, 2).toUpperCase()}</span></div>
               <div className="adm-tb-main">
-                <div className="adm-tb-top"><span className="adm-tb-name">{r.name} <small className="muted">· {r.orders} {t("adm.exec.ordersShort")}</small></span><b>{showCommission ? fmtMoney(r.commission, "usd", lang) : fmtMoney(r.revenue, "usd", lang)}</b></div>
-                <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: `${(r.revenue / max) * 100}%` }} /></div>
+                <div className="adm-tb-top">
+                  <span className="adm-tb-name">{r.name} <small className="muted">· {r.count} {t("adm.exec.ordersShort")}</small><SellerChannels by_source={r.by_source} compact className="sp-cell-channels" /></span>
+                  <b>{showCommission ? fmtMoney(r.commission, "usd", lang) : fmtMoney(r.sales, "usd", lang)}</b>
+                </div>
+                <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: `${(r.sales / max) * 100}%` }} /></div>
               </div>
             </div>
           ))}
           {stats.unattributed?.orders > 0 && <small className="muted">{t("adm.sel.unattributed", { n: stats.unattributed.orders })} · {fmtMoney(stats.unattributed.revenue, "usd", lang)}</small>}
+          {zero > 0 && <small className="muted"> · {t("adm.sp.zero", { n: zero })}</small>}
         </div>
       )}
       {sources.length > 0 && (
@@ -72,6 +85,7 @@ export function SellersMini({ range, store = "", go, lang, showCommission = fals
           {sources.map((s) => <button type="button" className="adm-chip neutral" key={s.source} onClick={() => go("sellers")} title={t("adm.exec.sourceTitle")}><Icon name={SOURCE_ICON[s.source] || "link"} size={12} />{t(`adm.src.${s.source}`) === `adm.src.${s.source}` ? s.source : t(`adm.src.${s.source}`)} · {s.orders}</button>)}
         </div>
       )}
+      {sp.panel}
     </Card>
   );
 }

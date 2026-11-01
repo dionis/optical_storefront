@@ -3,7 +3,7 @@
 // equilibrio, las comisiones por vendedor y la liquidación con las tiendas que
 // no son propias (HU-33, HU-34, HU-90 a HU-97). Con el privilegio «Ver costos»
 // se lee; con «Gestionar costos» se edita.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
@@ -11,6 +11,8 @@ import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./screens.css";
 
 const CATEGORIES = ["rent", "maintenance", "utilities", "salaries", "insurance", "licenses", "subscriptions", "equipment", "supplies", "shipping", "repairs", "remakes", "accounting", "other"];
@@ -48,6 +50,12 @@ export default function StoreCosts({ me }) {
   const showTotal = !storeOnly;
 
   const storeCode = (id) => (id ? ctx?.stores.find((s) => s.id === id)?.code || "…" : t("adm.costs2.shared"));
+  // Cabeceras que ordenan (useSortable.js). La matriz del resultado (filas fijas × tiendas) no se ordena.
+  const settlementRows = useMemo(() => pnlStores.filter((s) => s.settlement), [pnl, storeOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  const settleSorted = useSortable(settlementRows, { id: "costs-settlement", defaultKey: "net_sales", defaultDir: "desc", getters: { store_share: (s) => s.settlement.store_share, owner_share: (s) => s.settlement.owner_share } });
+  const commSorted = useSortable(pnl?.sellers || [], { id: "costs-commissions", defaultKey: "commission", defaultDir: "desc" });
+  const itemsSorted = useSortable(items, { id: "costs-items", deps: [ctx, lang], getters: { store: (it) => storeCode(it.establishment_id), category: (it) => t(`adm.costs2.cat.${it.category}`), frequency: (it) => t(`adm.costs2.freq.${it.frequency}`) } });
+  const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
   const save = async (e) => {
     e.preventDefault();
     const body = { ...form, establishment_id: form.establishment_id || null };
@@ -103,9 +111,9 @@ export default function StoreCosts({ me }) {
         <div className="adm-card">
           <h3>{t("adm.costs2.settlement")}</h3>
           <table className="adm-table responsive">
-            <thead><tr><th>{t("adm.pos.store")}</th><th>{t("adm.costs2.row.net_sales")}</th><th>{t("adm.costs2.storeShare")}</th><th>{t("adm.costs2.ownerShare")}</th></tr></thead>
+            <thead><tr>{sth(settleSorted, "code", t("adm.pos.store"))}{sth(settleSorted, "net_sales", t("adm.costs2.row.net_sales"))}{sth(settleSorted, "store_share", t("adm.costs2.storeShare"))}{sth(settleSorted, "owner_share", t("adm.costs2.ownerShare"))}</tr></thead>
             <tbody>
-              {pnlStores.filter((s) => s.settlement).map((s) => (
+              {settleSorted.rows.map((s) => (
                 <tr key={s.establishment_id}>
                   <td data-label={t("adm.pos.store")}>{s.code} · {t(`adm.stores.kind.${s.kind}`)}</td>
                   <td data-label={t("adm.costs2.row.net_sales")}>{m(s.net_sales)}</td>
@@ -122,9 +130,9 @@ export default function StoreCosts({ me }) {
         <div className="adm-card">
           <h3>{t("adm.costs2.commissions")}</h3>
           <table className="adm-table responsive">
-            <thead><tr><th>{t("adm.pos.sales.seller")}</th><th>{t("adm.costs2.row.net_sales")}</th><th>%</th><th>{t("adm.costs2.row.commissions")}</th></tr></thead>
+            <thead><tr>{sth(commSorted, "seller_code", t("adm.pos.sales.seller"))}{sth(commSorted, "net_sales", t("adm.costs2.row.net_sales"))}{sth(commSorted, "pct", "%")}{sth(commSorted, "commission", t("adm.costs2.row.commissions"))}</tr></thead>
             <tbody>
-              {pnl.sellers.map((s, i) => (
+              {commSorted.rows.map((s, i) => (
                 <tr key={i}><td data-label={t("adm.pos.sales.seller")}>{s.seller_code || "—"}</td><td data-label={t("adm.costs2.row.net_sales")}>{m(s.net_sales)}</td><td data-label="%">{s.pct == null ? "—" : `${s.pct} %`}</td><td data-label={t("adm.costs2.row.commissions")}><b>{m(s.commission)}</b></td></tr>
               ))}
             </tbody>
@@ -184,9 +192,9 @@ export default function StoreCosts({ me }) {
           </form>
         )}
         <table className="adm-table responsive">
-          <thead><tr><th>{t("adm.pos.store")}</th><th>{t("adm.costs2.category")}</th><th>{t("adm.pos.pay.amount")}</th><th>{t("adm.costs2.frequency")}</th><th>{t("adm.costs2.validity")}</th><th /></tr></thead>
+          <thead><tr>{sth(itemsSorted, "store", t("adm.pos.store"))}{sth(itemsSorted, "category", t("adm.costs2.category"))}{sth(itemsSorted, "amount", t("adm.pos.pay.amount"))}{sth(itemsSorted, "frequency", t("adm.costs2.frequency"))}{sth(itemsSorted, "starts_on", t("adm.costs2.validity"))}<th /></tr></thead>
           <tbody>
-            {items.map((it) => (
+            {itemsSorted.rows.map((it) => (
               <tr key={it.id}>
                 <td data-label={t("adm.pos.store")}>{storeCode(it.establishment_id)}</td>
                 <td data-label={t("adm.costs2.category")}><b>{t(`adm.costs2.cat.${it.category}`)}</b> <small className="muted">· {t(`adm.costs2.kind.${it.kind}`)}{it.description ? ` · ${it.description}` : ""}</small></td>

@@ -20,6 +20,7 @@ import {
   type InsightLine,
   type LineEconomics,
 } from "./sales-insights";
+import { findSellerById, findSellerByCode, sellerStats, type SourceStatRow } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
 import type { StaffScope } from "./staff-scope";
 import { tenant } from "./tenant";
@@ -46,6 +47,13 @@ import { tenant } from "./tenant";
  * supervisor and manager their stores; a seller ONLY their own sales — except
  * the money on the street and the overdue balances, which cover their store
  * because they may collect a colleague's balance at the counter.
+ *
+ * One seller (`?seller=<id|code>`, the seller panel of the Executive): the same
+ * map restricted to that seller's sales (lines with their code: counter sales
+ * and web referrals), their pending lab buckets and the balances of THEIR
+ * sales, and `subject` describing them (resolveSubjectScope). Admins,
+ * supervisors and managers may ask for a seller of their stores; a seller only
+ * for themselves.
  *
  * Lab rule (documented here because the lab has no digital trail): a counter
  * sale is "in the laboratory" while it is completed, not handed over
@@ -117,6 +125,10 @@ export interface PeriodFigures extends DayRange {
   profit_cents: number | null;
   /** null when the caller may not see commissions; a seller gets their own. */
   commission_cents: number | null;
+  /** Sales over orders; 0 without orders. */
+  avg_ticket_cents: number;
+  /** Profit over orders; null when the caller may not see profit. */
+  avg_profit_per_sale_cents: number | null;
   /** The previous equivalent period, for the delta; null when it was not loaded. */
   prev: { sales_cents: number; count: number; cost_cents: number | null; profit_cents: number | null; commission_cents: number | null } | null;
 }
@@ -196,11 +208,20 @@ export function aggregateSales(
     commission_cents: econ && access.commission ? t.commission : null,
   });
 
+  const per = (v: number, n: number) => (n ? Math.round(v / n) : 0);
   const periods = {} as Record<PeriodKey, PeriodFigures>;
   for (const k of PERIOD_KEYS) {
     const cur = sum(pr.ranges[k]);
     const prev = pr.previous[k];
-    periods[k] = { ...pr.ranges[k], ...money(cur), units: cur.units, prev: prev ? money(sum(prev)) : null };
+    const m = money(cur);
+    periods[k] = {
+      ...pr.ranges[k],
+      ...m,
+      units: cur.units,
+      avg_ticket_cents: per(m.sales_cents, m.count),
+      avg_profit_per_sale_cents: m.profit_cents === null ? null : per(m.profit_cents, m.count),
+      prev: prev ? money(sum(prev)) : null,
+    };
   }
 
   const byStore = new Map<string, StoreSales>();
@@ -315,7 +336,7 @@ export function pendingOf(
 
 export interface StartScope {
   /** Filter of the sales lines (lib/sales-analytics.ts applyFilter). */
-  sales: Pick<AnalyticsFilter, "stores" | "sellers">;
+  sales: Pick<AnalyticsFilter, "stores" | "sellers" | "sellerCodes">;
   /** Stores whose open sales are read; null = every store. ["-"] = none (the web). */
   pendingStores: string[] | null;
   /** A seller: only their own sales in the lab buckets. */
@@ -361,6 +382,52 @@ export function resolveStartScope(
   return { sales: { stores: ids, sellers: null }, pendingStores: ids, ownSellerId: null, collectStores: ids, showStores: true };
 }
 
+/** The seller the map is about (`?seller=`): the seller record, as lib/sellers.ts projects it. */
+export interface SubjectSeller {
+  id: string;
+  code: string;
+  name: string;
+  user_id: string | null;
+  establishment_id: string | null;
+  commission_pct: number;
+  active: boolean;
+}
+
+/**
+ * The scope of one seller's map (`?seller=`): the caller's own scope
+ * (resolveStartScope) narrowed to the lines that carry the seller's code —
+ * counter sales and web referrals alike — and to the open sales they made.
+ * Permission: an admin asks for anyone; a supervisor or manager only for a
+ * seller of a store they run (`forbidden_store`); a seller only for
+ * themselves (`forbidden_role`). Store lines never go out: the map is about
+ * a person. Pure.
+ */
+export function resolveSubjectScope(
+  scope: Pick<StaffScope, "is_admin" | "role" | "establishment_ids" | "user_id" | "seller">,
+  stores: Array<Pick<EstablishmentRow, "id" | "is_active">>,
+  storeParam: string,
+  seller: SubjectSeller
+): StartScope {
+  const self = !scope.is_admin && scope.role === "seller";
+  if (self) {
+    const own = (seller.user_id !== null && seller.user_id === scope.user_id) || (scope.seller?.id !== undefined && scope.seller?.id === seller.id);
+    if (!own) throw new PosError("forbidden_role", 403);
+  } else if (!scope.is_admin) {
+    if (!seller.establishment_id || !canSellAt(scope, seller.establishment_id)) throw new PosError("forbidden_store", 403);
+  }
+  const base = resolveStartScope(scope, stores, storeParam);
+  // A seller with no panel user (referral only) made no counter sale: "-" matches none.
+  const ownSellerId = seller.user_id ?? "-";
+  return {
+    sales: { stores: base.sales.stores, sellers: null, sellerCodes: [seller.code] },
+    pendingStores: base.pendingStores,
+    ownSellerId,
+    // The balances of THEIR sales (the on-street money the panel shows), inside the caller's stores.
+    collectStores: base.pendingStores,
+    showStores: false,
+  };
+}
+
 // ── Loading ──────────────────────────────────────────────────────────────────
 
 export interface StartMapStore {
@@ -376,6 +443,22 @@ export interface StartMapStore {
   to_deliver: number;
 }
 
+/** Who a `?seller=` map is about. */
+export interface StartSubject {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  user_id: string | null;
+  store_id: string | null;
+  store_code: string | null;
+  store_name: string | null;
+  color: string | null;
+  commission_pct: number;
+  /** Where their web referrals came from over the span (lib/sellers.ts); [] when the board could not be read. */
+  by_source: SourceStatRow[];
+}
+
 export interface StartMap {
   today: string;
   periods: Record<PeriodKey, PeriodFigures>;
@@ -389,6 +472,8 @@ export interface StartMap {
     store_color: string | null;
     commission_month_cents: number | null;
   };
+  /** The seller of a `?seller=` map; null on the caller's own map. */
+  subject: StartSubject | null;
   access: InsightAccess;
   /** More lines than read in the span: the month figures are partial. */
   truncated: boolean;
@@ -447,8 +532,12 @@ async function loadEconomics(container: MedusaContainer, f: AnalyticsFilter, acc
   return { ...cur, econ };
 }
 
-/** Completed sales not handed over or still owed, in `stores` (null = all) or sold by `sellerId`. */
-async function loadOpenSales(pg: Knex, stores: string[] | null, sellerId: string | null): Promise<OpenSaleRow[]> {
+/**
+ * Completed sales not handed over or still owed, in `stores` (null = all) or
+ * sold by `sellerId`; with `both`, in those stores AND by that seller (a
+ * seller's map).
+ */
+async function loadOpenSales(pg: Knex, stores: string[] | null, sellerId: string | null, both = false): Promise<OpenSaleRow[]> {
   const q = pg("pos_sale")
     .whereNull("deleted_at")
     .where("status", "completed")
@@ -456,7 +545,10 @@ async function loadOpenSales(pg: Knex, stores: string[] | null, sellerId: string
     .select("id", "establishment_id", "seller_id", "order_id", "status", "total_cents", "balance_cents", "promised_on", "delivered_at")
     .orderBy("created_at", "desc")
     .limit(MAX_OPEN_SALES);
-  if (stores || sellerId) {
+  if (both) {
+    if (stores) q.whereIn("establishment_id", stores);
+    q.where("seller_id", sellerId ?? "-");
+  } else if (stores || sellerId) {
     q.where((w) => {
       if (stores) w.orWhereIn("establishment_id", stores);
       if (sellerId) w.orWhere("seller_id", sellerId);
@@ -499,28 +591,52 @@ async function countWhere(q: Knex.QueryBuilder): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
-export async function startMap(container: MedusaContainer, scope: StaffScope, stores: EstablishmentRow[], storeParam: string): Promise<StartMap> {
+/** The seller behind `?seller=` (an id or a code), or null when none is asked for. Throws `seller_not_found`. */
+async function resolveSubject(container: MedusaContainer, sellerParam: string): Promise<SubjectSeller | null> {
+  const key = sellerParam.trim();
+  if (!key) return null;
+  const row = (await findSellerById(container, key)) ?? (await findSellerByCode(container, key));
+  if (!row) throw new PosError("seller_not_found", 404);
+  return { id: row.id, code: row.code, name: row.name, user_id: row.user_id, establishment_id: row.establishment_id, commission_pct: row.commission_pct, active: row.active };
+}
+
+/** The seller's web referrals by network over the span; [] when the board cannot be read (the map still goes out). */
+async function subjectSources(container: MedusaContainer, subject: SubjectSeller, span: DayRange, storeParam: string): Promise<SourceStatRow[]> {
+  try {
+    const store = storeParam && storeParam !== "all" ? storeParam : null;
+    const stats = await sellerStats(container, { from: `${span.from}T00:00:00.000Z`, to: `${span.to}T23:59:59.999Z`, store });
+    return stats.sellers.find((s) => s.id === subject.id)?.by_source ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function startMap(container: MedusaContainer, scope: StaffScope, stores: EstablishmentRow[], storeParam: string, sellerParam = ""): Promise<StartMap> {
   const pg = pgOf(container);
   const tz = tenant().timezone;
   const now = new Date();
   const local = localParts(now, tz);
   const pr = periodRanges(local.date, local.weekday);
-  const ss = resolveStartScope(scope, stores, storeParam);
+  const subject = await resolveSubject(container, sellerParam);
+  const ss = subject ? resolveSubjectScope(scope, stores, storeParam, subject) : resolveStartScope(scope, stores, storeParam);
   const access = insightAccess(scope);
-  const filter: AnalyticsFilter = { from: pr.span.from, to: pr.span.to, stores: ss.sales.stores, sellers: ss.sales.sellers };
+  const filter: AnalyticsFilter = { from: pr.span.from, to: pr.span.to, stores: ss.sales.stores, sellers: ss.sales.sellers, sellerCodes: ss.sales.sellerCodes ?? null };
   const seller = ss.ownSellerId !== null;
 
   const approvalsQ = pg("discount_approval").whereNull("deleted_at").where("status", "pending").where("expires_at", ">", now);
   const tillsQ = pg("cash_session").whereNull("deleted_at").whereNull("closed_at");
-  if (seller) approvalsQ.where("requested_by", scope.user_id);
+  if (subject) approvalsQ.where("requested_by", subject.user_id ?? "-");
+  else if (seller) approvalsQ.where("requested_by", scope.user_id);
   else if (ss.pendingStores) approvalsQ.whereIn("establishment_id", ss.pendingStores);
   if (ss.collectStores) tillsQ.whereIn("establishment_id", ss.collectStores);
 
-  const [sales, open, approvals, openTills] = await Promise.all([
+  const [sales, open, approvals, openTills, sources] = await Promise.all([
     loadEconomics(container, filter, access),
-    loadOpenSales(pg, seller ? ss.collectStores : ss.pendingStores, ss.ownSellerId),
+    subject ? loadOpenSales(pg, ss.pendingStores, ss.ownSellerId, true) : loadOpenSales(pg, seller ? ss.collectStores : ss.pendingStores, ss.ownSellerId),
     countWhere(approvalsQ),
-    countWhere(tillsQ),
+    // Registers are a store's, not a person's: a seller's map carries none.
+    subject ? Promise.resolve(0) : countWhere(tillsQ),
+    subject ? subjectSources(container, subject, pr.span, storeParam) : Promise.resolve([]),
   ]);
   const stageOf = await orderStages(container, open.filter((s) => !s.delivered_at && s.order_id).map((s) => s.order_id as string));
 
@@ -553,6 +669,7 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
 
   const homeId = scope.seller?.establishment_id ?? (ss.collectStores && ss.collectStores.length === 1 && ss.collectStores[0] !== "-" ? ss.collectStores[0] : null);
   const home = homeId ? stores.find((s) => s.id === homeId) ?? null : null;
+  const subjectStore = subject?.establishment_id ? stores.find((s) => s.id === subject.establishment_id) ?? null : null;
 
   return {
     today: pr.today,
@@ -567,6 +684,21 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
       store_color: home?.color ?? null,
       commission_month_cents: access.commission ? agg.periods.this_month.commission_cents : null,
     },
+    subject: subject
+      ? {
+        id: subject.id,
+        code: subject.code,
+        name: subject.name,
+        active: subject.active,
+        user_id: subject.user_id,
+        store_id: subject.establishment_id,
+        store_code: subjectStore?.code ?? null,
+        store_name: subjectStore?.name ?? null,
+        color: subjectStore?.color ?? null,
+        commission_pct: subject.commission_pct,
+        by_source: sources,
+      }
+      : null,
     access,
     truncated: sales.truncated,
   };

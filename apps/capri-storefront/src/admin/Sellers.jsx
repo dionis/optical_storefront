@@ -15,6 +15,7 @@ import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { SOURCE_ICON, SocialLinks } from "./sellerShared.jsx";
+import { SellerChannels, useSellerPanel } from "./SellerPanel.jsx";
 import { Card } from "./ui.jsx";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
@@ -108,7 +109,7 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
   );
 }
 
-function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete, onRotate }) {
+function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete, onRotate, onOpen }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const text = t("adm.sel.shareText", { name: TENANT.name });
@@ -120,11 +121,14 @@ function SellerCard({ s, stat, lang, store, terminal, onEdit, onToggle, onDelete
         <div className="sel-name"><b>{s.name}</b><small>{[s.email, s.phone].filter(Boolean).join(" · ") || t("adm.sel.noContact")}</small></div>
         <span className="sel-code" title={t("adm.sel.codeTitle")}>{s.code}</span>
       </div>
-      <div className="sel-stats">
+      {/* Las cifras abren el panel del vendedor (su resumen de inicio) delante de la lista. */}
+      <div className={`sel-stats ${onOpen ? "sp-rowlink" : ""}`} onClick={onOpen ? () => onOpen(s) : undefined} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} title={onOpen ? t("adm.sp.open") : undefined}
+        onKeyDown={onOpen ? (e) => { if (e.key === "Enter") onOpen(s); } : undefined}>
         <div className="sel-stat"><small>{t("adm.kpi.orders")}</small><b>{stat?.orders ?? 0}</b></div>
         <div className="sel-stat"><small>{t("adm.sel.sales")}</small><b>{fmtMoney(stat?.revenue ?? 0, "usd", lang)}</b></div>
         <div className="sel-stat"><small>{t("adm.sel.commissionShort", { pct: s.commission_pct })}</small><b>{fmtMoney(stat?.commission ?? 0, "usd", lang)}</b></div>
       </div>
+      {stat?.by_source?.some((x) => x.orders > 0) && <SellerChannels by_source={stat.by_source} compact />}
       <small className="muted"><Icon name="store" size={12} /> {store ? `${store.code} · ${store.name}` : t("adm.sel.storeNone")}{terminal ? ` — ${termLabel(terminal)}` : s.establishment_id ? ` — ${t("adm.sel.terminalNone")}` : ""}</small>
       {s.user_id && <span className="adm-chip neutral" title={t("adm.sel.counterUserHint")}><Icon name="user" size={12} />{t("adm.sel.counterUser")}</span>}
       {!s.active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t(s.user_id ? "adm.sel.inactiveCounter" : "adm.sel.inactive")}</span>}
@@ -164,6 +168,10 @@ export default function Sellers({ onChanged, go, me }) {
   const [addressConflict, setAddressConflict] = useState(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
+  // El panel del vendedor: su resumen de inicio delante de la lista, con el mismo rango.
+  const sp = useSellerPanel({ go, me });
+  // «Todo» no cabe en un rango del panel: los últimos diez años (el máximo de la analítica).
+  const openPanel = (x) => sp.open(x.code, { from: rangeFrom(range) || ymd(Date.now() - 3650 * 864e5), to: ymd(Date.now()), store: storeOnly });
 
   const load = () => {
     if (demo) { setState("demo"); return; }
@@ -253,7 +261,7 @@ export default function Sellers({ onChanged, go, me }) {
           <div className="sel-grid">
             {list.map((s) => (
               <SellerCard key={s.id} s={s} stat={statBy[s.id]} lang={lang} store={storeBy[s.establishment_id]} terminal={termBy[s.terminal_id]}
-                onEdit={openEditor} onToggle={onToggle}
+                onEdit={openEditor} onToggle={onToggle} onOpen={demo ? undefined : openPanel}
                 onDelete={onDelete} onRotate={onRotate} />
             ))}
           </div>
@@ -263,20 +271,23 @@ export default function Sellers({ onChanged, go, me }) {
         <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: statRows }}>
           <div className="adm-table-wrap">
             <table className="adm-table responsive">
-              <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th className="r">{t("adm.ex.sellers.share")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
               <tbody>
-                {statRows.slice().sort((a, b) => b.revenue - a.revenue).map((s, i) => (
-                  <tr key={s.id}>
+                {statRows.filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue).map((s, i) => (
+                  <tr key={s.id} className={demo ? "" : "sp-rowlink"} onClick={demo ? undefined : () => openPanel(s)} title={demo ? undefined : t("adm.sp.open")}>
                     <td data-label="#">{i + 1}</td><td data-label={t("adm.sel.name")}><b>{s.name}</b></td><td data-label={t("adm.sel.code")}><span className="sel-code">{s.code}</span></td>
-                    <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(s.revenue, "usd", lang)}</td>
+                    <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td>
+                    <td data-label={t("adm.sel.sales")} className="r num"><b>{fmtMoney(s.revenue, "usd", lang)}</b><SellerChannels by_source={s.by_source} compact className="sp-cell-channels" /></td>
                     <td data-label="%" className="r">{s.commission_pct}%</td><td data-label={t("adm.sel.commissions")} className="r num">{fmtMoney(s.commission, "usd", lang)}</td>
+                    <td data-label={t("adm.ex.sellers.share")} className="r num muted">{s.share_pct != null ? `${s.share_pct}%` : "—"}</td>
                     <td data-label={t("adm.sel.lastOrderCol")}>{s.last_order_at ? shortDate(s.last_order_at, lang) : "—"}</td>
                   </tr>
                 ))}
-                {!storeOnly && <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /></tr>}
+                {!storeOnly && <tr><td data-label="">—</td><td data-label={t("adm.sel.name")} className="muted">{t("adm.ord.noSeller")}</td><td /><td data-label={t("adm.kpi.orders")} className="r num">{stats.unattributed?.orders ?? 0}</td><td data-label={t("adm.sel.sales")} className="r num">{fmtMoney(stats.unattributed?.revenue ?? 0, "usd", lang)}</td><td /><td /><td /><td /></tr>}
               </tbody>
             </table>
           </div>
+          {statRows.some((s) => !(s.orders > 0)) && <p className="sp-zero">{t("adm.sp.zero", { n: statRows.filter((s) => !(s.orders > 0)).length })}</p>}
           {(stats.sources || []).length > 0 && (
             <div className="exec-sources" style={{ marginTop: 10 }}>
               {stats.sources.map((x) => <span className="adm-chip neutral" key={x.source}><Icon name={SOURCE_ICON[x.source] || "link"} size={12} />{t(`adm.src.${x.source}`) === `adm.src.${x.source}` ? x.source : t(`adm.src.${x.source}`)} · {x.orders} · {fmtMoney(x.revenue, "usd", lang)}</span>)}
@@ -285,6 +296,7 @@ export default function Sellers({ onChanged, go, me }) {
         </Card>
       )}
 
+      {sp.panel}
       <div className="adm-card" style={{ marginTop: 16 }}>
         <h3><Icon name="info" size={16} />{t("adm.sel.howTitle")}</h3>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>{t("adm.sel.howBody")}</p>

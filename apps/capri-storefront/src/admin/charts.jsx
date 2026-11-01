@@ -1211,3 +1211,102 @@ export function WeekdayChart({ data, height = 230 }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CompareBarChart: per bucket (a day), two bars side by side — sales in the
+// accent and cost in the muted second series — with the margin % printed above
+// each pair so the gap between what came in and what was kept is read at a
+// glance. One money axis for both (same unit), tooltip with sales / cost /
+// profit / margin. Draws at the real width of its box (useBoxWidth); never
+// overflows: the % labels thin out when the slots get narrow and come back on
+// hover.
+//
+//   <CompareBarChart data={[{ label: "10-03", sales: 820, cost: 510 }]} height={220}
+//     format={(v) => money(v, "usd", lang)} labels={{ sales, cost, profit, margin }} />
+//
+// `margin` is derived (sales − cost) unless the row brings its own `profit`.
+// `onSelect(row, i)` makes a pair clickable. Colors default to --adm-chart-1/2.
+export function CompareBarChart({ data, height = 220, format = (v) => `$${fmt(v)}`, axisFormat, labels = {}, colors = {}, onSelect, showPct = true }) {
+  const { t } = useLang();
+  const [hi, setHi] = useState(-1);
+  const [wrapRef, W] = useBoxWidth();
+  const L = { sales: labels.sales || t("adm.chart.sales"), cost: labels.cost || t("adm.chart.cost"), profit: labels.profit || t("adm.chart.profit"), margin: labels.margin || t("adm.chart.margin") };
+  const cSales = colors.sales || BRAND.primary;
+  const cCost = colors.cost || BRAND.accent;
+  const rows = (data || []).map((d) => {
+    const sales = Math.max(0, Number(d.sales) || 0);
+    const cost = Math.max(0, Number(d.cost) || 0);
+    const profit = d.profit != null ? Number(d.profit) || 0 : sales - cost;
+    const pct = sales > 0 ? (profit / sales) * 100 : null;
+    return { ...d, sales, cost, profit, pct };
+  });
+  const n = rows.length;
+  const empty = n === 0 || rows.every((r) => !r.sales && !r.cost);
+  const H = height, PR = 8, PT = showPct ? 20 : 8, PB = 22;
+  const max = niceMax(Math.max(0, ...rows.map((r) => Math.max(r.sales, r.cost))));
+  const axis = axisFormat || ((v) => format(v));
+  const PL = Math.min(72, 12 + String(axis(max)).length * 6.6);
+  const iw = Math.max(10, W - PL - PR), ih = H - PT - PB;
+  const slot = iw / Math.max(1, n);
+  const gap = 2;
+  const bw = Math.max(2, Math.min(22, (slot * 0.72 - gap) / 2));
+  const cx = (i) => PL + slot * i + slot / 2;
+  const y = (v) => PT + ih - (v / max) * ih;
+  const compact = H < 170;
+  const gridN = compact ? 2 : 4;
+  const step = labelStep(n, Math.max(3, Math.floor(iw / 48)));
+  const showAxis = (i) => (i === n - 1 ? true : i % step === 0 && n - 1 - i >= step);
+  // % labels: one per pair while they fit ("38%" ≈ 22 px); otherwise every k-th, and always the hovered one.
+  const pctStep = slot >= 26 ? 1 : Math.ceil(26 / slot);
+  const pctText = (p) => (p == null ? "—" : `${Math.round(p)}%`);
+  const hd = hi >= 0 ? rows[hi] : null;
+  const aria = t("adm.chart.ariaCompare", { n, sales: L.sales, cost: L.cost });
+  const pick = (i) => { if (onSelect) onSelect(rows[i], i); };
+  return (
+    <div className="chart-wrap cx-compare" role="img" aria-label={aria}>
+      <div className="chart-legend">
+        <span><i style={{ background: cSales }} />{L.sales}</span>
+        <span><i style={{ background: cCost }} />{L.cost}</span>
+        {showPct && <span className="cx-compare-pctkey"><b>38%</b> {L.margin}</span>}
+      </div>
+      <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
+        {empty ? <Empty height={H} /> : (
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block", overflow: "hidden" }} onMouseLeave={() => setHi(-1)}>
+            {Array.from({ length: gridN + 1 }, (_, g) => { const val = (max * g) / gridN; const yy = y(val);
+              return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} {...HAIR} /><text x={PL - 6} y={yy + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{axis(val)}</text></g>; })}
+            {rows.map((r, i) => {
+              const hovered = hi === i;
+              const x0 = cx(i) - bw - gap / 2;
+              const x1 = cx(i) + gap / 2;
+              const top = Math.min(y(r.sales), y(r.cost));
+              const showP = showPct && (hovered || i % pctStep === 0);
+              const neg = r.pct != null && r.pct < 0;
+              return (
+                <g key={i} onMouseEnter={() => setHi(i)} onClick={onSelect ? () => pick(i) : undefined} style={onSelect ? { cursor: "pointer" } : undefined}>
+                  <rect x={PL + slot * i} y={PT} width={slot} height={ih} fill={hovered ? BRAND.soft : "transparent"} />
+                  {r.sales > 0 && <path d={barPath(x0, y(0), y(r.sales), bw, 3)} fill={cSales} opacity={hi < 0 || hovered ? 0.92 : 0.5}
+                    style={{ transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 25}ms both`, transformBox: "fill-box", transformOrigin: "bottom" }} />}
+                  {r.cost > 0 && <path d={barPath(x1, y(0), y(r.cost), bw, 3)} fill={cCost} opacity={hi < 0 || hovered ? 0.92 : 0.5}
+                    style={{ transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 25 + 50}ms both`, transformBox: "fill-box", transformOrigin: "bottom" }} />}
+                  {showP && (r.sales > 0 || r.cost > 0) && (
+                    <text x={cx(i)} y={Math.max(9, top - 4)} textAnchor="middle" fontSize="10" fontWeight={hovered ? "800" : "700"} fill={neg ? "var(--adm-red-dark, #b02a37)" : hovered ? BRAND.ink : BRAND.muted} style={{ fontVariantNumeric: "tabular-nums" }}>{pctText(r.pct)}</text>
+                  )}
+                  {showAxis(i) && <text x={cx(i)} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"} fontSize={AXIS_FS} fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "400"}>{r.label}</text>}
+                </g>
+              );
+            })}
+          </svg>
+        )}
+        {hd && (
+          <Tip x={cx(hi)} y={Math.min(y(hd.sales), y(hd.cost))} W={W} H={H} caption={hd.label} value={null}
+            lines={[
+              { text: `${L.sales}: ${format(hd.sales)}`, color: "#e2e6f5" },
+              { text: `${L.cost}: ${format(hd.cost)}`, color: "#b9c4ff" },
+              { text: `${L.profit}: ${format(hd.profit)}`, color: hd.profit >= 0 ? "#7ee2a0" : "#ff9db0" },
+              { text: `${L.margin}: ${pctText(hd.pct)}`, color: "rgba(255,255,255,0.8)" },
+            ]} />
+        )}
+      </div>
+    </div>
+  );
+}

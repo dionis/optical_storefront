@@ -1,7 +1,7 @@
 import { PosError } from "../src/lib/pos-data";
 import type { InsightLine, LineEconomics } from "../src/lib/sales-insights";
 import { isAllowedForRestrictedRole } from "../src/lib/staff-roles";
-import { aggregateSales, labBucketOf, pendingOf, periodRanges, resolveStartScope, type OpenSaleRow } from "../src/lib/start-map";
+import { aggregateSales, labBucketOf, pendingOf, periodRanges, resolveStartScope, resolveSubjectScope, type OpenSaleRow } from "../src/lib/start-map";
 
 const line = (over: Partial<InsightLine> = {}): InsightLine => ({
   order_id: "o1",
@@ -71,7 +71,8 @@ describe("aggregateSales", () => {
 
   it("adds sales, orders and units per period and puts the previous period beside", () => {
     const { periods } = aggregateSales(lines, e, pr, { profit: true, commission: true });
-    expect(periods.today).toMatchObject({ from: "2026-11-04", sales_cents: 15000, count: 1, units: 3, cost_cents: 4200, profit_cents: 10300, commission_cents: 500 });
+    expect(periods.today).toMatchObject({ from: "2026-11-04", sales_cents: 15000, count: 1, units: 3, cost_cents: 4200, profit_cents: 10300, commission_cents: 500, avg_ticket_cents: 15000, avg_profit_per_sale_cents: 10300 });
+    expect(periods.this_week).toMatchObject({ avg_ticket_cents: 11000, avg_profit_per_sale_cents: 8300 });
     expect(periods.today.prev).toMatchObject({ sales_cents: 7000, count: 1 });
     expect(periods.yesterday).toMatchObject({ sales_cents: 7000, count: 1, prev: { sales_cents: 0, count: 0 } });
     expect(periods.this_week).toMatchObject({ sales_cents: 22000, count: 2 });
@@ -84,6 +85,8 @@ describe("aggregateSales", () => {
     const { periods } = aggregateSales(lines, e, pr, { profit: false, commission: true });
     expect(periods.today.cost_cents).toBeNull();
     expect(periods.today.profit_cents).toBeNull();
+    expect(periods.today.avg_profit_per_sale_cents).toBeNull();
+    expect(periods.today.avg_ticket_cents).toBe(15000);
     expect(periods.today.commission_cents).toBe(500);
     const none = aggregateSales(lines, null, pr, { profit: true, commission: true });
     expect(none.periods.today).toMatchObject({ sales_cents: 15000, cost_cents: null, commission_cents: null });
@@ -178,6 +181,35 @@ describe("resolveStartScope", () => {
     expect(s).toMatchObject({ sales: { stores: null, sellers: ["ana"] }, ownSellerId: "ana", collectStores: ["est_2"], showStores: false });
     expect(resolveStartScope(seller, stores, "est_1")).toMatchObject({ sales: { stores: ["est_1"], sellers: ["ana"] }, collectStores: ["est_1"], showStores: false });
     expect(() => resolveStartScope(seller, stores, "web")).toThrow(PosError);
+  });
+});
+
+describe("resolveSubjectScope (?seller=)", () => {
+  const stores = [{ id: "est_1", is_active: true }, { id: "est_2", is_active: true }];
+  const admin = { is_admin: true, role: "owner" as const, establishment_ids: null, user_id: "boss", seller: null };
+  const manager = { is_admin: false, role: "manager" as const, establishment_ids: ["est_1"], user_id: "mgr", seller: null };
+  const ana = { is_admin: false, role: "seller" as const, establishment_ids: ["est_1"], user_id: "ana", seller: { id: "sel_ana", code: "ANA", active: true, establishment_id: "est_1", terminal_id: null } };
+  const anaRow = { id: "sel_ana", code: "ANA", name: "Ana", user_id: "ana", establishment_id: "est_1", commission_pct: 10, active: true };
+  const luisRow = { id: "sel_luis", code: "LUIS", name: "Luis", user_id: "luis", establishment_id: "est_2", commission_pct: 5, active: true };
+  const referral = { id: "sel_ref", code: "REF", name: "Referidos", user_id: null, establishment_id: null, commission_pct: 5, active: true };
+
+  it("admin: the seller's lines by code (counter and web alike), their open sales, no store lines", () => {
+    expect(resolveSubjectScope(admin, stores, "", anaRow)).toEqual({ sales: { stores: null, sellers: null, sellerCodes: ["ANA"] }, pendingStores: null, ownSellerId: "ana", collectStores: null, showStores: false });
+    expect(resolveSubjectScope(admin, stores, "est_2", anaRow)).toMatchObject({ sales: { stores: ["est_2"], sellerCodes: ["ANA"] }, pendingStores: ["est_2"], collectStores: ["est_2"] });
+    // A referral-only seller has no panel user: no counter sale can be theirs.
+    expect(resolveSubjectScope(admin, stores, "", referral)).toMatchObject({ ownSellerId: "-", sales: { sellerCodes: ["REF"] } });
+  });
+
+  it("manager: only a seller of a store they run, inside their stores", () => {
+    expect(resolveSubjectScope(manager, stores, "", anaRow)).toMatchObject({ sales: { stores: ["est_1"], sellerCodes: ["ANA"] }, pendingStores: ["est_1"], ownSellerId: "ana", showStores: false });
+    expect(() => resolveSubjectScope(manager, stores, "", luisRow)).toThrow(PosError);
+    expect(() => resolveSubjectScope(manager, stores, "", referral)).toThrow(PosError);
+  });
+
+  it("seller: themselves and nobody else", () => {
+    expect(resolveSubjectScope(ana, stores, "", anaRow)).toMatchObject({ sales: { stores: null, sellers: null, sellerCodes: ["ANA"] }, ownSellerId: "ana", showStores: false });
+    expect(() => resolveSubjectScope(ana, stores, "", luisRow)).toThrow(PosError);
+    expect(() => resolveSubjectScope(ana, stores, "", referral)).toThrow(PosError);
   });
 });
 

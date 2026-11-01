@@ -29,6 +29,8 @@ import { PERIODS, StoreOrdersTable, datesOf, pct, salesReportSpec, salesSheets, 
 import { collectCharts, summariesFromAccordions } from "./ReportDoc.jsx";
 import { periodRange } from "./SalesBoard.jsx";
 import { kpiDelta } from "./charts.jsx";
+import { fetchSellers } from "./adminSellers.js";
+import { sellerRowsFromInsights, sellerRowsTotals, sellersReportSpec, useSellerPanel, SellerChannels } from "./SellerPanel.jsx";
 import "./exec.css";
 
 /** Las pestañas antiguas siguen siendo destinos válidos de go("exec", { sub }): abren su acordeón. */
@@ -171,6 +173,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   const { products, cases } = useCatalog();
   const bodyRef = useRef(null);
   const barRef = useRef(null);
+  // Vendedores (solo el dueño/superadmin los ve): la lista de fichas da la tienda
+  // de cada uno (bloques por tienda del reporte) y el panel se abre al pulsar una fila.
+  const [sellerList, setSellerList] = useState([]);
+  const sellerPanel = useSellerPanel({ go, me });
+  useEffect(() => {
+    if (demo || !isAdmin) return undefined;
+    let on = true;
+    fetchSellers().then((r) => { if (on) setSellerList(r?.sellers || []); }).catch(() => {});
+    return () => { on = false; };
+  }, [demo, isAdmin]);
 
   // La barra se pega justo debajo de la cabecera del panel, mida lo que mida.
   useEffect(() => {
@@ -255,9 +267,34 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   const vs = t(`adm.ex.vs.${per.period}`);
   const prevHint = prevRange ? `${t("adm.ex.kpi.vsPrev")}: ${prevRange.from} → ${prevRange.to}` : "";
 
-  // Vendedores (insights por vendedor): nombre, ventas, nº, ganancia, comisión.
-  const sellerRows = useMemo(() => (ins?.rows || []).map((r) => ({ ...r, name: r.key ? r.label || r.key : t("adm.ex.sellers.none") })), [ins, t]);
-  const topSeller = sellerRows.find((r) => r.key);
+  // Vendedores (insights por vendedor): de mayor a menor venta, sin los que no
+  // vendieron (`zero` los cuenta); una fila = una persona (la venta sin vendedor no va).
+  const sellerRows = useMemo(() => sellerRowsFromInsights(ins?.rows, { sellers: sellerList }), [ins, sellerList]);
+  const sellerTot = useMemo(() => sellerRowsTotals(sellerRows.rows), [sellerRows]);
+  const topSeller = sellerRows.rows[0];
+  const openSeller = (code) => sellerPanel.open(code, { from, to, store: storeId, period: per.period });
+  // Reporte de vendedores (PDF apaisado / Excel / CSV): con todas las tiendas, un bloque
+  // por tienda (la del vendedor en su ficha) con subtotales; los sin ventas, fuera.
+  const sellersReport = () => {
+    const periodLabel = per.period === "range" ? `${from} → ${to}` : t(`adm.ex.period.${per.period}`);
+    const storeName = sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "";
+    const labelOf = (id) => { const st = sf.stores.find((x) => x.id === id); return st ? `${st.code} · ${st.name}` : t("adm.sp.rpt.noStoreBlock"); };
+    let groups = null;
+    if (sf.isAll) {
+      const byStore = new Map();
+      for (const r of sellerRows.rows) {
+        const key = r.establishment_id && sf.stores.some((x) => x.id === r.establishment_id) ? r.establishment_id : "none";
+        if (!byStore.has(key)) byStore.set(key, { id: key, label: labelOf(key === "none" ? null : key), rows: [] });
+        byStore.get(key).rows.push(r);
+      }
+      groups = [...byStore.values()].sort((a, b) => sellerRowsTotals(b.rows).sales - sellerRowsTotals(a.rows).sales);
+    }
+    return sellersReportSpec({
+      rows: sellerRows.rows, groups, zero: sellerRows.zero, t, lang, showProfit, showCommission,
+      title: t("adm.sp.rpt.sellersTitle", { store: storeName, period: periodLabel }),
+      store: !sf.isAll && !sf.isWeb && sf.store ? sf.store : null, scope: storeName, period: { from, to }, storeLabel: labelOf,
+    });
+  };
 
   // Pedidos web: etapas del tablero online.
   const webOps = useMemo(() => {
@@ -312,17 +349,18 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
     const sheets = [
       { name: t("adm.ex.export.kpis"), cols: [{ header: t("adm.ex.export.kpi"), key: "label", width: 30 }, { header: t("adm.ex.export.value"), key: "value", type: "money", width: 16 }], rows: [{ label: t("adm.ex.period"), value: meta }, ...kpis.map(([label, value]) => ({ label, value: value ?? "" }))] },
       ...salesSheets(sales.rows, sales.totals, { t, lang, storeLabel }),
-      {
+      ...(isAdmin ? [{
         name: t("adm.ex.export.sellers"),
         cols: [
-          { header: t("adm.ex.sellers.name"), key: "name", width: 24 }, { header: t("adm.ex.sellers.sales"), key: "sales", type: "money" }, { header: t("adm.ex.sellers.count"), key: "count", type: "int" },
-          { header: t("adm.ex.sellers.units"), key: "units", type: "int" },
-          ...(showProfit ? [{ header: t("adm.ex.sellers.profit"), key: "profit", type: "money" }] : []),
+          { header: t("adm.ex.sellers.name"), key: "name", width: 24 }, { header: t("adm.sp.col.code"), key: "code", width: 10 },
+          { header: t("adm.ex.sellers.sales"), key: "sales", type: "money" }, { header: t("adm.ex.sellers.count"), key: "count", type: "int" },
+          { header: t("adm.ex.sellers.units"), key: "units", type: "int" }, { header: t("adm.sp.col.ticket"), key: "ticket", type: "money" },
+          ...(showProfit ? [{ header: t("adm.ex.sellers.profit"), key: "profit", type: "money" }, { header: t("adm.sp.col.avgProfit"), key: "avg_profit", type: "money" }] : []),
           ...(showCommission ? [{ header: t("adm.ex.sellers.commission"), key: "commission", type: "money" }] : []),
           { header: t("adm.ex.sellers.share"), key: "share", type: "pct" },
         ],
-        rows: sellerRows,
-      },
+        rows: sellerRows.rows,
+      }] : []),
       ...(cash ? [{
         name: t("adm.ex.export.cash"),
         cols: [{ header: t("adm.ex.cash.method"), get: methodLabel, width: 22 }, { header: t("adm.ex.cash.count"), key: "in_count", type: "int" }, { header: t("adm.ex.cash.collected"), get: (r) => cents(r.in_cents), type: "money" }, { header: t("adm.ex.cash.refunds"), get: (r) => cents(r.refund_cents), type: "money" }, { header: t("adm.ex.cash.fee"), get: (r) => cents(r.fee_cents), type: "money" }, { header: t("adm.ex.cash.net"), get: (r) => cents(r.net_cents), type: "money" }],
@@ -481,44 +519,51 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
             </Accordion>
           )}
 
-          <Accordion id="ex-sellers" icon="sellers" title={t("adm.ex.acc.sellers")} subtitle={t("adm.ex.acc.sellersSub")} badge={sellerRows.filter((r) => r.key).length || null}
-            summary={[
-              topSeller ? { label: t("adm.ex.pill.top"), value: `${topSeller.name} · ${m(topSeller.sales)}`, strong: true } : null,
-              showCommission && tot.commission ? { label: t("adm.ex.pill.commission"), value: m(tot.commission) } : null,
-              showProfit ? { label: t("adm.ex.pill.profit"), value: m(tot.profit), tone: Number(tot.profit) < 0 ? "bad" : "good" } : null,
-            ]}>
-            {!sellerRows.length ? <div className="adm-nodata">{t("adm.ex.sellers.empty")}</div> : (
-              <div className="adm-table-wrap">
-                <table className="adm-table dense responsive">
-                  <thead><tr><th>{t("adm.ex.sellers.name")}</th><th className="r">{t("adm.ex.sellers.sales")}</th><th className="r">{t("adm.ex.sellers.count")}</th><th className="r">{t("adm.ex.sellers.units")}</th>{showProfit && <th className="r">{t("adm.ex.sellers.profit")}</th>}{showCommission && <th className="r">{t("adm.ex.sellers.commission")}</th>}<th className="r">{t("adm.ex.sellers.share")}</th></tr></thead>
-                  <tbody>
-                    {sellerRows.map((r) => (
-                      <tr key={r.key ?? "none"} className={isAdmin && r.key ? "ord-row" : ""} onClick={isAdmin && r.key ? () => go("salesboard") : undefined}>
-                        <td data-label={t("adm.ex.sellers.name")}><b>{r.name}</b>{r.key && r.label && <small className="muted"> · {r.key}</small>}</td>
-                        <td data-label={t("adm.ex.sellers.sales")} className="r num"><b>{m(r.sales)}</b></td>
-                        <td data-label={t("adm.ex.sellers.count")} className="r num">{int(r.count, lang)}</td>
-                        <td data-label={t("adm.ex.sellers.units")} className="r num">{int(r.units, lang)}</td>
-                        {showProfit && <td data-label={t("adm.ex.sellers.profit")} className={`r num ${Number(r.profit) < 0 ? "neg" : ""}`}>{m(r.profit)} <small className="muted">{pct(r.margin_pct)}</small></td>}
-                        {showCommission && <td data-label={t("adm.ex.sellers.commission")} className="r num">{m(r.commission)}</td>}
-                        <td data-label={t("adm.ex.sellers.share")} className="r num muted">{pct(r.share)}</td>
+          {isAdmin && (
+            <Accordion id="ex-sellers" icon="sellers" title={t("adm.ex.acc.sellers")} subtitle={t("adm.ex.acc.sellersSub")} badge={sellerRows.rows.length || null}
+              right={<span className="ex-bar-item"><ExportMenu report={sellersReport} name={t("adm.sp.rpt.sellersName")} title={t("adm.ex.acc.sellers")} /><HelpTip topic="exec.sellers.quota" /></span>}
+              summary={[
+                topSeller ? { label: t("adm.ex.pill.top"), value: `${topSeller.name} · ${m(topSeller.sales)}`, strong: true } : null,
+                showCommission && sellerTot.hasCommission ? { label: t("adm.ex.pill.commission"), value: m(sellerTot.commission) } : null,
+                showProfit && sellerTot.hasProfit ? { label: t("adm.ex.pill.profit"), value: m(sellerTot.profit), tone: sellerTot.profit < 0 ? "bad" : "good" } : null,
+              ]}>
+              {!sellerRows.rows.length ? <div className="adm-nodata">{t("adm.ex.sellers.empty")}</div> : (
+                <div className="adm-table-wrap">
+                  <table className="adm-table dense responsive">
+                    <thead><tr><th>{t("adm.ex.sellers.name")}</th><th className="r">{t("adm.ex.sellers.sales")}</th><th className="r">{t("adm.ex.sellers.count")}</th><th className="r">{t("adm.sp.col.ticket")}</th>{showProfit && <th className="r">{t("adm.ex.sellers.profit")}</th>}{showProfit && <th className="r">{t("adm.sp.col.avgProfit")}<HelpTip topic="exec.sellers.avgProfit" size={12} /></th>}{showCommission && <th className="r">{t("adm.ex.sellers.commission")}<HelpTip topic="exec.sellers.commission" size={12} /></th>}<th className="r">{t("adm.ex.sellers.share")}<HelpTip topic="exec.sellers.quota" size={12} /></th></tr></thead>
+                    <tbody>
+                      {sellerRows.rows.map((r) => (
+                        <tr key={r.code} className="ord-row sp-rowlink" onClick={() => openSeller(r.code)} title={t("adm.sp.open")}>
+                          <td data-label={t("adm.ex.sellers.name")}><b>{r.name}</b><small className="muted"> · {r.code}</small></td>
+                          <td data-label={t("adm.ex.sellers.sales")} className="r num"><b>{m(r.sales)}</b></td>
+                          <td data-label={t("adm.ex.sellers.count")} className="r num">{int(r.count, lang)} <small className="muted">· {int(r.units, lang)} {t("adm.ex.sellers.units").toLowerCase()}</small></td>
+                          <td data-label={t("adm.sp.col.ticket")} className="r num">{m(r.ticket)}</td>
+                          {showProfit && <td data-label={t("adm.ex.sellers.profit")} className={`r num ${Number(r.profit) < 0 ? "neg" : ""}`}>{m(r.profit)} <small className="muted">{pct(r.margin_pct)}</small></td>}
+                          {showProfit && <td data-label={t("adm.sp.col.avgProfit")} className={`r num ${Number(r.avg_profit) < 0 ? "neg" : ""}`}>{m(r.avg_profit)}</td>}
+                          {showCommission && <td data-label={t("adm.ex.sellers.commission")} className="r num">{m(r.commission)}</td>}
+                          <td data-label={t("adm.ex.sellers.share")} className="r num muted">{pct(r.share)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td>{t("adm.ex.sellers.total")}</td>
+                        <td className="r num">{m(sellerTot.sales)}</td>
+                        <td className="r num">{int(sellerTot.count, lang)}</td>
+                        <td className="r num">{m(sellerTot.ticket)}</td>
+                        {showProfit && <td className="r num">{m(sellerTot.profit)}</td>}
+                        {showProfit && <td className="r num">{m(sellerTot.avg_profit || 0)}</td>}
+                        {showCommission && <td className="r num">{m(sellerTot.commission)}</td>}
+                        <td className="r num">{pct(sellerTot.share)}</td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td>{t("adm.ex.sellers.total")}</td>
-                      <td className="r num">{m(tot.sales)}</td>
-                      <td className="r num">{int(tot.count, lang)}</td>
-                      <td className="r num">{int(tot.units, lang)}</td>
-                      {showProfit && <td className="r num">{m(tot.profit)} <small className="muted">{pct(tot.margin_pct)}</small></td>}
-                      {showCommission && <td className="r num">{m(tot.commission)}</td>}
-                      <td className="r num">100%</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </Accordion>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+              {sellerRows.zero > 0 && <p className="sp-zero">{t("adm.sp.zero", { n: sellerRows.zero })}</p>}
+            </Accordion>
+          )}
+          {sellerPanel.panel}
 
           {isAdmin && showProfit && (
             <Accordion id="ex-costs" icon="costs" title={t("adm.ex.acc.costs")} subtitle={t("adm.ex.acc.costsSub")} open={openOf("ex-costs")} onToggle={toggled("costs")}
@@ -527,7 +572,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
                 { label: t("adm.ex.pill.profit"), value: m(tot.profit), tone: Number(tot.profit) < 0 ? "bad" : "good" },
                 { label: t("adm.ex.pill.margin"), value: pct(tot.margin_pct) },
               ]}>
-              <ExecutiveCosts range={dates} store={sf.isAll ? "" : storeId} go={go} />
+              <ExecutiveCosts range={dates} store={sf.isAll ? "" : storeId} go={go} onSeller={openSeller} channels={(sel) => <SellerChannels by_source={sel.by_source} compact />} />
             </Accordion>
           )}
 

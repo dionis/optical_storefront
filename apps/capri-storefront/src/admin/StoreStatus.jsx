@@ -22,6 +22,8 @@ import { adminFetch } from "./adminApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import { exportReport } from "./ReportDoc.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./screens.css";
 import "./fit.css";
 
@@ -93,6 +95,13 @@ export default function StoreStatus({ go, tabs = [], me }) {
     return { attention, sev, openRegisters, activeTills, cashExpected, pendingN, sellersActive, sellersToday, sellersCount, recentTotal, urgent, dToday: pctDelta(s.today.total, s.yesterday.total) };
   }, [s]);
 
+  // Cabeceras que ordenan (useSortable.js); los acordeones se pintan más abajo. Antes de los
+  // `return` tempranos porque son hooks. La tabla de pendientes mezcla contadores y ventas listas: no se ordena.
+  const tillsSorted = useSortable(s?.tills || [], { id: "ss-tills", getters: { sellers: (x) => x.sellers.length, status: (x) => (!x.is_active ? 0 : x.register ? 2 : 1), opened: (x) => x.register?.opened_at || null, opening: (x) => x.register?.opening ?? null, expected: (x) => x.register?.expected ?? null } });
+  const sellersSorted = useSortable(s?.sellers || [], { id: "ss-sellers", defaultKey: "today_total", defaultDir: "desc", getters: { kind: (v) => (v.has_user ? 1 : 0) } });
+  const recentSorted = useSortable(s?.recent || [], { id: "ss-recent", defaultKey: "created_at", defaultDir: "desc", getters: { status: (r) => (r.status === "voided" ? 2 : r.delivered ? 1 : 0) } });
+  const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
+
   if (state === "loading" && !data) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (state === "error" && !data) {
     return <div className="adm-section"><div className="adm-demo-banner">{t("adm.ss.loadFailed")}</div><button className="btn-sm" onClick={() => load(storeId, { force: true })}>{t("adm.ss.retry")}</button></div>;
@@ -109,14 +118,15 @@ export default function StoreStatus({ go, tabs = [], me }) {
   const saleStatus = (r) => (r.status === "voided" ? t("adm.my.voided") : r.delivered ? t("adm.my.delivered") : t("adm.fit.ss.status.completed"));
 
   // Columnas compartidas por tablas, Excel y CSV.
+  // `sortKey` es la columna por la que ordena la cabecera en pantalla (recentSorted).
   const recentCols = [
-    { header: t("adm.fit.ss.col.sale"), key: "number", width: 14 },
-    { header: t("adm.fit.ss.col.when"), get: (r) => `${shortDate(r.created_at, lang)} ${timeOf(r.created_at, lang)}`, width: 16 },
-    { header: t("adm.fit.ss.col.seller"), key: "seller_code", width: 10 },
-    { header: t("adm.fit.ss.col.terminal"), key: "terminal_code", width: 10 },
-    { header: t("adm.fit.ss.col.status"), get: saleStatus, width: 12 },
-    { header: t("adm.fit.ss.col.total"), key: "total", type: "money", width: 12 },
-    { header: t("adm.fit.ss.col.balance"), key: "balance", type: "money", width: 12 },
+    { header: t("adm.fit.ss.col.sale"), key: "number", width: 14, sortKey: "number" },
+    { header: t("adm.fit.ss.col.when"), get: (r) => `${shortDate(r.created_at, lang)} ${timeOf(r.created_at, lang)}`, width: 16, sortKey: "created_at" },
+    { header: t("adm.fit.ss.col.seller"), key: "seller_code", width: 10, sortKey: "seller_code" },
+    { header: t("adm.fit.ss.col.terminal"), key: "terminal_code", width: 10, sortKey: "terminal_code" },
+    { header: t("adm.fit.ss.col.status"), get: saleStatus, width: 12, sortKey: "status" },
+    { header: t("adm.fit.ss.col.total"), key: "total", type: "money", width: 12, sortKey: "total" },
+    { header: t("adm.fit.ss.col.balance"), key: "balance", type: "money", width: 12, sortKey: "balance" },
   ];
   // El reporte (ReportDoc): cabecera con la tienda y su color, KPI, los resúmenes
   // de cada acordeón como pastillas y una tabla por bloque. `recent` es la tabla
@@ -256,9 +266,9 @@ export default function StoreStatus({ go, tabs = [], me }) {
             {!s.tills.length ? <div className="adm-nodata">{t("adm.stores.tills.empty")}</div> : (
               <div className="acc-scroll dense">
                 <table className="adm-table adm-fit-table">
-                  <thead><tr><th>{t("adm.fit.ss.col.till")}</th><th>{t("adm.fit.ss.col.sellers")}</th><th>{t("adm.fit.ss.col.status")}</th><th>{t("adm.fit.ss.col.opened")}</th><th className="r">{t("adm.fit.ss.col.opening")}</th><th className="r">{t("adm.fit.ss.col.expected")}</th></tr></thead>
+                  <thead><tr>{sth(tillsSorted, "code", t("adm.fit.ss.col.till"))}{sth(tillsSorted, "sellers", t("adm.fit.ss.col.sellers"))}{sth(tillsSorted, "status", t("adm.fit.ss.col.status"))}{sth(tillsSorted, "opened", t("adm.fit.ss.col.opened"))}{sth(tillsSorted, "opening", t("adm.fit.ss.col.opening"), "r")}{sth(tillsSorted, "expected", t("adm.fit.ss.col.expected"), "r")}</tr></thead>
                   <tbody>
-                    {s.tills.map((x) => {
+                    {tillsSorted.rows.map((x) => {
                       const onClick = link("cash");
                       return (
                         <tr key={x.id} className={`${onClick ? "row-go" : ""} ${x.is_active ? "" : "off"}`} onClick={onClick} title={onClick ? t("adm.fit.ss.goCash") : undefined}>
@@ -328,9 +338,9 @@ export default function StoreStatus({ go, tabs = [], me }) {
             {!s.sellers.length ? <div className="adm-nodata">{t("adm.ss.noSellersStore")}</div> : (
               <div className="acc-scroll dense">
                 <table className="adm-table adm-fit-table">
-                  <thead><tr><th>{t("adm.fit.ss.col.seller")}</th><th>{t("adm.fit.ss.col.terminal")}</th><th>{t("adm.fit.ss.col.kind")}</th><th className="r">{t("adm.fit.ss.col.count")}</th><th className="r">{t("adm.fit.ss.col.today")}</th></tr></thead>
+                  <thead><tr>{sth(sellersSorted, "name", t("adm.fit.ss.col.seller"))}{sth(sellersSorted, "terminal_code", t("adm.fit.ss.col.terminal"))}{sth(sellersSorted, "kind", t("adm.fit.ss.col.kind"))}{sth(sellersSorted, "today_count", t("adm.fit.ss.col.count"), "r")}{sth(sellersSorted, "today_total", t("adm.fit.ss.col.today"), "r")}</tr></thead>
                   <tbody>
-                    {s.sellers.map((v) => {
+                    {sellersSorted.rows.map((v) => {
                       const onClick = link("sellers");
                       return (
                         <tr key={v.id} className={`${onClick ? "row-go" : ""} ${v.active ? "" : "off"}`} onClick={onClick} title={onClick ? t("adm.fit.ss.goSellers") : undefined}>
@@ -354,9 +364,9 @@ export default function StoreStatus({ go, tabs = [], me }) {
             {!s.recent.length ? <div className="adm-nodata">{t("adm.ss.noRecent")}</div> : (
               <div className="acc-scroll dense">
                 <table className="adm-table adm-fit-table">
-                  <thead><tr>{recentCols.map((c) => <th key={c.header} className={c.type === "money" ? "r" : ""}>{c.header}</th>)}</tr></thead>
+                  <thead><tr>{recentCols.map((c) => <SortTh key={c.header} col={c.sortKey} sort={recentSorted.sort} onSort={recentSorted.toggle} align={c.type === "money" ? "r" : ""}>{c.header}</SortTh>)}</tr></thead>
                   <tbody>
-                    {s.recent.map((r) => {
+                    {recentSorted.rows.map((r) => {
                       const onClick = link("possales");
                       return (
                         <tr key={r.id} className={`${onClick ? "row-go" : ""} ${r.status === "voided" ? "off" : ""}`} onClick={onClick} title={onClick ? t("adm.fit.ss.goSales") : undefined}>

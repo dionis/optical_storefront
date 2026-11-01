@@ -11,6 +11,8 @@ import { listSales, posContext, searchCustomers } from "./posApi.js";
 import Accordion from "./Accordion.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./screens.css";
 
 const fmt = (v, lang) => new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" });
@@ -68,6 +70,13 @@ export default function PosSales({ me }) {
     sums.voided > 0 ? { label: t("adm.scr.voided"), value: sums.voided, tone: "muted" } : null,
   ];
 
+  // Las cabeceras ordenan (useSortable.js); por defecto la más reciente arriba, como llegan del servidor.
+  const sorted = useSortable(sales, {
+    id: "pos-sales", defaultKey: "created_at", defaultDir: "desc", deps: [ctx],
+    getters: { terminal: (x) => termById.get(x.terminal_id)?.code || "", status: (x) => (x.status === "voided" ? 2 : x.delivered_at ? 1 : 0) },
+  });
+  const th = (col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
+
   if (state === "error" && !ctx) return <div className="adm-section"><div className="adm-demo-banner">{t("adm.err.pos.generic")}</div></div>;
 
   return (
@@ -105,9 +114,9 @@ export default function PosSales({ me }) {
       <Accordion id="possales" icon="receipt" title={t("adm.scr.sales")} summary={summary} defaultOpen bodyClassName="scr-acc-table">
         {state === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
         <table className="adm-table responsive">
-          <thead><tr><th>{t("adm.pos.sales.number")}</th><th>{t("adm.pos.sales.when")}</th><th>{t("adm.pos.terminal")}</th><th>{t("adm.pos.sales.seller")}</th><th>{t("adm.pos.price.total")}</th><th>{t("adm.pos.pay.balance")}</th><th>{t("adm.pos.sales.status")}</th></tr></thead>
+          <thead><tr>{th("number", t("adm.pos.sales.number"))}{th("created_at", t("adm.pos.sales.when"))}{th("terminal", t("adm.pos.terminal"))}{th("seller_code", t("adm.pos.sales.seller"))}{th("total", t("adm.pos.price.total"))}{th("balance", t("adm.pos.pay.balance"))}{th("status", t("adm.pos.sales.status"))}</tr></thead>
           <tbody>
-            {sales.map((s) => (
+            {sorted.rows.map((s) => (
               <tr key={s.id} className={`ord-row ${sp.saleId === s.id ? "open" : ""} ${s.status === "voided" ? "muted" : ""}`} onClick={() => sp.open(s.id)} title={t("adm.sd.openHint")}>
                 <td data-label={t("adm.pos.sales.number")}><b>{s.number}</b></td>
                 <td data-label={t("adm.pos.sales.when")}>{fmt(s.created_at, lang)}</td>

@@ -21,6 +21,8 @@ import { money } from "./adminOrders.js";
 import { adminFetch, ADMIN_API_URL, getSession } from "./adminApi.js";
 import { methodName, posContext } from "./posApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./sales-board.css";
 
 const GRAINS = ["hour", "day", "week", "month", "year"];
@@ -171,22 +173,25 @@ function Section({ id, icon, title, count, sum, open, onToggle, children, right 
 
 /** Tabla densa de una dimensión: nombre, ventas, (ganancia/comisión), (margen), nº, unidades, peso; totales al pie. */
 function DimTable({ by, rows, totals, label, m, t, second, showMargin, canDrill, onDrill, focusKey, colorOf, inCompare, expanded, onExpand }) {
-  const visible = expanded ? rows : rows.slice(0, ROWS_PREVIEW);
+  // Las cabeceras ordenan (useSortable.js); sin orden elegido, como llegan (por la métrica mostrada, de mayor a menor).
+  const sorted = useSortable(rows, { id: `sb-dim-${by}`, getters: { name: (r) => label(by, r) } });
+  const visible = expanded ? sorted.rows : sorted.rows.slice(0, ROWS_PREVIEW);
   const dimLabel = t(`adm.board.by.${by}`);
   const H = {
     total: t("adm.board.kpi.total"), second: second ? t(`adm.ins.metric.${second}`) : "", margin: t("adm.ins.margin"),
     count: t("adm.board.kpi.count"), units: t("adm.board.units"), share: t("adm.board.share"),
   };
+  const th = (col, text, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{text}</SortTh>;
   if (!rows.length) return <div className="adm-nodata">{t("adm.chart.noData")}</div>;
   return (
     <>
       <table className="adm-table responsive sb-table">
         <thead>
           <tr>
-            <th>{dimLabel}</th><th className="r">{H.total}</th>
-            {second && <th className="r">{H.second}</th>}
-            {showMargin && <th className="r">{H.margin}</th>}
-            <th className="r">{H.count}</th><th className="r">{H.units}</th><th className="r">{H.share}</th>
+            {th("name", dimLabel)}{th("sales", H.total, "r")}
+            {second && th(second, H.second, "r")}
+            {showMargin && th("margin_pct", H.margin, "r")}
+            {th("count", H.count, "r")}{th("units", H.units, "r")}{th("share", H.share, "r")}
           </tr>
         </thead>
         <tbody>
@@ -401,6 +406,10 @@ export default function SalesBoard({ go, tabs = [], me }) {
   const usedGrain = ins?.grain;
   const series = ins?.series || [];
   const labels = series.map((p) => bucketLabel(p, usedGrain, lang, t));
+  // Cabeceras que ordenan (useSortable.js): la serie en orden cronológico salvo que se elija otra columna; las ventas sueltas, la más reciente arriba.
+  const seriesSorted = useSortable(series, { id: "sb-series", deps: [usedGrain, lang], getters: { label: (p) => p.bucket } });
+  const salesSorted = useSortable(sales, { id: "sb-sales", defaultKey: "sold_at", defaultDir: "desc", deps: [ctx, lang], getters: { store: (x) => (x.channel === "web" ? t("adm.board.web") : storeLabel(x.establishment_id)) } });
+  const sth = (sorted, col, text, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{text}</SortTh>;
   const trendSeries = [
     { key: "sales", label: t("adm.board.kpi.total"), color: COLOR_SALES, values: series.map((p) => p.sales) },
     ...(second ? [{ key: second, label: t(`adm.ins.metric.${second}`), color: COLOR_SECOND, values: series.map((p) => p[second]) }] : []),
@@ -623,11 +632,11 @@ export default function SalesBoard({ go, tabs = [], me }) {
                 </div>
                 <div className="sb-scroll">
                   <table className="adm-table sb-table">
-                    <thead><tr><th>{t("adm.ins.period")}</th><th className="r">{t("adm.board.kpi.total")}</th>{second && <th className="r">{t(`adm.ins.metric.${second}`)}</th>}<th className="r">{t("adm.board.kpi.count")}</th><th className="r">{t("adm.board.units")}</th></tr></thead>
+                    <thead><tr>{sth(seriesSorted, "label", t("adm.ins.period"))}{sth(seriesSorted, "sales", t("adm.board.kpi.total"), "r")}{second && sth(seriesSorted, second, t(`adm.ins.metric.${second}`), "r")}{sth(seriesSorted, "count", t("adm.board.kpi.count"), "r")}{sth(seriesSorted, "units", t("adm.board.units"), "r")}</tr></thead>
                     <tbody>
-                      {series.map((p, i) => (
+                      {seriesSorted.rows.map((p) => (
                         <tr key={p.bucket}>
-                          <td title={usedGrain === "week" ? t("adm.sb.weekLong", { n: Number(p.bucket.split("-W")[1]), d: p.start }) : undefined}>{labels[i]}</td>
+                          <td title={usedGrain === "week" ? t("adm.sb.weekLong", { n: Number(p.bucket.split("-W")[1]), d: p.start }) : undefined}>{bucketLabel(p, usedGrain, lang, t)}</td>
                           <td className="r">{m(p.sales)}</td>
                           {second && <td className={`r ${p[second] < 0 ? "neg" : ""}`}>{m(p[second])}</td>}
                           <td className="r">{p.count}</td><td className="r">{p.units}</td>
@@ -655,9 +664,9 @@ export default function SalesBoard({ go, tabs = [], me }) {
 
             <Section id="sales" icon="receipt" title={focus.length ? t("adm.board.salesOf", { label: focus.map((x) => x.label).join(" · ") }) : t("adm.sb.sec.sales")} count={t("adm.sb.count", { n: cur.count })} sum={m(cur.sales)} open={Boolean(open.sales)} onToggle={setOpenOne}>
               <table className="adm-table responsive sb-table">
-                <thead><tr><th>{t("adm.pos.sales.number")}</th><th>{t("adm.pos.sales.when")}</th><th>{t("adm.pos.store")}</th><th>{t("adm.pos.sales.seller")}</th><th>{t("adm.board.items")}</th><th className="r">{t("adm.board.kpi.total")}</th></tr></thead>
+                <thead><tr>{sth(salesSorted, "number", t("adm.pos.sales.number"))}{sth(salesSorted, "sold_at", t("adm.pos.sales.when"))}{sth(salesSorted, "store", t("adm.pos.store"))}{sth(salesSorted, "seller_code", t("adm.pos.sales.seller"))}{sth(salesSorted, "items", t("adm.board.items"))}{sth(salesSorted, "total", t("adm.board.kpi.total"), "r")}</tr></thead>
                 <tbody>
-                  {sales.map((s) => (
+                  {salesSorted.rows.map((s) => (
                     <tr key={s.order_id}>
                       <td data-label={t("adm.pos.sales.number")}><b>{s.number || t("adm.board.web")}</b></td>
                       <td data-label={t("adm.pos.sales.when")}>{new Date(s.sold_at).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" })}</td>

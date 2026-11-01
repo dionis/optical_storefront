@@ -15,5 +15,7 @@ import help from "./help.js";
 import fit from "./fit.js";
 import roles from "./roles.js";
 import report from "./report.js";
+import sellers from "./sellers.js";
+import costs from "./costs.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs];

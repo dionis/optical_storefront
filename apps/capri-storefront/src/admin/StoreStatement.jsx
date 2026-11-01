@@ -17,6 +17,8 @@ import { inkOn } from "./ReportDoc.jsx";
 import { fetchStatement, posContext } from "./posApi.js";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
+import { useSortable } from "./useSortable.js";
+import SortTh from "./SortTh.jsx";
 import "./store-statement.css";
 import "./screens.css";
 
@@ -140,6 +142,12 @@ export default function StoreStatement({ me }) {
 
   const totals = data?.totals;
   const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : "—");
+  // Cabeceras que ordenan (useSortable.js); la fila de total de cada tabla se pinta aparte y queda abajo.
+  const salesSorted = useSortable(data?.sales || [], { id: "stmt-sales", defaultKey: "day", defaultDir: "asc", deps: [lang, catalog], getters: { items: itemsText, status: (x) => (x.status === "voided" ? 1 : 0) } });
+  const methodsSorted = useSortable(totals?.by_method || [], { id: "stmt-methods", defaultKey: "cents", defaultDir: "desc", deps: [lang], getters: { method: (r) => methodLabel(r.code, r.label) } });
+  const sellersSorted = useSortable(totals?.by_seller || [], { id: "stmt-sellers", defaultKey: "total_cents", defaultDir: "desc" });
+  const daysSorted = useSortable(totals?.by_day || [], { id: "stmt-days", defaultKey: "date", defaultDir: "asc" });
+  const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
 
   const onExcel = () => {
     if (!data) return;
@@ -298,22 +306,22 @@ export default function StoreStatement({ me }) {
                 <table className="stmt-tbl">
                   <thead>
                     <tr>
-                      <th>{t("adm.stmt.col.number")}</th>
-                      <th>{t("adm.stmt.col.date")}</th>
-                      {all && <th>{t("adm.stmt.col.store")}</th>}
-                      <th>{t("adm.stmt.col.customer")}</th>
-                      <th>{t("adm.stmt.col.seller")}</th>
-                      <th>{t("adm.stmt.col.items")}</th>
-                      <th className="num">{t("adm.stmt.col.list")}</th>
-                      <th className="num">{t("adm.stmt.col.discount")}</th>
-                      <th className="num">{t("adm.stmt.col.total")}</th>
-                      <th className="num">{t("adm.stmt.col.paid")}</th>
-                      <th className="num">{t("adm.stmt.col.balance")}</th>
-                      <th>{t("adm.stmt.col.status")}</th>
+                      {sth(salesSorted, "number", t("adm.stmt.col.number"))}
+                      {sth(salesSorted, "day", t("adm.stmt.col.date"))}
+                      {all && sth(salesSorted, "store_code", t("adm.stmt.col.store"))}
+                      {sth(salesSorted, "customer_name", t("adm.stmt.col.customer"))}
+                      {sth(salesSorted, "seller_code", t("adm.stmt.col.seller"))}
+                      {sth(salesSorted, "items", t("adm.stmt.col.items"))}
+                      {sth(salesSorted, "list_cents", t("adm.stmt.col.list"), "num")}
+                      {sth(salesSorted, "discount_cents", t("adm.stmt.col.discount"), "num")}
+                      {sth(salesSorted, "total_cents", t("adm.stmt.col.total"), "num")}
+                      {sth(salesSorted, "paid_cents", t("adm.stmt.col.paid"), "num")}
+                      {sth(salesSorted, "balance_cents", t("adm.stmt.col.balance"), "num")}
+                      {sth(salesSorted, "status", t("adm.stmt.col.status"))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.sales.map((s) => (
+                    {salesSorted.rows.map((s) => (
                       <tr key={s.id} className={s.status === "voided" ? "voided" : ""}>
                         <td className="mono"><button type="button" className="sd-link" onClick={() => sp.open(s.id)} title={t("adm.sd.openHint")}>{s.number}</button></td>
                         <td className="mono">{dayLabel(s.day, lang)}</td>
@@ -352,9 +360,9 @@ export default function StoreStatement({ me }) {
           <Acc {...acc("methods")} title={t("adm.stmt.sec.methods")} sum={<b>{m(totals.by_method.reduce((a, r) => a + r.cents, 0))}</b>}>
             {totals.by_method.length === 0 ? <div className="stmt-empty">{t("adm.stmt.empty")}</div> : (
               <table className="stmt-tbl">
-                <thead><tr><th>{t("adm.stmt.col.method")}</th><th className="num">{t("adm.stmt.col.amount")}</th><th className="num">{t("adm.stmt.col.share")}</th></tr></thead>
+                <thead><tr>{sth(methodsSorted, "method", t("adm.stmt.col.method"))}{sth(methodsSorted, "cents", t("adm.stmt.col.amount"), "num")}{sth(methodsSorted, "cents", t("adm.stmt.col.share"), "num")}</tr></thead>
                 <tbody>
-                  {totals.by_method.map((r) => {
+                  {methodsSorted.rows.map((r) => {
                     const whole = totals.by_method.reduce((a, x) => a + x.cents, 0);
                     return <tr key={r.code}><td>{methodLabel(r.code, r.label)}</td><td className="num">{m(r.cents)}</td><td className="num">{pct(r.cents, whole)}</td></tr>;
                   })}
@@ -367,9 +375,9 @@ export default function StoreStatement({ me }) {
           <Acc {...acc("sellers")} title={t("adm.stmt.sec.sellers")} sum={<><span>{totals.by_seller.length}</span><b>{m(totals.total_cents)}</b></>}>
             {totals.by_seller.length === 0 ? <div className="stmt-empty">{t("adm.stmt.empty")}</div> : (
               <table className="stmt-tbl">
-                <thead><tr><th>{t("adm.stmt.col.seller")}</th><th className="num">{t("adm.stmt.col.count")}</th><th className="num">{t("adm.stmt.col.total")}</th><th className="num">{t("adm.stmt.col.share")}</th></tr></thead>
+                <thead><tr>{sth(sellersSorted, "seller_code", t("adm.stmt.col.seller"))}{sth(sellersSorted, "count", t("adm.stmt.col.count"), "num")}{sth(sellersSorted, "total_cents", t("adm.stmt.col.total"), "num")}{sth(sellersSorted, "total_cents", t("adm.stmt.col.share"), "num")}</tr></thead>
                 <tbody>
-                  {totals.by_seller.map((r) => (
+                  {sellersSorted.rows.map((r) => (
                     <tr key={r.seller_code || "-"}><td className="mono">{sellerLabel(r.seller_code)}</td><td className="num">{r.count}</td><td className="num">{m(r.total_cents)}</td><td className="num">{pct(r.total_cents, totals.total_cents)}</td></tr>
                   ))}
                   <tr className="total"><td>{t("adm.stmt.total")}</td><td className="num">{totals.count}</td><td className="num">{m(totals.total_cents)}</td><td className="num">100%</td></tr>
@@ -381,9 +389,9 @@ export default function StoreStatement({ me }) {
           <Acc {...acc("days")} title={t("adm.stmt.sec.days")} sum={<><span>{totals.by_day.length}</span><b>{m(totals.total_cents)}</b></>}>
             {totals.by_day.length === 0 ? <div className="stmt-empty">{t("adm.stmt.empty")}</div> : (
               <table className="stmt-tbl">
-                <thead><tr><th>{t("adm.stmt.col.day")}</th><th className="num">{t("adm.stmt.col.count")}</th><th className="num">{t("adm.stmt.col.total")}</th></tr></thead>
+                <thead><tr>{sth(daysSorted, "date", t("adm.stmt.col.day"))}{sth(daysSorted, "count", t("adm.stmt.col.count"), "num")}{sth(daysSorted, "total_cents", t("adm.stmt.col.total"), "num")}</tr></thead>
                 <tbody>
-                  {totals.by_day.map((r) => <tr key={r.date}><td className="mono">{dayLabel(r.date, lang)}</td><td className="num">{r.count}</td><td className="num">{m(r.total_cents)}</td></tr>)}
+                  {daysSorted.rows.map((r) => <tr key={r.date}><td className="mono">{dayLabel(r.date, lang)}</td><td className="num">{r.count}</td><td className="num">{m(r.total_cents)}</td></tr>)}
                   <tr className="total"><td>{t("adm.stmt.total")}</td><td className="num">{totals.count}</td><td className="num">{m(totals.total_cents)}</td></tr>
                 </tbody>
               </table>
