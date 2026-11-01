@@ -7,3 +7,4 @@
  */
 export * from "./price-rule";
 export * from "./cost-toggle";
+export * from "./frame-cost";

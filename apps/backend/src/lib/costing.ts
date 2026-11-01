@@ -4,6 +4,7 @@ import { COSTING_MODULE } from "../modules/costing/index";
 import type CostingModuleService from "../modules/costing/service";
 import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
 import type LensConfigModuleService from "../modules/lens-config/service";
+import { ensureFrameCostCache, frameCostCents, type FrameCostLookup } from "./frame-cost";
 import type { BoardOrder } from "./order-board";
 import { listSellers } from "./sellers";
 import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-toggle";
@@ -31,6 +32,11 @@ import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-tog
  *   - RULES (`cost_rule` table): the owner's template. "A Flexure frame costs
  *     me 18", "the lab charges 12 per order", "Stripe keeps 2.9% + 0.30".
  *     Amount 0 means "not defined yet" and the panel highlights it.
+ *   - THE FRAME'S REAL COST (`store_frame_cost`, lib/frame-cost.ts): what the
+ *     supplier charges for that exact model, or what the owner typed over it.
+ *     It REPLACES the frame rule for its line (never adds to it), because a
+ *     real invoice beats an average the owner once estimated. A model nothing
+ *     knows the cost of stays "undefined", never 0.
  *   - PER ORDER (`order.metadata.cost_sheet`): an optional manual override of
  *     the lines, written by the owner from the panel. Absent → the sheet is
  *     computed live from the rules every time it is read.
@@ -162,7 +168,8 @@ export interface CostLine {
   amount: number;
   qty: number;
   subtotal: number;
-  source: "rule" | "manual" | "order" | "seller";
+  /** Where the amount came from: a cost rule, the supplier's price list / the owner's edit of it, the owner's manual sheet, the order itself or the seller. */
+  source: "rule" | "supplier" | "manual" | "order" | "seller";
   rule_id?: string;
   /** The rule's match key (brand slug, SKU, lens code, fixed-cost slug…) — what `conceptKey` groups by. */
   match_key?: string;
@@ -521,19 +528,26 @@ function suggestedPrice(m: SheetModel, manual: boolean): number | null {
  *
  * Deductions first (shipping: actual = what the customer paid, or a fixed
  * figure; the order's taxes; the gateway's % of the gross and its fixed fee),
- * which gives the net base. Then materials per item (`frame_sku` by SKU beats
- * `frame_brand` by brand; a case/estuche only ever matches by SKU or the
- * "case" brand; one line per lens code the item carries) and per order
- * (`order_fixed`). Then the owner's percentages and the seller's commission,
- * both of the NET base. The profit target (`profitTargetPct` of the rules,
- * or `targetPct` when given) is reported, never charged.
+ * which gives the net base. Then materials per item — the frame's own cost
+ * (`frameCost`, i.e. the supplier's list / the owner's edit) when it is known,
+ * otherwise the rule that matches it (`frame_sku` by SKU beats `frame_brand`
+ * by brand; a case/estuche only ever matches by SKU or the "case" brand), plus
+ * one line per lens code the item carries — and per order (`order_fixed`).
+ * Then the owner's percentages and the seller's commission, both of the NET
+ * base. The profit target (`profitTargetPct` of the rules, or `targetPct` when
+ * given) is reported, never charged.
+ *
+ * `frameCost` defaults to the process cache + the compiled supplier list, so
+ * every existing caller gets the real cost without passing anything; tests and
+ * any caller that already holds the rows inject their own lookup.
  */
 export function computeCostSheet(
   order: CostOrderLike,
   rules: CostRule[],
   seller?: { commission_pct: number } | null,
   manual?: StoredCostSheet | null,
-  targetPct?: number | null
+  targetPct?: number | null,
+  frameCost: FrameCostLookup = frameCostCents
 ): CostSheet {
   const gross = round2(num(order.total));
   const target_pct = targetPct === undefined ? profitTargetPct(rules) : targetPct !== null && targetPct > 0 ? round2(targetPct) : null;
@@ -627,9 +641,41 @@ export function computeCostSheet(
     const bySku = sku ? idx.get(`frame_sku:${sku}`) : undefined;
     const byBrand = brand ? idx.get(`frame_brand:${brand}`) : undefined;
     const frame = bySku ?? byBrand;
-    if (frame) {
+    // What the shop really pays the supplier for THIS model (store_frame_cost,
+    // seeded from Capri's list and editable per model). It REPLACES the rule
+    // that would have matched — exactly one `frame:` line per item either way,
+    // because `summarizeCostSheets` pairs frame lines with items by position
+    // and adding a second one would both double the cost and shift that pairing.
+    const supplierCents = sku ? frameCost(sku) : null;
+    if (supplierCents !== null) {
+      const amount = round2(supplierCents / 100);
+      materials.push({
+        key: `frame:${sku}`,
+        // The concept (and therefore the panel's by-kind breakdown) stays what
+        // it was: the matched rule's kind/key, or the brand when no rule
+        // matched. Only the AMOUNT now comes from the supplier.
+        kind: frame ? frame.kind : brand ? "frame_brand" : "frame_sku",
+        group: "material",
+        // Also the matched rule's label, for the same reason: `condenseLines`
+        // takes a concept's label from its first line, so naming the model
+        // here would label the whole "Montura Peachtree" row of the summary
+        // after whichever Peachtree was sold first. Without a rule there is
+        // nothing to inherit and the model is the clearest name.
+        label: frame ? frame.label : `Montura ${item.title ?? sku}`.trim(),
+        amount,
+        qty,
+        subtotal: round2(amount * qty),
+        source: "supplier",
+        match_key: frame ? normalizeMatchKey(frame.kind, frame.match_key) : brand ?? sku ?? undefined,
+        // A cost of 0 is still "not defined": the supplier never sells at 0, so
+        // a 0 here is the owner having typed one, and the panel must say so.
+        undefined_cost: amount === 0,
+      });
+    } else if (frame) {
       materials.push(lineFromRule(frame, `frame:${sku ?? brand}`, qty));
     } else {
+      // No supplier row and no rule: the cost is UNKNOWN, not zero. A silent 0
+      // would turn a case nobody priced into a 100 % margin.
       materials.push({
         key: `frame:${sku ?? brand ?? "?"}`,
         kind: "frame_brand",
@@ -954,10 +1000,17 @@ function rowToRule(r: Record<string, unknown>): CostRule {
   };
 }
 
-/** Live rules, sorted. */
+/**
+ * Live rules, sorted. It also warms the frame-cost cache (best effort), which
+ * is what lets `computeCostSheet` stay synchronous: every caller that computes
+ * a sheet loads the rules first, so the real per-model costs are in memory by
+ * the time the math runs. A failure there is silent — the lookup then answers
+ * from the compiled supplier list.
+ */
 export async function listCostRules(container: MedusaContainer): Promise<CostRule[]> {
   const svc = costingService(container);
   const rows = (await svc.listCostRules({}, { take: 1000 })) as unknown as Record<string, unknown>[];
+  await ensureFrameCostCache(container);
   return rows
     .filter((r) => !r["deleted_at"])
     .map(rowToRule)

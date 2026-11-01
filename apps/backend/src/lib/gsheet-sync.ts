@@ -52,11 +52,21 @@ import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/o
 import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 import { tenantName } from "./tenant";
+import {
+  frameCostCentsFrom,
+  frameCostRowFrom,
+  listFrameCosts,
+  loadCatalogModels,
+  type CatalogModel,
+  type FrameCostRow,
+  type FrameCostSource,
+} from "./frame-cost";
 import { projectBoardOrder } from "./order-board";
 import { loadPricingOverview, type PricingOverview } from "./pricing-overview";
 import {
   KIND_LABEL,
   PROFIT_TARGET_KEY,
+  brandName,
   costBreakdownText,
   costSheetForOrder,
   isProfitTargetRule,
@@ -2752,8 +2762,9 @@ export async function writePricesSheet(cfg: GsheetConfig, overview: PricingOverv
 }
 
 /**
- * Refresca la pestaña Precios con el maestro (o con una tienda). Mejor esfuerzo
- * y nunca lanza: lo llaman las rutas de precios al guardar y el backfill — la
+ * Refresca la pestaña Precios con el maestro (o con una tienda) y, detrás, la
+ * pestaña Costos monturas (costo y precio modelo por modelo). Mejor esfuerzo y
+ * nunca lanza: lo llaman las rutas de precios al guardar y el backfill — la
  * hoja es un espejo, no una dependencia, y jamás bloquea una respuesta.
  */
 export async function mirrorPricesToSheet(container: MedusaContainer, establishmentId: string | null = null): Promise<void> {
@@ -2766,5 +2777,219 @@ export async function mirrorPricesToSheet(container: MedusaContainer, establishm
     logger.info(`[gsheet] pestaña ${PRICES_SHEET} actualizada (${pricesSheetRows(overview).length} filas).`);
   } catch (error) {
     logger.warn(`[gsheet] pestaña ${PRICES_SHEET} no actualizada: ${(error as Error).message}`);
+  }
+  // El costo y el precio por modelo viven en su propia pestaña (son ~600
+  // filas, una por modelo del catálogo) y se refrescan con los mismos
+  // disparadores. Falla sola: un problema ahí no deja a Precios sin refrescar.
+  await mirrorFrameCostsToSheet(container);
+}
+
+// ── Costo y precio por modelo (pestaña "Costos monturas") ────────────────────
+//
+// El dueño: «deben aparecer en todos los aspectos comerciales el costo y el
+// precio». La pestaña Precios lleva el precio de venta y las reglas; esta
+// lleva, modelo por modelo, LO QUE SE PAGA AL PROVEEDOR junto al precio al que
+// se vende, que es la única forma de ver el margen real de una montura sin
+// abrir el panel.
+//
+// Misma política que las demás pestañas generadas: se regenera entera desde la
+// tienda y lleva una protección de aviso. Lo que el dueño edite aquí se
+// reescribe en la siguiente pasada — los costos se editan en el panel
+// («Precios y costos»), que es donde quedan marcados como suyos y donde
+// ninguna lista del proveedor los vuelve a pisar.
+
+/** Pestaña de solo lectura con el costo y el precio de cada modelo. */
+const FRAME_COSTS_SHEET = process.env.GSHEET_FRAME_COSTS_SHEET || "Costos monturas";
+export const FRAME_COSTS_HEADERS = ["Modelo", "SKU", "Marca", "Costo", "Precio", "Margen", "Margen %", "Fuente", "Actualizado"];
+/** Fila (0-based) del encabezado de la tabla de la pestaña Costos monturas. */
+const FRAME_COSTS_HEADER_ROW = 3;
+
+const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
+  supplier_list: "Lista del proveedor",
+  owner_edit: "Editado por el dueño",
+};
+
+/**
+ * Filas de la pestaña Costos monturas. Pura, para poder probarla sin la API.
+ *
+ * Recorre el CATÁLOGO (lo que la tienda vende) y le une su costo por SKU, así
+ * que un modelo sin costo aparece igual, con las celdas de costo y margen
+ * VACÍAS y «Sin costo» en Fuente: un 0 ahí convertiría un estuche sin costo en
+ * un margen del 100 %. Si el catálogo no se pudo leer, lista las filas de
+ * costo que haya, sin precio, para que la hoja nunca quede vacía.
+ */
+export function frameCostsSheetRows(costs: readonly FrameCostRow[], catalog: readonly CatalogModel[]): Cell[][] {
+  const rows: Cell[][] = [];
+  const withCost = catalog.length
+    ? catalog.filter((m) => frameCostCentsFrom(new Map(costs.map((c) => [c.sku, c])), m.sku) !== null).length
+    : costs.length;
+  rows[0] = [`${tenantName()} · Costo y precio por modelo`];
+  rows[1] = [
+    "Solo lectura: lo que se le paga al proveedor por cada montura o estuche y el precio al que se vende. " +
+      `Se refresca al guardar un costo en el panel y cada 30 minutos. ${withCost} de ${catalog.length || costs.length} modelos con costo conocido; ` +
+      "un modelo sin costo deja las celdas vacías (no vale 0) y su margen se reporta como desconocido.",
+  ];
+  rows[2] = [];
+  rows[FRAME_COSTS_HEADER_ROW] = [...FRAME_COSTS_HEADERS];
+
+  const byKey = new Map(costs.map((c) => [c.sku, c]));
+  const stamp = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
+
+  if (!catalog.length) {
+    for (const c of costs) {
+      rows.push([c.model, c.sku, "", dollarsOf(c.cost_cents), "", "", "", FRAME_COST_SOURCE_LABEL[c.source], stamp(c.updated_at)]);
+    }
+    return rows.map((r) => r ?? []);
+  }
+
+  const sorted = [...catalog].sort(
+    (a, b) => Number(a.is_case) - Number(b.is_case) || a.brand_slug.localeCompare(b.brand_slug) || a.title.localeCompare(b.title)
+  );
+  for (const m of sorted) {
+    const cost = frameCostRowFrom(byKey, m.sku);
+    const costCents = cost ? cost.cost_cents : null;
+    const margin = costCents != null && m.price_cents != null ? m.price_cents - costCents : null;
+    rows.push([
+      m.title || m.sku,
+      m.sku,
+      brandName(m.brand_slug),
+      costCents == null ? "" : dollarsOf(costCents),
+      m.price_cents == null ? "" : dollarsOf(m.price_cents),
+      margin == null ? "" : dollarsOf(margin),
+      margin == null || !m.price_cents ? "" : Number(((margin / m.price_cents) * 100).toFixed(1)),
+      cost ? FRAME_COST_SOURCE_LABEL[cost.source] : "Sin costo",
+      cost ? stamp(cost.updated_at) : "",
+    ]);
+  }
+  return rows.map((r) => r ?? []);
+}
+
+/**
+ * Escribe (o crea) la pestaña Costos monturas. Idempotente: se limpia y
+ * reescribe entera. La cuadrícula se agranda antes de escribir — son ~600
+ * modelos y una pestaña nueva de Google trae 1000 filas, pero una creada por
+ * una versión anterior puede traer menos y la escritura fallaría.
+ */
+export async function writeFrameCostsSheet(
+  cfg: GsheetConfig,
+  costs: readonly FrameCostRow[],
+  catalog: readonly CatalogModel[]
+): Promise<void> {
+  const sheets = await readSheetsMeta(cfg);
+  const rows = frameCostsSheetRows(costs, catalog);
+  const n = FRAME_COSTS_HEADERS.length;
+  const lastRow = Math.max(rows.length, 60);
+  const gridRows = Math.max(rows.length + 100, 800);
+
+  let sheet = sheets.find((s) => s.properties?.title === FRAME_COSTS_SHEET);
+  if (!sheet) {
+    const [reply] = await batchUpdate(cfg, [
+      { addSheet: { properties: { title: FRAME_COSTS_SHEET, gridProperties: { rowCount: gridRows, columnCount: n + 1, hideGridlines: true } } } },
+    ]);
+    sheet = { properties: { sheetId: Number(reply?.addSheet?.properties?.sheetId ?? 0), title: FRAME_COSTS_SHEET } };
+  } else {
+    await batchUpdate(cfg, [
+      {
+        updateSheetProperties: {
+          properties: { sheetId: sheet.properties?.sheetId ?? 0, gridProperties: { rowCount: gridRows, columnCount: n + 1 } },
+          fields: "gridProperties(rowCount,columnCount)",
+        },
+      },
+    ]);
+  }
+  const sid = sheet.properties?.sheetId ?? 0;
+
+  const clear = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${FRAME_COSTS_SHEET}!A1:${columnLetter(n - 1)}${gridRows}`)}:clear`, { method: "POST", body: "{}" });
+  if (!clear.ok) throw await failure("clear frame costs", clear);
+  const write = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${FRAME_COSTS_SHEET}!A1`)}?valueInputOption=RAW`, {
+    method: "PUT",
+    body: JSON.stringify({ values: rows.map((r) => (r.length ? r : [""])) }),
+  });
+  if (!write.ok) throw await failure("write frame costs", write);
+
+  const range = (r0: number, r1: number, c0: number, c1: number) => ({ sheetId: sid, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+  const fmt = (rg: unknown, f: Record<string, unknown>) => ({ repeatCell: { range: rg, cell: { userEnteredFormat: f }, fields: "userEnteredFormat(" + Object.keys(f).join(",") + ")" } });
+  const H = FRAME_COSTS_HEADER_ROW;
+  const PROTECT_TAG = `${tenantName()} · solo lectura`;
+  const req: unknown[] = [];
+  for (const pr of sheet.protectedRanges ?? []) {
+    if (pr.protectedRangeId !== undefined && (pr.description ?? "").startsWith(PROTECT_TAG)) {
+      req.push({ deleteProtectedRange: { protectedRangeId: pr.protectedRangeId } });
+    }
+  }
+  req.push(
+    { unmergeCells: { range: range(0, lastRow, 0, n) } },
+    { repeatCell: { range: range(0, lastRow, 0, n), cell: { userEnteredFormat: {} }, fields: "userEnteredFormat" } },
+    { updateSheetProperties: { properties: { sheetId: sid, tabColorStyle: { rgbColor: GOLD }, gridProperties: { frozenRowCount: H + 1, hideGridlines: true } }, fields: "tabColorStyle,gridProperties(frozenRowCount,hideGridlines)" } },
+    fmt(range(0, 1, 0, n), { backgroundColorStyle: { rgbColor: NAVY }, textFormat: { bold: true, fontSize: 18, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE" }),
+    { mergeCells: { range: range(0, 1, 0, n), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 0, endIndex: 1 }, properties: { pixelSize: 46 }, fields: "pixelSize" } },
+    fmt(range(1, 2, 0, n), { textFormat: { italic: true, fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } }, wrapStrategy: "WRAP", verticalAlignment: "TOP" }),
+    { mergeCells: { range: range(1, 2, 0, n), mergeType: "MERGE_ALL" } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: 1, endIndex: 2 }, properties: { pixelSize: 40 }, fields: "pixelSize" } },
+    fmt(range(H, H + 1, 0, n), { backgroundColorStyle: { rgbColor: HEADER_COLOR }, textFormat: { bold: true, fontSize: 11, foregroundColorStyle: { rgbColor: WHITE } }, verticalAlignment: "MIDDLE", wrapStrategy: "WRAP" }),
+    { updateBorders: { range: range(H, H + 1, 0, n), bottom: { style: "SOLID_MEDIUM", colorStyle: { rgbColor: GOLD } } } },
+    { updateDimensionProperties: { range: { sheetId: sid, dimension: "ROWS", startIndex: H, endIndex: H + 1 }, properties: { pixelSize: 36 }, fields: "pixelSize" } },
+    fmt(range(H + 1, lastRow, 0, n), { backgroundColorStyle: { rgbColor: WHITE }, wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { bold: false, fontSize: 10, foregroundColorStyle: { rgbColor: rgb("#1e2733") } } }),
+    fmt(range(H + 1, lastRow, 0, 1), { textFormat: { bold: true, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } } }),
+    fmt(range(H + 1, lastRow, 3, 6), { numberFormat: { type: "NUMBER", pattern: "#,##0.00" }, horizontalAlignment: "RIGHT" }),
+    fmt(range(H + 1, lastRow, 6, 7), { numberFormat: { type: "NUMBER", pattern: "#,##0.0" }, horizontalAlignment: "RIGHT" }),
+    fmt(range(H + 1, lastRow, 7, 9), { textFormat: { fontSize: 9, foregroundColorStyle: { rgbColor: rgb("#5b6472") } } }),
+    { updateBorders: { range: range(H + 1, Math.max(rows.length, H + 2), 0, n), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
+    ...[200, 120, 140, 90, 90, 90, 80, 160, 110].map((px, i) => ({
+      updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: px }, fields: "pixelSize" },
+    })),
+    { setBasicFilter: { filter: { range: range(H, Math.max(rows.length, H + 2), 0, n) } } },
+    {
+      addProtectedRange: {
+        protectedRange: {
+          range: { sheetId: sid },
+          description: `${PROTECT_TAG} (los costos se editan en el panel, pestaña «Precios y costos»)`,
+          warningOnly: true,
+        },
+      },
+    }
+  );
+  const ruleCount = (sheet.conditionalFormats ?? []).length;
+  for (let i = ruleCount - 1; i >= 0; i--) req.push({ deleteConditionalFormatRule: { sheetId: sid, index: i } });
+  req.push(
+    {
+      addConditionalFormatRule: {
+        index: 0,
+        // Un modelo sin costo se ve de un golpe: es el que falta por cargar.
+        rule: {
+          ranges: [range(H + 1, lastRow, 0, n)],
+          booleanRule: { condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=AND($A${H + 2}<>"",$D${H + 2}="")` }] }, format: { backgroundColorStyle: { rgbColor: rgb("#fdecec") } } },
+        },
+      },
+    },
+    {
+      addConditionalFormatRule: {
+        index: 1,
+        rule: {
+          ranges: [range(H + 1, lastRow, 0, n)],
+          booleanRule: { condition: { type: "CUSTOM_FORMULA", values: [{ userEnteredValue: `=AND(ISEVEN(ROW()),$A${H + 2}<>"")` }] }, format: { backgroundColorStyle: { rgbColor: BAND_2 } } },
+        },
+      },
+    }
+  );
+  await batchUpdate(cfg, req);
+}
+
+/**
+ * Refresca la pestaña Costos monturas. Mejor esfuerzo y nunca lanza: la llama
+ * `mirrorPricesToSheet`, así que la refrescan las mismas rutas de precios y
+ * costos y el job de cada 30 minutos. Sin hoja configurada no hace nada.
+ */
+export async function mirrorFrameCostsToSheet(container: MedusaContainer): Promise<void> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const cfg = gsheetConfig();
+  if (!cfg || privateKeyProblem(cfg.privateKey)) return;
+  try {
+    const [costs, catalog] = await Promise.all([listFrameCosts(container), loadCatalogModels(container)]);
+    await writeFrameCostsSheet(cfg, costs, catalog);
+    logger.info(`[gsheet] pestaña ${FRAME_COSTS_SHEET} actualizada (${costs.length} costos, ${catalog.length} modelos).`);
+  } catch (error) {
+    logger.warn(`[gsheet] pestaña ${FRAME_COSTS_SHEET} no actualizada: ${(error as Error).message}`);
   }
 }

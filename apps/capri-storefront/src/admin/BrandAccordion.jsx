@@ -2,8 +2,10 @@
 // Una marca del catálogo como acordeón que YA SE LEE CERRADO — regla del dueño:
 // «cada acordeón resume antes de abrirse». La cabecera lleva el logo de la marca
 // (no su nombre a secas), cuántos modelos y colores tiene, el rango de precio, el
-// costo medio de proveedor, el margen medio y el interruptor de surtido; al
-// abrirlo, una fila por modelo que cabe en UNA línea en pantalla ancha.
+// costo medio de proveedor, el margen medio, cuántos modelos están SIN costo y
+// el interruptor de surtido; al abrirlo, una fila por modelo que cabe en UNA
+// línea en pantalla ancha, con el costo y el precio editables y el margen que
+// sale de los dos.
 //
 // Este módulo no decide nada: recibe ya calculado lo que pinta (CatalogManager
 // es quien lee el surtido, los precios y los costos) y avisa por callbacks. Así
@@ -15,6 +17,9 @@ import Accordion from "./Accordion.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
+// El margen se calcula con la MISMA función que el panel de precios, para que
+// las dos pantallas no puedan discrepar en una cifra que mira el dueño.
+import { marginPct } from "./pricing/api.js";
 // La notación óptica es la MISMA que ve el vendedor en el punto de venta
 // («51 □ 18 145»): se reutiliza su función en vez de volver a escribirla.
 import { sizeNotation } from "./PosFrameCard.jsx";
@@ -82,15 +87,30 @@ function Swatches({ colors, name }) {
 }
 
 /**
- * Una fila de modelo. El precio de venta es el del catálogo (lo calcula el
- * servidor con la regla); el campo de al lado escribe el PRECIO PROPIO del
- * modelo por /admin/pricing/frames/override, y la pastilla «Propio» avisa de
- * que ese modelo ya no sigue la regla.
+ * Una fila de modelo. Lleva, en este orden, las dos cifras de las que vive la
+ * contabilidad y lo que sale de ellas: COSTO (del proveedor o puesto a mano) +
+ * su campo editable, PRECIO de venta + su campo editable, y el MARGEN que sale
+ * de los dos.
+ *
+ * `cost` es el descriptor que devuelve `costOf` de pricing/api.js, con el costo
+ * del SERVIDOR (/admin/pricing/frames/costs). `cost.cents === null` significa
+ * que ese modelo NO tiene costo conocido: entonces no se pinta margen ni un
+ * «0 %» — se pinta que falta, y la fila se destaca, porque son justo los
+ * modelos que hacen que la contabilidad mienta.
+ *
+ * Las dos escrituras son la misma pareja de gestos (escribir + guardar, y un
+ * botón para devolverlo a lo heredado): el precio vuelve a la regla
+ * (/admin/pricing/frames/override) y el costo vuelve a la lista del proveedor
+ * (/admin/pricing/frames/cost con cost_cents null).
  */
-function ModelRow({ p, cost, override, store, exposed, ownRule, busy, isCase, onSavePrice, onClearPrice, onDiscontinue, onSwitch, onOpen }) {
+function ModelRow({
+  p, cost, override, store, exposed, ownRule, busy, isCase,
+  onSavePrice, onClearPrice, onSaveCost, onClearCost, onDiscontinue, onSwitch, onOpen,
+}) {
   const { t, lang } = useLang();
   const usd = (n) => money(n, "usd", lang);
   const [draft, setDraft] = useState("");
+  const [costDraft, setCostDraft] = useState("");
   const size = isCase ? null : modelSize(p);
   const img = p.colors?.[0]?.image;
   const name = p.name || p.sku;
@@ -98,8 +118,23 @@ function ModelRow({ p, cost, override, store, exposed, ownRule, busy, isCase, on
   // Medusa): no hay a qué escribirle precio propio ni surtido.
   const linked = Boolean(p.medusaId);
 
+  // El precio que de verdad se cobra: el propio del modelo si lo tiene, si no
+  // el del catálogo (que ya trae la regla aplicada por el servidor).
+  const price = override ? override.price : p.price;
+  // Sin descriptor todavía no se leyó el costo (la pantalla acaba de abrirse):
+  // eso NO es «falta el costo», así que no se enciende la alarma mientras tanto.
+  const costLoading = !cost;
+  const costUsd = cost?.cents != null ? cost.cents / 100 : null;
+  const missingCost = !costLoading && costUsd == null;
+  const ownCost = Boolean(cost?.own);
+  // El costo se escribe por SKU, no por `medusaId`: no hace falta que el modelo
+  // esté enlazado con Medusa. Sí hace falta que el servidor haya contestado.
+  const canEditCost = Boolean(p.sku) && !costLoading && cost?.editable !== false && !busy;
+  const margin = costUsd == null ? null : marginPct(price, costUsd);
+  const costTitle = ownCost ? t("adm.cm.costOwnHint") : t("adm.cm.costHint");
+
   return (
-    <div className={`cm-row ${exposed === false ? "hidden" : ""}`}>
+    <div className={`cm-row ${exposed === false ? "hidden" : ""} ${missingCost ? "nocost" : ""}`}>
       <button type="button" className="cm-thumb" title={name} aria-label={name} onClick={() => onOpen(p)}>
         {img ? <img src={img} alt="" loading="lazy" /> : <Icon name={isCase ? "box" : "glasses"} size={16} />}
       </button>
@@ -121,14 +156,56 @@ function ModelRow({ p, cost, override, store, exposed, ownRule, busy, isCase, on
         {size ? <span className="cm-mono">{size}</span> : <span className="cm-dash">{t("adm.cm.none")}</span>}
       </span>
 
-      <span className="cm-cell cm-cost" title={cost != null ? t("adm.cm.costHint") : undefined}>
+      <span className="cm-cell cm-cost" title={costUsd != null ? costTitle : missingCost ? t("adm.cm.noCostHint") : undefined}>
         <small className="cm-lbl">{t("adm.cm.col.cost")}</small>
-        {cost != null ? <span className="cm-mono">{usd(cost)}</span> : <span className="cm-dash">{t("adm.cm.none")}</span>}
+        {costUsd != null
+          ? <span className={`cm-mono ${ownCost ? "own" : ""}`}>{usd(costUsd)}</span>
+          : <span className="cm-dash">{t("adm.cm.none")}</span>}
+        {ownCost && <span className="cm-badge" title={t("adm.cm.costOwnHint")}>{t("adm.cm.ownBadge")}</span>}
+      </span>
+
+      {/* Costo editable: el mismo gesto que el precio propio de más a la
+          derecha. El marcador de posición enseña el costo de la lista del
+          proveedor cuando se conoce, para saber sobre qué se está escribiendo. */}
+      <span className="cm-cell cm-costown">
+        <small className="cm-lbl">{t("adm.cm.col.costOwn")}</small>
+        <input
+          inputMode="decimal"
+          className="cm-input"
+          placeholder={t("adm.cm.costPlaceholder")}
+          aria-label={t("adm.cm.costAria", { name })}
+          title={t("adm.cm.costAria", { name })}
+          disabled={!canEditCost}
+          value={costDraft}
+          onChange={(e) => setCostDraft(e.target.value.replace(/[^0-9.]/g, ""))}
+        />
+        <button
+          type="button"
+          className="btn-xs primary"
+          disabled={!canEditCost || !costDraft}
+          title={t("adm.cm.saveCost", { name })}
+          aria-label={t("adm.cm.saveCost", { name })}
+          onClick={() => onSaveCost(p, costDraft).then((ok) => { if (ok) setCostDraft(""); })}
+        >
+          <Icon name="save" size={12} />
+        </button>
+        {ownCost && (
+          <button
+            type="button"
+            className="btn-xs"
+            disabled={!canEditCost}
+            title={t("adm.cm.clearCost", { name })}
+            aria-label={t("adm.cm.clearCost", { name })}
+            onClick={() => onClearCost(p)}
+          >
+            <Icon name="undo" size={12} />
+          </button>
+        )}
       </span>
 
       <span className="cm-cell cm-price">
         <small className="cm-lbl">{t("adm.cm.col.price")}</small>
-        <b className="cm-mono" title={override ? t("adm.cm.ownHint") : t("adm.cm.rulePrice")}>{usd(override ? override.price : p.price)}</b>
+        <b className="cm-mono" title={override ? t("adm.cm.ownHint") : t("adm.cm.rulePrice")}>{usd(price)}</b>
         {override && <span className="cm-badge" title={t("adm.cm.ownHint")}>{t("adm.cm.ownBadge")}</span>}
       </span>
 
@@ -167,6 +244,26 @@ function ModelRow({ p, cost, override, store, exposed, ownRule, busy, isCase, on
         )}
       </span>
 
+      {/* Margen: lo que sale del costo y del precio. Sin costo conocido NO se
+          pinta un «0 %» — se pinta que falta el costo, destacado, que es la
+          única lectura honesta. */}
+      <span className="cm-cell cm-margin">
+        <small className="cm-lbl">{t("adm.cm.col.margin")}</small>
+        {missingCost
+          ? (
+            <span className="cm-nocost" title={t("adm.cm.noCostHint")}>
+              <Icon name="alert" size={11} /> {t("adm.cm.noCost")}
+            </span>
+          )
+          : margin == null
+            ? <span className="cm-dash" title={t("adm.cm.marginHint")}>{t("adm.cm.none")}</span>
+            : (
+              <b className={`cm-mono cm-mg ${margin >= 50 ? "good" : margin >= 30 ? "warn" : "bad"}`} title={t("adm.cm.marginHint")}>
+                {t("adm.cm.marginPct", { v: margin })}
+              </b>
+            )}
+      </span>
+
       <span className="cm-cell cm-sale">
         <small className="cm-lbl">{t("adm.cm.col.sale")}</small>
         <AssortSwitch
@@ -195,12 +292,14 @@ function ModelRow({ p, cost, override, store, exposed, ownRule, busy, isCase, on
 
 /**
  * La marca entera. `stats` llega calculado (modelos, colores, rango de precio,
- * costo medio y margen medio) para que la cabecera cerrada ya lo diga todo.
+ * costo medio, margen medio y cuántos modelos están sin costo) para que la
+ * cabecera cerrada ya lo diga todo.
  */
 export default function BrandAccordion({
   brand, models, stats, offCount = 0, store, isCase = false, defaultOpen = false,
   brandRule = null, exposedOf, ownRuleOf, overrideOf, costOf, ruleLabel,
-  busy = null, onBrandSwitch, onModelSwitch, onSavePrice, onClearPrice, onDiscontinue, onOpen,
+  busy = null, onBrandSwitch, onModelSwitch, onSavePrice, onClearPrice,
+  onSaveCost, onClearCost, onDiscontinue, onOpen,
 }) {
   const { t, lang } = useLang();
   const usd = (n) => money(n, "usd", lang);
@@ -211,8 +310,12 @@ export default function BrandAccordion({
     { label: t("adm.cm.b.models"), value: stats.models, strong: true },
     { label: t("adm.cm.b.colors"), value: stats.colors },
     stats.min != null && { label: t("adm.cm.b.price"), value: t("adm.cm.b.range", { min: usd(stats.min), max: usd(stats.max) }) },
+    // Costo medio y margen medio salen del costo REAL del servidor y solo de
+    // los modelos que lo tienen; los que no, se cuentan aparte para que la
+    // cabecera no presuma de un margen calculado sobre un agujero.
     stats.cost != null && { label: t("adm.cm.b.cost"), value: usd(stats.cost) },
     stats.margin != null && { label: t("adm.cm.b.margin"), value: `${stats.margin} %`, tone: stats.margin >= 50 ? "good" : stats.margin >= 30 ? "warn" : "bad" },
+    stats.noCost > 0 && { label: t("adm.cm.b.noCost"), value: stats.noCost, tone: "bad" },
     // Los descatalogados van APARTE del conteo activo: el dueño no quiere que
     // una marca parezca más grande por lo que ya no vende.
     offCount > 0 && { label: t("adm.cm.b.off"), value: offCount, tone: "muted" },
@@ -262,6 +365,8 @@ export default function BrandAccordion({
             busy={busy === (p.slug || p.sku)}
             onSavePrice={onSavePrice}
             onClearPrice={onClearPrice}
+            onSaveCost={onSaveCost}
+            onClearCost={onClearCost}
             onDiscontinue={onDiscontinue}
             onSwitch={onModelSwitch}
             onOpen={onOpen}

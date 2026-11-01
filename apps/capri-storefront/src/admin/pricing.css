@@ -94,8 +94,47 @@
 .pp-badge.inherit { background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); border-color: transparent; }
 .pp-badge.off { background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); border-color: transparent; }
 
+/* ── Costo del proveedor (vista Monturas) ────────────────────────────────
+   El costo va SIEMPRE junto a su precio y al margen que sale de los dos, y lo
+   que falta se ve antes de buscarlo: la línea de cobertura arriba y la fila
+   marcada abajo. Nada de esto inventa espacio: todo cabe en una línea. */
+
+/* Rótulo corto delante de un campo en una fila (costo / precio exacto). */
+.pp-lbl { font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; }
+
+/* El costo editable: valor, pastilla «Propio» y los dos gestos, en una línea. */
+.pp-cost { display: inline-flex; align-items: center; gap: 5px; }
+.pp-cost-v { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pp-cost-v.own { color: var(--adm-accent-ink, var(--adm-navy)); }
+.pp-cost .pp-num { width: 8ch; }
+
+/* Margen: el mismo criterio de tonos que las pastillas del acordeón por marca. */
+.pp-mg { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pp-mg.good { color: var(--adm-green-dark, #14663f); }
+.pp-mg.warn { color: var(--adm-amber-dark, #92400e); }
+.pp-mg.bad { color: var(--adm-red-dark, #991b1b); }
+
+/* «Sin costo»: no es un dato neutro, es la tarea pendiente. */
+.pp-nocost { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); }
+
+/* Cobertura de costos: una línea, con el atajo para filtrar los que faltan. */
+.pp-cover { margin: 0 0 6px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: var(--adm-radius-sm, 8px);
+  border: 1px solid var(--adm-line); background: var(--adm-surface-2); color: var(--adm-muted); }
+.pp-cover.ok { color: var(--adm-green-dark, #14663f); border-color: transparent; background: var(--adm-green-soft, var(--adm-surface-2)); }
+.pp-cover.bad { color: var(--adm-red-dark, #991b1b); border-color: transparent; background: var(--adm-red-soft, var(--adm-surface-2)); }
+
+/* La fila de un modelo sin costo, marcada en la tabla. */
+tr.pp-missing > td:first-child { box-shadow: inset 3px 0 0 var(--adm-red-dark, #991b1b); }
+.pp-sku { font: 600 10.5px var(--adm-mono, ui-monospace, monospace); color: var(--adm-muted); }
+
 /* Buscador de modelo + resultados como pastillas en una sola tira. */
 .pp-search { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); max-width: 420px; }
+/* El de dentro de la barra de una tabla no se come la fila entera. */
+.pp-search.compact { max-width: 220px; padding: 1px 8px; }
+.pp-search.compact input { font-size: 11.5px; }
 .pp-search input { border: 0; background: none; outline: none; font-size: 12.5px; color: var(--adm-ink); width: 100%; }
 .pp-matches { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 0; padding: 0; list-style: none; }
 .pp-matches li { display: inline-flex; }
@@ -165,6 +204,9 @@ table.pp-grid tbody tr:hover td { background: var(--adm-surface-2); }
 }
 @media print {
   .pp-search, .pp-matches, .pp-switch, .pp-row button, .pp-seg, .pp-chips { display: none; }
+  /* En papel el costo es un número, no un campo: lo que se imprime es la
+     hoja que repasa la contabilidad, no los gestos para cambiarla. */
+  .pp-cost input, .pp-cost button, .pp-cover button { display: none; }
   .pp-grid-wrap, .pp-grid-wrap.tall { max-height: none; overflow: visible; }
   .pp-two { grid-template-columns: 1fr; }
 }

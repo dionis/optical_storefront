@@ -21,15 +21,17 @@
 //     (src/admin/pricing/api.js). Aquí no se recalcula ningún precio;
 //   · habilitar/deshabilitar → surtido por tienda, /admin/store-assortment/:id
 //     y …/rule, con la precedencia del backend (modelo > marca > expuesto);
-//   · costo de proveedor → la lista real de Capri (data/capriPrices.js). Es
-//     dato del navegador: el servidor todavía no lo publica (ver informe);
+//   · costo de proveedor → /admin/pricing/frames/costs, por la caché de
+//     lecturas del panel (TTL largo: un costo cambia cuando llega lista nueva).
+//     Ya NO sale del navegador: el costo es lo que hace fiable la contabilidad y
+//     tiene que ser el mismo para el dueño, la caja y el informe. Se edita con
+//     POST /admin/pricing/frames/cost (pricing/api.js), igual que el precio;
 //   · «Descontinuar» → Admin API de Medusa (catalogAdmin.js). NO es lo mismo
 //     que el interruptor: uno saca el modelo del catálogo entero, el otro solo
 //     lo oculta en una tienda. Lo explica el HelpTip «catalog.assortVsOff».
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCatalog, loadLive } from "../data/catalogStore.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
-import { capriPrice } from "../data/capriPrices.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import HelpTip from "./HelpTip.jsx";
@@ -43,7 +45,9 @@ import { money, shortDate } from "./adminOrders.js";
 import { rangeFor } from "./analytics.js";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { fetchStoreAssortment, setAssortmentRule } from "./adminStores.js";
-import { fetchPricingOverview, savePricingOverride } from "./pricing/api.js";
+import {
+  costOf, fetchPricingOverview, loadFrameCosts, marginPct, savePricingOverride, saveFrameCost,
+} from "./pricing/api.js";
 import {
   setProductStatus, fetchDiscontinued, exportCatalogCsv, exportCatalogExcel,
 } from "./catalogAdmin.js";
@@ -66,13 +70,6 @@ function RangePicker({ value, onChange }) {
     </div>
   );
 }
-
-/** Costo del proveedor de un modelo: la lista real de Capri por SKU. */
-const costOfProduct = (p) => {
-  if (!p || p.isCase) return null;
-  const real = typeof p.supplierPrice === "number" ? p.supplierPrice : capriPrice(p.sku);
-  return typeof real === "number" && real > 0 ? real : null;
-};
 
 /** La regla de precios en una frase corta para el subtítulo del acordeón. */
 function ruleText(rule, t, lang) {
@@ -114,6 +111,7 @@ export default function CatalogManager({ me = null, params = null }) {
   const [busy, setBusy] = useState(null);         // slug | "brand:<slug>" | "export"
   const [off, setOff] = useState([]);             // descontinuadas (draft en Medusa)
   const [pricing, setPricing] = useState(null);   // /admin/pricing/overview
+  const [costs, setCosts] = useState(null);       // /admin/pricing/frames/costs
   const [assort, setAssort] = useState(null);     // /admin/store-assortment/:id
   const [history, setHistory] = useState(null);
   const [cardProduct, setCardProduct] = useState(null);
@@ -138,6 +136,17 @@ export default function CatalogManager({ me = null, params = null }) {
     fetchPricingOverview(priceScope).then((d) => { if (on) setPricing(d); }).catch(() => { if (on) setPricing(null); });
     return () => { on = false; };
   }, [demo, priceScope]);
+
+  // Costos del proveedor: una lectura para TODAS las marcas (no cuelga de la
+  // tienda — lo que cuesta un modelo es lo mismo en todos los mostradores) y
+  // cacheada con TTL largo, así que abrir y cerrar acordeones no pide nada.
+  const loadCosts = useCallback(async (force = false) => {
+    if (demo) return null;
+    const index = await loadFrameCosts({ force });
+    setCosts(index);
+    return index;
+  }, [demo]);
+  useEffect(() => { loadCosts(); }, [loadCosts]);
 
   // Surtido: solo existe por tienda. Una sola lectura trae la regla de cada
   // marca y las excepciones por modelo; la precedencia se resuelve al pintar.
@@ -259,9 +268,17 @@ export default function CatalogManager({ me = null, params = null }) {
     };
   }, [cases, matches, t]);
 
-  /** Resumen de una marca para su cabecera cerrada. */
+  /** El costo del servidor de un modelo (descriptor, `cents: null` = falta). */
+  const costOfProduct = useCallback((p) => costOf(costs, p), [costs]);
+
+  /**
+   * Resumen de una marca para su cabecera cerrada. El costo medio y el margen
+   * medio salen SOLO de los modelos con costo real; los que no lo tienen se
+   * cuentan aparte (`noCost`) en vez de entrar como cero, que es lo que haría
+   * que la cabecera presumiera de un margen que no existe.
+   */
   const statsOf = useCallback((list) => {
-    let colors = 0, min = null, max = null, costSum = 0, costN = 0, marginSum = 0;
+    let colors = 0, min = null, max = null, costSum = 0, costN = 0, marginSum = 0, marginN = 0, noCost = 0;
     for (const p of list) {
       colors += (p.colors || []).length;
       const price = overrideOf(p)?.price ?? p.price;
@@ -269,20 +286,24 @@ export default function CatalogManager({ me = null, params = null }) {
         min = min == null ? price : Math.min(min, price);
         max = max == null ? price : Math.max(max, price);
       }
-      const cost = costOfProduct(p);
-      if (cost != null && typeof price === "number" && price > 0) {
-        costSum += cost; costN += 1;
-        marginSum += ((price - cost) / price) * 100;
-      }
+      const cents = costOfProduct(p)?.cents ?? null;
+      if (cents == null) { noCost += 1; continue; }
+      const cost = cents / 100;
+      costSum += cost; costN += 1;
+      const m = marginPct(price, cost);
+      if (m != null) { marginSum += m; marginN += 1; }
     }
     return {
       models: list.length,
       colors,
       min, max,
       cost: costN ? Math.round((costSum / costN) * 100) / 100 : null,
-      margin: costN ? Math.round(marginSum / costN) : null,
+      margin: marginN ? Math.round(marginSum / marginN) : null,
+      // Mientras el servidor no haya contestado no se acusa a nadie de estar
+      // sin costo: todavía no se sabe.
+      noCost: costs ? noCost : 0,
     };
-  }, [overrideOf]);
+  }, [overrideOf, costOfProduct, costs]);
 
   /* ── Escrituras ────────────────────────────────────────────────────── */
 
@@ -328,6 +349,40 @@ export default function CatalogManager({ me = null, params = null }) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(null); }
   }, [priceScope, toast, t]);
+
+  /**
+   * Costo del proveedor de un modelo: POST /admin/pricing/frames/cost. Va por
+   * SKU (no por `medusaId`): el costo es del modelo del proveedor, así que un
+   * modelo del catálogo semilla todavía sin enlazar también puede llevarlo.
+   * No cuelga de la tienda — lo que cuesta no cambia de mostrador.
+   */
+  const onSaveCost = useCallback(async (p, value) => {
+    const cost = Number(value);
+    if (!p.sku || !Number.isFinite(cost) || cost < 0) return false;
+    setBusy(p.slug || p.sku);
+    try {
+      await saveFrameCost({ sku: p.sku, costUsd: cost });
+      await loadCosts(true);
+      toast({ tone: "success", title: t("adm.cm.costSaved", { name: p.name, cost: usd(cost) }) });
+      return true;
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+      return false;
+    } finally { setBusy(null); }
+  }, [loadCosts, toast, t, usd]);
+
+  /** Quitar el costo propio: el modelo vuelve al de la lista del proveedor. */
+  const onClearCost = useCallback(async (p) => {
+    if (!p.sku) return;
+    setBusy(p.slug || p.sku);
+    try {
+      await saveFrameCost({ sku: p.sku, costUsd: null });
+      await loadCosts(true);
+      toast({ tone: "success", title: t("adm.cm.costCleared", { name: p.name }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(null); }
+  }, [loadCosts, toast, t]);
 
   /** Surtido de la tienda: una regla por marca o por modelo (el modelo manda). */
   const writeRule = useCallback(async (rule, key, title) => {
@@ -423,6 +478,8 @@ export default function CatalogManager({ me = null, params = null }) {
     onModelSwitch,
     onSavePrice,
     onClearPrice,
+    onSaveCost,
+    onClearCost,
     onDiscontinue: (p) => setStatus(p, true),
     onOpen: setCardProduct,
   });
@@ -481,6 +538,9 @@ export default function CatalogManager({ me = null, params = null }) {
         )}
       </div>
       {storeInfo.isAll && <p className="cm-warn"><Icon name="info" size={13} />{t("adm.cm.scope.needStore")}</p>}
+      {/* El servidor no dio los costos: se enseña el respaldo del navegador y
+          se dice, porque en ese estado el costo no se puede editar. */}
+      {costs?.offline && <p className="cm-warn bad"><Icon name="alert" size={13} />{t("adm.cm.costsOffline")}</p>}
 
       <AccordionGroup>
         {shown.map((g, i) => <BrandAccordion key={g.slug || "-"} {...brandProps(g, false)} defaultOpen={i === 0 && !!needle} />)}

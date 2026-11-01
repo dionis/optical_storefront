@@ -32,6 +32,7 @@ const es = {
   "adm.cm.b.cost": "costo medio",
   "adm.cm.b.margin": "margen medio",
   "adm.cm.b.off": "descatalogados",
+  "adm.cm.b.noCost": "sin costo",
   "adm.cm.b.hidden": "oculta en {store}",
   "adm.cm.b.range": "{min} – {max}",
 
@@ -40,15 +41,34 @@ const es = {
   "adm.cm.col.colors": "Colores",
   "adm.cm.col.size": "Medidas",
   "adm.cm.col.cost": "Costo prov.",
+  "adm.cm.col.costOwn": "Costo propio",
   "adm.cm.col.price": "Precio venta",
   "adm.cm.col.own": "Precio propio",
+  "adm.cm.col.margin": "Margen",
   "adm.cm.col.sale": "A la venta",
 
   "adm.cm.none": "—",
   "adm.cm.colorsMore": "+{n}",
   "adm.cm.colorList": "Colores de {name}: {list}",
   "adm.cm.sizeHint": "Calibre □ puente varilla, en milímetros",
-  "adm.cm.costHint": "Lo que cuesta la montura al proveedor (lista de Capri Optics).",
+
+  // ── Costo del proveedor (viene del servidor y se edita a mano) ──
+  "adm.cm.costHint": "Lo que te cuesta al proveedor, según la lista de Capri Optics.",
+  "adm.cm.costOwnHint": "Costo puesto a mano: este modelo ya no sigue la lista del proveedor.",
+  "adm.cm.costPlaceholder": "Costo",
+  "adm.cm.costAria": "Costo del proveedor de {name} en dólares",
+  "adm.cm.saveCost": "Guardar el costo de {name}",
+  "adm.cm.clearCost": "Devolver {name} al costo de la lista del proveedor",
+  "adm.cm.costSaved": "{name}: costo {cost}.",
+  "adm.cm.costCleared": "{name} vuelve al costo de la lista del proveedor.",
+  "adm.cm.costsOffline":
+    "El servidor no dio los costos: se enseña la última lista de Capri guardada en el navegador y el costo no se puede editar hasta que vuelva.",
+  "adm.cm.noCost": "Sin costo",
+  "adm.cm.noCostHint":
+    "Este modelo no tiene costo conocido: sin él no hay margen ni ganancia fiable. Ponlo a mano en el campo de al lado.",
+  "adm.cm.marginPct": "{v} %",
+  "adm.cm.marginHint": "Margen sobre el precio de venta: (precio − costo) ÷ precio.",
+
   "adm.cm.rulePrice": "Precio por la regla de precios",
   "adm.cm.ownBadge": "Propio",
   "adm.cm.ownHint": "Este modelo tiene precio propio: la regla no le aplica.",
@@ -78,7 +98,7 @@ const es = {
 
   // ── Estuches ──
   "adm.cm.cases": "Estuches",
-  "adm.cm.casesSub": "El mismo trato que las monturas, sin medidas ni costo de proveedor.",
+  "adm.cm.casesSub": "El mismo trato que las monturas, con su costo y su precio, pero sin medidas.",
 
   // ── Descontinuar (saca el modelo del catálogo entero) ──
   "adm.cm.discontinue": "Descontinuar {name} del catálogo",
@@ -121,6 +141,7 @@ const en = {
   "adm.cm.b.cost": "avg. cost",
   "adm.cm.b.margin": "avg. margin",
   "adm.cm.b.off": "discontinued",
+  "adm.cm.b.noCost": "no cost",
   "adm.cm.b.hidden": "hidden in {store}",
   "adm.cm.b.range": "{min} – {max}",
 
@@ -128,15 +149,33 @@ const en = {
   "adm.cm.col.colors": "Colours",
   "adm.cm.col.size": "Size",
   "adm.cm.col.cost": "Supplier cost",
+  "adm.cm.col.costOwn": "Own cost",
   "adm.cm.col.price": "Sale price",
   "adm.cm.col.own": "Own price",
+  "adm.cm.col.margin": "Margin",
   "adm.cm.col.sale": "On sale",
 
   "adm.cm.none": "—",
   "adm.cm.colorsMore": "+{n}",
   "adm.cm.colorList": "{name} colours: {list}",
   "adm.cm.sizeHint": "Eye □ bridge temple, in millimetres",
-  "adm.cm.costHint": "What the frame costs you from the supplier (Capri Optics list).",
+
+  "adm.cm.costHint": "What it costs you from the supplier, per the Capri Optics list.",
+  "adm.cm.costOwnHint": "Cost set by hand: this model no longer follows the supplier list.",
+  "adm.cm.costPlaceholder": "Cost",
+  "adm.cm.costAria": "Supplier cost for {name} in dollars",
+  "adm.cm.saveCost": "Save the cost for {name}",
+  "adm.cm.clearCost": "Send {name} back to the supplier list cost",
+  "adm.cm.costSaved": "{name}: cost {cost}.",
+  "adm.cm.costCleared": "{name} is back on the supplier list cost.",
+  "adm.cm.costsOffline":
+    "The server did not return the costs: the last Capri list kept in the browser is shown and the cost cannot be edited until it is back.",
+  "adm.cm.noCost": "No cost",
+  "adm.cm.noCostHint":
+    "This model has no known cost: without it there is no reliable margin or profit. Set it by hand in the field next to it.",
+  "adm.cm.marginPct": "{v} %",
+  "adm.cm.marginHint": "Margin over the sale price: (price − cost) ÷ price.",
+
   "adm.cm.rulePrice": "Price from the pricing rule",
   "adm.cm.ownBadge": "Own",
   "adm.cm.ownHint": "This model has its own price: the rule does not apply to it.",
@@ -164,7 +203,7 @@ const en = {
   "adm.cm.assortFailed": "The store assortment could not be read.",
 
   "adm.cm.cases": "Cases",
-  "adm.cm.casesSub": "Same treatment as frames, without measurements or supplier cost.",
+  "adm.cm.casesSub": "Same treatment as frames, with their cost and price, but no measurements.",
 
   "adm.cm.discontinue": "Discontinue {name} from the catalog",
   "adm.cm.diffTitle": "Hiding in one store is not discontinuing",

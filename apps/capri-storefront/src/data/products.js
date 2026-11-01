@@ -82,7 +82,18 @@ function hash(str) {
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff;
   return Math.abs(h);
 }
-// Precio base del proveedor (costo antes del markup).
+// Precio base del proveedor (costo antes del markup) para el CATÁLOGO SEMILLA
+// de la tienda: este módulo se evalúa al cargar el bundle, sin sesión de admin
+// y sin poder esperar al servidor, así que no puede leer el costo real.
+//
+// AVISO, por si se vuelve a confundir: `supplierPrice` de aquí NO es el costo de
+// la contabilidad. El costo bueno vive en el servidor
+// (GET /admin/pricing/frames/costs) y es lo único que lee el panel desde el
+// 1-nov-2026 (admin/pricing/api.js → `loadFrameCosts`/`costOf`). Lo de aquí solo
+// sirve para que la tienda tenga un precio de venta coherente antes de que
+// Medusa conteste; si una pantalla de /admin vuelve a leerlo, la contabilidad se
+// queda a merced de lo que cada navegador tenga al día.
+//
 // Usa el listado REAL de Capri Optics (capriPrices.js); si el SKU no está en la
 // tabla, cae al hash determinístico anterior como último respaldo.
 function supplierPriceFor(sku) {

@@ -146,6 +146,56 @@ const CM_HISTORY = [
 // así se puede ver el estado «oculta» y la precedencia modelo > marca.
 const CM_RULES = new Map([["brand:trendy", false], ["product:prod_DC203", false]]);
 
+/* ── Costos del proveedor (GET /admin/pricing/frames/costs) ────────────────
+   El contrato tal cual: filas { sku, model, book_cents, cost_cents, source,
+   updated_at } y el resumen { with_cost, without_cost }. Los pares
+   «lista → descuento» son los reales de Capri 2026 (DC 89.99 → 20.99, PT 49.99
+   → 3.75, FX 89.99 → 16.99, ML 54.99 → 6.25…).
+
+   Tres casos a propósito, porque son los tres que hay que poder mirar:
+     · lo normal: costo de la lista del proveedor (`source: "supplier"`);
+     · lo que el dueño cambió a mano (`source: "owner"`, pastilla «Propio»);
+     · lo que NO tiene costo (`cost_cents: null`) — los dos estuches del caso
+       real (el de Grande y el de SimplyLite) y tres monturas, para ver el aviso
+       de cobertura, el filtro «solo los que faltan» y la fila destacada.    */
+const COST_TIERS = [
+  ["PRX", 10999, 2999], ["DC", 8999, 1699], ["FX", 8999, 1699], ["GR", 7999, 1699],
+  ["TY", 5999, 850], ["ML", 5499, 625], ["PT", 4999, 375], ["U", 3999, 299],
+].sort((a, b) => b[0].length - a[0].length);
+const CASE_TIER = [1200, 350];
+const COST_MISSING = new Set(["GR440", "PT243", "PRX486", "GRANDECASE", "SIMPLYLITECASE"]);
+const COST_OWN = new Map([["DC206", 2450], ["FX283", 1450]]);
+const ckey = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
+const tierOf = (sku, isCase) => {
+  if (isCase) return CASE_TIER;
+  const hit = COST_TIERS.find(([pre]) => ckey(sku).startsWith(pre));
+  return hit ? [hit[1], hit[2]] : [null, null];
+};
+const CM_COSTS = new Map();
+const addCost = (sku, model, isCase) => {
+  const k = ckey(sku);
+  if (CM_COSTS.has(k)) return;
+  const [book, list] = tierOf(sku, isCase);
+  const own = COST_OWN.get(k);
+  const missing = COST_MISSING.has(k);
+  CM_COSTS.set(k, {
+    sku, model,
+    book_cents: book,
+    cost_cents: missing ? null : own ?? list,
+    source: own ? "owner" : "supplier",
+    updated_at: own ? "2026-10-24T09:10:00Z" : "2026-07-01T00:00:00Z",
+  });
+};
+for (const f of CM_FRAMES) addCost(f.sku, f.name, false);
+for (const c of CM_CASES) addCost(c.sku, c.name, true);
+// Modelos de la lista del proveedor que este catálogo simulado no trae: el
+// estuche de SimplyLite (sin costo) y los dos modelos con precio propio de
+// «Modificados», para ver también la columna de precio y el margen cruzados.
+addCost("SIMPLYLITECASE", "SimplyLite Case", true);
+addCost("DC241", "DC241", false);
+addCost("FL118", "FL 118", false);
+addCost("CS-RIG", "Estuche rígido", true);
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input.url, location.origin);
@@ -191,6 +241,37 @@ window.fetch = async (input, init) => {
       total_products: CM_FRAMES.length,
       exposed_products: CM_FRAMES.filter(exposedOf).length,
     });
+  }
+  // Costos del proveedor: los lee «Productos» (acordeón por marca) y la vista
+  // Monturas de «Precios y costos», por la misma entrada de caché.
+  if (p === "/admin/pricing/frames/costs") {
+    const rows = [...CM_COSTS.values()];
+    return json({
+      rows,
+      summary: {
+        with_cost: rows.filter((r) => r.cost_cents != null).length,
+        without_cost: rows.filter((r) => r.cost_cents == null).length,
+      },
+    });
+  }
+  // Fijar o devolver el costo de un modelo. El banco lo recuerda EN MEMORIA, así
+  // que se puede ver la pastilla «Propio» aparecer y el botón de deshacer
+  // devolver el modelo al costo de la lista.
+  if (p === "/admin/pricing/frames/cost") {
+    const body = JSON.parse(init?.body || "{}");
+    const k = ckey(body.sku);
+    const row = CM_COSTS.get(k) || { sku: body.sku, model: body.sku, book_cents: null };
+    if (body.cost_cents == null) {
+      const [, list] = tierOf(body.sku, ckey(body.sku).includes("CASE"));
+      row.cost_cents = COST_MISSING.has(k) ? null : list;
+      row.source = "supplier";
+    } else {
+      row.cost_cents = Number(body.cost_cents);
+      row.source = "owner";
+    }
+    row.updated_at = new Date().toISOString();
+    CM_COSTS.set(k, row);
+    return json({ ok: true, sku: row.sku, cost_cents: row.cost_cents, source: row.source });
   }
   // Monturas descontinuadas (status draft) que lista fetchDiscontinued().
   if (p === "/admin/products") {

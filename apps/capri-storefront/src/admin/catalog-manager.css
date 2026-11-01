@@ -1,7 +1,7 @@
 /* «Productos» del grupo Comercial: CatalogManager.jsx + BrandAccordion.jsx.
    Minimalista por pedido del dueño («odio el espacio en blanco»): la fila de un
    modelo es UNA línea de 40 px con columnas del ancho del dato que llevan, y la
-   cabecera de una marca cerrada mide ~56 px. Bajo 1080 px las columnas se
+   cabecera de una marca cerrada mide ~56 px. Bajo 1140 px las columnas se
    reorganizan hacia abajo y aparecen sus rótulos (.cm-lbl), como en las tablas
    responsive del panel. Solo tokens --adm-* / --st-*: el modo oscuro lo hereda
    del armazón, sin un color a mano. */
@@ -15,6 +15,8 @@
 .cm-intro { margin: 0; font-size: 12px; color: var(--adm-muted); max-width: 92ch; }
 .cm-warn { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--adm-muted);
   background: var(--adm-surface-2); border: 1px dashed var(--adm-line); border-radius: var(--adm-radius, 12px); padding: 5px 9px; }
+/* Aviso que NO es informativo: el costo no se puede editar ahora mismo. */
+.cm-warn.bad { color: var(--adm-red-dark, #991b1b); border-color: var(--adm-red-dark, #991b1b); background: var(--adm-red-soft, var(--adm-surface-2)); }
 
 /* Buscador: una línea, sin tarjeta propia ni margen de sobra. */
 .cm-find { flex: 1 1 220px; max-width: 360px; }
@@ -36,12 +38,18 @@
 .cm-foot { margin: 6px 0 0; display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--adm-muted); }
 
 /* ── Fila de un modelo: UNA línea en escritorio ──────────────────────── */
+/* Doce columnas: miniatura · nombre · SKU · colores · medidas · COSTO · costo
+   editable · PRECIO · precio propio · MARGEN · a la venta · descontinuar. Las
+   dos cifras de la contabilidad van seguidas de su campo, y el margen cierra el
+   grupo del dinero. Mide ~1020 px de mínimo, así que por debajo de 1140 px las
+   columnas bajan (más abajo) en vez de apretarse. */
 .cm-row {
   display: grid;
   grid-template-columns:
-    28px minmax(100px, 1.2fr) 88px minmax(84px, .9fr) minmax(96px, .7fr) 70px 104px 146px 40px 28px;
+    28px minmax(96px, 1.1fr) 76px minmax(80px, .9fr) minmax(84px, .6fr)
+    118px 112px 104px 112px 86px 40px 26px;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-height: 40px;
   padding: 2px 2px;
   border-top: 1px solid var(--adm-line-2, var(--adm-line));
@@ -49,6 +57,9 @@
 .cm-rows > .cm-row:first-child { border-top: none; }
 .cm-row.hidden { opacity: .55; }
 .cm-row.hidden .cm-name { text-decoration: line-through; }
+/* Un modelo sin costo conocido se tiene que ver desde arriba: es el que hace
+   que el margen de su marca y la contabilidad del mes no cuadren. */
+.cm-row.nocost { box-shadow: inset 3px 0 0 var(--adm-red-dark, #991b1b); }
 .cm-cell { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .cm-lbl { display: none; }
 .cm-mono { font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
@@ -62,8 +73,20 @@
 .cm-name:hover { color: var(--adm-accent-ink, var(--adm-navy)); text-decoration: underline; }
 .cm-sku code { font: 600 11px var(--adm-mono, ui-monospace, monospace); color: var(--adm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-price b { font-size: 12.5px; }
-.cm-cost, .cm-price { justify-content: flex-end; }
-@media (max-width: 1080px) { .cm-cost, .cm-price { justify-content: flex-start; } }
+.cm-cost, .cm-price, .cm-margin { justify-content: flex-end; }
+/* Costo puesto a mano por el dueño: se distingue del de la lista sin leer nada. */
+.cm-mono.own { font-weight: 800; color: var(--adm-accent-ink, var(--adm-navy)); }
+
+/* Margen: tres tonos, el mismo criterio que las pastillas de la cabecera. */
+.cm-mg { font-size: 12px; }
+.cm-mg.good { color: var(--adm-green-dark, #14663f); }
+.cm-mg.warn { color: var(--adm-amber-dark, #92400e); }
+.cm-mg.bad { color: var(--adm-red-dark, #991b1b); }
+/* «Sin costo»: no es un dato neutro, es lo que hay que arreglar. */
+.cm-nocost { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 800;
+  background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); }
+@media (max-width: 1140px) { .cm-cost, .cm-price, .cm-margin { justify-content: flex-start; } }
 
 /* Muestras de color: el color se ve, no se lee. */
 .cm-swatches { display: inline-flex; align-items: center; gap: 2px; }
@@ -73,11 +96,11 @@
 .cm-badge { font-size: 9.5px; font-weight: 800; letter-spacing: .02em; padding: 1px 5px; border-radius: 999px;
   background: var(--adm-accent-soft, var(--adm-surface-2)); color: var(--adm-accent-ink, var(--adm-navy)); border: 1px solid var(--adm-accent-line, var(--adm-line)); }
 
-/* El campo de precio propio es del ancho de un número, no de la fila. */
-.cm-input { width: 74px; min-width: 0; height: 24px; padding: 0 6px; font: 600 11.5px var(--adm-font); text-align: right;
+/* Los campos de costo y de precio propio son del ancho de un número, no de la fila. */
+.cm-input { width: 60px; min-width: 0; height: 24px; padding: 0 5px; font: 600 11.5px var(--adm-font); text-align: right;
   background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); border-radius: 7px; }
 .cm-input:disabled { opacity: .5; cursor: not-allowed; }
-.cm-own .btn-xs, .cm-off { padding: 0 5px; min-height: 24px; }
+.cm-own .btn-xs, .cm-costown .btn-xs, .cm-off { padding: 0 5px; min-height: 24px; }
 
 /* Interruptor de surtido: el .adm-switch del panel, sin etiqueta de texto. */
 .cm-sw { display: inline-flex; align-items: center; cursor: pointer; }
@@ -96,7 +119,7 @@
   background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: 999px; }
 
 /* ── Estrecho: las columnas bajan y aparecen sus rótulos ─────────────── */
-@media (max-width: 1080px) {
+@media (max-width: 1140px) {
   .cm-row {
     grid-template-columns: 28px minmax(90px, 1fr) auto auto;
     row-gap: 2px;
@@ -104,17 +127,18 @@
   }
   .cm-name { grid-column: 2 / -2; }
   .cm-cell { grid-column: auto; }
-  .cm-sku, .cm-colors, .cm-size, .cm-cost, .cm-price, .cm-own, .cm-sale { grid-column: span 2; }
+  .cm-sku, .cm-colors, .cm-size, .cm-cost, .cm-costown, .cm-price, .cm-own, .cm-margin, .cm-sale { grid-column: span 2; }
   .cm-lbl { display: inline; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--adm-muted); }
   .cm-name { white-space: normal; }
 }
 @media (max-width: 560px) {
   .cm-row { grid-template-columns: 28px 1fr auto; }
-  .cm-sku, .cm-colors, .cm-size, .cm-cost, .cm-price, .cm-own, .cm-sale { grid-column: span 3; }
+  .cm-sku, .cm-colors, .cm-size, .cm-cost, .cm-costown, .cm-price, .cm-own, .cm-margin, .cm-sale { grid-column: span 3; }
   .cm-logo { max-width: 76px; }
 }
 
-/* Impresión: sin interruptores ni botones, que no se imprimen útiles. */
+/* Impresión: sin interruptores ni botones, que no se imprimen útiles. El costo,
+   el precio y el margen SÍ se imprimen: es la hoja que repasa la contabilidad. */
 @media print {
-  .cm-tools, .cm-own, .cm-sale, .cm-off, .cm-brand-sw, .cm-find { display: none !important; }
+  .cm-tools, .cm-own, .cm-costown, .cm-sale, .cm-off, .cm-brand-sw, .cm-find { display: none !important; }
 }
