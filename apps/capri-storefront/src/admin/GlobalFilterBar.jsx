@@ -22,11 +22,14 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import StoreFilter from "./StoreFilter.jsx";
-import { PERIODS, usePeriodFilter } from "./periodStore.js";
+import { PERIODS, usePeriodFilter, usePeriodNotice } from "./periodStore.js";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { exportReport } from "./ReportDoc.jsx";
 import "./filter-bar.css";
+// El aviso de salto automático comparte hoja con EmptyPeriod.jsx: es el mismo
+// asunto (un período sin datos) visto desde la barra.
+import "./empty-period.css";
 
 /**
  * Pestaña → piezas de la barra. `store`: selector de tienda; `period`: período
@@ -158,7 +161,10 @@ function PeriodControl() {
     <>
       <div className={`adm-bar-seg ${scrolls ? "scrolls" : ""}`} ref={segRef} role="group" aria-label={t("adm.bar.period")}>
         {PERIODS.map((p) => (
-          <button key={p} type="button" className={period === p ? "on" : ""} aria-pressed={period === p} onClick={() => setPeriod(p)} title={t(`adm.ex.period.${p}`)}>
+          // `{ explicit: true }`: aquí el período lo elige una PERSONA, así que
+          // queda marcado y el panel no se lo vuelve a cambiar por debajo
+          // (periodStore.js → hasExplicitPeriod / autoSwitchPeriod).
+          <button key={p} type="button" className={period === p ? "on" : ""} aria-pressed={period === p} onClick={() => setPeriod(p, { explicit: true })} title={t(`adm.ex.period.${p}`)}>
             {t(`adm.ex.per.${p}`)}
           </button>
         ))}
@@ -166,17 +172,40 @@ function PeriodControl() {
       {custom ? (
         <span className="adm-bar-range on" title={t("adm.bar.range")}>
           <Icon name="calendar" size={13} />
-          <input type="date" value={from} max={to} aria-label={t("adm.ex.from")} title={t("adm.ex.from")} onChange={(e) => e.target.value && setRange(e.target.value, undefined)} />
+          <input type="date" value={from} max={to} aria-label={t("adm.ex.from")} title={t("adm.ex.from")} onChange={(e) => e.target.value && setRange(e.target.value, undefined, { explicit: true })} />
           <span className="adm-bar-range-sep" aria-hidden="true">–</span>
-          <input type="date" value={to} min={from} aria-label={t("adm.ex.to")} title={t("adm.ex.to")} onChange={(e) => e.target.value && setRange(undefined, e.target.value)} />
+          <input type="date" value={to} min={from} aria-label={t("adm.ex.to")} title={t("adm.ex.to")} onChange={(e) => e.target.value && setRange(undefined, e.target.value, { explicit: true })} />
         </span>
       ) : (
-        <button type="button" className="adm-bar-range adm-bar-range-btn" onClick={() => setPeriod("range")} title={`${t("adm.ex.from")} ${from} – ${t("adm.ex.to")} ${to} · ${t("adm.bar.rangeHint")}`}>
+        <button type="button" className="adm-bar-range adm-bar-range-btn" onClick={() => setPeriod("range", { explicit: true })} title={`${t("adm.ex.from")} ${from} – ${t("adm.ex.to")} ${to} · ${t("adm.bar.rangeHint")}`}>
           <Icon name="calendar" size={13} />
           <span>{from === to ? short(from) : `${short(from)} – ${short(to)}`}</span>
         </button>
       )}
     </>
+  );
+}
+
+/**
+ * «Este mes aún no tiene ventas: mostrando mes pasado». Cuando el panel cambia
+ * el período él solo (periodStore.js → autoSwitchPeriod, el día 1 del mes) hay
+ * que DECIRLO en el mismo sitio donde se ve el período: datos que cambian sin
+ * explicación es lo que hizo creer al dueño que el panel estaba roto. Sin salto
+ * automático no pinta nada, así que la barra queda igual que siempre.
+ */
+function AutoNotice() {
+  const { t } = useLang();
+  const { notice, dismiss } = usePeriodNotice();
+  if (!notice) return null;
+  const text = t("adm.period.auto.notice", { from: t(`adm.ex.period.${notice.fromPeriod}`), to: t(`adm.ex.period.${notice.toPeriod}`) });
+  return (
+    <div className="ep-notice" role="status" aria-label={t("adm.period.auto.aria")}>
+      <Icon name="info" size={14} />
+      <span className="ep-notice-txt">{text}</span>
+      <button type="button" className="btn-xs ep-notice-ok" onClick={dismiss} title={t("adm.period.auto.dismiss")} aria-label={t("adm.period.auto.dismiss")}>
+        {t("adm.period.auto.dismiss")}
+      </button>
+    </div>
   );
 }
 
@@ -208,15 +237,22 @@ function ExportGroup() {
  */
 export default function GlobalFilterBar({ tab, me, barRef }) {
   const { t } = useLang();
+  const { notice } = usePeriodNotice();
   const opts = barOptionsFor(tab);
   if (!opts) return null;
+  // El aviso solo tiene sentido donde se ve el período, y va DENTRO de la barra
+  // para que el alto que mide AdminShell (--adm-bar-h) lo incluya y no tape el
+  // principio de la pantalla. `data-notice` deja que la barra envuelva a dos
+  // filas en escritorio (empty-period.css), que normalmente es de una sola.
+  const showNotice = Boolean(opts.period && notice);
   return (
-    <div className="adm-bar adm-noprint" ref={barRef} role="region" aria-label={t("adm.bar.aria")} data-tab={tab}>
+    <div className="adm-bar adm-noprint" ref={barRef} role="region" aria-label={t("adm.bar.aria")} data-tab={tab} data-notice={showNotice ? "1" : undefined}>
       <div className="adm-bar-filters">
         {opts.store && <span className="adm-bar-item adm-bar-store"><StoreFilter me={me} compact /></span>}
         {opts.period && <span className="adm-bar-item adm-bar-period"><PeriodControl /></span>}
       </div>
       {opts.export && <ExportGroup />}
+      {showNotice && <AutoNotice />}
     </div>
   );
 }

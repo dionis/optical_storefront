@@ -46,8 +46,22 @@ import "./exec.css";
 
 /** Los períodos del panel (periodStore.js); se re-exportan por compatibilidad (SellerPanel). */
 export { PERIODS };
-/** Pages of 100 sales read for one list: beyond it the panel says `truncated`. */
+/** Pages of sales read for one list: beyond it the panel says `truncated`. */
 const MAX_PAGES = 10;
+/**
+ * Filas por página que se piden. El backend acepta `limit` (hasta 200); una
+ * versión que todavía no lo entienda devuelve sus 100 de siempre, y el tamaño
+ * REAL de página se deduce de la primera respuesta, así que pedir 200 nunca
+ * rompe nada: solo parte en dos el número de viajes cuando ya esté desplegado.
+ */
+const PAGE_LIMIT = 200;
+/**
+ * Páginas que se piden a la vez cuando la respuesta no trae `total` y hay que
+ * descubrir el final a tientas. Antes se pedía una tras otra (hasta 10 viajes
+ * encadenados, ~0,5 s cada uno = varios segundos de espera en el Ejecutivo);
+ * ahora van en lotes paralelos y se corta en cuanto una dice `has_more: false`.
+ */
+const PAGE_BATCH = 4;
 /** Chips de filtro por etapa, las pendientes primero. */
 export const STAGE_FILTERS = ["pending", "shipped", "in_transit", "delivered", "voided"];
 /** Claves de `params` que esta lista entiende (ver el contrato de arriba). */
@@ -70,7 +84,9 @@ const DAY_MS = 86400_000;
 const LIST_TTL = 60_000;
 /** Lo que pide la lista para un rango y una tienda (también lo usa AdminShell.prefetchTab). */
 export function storeOrdersQueries({ from, to, storeId }) {
-  const q = { from, to, page: 0 };
+  // Mismo `limit` que useStoreSales: si no coincidiera, lo que se precarga
+  // quedaría en otra clave de caché y la lista lo pediría otra vez.
+  const q = { from, to, page: 0, limit: PAGE_LIMIT };
   if (storeId && storeId !== "all") q.stores = storeId;
   const b = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
   if (storeId && storeId !== "all") b.store = storeId;
@@ -105,6 +121,13 @@ export function salesTotals(rows) {
  * Las ventas del período para la(s) tienda(s): todas las páginas (hasta
  * MAX_PAGES). `storeId`: "all" | "web" | id de establecimiento. `reload()`
  * vuelve a leer (tras cobrar, entregar o anular desde la ficha).
+ *
+ * Las páginas se piden EN PARALELO, no una tras otra: la primera dice si hay
+ * más, cuánto mide una página y —cuando el backend lo manda— el `total`, y con
+ * eso el resto se lanza de una vez. Paginar en secuencia costaba un viaje por
+ * página (hasta diez encadenados), y el Ejecutivo monta este hook antes de
+ * poder pintar nada. El orden de las filas es el del servidor: cada respuesta
+ * se guarda en el hueco de SU número de página, no por orden de llegada.
  */
 export function useStoreSales({ from, to, storeId }, enabled = true) {
   const [data, setData] = useState({ rows: [], access: null, state: "idle", truncated: false });
@@ -114,20 +137,56 @@ export function useStoreSales({ from, to, storeId }, enabled = true) {
     if (!enabled || demo || !from || !to || from > to) { setData((d) => ({ ...d, state: demo ? "demo" : "idle" })); return undefined; }
     let on = true;
     setData((d) => ({ ...d, state: "loading" }));
+    const getPage = (page) => {
+      const q = { from, to, page, limit: PAGE_LIMIT };
+      if (storeId && storeId !== "all") q.stores = storeId;
+      return adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
+    };
     (async () => {
-      const rows = [];
-      let access = null;
+      const first = await getPage(0);
+      // `on` se comprueba antes de cada tanda y antes de escribir: una
+      // respuesta que llega tras desmontar no toca el estado ni pide más.
+      if (!on) return;
+      const pages = [first.sales || []];
+      let access = first.access || null;
       let truncated = false;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const q = { from, to, page };
-        if (storeId && storeId !== "all") q.stores = storeId;
-        const r = await adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
-        rows.push(...(r.sales || []));
-        access = r.access || access;
-        if (!r.has_more) break;
-        if (page === MAX_PAGES - 1) truncated = true;
+      const take = (r, page) => { pages[page] = r.sales || []; access = r.access || access; };
+      if (first.has_more) {
+        // Tamaño real de página: si el backend todavía ignora `limit`, esto son
+        // sus 100 y las cuentas siguen cuadrando.
+        const size = (first.sales || []).length || PAGE_LIMIT;
+        const total = Number(first.total);
+        if (Number.isFinite(total) && total > 0) {
+          // Con `total` se sabe cuántas páginas faltan: todas juntas, un viaje.
+          const want = Math.ceil(total / size);
+          const nums = [];
+          for (let page = 1; page < Math.min(want, MAX_PAGES); page++) nums.push(page);
+          const res = await Promise.all(nums.map(getPage));
+          if (!on) return;
+          nums.forEach((page, i) => take(res[i], page));
+          truncated = want > MAX_PAGES;
+        } else {
+          // Sin `total`: lotes de PAGE_BATCH en paralelo hasta que una página
+          // diga que ya no hay más. Lo pedido de más tras esa página se tira.
+          let next = 1;
+          let more = true;
+          while (more && next < MAX_PAGES) {
+            const nums = [];
+            for (let page = next; page < Math.min(next + PAGE_BATCH, MAX_PAGES); page++) nums.push(page);
+            const res = await Promise.all(nums.map(getPage));
+            if (!on) return;
+            for (let i = 0; i < nums.length; i++) {
+              take(res[i], nums[i]);
+              if (!res[i].has_more) { more = false; break; }
+            }
+            next += nums.length;
+            // Igual que antes: se avisa solo si tras la última página permitida
+            // el servidor seguía teniendo ventas.
+            if (more && next >= MAX_PAGES) truncated = true;
+          }
+        }
       }
-      if (on) setData({ rows, access, state: "ok", truncated });
+      if (on) setData({ rows: pages.flat(), access, state: "ok", truncated });
     })().catch(() => { if (on) setData({ rows: [], access: null, state: "error", truncated: false }); });
     return () => { on = false; };
   }, [from, to, storeId, enabled, demo, tick]);

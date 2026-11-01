@@ -16,6 +16,28 @@
 // mes = 1→hoy, año = 1 ene→hoy; «pasada/o» = el anterior entero. `datesOf`
 // devuelve "YYYY-MM-DD" locales; `boundsOf` los convierte a Date (lo que toman
 // analytics.js / realAnalytics.js), igual que StoreOrders.datesOf.
+//
+// ── Períodos recién empezados ──────────────────────────────────────────────
+// Como «Mes» es 1→hoy, el día 1 de cada mes el período activo es un solo día y
+// TODA pantalla sale a cero aunque el mes pasado esté lleno de ventas. Pasa
+// igual los lunes («Semana» = lunes→hoy) y cada 1 de enero. El dueño abre el
+// panel, lo ve vacío y cree que está roto. Tres piezas resuelven eso:
+//
+//   1. `alternativePeriodsOf(period)` → los períodos a los que tiene sentido
+//      saltar para encontrar datos, en orden de «lo más parecido primero». Es
+//      la lista que pinta EmptyPeriod.jsx como botones.
+//   2. Elección EXPLÍCITA vs. valor por defecto. Lo guardado lleva
+//      `explicit: true` solo cuando alguien fijó el período a mano (la barra de
+//      filtros y los botones de EmptyPeriod pasan `{ explicit: true }`; un
+//      salto de pantalla con `applyPeriodParams` NO lo marca). Se consulta con
+//      `hasExplicitPeriod()` y la marca es pegajosa: una vez elegido, nada la
+//      borra.
+//   3. `autoSwitchPeriod(hasData)` salta al primer alternativo con datos UNA
+//      sola vez por sesión y solo si nunca hubo elección explícita, y deja un
+//      aviso (`usePeriodNotice()` / `readPeriodNotice()`) que la barra de
+//      filtros pinta: «Este mes aún no tiene ventas: mostrando mes pasado».
+//      Nunca se mueve el período en silencio — el dueño odia los datos que
+//      cambian sin explicación.
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 export const PERIODS = ["today", "yesterday", "week", "lastWeek", "month", "lastMonth", "year", "range"];
@@ -89,30 +111,144 @@ export const monthOf = ({ from }) => String(from || "").slice(0, 7);
 // ── Estado compartido ──────────────────────────────────────────────────────
 // Un período de la lista se guarda solo por su clave y se recalcula al leer:
 // «Hoy» guardado ayer es hoy, no ayer. Solo «Rango» conserva sus fechas.
+// `explicit` distingue «lo eligió una persona» de «es el valor por defecto»: sin
+// esa marca no se puede saber si mover el período le pisa la elección a nadie.
+// Lo guardado por una versión anterior del panel no la lleva, así que cuenta
+// como no elegido: lo peor que pasa es un salto automático AVISADO la primera
+// vez, que es justo lo que se quiere el día 1 del mes.
 function normalize(raw) {
   const period = PERIODS.includes(raw?.period) ? raw.period : DEFAULT_PERIOD;
-  if (period === "range" && DAY_RE.test(raw?.from || "") && DAY_RE.test(raw?.to || "") && raw.from <= raw.to) return { period, from: raw.from, to: raw.to };
-  if (period === "range") return { period: DEFAULT_PERIOD, ...datesOf(DEFAULT_PERIOD) };
-  return { period, ...datesOf(period) };
+  const explicit = raw?.explicit === true;
+  if (period === "range" && DAY_RE.test(raw?.from || "") && DAY_RE.test(raw?.to || "") && raw.from <= raw.to) return { period, from: raw.from, to: raw.to, explicit };
+  if (period === "range") return { period: DEFAULT_PERIOD, ...datesOf(DEFAULT_PERIOD), explicit };
+  return { period, ...datesOf(period), explicit };
 }
 function read() {
   try { return normalize(JSON.parse(localStorage.getItem(KEY) || "null")); } catch { return normalize(null); }
 }
 let snapshot = null;
 const getSnapshot = () => (snapshot ||= read());
-const SERVER_SNAPSHOT = Object.freeze({ period: DEFAULT_PERIOD, ...datesOf(DEFAULT_PERIOD) });
+// Aviso del último salto automático y «ya lo intentamos»: viven en el módulo, no
+// en un componente, para que montar y desmontar pantallas no reinicie ni el
+// aviso ni el límite de un salto por sesión.
+let notice = null;
+let autoTried = false;
+const SERVER_SNAPSHOT = Object.freeze({ period: DEFAULT_PERIOD, ...datesOf(DEFAULT_PERIOD), explicit: false });
 const getServerSnapshot = () => SERVER_SNAPSHOT;
 
-/** Fija el período global (todas las pantallas montadas se vuelven a pintar). */
-export function setPeriodState(next) {
-  const value = normalize(next);
+/**
+ * Fija el período global (todas las pantallas montadas se vuelven a pintar).
+ * `opts.explicit` marca que lo eligió una persona, no el valor por defecto; la
+ * marca es PEGAJOSA (un salto de pantalla posterior cambia el período pero no
+ * borra que alguien ya eligió) y apaga el aviso de salto automático, porque a
+ * partir de ahí el período que se ve es el que se pidió.
+ */
+export function setPeriodState(next, { explicit = false } = {}) {
+  const chosen = explicit || next?.explicit === true || getSnapshot().explicit === true;
+  const value = normalize({ ...next, explicit: chosen });
   snapshot = value;
+  if (explicit) notice = null;
   try { localStorage.setItem(KEY, JSON.stringify(value)); } catch { /* noop */ }
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(EVENT, { detail: value }));
   return value;
 }
 /** Lo guardado, ya normalizado; para módulos sin hook. */
 export const readPeriod = () => getSnapshot();
+
+// ── Períodos alternativos ──────────────────────────────────────────────────
+// A qué período tiene sentido saltar cuando el activo no trae nada, en orden de
+// «lo más parecido primero»: primero el equivalente anterior (la semana pasada,
+// el mes pasado), luego se ensancha la ventana (mes, año). Son claves de
+// PERIODS y sus fechas salen de `datesOf`, así que lo que se ofrece es siempre
+// un período que la barra de filtros también sabe pintar.
+//   · Hoy / Ayer → la semana, el mes, el mes pasado, el año.
+//   · Semana     → la semana pasada y, si tampoco, mes · mes pasado · año.
+//   · Mes        → el mes pasado y el año (el caso del día 1).
+//   · Mes pasado → solo el año: más atrás ya no hay período con nombre.
+//   · Año        → nada. No existe «año pasado» en PERIODS; ofrecer «Rango»
+//                  sería mandar al operador a teclear dos fechas, no un salto.
+//   · Rango      → fechas a mano; se ofrece ensanchar a mes · mes pasado · año.
+const ALTERNATIVES = {
+  today: ["week", "month", "lastMonth", "year"],
+  yesterday: ["week", "month", "lastMonth", "year"],
+  week: ["lastWeek", "month", "lastMonth", "year"],
+  lastWeek: ["month", "lastMonth", "year"],
+  month: ["lastMonth", "year"],
+  lastMonth: ["year"],
+  year: [],
+  range: ["month", "lastMonth", "year"],
+};
+
+/**
+ * Períodos a los que tiene sentido saltar desde `period` (por defecto el
+ * activo) para encontrar datos, en orden. Siempre claves de PERIODS, nunca el
+ * propio período ni "range".
+ */
+export function alternativePeriodsOf(period = getSnapshot().period) {
+  return (ALTERNATIVES[period] || []).filter((p) => p !== period && p !== "range" && PERIODS.includes(p));
+}
+
+// ── Elección explícita y salto automático ──────────────────────────────────
+
+/** ¿Alguien fijó el período a mano alguna vez (y no es solo el valor por defecto)? */
+export const hasExplicitPeriod = () => getSnapshot().explicit === true;
+
+/** Marca el período actual como elección explícita sin cambiarlo. */
+export function markPeriodExplicit() {
+  if (hasExplicitPeriod()) return;
+  setPeriodState(getSnapshot(), { explicit: true });
+}
+
+/**
+ * ¿Queda margen para un salto automático? Una pantalla lo consulta ANTES de
+ * ponerse a sondear períodos, para no gastar peticiones cuando ya no puede
+ * saltar (hubo elección explícita, ya se saltó o no hay alternativos).
+ */
+export const canAutoSwitchPeriod = () => !autoTried && !hasExplicitPeriod() && alternativePeriodsOf().length > 0;
+
+/**
+ * Salta al PRIMER período alternativo con datos. `hasData(period, { from, to })`
+ * lo decide la pantalla (puede devolver booleano o promesa); lo que lance se
+ * trata como «sin datos» y se sigue con el siguiente.
+ *
+ * Reglas que no se rompen:
+ *   · solo si nunca hubo elección explícita (ni antes ni durante el sondeo, que
+ *     puede ser lento: se vuelve a comprobar justo antes de fijar);
+ *   · una sola vez por sesión — `autoTried` se marca ANTES de sondear, así dos
+ *     pantallas montadas a la vez no pueden saltar dos veces ni entrar en bucle
+ *     si el sondeo falla;
+ *   · si salta, deja aviso (`readPeriodNotice()`), nunca se mueve en silencio.
+ *
+ * Devuelve el aviso `{ fromPeriod, toPeriod }` si saltó, o `null` si no.
+ */
+export async function autoSwitchPeriod(hasData, now = new Date()) {
+  if (!canAutoSwitchPeriod() || typeof hasData !== "function") return null;
+  autoTried = true;
+  const fromPeriod = getSnapshot().period;
+  for (const toPeriod of alternativePeriodsOf(fromPeriod)) {
+    const range = datesOf(toPeriod, now);
+    let found = false;
+    try { found = Boolean(await hasData(toPeriod, range)); } catch { found = false; }
+    if (!found) continue;
+    if (hasExplicitPeriod()) return null; // alguien eligió mientras sondeábamos: manda él
+    notice = { fromPeriod, toPeriod };
+    setPeriodState({ period: toPeriod }); // sin `explicit`: no lo eligió nadie, lo elegimos nosotros
+    return notice;
+  }
+  return null;
+}
+
+/** El aviso del último salto automático, o `null`; para módulos sin hook. */
+export const readPeriodNotice = () => notice;
+// En el servidor no hay salto automático que avisar (ni localStorage que leer).
+const getServerNotice = () => null;
+
+/** Quita el aviso (el operador ya lo leyó). No toca el período. */
+export function dismissPeriodNotice() {
+  if (!notice) return;
+  notice = null;
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(EVENT, { detail: getSnapshot() }));
+}
 
 /**
  * Aplica `period` o `from`/`to` de unos `params` de salto (contrato de
@@ -140,20 +276,36 @@ function subscribe(cb) {
  * recalcula sus fechas); `setRange(from, to)` pasa a «Rango» con esas fechas
  * (una sola también vale: la otra se conserva, y si se cruzan se iguala);
  * `label(t)` es el texto corto para cabeceras y nombres de archivo.
+ *
+ * Los dos aceptan `opts` y se lo pasan a `setPeriodState`: quien fija el período
+ * porque una PERSONA lo pidió (la barra de filtros, los botones de
+ * EmptyPeriod) manda `{ explicit: true }` y así el panel no se lo vuelve a
+ * cambiar por debajo.
  */
 export function usePeriodFilter() {
   const s = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const setPeriod = useCallback((p) => { setPeriodState(p === "range" ? { period: "range", from: getSnapshot().from, to: getSnapshot().to } : { period: p }); }, []);
-  const setRange = useCallback((from, to) => {
+  const setPeriod = useCallback((p, opts) => { setPeriodState(p === "range" ? { period: "range", from: getSnapshot().from, to: getSnapshot().to } : { period: p }, opts); }, []);
+  const setRange = useCallback((from, to, opts) => {
     const cur = getSnapshot();
     let f = DAY_RE.test(from || "") ? from : cur.from;
     let tt = DAY_RE.test(to || "") ? to : cur.to;
     if (from && !to && f > tt) tt = f;
     if (to && !from && tt < f) f = tt;
-    setPeriodState({ period: "range", from: f, to: tt });
+    setPeriodState({ period: "range", from: f, to: tt }, opts);
   }, []);
   const label = useCallback((t) => (s.period === "range" ? `${s.from} → ${s.to}` : t(`adm.ex.period.${s.period}`)), [s]);
   const range = useMemo(() => ({ from: s.from, to: s.to }), [s.from, s.to]);
   const prevRange = useMemo(() => previousRangeOf(s.period, range), [s.period, range]);
-  return { period: s.period, from: s.from, to: s.to, range, prevRange, setPeriod, setRange, label };
+  return { period: s.period, from: s.from, to: s.to, range, prevRange, setPeriod, setRange, label, explicit: s.explicit === true };
+}
+
+/**
+ * El aviso del salto automático, para que el panel lo DIGA: `{ notice:
+ * { fromPeriod, toPeriod } | null, dismiss }`. Se refresca con el mismo evento
+ * que el período, así aparece en el mismo pintado en que cambian las cifras.
+ */
+export function usePeriodNotice() {
+  const n = useSyncExternalStore(subscribe, readPeriodNotice, getServerNotice);
+  const dismiss = useCallback(() => dismissPeriodNotice(), []);
+  return useMemo(() => ({ notice: n, dismiss }), [n, dismiss]);
 }

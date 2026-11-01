@@ -57,17 +57,18 @@ const ctx = (over: Partial<EconomicsContext> = {}): EconomicsContext => ({
   rules: RULES,
   orders: new Map([["o1", { gross: 10800, net: 10000, lines: 1 }]]),
   saleFees: new Map([["s1", 250]]),
+  saleCash: new Map([["s1", { paid: 8000, balance: 2800 }]]),
   commissionPct: () => 10,
   ...over,
 });
 
-const ZERO: Figures = { sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, margin_pct: null, count: 0, units: 0, avg_ticket: 0 };
+const ZERO: Figures = { sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, margin_pct: null, paid: 0, balance: 0, count: 0, units: 0, avg_ticket: 0 };
 const NO_LABELS = { store: () => null, sellerName: () => null };
 
 describe("lineEconomics", () => {
   it("net minus materials, recorded fee and commission; rent and the target stay out", () => {
     const [e] = lineEconomics([line()], ctx());
-    expect(e).toEqual({ net: 10000, cost: 3500, fee: 250, commission: 1000, profit: 5250, missing_cost: false });
+    expect(e).toEqual({ net: 10000, cost: 3500, fee: 250, commission: 1000, profit: 5250, paid: 8000, balance: 2800, missing_cost: false });
   });
 
   it("a web order pays the gateway rules", () => {
@@ -220,6 +221,81 @@ describe("buildInsights", () => {
   });
 });
 
+describe("cash of the period (paid, balance)", () => {
+  // A till sale of two lines, half collected, and a web order charged in full.
+  const LINES = [
+    line(),
+    line({ product_id: "p2", sku: "FX2", title: "Lentes", category: "lens", total_cents: 10800, tax_cents: 800 }),
+    line({ order_id: "w1", sale_id: null, channel: "web", establishment_id: null, seller_id: null, seller_code: "WEB", category: "case", product_id: "p9", total_cents: 5400, tax_cents: 400, sold_date_local: "2026-10-28" }),
+  ];
+  const CASH = new Map([["s1", { paid: 8000, balance: 13600 }]]);
+  const build = (lines: InsightLine[], by: "seller" | "category" = "seller") =>
+    buildInsights({
+      from: "2026-10-27",
+      to: "2026-10-28",
+      grain: "day",
+      by,
+      lines,
+      econ: lineEconomics(lines, ctx({ orders: new Map(), saleFees: new Map(), saleCash: CASH })),
+      previous: ZERO,
+      previousRange: { from: "2026-10-25", to: "2026-10-26" },
+      labels: NO_LABELS,
+      costRulesMissing: false,
+      truncated: false,
+    });
+
+  it("a sale with several lines is collected once, not once per line", () => {
+    const d = build(LINES);
+    expect(d.totals.count).toBe(2);
+    expect(d.totals.paid).toBe(134); // 80.00 of the till sale + the 54.00 web order
+    expect(d.totals.balance).toBe(136); // only the till sale owes
+  });
+
+  it("a web order is paid in full when it is placed and owes nothing", () => {
+    const d = build([LINES[2]]);
+    expect([d.totals.paid, d.totals.balance, d.totals.sales]).toEqual([54, 0, 54]);
+  });
+
+  it("paid and balance add up to what the sales were charged", () => {
+    const d = build(LINES);
+    // 108.00 + 108.00 of the till sale (8000 + 13600 cents) plus 54.00 web.
+    expect(d.totals.paid + d.totals.balance).toBe(d.totals.sales);
+  });
+
+  it("a day and a dimension row each count the sale's cash once", () => {
+    const d = build(LINES, "category");
+    expect(d.series.map((p) => p.bucket)).toEqual(["2026-10-27", "2026-10-28"]);
+    const rows = new Map(d.rows.map((r) => [r.key, r]));
+    // Both lines of the till sale are the same sale: neither its frame row nor
+    // its lens row may claim more than the sale collected.
+    expect(rows.get("frame")!.paid).toBe(80);
+    expect(rows.get("lens")!.paid).toBe(80);
+    expect(rows.get("case")!.paid).toBe(54);
+    // And a sale that spans two categories therefore shows in both of them: the
+    // rows of a dimension add up past the period's cash, exactly as `count`
+    // already does. Only `totals` is the till.
+    expect(d.rows.reduce((t, r) => t + r.paid, 0)).toBeGreaterThan(d.totals.paid);
+    expect(d.series.reduce((t, p) => t + p.count, 0)).toBe(d.totals.count);
+  });
+
+  it("without pos_sale the sale reads as collected, never as a phantom debt", () => {
+    const d = buildInsights({
+      from: "2026-10-27",
+      to: "2026-10-28",
+      grain: "day",
+      by: "seller",
+      lines: LINES,
+      econ: lineEconomics(LINES, ctx({ orders: new Map(), saleFees: new Map(), saleCash: undefined })),
+      previous: ZERO,
+      previousRange: { from: "2026-10-25", to: "2026-10-26" },
+      labels: NO_LABELS,
+      costRulesMissing: false,
+      truncated: false,
+    });
+    expect([d.totals.paid, d.totals.balance]).toEqual([d.totals.sales, 0]);
+  });
+});
+
 describe("redactInsights", () => {
   const data = () =>
     buildInsights({
@@ -256,6 +332,13 @@ describe("redactInsights", () => {
     const d = redactInsights(data(), { profit: false, commission: true });
     expect(d.totals.commission).toBe(10);
     expect(d.totals.profit).toBe(0);
+  });
+
+  it("the till is not the margin: a seller keeps what they collected and what is owed", () => {
+    const d = redactInsights(data(), { profit: false, commission: false });
+    expect([d.totals.paid, d.totals.balance]).toEqual([80, 28]);
+    expect([d.previous.paid, d.previous.balance]).toEqual([0, 0]);
+    expect([d.rows[0].paid, d.rows[0].balance]).toEqual([80, 28]);
   });
 
   it("whoever holds the privilege sees everything", () => {

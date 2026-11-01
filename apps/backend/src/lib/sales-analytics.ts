@@ -330,8 +330,38 @@ export async function lensLabelMaps(pg: Knex, codes: { designs: string[]; materi
   return { designs, materials, photos, ars };
 }
 
+/** Sales per page of the list by default, and the most a client may ask for. */
+export const SALES_PAGE_DEFAULT = 100;
+export const SALES_PAGE_MAX = 200;
+
+/**
+ * The page size the client asked for, clamped. A wider window is fewer round
+ * trips for the panel; the cap is there because each row costs four lookups
+ * (pos_sale, customer, order line, lens labels). Anything unreadable — absent,
+ * empty, a word, zero, negative — falls back to the default instead of
+ * returning nothing. Pure, so the route's contract is testable.
+ */
+export function salesPageSize(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return SALES_PAGE_DEFAULT;
+  return Math.min(n, SALES_PAGE_MAX);
+}
+
+/**
+ * How many sales the filter holds. One aggregate over the same rows as
+ * `salesList` — the very COUNT(DISTINCT order_id) `summaryOf` already runs, no
+ * join and none of the per-row lookups — so it is worth a round trip: knowing
+ * the count up front lets a caller ask for every page at once instead of
+ * walking them one by one until a short page tells it to stop.
+ */
+export async function salesListCount(container: MedusaContainer, f: AnalyticsFilter): Promise<number> {
+  const pg = pgOf(container);
+  const [row] = (await applyFilter(pg("sale_fact"), f).select(pg.raw("COUNT(DISTINCT sale_fact.order_id)::int AS count"))) as Array<{ count: number }>;
+  return Number(row?.count ?? 0);
+}
+
 /** The sales behind a number (HU-64: from a figure to the single sale). */
-export async function salesList(container: MedusaContainer, f: AnalyticsFilter, take = 100, skip = 0): Promise<SaleListRow[]> {
+export async function salesList(container: MedusaContainer, f: AnalyticsFilter, take = SALES_PAGE_DEFAULT, skip = 0): Promise<SaleListRow[]> {
   const pg = pgOf(container);
   const rows = (await applyFilter(pg("sale_fact"), f)
     .select(

@@ -34,10 +34,11 @@ import { useCatalog } from "../data/catalogStore.js";
 import { ExportMenu } from "./ui.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
+import EmptyPeriod from "./EmptyPeriod.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
-import { applyPeriodParams, usePeriodFilter } from "./periodStore.js";
+import { applyPeriodParams, autoSwitchPeriod, canAutoSwitchPeriod, usePeriodFilter } from "./periodStore.js";
 import Trends, { CatalogMini } from "./Executive.jsx";
 import ExecutiveCosts from "./ExecutiveCosts.jsx";
 import { OrdersStagesView, datesOf, isStuck, paramsKey, pct, salesReportSpec, salesSheets, stageOfRow, storeLabelFor, useOrderStages, useStoreSales } from "./StoreOrders.jsx";
@@ -150,14 +151,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const [cash, setCash] = useState(null);
   const [tick, setTick] = useState(0);
   // El período equivalente anterior (periodStore.previousRangeOf): sus cifras
-  // llegan en paralelo con las actuales y alimentan la variación de TODAS las tarjetas.
+  // llegan en paralelo con las actuales y alimentan la variación de TODAS las
+  // tarjetas. Todo sale de DOS lecturas (insights y caja): antes, cobrado y por
+  // cobrar venían de una segunda lista de ventas paginada (useStoreSales del
+  // período anterior), hasta diez peticiones encadenadas para dos números.
   const prevRange = per.prevRange;
   const [prevIns, setPrevIns] = useState(null);
   const [prevCash, setPrevCash] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
   const sales = useStoreSales({ from, to, storeId });
   const stages = useOrderStages({ from, to, storeId });
-  const prevSales = useStoreSales({ from: prevRange?.from, to: prevRange?.to, storeId }, !!prevRange);
   const { products, cases } = useCatalog();
   const bodyRef = useRef(null);
   // Vendedores (solo el dueño/superadmin los ve): la lista de fichas da la tienda
@@ -202,7 +205,28 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       prev ? insightsOf(prev).catch(() => null) : Promise.resolve(null),
       prev ? cashOf(prev) : Promise.resolve(null),
     ])
-      .then(([a, c, pa, pc]) => { if (on) { setIns(a); setCash(c); setPrevIns(pa); setPrevCash(pc); setState("ok"); } })
+      .then(([a, c, pa, pc]) => {
+        if (!on) return;
+        setIns(a); setCash(c); setPrevIns(pa); setPrevCash(pc); setState("ok");
+        // Período por defecto que cae en una ventana vacía: el día 1 de mes
+        // «Mes» es 1→1 y el panel entero sale a ceros, que se lee como «está
+        // roto» (le pasó al dueño el 1-nov-2026). Si NADIE ha elegido período
+        // todavía, se sondea el primer alternativo con ventas y se salta a él;
+        // la barra de filtros avisa de que se cambió y por qué, nunca en
+        // silencio. `autoSwitchPeriod` marca el intento ANTES de sondear, así
+        // que esto ocurre una sola vez por sesión aunque el sondeo falle, y
+        // cambiar el período vuelve a disparar este efecto sin bucle.
+        if ((Number(a?.totals?.count) || 0) === 0 && canAutoSwitchPeriod()) {
+          autoSwitchPeriod(async (_p, r) => {
+            const q = { from: r.from, to: r.to };
+            if (!sf.isAll) q.stores = storeId;
+            // `summary` es el agregado más barato del backend (sin filas ni
+            // economía por línea): solo queremos saber si hubo alguna venta.
+            const sum = await adminGet("/admin/sales-analytics/summary", { query: q, ttl: INSIGHTS_TTL }).catch(() => null);
+            return (Number(sum?.current?.count) || 0) > 0;
+          }).catch(() => {});
+        }
+      })
       .catch(() => { if (on) setState("error"); });
     return () => { on = false; };
   }, [from, to, prevRange, storeId, sf.isAll, sf.isWeb, physical, demo, tick]);
@@ -221,7 +245,6 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   // (kpiDelta). `null` mientras no hay cifra anterior → la tarjeta pinta «—».
   const ptot = prevIns?.totals || null;
   const pCost = ptot && showProfit ? (Number(ptot.cost) || 0) + (Number(ptot.fee) || 0) : null;
-  const pSalesTot = prevSales.state === "ok" ? prevSales.totals : null;
   const pCashTot = prevCash?.totals || null;
   const dOpts = (kind, invert = false) => ({ kind, invert, lang, fmt: (v) => m(v) });
   const deltas = {
@@ -229,8 +252,12 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
     count: kpiDelta(tot.count, ptot?.count, dOpts("count")),
     units: kpiDelta(tot.units, ptot?.units, dOpts("count")),
     ticket: kpiDelta(tot.avg_ticket, ptot?.avg_ticket, dOpts("money")),
-    paid: kpiDelta(sales.totals.paid, pSalesTot?.paid, dOpts("money")),
-    balance: kpiDelta(sales.totals.balance, pSalesTot?.balance, dOpts("money", true)),
+    // Cobrado y por cobrar del período anterior salen de `prevIns.totals`
+    // (mismas unidades que el resto de `totals`, como tot.sales). Mientras el
+    // backend no las mande vienen `undefined` y kpiDelta devuelve null: la
+    // tarjeta pinta «—», nunca un $0.00 inventado.
+    paid: kpiDelta(sales.totals.paid, ptot?.paid, dOpts("money")),
+    balance: kpiDelta(sales.totals.balance, ptot?.balance, dOpts("money", true)),
     cost: kpiDelta(realCost, pCost, dOpts("money", true)),
     profit: kpiDelta(tot.profit, ptot?.profit, dOpts("money")),
     margin: kpiDelta(tot.margin_pct, ptot?.margin_pct, dOpts("pct")),
@@ -345,6 +372,11 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
     return { filename: `${t("adm.ex.export.name")}-${from}-${to}.xlsx`, sheets };
   };
 
+  // Período sin NINGUNA venta: la pantalla de ceros parecía rota (le pasó al
+  // dueño el día 1 de mes). Solo cuando las dos lecturas ya cargaron — mientras
+  // `loading` todavía no se sabe si está vacío o si falta por llegar.
+  const noSales = state === "ok" && sales.state === "ok" && !sales.rows.length && (Number(tot.count) || 0) === 0;
+
   const missing = sales.totals.missing;
   const missingFlag = missing ? { text: int(missing, lang), title: t("adm.ex.kpi.missing", { n: missing }) } : null;
 
@@ -406,6 +438,8 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
           {showProfit && <Kpi label={t("adm.ex.kpi.margin")} value={pct(tot.margin_pct)} delta={deltas.margin} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.margin")} help="exec.kpi.margin" loading={loading} />}
           {!sf.isWeb && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "—"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} delta={deltas.cashNet} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
         </div>
+
+        {noSales && <EmptyPeriod kind="sales" />}
 
         <AccordionGroup>
           <Accordion id="ex-stages" icon="receipt" title={t("adm.ex.acc.stages")} subtitle={t("adm.ex.acc.stagesSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}

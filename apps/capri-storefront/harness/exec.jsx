@@ -21,6 +21,7 @@ import Stores from "/src/admin/Stores.jsx";
 import MySales from "/src/admin/MySales.jsx";
 import { setPeriodState } from "/src/admin/periodStore.js";
 import PricingPanel from "../src/admin/PricingPanel.jsx";
+import EmptyPeriod from "/src/admin/EmptyPeriod.jsx";
 
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get("mode") || "light";
@@ -201,7 +202,17 @@ const OWNER = { id: "u1", role: "owner", is_admin: true, display_name: "Rubí Da
 const MANAGER = { id: "u2", role: "manager", is_admin: false, display_name: "Daniela Ruiz", privileges: ["costs.view"], store_ids: ["est_02"] };
 const SELLER = { id: "u3", role: "seller", is_admin: false, display_name: "Daniela Ruiz", privileges: [], seller_code: "DAN", store_ids: ["est_02"] };
 const me = ROLE === "owner" ? OWNER : ROLE === "seller" ? SELLER : MANAGER;
-const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go) => <Sellers me={me} go={go} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} /> };
+const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go) => <Sellers me={me} go={go} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
+  // Estado «el período elegido no tiene nada»: las tres variantes juntas para
+  // revisarlas de un vistazo en claro y en oscuro (ver harness/README).
+  empty: () => (
+    <div className="adm-section" style={{ display: "grid", gap: 16 }}>
+      <EmptyPeriod kind="sales" />
+      <EmptyPeriod kind="cash" />
+      <EmptyPeriod kind="orders" />
+      <EmptyPeriod kind="cash" compact />
+    </div>
+  ) };
 
 function App() {
   const [tab, setTab] = useState(TAB0);

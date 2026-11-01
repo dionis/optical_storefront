@@ -30,7 +30,7 @@ const line = (over: Partial<InsightLine> = {}): InsightLine => ({
   ...over,
 });
 
-const econ = (over: Partial<LineEconomics> = {}): LineEconomics => ({ net: 10000, cost: 3000, fee: 200, commission: 500, profit: 6300, missing_cost: false, ...over });
+const econ = (over: Partial<LineEconomics> = {}): LineEconomics => ({ net: 10000, cost: 3000, fee: 200, commission: 500, profit: 6300, paid: 10800, balance: 0, missing_cost: false, ...over });
 
 describe("periodRanges", () => {
   it("cuts the calendar from a local day: weeks start on Monday, the span starts on the 1st of last month", () => {

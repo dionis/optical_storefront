@@ -24,6 +24,10 @@ import { tenant } from "./tenant";
  *   commission  the seller's % of the net
  *   profit      net − cost − fee − commission
  *
+ * Alongside them the totals carry the till: `paid` and `balance`, counted once
+ * per sale, so the panel reads what was collected and what is still owed
+ * without downloading the whole list of sales to add it up itself.
+ *
  * Rent and other monthly costs have no hour or product: they stay in the P&L.
  * Costs come from the current rules, as in the P&L, so a changed rule also
  * changes past figures, and a hand-typed cost sheet on one order is not used.
@@ -77,6 +81,12 @@ export interface EconomicsContext {
   orders: Map<string, OrderTotals>;
   /** Recorded fees of till sales by sale id, in cents. */
   saleFees: Map<string, number>;
+  /**
+   * Collected and still owed per till sale, by sale id, in cents (pos_sale).
+   * Optional because the callers that only want profit (lib/start-map.ts) never
+   * load it; without it a sale reads as paid in full, as a web order does.
+   */
+  saleCash?: Map<string, { paid: number; balance: number }>;
   /** Commission % of the line's seller; null when none is defined. */
   commissionPct: (line: InsightLine) => number | null;
 }
@@ -87,6 +97,13 @@ export interface LineEconomics {
   fee: number;
   commission: number;
   profit: number;
+  /**
+   * Cash of the WHOLE sale this line belongs to, in cents, repeated on every
+   * line of it: money is collected per sale, never per line. Whoever adds these
+   * up must count them once per order (see `add`).
+   */
+  paid: number;
+  balance: number;
   /** A frame or lens of the line has no cost defined yet, so its profit reads too high. */
   missing_cost: boolean;
 }
@@ -180,6 +197,8 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
   });
   const fixedOf = new Array<number>(lines.length).fill(0);
   const feeOf = new Array<number>(lines.length).fill(0);
+  const paidOf = new Array<number>(lines.length).fill(0);
+  const balanceOf = new Array<number>(lines.length).fill(0);
   for (const [orderId, idx] of byOrder) {
     const first = lines[idx[0]];
     const order = ctx.orders.get(orderId) ?? { gross: first.total_cents, net: nets[idx[0]], lines: idx.length };
@@ -193,9 +212,18 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     const feeTotal = first.sale_id ? ctx.saleFees.get(first.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
     const fixedParts = allocateCents(orderFixed * coverage, weights);
     const feeParts = allocateCents(feeTotal * coverage, weights);
+    // Cash, with the same answer /admin/sales-analytics/sales puts on a row
+    // (lib/sales-analytics.ts saleListRowOf): a till sale knows what it took and
+    // what it still owes, while a web order was charged in full when it was
+    // placed, so what is here is collected and nothing is owed. A till sale
+    // whose pos_sale row is not loaded falls back the same way the list does.
+    const cash = first.sale_id ? ctx.saleCash?.get(first.sale_id) : undefined;
+    const presentGross = idx.reduce((s, i) => s + lines[i].total_cents, 0);
     idx.forEach((i, k) => {
       fixedOf[i] = fixedParts[k];
       feeOf[i] = feeParts[k];
+      paidOf[i] = cash ? cash.paid : presentGross;
+      balanceOf[i] = cash ? cash.balance : 0;
     });
   }
 
@@ -205,7 +233,7 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     const cost = material.cost + fixedOf[i];
     const fee = feeOf[i];
     const commission = Math.round((net * (ctx.commissionPct(l) ?? 0)) / 100);
-    return { net, cost, fee, commission, profit: net - cost - fee - commission, missing_cost: material.missing };
+    return { net, cost, fee, commission, profit: net - cost - fee - commission, paid: paidOf[i], balance: balanceOf[i], missing_cost: material.missing };
   });
 }
 
@@ -286,6 +314,13 @@ export interface Figures {
   profit: number;
   /** Profit over the net, in %. */
   margin_pct: number | null;
+  /**
+   * Cash of the period's sales, in dollars: what they collected and what they
+   * still owe, counted once per sale. `paid + balance` is what those sales were
+   * charged (`sales`) whenever every line of them is in the filter.
+   */
+  paid: number;
+  balance: number;
   count: number;
   units: number;
   avg_ticket: number;
@@ -299,11 +334,13 @@ interface Tally {
   fee: number;
   commission: number;
   profit: number;
+  paid: number;
+  balance: number;
   units: number;
   orders: Set<string>;
 }
 
-const newTally = (): Tally => ({ sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, units: 0, orders: new Set() });
+const newTally = (): Tally => ({ sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, paid: 0, balance: 0, units: 0, orders: new Set() });
 
 function add(t: Tally, l: InsightLine, e: LineEconomics): void {
   t.sales += l.total_cents;
@@ -314,6 +351,12 @@ function add(t: Tally, l: InsightLine, e: LineEconomics): void {
   t.commission += e.commission;
   t.profit += e.profit;
   t.units += l.qty;
+  // The cash on the line is the whole sale's, so it joins the tally with the
+  // sale and not with each of its lines — the rule `count` already follows.
+  if (!t.orders.has(l.order_id)) {
+    t.paid += e.paid;
+    t.balance += e.balance;
+  }
   t.orders.add(l.order_id);
 }
 
@@ -329,6 +372,8 @@ function figures(t: Tally): Figures {
     commission: d(t.commission),
     profit: d(t.profit),
     margin_pct: t.net > 0 ? Math.round((t.profit / t.net) * 1000) / 10 : null,
+    paid: d(t.paid),
+    balance: d(t.balance),
     count,
     units: t.units,
     avg_ticket: count ? Math.round(t.sales / count) / 100 : 0,
@@ -526,6 +571,12 @@ export function insightAccess(scope: { is_admin: boolean; role: string | null; p
 /**
  * Takes out what the caller may not see, here and not in the panel: hiding a
  * column in the browser would still send a store's margin to a seller. Pure.
+ *
+ * `sales`, `paid` and `balance` stay: they are the till, not the margin. What a
+ * seller took in and what their customer still owes is theirs to chase, and the
+ * sales list already hands them both rows (attachSaleEconomics keeps `paid` and
+ * `balance` for every caller). Only cost, fee, profit, margin and — unless it is
+ * their own — commission say what the store earns, and only those are hidden.
  */
 export function redactInsights(data: Insights, access: InsightAccess): Insights {
   const figure = <T extends Figures>(f: T): T => ({
@@ -648,6 +699,13 @@ export function saleFeesQuery(pg: Knex, f: AnalyticsFilter): Knex.QueryBuilder {
     .select("p.sale_id", pg.raw("COALESCE(SUM(p.fee_cents), 0)::bigint AS fee"));
 }
 
+/** What every till sale of the period collected and still owes — the same pos_sale columns the sales list reads. */
+export function saleCashQuery(pg: Knex, f: AnalyticsFilter): Knex.QueryBuilder {
+  return pg("pos_sale as s")
+    .whereIn("s.id", applyFilter(pg("sale_fact"), f).whereNotNull("sale_fact.sale_id").select("sale_fact.sale_id"))
+    .select("s.id", "s.paid_cents", "s.balance_cents");
+}
+
 async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string, orderIds?: string[]): Promise<{ lines: InsightLine[]; truncated: boolean }> {
   const q = linesQuery(pg, f, tz);
   if (orderIds) q.whereIn("sale_fact.order_id", orderIds);
@@ -671,19 +729,23 @@ async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string, orderIds?: st
   };
 }
 
-async function loadOrderContext(pg: Knex, f: AnalyticsFilter, orderIds?: string[]): Promise<{ orders: Map<string, OrderTotals>; saleFees: Map<string, number> }> {
+async function loadOrderContext(pg: Knex, f: AnalyticsFilter, orderIds?: string[]): Promise<{ orders: Map<string, OrderTotals>; saleFees: Map<string, number>; saleCash: Map<string, { paid: number; balance: number }> }> {
   const totalsQ = orderTotalsQuery(pg, f);
   const feesQ = saleFeesQuery(pg, f);
+  const cashQ = saleCashQuery(pg, f);
   if (orderIds) {
+    const saleIds = pg("sale_fact").whereNull("sale_fact.deleted_at").whereIn("sale_fact.order_id", orderIds).whereNotNull("sale_fact.sale_id").select("sale_fact.sale_id");
     totalsQ.whereIn("o.order_id", orderIds);
-    feesQ.whereIn("p.sale_id", pg("sale_fact").whereNull("sale_fact.deleted_at").whereIn("sale_fact.order_id", orderIds).whereNotNull("sale_fact.sale_id").select("sale_fact.sale_id"));
+    feesQ.whereIn("p.sale_id", saleIds.clone());
+    cashQ.whereIn("s.id", saleIds.clone());
   }
-  // Both aggregates at once: they are independent, and the panel waits for the
-  // slowest of them instead of their sum.
-  const [orderRows, feeRows] = (await Promise.all([totalsQ, feesQ])) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
+  // The three aggregates at once: they are independent, and the panel waits for
+  // the slowest of them instead of their sum.
+  const [orderRows, feeRows, cashRows] = (await Promise.all([totalsQ, feesQ, cashQ])) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>, Array<Record<string, unknown>>];
   return {
     orders: new Map(orderRows.map((r) => [String(r.order_id), { gross: Number(r.gross), net: Number(r.net), lines: Number(r.lines) }])),
     saleFees: new Map(feeRows.map((r) => [String(r.sale_id), Number(r.fee)])),
+    saleCash: new Map(cashRows.map((r) => [String(r.id), { paid: Number(r.paid_cents), balance: Number(r.balance_cents) }])),
   };
 }
 
