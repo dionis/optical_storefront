@@ -67,3 +67,38 @@
 .scr-acc-table { padding-top: 8px; }
 .scr-acc-cards { padding-top: 8px; }
 .scr-inline-select { font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-ink); }
+
+/* ── Resultado por tienda (StoreCosts.jsx) ─────────────────────────────────
+   Sin filtros propios (los pone la barra global): una tira de indicadores, el
+   resultado del mes en una tabla compacta (una columna por tienda) y los costos
+   registrados en una DataTable. Denso y legible en claro y en oscuro: todo
+   color sale de los tokens --adm-*, así el modo oscuro va solo. */
+.sc .sc-note { display: inline-flex; align-items: center; gap: 6px; margin: -6px 0 10px; font-size: 12px; }
+.sc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; margin: 0 0 12px; }
+.sc-kpi { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface); box-shadow: var(--adm-shadow-card); min-width: 0; }
+.sc-kpi small { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-muted); }
+.sc-kpi b { font-family: var(--adm-display); font-size: clamp(17px, 2.2vw, 21px); letter-spacing: -.02em; color: var(--adm-ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.sc-kpi span { font-size: 10.5px; color: var(--adm-faint); line-height: 1.25; }
+.sc-kpi.hero { background: var(--st-soft, var(--adm-surface-2)); border-color: var(--adm-accent-line, var(--adm-line)); }
+.sc-kpi b.good { color: var(--adm-green); }
+.sc-kpi b.neg { color: var(--adm-red); }
+.sc .sc-card { margin-bottom: 10px; }
+.sc .sc-card > h3, .sc .sc-card .adm-head-row h3 { margin: 0 0 8px; font-size: 14px; color: var(--adm-ink); }
+.sc .sc-card .adm-head-row { margin-bottom: 6px; }
+/* El resultado: filas fijas × tiendas. Cabeceras pegadas, cifras tabulares y
+   las dos filas que importan (contribución y resultado) con fondo propio. */
+.sc-pnl { font-size: 12.5px; max-width: 1000px; }
+/* Las columnas de cifras, de ancho fijo: el concepto se queda con el resto y
+   los números no se van al otro extremo de la pantalla con una sola tienda. */
+.sc-pnl thead th:not(:first-child), .sc-pnl tbody td { width: 150px; }
+.sc-pnl th, .sc-pnl td { padding: 4px 8px; }
+.sc-pnl thead th { position: sticky; top: 0; z-index: 1; background: var(--adm-surface); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-muted); }
+.sc-pnl tbody th[scope="row"] { font-weight: 600; color: var(--adm-muted); white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.sc-pnl td { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--adm-ink); }
+.sc-pnl tr.strong th[scope="row"], .sc-pnl tr.strong td { font-weight: 800; color: var(--adm-ink); background: var(--adm-surface-2); }
+.sc-pnl td.neg { color: var(--adm-red); }
+.sc .sc-items .alr-form { margin-bottom: 10px; }
+@media (max-width: 720px) {
+  .sc-pnl thead th { position: static; }
+  .sc-kpi b { font-size: 18px; }
+}

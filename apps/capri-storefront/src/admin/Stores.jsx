@@ -18,6 +18,8 @@ import FieldError from "../components/FieldError.jsx";
 import { LIMITS, phoneProblem, typedPhone } from "../data/fieldRules.js";
 
 const EMPTY = { name: "", address: "", phone: "" };
+/** Icono de cada tipo de tienda: propia, familiar, de un socio o en consignación. */
+const KIND_ICON = { own: "store", family: "team", partner: "share", consignment: "box" };
 
 /** Muestras de la paleta y, al lado, cualquier otro color. */
 function ColorPicker({ value, onChange, disabled }) {
@@ -121,7 +123,7 @@ export default function Stores() {
         </div>
         <div style={{ marginTop: 12 }}><ColorPicker value={newColor} disabled={demo || busy} onChange={(color) => setForm({ ...form, color })} /></div>
         <div className="adm-actions" style={{ marginTop: 12 }}>
-          <button className="btn-sm primary" disabled={demo || busy}>{busy ? "…" : t("adm.stores.create")}</button>
+          <button className="btn-sm primary" disabled={demo || busy}><Icon name="plus" size={14} />{busy ? "…" : t("adm.stores.create")}</button>
         </div>
       </form>
 
@@ -133,7 +135,8 @@ export default function Stores() {
           {stores.map((s) => (
             <div key={s.id} className="adm-team-item">
             <div className="adm-team-row">
-              <span className="adm-team-avatar adm-store-code" style={s.color ? { background: s.color, color: storeInk(s.color) } : undefined}>{s.code}</span>
+              {/* El código, en el color de la tienda: el mismo de sus correos. */}
+              <span className="adm-team-avatar adm-store-code" title={`${s.code} · ${s.color || ""}`} style={s.color ? { background: s.color, color: storeInk(s.color) } : undefined}>{s.code}</span>
               {editing === s.id ? (
                 <span className="adm-team-main adm-store-edit">
                   <input className="adm-input" aria-label={t("adm.stores.name")} maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -150,23 +153,30 @@ export default function Stores() {
                   <textarea className="adm-input" rows={3} maxLength={600} aria-label={t("adm.stores.receiptNote")} placeholder={t("adm.stores.receiptNote")} value={draft.receipt_note} onChange={(e) => setDraft({ ...draft, receipt_note: e.target.value })} />
                 </span>
               ) : (
-                <span className="adm-team-main">
+                <span className="adm-team-main adm-store-info">
                   <b>{s.name}</b>
-                  <small className="muted">{[t(`adm.stores.kind.${s.kind || "own"}`), s.address, s.phone, shortDate(s.created_at, lang)].filter(Boolean).join(" · ")}</small>
+                  {/* Cada dato con su icono: tipo de tienda, dirección, teléfono, alta y, si no es propia, su % de liquidación. */}
+                  <span className="adm-store-facts">
+                    <span className="adm-store-fact kind" title={t("adm.stores.kind")}><Icon name={KIND_ICON[s.kind || "own"]} size={12} />{t(`adm.stores.kind.${s.kind || "own"}`)}</span>
+                    {s.address && <span className="adm-store-fact" title={t("adm.stores.address")}><Icon name="mapPin" size={12} />{s.address}</span>}
+                    {s.phone && <span className="adm-store-fact" title={t("adm.stores.phone")}><Icon name="phone" size={12} />{s.phone}</span>}
+                    {s.created_at && <span className="adm-store-fact" title={t("adm.scr.store.created")}><Icon name="calendar" size={12} />{shortDate(s.created_at, lang)}</span>}
+                    {s.kind && s.kind !== "own" && s.settlement_pct != null && <span className="adm-store-fact" title={t("adm.stores.settlementPct")}><Icon name="percent" size={12} />{s.settlement_pct} %</span>}
+                  </span>
                 </span>
               )}
               {!s.is_active && <span className="adm-chip bad"><Icon name="alert" size={12} />{t("adm.stores.inactive")}</span>}
               {editing === s.id ? (
                 <>
-                  <button className="btn-xs primary" disabled={busy} onClick={() => save(s)}>{t("adm.stores.save")}</button>
-                  <button className="btn-xs" disabled={busy} onClick={() => setEditing(null)}>{t("adm.stores.cancel")}</button>
+                  <button className="btn-xs primary" disabled={busy} onClick={() => save(s)}><Icon name="save" size={12} />{t("adm.stores.save")}</button>
+                  <button className="btn-xs" disabled={busy} onClick={() => setEditing(null)}><Icon name="close" size={12} />{t("adm.stores.cancel")}</button>
                 </>
               ) : (
                 <>
-                  <button className="btn-xs primary" disabled={demo} onClick={() => { setAssortId(null); setPricingId(pricingId === s.id ? null : s.id); }}>{t("adm.stores.prices")}</button>
-                  <button className="btn-xs primary" disabled={demo} onClick={() => { setPricingId(null); setAssortId(assortId === s.id ? null : s.id); }}>{t("adm.stores.catalog")}</button>
-                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", color: s.color || STORE_COLORS[0], kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}>{t("adm.stores.edit")}</button>
-                  <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}>{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
+                  <button className={`btn-xs ${pricingId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={pricingId === s.id} onClick={() => { setAssortId(null); setPricingId(pricingId === s.id ? null : s.id); }}><Icon name="prices" size={12} />{t("adm.stores.prices")}</button>
+                  <button className={`btn-xs ${assortId === s.id ? "primary on" : ""}`} disabled={demo} aria-pressed={assortId === s.id} onClick={() => { setPricingId(null); setAssortId(assortId === s.id ? null : s.id); }}><Icon name="products" size={12} />{t("adm.stores.catalog")}</button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => { setEditing(s.id); setDraft({ name: s.name, address: s.address || "", phone: s.phone || "", color: s.color || STORE_COLORS[0], kind: s.kind || "own", receipt_note: s.receipt_note || "", settlement_pct: s.settlement_pct ?? null }); }}><Icon name="edit" size={12} />{t("adm.stores.edit")}</button>
+                  <button className={`btn-xs ${s.is_active ? "warn" : ""}`} disabled={busy || demo} onClick={() => toggle(s)}><Icon name={s.is_active ? "power" : "checkCircle"} size={12} />{t(s.is_active ? "adm.stores.deactivate" : "adm.stores.activate")}</button>
                 </>
               )}
             </div>
@@ -186,6 +196,9 @@ export default function Stores() {
         <StoreAssortment key={assortId} store={stores.find((s) => s.id === assortId)} onClose={() => setAssortId(null)} />
       )}
 
+      {/* TODO: el bloque «PRECIOS DEL DUEÑO COMO PRECIO BASE» se muda al nuevo
+          panel de precios (agente de precios); aquí queda tal cual hasta que ese
+          panel lo sustituya. */}
       {!demo && <PriceImport />}
     </div>
   );

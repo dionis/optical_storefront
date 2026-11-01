@@ -120,8 +120,17 @@ export interface PeriodFigures extends DayRange {
   sales_cents: number;
   count: number;
   units: number;
-  /** Materials, fixed costs per order and payment fees of those lines; null when the caller may not see costs (lib/sales-insights.ts insightAccess). */
+  /**
+   * Cost of those lines INCLUDING the payment fee: materials, the fixed costs
+   * per order and the fee of the collection. The Executive splits the two
+   * (`cost` and `fee`), so `cost_cents = Executive cost + Executive fee` —
+   * `fee_cents` below carries the fee on its own so the two screens can be
+   * reconciled line by line. Null when the caller may not see costs
+   * (lib/sales-insights.ts insightAccess).
+   */
   cost_cents: number | null;
+  /** The payment fee already inside `cost_cents`; null with the cost. */
+  fee_cents: number | null;
   profit_cents: number | null;
   /** null when the caller may not see commissions; a seller gets their own. */
   commission_cents: number | null;
@@ -130,19 +139,21 @@ export interface PeriodFigures extends DayRange {
   /** Profit over orders; null when the caller may not see profit. */
   avg_profit_per_sale_cents: number | null;
   /** The previous equivalent period, for the delta; null when it was not loaded. */
-  prev: { sales_cents: number; count: number; cost_cents: number | null; profit_cents: number | null; commission_cents: number | null } | null;
+  prev: { sales_cents: number; count: number; cost_cents: number | null; fee_cents: number | null; profit_cents: number | null; commission_cents: number | null } | null;
 }
 
 interface Tally {
   sales: number;
   units: number;
+  /** Materials and per-order fixed costs plus the payment fee (see PeriodFigures.cost_cents). */
   cost: number;
+  fee: number;
   profit: number;
   commission: number;
   orders: Set<string>;
 }
 
-const newTally = (): Tally => ({ sales: 0, units: 0, cost: 0, profit: 0, commission: 0, orders: new Set() });
+const newTally = (): Tally => ({ sales: 0, units: 0, cost: 0, fee: 0, profit: 0, commission: 0, orders: new Set() });
 
 /** Key of a line's store: the web store is "web". */
 export const storeKeyOf = (l: Pick<InsightLine, "channel" | "establishment_id">): string => (l.channel === "web" ? "web" : l.establishment_id ?? "none");
@@ -179,6 +190,7 @@ export function aggregateSales(
     const e = econ?.[i];
     if (e) {
       t.cost += e.cost + e.fee;
+      t.fee += e.fee;
       t.profit += e.profit;
       t.commission += e.commission;
     }
@@ -193,6 +205,7 @@ export function aggregateSales(
         out.sales += t.sales;
         out.units += t.units;
         out.cost += t.cost;
+        out.fee += t.fee;
         out.profit += t.profit;
         out.commission += t.commission;
         for (const o of t.orders) out.orders.add(o);
@@ -204,6 +217,7 @@ export function aggregateSales(
     sales_cents: t.sales,
     count: t.orders.size,
     cost_cents: econ && access.profit ? t.cost : null,
+    fee_cents: econ && access.profit ? t.fee : null,
     profit_cents: econ && access.profit ? t.profit : null,
     commission_cents: econ && access.commission ? t.commission : null,
   });
@@ -470,6 +484,7 @@ export interface StartMap {
     store_code: string | null;
     store_name: string | null;
     store_color: string | null;
+    /** The CALLER's own commission this month; null unless the map covers their own sales (never the chain's bill). */
     commission_month_cents: number | null;
   };
   /** The seller of a `?seller=` map; null on the caller's own map. */
@@ -477,6 +492,8 @@ export interface StartMap {
   access: InsightAccess;
   /** More lines than read in the span: the month figures are partial. */
   truncated: boolean;
+  /** More open sales than MAX_OPEN_SALES: the `pending` buckets and the money on the street are partial. */
+  pending_truncated: boolean;
 }
 
 /** Open sales read for the pending figures. */
@@ -544,7 +561,9 @@ async function loadOpenSales(pg: Knex, stores: string[] | null, sellerId: string
     .where((w) => { w.whereNull("delivered_at").orWhere("balance_cents", ">", 0); })
     .select("id", "establishment_id", "seller_id", "order_id", "status", "total_cents", "balance_cents", "promised_on", "delivered_at")
     .orderBy("created_at", "desc")
-    .limit(MAX_OPEN_SALES);
+    // One row over the cap, so the caller can SAY the pending figures are short
+    // instead of quietly understating the money on the street.
+    .limit(MAX_OPEN_SALES + 1);
   if (both) {
     if (stores) q.whereIn("establishment_id", stores);
     q.where("seller_id", sellerId ?? "-");
@@ -638,10 +657,12 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
     subject ? Promise.resolve(0) : countWhere(tillsQ),
     subject ? subjectSources(container, subject, pr.span, storeParam) : Promise.resolve([]),
   ]);
-  const stageOf = await orderStages(container, open.filter((s) => !s.delivered_at && s.order_id).map((s) => s.order_id as string));
+  const pendingTruncated = open.length > MAX_OPEN_SALES;
+  const openSales = pendingTruncated ? open.slice(0, MAX_OPEN_SALES) : open;
+  const stageOf = await orderStages(container, openSales.filter((s) => !s.delivered_at && s.order_id).map((s) => s.order_id as string));
 
   const agg = aggregateSales(sales.lines, sales.econ, pr, access);
-  const pend = pendingOf(open, stageOf, { today: pr.today, ownSellerId: ss.ownSellerId, collectStores: ss.collectStores });
+  const pend = pendingOf(openSales, stageOf, { today: pr.today, ownSellerId: ss.ownSellerId, collectStores: ss.collectStores });
 
   const storeRows: StartMapStore[] = [];
   if (ss.showStores) {
@@ -667,6 +688,11 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
     storeRows.sort((a, b) => b.month_cents - a.month_cents || a.code.localeCompare(b.code));
   }
 
+  // "My commission this month" is the CALLER's own, so it only goes out when
+  // the lines aggregated are the caller's own sales. An owner's map covers
+  // every store: showing the chain's whole commission bill under `me` read as
+  // the owner's personal commission.
+  const ownLines = !subject && ss.ownSellerId !== null && ss.ownSellerId === scope.user_id;
   const homeId = scope.seller?.establishment_id ?? (ss.collectStores && ss.collectStores.length === 1 && ss.collectStores[0] !== "-" ? ss.collectStores[0] : null);
   const home = homeId ? stores.find((s) => s.id === homeId) ?? null : null;
   const subjectStore = subject?.establishment_id ? stores.find((s) => s.id === subject.establishment_id) ?? null : null;
@@ -682,7 +708,7 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
       store_code: home?.code ?? null,
       store_name: home?.name ?? null,
       store_color: home?.color ?? null,
-      commission_month_cents: access.commission ? agg.periods.this_month.commission_cents : null,
+      commission_month_cents: ownLines && access.commission ? agg.periods.this_month.commission_cents : null,
     },
     subject: subject
       ? {
@@ -701,5 +727,6 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
       : null,
     access,
     truncated: sales.truncated,
+    pending_truncated: pendingTruncated,
   };
 }

@@ -404,7 +404,11 @@ export interface SellerStatRow {
   commission_pct: number;
   active: boolean;
   orders: number;
+  /** What the customers paid (tax and shipping included) — the sales figure. */
   revenue: number;
+  /** Commission base: revenue less sales tax and shipping (`netRevenueOf`). */
+  net_revenue: number;
+  /** net_revenue × commission_pct / 100. */
   commission: number;
   /** Items sold (line quantities). */
   units: number;
@@ -466,7 +470,26 @@ export type StatOrder = Pick<BoardOrder, "seller_code" | "total" | "terminal" | 
   id?: string;
   seller_source?: string | null;
   items?: Array<{ quantity?: number | null }>;
+  /** Sales tax and shipping the customer paid: out of the commission base (see `netRevenueOf`). */
+  tax_total?: unknown;
+  shipping_total?: unknown;
 };
+
+/**
+ * Commission base of an order: what the customer paid LESS the sales tax and
+ * the shipping. Neither is the store's money — the tax belongs to the state
+ * and the shipping to the courier — so neither earns a commission.
+ *
+ * This is the same base as everywhere else: `lineEconomics` takes
+ * `total − tax` of each line (sale_fact has no shipping line at all),
+ * `store-pnl.ts` the same, and `/admin/sales-analytics/me` shows the seller
+ * `(total − tax) × pct`. Paying on the gross would hand every seller the
+ * commission of the state's tax as well. Dollars in, dollars out. Pure.
+ */
+export function netRevenueOf(order: Pick<StatOrder, "total" | "tax_total" | "shipping_total">): number {
+  const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return round2(Math.max(0, num(order.total) - num(order.tax_total) - num(order.shipping_total)));
+}
 
 /**
  * Pure grouping: board-like rows × sellers → per-seller totals. Orders in a
@@ -476,6 +499,10 @@ export type StatOrder = Pick<BoardOrder, "seller_code" | "total" | "terminal" | 
  * `profit`/`avg_profit`; without it they stay null (the caller may not see
  * them). `share_pct` is the seller's part of EVERY sale in the window,
  * attributed or not: the quota.
+ *
+ * `revenue` is what the customers paid; `commission` is the percentage of
+ * `net_revenue` (revenue less sales tax and shipping, `netRevenueOf`) — the
+ * same base as the store result and the seller's own panel.
  */
 export function groupSellerStats(
   orders: StatOrder[],
@@ -494,6 +521,7 @@ export function groupSellerStats(
       active: s.active,
       orders: 0,
       revenue: 0,
+      net_revenue: 0,
       commission: 0,
       units: 0,
       avg_ticket: 0,
@@ -519,6 +547,7 @@ export function groupSellerStats(
     }
     row.orders++;
     row.revenue = round2(row.revenue + total);
+    row.net_revenue = round2(row.net_revenue + netRevenueOf(o));
     row.units += (o.items ?? []).reduce((n, it) => n + (Number(it?.quantity ?? 1) || 0), 0);
     if (profitByOrder && o.id !== undefined) profitOf.set(row.code, round2((profitOf.get(row.code) ?? 0) + (profitByOrder.get(o.id) ?? 0)));
     const at = isoAt(o.created_at) || null;
@@ -529,7 +558,8 @@ export function groupSellerStats(
   }
   const everything = round2([...byCode.values()].reduce((s, r) => s + r.revenue, 0) + unattributed.revenue);
   for (const row of byCode.values()) {
-    row.commission = round2((row.revenue * row.commission_pct) / 100);
+    // Of the NET, never of the gross: the sales tax is the state's money.
+    row.commission = round2((row.net_revenue * row.commission_pct) / 100);
     row.avg_ticket = row.orders ? round2(row.revenue / row.orders) : 0;
     if (profitByOrder) {
       row.profit = profitOf.get(row.code) ?? 0;

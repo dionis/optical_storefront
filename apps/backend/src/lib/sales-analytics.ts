@@ -157,11 +157,15 @@ export async function salesBreakdown(container: MedusaContainer, f: AnalyticsFil
     .select(
       pg.raw("COALESCE(SUM(sale_fact.total_cents), 0)::bigint AS total"),
       pg.raw("COUNT(DISTINCT sale_fact.order_id)::int AS count"),
-      pg.raw("COALESCE(SUM(sale_fact.qty), 0)::int AS units")
+      pg.raw("COALESCE(SUM(sale_fact.qty), 0)::int AS units"),
+      // Share of the WHOLE dimension, not of the page: the window runs over
+      // every group before LIMIT, so the 51st brand does not inflate the first
+      // fifty. (lib/sales-insights.ts divides by the same kind of grand total.)
+      pg.raw("COALESCE(SUM(SUM(sale_fact.total_cents)) OVER (), 0)::bigint AS grand_total")
     )
     .orderBy("total", "desc")
-    .limit(limit)) as Array<{ key: string | null; label: string | null; total: string; count: number; units: number }>;
-  const sum = rows.reduce((s, r) => s + Number(r.total), 0) || 1;
+    .limit(limit)) as Array<{ key: string | null; label: string | null; total: string; count: number; units: number; grand_total: string }>;
+  const sum = Number(rows[0]?.grand_total ?? 0) || 1;
   return rows.map((r) => ({
     key: r.key,
     label: r.label,

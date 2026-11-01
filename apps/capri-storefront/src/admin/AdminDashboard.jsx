@@ -53,6 +53,7 @@ import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../data/lensPricing.js";
+import PricingPanel from "./PricingPanel.jsx";
 
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 
@@ -1084,7 +1085,8 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
-      {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} pricesView={<Prices preQ={find || nav.params.q || ""} />} />}
+      {tab === "pricing" && <PricingPanel key={`pricing-${nav.n}`} me={me} sellers={sellers} go={go} />}
+      {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
       {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} />}
       {tab === "products" && (
         <>

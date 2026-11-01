@@ -78,6 +78,22 @@ export default {
     "adm.scr.storeHint": "Elige una tienda en el filtro para ver otra.",
     "adm.scr.sellersIn": "{n} en esta tienda",
     "adm.scr.onlyStore": "Solo la tienda elegida",
+    // Resultado por tienda (StoreCosts.jsx): sin filtros propios — tienda y
+    // período salen de la barra global; el resultado es del MES del período.
+    "adm.scr.sc.concept": "Concepto",
+    "adm.scr.sc.costs": "Costos del mes",
+    "adm.scr.sc.monthly": "El resultado es mensual: del período de la barra se toma su mes.",
+    "adm.scr.sc.webNote": "La tienda online no tiene costos de tienda: se enseña el negocio entero.",
+    "adm.scr.sc.reportTitle": "Resultado por tienda · {month}",
+    "adm.scr.sc.receipt": "Ver comprobante",
+    "adm.scr.sc.noStore": "La tienda elegida no tiene resultado en este mes.",
+    // Estado de cuenta (StoreStatement.jsx): avisos de alcance y del período.
+    "adm.scr.st.webNote": "La tienda online no tiene estado de cuenta: se enseña el consolidado de la empresa.",
+    "adm.scr.st.fallback": "La tienda elegida no está entre las tuyas: se enseña {store}.",
+    "adm.scr.st.naturalMonth": "Mes natural completo",
+    "adm.scr.st.scope": "Alcance",
+    // Tiendas (Stores.jsx): etiquetas de los datos de cada ficha.
+    "adm.scr.store.created": "Alta",
   },
   en: {
     "adm.wb.greeting": "Hi, {name}",
@@ -155,5 +171,17 @@ export default {
     "adm.scr.storeHint": "Pick a store in the filter to see another one.",
     "adm.scr.sellersIn": "{n} in this store",
     "adm.scr.onlyStore": "Selected store only",
+    "adm.scr.sc.concept": "Item",
+    "adm.scr.sc.costs": "Costs of the month",
+    "adm.scr.sc.monthly": "The result is monthly: the month of the bar's period is used.",
+    "adm.scr.sc.webNote": "The online store has no store costs: the whole business is shown.",
+    "adm.scr.sc.reportTitle": "Result by store · {month}",
+    "adm.scr.sc.receipt": "View receipt",
+    "adm.scr.sc.noStore": "The chosen store has no result for this month.",
+    "adm.scr.st.webNote": "The online store has no statement: the business-wide consolidated one is shown.",
+    "adm.scr.st.fallback": "The chosen store is not one of yours: {store} is shown.",
+    "adm.scr.st.naturalMonth": "Whole calendar month",
+    "adm.scr.st.scope": "Scope",
+    "adm.scr.store.created": "Created",
   },
 };

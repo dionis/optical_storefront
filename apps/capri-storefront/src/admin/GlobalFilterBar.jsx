@@ -33,6 +33,8 @@ import "./filter-bar.css";
  * y rango; `export`: PDF · Excel · CSV. Pestañas ausentes → sin barra.
  */
 export const BAR_TABS = {
+  // Precios y costos: la tienda decide qué variación se edita; no hay período.
+  pricing: { store: true, period: false, export: true },
   exec: { store: true, period: true, export: true },
   storeorders: { store: true, period: true, export: true },
   possales: { store: true, period: true, export: true },
@@ -43,7 +45,7 @@ export const BAR_TABS = {
   storestatus: { store: true, period: false, export: true },
   audit: { store: true, period: true, export: false },
   sellers: { store: true, period: true, export: true },
-  storecosts: { store: true, period: true, export: false },
+  storecosts: { store: true, period: true, export: true },
   mysales: { store: true, period: true, export: true },
   approvals: { store: true, period: false, export: false },
   orders: { store: false, period: true, export: true },

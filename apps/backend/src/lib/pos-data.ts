@@ -733,7 +733,7 @@ export async function quoteSale(
     let lensCents: number;
     let category: string | null;
     try {
-      const b = await computeLensBreakdown(pg, line.selection);
+      const b = await computeLensBreakdown(pg, line.selection, establishmentId);
       lensCents = b.total_cents;
       category = b.category;
     } catch {

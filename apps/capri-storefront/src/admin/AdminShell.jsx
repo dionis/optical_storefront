@@ -28,10 +28,10 @@ export const NAV_GROUPS = [
     { key: "storecosts", icon: "costs" },
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
-    { key: "alerts", icon: "bell" },
   ] },
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
+    { key: "pricing", icon: "prices" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
@@ -40,6 +40,10 @@ export const NAV_GROUPS = [
   ] },
   { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },
+    // Las alertas se configuran desde Administración (decisión del dueño), no
+    // dentro de Tiendas: son reglas del negocio, no de una tienda. El
+    // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).
+    { key: "alerts", icon: "bell" },
     { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
   ] },

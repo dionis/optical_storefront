@@ -166,11 +166,33 @@ export interface CashReport {
   };
   /** Users seen in the period (for the seller filter). */
   people: Person[];
-  /** The movement list hit MAX_MOVEMENTS; the totals are still complete. */
+  /**
+   * The movement LIST hit MAX_MOVEMENTS. The totals, `by_category` and the
+   * per-day series are still complete: `cashReport` reads them from a separate
+   * SQL aggregate over the whole period, not from the list.
+   */
   truncated: boolean;
 }
 
 export const MAX_MOVEMENTS = 5000;
+
+/**
+ * One row of the complete ledger aggregate: every `cash_movement` of the
+ * period grouped by local day, direction and reason, straight from SQL.
+ *
+ * The movement LIST is capped at `MAX_MOVEMENTS`; the totals, the per-reason
+ * table and the per-day series must not be. With this aggregate they are
+ * computed from the whole period even when the list is cut, so "cash in /
+ * cash out" is never quietly short of a few thousand lines.
+ */
+export interface MovementAggRow {
+  /** Local date YYYY-MM-DD. */
+  day: string;
+  kind: "in" | "out" | string;
+  category: string | null;
+  count: number;
+  cents: number;
+}
 
 const CARD_KINDS = new Set(["debit", "credit", "card"]);
 /** Ledger lines written by the register itself: listed, grouped, but never added on top of the payments they mirror. */
@@ -188,6 +210,8 @@ export function buildCashReport(input: {
   methods: MethodLike[];
   people?: Person[];
   truncated?: boolean;
+  /** Complete ledger aggregate of the period; without it the (possibly capped) list is used. */
+  movementAgg?: MovementAggRow[];
 }): CashReport {
   const methods = new Map(input.methods.map((m) => [m.code, m]));
   const people = new Map((input.people ?? []).map((p) => [p.id, p]));
@@ -195,18 +219,35 @@ export function buildCashReport(input: {
     const m = methods.get(code);
     return Boolean(m && (m.kind === "insurance" || m.receivable));
   };
+  /**
+   * Did this money go into the drawer? The flag STORED ON THE ROW decides,
+   * because it is the one the till used when it wrote (or did not write) the
+   * `cash_movement` line, so it is what the count has to match. The method's
+   * current flag is only a fallback for rows written before it existed: using
+   * it would make the register disagree with itself the day the owner unticks
+   * "counts as cash" on a method.
+   */
   const isCash = (p: PaymentRow): boolean => p.counts_as_cash || Boolean(methods.get(p.method_code)?.counts_as_cash);
+  /**
+   * Signed amount of a payment: a refund is money going OUT, whatever sign it
+   * was stored with. `voidSale` writes refunds negative, but a hand-fixed row
+   * (or a future partial refund) must not be able to turn a refund into income.
+   */
+  const signedOf = (p: PaymentRow): number => {
+    const amount = n(p.amount_cents);
+    return p.kind === "refund" ? -Math.abs(amount) : amount;
+  };
 
   // Per method ----------------------------------------------------------------
   type Agg = { in_count: number; in_cents: number; refund_cents: number; fee_cents: number };
   const byMethod = new Map<string, Agg>();
   for (const p of input.payments) {
     const a = byMethod.get(p.method_code) ?? { in_count: 0, in_cents: 0, refund_cents: 0, fee_cents: 0 };
-    const amount = n(p.amount_cents);
-    if (p.kind === "refund" || amount < 0) a.refund_cents += -amount;
+    const signed = signedOf(p);
+    if (signed < 0) a.refund_cents += -signed;
     else {
       a.in_count += 1;
-      a.in_cents += amount;
+      a.in_cents += signed;
     }
     a.fee_cents += n(p.fee_cents);
     byMethod.set(p.method_code, a);
@@ -247,30 +288,44 @@ export function buildCashReport(input: {
   };
   for (const m of by_method) {
     if (m.receivable) {
+      // The insurer's part: listed per method, never counted as collected —
+      // nothing has reached the till or the bank yet.
       totals.receivable_cents += m.net_cents;
       continue;
     }
     totals.payments_cents += m.net_cents;
     totals.fees_cents += m.fee_cents;
-    if (m.counts_as_cash) totals.cash_payments_cents += m.net_cents;
-    else if (CARD_KINDS.has(m.kind)) totals.card_cents += m.net_cents;
-    else totals.other_cents += m.net_cents;
+  }
+  // Cash / card / other split off the ROWS, with the same `isCash` the per-day
+  // series uses, so `Σ series.cash_net` and `totals.cash_net_cents` agree even
+  // when a method's "counts as cash" flag was changed after the fact.
+  for (const p of input.payments) {
+    if (isReceivable(p.method_code)) continue;
+    const signed = signedOf(p);
+    if (isCash(p)) totals.cash_payments_cents += signed;
+    else if (CARD_KINDS.has(methods.get(p.method_code)?.kind ?? "other")) totals.card_cents += signed;
+    else totals.other_cents += signed;
   }
 
   // Movements: the manual ones count as cash in / out; the automatic lines
   // (sale payments, refunds, opening float) are the ledger's mirror of the
   // payments above and the session's float, so they are listed, not re-added.
+  //
+  // The figures come from `movementAgg` when the caller passed it (the whole
+  // period, straight from SQL) and from the list only as a fallback — the list
+  // is capped at MAX_MOVEMENTS and a capped list would understate cash out.
+  const ledger: Array<{ day: string; kind: string; category: string | null; count: number; cents: number }> =
+    input.movementAgg ?? input.movements.map((mv) => ({ day: mv.day, kind: mv.kind, category: mv.category ?? null, count: 1, cents: n(mv.amount_cents) }));
   const byCat = new Map<string, { category: string | null; kind: string; count: number; cents: number }>();
-  for (const mv of input.movements) {
-    const amount = n(mv.amount_cents);
-    const auto = AUTO_CATEGORIES.has(mv.category ?? "");
-    if (!auto) {
-      if (mv.kind === "in") totals.movements_in_cents += amount;
+  for (const row of ledger) {
+    const amount = n(row.cents);
+    if (!AUTO_CATEGORIES.has(row.category ?? "")) {
+      if (row.kind === "in") totals.movements_in_cents += amount;
       else totals.movements_out_cents += amount;
     }
-    const key = `${mv.kind}|${mv.category ?? ""}`;
-    const c = byCat.get(key) ?? { category: mv.category ?? null, kind: mv.kind, count: 0, cents: 0 };
-    c.count += 1;
+    const key = `${row.kind}|${row.category ?? ""}`;
+    const c = byCat.get(key) ?? { category: row.category, kind: row.kind, count: 0, cents: 0 };
+    c.count += row.count;
     c.cents += amount;
     byCat.set(key, c);
   }
@@ -330,14 +385,14 @@ export function buildCashReport(input: {
   for (const p of input.payments) {
     if (isReceivable(p.method_code)) continue;
     const row = day(p.day);
-    const amount = n(p.amount_cents);
-    row.payments_cents += amount;
-    if (isCash(p)) row.cash_net_cents += amount;
+    const signed = signedOf(p);
+    row.payments_cents += signed;
+    if (isCash(p)) row.cash_net_cents += signed;
   }
-  for (const mv of input.movements) {
+  for (const mv of ledger) {
     if (AUTO_CATEGORIES.has(mv.category ?? "")) continue;
     const row = day(mv.day);
-    const amount = n(mv.amount_cents);
+    const amount = n(mv.cents);
     if (mv.kind === "in") {
       row.cash_in_cents += amount;
       row.cash_net_cents += amount;
@@ -417,6 +472,20 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
   if (f.sellers) mvQ.whereIn("m.created_by", f.sellers);
   if (f.terminals) mvQ.whereRaw("COALESCE(m.terminal_id, cs.terminal_id) IN (" + f.terminals.map(() => "?").join(",") + ")", f.terminals);
 
+  // The same ledger, grouped in the database: the totals and the per-day
+  // series are built from this, so they stay complete when the LIST is capped.
+  const aggQ = pg("cash_movement as m")
+    .join("cash_session as cs", "cs.id", "m.session_id")
+    .whereNull("m.deleted_at")
+    .where("m.created_at", ">=", lo)
+    .where("m.created_at", "<", hi)
+    .groupByRaw("1, 2, 3")
+    .select(localDay("m.created_at"), "m.kind", "m.category")
+    .select(pg.raw("COUNT(*)::int AS count"), pg.raw("COALESCE(SUM(m.amount_cents), 0)::bigint AS cents"));
+  if (f.stores) aggQ.whereIn("cs.establishment_id", f.stores);
+  if (f.sellers) aggQ.whereIn("m.created_by", f.sellers);
+  if (f.terminals) aggQ.whereRaw("COALESCE(m.terminal_id, cs.terminal_id) IN (" + f.terminals.map(() => "?").join(",") + ")", f.terminals);
+
   // Closings: sessions opened in the period (a register open overnight belongs to the day it opened).
   const sesQ = pg("cash_session as cs")
     .leftJoin("pos_terminal as t", "t.id", "cs.terminal_id")
@@ -430,9 +499,10 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
   // Sessions are the store's (not a till's) since CreatePos5: a till filter never hides them.
   if (f.stores) sesQ.whereIn("cs.establishment_id", f.stores);
 
-  const [payRows, mvRowsAll, sesRows, methods] = await Promise.all([
+  const [payRows, mvRowsAll, aggRows, sesRows, methods] = await Promise.all([
     payQ as unknown as Promise<Record<string, unknown>[]>,
     mvQ as unknown as Promise<Record<string, unknown>[]>,
+    aggQ as unknown as Promise<Record<string, unknown>[]>,
     sesQ as unknown as Promise<Record<string, unknown>[]>,
     listPaymentMethods(container),
   ]);
@@ -491,5 +561,12 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
     ...movements.map((m) => m.created_by ?? ""),
     ...sessions.flatMap((s) => [s.opened_by ?? "", s.closed_by ?? "", s.approved_by ?? ""]),
   ]);
-  return buildCashReport({ from: f.from, to: f.to, payments, movements, sessions, methods, people, truncated });
+  const movementAgg: MovementAggRow[] = aggRows.map((r) => ({
+    day: String(r.day),
+    kind: String(r.kind),
+    category: (r.category as string | null) ?? null,
+    count: n(r.count),
+    cents: n(r.cents),
+  }));
+  return buildCashReport({ from: f.from, to: f.to, payments, movements, sessions, methods, people, truncated, movementAgg });
 }

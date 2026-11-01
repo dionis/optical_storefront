@@ -93,8 +93,47 @@ export interface LineEconomics {
 
 const MATERIAL_KINDS = new Set(["frame_brand", "frame_sku", "lens_design", "lens_material", "lens_photo", "lens_ar"]);
 
+/**
+ * Splits `amount` cents among `weights` so the parts add up to `amount`
+ * EXACTLY: the proportional part of each weight, floored, and the leftover
+ * cents handed to the biggest remainders (largest remainder / Hare quota,
+ * the same rule as lib/store-costs.ts allocateShared). Equal parts when every
+ * weight is zero. A negative amount is split with the sign kept. Pure.
+ *
+ * Rounding each part on its own would lose or invent a cent on a sale with
+ * several lines, and a statement that is off by a cent is a statement nobody
+ * trusts.
+ */
+export function allocateCents(amount: number, weights: readonly number[]): number[] {
+  const count = weights.length;
+  if (!count) return [];
+  const whole = Math.round(amount);
+  if (whole === 0) return weights.map(() => 0);
+  const sign = whole < 0 ? -1 : 1;
+  const abs = Math.abs(whole);
+  let w = weights.map((x) => (Number.isFinite(x) && x > 0 ? x : 0));
+  let total = w.reduce((s, x) => s + x, 0);
+  if (total === 0) {
+    w = weights.map(() => 1);
+    total = count;
+  }
+  const raw = w.map((x) => (abs * x) / total);
+  const parts = raw.map((v) => Math.floor(v));
+  let left = abs - parts.reduce((s, v) => s + v, 0);
+  const order = raw.map((v, i) => [v - Math.floor(v), i] as const).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  for (const [, i] of order) {
+    if (left <= 0) break;
+    parts[i] += 1;
+    left -= 1;
+  }
+  return parts.map((v) => v * sign);
+}
+
 /** The money of each line, in cents. Pure. */
 export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): LineEconomics[] {
+  // computeCostSheet drops the inactive rules itself (ruleIndex), so an
+  // inactive material rule leaves its line "without a cost defined" — the same
+  // answer the Costs tab gives.
   const materials = ctx.rules.filter((r) => MATERIAL_KINDS.has(r.kind));
   const active = ctx.rules.filter((r) => r.active);
   const orderFixed = active.filter((r) => r.kind === "order_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
@@ -127,14 +166,44 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     return out;
   };
 
-  return lines.map((l) => {
-    const net = l.total_cents - l.tax_cents;
-    const order = ctx.orders.get(l.order_id) ?? { gross: l.total_cents, net, lines: 1 };
-    const share = order.net > 0 ? net / order.net : 1 / Math.max(1, order.lines);
-    const orderFee = l.sale_id ? ctx.saleFees.get(l.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
+  const nets = lines.map((l) => l.total_cents - l.tax_cents);
+
+  // The payment fee and the per-order fixed costs belong to the WHOLE sale, so
+  // they are charged once and split among its lines in proportion to their net.
+  // A filter that selects part of a sale (one product, one lens design) only
+  // carries the matching share: `coverage` is how much of the sale is here.
+  const byOrder = new Map<string, number[]>();
+  lines.forEach((l, i) => {
+    const group = byOrder.get(l.order_id);
+    if (group) group.push(i);
+    else byOrder.set(l.order_id, [i]);
+  });
+  const fixedOf = new Array<number>(lines.length).fill(0);
+  const feeOf = new Array<number>(lines.length).fill(0);
+  for (const [orderId, idx] of byOrder) {
+    const first = lines[idx[0]];
+    const order = ctx.orders.get(orderId) ?? { gross: first.total_cents, net: nets[idx[0]], lines: idx.length };
+    const presentNet = idx.reduce((s, i) => s + nets[i], 0);
+    // A sale that left no net (a 100 % discount) is split by line count instead,
+    // and never beyond the whole of it.
+    const coverage = order.net > 0 ? presentNet / order.net : Math.min(1, idx.length / Math.max(1, order.lines));
+    const weights = order.net > 0 ? idx.map((i) => nets[i]) : idx.map(() => 1);
+    // Till sale: the fee recorded with its payments. Web order: the gateway's
+    // % of what the customer was charged, plus its fixed fee.
+    const feeTotal = first.sale_id ? ctx.saleFees.get(first.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
+    const fixedParts = allocateCents(orderFixed * coverage, weights);
+    const feeParts = allocateCents(feeTotal * coverage, weights);
+    idx.forEach((i, k) => {
+      fixedOf[i] = fixedParts[k];
+      feeOf[i] = feeParts[k];
+    });
+  }
+
+  return lines.map((l, i) => {
+    const net = nets[i];
     const material = materialCost(l);
-    const cost = material.cost + Math.round(orderFixed * share);
-    const fee = Math.round(orderFee * share);
+    const cost = material.cost + fixedOf[i];
+    const fee = feeOf[i];
     const commission = Math.round((net * (ctx.commissionPct(l) ?? 0)) / 100);
     return { net, cost, fee, commission, profit: net - cost - fee - commission, missing_cost: material.missing };
   });
@@ -609,8 +678,9 @@ async function loadOrderContext(pg: Knex, f: AnalyticsFilter, orderIds?: string[
     totalsQ.whereIn("o.order_id", orderIds);
     feesQ.whereIn("p.sale_id", pg("sale_fact").whereNull("sale_fact.deleted_at").whereIn("sale_fact.order_id", orderIds).whereNotNull("sale_fact.sale_id").select("sale_fact.sale_id"));
   }
-  const orderRows = (await totalsQ) as Array<Record<string, unknown>>;
-  const feeRows = (await feesQ) as Array<Record<string, unknown>>;
+  // Both aggregates at once: they are independent, and the panel waits for the
+  // slowest of them instead of their sum.
+  const [orderRows, feeRows] = (await Promise.all([totalsQ, feesQ])) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
   return {
     orders: new Map(orderRows.map((r) => [String(r.order_id), { gross: Number(r.gross), net: Number(r.net), lines: Number(r.lines) }])),
     saleFees: new Map(feeRows.map((r) => [String(r.sale_id), Number(r.fee)])),

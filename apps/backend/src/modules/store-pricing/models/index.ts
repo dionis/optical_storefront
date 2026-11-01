@@ -6,3 +6,4 @@
  * src/modules/store-settings/models/index.ts.
  */
 export * from "./price-rule";
+export * from "./cost-toggle";

@@ -163,8 +163,12 @@ async function views(container: MedusaContainer, rows: Record<string, unknown>[]
       ...movements.map((m) => (m.created_by ? String(m.created_by) : "")),
     ]),
   ]);
-  const person = (id: unknown): Person | null => (id ? people.find((x) => x.id === String(id)) ?? { id: String(id), name: String(id), code: null } : null);
-  const termCode = (id: unknown): string | null => (id ? terminals.find((t) => t.id === String(id))?.code ?? null : null);
+  // Indexed once: a session can carry thousands of ledger lines, and a linear
+  // search per line turned the detail into O(lines × people).
+  const peopleById = new Map(people.map((p) => [p.id, p]));
+  const terminalById = new Map(terminals.map((t) => [t.id, t]));
+  const person = (id: unknown): Person | null => (id ? peopleById.get(String(id)) ?? { id: String(id), name: String(id), code: null } : null);
+  const termCode = (id: unknown): string | null => (id ? terminalById.get(String(id))?.code ?? null : null);
   const bySession = new Map<string, MovementView[]>();
   for (const m of movements) {
     const list = bySession.get(String(m.session_id)) ?? [];
