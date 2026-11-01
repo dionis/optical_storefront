@@ -93,6 +93,12 @@ export default {
     "adm.scr.st.naturalMonth": "Mes natural completo",
     "adm.scr.st.scope": "Alcance",
     // Tiendas (Stores.jsx): etiquetas de los datos de cada ficha.
+    // Red de seguridad: si una pantalla revienta al pintarse, AdminErrorBoundary
+    // enseña esto en su sitio en vez de dejar el panel en blanco.
+    "adm.crash.title": "Esta pantalla no se pudo mostrar",
+    "adm.crash.body": "Hubo un fallo al pintarla. El resto del panel sigue funcionando: vuelve a intentarlo o cambia de pestaña.",
+    "adm.crash.retry": "Volver a intentar",
+    "adm.crash.detail": "Detalle técnico",
     "adm.scr.store.created": "Alta",
   },
   en: {
@@ -182,6 +188,10 @@ export default {
     "adm.scr.st.fallback": "The chosen store is not one of yours: {store} is shown.",
     "adm.scr.st.naturalMonth": "Whole calendar month",
     "adm.scr.st.scope": "Scope",
+    "adm.crash.title": "This screen could not be shown",
+    "adm.crash.body": "Something failed while drawing it. The rest of the panel still works: try again or switch tabs.",
+    "adm.crash.retry": "Try again",
+    "adm.crash.detail": "Technical detail",
     "adm.scr.store.created": "Created",
   },
 };

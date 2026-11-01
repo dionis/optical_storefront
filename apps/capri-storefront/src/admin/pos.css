@@ -1,0 +1,4 @@
+
+/* Edad ya calculada junto a la fecha de nacimiento (PosSale.jsx, ageFrom). */
+.pos-birth-lbl { display: inline-flex; align-items: baseline; gap: 7px; }
+.pos-age { padding: 1px 7px; border-radius: var(--adm-radius-pill); background: var(--adm-accent-soft); color: var(--adm-accent-ink); font-size: 11.5px; font-weight: 700; }

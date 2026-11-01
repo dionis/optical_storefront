@@ -41,6 +41,22 @@ import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 // Tema de ayuda (HelpTip) de cada paso; la receta tiene los suyos en la cuadrícula.
 const STEP_HELP = { customer: "pos.step.customer", frame: "pos.step.frame", rx: "pos.rx.howToRead", lenses: "pos.step.lenses", price: "pos.step.price", payment: "pos.step.payment" };
+/**
+ * Edad cumplida a partir de la fecha de nacimiento ("YYYY-MM-DD"), o null si
+ * falta, no se entiende o es futura. Se pinta al lado del campo porque quien
+ * atiende razona en años, no en fechas: la edad decide si una graduación es
+ * verosímil (presbicia a partir de los 40) y si la montura es de niño.
+ */
+export function ageFrom(birth, today = new Date()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birth || ""))) return null;
+  const d = new Date(`${birth}T00:00:00`);
+  if (Number.isNaN(d.getTime()) || d > today) return null;
+  let age = today.getFullYear() - d.getFullYear();
+  const beforeBirthday = today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const EMPTY_OWN = { open: false, description: "", photo: null };
@@ -387,6 +403,10 @@ export default function PosSale({ me }) {
   // Receta nueva: el servidor es la última palabra, pero lo que el laboratorio no corta no sale de aquí.
   const rxCheck = validateRx(rxNew, rxNew.type, { mode: "new" });
   const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
+  // Formato de moneda del panel. Va ANTES de `frameCards`: ese `.map` se evalúa
+  // en cada render en cuanto la venta tiene una montura, así que declararlo
+  // más abajo dejaba `m` en zona muerta temporal y la pantalla entera
+  // reventaba (ReferenceError) justo al elegir el color de la montura.
   const m = (v) => money(v, "usd", lang);
   // La montura que se está vendiendo, siempre a la vista en los pasos siguientes.
   const frameCards = lines.filter((l) => l.kind === "frame").map((l) => <PosFrameCard key={l.key} frame={l} money={m} compact />);
@@ -534,7 +554,15 @@ export default function PosSale({ me }) {
               <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
               <label>{t("adm.pos.cust.email")}<input type="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
               <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
-              <label>{t("adm.pos.cust.birth")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} /><FieldError error={custField("birth_date").problem} /></label>
+              <label>
+                <span className="pos-birth-lbl">
+                  {t("adm.pos.cust.birth")}
+                  {/* La edad ya calculada, al lado: el dato con el que de verdad se trabaja. */}
+                  {ageFrom(customer.birth_date) !== null && <b className="pos-age">{t("adm.pos.cust.age", { n: ageFrom(customer.birth_date) })}</b>}
+                </span>
+                <input type="date" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
+                <FieldError error={custField("birth_date").problem} />
+              </label>
             </div>
             <details className="pos-address" ref={addressRef}>
               <summary>{t("adm.pos.cust.address")}</summary>

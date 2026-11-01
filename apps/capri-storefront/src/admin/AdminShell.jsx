@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import AdminErrorBoundary from "./AdminErrorBoundary.jsx";
 import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
 import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
@@ -359,7 +360,10 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
           {/* `go` baja hasta el buscador global de la barra: sin él navegaría
               cambiando la URL, que recarga la página entera. */}
           <GlobalFilterBar tab={tab} me={me} barRef={barRef} go={goTo} />
-          <main className="adm-body" key={tab}>{children}</main>
+          {/* Una pestaña que revienta al pintarse no puede llevarse el panel
+              entero por delante: la barrera la acota y `key={tab}` hace que
+              cambiar de pestaña reintente sin recargar. */}
+          <main className="adm-body" key={tab}><AdminErrorBoundary>{children}</AdminErrorBoundary></main>
         </ExportRegistry>
       </div>
 

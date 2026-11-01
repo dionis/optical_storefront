@@ -1781,3 +1781,11 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 }
 .board-kpis .cx-kpi { container-type: inline-size; }
 .ins-body .adm-subtabs { flex-wrap: wrap; }
+
+/* Pantalla que revienta al pintarse (AdminErrorBoundary.jsx): el aviso ocupa el
+   sitio de la pestaña, el resto del panel sigue usable. */
+.adm-crash { display: grid; gap: 10px; justify-items: start; border: 1px solid var(--adm-danger-line, var(--adm-line)); }
+.adm-crash-head { display: flex; align-items: center; gap: 8px; color: var(--adm-danger, #c0392b); font-weight: 700; }
+.adm-crash-detail { width: 100%; }
+.adm-crash-detail summary { cursor: pointer; font-size: 12px; color: var(--adm-faint); }
+.adm-crash-detail pre { margin: 8px 0 0; padding: 10px; max-height: 240px; overflow: auto; background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; }
