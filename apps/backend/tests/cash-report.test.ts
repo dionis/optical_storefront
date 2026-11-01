@@ -60,8 +60,10 @@ describe("cash movement categories", () => {
     expect(isCashCategory(null)).toBe(false);
   });
 
-  it("expected cash still ignores the category", () => {
-    expect(expectedCash(5000, [10000], [{ kind: "out", amount: 2000 }])).toBe(13000);
+  it("expected cash is the ledger: opening + in − out, the opening float line not summed twice", () => {
+    expect(expectedCash(5000, [{ kind: "in", amount: 10000, category: "sale_payment" }, { kind: "out", amount: 2000, category: "expense" }])).toBe(13000);
+    expect(expectedCash(5000, [{ kind: "in", amount: 5000, category: "opening_float" }, { kind: "in", amount: 10000, category: "sale_payment" }, { kind: "out", amount: 1500, category: "sale_refund" }])).toBe(13500);
+    expect(expectedCash(0, [])).toBe(0);
   });
 });
 
@@ -140,6 +142,33 @@ describe("buildCashReport", () => {
     expect(r.sessions[0].diff_cents).toBeNull();
   });
 
+  it("lists the automatic ledger lines but never adds them on top of the payments they mirror", () => {
+    const r = buildCashReport({
+      from: "2026-10-01",
+      to: "2026-10-31",
+      methods: METHODS,
+      payments: [pay({ method_code: "cash", amount_cents: 10000, counts_as_cash: true })],
+      movements: [
+        mv({ kind: "in", category: "opening_float", amount_cents: 5000, note: null }),
+        mv({ kind: "in", category: "sale_payment", amount_cents: 10000, note: "Op1-000001", sale_id: "poss_1", payment_id: "pospay_1", terminal_id: "t1" }),
+        mv({ kind: "out", category: "sale_refund", amount_cents: 2500, note: "Op1-000002", sale_id: "poss_2", payment_id: "pospay_2" }),
+        mv({ kind: "out", category: "expense", amount_cents: 700 }),
+      ],
+      sessions: [ses({ status: "pending_approval", opened_by: "u1", closed_by: "u1", opened_signature: "AG", closed_signature: "AG", approval_signature: null })],
+      people: [{ id: "u1", name: "Ana García", code: "ANA" }],
+    });
+    expect(r.totals.cash_payments_cents).toBe(10000);
+    expect(r.totals.movements_in_cents).toBe(0);
+    expect(r.totals.movements_out_cents).toBe(700);
+    expect(r.totals.cash_net_cents).toBe(10000 - 700);
+    expect(r.series).toEqual([{ date: "2026-10-05", payments_cents: 10000, cash_in_cents: 0, cash_out_cents: 700, cash_net_cents: 9300 }]);
+    expect(r.movements.filter((m) => m.auto).map((m) => m.category).sort()).toEqual(["opening_float", "sale_payment", "sale_refund"]);
+    expect(r.movements.filter((m) => !m.auto).map((m) => m.category)).toEqual(["expense"]);
+    expect(r.movements.find((m) => m.category === "sale_payment")).toMatchObject({ auto: true, sale_id: "poss_1", payment_id: "pospay_1", terminal_id: "t1" });
+    expect(r.by_category.map((c) => c.category)).toEqual(expect.arrayContaining(["sale_payment", "sale_refund", "opening_float", "expense"]));
+    expect(r.sessions[0]).toMatchObject({ status: "pending_approval", opened_signature: "AG", closed_signature: "AG", approval_signature: null, opened_by: { id: "u1", name: "Ana García", code: "ANA" } });
+  });
+
   it("is empty, not broken, without rows", () => {
     const r = buildCashReport({ from: "2026-10-01", to: "2026-10-31", methods: METHODS, payments: [], movements: [], sessions: [] });
     expect(r.by_method).toEqual([]);
@@ -157,5 +186,14 @@ describe("buildCashReport", () => {
 describe("restricted roles reach the cash report", () => {
   it("GET /admin/pos/cash-report is allow-listed", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/cash-report?from=2026-10-01&to=2026-10-31")).toBe(true);
+  });
+
+  it("a session's detail, document and re-send are allow-listed; approving a difference is the owner's", () => {
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/cash-sessions/cash_1")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/cash-sessions/cash_1/document?kind=close")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/cash-sessions/cash_1/email")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/cash-sessions/cash_1/close")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/cash-sessions")).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pos/cash-sessions/cash_1/approve")).toBe(false);
   });
 });

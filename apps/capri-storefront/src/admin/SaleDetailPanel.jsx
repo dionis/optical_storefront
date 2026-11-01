@@ -1,19 +1,25 @@
-// Dónde se usa: en toda pantalla que liste ventas de tienda — Ventas de tienda
-// (PosSales), Pedidos de la tienda (StoreOrders, también dentro del Ejecutivo)
-// y Estado de cuenta (StoreStatement). Al pulsar una venta se abre esta ficha
-// como cajón lateral con TODO lo de la venta: cliente, montura y lentes (con la
-// receta para quien puede verla), importes, cobros (y registrar uno), documentos
-// (imprimir / enviar recibo) e historial. Desde aquí también se entrega y se
-// anula (o se pide anular), como antes desde la fila de Ventas de tienda.
+// Dónde se usa: en toda pantalla que liste ventas o pedidos — Ventas de tienda
+// (PosSales), Pedidos y etapas (StoreOrders, también dentro del Ejecutivo),
+// Estado de cuenta (StoreStatement), Mi panel y Cobros pendientes. Al pulsar
+// una venta o un pedido se abre esta ficha delante de la pantalla (fondo
+// atenuado) con TODO: cliente, montura y lentes con foto (y la receta para
+// quien puede verla), la ETAPA del pedido con su línea de tiempo y los botones
+// para avanzarla, importes, cobros (y registrar uno), documentos e historial.
+// Desde aquí también se entrega y se anula (o se pide anular).
 //
 //   const sp = useSalePanel({ me, onChanged: reload });
-//   <tr onClick={() => sp.open(sale.id, { economics: row })}>…</tr>
+//   <tr onClick={() => sp.open(sale.id, { economics: row })}>…</tr>      // venta de caja
+//   <tr onClick={() => sp.open({ orderId: order.id })}>…</tr>            // pedido web (sin venta de caja)
 //   {sp.panel}
 //
 // Datos: GET /admin/pos/sales/:id (venta, cobros, seguros), GET …/documents?kind=receipt
 // (líneas con foto, cliente, impuesto, impresiones — sin registrar impresión),
 // GET /admin/pos/customers/:id (correo) y, solo para administradores, supervisores
-// y encargados, GET …/documents?kind=job (valores de la receta). Costo, comisión y
+// y encargados, GET …/documents?kind=job (valores de la receta). La etapa y, para
+// un pedido web, los artículos, la dirección y los cobros de Medusa: GET
+// /admin/order-board/:id (la venta de caja lleva `order_id`; un pedido de caja
+// abierto por `orderId` lleva `pos_sale_id` y pasa a la ficha de venta). Avanzar
+// = POST /admin/order-board/:id/stage con una de `next_stages`. Costo, comisión y
 // ganancia nunca se piden aquí: llegan en `economics` desde la lista que ya los
 // tenía (y solo si el servidor los dio).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,10 +27,13 @@ import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
-import { money } from "./adminOrders.js";
+import { STAGES, STAGE_BY_KEY, money, orderLabel, setOrderStage, stageErrorText } from "./adminOrders.js";
+import { adminFetch } from "./adminApi.js";
 import { collectPayment, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, posContext, voidSale } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import { StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
+import { DESIGNS, MATERIALS, PHOTO, AR_OPTIONS, L } from "../data/lensPricing.js";
 import "./sale-detail.css";
 
 const fmt = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
@@ -88,14 +97,85 @@ function Section({ icon, title, right, children }) {
   );
 }
 
+/** Etiqueta de un código de lente de un pedido web (lensPricing.js), o el código tal cual. */
+const lensCodeLabel = (list, code, lang) => { if (!code) return ""; const x = (Array.isArray(list) ? list : []).find((i) => i.id === code); return x ? L(x.label, lang) : String(code); };
+const lensChipsOf = (lens, lang) => (lens ? [lensCodeLabel(DESIGNS, lens.design_code, lang), lensCodeLabel(MATERIALS, lens.material_code, lang), lensCodeLabel(PHOTO, lens.photo_code, lang), lensCodeLabel(AR_OPTIONS, lens.ar_code, lang)].filter(Boolean) : []);
+/** Proveedor de pago de Medusa, legible: «pp_stripe_stripe» → «stripe»; el manual del POS, «caja». */
+const providerName = (id, t) => { const k = String(id || "").replace(/^pp_/, "").split("_")[0]; return !k ? "—" : k === "system" ? t("adm.sd.order.posSale") : k; };
+
 /**
- * Props: `saleId`, `open`, `onClose`, `onChanged` (tras cobrar/entregar/anular,
- * para que la lista se refresque), `me` (GET /admin/team/me; sin él se usa el
+ * Cuándo alcanzó el pedido cada etapa: el historial que escribe transitionOrderStage
+ * (`stage_history`), y si falta, lo que Medusa registró (creación, preparación,
+ * envío, entrega) o la entrega en caja. null = sin fecha conocida.
+ */
+export function stageDateOf(order, key) {
+  if (!order) return null;
+  const hist = (order.stage_history || []).filter((h) => h.stage === key).at(-1)?.at;
+  if (hist) return hist;
+  const live = (order.fulfillments || []).filter((f) => !f.canceled_at);
+  switch (key) {
+    case "confirmed": return order.created_at || null;
+    case "shipped": return live.map((f) => f.packed_at || f.created_at).find(Boolean) || null;
+    case "in_transit": return live.map((f) => f.shipped_at).find(Boolean) || null;
+    case "delivered": return live.map((f) => f.delivered_at).find(Boolean) || order.pos_delivered_at || null;
+    default: return null;
+  }
+}
+
+/**
+ * Bloque «Etapa del pedido»: la línea de las cinco etapas con su fecha, el
+ * estado terminal si lo hay, y un botón por cada etapa que el servidor acepta
+ * ahora (`next_stages`) — la siguiente natural en primario. Lo usan la ficha
+ * de venta (por `sale.order_id`) y la de pedido web.
+ */
+function StageBlock({ order, state, moving, onMove, tracking, setTracking }) {
+  const { t, lang } = useLang();
+  if (state === "none") return <p className="sd-empty">{t("adm.sd.stage.noOrder")}</p>;
+  if (state === "loading" || !order) return <p className="sd-hint">{state === "error" ? t("adm.sd.stage.failed") : t("adm.sd.stage.loading")}</p>;
+  const cur = order.terminal ? -1 : STAGE_INDEX[order.stage] ?? 0;
+  const next = order.next_stages || [];
+  const natural = nextForward(order);
+  const needsTracking = next.includes("in_transit");
+  return (
+    <>
+      <ol className="sd-stages">
+        {STAGES.map((st, i) => {
+          const at = stageDateOf(order, st.key);
+          const tone = order.terminal ? "off" : i < cur ? "done" : i === cur ? "current" : "todo";
+          return (
+            <li key={st.key} className={`sd-stage ${tone}`}>
+              <span className="sd-stage-dot"><Icon name={STAGE_ICON[st.key]} size={12} /></span>
+              <b>{t(st.label)}</b>
+              <small>{at && tone !== "todo" ? fmt(at, lang) : tone === "current" ? t("adm.sd.stage.now") : t("adm.sd.stage.pendingStep")}</small>
+            </li>
+          );
+        })}
+      </ol>
+      {order.terminal && <div className={`sd-banner ${order.terminal === "payment_pending" ? "warn" : "bad"}`}>{t("adm.sd.stage.terminal", { state: stageLabel(order.terminal, t) })}</div>}
+      {order.pos_delivered_at && <p className="sd-hint"><Icon name="hand" size={12} /> {t("adm.sd.stage.posDelivered")} · {fmt(order.pos_delivered_at, lang)}</p>}
+      {next.length ? (
+        <div className="sd-stage-actions adm-noprint">
+          {needsTracking && <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder={t("adm.sd.stage.tracking")} aria-label={t("adm.sd.stage.tracking")} />}
+          {next.map((k) => (
+            <button key={k} type="button" className={`btn-sm ${k === natural ? "primary" : ""}`} disabled={moving} onClick={() => onMove(k)} title={t(STAGE_BY_KEY[k].action)}>
+              <Icon name={STAGE_ICON[k]} size={13} /> {t("adm.sd.stage.moveTo", { stage: t(STAGE_BY_KEY[k].label) })}
+            </button>
+          ))}
+        </div>
+      ) : !order.terminal && <p className="sd-hint">{t("adm.sd.stage.none")}</p>}
+    </>
+  );
+}
+
+/**
+ * Props: `saleId` (venta de caja) o `orderId` (pedido de Medusa, p. ej. web),
+ * `open`, `onClose`, `onChanged` (tras cobrar/entregar/anular/avanzar, para
+ * que la lista se refresque), `me` (GET /admin/team/me; sin él se usa el
  * contexto del POS), `economics` (fila de /admin/sales-analytics/sales con
  * cost/fee/commission/profit/margin_pct, opcional), `ctx` (contexto del POS si
  * la pantalla ya lo tiene; opcional).
  */
-export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, economics = null, ctx: givenCtx = null }) {
+export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrderId = null, open, onClose, onChanged, me, economics = null, ctx: givenCtx = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const [ctx, setCtx] = useState(givenCtx);
@@ -108,6 +188,12 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
   const [pay, setPay] = useState({ method_code: "", amount: "", details: {} });
   const [voiding, setVoiding] = useState({ open: false, reason: "", note: "" });
   const [tick, setTick] = useState(0);
+  // El pedido de Medusa detrás (etapa, next_stages, historial; artículos y cobros de un pedido web).
+  const [order, setOrder] = useState(null);
+  const [orderState, setOrderState] = useState("idle");
+  const [moving, setMoving] = useState(false);
+  const [tracking, setTracking] = useState("");
+  const [oTick, setOTick] = useState(0);
   const panelRef = useRef(null);
   const m = (v) => money(v, "usd", lang);
 
@@ -115,6 +201,10 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
 
   const who = me || (ctx && ctx.role !== undefined ? { is_admin: ctx.is_admin, role: ctx.role } : null);
   const rxAllowed = canSeeRx(who);
+
+  // Un pedido de caja abierto por `orderId` lleva `pos_sale_id`: se pinta la ficha de venta completa.
+  const saleId = givenSaleId || (!givenSaleId && order && givenOrderId && order.id === givenOrderId ? order.pos_sale_id : null) || null;
+  const orderMode = !saleId && Boolean(givenOrderId);
 
   // Carga: venta + documento (líneas, cliente, impuesto, impresiones) y, aparte, correo del cliente y receta.
   useEffect(() => {
@@ -136,6 +226,40 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
     return () => { on = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, saleId, tick, rxAllowed, Boolean(ctx)]);
+
+  // El pedido: el dado (`orderId`) o el de la venta (`sale.order_id`). Sin pedido, sin etapas.
+  const orderIdToLoad = givenOrderId || data?.sale?.order_id || null;
+  useEffect(() => {
+    if (!open) return undefined;
+    if (!orderIdToLoad) { if (givenSaleId && data) { setOrder(null); setOrderState("none"); } else { setOrder(null); setOrderState("idle"); } return undefined; }
+    let on = true;
+    setOrderState("loading");
+    setTracking("");
+    adminFetch(`/admin/order-board/${encodeURIComponent(orderIdToLoad)}`)
+      .then((r) => { if (on) { setOrder(r.order || null); setOrderState(r.order ? "ok" : "error"); } })
+      .catch(() => { if (on) { setOrder(null); setOrderState("error"); } });
+    return () => { on = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, orderIdToLoad, tick, oTick, Boolean(data)]);
+  useEffect(() => { if (!open) { setOrder(null); setOrderState("idle"); } }, [open]);
+  // Sin venta (ficha de pedido web, o cerrada): nada de la venta anterior se queda pintado.
+  useEffect(() => { if (!saleId) { setData(null); setDoc(null); setCustomer(null); setRxDoc(null); setState("idle"); } }, [saleId]);
+
+  // Avanzar (o retroceder la nota de laboratorio): una de `next_stages`, confirmada; el servidor devuelve el pedido ya movido.
+  const moveStage = async (stage) => {
+    if (!order) return;
+    const st = STAGE_BY_KEY[stage];
+    const n = data?.sale?.number || orderLabel(order);
+    if (!(await confirm({ title: t("adm.sd.stage.confirm", { n, stage: t(st.label) }), message: t(st.action) }))) return;
+    setMoving(true);
+    try {
+      const after = await setOrderStage(order.id, stage, { trackingNumber: stage === "in_transit" ? tracking.trim() : "" });
+      if (after) setOrder((o) => ({ ...(o || {}), ...after })); else setTick((x) => x + 1);
+      toast({ tone: "success", title: t("adm.sd.stage.moved", { stage: t(st.label) }) });
+      onChanged?.();
+    } catch (e) { toast({ tone: "error", title: stageErrorText(t, e) }); }
+    finally { setMoving(false); }
+  };
 
   // Cajón abierto: sin scroll detrás, foco dentro, Escape cierra, y al cerrar vuelve el foco a la fila.
   useEffect(() => {
@@ -167,7 +291,7 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
   const s = data?.sale;
   const store = useMemo(() => (s && ctx ? (ctx.stores || []).find((x) => x.id === s.establishment_id) : null), [s, ctx]);
   const terminal = store?.terminals?.find((x) => x.id === s?.terminal_id) || null;
-  const methods = useMemo(() => (ctx?.payment_methods || []).filter((x) => (!store || store.payment_methods.includes(x.code)) && !(x.kind === "insurance" || x.receivable)), [ctx, store]);
+  const methods = useMemo(() => (ctx?.payment_methods || []).filter((x) => (!store || (store.payment_methods || []).includes(x.code)) && !(x.kind === "insurance" || x.receivable)), [ctx, store]);
   const meth = methods.find((x) => x.code === pay.method_code);
   // El monto propuesto es el saldo; cambia cuando la venta cambia (tras un cobro parcial).
   useEffect(() => { if (s) setPay((p) => ({ ...p, amount: s.balance > 0 ? String(s.balance) : "" })); }, [s?.balance]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -178,6 +302,8 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
       const r = await fn();
       if (r?.sale) setData((d) => ({ ...d, sale: r.sale }));
       toast({ tone: "success", title: ok(r) });
+      // Entregar / anular mueven el pedido de Medusa (entrega en caja, cancelación): la etapa se relee.
+      setOTick((n) => n + 1);
       onChanged?.();
     } catch (e) { toast({ tone: "error", title: t(errKey(e)) }); }
     finally { setBusy(false); }
@@ -224,22 +350,41 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
   const canDeliver = s && s.status !== "voided" && !s.delivered_at;
   const canVoidBtn = s && s.status !== "voided";
 
+  // Pedido web (sin venta de caja): cabecera, cliente, artículos, importes y cobros salen del pedido.
+  const o = orderMode ? order : null;
+  const oStage = o ? (o.terminal === "canceled" || o.terminal === "refunded" ? "voided" : o.terminal || o.stage) : null;
+  const oStoreLabel = o ? (o.channel === "pos" ? ((ctx?.stores || []).find((x) => x.id === o.establishment_id) || null) : null) : null;
+  const oHistory = !o ? [] : [
+    { at: o.created_at, key: "created", tone: "accent", icon: "receipt", what: t("adm.sd.h.created"), sub: o.seller_code || "" },
+    ...(o.stage_history || []).map((h, i) => ({ at: h.at, key: `h${i}`, tone: h.stage === "delivered" ? "ok" : "", icon: STAGE_ICON[h.stage] || "box", what: stageLabel(h.stage, t), sub: "" })),
+    ...(o.payments || []).filter((p) => p.captured > 0 || p.refunded > 0).map((p, i) => ({ at: p.captured_at || p.created_at, key: `p${i}`, tone: p.refunded > 0 && p.captured === 0 ? "bad" : "ok", icon: "dollar", what: `${t("adm.sd.pay.captured")} · ${money(p.captured, p.currency_code, lang)}`, sub: providerName(p.provider_id, t) })),
+  ].filter((h) => h.at).sort((a, b) => new Date(a.at) - new Date(b.at));
+  const headNumber = s ? s.number : o ? orderLabel(o) : "…";
+  const stageRight = order && orderState === "ok" ? <StageChip stage={order.terminal === "canceled" || order.terminal === "refunded" ? "voided" : order.terminal || order.stage} t={t} /> : null;
+  const stageSection = (
+    <Section icon="layers" title={t("adm.sd.sec.stage")} right={stageRight}>
+      <StageBlock order={order} state={orderState} moving={moving} onMove={moveStage} tracking={tracking} setTracking={setTracking} />
+    </Section>
+  );
+
   return createPortal(
     <div className="sd-root" role="presentation" onKeyDown={onKey}>
       <div className="sd-backdrop" onClick={onClose} aria-hidden="true" />
-      <aside className="sd-panel" role="dialog" aria-modal="true" aria-label={s ? `${t("adm.sd.title")} ${s.number}` : t("adm.sd.title")} tabIndex={-1} ref={panelRef}>
+      <aside className="sd-panel" role="dialog" aria-modal="true" aria-label={`${orderMode ? t("adm.sd.order.title") : t("adm.sd.title")} ${headNumber}`} tabIndex={-1} ref={panelRef}>
         <header className="sd-head">
           <div className="sd-head-row">
             <div style={{ minWidth: 0 }}>
-              <p className="sd-kicker">{t("adm.sd.title")}</p>
+              <p className="sd-kicker">{orderMode ? t("adm.sd.order.title") : t("adm.sd.title")}</p>
               <h2 className="sd-number">
-                {s ? s.number : "…"}
+                {headNumber}
                 {status && <span className={`adm-chip ${status[1]}`}>{t(`adm.sd.st.${status[0]}`)}</span>}
                 {s?.void_requested_at && s.status !== "voided" && <span className="adm-chip warn">{t("adm.sd.st.voidAsked")}</span>}
+                {o && <StageChip stage={oStage} t={t} />}
+                {o && !o.terminal && <span className={`adm-chip ${o.paid ? "ok" : "warn"}`}>{t(o.paid ? "adm.sd.order.paid" : "adm.sd.order.unpaid")}</span>}
               </h2>
             </div>
             <div className="sd-head-actions adm-noprint">
-              <button type="button" className="sd-icobtn" onClick={() => window.print()} title={t("adm.sd.print")} aria-label={t("adm.sd.print")} disabled={!s}><Icon name="printer" size={15} /></button>
+              <button type="button" className="sd-icobtn" onClick={() => window.print()} title={t("adm.sd.print")} aria-label={t("adm.sd.print")} disabled={!s && !o}><Icon name="printer" size={15} /></button>
               <button type="button" className="sd-icobtn" onClick={onClose} title={t("adm.sd.close")} aria-label={t("adm.sd.close")}><Icon name="close" size={16} /></button>
             </div>
           </div>
@@ -251,17 +396,121 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
               {(terminal?.code || doc?.terminal?.code) && <li><Icon name="store" size={13} /> {t("adm.sd.terminal")}: <b>{terminal?.code || doc.terminal.code}</b></li>}
             </ul>
           )}
+          {o && (
+            <ul className="sd-meta">
+              <li><Icon name="calendar" size={13} /> <b>{fmt(o.created_at, lang)}</b></li>
+              <li>{o.channel === "pos" ? <span className="sd-dot" style={{ background: oStoreLabel?.color || "var(--adm-line)" }} /> : <Icon name="globe" size={13} />} {t("adm.sd.store")}: <b>{o.channel === "pos" ? (oStoreLabel ? `${oStoreLabel.code} · ${oStoreLabel.name}` : o.establishment_id || "—") : t("adm.sd.order.web")}</b></li>
+              {o.seller_code && <li><Icon name="user" size={13} /> {t("adm.sd.order.seller")}: <b>{o.seller_code}</b></li>}
+              {o.has_prescription && <li><Icon name="eye" size={13} /> <b>{t("adm.sd.rxYes")}</b></li>}
+            </ul>
+          )}
         </header>
 
         <div className="sd-body">
-          {state === "loading" && <div className="sd-loading" aria-busy="true"><div className="sd-skel" /><div className="sd-skel" /><div className="sd-skel" /><p className="sd-empty">{t("adm.sd.loading")}</p></div>}
-          {state === "error" && (
-            <div className="sd-card"><p className="sd-empty">{t("adm.sd.notFound")}</p><div><button type="button" className="btn-sm" onClick={() => setTick((n) => n + 1)}><Icon name="refresh" size={14} /> {t("adm.sd.retry")}</button></div></div>
+          {(state === "loading" || (orderMode && orderState === "loading")) && <div className="sd-loading" aria-busy="true"><div className="sd-skel" /><div className="sd-skel" /><div className="sd-skel" /><p className="sd-empty">{t("adm.sd.loading")}</p></div>}
+          {(state === "error" || (orderMode && orderState === "error")) && (
+            <div className="sd-card"><p className="sd-empty">{orderMode ? t("adm.sd.order.notFound") : t("adm.sd.notFound")}</p><div><button type="button" className="btn-sm" onClick={() => setTick((n) => n + 1)}><Icon name="refresh" size={14} /> {t("adm.sd.retry")}</button></div></div>
+          )}
+          {o && orderState === "ok" && (
+            <>
+              {o.owner_note && <div className="sd-banner info"><b>{t("adm.sd.order.note")}:</b> {o.owner_note}</div>}
+              {stageSection}
+
+              <Section icon="user" title={t("adm.sd.sec.customer")}>
+                {o.customer?.name ? <div className="sd-name">{o.customer.name}</div> : <p className="sd-empty">{t("adm.sd.noCustomer")}</p>}
+                <dl className="sd-kv">
+                  {o.customer?.phone && <><dt>{t("adm.sd.phone")}</dt><dd><a href={`tel:${o.customer.phone}`}>{o.customer.phone}</a></dd></>}
+                  {o.customer?.email && <><dt>{t("adm.sd.email")}</dt><dd><a href={`mailto:${o.customer.email}`}>{o.customer.email}</a></dd></>}
+                  <dt>{t("adm.sd.order.address")}</dt>
+                  <dd>{o.shipping_address ? [o.shipping_address.address_1, o.shipping_address.address_2, [o.shipping_address.city, o.shipping_address.province, o.shipping_address.postal_code].filter(Boolean).join(", "), String(o.shipping_address.country_code || "").toUpperCase()].filter(Boolean).join(" · ") : <span className="sd-muted">{t("adm.sd.order.noAddress")}</span>}</dd>
+                  {o.shipping_method && <><dt>{t("adm.sd.order.shippingMethod")}</dt><dd>{o.shipping_method}</dd></>}
+                  {o.tracking_number && <><dt>{t("adm.sd.order.tracking")}</dt><dd>{o.tracking_url ? <a href={o.tracking_url} target="_blank" rel="noreferrer">{o.tracking_number}</a> : <b>{o.tracking_number}</b>}</dd></>}
+                </dl>
+              </Section>
+
+              <Section icon="glasses" title={t("adm.sd.order.items")}>
+                {!(o.items || []).length && <p className="sd-empty">{t("adm.sd.order.noItems")}</p>}
+                {(o.items || []).map((it, i) => {
+                  const lens = lensChipsOf(it.lens, lang);
+                  return (
+                    <div key={it.id || i} className="sd-line">
+                      <PosFramePhoto line={{ kind: "frame", image: it.thumbnail, title: it.title }} size="md" />
+                      <div className="sd-line-info">
+                        <div className="sd-line-title">{it.title}</div>
+                        <div className="sd-line-sub">
+                          {it.variant_title && <span>{t("adm.sd.color")}: <b>{it.variant_title}</b></span>}
+                          {it.sku && <span>{t("adm.sd.sku")}: <b>{it.sku}</b></span>}
+                          {it.quantity > 1 && <span>×{it.quantity}</span>}
+                        </div>
+                        <div className="sd-chips">
+                          {lens.length ? lens.map((x) => <span key={x} className="adm-chip neutral">{x}</span>) : <span className="adm-chip neutral">{t("adm.sd.frameOnly")}</span>}
+                          <span className={`adm-chip ${it.has_prescription ? "ok" : "neutral"}`}>{it.has_prescription ? t("adm.sd.rxYes") : t("adm.sd.rxNo")}</span>
+                        </div>
+                        <div className="sd-line-price">{money(it.total, o.currency_code, lang)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </Section>
+
+              <Section icon="dollar" title={t("adm.sd.sec.amounts")}>
+                <dl className="sd-totals">
+                  <div><dt>{t("adm.sd.order.subtotal")}</dt><dd>{money(o.item_total, o.currency_code, lang)}</dd></div>
+                  {Number(o.discount_total) > 0 && <div><dt>{t("adm.sd.order.discountTotal")}</dt><dd>−{money(o.discount_total, o.currency_code, lang)}</dd></div>}
+                  {Number(o.shipping_total) > 0 && <div><dt>{t("adm.sd.order.shippingTotal")}</dt><dd>{money(o.shipping_total, o.currency_code, lang)}</dd></div>}
+                  {Number(o.tax_total) > 0 && <div><dt>{t("adm.sd.tax")}</dt><dd>{money(o.tax_total, o.currency_code, lang)}</dd></div>}
+                  <div className="sd-total"><dt>{t("adm.sd.total")}</dt><dd>{money(o.total, o.currency_code, lang)}</dd></div>
+                </dl>
+                {econ && (
+                  <div className="sd-econ">
+                    <p className="sd-hint"><Icon name="lock" size={12} /> {t("adm.sd.econ.title")}</p>
+                    <div className="sd-econ-grid">
+                      {costOf(econ) != null && <div className="sd-econ-kpi"><small>{t("adm.sd.econ.cost")}</small><b>{m(costOf(econ))}</b></div>}
+                      {econ.commission != null && <div className="sd-econ-kpi"><small>{t("adm.sd.econ.commission")}</small><b>{m(econ.commission)}</b></div>}
+                      {econ.profit != null && <div className="sd-econ-kpi"><small>{t("adm.sd.econ.profit")}</small><b className={Number(econ.profit) < 0 ? "neg" : "pos"}>{m(econ.profit)}</b></div>}
+                      {econ.profit != null && <div className="sd-econ-kpi"><small>{t("adm.sd.econ.margin")}</small><b>{pct(econ.margin_pct)}</b></div>}
+                    </div>
+                    {econ.missing_cost && <p className="sd-hint">{t("adm.sd.econ.missing")}</p>}
+                  </div>
+                )}
+              </Section>
+
+              <Section icon="wallet" title={t("adm.sd.sec.payments")}>
+                {!(o.payments || []).length ? <p className="sd-empty">{t("adm.sd.pay.empty")}</p> : (
+                  <table className="sd-table">
+                    <thead><tr><th>{t("adm.sd.pay.when")}</th><th>{t("adm.sd.pay.provider")}</th><th>{t("adm.sd.pay.kind")}</th><th className="r">{t("adm.sd.pay.amount")}</th></tr></thead>
+                    <tbody>
+                      {o.payments.map((p, i) => (
+                        <tr key={p.id || i}>
+                          <td>{fmt(p.captured_at || p.created_at, lang)}</td>
+                          <td>{providerName(p.provider_id, t)}</td>
+                          <td>{p.canceled_at ? t("adm.sd.pay.canceled") : p.refunded > 0 ? `${t("adm.sd.pay.refunded")} · ${money(p.refunded, p.currency_code, lang)}` : p.captured > 0 ? t("adm.sd.pay.captured") : t("adm.sd.pay.pending")}</td>
+                          <td className={`r ${p.canceled_at ? "neg" : ""}`}><b>{money(p.captured > 0 ? p.captured : p.amount, p.currency_code, lang)}</b></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Section>
+
+              <Section icon="history" title={t("adm.sd.sec.history")}>
+                <ol className="sd-timeline">
+                  {oHistory.map((h) => (
+                    <li key={h.key} className={`sd-tl ${h.tone}`}>
+                      <span className="sd-tl-dot"><Icon name={h.icon} size={10} /></span>
+                      <span className="sd-tl-what">{h.what}{h.sub && <small>{h.sub}</small>}</span>
+                      <span className="sd-tl-when">{fmt(h.at, lang)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Section>
+            </>
           )}
           {s && (
             <>
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}</div>}
               {s.status === "voided" && <div className="sd-banner bad">{t("adm.pos.sales.voidedAt", { date: fmt(s.voided_at, lang), reason: t(`adm.pos.void.${s.void_reason}`) })}</div>}
+              {stageSection}
 
               <Section icon="user" title={t("adm.sd.sec.customer")}>
                 {custName ? <div className="sd-name">{custName}</div> : <p className="sd-empty">{t("adm.sd.noCustomer")}</p>}
@@ -440,20 +689,28 @@ export default function SaleDetailPanel({ saleId, open, onClose, onChanged, me, 
         </footer>
       </aside>
     </div>,
-    document.body,
+    // Dentro del armazón (.adm-shell) para heredar los tokens del modo claro/oscuro y del tema de la tienda; el cajón es fixed, así que da igual dónde cuelgue.
+    document.querySelector(".adm-shell") || document.body,
   );
 }
 
 /**
  * Dos líneas para que cualquier pantalla abra la ficha:
  *   const sp = useSalePanel({ me, ctx?, onChanged? });
- *   …onClick={() => sp.open(sale.id, { economics: row })}… {sp.panel}
- * `sp.saleId` es la venta abierta (para resaltar su fila); `sp.close()` la cierra.
+ *   …onClick={() => sp.open(sale.id, { economics: row })}… {sp.panel}        // venta de caja
+ *   …onClick={() => sp.open({ orderId: order.id }, { economics: row })}…     // pedido web / de Medusa
+ * `sp.open` acepta el id de la venta (string) o `{ saleId }` / `{ orderId }`.
+ * `sp.saleId` / `sp.orderId` es lo abierto (para resaltar su fila); `sp.close()` la cierra.
  */
 export function useSalePanel({ me, ctx = null, onChanged } = {}) {
-  const [cur, setCur] = useState({ id: null, extra: {} });
-  const open = useCallback((saleId, extra = {}) => { if (saleId) setCur({ id: saleId, extra: extra || {} }); }, []);
-  const close = useCallback(() => setCur((c) => (c.id ? { ...c, id: null } : c)), []);
-  const panel = <SaleDetailPanel saleId={cur.id} open={Boolean(cur.id)} onClose={close} onChanged={onChanged} me={me} ctx={ctx} economics={cur.extra.economics || null} />;
-  return { open, close, panel, saleId: cur.id };
+  const [cur, setCur] = useState({ id: null, orderId: null, extra: {} });
+  const open = useCallback((ref, extra = {}) => {
+    const saleId = typeof ref === "string" ? ref : ref?.saleId || null;
+    const orderId = (typeof ref === "object" && ref?.orderId) || extra?.orderId || null;
+    if (saleId || orderId) setCur({ id: saleId, orderId, extra: extra || {} });
+  }, []);
+  const close = useCallback(() => setCur((c) => (c.id || c.orderId ? { ...c, id: null, orderId: null } : c)), []);
+  const isOpen = Boolean(cur.id || cur.orderId);
+  const panel = <SaleDetailPanel saleId={cur.id} orderId={cur.orderId} open={isOpen} onClose={close} onChanged={onChanged} me={me} ctx={ctx} economics={cur.extra.economics || null} />;
+  return { open, close, panel, saleId: cur.id, orderId: cur.orderId };
 }

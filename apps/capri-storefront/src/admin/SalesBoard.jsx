@@ -10,23 +10,32 @@
 // decide el servidor (GET /admin/sales-analytics/insights, una sola lectura con
 // todas las dimensiones). Exporta a PDF (impresión aislada), Excel (.xlsx real,
 // una hoja por sección) y CSV (las ventas una a una, del servidor).
+//
+// Tienda, período y rango son los GLOBALES del panel (barra de filtros de
+// AdminShell: useStoreFilter + usePeriodFilter), y exportar se registra en esa
+// misma barra (useRegisterExport). Aquí queda solo lo propio del tablero: la
+// granularidad de la serie, el vendedor, comparar y los filtros finos.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useLensCatalog } from "../data/lensCatalog.js";
 import Icon from "./icons.jsx";
 import HelpTip from "./HelpTip.jsx";
 import { TrendChart } from "./charts.jsx";
-import { ExportMenu, SubTabs } from "./ui.jsx";
+import { SubTabs } from "./ui.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch, ADMIN_API_URL, getSession } from "./adminApi.js";
 import { methodName, posContext } from "./posApi.js";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import "./sales-board.css";
 
+/** El cálculo de períodos vive en periodStore.js; se re-exporta para quien lo importaba de aquí. */
+export { datesOf as periodRange } from "./periodStore.js";
+
 const GRAINS = ["hour", "day", "week", "month", "year"];
-const PERIODS = ["today", "yesterday", "week", "lastWeek", "month", "lastMonth", "year", "range"];
 // Las secciones del panel y las dimensiones que agrupa cada una (pestañas dentro del acordeón).
 const SECTIONS = [
   { key: "store", icon: "store", dims: ["establishment"] },
@@ -50,7 +59,6 @@ const LS_COMPARE = "adm.sb.compare.v1";
 const DEFAULT_OPEN = { series: true, store: true, seller: true, product: true, lens: false, payment: false, split: false, sales: false };
 
 const pad = (n) => String(n).padStart(2, "0");
-const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /** Semana ISO de un día local ("YYYY-MM-DD" → "YYYY-Www"), igual que el servidor (sales-insights.ts). */
 export function isoWeekOf(day) {
@@ -60,25 +68,6 @@ export function isoWeekOf(day) {
   const year = d.getUTCFullYear();
   const week = Math.ceil(((d.getTime() - Date.UTC(year, 0, 1)) / 86400_000 + 1) / 7);
   return `${year}-W${pad(week)}`;
-}
-
-export function periodRange(period, now = new Date()) {
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const ago = (n) => ymd(new Date(y, m, now.getDate() - n));
-  const dow = now.getDay() || 7; // 1 = lunes … 7 = domingo
-  switch (period) {
-    case "yesterday": return { from: ago(1), to: ago(1) };
-    case "7d": return { from: ago(6), to: ago(0) };
-    case "30d": return { from: ago(29), to: ago(0) };
-    case "week": return { from: ago(dow - 1), to: ago(0) };
-    case "lastWeek": return { from: ago(dow + 6), to: ago(dow) };
-    case "month": return { from: ymd(new Date(y, m, 1)), to: ago(0) };
-    case "lastMonth": return { from: ymd(new Date(y, m - 1, 1)), to: ymd(new Date(y, m, 0)) };
-    case "year": return { from: `${y}-01-01`, to: ago(0) };
-    case "5y": return { from: `${y - 4}-01-01`, to: ago(0) };
-    default: return { from: ago(0), to: ago(0) };
-  }
 }
 
 const qs = (o) => {
@@ -237,9 +226,11 @@ export default function SalesBoard({ go, tabs = [], me }) {
   const { t, lang } = useLang();
   const { DESIGNS, MATERIALS, PHOTO, AR } = useLensCatalog();
   const [ctx, setCtx] = useState(null);
-  const [period, setPeriod] = useState("month");
-  const [f, setF] = useState({ ...periodRange("month"), payment_methods: [], categories: [], rx: "" });
+  // Período y rango: los globales del panel (barra de filtros de AdminShell).
+  const { from, to } = usePeriodFilter();
+  const [f, setF] = useState({ payment_methods: [], categories: [], rx: "" });
   const [grain, setGrain] = useState(null); // null = la que convenga al periodo
+  useEffect(() => { setGrain(null); }, [from, to]);
   const [focus, setFocus] = useState([]); // [{ by, key, label }]
   const [compareOn, setCompareOn] = useState(() => readLs(LS_COMPARE, false) === true);
   const [compareBy, setCompareBy] = useState("establishment");
@@ -256,19 +247,8 @@ export default function SalesBoard({ go, tabs = [], me }) {
   // El color sigue a la entidad: quien tuvo un color lo conserva al filtrar.
   const colors = useRef(new Map());
   const bodyRef = useRef(null);
-  const barRef = useRef(null);
 
   useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [], payment_methods: [] })); }, []);
-  // La barra se pega justo debajo de la cabecera del panel, mida lo que mida (en el móvil crece).
-  useEffect(() => {
-    const top = document.querySelector(".adm-top");
-    if (!top || !barRef.current) return undefined;
-    const apply = () => barRef.current?.style.setProperty("--sb-top", `${top.offsetHeight}px`);
-    apply();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
-    ro?.observe(top);
-    return () => ro?.disconnect();
-  }, []);
   useEffect(() => { writeLs(LS_OPEN, open); }, [open]);
   useEffect(() => { writeLs(LS_COMPARE, compareOn); }, [compareOn]);
 
@@ -279,8 +259,8 @@ export default function SalesBoard({ go, tabs = [], me }) {
       if (x.by === "product" && x.key === "own_frame") extra.categories = ["own_frame"];
       else extra[FOCUS_PARAM[x.by]] = [x.key];
     }
-    return { ...f, ...extra };
-  }, [f, focus]);
+    return { from, to, ...f, ...extra };
+  }, [from, to, f, focus]);
   const query = useMemo(() => qs(filters), [filters]);
 
   const access = ins?.access;
@@ -355,17 +335,6 @@ export default function SalesBoard({ go, tabs = [], me }) {
     return colors.current.get(id);
   };
 
-  const pickPeriod = (p) => {
-    setPeriod(p);
-    setGrain(null);
-    if (p !== "range") setF((x) => ({ ...x, ...periodRange(p) }));
-  };
-  const setDate = (k, v) => {
-    if (!v) return;
-    setGrain(null);
-    setPeriod("range");
-    setF((x) => ({ ...x, [k]: v, ...(k === "from" && v > x.to ? { to: v } : {}), ...(k === "to" && v < x.from ? { from: v } : {}) }));
-  };
   const toggle = (k, v) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const setOpenOne = useCallback((id, v) => setOpen((o) => (o[id] === v ? o : { ...o, [id]: v })), []);
   const setFocusOne = (by, key, lbl) => setFocus((x) => (key === null || key === undefined || key === "" ? x.filter((y) => y.by !== by) : [...x.filter((y) => y.by !== by), { by, key, label: lbl }]));
@@ -396,7 +365,7 @@ export default function SalesBoard({ go, tabs = [], me }) {
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `ventas_${storeSlug()}_${f.from}_${f.to}.csv`;
+    a.download = `ventas_${storeSlug()}_${from}_${to}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
@@ -421,14 +390,14 @@ export default function SalesBoard({ go, tabs = [], me }) {
   const bestBucket = series.reduce((best, p) => (p.sales > (best?.sales ?? 0) ? p : best), null);
   const useful = {
     hour: true,
-    day: f.from !== f.to,
-    week: isoWeekOf(f.from) !== isoWeekOf(f.to),
-    month: f.from.slice(0, 7) !== f.to.slice(0, 7),
-    year: f.from.slice(0, 4) !== f.to.slice(0, 4),
+    day: from !== to,
+    week: isoWeekOf(from) !== isoWeekOf(to),
+    month: from.slice(0, 7) !== to.slice(0, 7),
+    year: from.slice(0, 4) !== to.slice(0, 4),
   };
   const otherFocus = focus.filter((x) => x.by !== "establishment" && x.by !== "seller");
   const sectionTotal = (by) => (breakdowns[by] ? `${t("adm.sb.count", { n: cur?.count ?? 0 })}` : "");
-  const printMeta = () => t("adm.sb.printMeta", { store: storeFocus ? storeFocus.label : t("adm.sb.allStores"), seller: sellerFocus ? sellerFocus.label : t("adm.sb.allSellers"), from: f.from, to: f.to });
+  const printMeta = () => t("adm.sb.printMeta", { store: storeFocus ? storeFocus.label : t("adm.sb.allStores"), seller: sellerFocus ? sellerFocus.label : t("adm.sb.allSellers"), from: from, to: to });
   // Para el PDF se abre todo en el DOM (un <details> cerrado se clona sin cuerpo) y se cierra
   // de nuevo nada más clonar; el estado de React no cambia. Las ventas sueltas solo si ya se cargaron.
   const beforePrint = () => {
@@ -462,7 +431,7 @@ export default function SalesBoard({ go, tabs = [], me }) {
       {
         name: t("adm.sb.sheet.summary"),
         cols: [{ header: t("adm.sb.metricCol"), key: "label", width: 28 }, { header: t("adm.sb.valueCol"), key: "value", type: "number", width: 16 }, { header: t("adm.sb.prev"), key: "prev", type: "number", width: 16 }],
-        rows: [{ label: t("adm.ins.period"), value: `${f.from} → ${f.to}`, prev: ins.previous_range ? `${ins.previous_range.from} → ${ins.previous_range.to}` : "" }, { label: t("adm.sb.store"), value: storeFocus ? storeFocus.label : t("adm.sb.allStores") }, { label: t("adm.sb.seller"), value: sellerFocus ? sellerFocus.label : t("adm.sb.allSellers") }, ...summaryRows],
+        rows: [{ label: t("adm.ins.period"), value: `${from} → ${to}`, prev: ins.previous_range ? `${ins.previous_range.from} → ${ins.previous_range.to}` : "" }, { label: t("adm.sb.store"), value: storeFocus ? storeFocus.label : t("adm.sb.allStores") }, { label: t("adm.sb.seller"), value: sellerFocus ? sellerFocus.label : t("adm.sb.allSellers") }, ...summaryRows],
       },
       {
         name: t("adm.sb.sheet.series"),
@@ -479,8 +448,10 @@ export default function SalesBoard({ go, tabs = [], me }) {
         totalsLabel: t("adm.sb.total"),
       })),
     ];
-    return { filename: `ventas_${storeSlug()}_${f.from}_${f.to}.xlsx`, sheets };
+    return { filename: `ventas_${storeSlug()}_${from}_${to}.xlsx`, sheets };
   };
+  // PDF · Excel · CSV desde la barra global del panel (los mismos tres de antes).
+  useRegisterExport(menuHandlers({ targetRef: bodyRef, title: `${t("adm.tab.salesboard")} · ${from} – ${to}`, name: "ventas", xlsx, onCsv: exportCsv, meta: printMeta, beforePrint }));
 
   const tiles = cur && (
     <div className="sb-totals">
@@ -525,20 +496,14 @@ export default function SalesBoard({ go, tabs = [], me }) {
         <p>{t(isSeller ? "adm.ins.subSeller" : "adm.ins.sub")}</p>
       </div>
 
-      <div className={`sb-bar adm-noprint ${state === "loading" ? "busy" : ""}`} ref={barRef}>
-        <div className="sb-chips" role="group" aria-label={t("adm.ins.period")}>
-          {PERIODS.map((p) => <button key={p} type="button" className={period === p ? "on" : ""} onClick={() => pickPeriod(p)}>{t(p === "range" || p === "week" || p === "lastWeek" ? `adm.sb.preset.${p}` : `adm.board.preset.${p}`)}</button>)}
-        </div>
-        <span className="sb-dates">
-          <input type="date" value={f.from} max={f.to} aria-label={t("adm.board.from")} title={t("adm.board.from")} onChange={(e) => setDate("from", e.target.value)} />
-          –
-          <input type="date" value={f.to} min={f.from} aria-label={t("adm.board.to")} title={t("adm.board.to")} onChange={(e) => setDate("to", e.target.value)} />
-        </span>
+      {/* Tienda, período, rango y exportar están en la barra global del panel (AdminShell);
+          aquí solo lo propio del tablero: la granularidad de la serie, el vendedor,
+          comparar, los filtros finos y los focos activos. */}
+      <div className={`sb-bar adm-noprint ${state === "loading" ? "busy" : ""}`}>
         <div className="adm-range" role="group" aria-label={t("adm.ins.seeBy")}>
           {GRAINS.map((g) => <button key={g} type="button" className={usedGrain === g ? "on" : ""} disabled={!useful[g]} title={useful[g] ? undefined : t("adm.ins.grainNotUseful")} onClick={() => setGrain(g)}>{t(`adm.ins.grain.${g}`)}</button>)}
         </div>
         <HelpTip topic="salesboard.grain" />
-        {moreStores && who && <StoreFilter me={who} />}
         {moreStores && globalAll && storeFocus && (
           <button type="button" className="adm-chip neutral" onClick={() => setFocusOne("establishment", null)} aria-label={t("adm.ins.removeFocus", { label: storeFocus.label })} title={t("adm.ins.removeFocus", { label: storeFocus.label })}>
             {t("adm.board.by.establishment")}: {storeFocus.label} <Icon name="close" size={11} />
@@ -565,9 +530,6 @@ export default function SalesBoard({ go, tabs = [], me }) {
             <button type="button" className="btn-xs" onClick={() => setFocus([])}>{t("adm.ins.clearFocus")}</button>
           </span>
         )}
-        <span className="sb-export">
-          <ExportMenu targetRef={bodyRef} title={`${t("adm.tab.salesboard")} · ${f.from} – ${f.to}`} name="ventas" compact={false} xlsx={xlsx} onCsv={exportCsv} meta={printMeta} beforePrint={beforePrint} />
-        </span>
         {moreFilters && (
           <div className="sb-more">
             <span className="sb-chips"><b>{t("adm.board.payment")}</b>

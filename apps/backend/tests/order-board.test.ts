@@ -7,11 +7,14 @@
  * database and no HTTP, same rule as the other suites.
  */
 import {
+  applyPosDelivery,
   availableTransitions,
   filterBoardRows,
   liveFulfillments,
   isOrderStage,
   projectBoardOrder,
+  projectPayments,
+  slimBoardOrder,
 } from "../src/lib/order-board";
 import { deriveOrderProgress } from "../src/lib/order-status";
 
@@ -248,5 +251,56 @@ describe("isOrderStage", () => {
     expect(isOrderStage("processing")).toBe(false);
     expect(isOrderStage("")).toBe(false);
     expect(isOrderStage(null)).toBe(false);
+  });
+});
+
+describe("projectBoardOrder — till sale, payments, slim view", () => {
+  it("carries the till sale behind a POS order and starts undelivered", () => {
+    const row = projectBoardOrder(order({ metadata: { source: "pos", establishment_id: "est_1", pos_sale_id: "sale_7", pos_sale_number: "R39-000127" } }) as never);
+    expect(row.channel).toBe("pos");
+    expect(row.pos_sale_id).toBe("sale_7");
+    expect(row.pos_sale_number).toBe("R39-000127");
+    expect(row.pos_delivered_at).toBeNull();
+    expect(row.payments).toEqual([]);
+  });
+
+  it("applyPosDelivery: a sale handed over at the till is delivered with no moves left", () => {
+    const a = projectBoardOrder(order({ id: "o_a", metadata: { source: "pos", pos_sale_id: "sale_a" } }) as never);
+    const b = projectBoardOrder(order({ id: "o_b", metadata: { source: "pos", pos_sale_id: "sale_b" } }) as never);
+    // A canceled sale keeps its terminal state even if the till says delivered.
+    const c = projectBoardOrder(order({ id: "o_c", payment_status: "canceled", metadata: { source: "pos", pos_sale_id: "sale_c" } }) as never);
+    applyPosDelivery([a, b, c], new Map([["sale_a", "2026-10-30T15:00:00.000Z"], ["sale_c", "2026-10-30T15:00:00.000Z"]]));
+    expect(a.stage).toBe("delivered");
+    expect(a.next_stages).toEqual([]);
+    expect(a.pos_delivered_at).toBe("2026-10-30T15:00:00.000Z");
+    expect(b.stage).toBe("in_lab");
+    expect(b.pos_delivered_at).toBeNull();
+    expect(c.terminal).toBe("canceled");
+    expect(c.stage).not.toBe("delivered");
+  });
+
+  it("projectPayments: one row per Medusa payment with captured and refunded sums", () => {
+    const rows = projectPayments({
+      payment_collections: [{ payments: [
+        { id: "pay_1", provider_id: "pp_stripe_stripe", amount: 270, currency_code: "usd", created_at: "2026-10-01T10:00:00Z", captured_at: "2026-10-01T10:01:00Z", captures: [{ amount: 200 }, { amount: 70 }], refunds: [{ amount: 20 }] },
+      ] }],
+    });
+    expect(rows).toEqual([expect.objectContaining({ id: "pay_1", amount: 270, captured: 270, refunded: 20, provider_id: "pp_stripe_stripe" })]);
+    expect(projectPayments({})).toEqual([]);
+  });
+
+  it("slimBoardOrder keeps the stage, the moves and the money and drops items, addresses and customer", () => {
+    const full = projectBoardOrder(order({
+      display_id: 42, total: 270, email: "ana@example.com",
+      shipping_address: { first_name: "Ana", city: "Miami", phone: "305" },
+      metadata: { seller_code: "dan", stage_history: [{ stage: "in_lab", at: "2026-10-02T10:00:00Z" }] },
+    }) as never);
+    const slim = slimBoardOrder(full) as Record<string, unknown>;
+    expect(slim).toEqual(expect.objectContaining({ id: "order_1", display_id: 42, total: 270, stage: "in_lab", next_stages: ["confirmed", "shipped"], seller_code: "DAN", channel: "web" }));
+    expect(slim.stage_history).toEqual([{ stage: "in_lab", at: "2026-10-02T10:00:00Z" }]);
+    expect(slim).not.toHaveProperty("items");
+    expect(slim).not.toHaveProperty("customer");
+    expect(slim).not.toHaveProperty("shipping_address");
+    expect(JSON.stringify(slim)).not.toContain("ana@example.com");
   });
 });

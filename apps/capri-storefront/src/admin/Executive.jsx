@@ -1,91 +1,81 @@
-// Dónde se usa: Ejecutivo → acordeón «Pedidos web» — la foto de la tienda
-// online (el tablero de pedidos, `store=web`) en UNA vista: alertas, KPI,
-// pipeline por etapa, ventas por vendedor referido, tendencia diaria, mezcla
-// por marca y últimos pedidos. Cada tarjeta y cada cifra es clicable: ayuda,
-// ir a la pantalla relacionada o exportar. `CatalogMini` (salud del catálogo)
-// se exporta aparte para el acordeón «Catálogo».
+// Dónde se usa: Ejecutivo → acordeón «Tendencias» (ExecutiveHub.jsx). Las
+// gráficas del período, cada una UNA sola vez en toda la cabina: ventas por
+// día, pedidos por día, ventas por vendedor, por marca y —solo con la tienda
+// online a la vista— accesos vs compras y día de la semana. Se alimentan de las
+// MISMAS ventas que la tira de KPI y la lista «Pedidos y etapas»
+// (useStoreSales → /admin/sales-analytics/sales), así que siguen el filtro
+// global de tienda (todas / web / una tienda) y el período sin segunda fuente.
+// Los KPI y los últimos pedidos ya no se repiten aquí: viven en la tira y en
+// la lista. `CatalogMini` (salud del catálogo) sigue para el acordeón «Catálogo».
 //
-//   <Executive range={{ from: Date, to: Date }} store="web" go={go} />
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { KpiCard, LineChart, BarChart, DonutChart } from "./charts.jsx";
-import { summarize, summarizeOrders, rangeFor, subscribe as onAnalytics } from "./analytics.js";
-import { adminFetch } from "./adminApi.js";
-import { fetchBoardWindow, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
+//   <Trends rows={sales.rows} range={{ from: Date, to: Date }} web={sf.isAll || sf.isWeb}
+//          sellers={sellerRows.rows} onSeller={openSeller} go={go} />
+import { useEffect, useMemo, useState } from "react";
+import { LineChart, BarChart, DonutChart, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
+import { summarizeOrders } from "./analytics.js";
 import { isDemoLogin } from "./adminAuth.js";
-import { STAGE_BY_KEY, TERMINAL_BY_KEY, money as fmtMoney, shortDate, orderLabel } from "./adminOrders.js";
+import { money as fmtMoney } from "./adminOrders.js";
 import { fetchDiscontinued } from "./catalogAdmin.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRANDS } from "../data/brands.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { Card, useChartHeight } from "./ui.jsx";
-import { SOURCE_ICON } from "./sellerShared.jsx";
-import { SellerChannels, sellerRowsFromStats, useSellerPanel } from "./SellerPanel.jsx";
-import { StageBarCard } from "./StageBar.jsx";
+import { SellerChannels } from "./SellerPanel.jsx";
 import "./fit.css";
 
-export const STAGE_ICON = { confirmed: "receipt", in_lab: "lab", shipped: "box", in_transit: "truck", delivered: "checkCircle", payment_pending: "clock", canceled: "alert", refunded: "undo" };
+export { STAGE_ICON } from "./StageBar.jsx";
 const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
 const BRAND_SLUG_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.slug]));
 const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es");
-const usd = (n, lang) => "$" + (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-// Día local (toISOString correría el día cerca de medianoche).
-const ymd = (d) => { const x = new Date(d); const p = (n) => String(n).padStart(2, "0"); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; };
-const daysSince = (iso) => (Date.now() - new Date(iso).getTime()) / 864e5;
-const demoSnap = () => { try { return (localStorage.getItem("oer_orders") || "").length; } catch { return 0; } };
+
+/** Una venta de la lista como pedido de analytics.js (summarizeOrders): día, total, marca y modelo. */
+export function saleToTrendOrder(r, noBrand = "—") {
+  const total = Number(r.total) || 0;
+  const qty = Number(r.units) || 1;
+  return {
+    id: r.order_id || r.sale_id,
+    t: r.sold_at,
+    total,
+    itemsCount: qty,
+    items: [{ name: r.frame_model || r.items || "—", sku: r.frame_sku || "", brand: r.frame_brand || noBrand, kind: "frame", qty, total }],
+    stage: null,
+    terminal: null,
+    has_prescription: Boolean(r.has_rx),
+    demo: false,
+  };
+}
 
 /**
- * Ventas por vendedor (top 5) + por red social (GET /admin/sellers/stats?from&to&store):
- * total vendido por cada uno con los iconos de las redes por las que vendió y el
- * nº por red; de mayor a menor y sin los que no vendieron. Pulsar un vendedor
- * abre su panel (SellerPanel) delante de la pantalla.
+ * Ventas por vendedor, en corto: barras con nombre, nº y total (o comisión), de
+ * mayor a menor; pulsar abre el panel del vendedor (`onSeller(code)`). Las filas
+ * son las de sellerRowsFromInsights (ExecutiveHub), la misma fuente que el
+ * acordeón «Vendedores».
  */
-export function SellersMini({ range, store = "", go, lang, showCommission = false, me }) {
-  const { t } = useLang();
-  const [stats, setStats] = useState(null);
-  const sp = useSellerPanel({ go, me });
-  const from = range?.from ? ymd(range.from) : "";
-  const to = range?.to ? ymd(range.to) : "";
-  const storeQ = store === "all" ? "" : store;
-  useEffect(() => {
-    if (isDemoLogin()) return undefined;
-    let on = true;
-    adminFetch("/admin/sellers/stats", { query: { from, to, store: storeQ } }).then((s) => { if (on) setStats(s); }).catch(() => {});
-    return () => { on = false; };
-  }, [from, to, storeQ]);
-  const { rows: all, zero } = useMemo(() => sellerRowsFromStats(stats?.sellers), [stats]);
-  const rows = all.slice(0, 5);
-  const max = Math.max(1, ...rows.map((r) => r.sales));
-  const sources = (stats?.sources || []).slice(0, 5);
+export function SellersMini({ rows = [], zero = 0, onSeller, go, showCommission = false }) {
+  const { t, lang } = useLang();
+  const top = rows.slice(0, 6);
+  const max = Math.max(1, ...top.map((r) => r.sales));
   return (
-    <Card icon="sellers" title={t("adm.exec.bySeller")} hint={t("adm.exec.bySellerHint")} onGo={() => go("sellers")} goLabel={t("adm.tab.sellers")} name="vendedores"
-      csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "count"], [t("adm.sel.sales"), "sales"], [t("adm.sel.commissions"), "commission"], [t("adm.ex.sellers.share"), "share"]], rows: all }}>
-      {!stats ? <div className="adm-skel" style={{ height: 80 }} /> : rows.length === 0 ? (
-        <div className="adm-empty compact" onClick={() => go("sellers")} role="button"><Icon name="megaphone" size={26} /><b>{t("adm.exec.noSellerSales")}</b><p>{t("adm.exec.noSellerSalesHint", { n: stats.unattributed?.orders ?? 0 })}</p></div>
-      ) : (
+    <Card icon="sellers" title={t("adm.exec.bySeller")} hint={t("adm.ex.tr.bySellerHint")} onGo={go ? () => go("sellers") : undefined} goLabel={t("adm.tab.sellers")} name="vendedores"
+      csv={{ cols: [[t("adm.ex.sellers.name"), "name"], [t("adm.sp.col.code"), "code"], [t("adm.ex.sellers.count"), "count"], [t("adm.ex.sellers.sales"), "sales"], [t("adm.ex.sellers.commission"), "commission"], [t("adm.ex.sellers.share"), "share"]], rows }}>
+      {top.length === 0 ? <div className="adm-nodata">{t("adm.ex.sellers.empty")}</div> : (
         <div className="adm-thumbbars tight">
-          {rows.map((r) => (
-            <div className="adm-tb-row clickable" key={r.id} onClick={() => sp.open(r.code, { from, to, store: storeQ })} title={t("adm.sp.open")}>
-              <div className="adm-tb-thumb sm"><span className="sel-avatar mini">{String(r.name || "?").slice(0, 2).toUpperCase()}</span></div>
+          {top.map((r) => (
+            <div className={`adm-tb-row ${onSeller ? "clickable" : ""}`} key={r.code} onClick={onSeller ? () => onSeller(r.code) : undefined} role={onSeller ? "button" : undefined} title={onSeller ? t("adm.sp.open") : undefined}>
+              <div className="adm-tb-thumb sm"><span className="sel-avatar mini">{String(r.name || r.code || "?").slice(0, 2).toUpperCase()}</span></div>
               <div className="adm-tb-main">
                 <div className="adm-tb-top">
-                  <span className="adm-tb-name">{r.name} <small className="muted">· {r.count} {t("adm.exec.ordersShort")}</small><SellerChannels by_source={r.by_source} compact className="sp-cell-channels" /></span>
-                  <b>{showCommission ? fmtMoney(r.commission, "usd", lang) : fmtMoney(r.sales, "usd", lang)}</b>
+                  <span className="adm-tb-name">{r.name} <small className="muted">· {int(r.count, lang)} {t("adm.exec.ordersShort")}</small>{r.by_source && <SellerChannels by_source={r.by_source} compact className="sp-cell-channels" />}</span>
+                  <b>{fmtMoney(r.sales, "usd", lang)}{showCommission && r.commission != null && <small className="muted"> · {fmtMoney(r.commission, "usd", lang)}</small>}</b>
                 </div>
                 <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: `${(r.sales / max) * 100}%` }} /></div>
               </div>
             </div>
           ))}
-          {stats.unattributed?.orders > 0 && <small className="muted">{t("adm.sel.unattributed", { n: stats.unattributed.orders })} · {fmtMoney(stats.unattributed.revenue, "usd", lang)}</small>}
-          {zero > 0 && <small className="muted"> · {t("adm.sp.zero", { n: zero })}</small>}
+          {zero > 0 && <small className="muted">{t("adm.sp.zero", { n: zero })}</small>}
         </div>
       )}
-      {sources.length > 0 && (
-        <div className="exec-sources">
-          {sources.map((s) => <button type="button" className="adm-chip neutral" key={s.source} onClick={() => go("sellers")} title={t("adm.exec.sourceTitle")}><Icon name={SOURCE_ICON[s.source] || "link"} size={12} />{t(`adm.src.${s.source}`) === `adm.src.${s.source}` ? s.source : t(`adm.src.${s.source}`)} · {s.orders}</button>)}
-        </div>
-      )}
-      {sp.panel}
     </Card>
   );
 }
@@ -113,135 +103,49 @@ export function CatalogMini({ go, bare = false }) {
   return <Card icon="glasses" title={t("adm.exec.catalogHealth")} hint={t("adm.exec.catalogHint")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="catalogo">{body}</Card>;
 }
 
-export default function Executive({ preset, range: givenRange, store = "web", go, compact = false }) {
+/**
+ * Las gráficas del período. `rows`: ventas de useStoreSales (las anuladas se
+ * descartan); `range`: { from: Date, to: Date }; `web`: la tienda online está a
+ * la vista (todas o web) — solo entonces hay accesos, que se miden en la web;
+ * `sellers` / `zero`: filas de sellerRowsFromInsights; `onSeller(code)` abre el
+ * panel del vendedor; `go` para las tarjetas que saltan a otra pantalla.
+ */
+export default function Trends({ rows = [], range, web = true, sellers = [], zero = 0, onSeller, go, showCommission = false, loading = false }) {
   const { t, lang } = useLang();
-  const demo = isDemoLogin();
-  const snap = useSyncExternalStore(onAnalytics, demoSnap, () => 0);
-  const { products, cases } = useCatalog();
-  const [win, setWin] = useState(null);
-  const [state, setState] = useState(demo ? "demo" : "loading");
-  // `range` manda; `preset` (hoy/7d/30d/90d) se conserva para quien aún lo pase.
-  const range = useMemo(() => givenRange || rangeFor(preset || "30d"), [givenRange, preset]);
-  const fromMs = range.from.getTime();
-  const toMs = range.to.getTime();
-
-  useEffect(() => {
-    if (demo) return undefined;
-    let on = true;
-    setState("loading");
-    fetchBoardWindow({ from: new Date(fromMs), to: new Date(toMs), store }).then((w) => { if (on) { setWin(w); setState("real"); } }).catch(() => { if (on) setState("error"); });
-    return () => { on = false; };
-  }, [fromMs, toMs, store, demo]);
-
-  const catalogIndex = useMemo(() => buildCatalogIndex(products, cases), [products, cases]);
-  const { s, boardOrders } = useMemo(() => {
-    if (state === "real" && win) {
-      const board = win.orders || [];
-      const revenue = board.filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, catalogIndex));
-      return { s: summarizeOrders(revenue, range), boardOrders: board };
-    }
-    return { s: summarize(range), boardOrders: [] };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, win, catalogIndex, range, snap]);
-
-  const ops = useMemo(() => {
-    const by = { confirmed: { n: 0, v: 0 }, in_lab: { n: 0, v: 0 }, shipped: { n: 0, v: 0 }, in_transit: { n: 0, v: 0 }, delivered: { n: 0, v: 0 } };
-    let pendingPay = 0, canceled = 0, stuck = 0, todayN = 0, todayV = 0;
-    for (const o of boardOrders) {
-      if (o.terminal === "payment_pending") { pendingPay += 1; continue; }
-      if (o.terminal === "canceled" || o.terminal === "refunded") { canceled += 1; continue; }
-      if (by[o.stage]) { by[o.stage].n += 1; by[o.stage].v += o.total || 0; }
-      if ((o.stage === "confirmed" || o.stage === "in_lab") && daysSince(o.created_at) > 7) stuck += 1;
-      if (new Date(o.created_at).toDateString() === new Date().toDateString()) { todayN += 1; todayV += o.total || 0; }
-    }
-    return { by, pendingPay, canceled, stuck, todayN, todayV };
-  }, [boardOrders]);
-
-  const toPrepare = ops.by.confirmed.n + ops.by.in_lab.n;
-  const inDelivery = ops.by.shipped.n + ops.by.in_transit.n;
-  const recent = state === "real" ? boardOrders.slice(0, 7) : [];
-  const alerts = [];
-  if (state === "real") {
-    if (ops.pendingPay) alerts.push({ tone: "warn", txt: t("adm.exec.alertPay", { n: int(ops.pendingPay, lang) }), go: () => go("orders", { terminal: "payment_pending" }) });
-    if (ops.stuck) alerts.push({ tone: "crit", txt: t("adm.exec.alertStuck", { n: int(ops.stuck, lang) }), go: () => go("orders", { stage: "in_lab" }) });
-    if (win?.truncated) alerts.push({ tone: "info", txt: t("adm.real.truncated", { n: int(win.scanLimit, lang) }) });
-  }
+  const noBrand = t("adm.ex.tr.noBrand");
+  const s = useMemo(() => summarizeOrders(rows.filter((r) => r.status !== "voided").map((r) => saleToTrendOrder(r, noBrand)), range), [rows, range, noBrand]);
+  const weekday = useMemo(() => s.weekday.map((w) => ({ ...w, label: t(w.label) })), [s.weekday, t]);
   const brandSlug = (label) => BRAND_SLUG_BY_NAME[label] || String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const H = useChartHeight(0.14, 90, 150);
-  // Tira de etapas (StageBar): una fila con conteo, importe y % por etapa.
-  const stages = useMemo(() => Object.entries(ops.by).map(([key, v]) => {
-    const st = STAGE_BY_KEY[key];
-    return { key, label: st ? t(st.label) : key, icon: STAGE_ICON[key] || "box", count: v.n, amount: v.v };
-  }), [ops.by, t]);
-
-  // Suelto (no «compact» dentro del acordeón del Ejecutivo) ocupa UNA vista: .adm-fit (fit.css).
+  const empty = !loading && rows.length === 0;
   return (
-    <div className={`adm-exec ${compact ? "" : "adm-fit"}`}>
-      <div className="adm-exec-top">
-        {state === "loading" && <div className="adm-src-note loading">{t("adm.real.loading")}</div>}
-        {state === "error" && <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>}
-        {demo && <div className="adm-demo-banner">{t("adm.exec.demoNote")}</div>}
-        {state === "real" && (
-          <div className="adm-exec-alerts">
-            {alerts.length === 0
-              ? <button type="button" className="exec-alert ok" onClick={() => go("orders")}><Icon name="checkCircle" size={14} /> {t("adm.exec.allClear")}</button>
-              : alerts.map((a, i) => <button type="button" key={i} className={`exec-alert ${a.tone}`} onClick={a.go}>{a.txt}{a.go && <Icon name="arrowRight" size={13} />}</button>)}
-          </div>
-        )}
-      </div>
-
-      <div className="adm-kpis adm-exec-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={usd(s.kpis.revenue, lang)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(s.kpis.units, lang) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount, lang)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders")} />
-        <KpiCard label={t("adm.kpi.aov")} value={usd(s.kpis.aov, lang)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
-        <KpiCard label={t("adm.exec.today")} value={`${int(ops.todayN, lang)} · ${usd(ops.todayV, lang)}`} icon={<Icon name="calendar" />} hint={t("adm.kpi.h.today")} onClick={() => go("orders", { preset: "today" })} />
-        <KpiCard label={t("adm.exec.toPrepare")} value={int(toPrepare, lang)} icon={<Icon name="lab" />} sub={t("adm.exec.toPrepareSub")} hint={t("adm.kpi.h.toPrepare")} onClick={() => go("orders", { stage: "in_lab" })} />
-        <KpiCard label={t("adm.exec.inDelivery")} value={int(inDelivery, lang)} icon={<Icon name="truck" />} hint={t("adm.kpi.h.inDelivery")} onClick={() => go("orders", { stage: "in_transit" })} />
-      </div>
-
-      <div className={compact ? "adm-exec-body" : "adm-fit-body adm-exec-body"}>
-      <StageBarCard icon="layers" title={t("adm.exec.pipeline")} hint={t("adm.exec.pipelineHint")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pipeline"
-        stages={state === "real" ? stages : []} emptyText={t("adm.sales.noneInRange")} onPick={(st) => go("orders", { stage: st.key })} />
-
+    <div className="adm-exec ex-trends">
+      {empty && <div className="adm-nodata">{t("adm.ex.tr.empty")}</div>}
       <div className="adm-fit-row cols-3 tight">
-        <Card icon="sales" title={t("adm.chart.salesByDay")} hint={t("adm.chart.h.salesByDay")} onGo={() => go("exec", { sub: "detail" })} goLabel={t("adm.tab.sales")} name="ventas-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.salesSeries }}>
+        <Card icon="sales" title={t("adm.chart.salesByDay")} hint={t("adm.ex.tr.salesByDayHint")} name="ventas-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.salesSeries }}>
           <LineChart data={s.salesSeries} valuePrefix="$" height={H} />
         </Card>
-        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.chart.h.ordersByDay")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
+        <Card icon="orders" title={t("adm.sales.ordersByDay")} hint={t("adm.ex.tr.ordersByDayHint")} name="pedidos-dia" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.orders"), "value"]], rows: s.ordersSeries }}>
           <BarChart data={s.ordersSeries} height={H} />
         </Card>
-        <SellersMini range={range} store={store} go={go} lang={lang} />
+        <SellersMini rows={sellers} zero={zero} onSeller={onSeller} go={go} showCommission={showCommission} />
       </div>
-
-      <div className={`exec-grid ${compact ? "cols-1-2" : "cols-1-2-1"}`}>
-        <Card icon="tagIcon" title={t("adm.chart.salesByBrand")} hint={t("adm.chart.h.salesByBrand")} onGo={() => go("products")} goLabel={t("adm.tab.products")} name="ventas-marca" csv={{ cols: [[t("adm.exec.brands"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.topBrands }}>
-          <DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={Math.min(120, H)} onSelect={(label) => go("costs", { sub: "prices", q: label, brand: brandSlug(label) })} />
+      <div className={`adm-fit-row tight ${web ? "cols-3" : "cols-1"}`}>
+        <Card icon="tagIcon" title={t("adm.chart.salesByBrand")} hint={t("adm.ex.tr.byBrandHint")} onGo={go ? () => go("products") : undefined} goLabel={t("adm.tab.products")} name="ventas-marca" csv={{ cols: [[t("adm.exec.brands"), "label"], [t("adm.kpi.revenue"), "value"]], rows: s.topBrands }}>
+          <DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={Math.min(120, H)} onSelect={go ? (label) => go("costs", { sub: "prices", q: label, brand: brandSlug(label) }) : undefined} />
         </Card>
-        <Card icon="clock" title={t("adm.exec.recent")} hint={t("adm.exec.recentHint")} onGo={() => go("orders")} goLabel={t("adm.tab.orders")} name="ultimos-pedidos">
-          {recent.length === 0 ? <div className="adm-nodata">{t("adm.sales.noneInRange")}</div> : (
-            <div className="adm-table-wrap">
-              <table className="adm-table exec-recent">
-                <tbody>
-                  {recent.map((o) => {
-                    const st = o.terminal ? TERMINAL_BY_KEY[o.terminal] : STAGE_BY_KEY[o.stage];
-                    return (
-                      <tr key={o.id} className="ord-row" onClick={() => go("orders", { order: o.id })} title={t("adm.exec.openOrder")}>
-                        <td><b>{orderLabel(o)}</b></td>
-                        <td>{shortDate(o.created_at, lang)}</td>
-                        <td>{o.customer?.name || o.email || "—"}{o.seller_code && <span className="adm-chip gold" style={{ marginLeft: 6, fontSize: 10 }}>{o.seller_code}</span>}</td>
-                        <td><span className={`exec-chip ${o.terminal ? "term" : o.stage}`}><Icon name={STAGE_ICON[o.terminal || o.stage] || "box"} size={12} />{st ? t(st.label) : o.stage}</span></td>
-                        <td className="r"><b>{fmtMoney(o.total, o.currency_code, lang)}</b></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-        {!compact && <CatalogMini go={go} />}
+        {web && (
+          <Card icon="eye" title={t("adm.chart.accessVsBuy")} hint={t("adm.chart.accessVsBuy.h")} name="accesos-compras" csv={{ cols: [[t("adm.col.date"), "label"], [t("adm.kpi.access"), "access"], [t("adm.kpi.orders"), "orders"]], rows: s.accessVsBuy }}>
+            <AccessVsBuyChart data={s.accessVsBuy} height={H} />
+          </Card>
+        )}
+        {web && (
+          <Card icon="calendar" title={t("adm.chart.weekday")} hint={t("adm.fit.weekdayHint")} name="dia-semana" csv={{ cols: [[t("adm.chart.weekday"), "label"], [t("adm.kpi.access"), "access"], [t("adm.kpi.orders"), "orders"]], rows: weekday }}>
+            <WeekdayChart data={weekday} height={H} />
+          </Card>
+        )}
       </div>
-      </div>
+      {!web && <p className="ex-tr-note muted"><Icon name="info" size={12} /> {t("adm.ex.tr.webOnly")}</p>}
     </div>
   );
 }

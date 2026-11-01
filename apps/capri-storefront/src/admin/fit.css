@@ -28,8 +28,9 @@
 
 .adm-fit {
   display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px;
-  /* 100dvh − barra superior − relleno vertical de .adm-body (18 + 44 px). */
-  height: calc(100dvh - var(--adm-top-h, 56px) - var(--adm-fit-chrome, 64px)); min-height: 0;
+  /* 100dvh − cabecera − barra de filtros global (AdminShell la mide: --adm-bar-h)
+     − relleno vertical de .adm-body (18 + 44 px). */
+  height: calc(100dvh - var(--adm-top-real, var(--adm-top-h, 56px)) - var(--adm-bar-h, 0px) - var(--adm-fit-chrome, 64px)); min-height: 0;
 }
 .adm-fit > .adm-fit-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 1px 2px 8px; scrollbar-width: thin; }
 .adm-fit-bar {

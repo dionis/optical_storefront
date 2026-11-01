@@ -35,6 +35,11 @@ export default {
     "adm.pb.open": "Abrir la venta {n}",
     "adm.pb.refresh": "Actualizar",
     "adm.pb.totalRow": "Total",
+    "adm.pb.frame": "Marca / modelo",
+    "adm.pb.store": "Tienda",
+    "adm.pb.actions": "Acciones",
+    "adm.pb.filtered": "Filtro: {what}",
+    "adm.pb.onlyOverdue": "solo atrasados",
 
     "adm.my.list": "Mis ventas",
     "adm.my.listSub": "Tus ventas del período con lo cobrado, lo pendiente y tu comisión.",
@@ -79,6 +84,11 @@ export default {
     "adm.pb.open": "Open sale {n}",
     "adm.pb.refresh": "Refresh",
     "adm.pb.totalRow": "Total",
+    "adm.pb.frame": "Brand / model",
+    "adm.pb.store": "Store",
+    "adm.pb.actions": "Actions",
+    "adm.pb.filtered": "Filter: {what}",
+    "adm.pb.onlyOverdue": "overdue only",
 
     "adm.my.list": "My sales",
     "adm.my.listSub": "Your sales of the period with what was collected, what is due and your commission.",

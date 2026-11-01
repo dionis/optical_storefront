@@ -1,14 +1,14 @@
 // Dónde se usa: interior de /admin. Secciones Ejecutivo/Pedidos/Costos/Vendedores/Resumen/Ventas/Productos/Precios/Equipo/Seguridad dentro del armazón AdminShell (barra lateral de iconos).
-import { useState, useEffect, useMemo, useSyncExternalStore, useRef } from "react";
-import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart } from "./charts.jsx";
-import { ensureSeed, summarize, summarizeOrders, rangeFor, subscribe as onAnalytics, clearDemo, productSales, productSalesFrom } from "./analytics.js";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { KpiCard } from "./charts.jsx";
+import { ensureSeed, rangeFor, productSales, productSalesFrom } from "./analytics.js";
 // REAL analytics: the panel's Resumen/Ventas/Precios feed on the store's actual
 // orders (Medusa order board) when the login is real; the demo seed only backs
 // the demo login and the error fallback. See realAnalytics.js.
-import { fetchBoardWindow, fetchRealAnalyticsOrders, buildCatalogIndex, toAnalyticsOrder } from "./realAnalytics.js";
+import { fetchBoardWindow, toAnalyticsOrder } from "./realAnalytics.js";
 import { isDemoLogin } from "./adminAuth.js";
 import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
-import { Card, useChartHeight } from "./ui.jsx";
+import { Card } from "./ui.jsx";
 import { printElement } from "./exportUtils.js";
 import CatalogManager from "./CatalogManager.jsx";
 import Team from "./Team.jsx";
@@ -99,156 +99,11 @@ function RangePicker({ value, onChange }) {
   );
 }
 
-// re-render when analytics change (watch both daily buckets and orders)
-const analyticsSnap = () => (localStorage.getItem("oer_daily") || "").length + ":" + (localStorage.getItem("oer_orders") || "").length;
-function useAnalyticsTick() {
-  return useSyncExternalStore(onAnalytics, analyticsSnap, () => "0:0");
-}
-
-function useSummary(preset) {
-  const snap = useAnalyticsTick();
-  return useMemo(() => summarize(rangeFor(preset)), [preset, snap]);
-}
-
-// REAL summary: same aggregation, fed by the store's actual orders. With the
-// demo login (or while real orders fail to load) it falls back to the demo
-// summarize so the charts never go blank. Returns the summary plus the source
-// so the tabs can label what the numbers are ("real", "demo", "loading").
-function useRealSummary(preset) {
-  const snap = useAnalyticsTick();            // keeps the demo fallback live
-  const demoMode = isDemoLogin();
-  const { products, cases } = useCatalog();
-  const [win, setWin] = useState(null);       // { orders, truncated, scanLimit }
-  const [state, setState] = useState(demoMode ? "demo" : "loading");
-  useEffect(() => {
-    if (demoMode) { setState("demo"); return undefined; }
-    let on = true;
-    setState("loading");
-    fetchBoardWindow(rangeFor(preset))
-      .then((w) => { if (on) { setWin(w); setState("real"); } })
-      .catch(() => { if (on) setState("error"); });
-    return () => { on = false; };
-  }, [preset, demoMode]);
-  const catalogIndex = useMemo(() => buildCatalogIndex(products, cases), [products, cases]);
-  const s = useMemo(() => {
-    if (state === "real" && win) {
-      // Revenue truth: canceled/refunded/payment-pending orders don't count.
-      const revenue = (win.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, catalogIndex));
-      return summarizeOrders(revenue, rangeFor(preset));
-    }
-    return summarize(rangeFor(preset));       // demo login / load error
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, win, catalogIndex, preset, snap]);
-  return { s, source: state, truncated: state === "real" && win ? win.truncated : false, scanLimit: win?.scanLimit || 300 };
-}
-
-// Small banner naming the data source of the analytics tabs (real store data,
-// scan-window note, or the demo/error fallback). Keys live in adm.real.*.
-function SourceNote({ source, truncated, scanLimit }) {
-  const { t } = useLang();
-  if (source === "loading") return <div className="adm-src-note loading">{t("adm.real.loading")}</div>;
-  if (source === "error") return <div className="adm-demo-banner">{t("adm.real.loadFailed")}</div>;
-  if (source === "real") {
-    return (
-      <div className="adm-src-note real">
-        <b>{t("adm.real.source")}</b>
-        {truncated ? <span> · {t("adm.real.truncated", { n: int(scanLimit) })}</span> : null}
-      </div>
-    );
-  }
-  return null;
-}
-
-/* ---------------- Overview ---------------- */
-// Una vista: KPI + dos filas de gráficos a altura acotada (useChartHeight) y la
-// pareja Accesos/Compras + Día de la semana en UNA fila (.adm-grid-2.pair).
-function Overview({ preset, setPreset, go }) {
-  const { t } = useLang();
-  const { s, source, truncated, scanLimit } = useRealSummary(preset);
-  const k = s.kpis;
-  const { products } = useCatalog();
-  const H = useChartHeight(0.14, 100, 150);
-  const imgByName = useMemo(() => Object.fromEntries(products.map((p) => [p.name, p.colors?.[0]?.image])), [products]);
-  // summarize() hands back dictionary keys for the labels it invents (weekdays,
-  // funnel steps). Resolve them here, at the boundary, so the chart components
-  // stay generic and just render whatever label they are given.
-  const funnel = useMemo(() => s.funnel.map((f) => ({ ...f, label: t(f.label) })), [s.funnel, t]);
-  const weekday = useMemo(() => s.weekday.map((w) => ({ ...w, label: t(w.label) })), [s.weekday, t]);
-  return (
-    <div className="adm-exec">
-      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.overviewSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
-      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
-      {s.hasDemo && (
-        <div className="adm-demo-banner">
-          <span dangerouslySetInnerHTML={{ __html: t("adm.demoBanner") }} />{" "}
-          <button onClick={clearDemo}>{t("adm.clearDemo")}</button>
-        </div>
-      )}
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(k.revenue)} icon={<Icon name="dollar" />} sub={t("adm.kpi.unitsSub", { n: int(k.units) })} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(k.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(k.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "detail" })} />
-        <KpiCard label={t("adm.kpi.access")} value={int(k.access)} icon={<Icon name="eye" />} sub={source === "real" ? t("adm.real.funnelLocal") : undefined} hint={t("adm.kpi.h.access")} />
-        <KpiCard label={t("adm.kpi.conversion")} value={(k.conv || 0).toFixed(1) + "%"} icon={<Icon name="gauge" />} sub={t("adm.kpi.convSub")} hint={t("adm.kpi.h.conversion")} />
-      </div>
-      <div className="adm-grid-2 pair">
-        <Card title={t("adm.chart.salesByDay")} name="salesByDay" hint={t("adm.chart.salesByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" height={H} /></Card>
-        <Card title={t("adm.chart.funnel")} name="funnel" hint={t("adm.chart.funnel.h")}><Funnel steps={funnel} height={H} /></Card>
-      </div>
-      <div className="adm-grid-2 pair">
-        <Card title={t("adm.chart.salesByBrand")} name="salesByBrand" hint={t("adm.chart.salesByBrand.h")}><DonutChart data={s.topBrands} iconByLabel={BRAND_LOGO_BY_NAME} height={H} size={Math.min(140, H)} /></Card>
-        <Card title={t("adm.chart.topProducts")} name="topProducts" hint={t("adm.chart.topProducts.h")}><ThumbBars data={s.topProducts} imgByName={imgByName} valuePrefix="$" emptyMsg={t("adm.chart.noSales")} /></Card>
-      </div>
-      <div className="adm-grid-2 pair">
-        <Card title={t("adm.chart.accessVsBuy")} name="accessVsBuy" hint={t("adm.chart.accessVsBuy.h")}><AccessVsBuyChart data={s.accessVsBuy} height={H} /></Card>
-        <Card title={t("adm.chart.weekday")} name="weekday" hint={t("adm.fit.weekdayHint")}><WeekdayChart data={weekday} height={H} /></Card>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Sales ---------------- */
-function Sales({ preset, setPreset, go }) {
-  const { t, lang } = useLang();
-  const { s, source, truncated, scanLimit } = useRealSummary(preset);
-  const H = useChartHeight(0.18, 110, 170);
-  const recent = s.orders.slice(0, 40);
-  return (
-    <div className="adm-exec">
-      <div className="adm-head-row compact"><span className="muted">{t("adm.exec.detailSub")}</span><RangePicker value={preset} onChange={setPreset} /></div>
-      <SourceNote source={source} truncated={truncated} scanLimit={scanLimit} />
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.kpi.revenue")} value={money(s.kpis.revenue)} icon={<Icon name="dollar" />} hint={t("adm.kpi.h.revenue")} onClick={() => go("exec", { sub: "costs" })} />
-        <KpiCard label={t("adm.kpi.orders")} value={int(s.kpis.ordersCount)} icon={<Icon name="receipt" />} hint={t("adm.kpi.h.orders")} onClick={() => go("orders", { preset })} />
-        <KpiCard label={t("adm.kpi.aov")} value={money(s.kpis.aov)} icon={<Icon name="trendUp" />} hint={t("adm.kpi.h.aov")} onClick={() => go("exec", { sub: "overview" })} />
-        <KpiCard label={t("adm.kpi.units")} value={int(s.kpis.units)} icon={<Icon name="box" />} hint={t("adm.kpi.h.units")} onClick={() => go("products")} />
-      </div>
-      <div className="adm-grid-2">
-        <Card title={t("adm.sales.revByDay")} name="revByDay" hint={t("adm.sales.revByDay.h")}><LineChart data={s.salesSeries} valuePrefix="$" height={H} /></Card>
-        <Card title={t("adm.sales.ordersByDay")} name="ordersByDay" hint={t("adm.sales.ordersByDay.h")}><BarChart data={s.ordersSeries} height={H} /></Card>
-      </div>
-      <Card icon="clock" title={t("adm.sales.recent", { n: int(s.orders.length) })} name="pedidos-recientes" hint={t("adm.sales.recent.h")}>
-        <div className="adm-table-wrap">
-          <table className="adm-table responsive">
-            <thead><tr><th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.col.items")}</th><th className="r">{t("adm.col.total")}</th></tr></thead>
-            <tbody>
-              {recent.length === 0 ? <tr><td colSpan="4" className="muted">{t("adm.sales.noneInRange")}</td></tr> :
-                recent.map((o) => (
-                  <tr key={o.id} className="ord-row" onClick={() => go("orders", { order: o.id })} title={t("adm.exec.openOrder")}>
-                    <td data-label={t("adm.col.order")}>{o.demo ? o.id : `#${o.display_id ?? o.id}`}{o.demo && <span className="tag-demo">{t("adm.demoTag")}</span>}</td>
-                    <td data-label={t("adm.col.date")}>{shortDate(o.t, lang)}</td>
-                    <td data-label={t("adm.col.items")}>{o.items.map((i) => i.name).slice(0, 3).join(", ")}{o.items.length > 3 ? "…" : ""}</td>
-                    {/* Real orders carry their currency; demo ones fall back to USD. */}
-                    <td data-label={t("adm.col.total")} className="r">{fmtMoney(o.total, o.currency || "usd", lang)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
+// «Resumen» y «Ventas en detalle» vivían aquí como vistas del Ejecutivo; sus
+// gráficas están ahora, una sola vez, en Ejecutivo → «Tendencias»
+// (Executive.jsx) y su lista en «Pedidos y etapas» (StoreOrders.jsx), ambas
+// sobre las mismas ventas que la tira de KPI. go("exec", { sub: "overview" |
+// "detail" }) sigue abriendo el acordeón que corresponde.
 
 /* ---------------- Products (new / discontinued over time) ---------------- */
 function Products({ preset, setPreset }) {
@@ -1226,8 +1081,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
     <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me}>
       {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
-        <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub}
-          views={{ overview: <Overview preset={preset} setPreset={setPreset} go={go} />, sales: <Sales preset={preset} setPreset={setPreset} go={go} /> }} />
+        <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} pricesView={<Prices preQ={find || nav.params.q || ""} />} />}
@@ -1255,7 +1109,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "cash" && <PosCash me={me} />}
       {tab === "storecosts" && <StoreCosts me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
-      {tab === "storeorders" && <StoreOrders me={me} go={go} />}
+      {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

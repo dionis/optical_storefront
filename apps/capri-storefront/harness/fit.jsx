@@ -1,4 +1,7 @@
-// Harness del sistema «una vista» (fit.css): ?v=status | charts | stage | costchart, &mode=light|dark.
+// Harness del sistema «una vista» (fit.css): ?v=status | charts | stage | costchart | datatable | pending, &mode=light|dark.
+// datatable = «Ventas de tienda» (PosSales) sobre DataTable.jsx con /admin/pos/context,
+// /admin/pos/sales y /admin/sales-analytics/sales simulados: selector «Columnas»,
+// cabeceras que ordenan, totales, fila clicable y exportación con las columnas visibles.
 // costchart = el acordeón «Costos y margen» completo (ExecutiveCosts) con un
 // GET /admin/costing/summary simulado: KPI de una palabra, glosario, reparto,
 // vendedores con sus redes y la gráfica Ventas vs costo.
@@ -18,6 +21,8 @@ import StoreStatus from "/src/admin/StoreStatus.jsx";
 import { StageBarCard } from "/src/admin/StageBar.jsx";
 import { KpiCard, LineChart, BarChart, DonutChart, Funnel, AccessVsBuyChart, WeekdayChart, CompareBarChart } from "/src/admin/charts.jsx";
 import ExecutiveCosts from "/src/admin/ExecutiveCosts.jsx";
+import PosSales from "/src/admin/PosSales.jsx";
+import PendingBalances from "/src/admin/PendingBalances.jsx";
 import { Card, useChartHeight } from "/src/admin/ui.jsx";
 import Icon from "/src/admin/icons.jsx";
 
@@ -74,6 +79,10 @@ window.fetch = (url, opts) => {
   if (u.includes("/admin/store-status")) return new Promise((r) => setTimeout(() => r(json(STATUS)), 120));
   if (u.includes("/admin/establishments")) return json(STORES);
   if (u.includes("/admin/costing/summary")) return new Promise((r) => setTimeout(() => r(json(COSTING)), 80));
+  if (u.includes("/admin/pos/context")) return json(POS_CTX);
+  if (u.includes("/admin/pos/sales")) return new Promise((r) => setTimeout(() => r(json({ sales: POS_SALES })), 100));
+  if (u.includes("/admin/sales-analytics/sales")) return new Promise((r) => setTimeout(() => r(json({ access: { profit: true, commission: true }, sales: POS_DETAILS, page: 0, has_more: false })), 250));
+  if (u.includes("/admin/team/me")) return json(ME);
   if (u.includes("/admin/")) return json({});
   return realFetch(url, opts);
 };
@@ -136,6 +145,49 @@ const COSTING = {
   by_brand: [{ slug: "dicaprio", name: "DiCaprio", orders: 31, revenue: 8420, frame_cost: 1240, margin_share: 0 }, { slug: "flexure", name: "Flexure", orders: 19, revenue: 5120, frame_cost: 760, margin_share: 0 }, { slug: "mileniall", name: "Mileniall", orders: 12, revenue: 3310, frame_cost: 420, margin_share: 0 }, { slug: "peachtrie", name: "Peachtrie", orders: 8, revenue: 1980, frame_cost: 280, margin_share: 0 }, { slug: "trendy", name: "Trendy", orders: 5, revenue: 760, frame_cost: 110, margin_share: 0 }],
   orders: costOrders,
 };
+
+// ── DataTable: «Ventas de tienda» con 18 ventas simuladas (una anulada, dos con saldo, una montura propia). ──
+const POS_CTX = {
+  is_admin: true, role: "owner",
+  stores: STORES.establishments.map((s) => ({ ...s, terminals: [{ id: `${s.id}-t1`, code: "T1" }, { id: `${s.id}-t2`, code: "T2" }], payment_methods: ["cash", "card"] })),
+  payment_methods: [{ code: "cash", kind: "cash", builtin: true }, { code: "card", kind: "card", builtin: true }],
+};
+const CUSTOMERS = [["María Fernanda Rodríguez", "+1 305 555 0101"], ["Juan Pérez", "+1 305 555 0102"], ["Ana Lucía Gómez", "+1 305 555 0103"], ["Carlos Méndez", null], ["Sofía Castro", "+1 305 555 0105"]];
+const FRAMES = [["DiCaprio", "DC 3401", "Negro mate", "DC3401-BLK-52"], ["Flexure", "FX 220", "Carey", "FX220-TOR-54"], ["Mileniall", "ML 15", "Azul", "ML15-BLU-50"], ["Peachtrie", "PT 88", "Rosa", "PT88-PNK-51"], [null, "Montura del cliente (Ray-Ban)", null, null]];
+const rp = rnd(23);
+const POS_SALES = Array.from({ length: 18 }, (_, i) => {
+  const total = Math.round((120 + rp() * 480) * 100) / 100;
+  const balance = i % 5 === 1 ? Math.round(total * 0.4 * 100) / 100 : 0;
+  return {
+    id: `sale_${i}`, number: `R41-0002${String(40 - i).padStart(2, "0")}`, establishment_id: i % 4 === 3 ? "est_2" : "est_1", terminal_id: i % 3 === 2 ? "est_1-t2" : "est_1-t1",
+    seller_id: `s${(i % 3) + 1}`, seller_code: ["DAN", "MAR", "JOS"][i % 3], customer_id: `cus_${i % 5}`, list: total, discount: i % 4 === 0 ? 20 : 0, discount_pct: i % 4 === 0 ? 5 : 0,
+    total, paid: total - balance, insurance: 0, balance, status: i === 6 ? "voided" : "completed", tray: `R41-${i + 1}`, promised_on: new Date(now + (3 - i) * 864e5).toISOString().slice(0, 10),
+    delivery: i % 6 === 5 ? "ship" : "pickup", delivered_at: i % 3 === 0 && i !== 6 ? iso(i * 60) : null, voided_at: i === 6 ? iso(100) : null, void_reason: null, void_requested_at: i === 8 ? iso(30) : null,
+    created_at: iso(i * 190 + 12), payments: [],
+  };
+});
+const POS_DETAILS = POS_SALES.map((s, i) => {
+  const [customer, customer_phone] = CUSTOMERS[i % 5];
+  const [frame_brand, frame_model, frame_color, frame_sku] = FRAMES[i % 5];
+  const own = i % 5 === 4;
+  const cost = Math.round(s.total * 0.46 * 100) / 100;
+  return {
+    order_id: `order_${i}`, sale_id: s.id, number: s.number, channel: "pos", establishment_id: s.establishment_id, seller_code: s.seller_code, customer, customer_phone,
+    sold_at: s.created_at, total: s.total, discount: s.discount, units: 2, status: s.status === "voided" ? "voided" : "active",
+    items: own ? "Lentes progresivos · Montura del cliente" : `${frame_brand} ${frame_model} · Lentes monofocales CR-39`, paid: s.paid, balance: s.balance,
+    frame_brand, frame_model, frame_color, frame_sku, own_frame: own, has_rx: i % 3 !== 1,
+    lens_summary: i % 3 === 1 ? null : { es: own ? "Progresivo · Policarbonato · AR" : "Monofocal · CR-39 · Fotocromático", en: own ? "Progressive · Polycarbonate · AR" : "Single vision · CR-39 · Photochromic" },
+    cost, fee: Math.round(s.total * 0.029 * 100) / 100, commission: Math.round(s.total * 0.05 * 100) / 100, profit: Math.round((s.total - cost) * 100) / 100, margin_pct: Math.round(((s.total - cost) / s.total) * 1000) / 10,
+  };
+});
+function DataTableView() {
+  return <PosSales me={ME} />;
+}
+// pending = «Cobros pendientes» sobre la misma tabla (DataTable) y los mismos datos; ?q=&overdue=&stage=&seller= se pasan como `params`.
+function PendingView() {
+  const params = { q: Q.get("q") || "", overdue: Q.get("overdue") || "", stage: Q.get("stage") || "", seller: Q.get("seller") || "" };
+  return <PendingBalances me={ME} openSale={(id) => console.log("openSale", id)} params={params} />;
+}
 
 function ChartsView() {
   const H = useChartHeight(0.14, 100, 150);
@@ -211,6 +263,8 @@ function App() {
         {VIEW === "charts" && <ChartsView />}
         {VIEW === "stage" && <StageView />}
         {VIEW === "costchart" && <CostChartView />}
+        {VIEW === "datatable" && <DataTableView />}
+        {VIEW === "pending" && <PendingView />}
       </AdminShell>
     </MemoryRouter>
   );

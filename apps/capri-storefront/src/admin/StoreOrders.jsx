@@ -1,16 +1,39 @@
-// Dónde se usa: Ejecutivo → acordeón «Pedidos de la tienda» (embedded) y, para
-// quien administra una tienda, la pestaña "storeorders" (standalone). La lista
-// de todo lo vendido en el período para la tienda elegida con lo que el dueño
-// quiere leer de cada venta: precio, descuento, lo que le costó a la tienda,
-// comisión, ganancia, margen, cobrado y saldo. Backend:
-// GET /admin/sales-analytics/sales (cost/fee/profit vienen null si el servidor
-// decide que no se pueden ver — aquí no se oculta nada por cuenta propia).
-import { useEffect, useMemo, useRef, useState } from "react";
+// Dónde se usa: Ejecutivo → acordeón «Pedidos y etapas» (OrdersStagesView) y,
+// para quien administra una tienda, la pestaña "storeorders" (StoreOrders en
+// solitario). UNA lista con todo lo vendido en el período para la tienda
+// elegida (global, useStoreFilter) y lo que el dueño quiere leer de cada venta:
+// precio, descuento, costo, comisión, ganancia, margen, cobrado, saldo y la
+// ETAPA del pedido (confirmado → laboratorio → preparado → en camino →
+// entregado), con «Avanzar» en la fila y la ficha (SaleDetailPanel) al pulsar.
+//
+// Datos — dos fuentes, UNA lista:
+//   GET /admin/sales-analytics/sales   el dinero y la descripción de cada venta
+//                                      (cost/fee/profit null si no se pueden ver);
+//   GET /admin/order-board?view=stages la etapa, `next_stages` e historial de
+//                                      cada pedido del período (≤300 filas, una
+//                                      petición), casadas aquí por `order_id`.
+//
+// ───────────────────────────────────────────────────────────────────────────
+// CONTRATO DE `params` (go("storeorders", params) · go("exec", { sub: "stages", …params }))
+// Toda pantalla que salte a esta lista pasa el elemento que la motivó, para que
+// la lista abra YA filtrada por él (y lo muestre como chip quitable):
+//   seller  código de vendedor (seller_code, p. ej. "DAN")   → chip «Vendedor: DAN ×»
+//   stage   "pending" (confirmado + laboratorio) | confirmed | in_lab | shipped
+//           | in_transit | delivered | voided                 → chip «Etapa: … ×»
+//   q       texto libre: nº de venta, nº de pedido, cliente o teléfono → chip «Buscar: … ×»
+//   period  uno de PERIODS (today…year) — o from/to (YYYY-MM-DD) para «Rango»
+//   store   "all" | "web" | id de establecimiento → fija el filtro GLOBAL de tienda
+//   order   id de pedido ("order_…") o de venta de caja → abre su ficha encima
+// Las claves que no vengan no cambian nada. `paramsKey(params)` resume las que
+// cuentan; los componentes reaccionan a ese resumen, no a la identidad del objeto.
+// ───────────────────────────────────────────────────────────────────────────
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
 import { adminFetch } from "./adminApi.js";
 import { isDemoLogin } from "./adminAuth.js";
-import { money as fmtMoney } from "./adminOrders.js";
+import { STAGES, STAGE_BY_KEY, money as fmtMoney, setOrderStage, stageErrorText } from "./adminOrders.js";
 import { ExportMenu } from "./ui.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { WEB_STORE } from "./useStoreTheme.js";
@@ -18,25 +41,41 @@ import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import { periodRange } from "./SalesBoard.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
+import { StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import "./exec.css";
 
 export const PERIODS = ["today", "yesterday", "week", "lastWeek", "month", "lastMonth", "year", "range"];
 /** Pages of 100 sales read for one list: beyond it the panel says `truncated`. */
 const MAX_PAGES = 10;
+/** Chips de filtro por etapa, las pendientes primero. */
+export const STAGE_FILTERS = ["pending", "shipped", "in_transit", "delivered", "voided"];
+/** Claves de `params` que esta lista entiende (ver el contrato de arriba). */
+export const PARAM_KEYS = ["seller", "stage", "q", "period", "from", "to", "store", "order"];
+export const paramsKey = (p) => JSON.stringify([...PARAM_KEYS, "_n"].map((k) => (p && p[k] != null ? String(p[k]) : "")));
+const STUCK_DAYS = 7;
 
 const pad = (n) => String(n).padStart(2, "0");
 export const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 /** Local Date bounds of a "YYYY-MM-DD" range (what analytics.js / realAnalytics.js take). */
 export const datesOf = ({ from, to }) => ({ from: new Date(`${from}T00:00:00`), to: new Date(`${to}T23:59:59.999`) });
 export const pct = (v) => (v == null || Number.isNaN(Number(v)) ? "—" : `${Math.round(Number(v) * 10) / 10}%`);
+const shiftDay = (day, n) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + n); return ymd(d); };
+const DAY_MS = 86400_000;
 
 /** Período (chips + desde/hasta) compartido por el Ejecutivo y la lista en solitario. */
 export function usePeriod(initial = "month") {
   const [period, setPeriod] = useState(initial);
   const [range, setRange] = useState(() => periodRange(initial));
-  const pick = (p) => { setPeriod(p); if (p !== "range") setRange(periodRange(p)); };
-  const setDate = (k, v) => { if (!v) return; setPeriod("range"); setRange((r) => ({ ...r, [k]: v })); };
-  return { period, range, pick, setDate };
+  const pick = useCallback((p) => { setPeriod(p); if (p !== "range") setRange(periodRange(p)); }, []);
+  const setDate = useCallback((k, v) => { if (!v) return; setPeriod("range"); setRange((r) => ({ ...r, [k]: v })); }, []);
+  /** Aplica `period` o `from`/`to` de unos `params` (contrato de arriba); ignora lo que no venga. */
+  const applyParams = useCallback((p) => {
+    if (!p) return;
+    // Un período con nombre manda (sigue vivo al cambiar de día); from/to solo definen un rango a medida.
+    if (p.period && PERIODS.includes(p.period) && p.period !== "range") { pick(p.period); return; }
+    if (p.from && p.to && /^\d{4}-\d{2}-\d{2}$/.test(p.from) && /^\d{4}-\d{2}-\d{2}$/.test(p.to)) { setPeriod("range"); setRange({ from: p.from, to: p.to }); }
+  }, [pick]);
+  return { period, range, pick, setDate, applyParams };
 }
 
 export function PeriodBar({ period, range, pick, setDate }) {
@@ -81,10 +120,12 @@ export function salesTotals(rows) {
 
 /**
  * Las ventas del período para la(s) tienda(s): todas las páginas (hasta
- * MAX_PAGES). `storeId`: "all" | "web" | id de establecimiento.
+ * MAX_PAGES). `storeId`: "all" | "web" | id de establecimiento. `reload()`
+ * vuelve a leer (tras cobrar, entregar o anular desde la ficha).
  */
 export function useStoreSales({ from, to, storeId }, enabled = true) {
   const [data, setData] = useState({ rows: [], access: null, state: "idle", truncated: false });
+  const [tick, setTick] = useState(0);
   const demo = isDemoLogin();
   useEffect(() => {
     if (!enabled || demo || !from || !to || from > to) { setData((d) => ({ ...d, state: demo ? "demo" : "idle" })); return undefined; }
@@ -106,10 +147,68 @@ export function useStoreSales({ from, to, storeId }, enabled = true) {
       if (on) setData({ rows, access, state: "ok", truncated });
     })().catch(() => { if (on) setData({ rows: [], access: null, state: "error", truncated: false }); });
     return () => { on = false; };
-  }, [from, to, storeId, enabled, demo]);
+  }, [from, to, storeId, enabled, demo, tick]);
   const totals = useMemo(() => salesTotals(data.rows), [data.rows]);
-  return { ...data, totals };
+  const reload = useCallback(() => setTick((n) => n + 1), []);
+  return { ...data, totals, reload };
 }
+
+/**
+ * La etapa de cada pedido del período (GET /admin/order-board?view=stages),
+ * indexada por id de pedido (= `order_id` de la venta). Una petición por
+ * período, con un día de margen a cada lado para que un pedido en el borde no
+ * se quede sin etapa. `patch(order)` actualiza una fila tras avanzarla;
+ * `reload()` vuelve a leer todo. `truncated`: el tablero solo mira los
+ * `scanLimit` pedidos más recientes — la lista lo dice, no lo calla.
+ */
+export function useOrderStages({ from, to, storeId }, enabled = true) {
+  const [st, setSt] = useState({ byOrder: new Map(), state: "idle", truncated: false, scanLimit: 300 });
+  const [tick, setTick] = useState(0);
+  const demo = isDemoLogin();
+  useEffect(() => {
+    if (!enabled || demo || !from || !to || from > to) { setSt((s) => ({ ...s, state: demo ? "demo" : "idle" })); return undefined; }
+    let on = true;
+    setSt((s) => ({ ...s, state: "loading" }));
+    const q = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
+    if (storeId && storeId !== "all") q.store = storeId;
+    adminFetch("/admin/order-board", { query: q })
+      .then((r) => {
+        if (!on) return;
+        const byOrder = new Map((r.orders || []).map((o) => [o.id, o]));
+        setSt({ byOrder, state: "ok", truncated: Boolean(r.truncated) || (Number(r.count) || 0) > byOrder.size, scanLimit: r.scan_limit || 300 });
+      })
+      .catch(() => { if (on) setSt({ byOrder: new Map(), state: "error", truncated: false, scanLimit: 300 }); });
+    return () => { on = false; };
+  }, [from, to, storeId, enabled, demo, tick]);
+  const patch = useCallback((order) => {
+    if (!order?.id) return;
+    setSt((s) => { const byOrder = new Map(s.byOrder); byOrder.set(order.id, { ...(byOrder.get(order.id) || {}), ...order }); return { ...s, byOrder }; });
+  }, []);
+  const reload = useCallback(() => setTick((n) => n + 1), []);
+  return { ...st, patch, reload };
+}
+
+/**
+ * Etapa de una fila de ventas: «voided» si la venta o el pedido se anularon,
+ * la del tablero por `order_id`, o null si el pedido no está en la ventana.
+ */
+export function stageOfRow(r, byOrder) {
+  if (r.status === "voided") return "voided";
+  const b = byOrder?.get(r.order_id);
+  if (!b) return null;
+  if (b.terminal === "canceled" || b.terminal === "refunded") return "voided";
+  if (b.terminal === "payment_pending") return "payment_pending";
+  return b.stage || null;
+}
+/** ¿Cumple la fila el chip de etapa? "pending" agrupa confirmado + laboratorio (+ pago pendiente). */
+export function matchesStageFilter(stage, f) {
+  if (!f) return true;
+  if (f === "pending") return stage === "confirmed" || stage === "in_lab" || stage === "payment_pending";
+  return stage === f;
+}
+const isPendingStage = (s) => s === "confirmed" || s === "in_lab" || s === "payment_pending";
+/** Lleva más de STUCK_DAYS días sin salir: pendiente y vendida hace más de una semana. */
+export const isStuck = (r, stage, now = Date.now()) => isPendingStage(stage) && now - new Date(r.sold_at).getTime() > STUCK_DAYS * DAY_MS;
 
 const costOf = (r) => (r.cost == null ? null : (Number(r.cost) || 0) + (Number(r.fee) || 0));
 
@@ -126,9 +225,10 @@ export const saleLens = (r, { t, lang }) => (r.lens_summary ? r.lens_summary[lan
 /**
  * Las columnas de la lista para el reporte (PDF, Excel y CSV comparten esta
  * definición: `get` da el crudo, `text` lo impreso). Costo, comisión, ganancia
- * y margen solo cuando el servidor los mandó (`access`).
+ * y margen solo cuando el servidor los mandó (`access`). `stageOf(row)`, si se
+ * pasa, añade la columna Etapa.
  */
-export function salesReportCols({ t, lang, storeLabel, access, withStore = false }) {
+export function salesReportCols({ t, lang, storeLabel, access, withStore = false, stageOf = null }) {
   const m = (v) => (v == null ? "" : Number(v));
   const showEcon = access?.profit === true;
   const showCommission = access?.commission === true;
@@ -156,7 +256,9 @@ export function salesReportCols({ t, lang, storeLabel, access, withStore = false
       { header: t("adm.ex.so.margin"), get: (r) => (r.margin_pct == null ? "" : Number(r.margin_pct)), key: "margin_pct", type: "pct", width: 7, pw: 10 },
     ] : []),
     ...(showCommission ? [{ header: t("adm.ex.so.commission"), get: (r) => m(r.commission), key: "commission", type: "money", width: 9, pw: 11 }] : []),
-    { header: t("adm.ex.so.status"), get: (r) => t(`adm.ex.so.status.${r.status === "voided" ? "voided" : "active"}`), width: 8, pw: 9 },
+    stageOf
+      ? { header: t("adm.ex.stg.col"), get: (r) => stageLabel(stageOf(r), t), width: 11, pw: 11 }
+      : { header: t("adm.ex.so.status"), get: (r) => t(`adm.ex.so.status.${r.status === "voided" ? "voided" : "active"}`), width: 8, pw: 9 },
   ];
 }
 
@@ -195,14 +297,14 @@ export function salesGroupBy({ t, stores, storeLabel }) {
 }
 
 /** La tabla de ventas como bloque de ReportDoc (`tables: [salesReportTable(...)]`). `groupBy` parte el PDF en bloques (salesGroupBy). */
-export function salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore = false, groupBy = null }) {
+export function salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore = false, groupBy = null, stageOf = null }) {
   const active = rows.filter((r) => r.status !== "voided");
   return {
     ...(groupBy ? { groupBy } : {}),
     title: t("adm.rpt.salesTable"),
     sheet: t("adm.ex.so.sheet"),
     note: t("adm.rpt.salesNote", { n: active.length }),
-    cols: salesReportCols({ t, lang, storeLabel, access: access || { profit: totals.hasEcon, commission: totals.hasCommission }, withStore }),
+    cols: salesReportCols({ t, lang, storeLabel, access: access || { profit: totals.hasEcon, commission: totals.hasCommission }, withStore, stageOf }),
     rows,
     rowCls: (r) => (r.status === "voided" ? "voided" : ""),
     totals: salesReportTotals(totals),
@@ -218,7 +320,7 @@ export function salesReportTable(rows, totals, { t, lang, storeLabel, access, wi
  * phone) | null, isAll, isWeb }; `period` = { from, to }; `stores` (opcional,
  * las de useStoreFilter) nombra y colorea los bloques por tienda cuando isAll.
  */
-export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, stores, scope, period, title, kpis = [], summaries = [], charts = [] }) {
+export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, stores, scope, period, title, kpis = [], summaries = [], charts = [], stageOf = null }) {
   const store = scope?.store && !scope.isAll && !scope.isWeb ? scope.store : null;
   const scopeName = store ? store.name || store.code : scope?.isWeb ? t("adm.rpt.web") : t("adm.rpt.allStores");
   const m = (v) => fmtMoney(v, "usd", lang);
@@ -240,7 +342,7 @@ export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, sto
     kpis: baseKpis,
     summaries,
     charts,
-    tables: [salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore: Boolean(scope?.isAll), groupBy: scope?.isAll ? salesGroupBy({ t, stores, storeLabel }) : null })],
+    tables: [salesReportTable(rows, totals, { t, lang, storeLabel, access, withStore: Boolean(scope?.isAll), groupBy: scope?.isAll ? salesGroupBy({ t, stores, storeLabel }) : null, stageOf })],
     landscape: true,
     lang,
     t,
@@ -248,8 +350,8 @@ export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, sto
 }
 
 /** Hojas del Excel de la lista (también las usa el Ejecutivo en su libro). */
-export function salesSheets(rows, totals, { t, lang, storeLabel, access }) {
-  const cols = salesReportCols({ t, lang, storeLabel, access: access || { profit: totals.hasEcon, commission: totals.hasCommission }, withStore: Boolean(storeLabel) });
+export function salesSheets(rows, totals, { t, lang, storeLabel, access, stageOf = null }) {
+  const cols = salesReportCols({ t, lang, storeLabel, access: access || { profit: totals.hasEcon, commission: totals.hasCommission }, withStore: Boolean(storeLabel), stageOf });
   return [{
     name: t("adm.ex.so.sheet"),
     cols: [...cols, { header: t("adm.ex.so.items"), key: "items", width: 40 }, { header: t("adm.rpt.col.phone"), key: "customer_phone", width: 14 }],
@@ -259,105 +361,229 @@ export function salesSheets(rows, totals, { t, lang, storeLabel, access }) {
   }];
 }
 
+/** Texto libre contra nº de venta, nº de pedido, cliente y teléfono. */
+const matchesQuery = (r, q, t) => {
+  if (!q) return true;
+  const k = q.trim().toLowerCase().replace(/^#/, "");
+  if (!k) return true;
+  return [saleNumber(r, t), r.number, r.order_id, r.customer, r.customer_phone, r.items].filter(Boolean).join(" ").toLowerCase().includes(k);
+};
+
+/**
+ * Filtros de elemento de la lista (vendedor, etapa, texto): estado inicial
+ * desde `params`, y se vuelven a aplicar cuando cambia `paramsKey(params)`.
+ */
+export function useListFilters(params) {
+  const key = paramsKey(params);
+  const fromParams = (p) => ({ seller: p?.seller ? String(p.seller).toUpperCase() : "", stage: p?.stage && (STAGE_FILTERS.includes(p.stage) || STAGE_BY_KEY[p.stage]) ? p.stage : "", q: p?.q ? String(p.q) : "" });
+  const [f, setF] = useState(() => fromParams(params));
+  useEffect(() => { setF(fromParams(params)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = useCallback((k, v) => setF((x) => ({ ...x, [k]: v })), []);
+  const clear = useCallback(() => setF({ seller: "", stage: "", q: "" }), []);
+  return { ...f, set, clear, active: Boolean(f.seller || f.stage || f.q) };
+}
+
+/**
+ * La tira de etapas: StageBar con las cinco etapas (cuántas y cuánto suman,
+ * pulsar filtra), chips por grupo (pendientes primero), la línea de alertas
+ * («N llevan más de 7 días sin salir») y los filtros activos como chips quitables.
+ */
+export function StageStrip({ rows, byOrder, stages, filters, compact = false }) {
+  const { t, lang } = useLang();
+  const m = (v) => fmtMoney(v, "usd", lang);
+  const stats = useMemo(() => {
+    const by = Object.fromEntries([...STAGES.map((s) => s.key), "payment_pending", "voided", "none"].map((k) => [k, { n: 0, v: 0 }]));
+    let stuck = 0;
+    const now = Date.now();
+    for (const r of rows) {
+      const st = stageOfRow(r, byOrder) || "none";
+      by[st].n += 1;
+      by[st].v += Number(r.total) || 0;
+      if (isStuck(r, st, now)) stuck += 1;
+    }
+    const group = (keys) => keys.reduce((acc, k) => ({ n: acc.n + by[k].n, v: acc.v + by[k].v }), { n: 0, v: 0 });
+    return { by, stuck, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
+  }, [rows, byOrder]);
+  const tiles = STAGES.map((s) => ({ key: s.key, label: t(s.label), icon: STAGE_ICON[s.key], count: stats.by[s.key].n, amount: stats.by[s.key].v }));
+  const pick = (key) => filters.set("stage", filters.stage === key ? "" : key);
+  const chip = (key, label, n, v) => (
+    <button key={key} type="button" className={`so-chip ${filters.stage === key ? "on" : ""} ${key}`} aria-pressed={filters.stage === key} onClick={() => pick(key)} title={v != null ? m(v) : undefined}>
+      <Icon name={STAGE_ICON[key] || "lab"} size={12} />{label}<b>{n}</b>
+    </button>
+  );
+  const el = [];
+  if (filters.seller) el.push({ k: "seller", label: t("adm.ex.flt.seller"), value: filters.seller });
+  if (filters.stage) el.push({ k: "stage", label: t("adm.ex.flt.stage"), value: stageLabel(filters.stage, t) });
+  if (filters.q) el.push({ k: "q", label: t("adm.ex.flt.q"), value: filters.q });
+  return (
+    <div className={`so-strip ${compact ? "compact" : ""}`}>
+      <StageBarCard icon="layers" title={t("adm.ex.stg.title")} hint={t("adm.ex.stg.hint")} name="etapas" className="so-stagebar"
+        stages={tiles} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+      <div className="so-chips adm-noprint" role="group" aria-label={t("adm.ex.flt.stage")}>
+        <button type="button" className={`so-chip all ${!filters.stage ? "on" : ""}`} aria-pressed={!filters.stage} onClick={() => filters.set("stage", "")}>{t("adm.ex.stg.all")}<b>{rows.length}</b></button>
+        {chip("pending", t("adm.ex.stg.pending"), stats.groups.pending.n, stats.groups.pending.v)}
+        {chip("shipped", t(STAGE_BY_KEY.shipped.label), stats.groups.shipped.n, stats.groups.shipped.v)}
+        {chip("in_transit", t(STAGE_BY_KEY.in_transit.label), stats.groups.in_transit.n, stats.groups.in_transit.v)}
+        {chip("delivered", t(STAGE_BY_KEY.delivered.label), stats.groups.delivered.n, stats.groups.delivered.v)}
+        {chip("voided", t("adm.ex.stg.voided"), stats.groups.voided.n, stats.groups.voided.v)}
+        <span className="so-search">
+          <Icon name="search" size={13} />
+          <input value={filters.q} onChange={(e) => filters.set("q", e.target.value)} placeholder={t("adm.ex.flt.search")} aria-label={t("adm.ex.flt.q")} />
+        </span>
+      </div>
+      <div className="so-alerts">
+        {stats.stuck > 0
+          ? <button type="button" className="so-alert crit" onClick={() => filters.set("stage", "pending")}><Icon name="alert" size={13} />{t("adm.ex.stg.stuck", { n: stats.stuck })}<Icon name="arrowRight" size={12} /></button>
+          : rows.length > 0 && stages.state === "ok" && <span className="so-alert ok"><Icon name="checkCircle" size={13} />{t("adm.ex.stg.allClear")}</span>}
+        {stages.state === "ok" && stages.truncated && <span className="so-alert info"><Icon name="info" size={13} />{t("adm.ex.stg.boardTruncated", { n: stages.scanLimit })}</span>}
+        {stages.state === "error" && <span className="so-alert warn"><Icon name="alert" size={13} />{t("adm.ex.stg.boardFailed")}</span>}
+        {el.length > 0 && (
+          <span className="so-active adm-noprint">
+            {el.map((x) => (
+              <span key={x.k} className="so-flt">
+                <small>{x.label}:</small> <b>{x.value}</b>
+                <button type="button" onClick={() => filters.set(x.k, "")} title={t("adm.ex.flt.clear")} aria-label={`${t("adm.ex.flt.clear")}: ${x.label} ${x.value}`}><Icon name="close" size={11} /></button>
+              </span>
+            ))}
+            {el.length > 1 && <button type="button" className="so-flt-clear" onClick={filters.clear}>{t("adm.ex.flt.clearAll")}</button>}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * La tabla. `data` viene de useStoreSales (el Ejecutivo la comparte con sus
- * KPI); en solitario la carga ella misma. Pulsar una venta de tienda abre su
- * ficha (SaleDetailPanel) con la economía de la fila; `onOpen`, si se pasa,
- * sustituye ese comportamiento. Un pedido de la web no tiene ficha de venta.
+ * KPI); `rows` (opcional) son las filas ya filtradas a pintar. Pulsar una venta
+ * abre su ficha (SaleDetailPanel): la de caja por `sale_id`, un pedido web por
+ * `order_id` — la misma ficha, con etapa, artículos y fotos. `byOrder`
+ * (useOrderStages) pone la columna Etapa y el botón «Avanzar»; `onAdvance(row,
+ * stage)` lo ejecuta. `onOpen`, si se pasa, sustituye la ficha. `autoOpen` =
+ * { id } abre esa venta/pedido al montar (params.order).
  */
-export function StoreOrdersTable({ data, storeLabel, onOpen, compact = false, me }) {
+export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, compact = false, me, byOrder = null, onAdvance = null, onChanged, autoOpen = null, busyId = null }) {
   const { t, lang } = useLang();
-  const { rows, access, state, truncated, totals } = data;
-  const sp = useSalePanel({ me });
+  const { rows: allRows, access, state, truncated, totals: allTotals } = data;
+  const rows = givenRows || allRows;
+  const totals = useMemo(() => (givenRows ? salesTotals(givenRows) : allTotals), [givenRows, allTotals]);
+  const sp = useSalePanel({ me, onChanged });
   const m = (v) => fmtMoney(v, "usd", lang);
   const when = (iso) => new Date(iso).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" });
   const showEcon = access?.profit === true;
   const showCommission = access?.commission === true;
   const hidden = <span className="muted" title={t("adm.ex.so.hiddenHint")}>{t("adm.ex.so.hidden")}</span>;
-  const onRow = typeof onOpen === "function" ? onOpen : (r) => (r.sale_id ? sp.open(r.sale_id, { economics: r }) : null);
-  const clickable = (r) => typeof onOpen === "function" || Boolean(r.sale_id);
+  const openRow = (r) => (r.sale_id ? sp.open(r.sale_id, { economics: r, orderId: r.order_id }) : r.order_id ? sp.open({ orderId: r.order_id }, { economics: r }) : null);
+  const onRow = typeof onOpen === "function" ? onOpen : openRow;
+  const clickable = (r) => typeof onOpen === "function" || Boolean(r.sale_id || r.order_id);
+  const stageOf = (r) => stageOfRow(r, byOrder);
+  // params.order: abrir la ficha de esa venta / pedido nada más montar la lista.
+  const opened = useRef(null);
+  useEffect(() => {
+    const id = autoOpen?.id;
+    if (!id || opened.current === id) return;
+    opened.current = id;
+    if (String(id).startsWith("order_")) sp.open({ orderId: id }, { economics: rows.find((r) => r.order_id === id) || null });
+    else sp.open(id, { economics: rows.find((r) => r.sale_id === id) || null });
+  }, [autoOpen?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Las cabeceras ordenan (useSortable.js); la fila de totales va aparte y queda siempre abajo.
   const sorted = useSortable(rows, {
-    id: "store-orders", defaultKey: "sold_at", defaultDir: "desc", deps: [lang],
-    getters: { number: (r) => saleNumber(r, t), brand: (r) => saleBrand(r, t), model: saleModel, color: saleColor, rx: (r) => r.has_rx, own: (r) => r.own_frame, lens: (r) => saleLens(r, { t, lang }), cost: costOf, status: (r) => (r.status === "voided" ? 1 : 0) },
+    id: "store-orders", defaultKey: "sold_at", defaultDir: "desc", deps: [lang, byOrder],
+    getters: { number: (r) => saleNumber(r, t), brand: (r) => saleBrand(r, t), model: saleModel, color: saleColor, rx: (r) => r.has_rx, own: (r) => r.own_frame, lens: (r) => saleLens(r, { t, lang }), cost: costOf, stage: (r) => { const s = stageOf(r); return s === "voided" ? 99 : s == null ? 50 : s === "payment_pending" ? -1 : STAGE_INDEX[s]; } },
   });
   const th = (col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
-  if (state === "loading" && !rows.length) return <div className="adm-skel" style={{ height: 120 }} />;
+  if (state === "loading" && !allRows.length) return <div className="adm-skel" style={{ height: 120 }} />;
   if (state === "error") return <div className="adm-demo-banner">{t("adm.ex.loadFailed")}</div>;
   if (state === "demo") return <div className="adm-demo-banner">{t("adm.ex.demo")}</div>;
-  if (!rows.length) return <div className="adm-nodata">{t("adm.ex.so.empty")}</div>;
+  if (!allRows.length) return <div className="adm-nodata">{t("adm.ex.so.empty")}</div>;
   return (
     <div className={`adm-table-wrap so-wrap ${compact ? "compact" : ""}`}>
       {truncated && <div className="adm-demo-banner">{t("adm.ex.truncated")}</div>}
-      <table className="adm-table responsive so-table">
-        <thead>
-          <tr>
-            {th("number", t("adm.ex.so.number"))}
-            {th("sold_at", t("adm.ex.so.date"))}
-            {th("customer", t("adm.ex.so.customer"))}
-            {th("seller_code", t("adm.ex.so.seller"))}
-            {th("brand", t("adm.rpt.col.brand"))}
-            {th("model", t("adm.rpt.col.model"))}
-            {th("color", t("adm.rpt.col.color"))}
-            {th("rx", t("adm.rpt.col.rx"))}
-            {th("own", t("adm.rpt.col.own"))}
-            <SortTh col="lens" sort={sorted.sort} onSort={sorted.toggle} className="so-items">{t("adm.rpt.col.lens")}</SortTh>
-            {th("total", t("adm.ex.so.price"), "r")}
-            {th("discount", t("adm.ex.so.discount"), "r")}
-            {th("cost", t("adm.ex.so.cost"), "r")}
-            {th("commission", t("adm.ex.so.commission"), "r")}
-            {th("profit", t("adm.ex.so.profit"), "r")}
-            {th("margin_pct", t("adm.ex.so.margin"), "r")}
-            {th("paid", t("adm.ex.so.paid"), "r")}
-            {th("balance", t("adm.ex.so.balance"), "r")}
-            {th("status", t("adm.ex.so.status"))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.rows.map((r) => {
-            const voided = r.status === "voided";
-            const profit = r.profit == null ? null : Number(r.profit);
-            return (
-              <tr key={r.order_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${sp.saleId && sp.saleId === r.sale_id ? "sd-current" : ""} ${voided ? "so-voided" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? t("adm.sd.openHint") : undefined}>
-                <td data-label={t("adm.ex.so.number")}><b>{r.number || `${t("adm.ex.so.web")} ${r.order_id.slice(-6)}`}</b>{storeLabel && <small className="muted so-store"> · {storeLabel(r)}</small>}</td>
-                <td data-label={t("adm.ex.so.date")}>{when(r.sold_at)}</td>
-                <td data-label={t("adm.ex.so.customer")}>{r.customer || "—"}</td>
-                <td data-label={t("adm.ex.so.seller")}>{r.seller_code ? <span className="adm-chip gold">{r.seller_code}</span> : <span className="muted">—</span>}</td>
-                <td data-label={t("adm.rpt.col.brand")}>{saleBrand(r, t) || <span className="muted">—</span>}</td>
-                <td data-label={t("adm.rpt.col.model")} title={r.items}>{saleModel(r) || <span className="muted">{r.items || "—"}</span>}</td>
-                <td data-label={t("adm.rpt.col.color")}>{saleColor(r) || <span className="muted">—</span>}</td>
-                <td data-label={t("adm.rpt.col.rx")}>{r.has_rx == null ? <span className="muted">—</span> : <span className={`adm-chip ${r.has_rx ? "ok" : "neutral"}`}>{saleRx(r, t)}</span>}</td>
-                <td data-label={t("adm.rpt.col.own")}>{r.own_frame == null ? <span className="muted">—</span> : <span className={`adm-chip ${r.own_frame ? "warn" : "neutral"}`}>{saleOwn(r, t)}</span>}</td>
-                <td data-label={t("adm.rpt.col.lens")} className="so-items muted" title={r.items}>{saleLens(r, { t, lang }) || "—"}</td>
-                <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(r.total)}</b></td>
-                <td data-label={t("adm.ex.so.discount")} className="r num muted">{Number(r.discount) > 0 ? `−${m(r.discount)}` : "—"}</td>
-                <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon ? (costOf(r) == null ? "—" : m(costOf(r))) : hidden}{showEcon && r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>
-                <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission ? (r.commission == null ? "—" : m(r.commission)) : hidden}</td>
-                <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon ? (profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>) : hidden}</td>
-                <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon ? <span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span> : hidden}</td>
-                <td data-label={t("adm.ex.so.paid")} className="r num">{m(r.paid)}</td>
-                <td data-label={t("adm.ex.so.balance")} className="r num">{Number(r.balance) > 0 ? <b className="neg">{m(r.balance)}</b> : <span className="muted">—</span>}</td>
-                <td data-label={t("adm.ex.so.status")}><span className={`adm-chip ${voided ? "bad" : "ok"}`}>{t(`adm.ex.so.status.${voided ? "voided" : "active"}`)}</span></td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="so-total">
-            <td data-label={t("adm.ex.so.total")} colSpan="9"><b>{t("adm.ex.so.total")}</b> <small className="muted">{t("adm.ex.so.rows", { n: totals.count })}</small></td>
-            <td className="so-items muted">{totals.units}</td>
-            <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(totals.total)}</b></td>
-            <td data-label={t("adm.ex.so.discount")} className="r num">{totals.discount > 0 ? `−${m(totals.discount)}` : "—"}</td>
-            <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon && totals.hasEcon ? <b>{m(totals.cost)}</b> : hidden}</td>
-            <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission && totals.hasCommission ? <b>{m(totals.commission)}</b> : hidden}</td>
-            <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon && totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : hidden}</td>
-            <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon && totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : hidden}</td>
-            <td data-label={t("adm.ex.so.paid")} className="r num"><b>{m(totals.paid)}</b></td>
-            <td data-label={t("adm.ex.so.balance")} className="r num"><b className={totals.balance > 0 ? "neg" : ""}>{m(totals.balance)}</b></td>
-            <td />
-          </tr>
-        </tfoot>
-      </table>
+      {givenRows && givenRows.length !== allRows.length && <p className="so-showing muted">{t("adm.ex.flt.showing", { n: givenRows.length, total: allRows.length })}</p>}
+      {!rows.length ? <div className="adm-nodata">{t("adm.ex.flt.noMatch")}</div> : (
+        <table className="adm-table responsive so-table">
+          <thead>
+            <tr>
+              {th("number", t("adm.ex.so.number"))}
+              {th("sold_at", t("adm.ex.so.date"))}
+              {th("stage", t("adm.ex.stg.col"))}
+              {th("customer", t("adm.ex.so.customer"))}
+              {th("seller_code", t("adm.ex.so.seller"))}
+              {th("brand", t("adm.rpt.col.brand"))}
+              {th("model", t("adm.rpt.col.model"))}
+              {th("color", t("adm.rpt.col.color"))}
+              {th("rx", t("adm.rpt.col.rx"))}
+              {th("own", t("adm.rpt.col.own"))}
+              <SortTh col="lens" sort={sorted.sort} onSort={sorted.toggle} className="so-items">{t("adm.rpt.col.lens")}</SortTh>
+              {th("total", t("adm.ex.so.price"), "r")}
+              {th("discount", t("adm.ex.so.discount"), "r")}
+              {th("cost", t("adm.ex.so.cost"), "r")}
+              {th("commission", t("adm.ex.so.commission"), "r")}
+              {th("profit", t("adm.ex.so.profit"), "r")}
+              {th("margin_pct", t("adm.ex.so.margin"), "r")}
+              {th("paid", t("adm.ex.so.paid"), "r")}
+              {th("balance", t("adm.ex.so.balance"), "r")}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.rows.map((r) => {
+              const voided = r.status === "voided";
+              const profit = r.profit == null ? null : Number(r.profit);
+              const stage = stageOf(r);
+              const board = byOrder?.get(r.order_id) || null;
+              const next = stage && stage !== "voided" ? nextForward(board) : null;
+              const current = sp.saleId && sp.saleId === r.sale_id || (sp.orderId && sp.orderId === r.order_id);
+              return (
+                <tr key={r.order_id || r.sale_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${current ? "sd-current" : ""} ${voided ? "so-voided" : ""} ${isStuck(r, stage) ? "so-stuck" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? (r.sale_id ? t("adm.sd.openHint") : t("adm.ex.so.openOrder")) : undefined}>
+                  <td data-label={t("adm.ex.so.number")}><b>{saleNumber(r, t)}</b>{storeLabel && <small className="muted so-store"> · {storeLabel(r)}</small>}</td>
+                  <td data-label={t("adm.ex.so.date")}>{when(r.sold_at)}</td>
+                  <td data-label={t("adm.ex.stg.col")} className="so-stage-cell">
+                    <span className="so-stage-wrap">
+                      <StageChip stage={stage} t={t} small title={board?.pos_delivered_at ? t("adm.sd.stage.posDelivered") : undefined} />
+                      {next && onAdvance && (
+                        <button type="button" className="so-adv adm-noprint" disabled={busyId === r.order_id} title={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })} aria-label={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })}
+                          onClick={(e) => { e.stopPropagation(); onAdvance(r, next); }}>
+                          <Icon name="arrowRight" size={11} />{stageLabel(next, t)}
+                        </button>
+                      )}
+                    </span>
+                  </td>
+                  <td data-label={t("adm.ex.so.customer")}>{r.customer || "—"}</td>
+                  <td data-label={t("adm.ex.so.seller")}>{r.seller_code ? <span className="adm-chip gold">{r.seller_code}</span> : <span className="muted">—</span>}</td>
+                  <td data-label={t("adm.rpt.col.brand")}>{saleBrand(r, t) || <span className="muted">—</span>}</td>
+                  <td data-label={t("adm.rpt.col.model")} title={r.items}>{saleModel(r) || <span className="muted">{r.items || "—"}</span>}</td>
+                  <td data-label={t("adm.rpt.col.color")}>{saleColor(r) || <span className="muted">—</span>}</td>
+                  <td data-label={t("adm.rpt.col.rx")}>{r.has_rx == null ? <span className="muted">—</span> : <span className={`adm-chip ${r.has_rx ? "ok" : "neutral"}`}>{saleRx(r, t)}</span>}</td>
+                  <td data-label={t("adm.rpt.col.own")}>{r.own_frame == null ? <span className="muted">—</span> : <span className={`adm-chip ${r.own_frame ? "warn" : "neutral"}`}>{saleOwn(r, t)}</span>}</td>
+                  <td data-label={t("adm.rpt.col.lens")} className="so-items muted" title={r.items}>{saleLens(r, { t, lang }) || "—"}</td>
+                  <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(r.total)}</b></td>
+                  <td data-label={t("adm.ex.so.discount")} className="r num muted">{Number(r.discount) > 0 ? `−${m(r.discount)}` : "—"}</td>
+                  <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon ? (costOf(r) == null ? "—" : m(costOf(r))) : hidden}{showEcon && r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>
+                  <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission ? (r.commission == null ? "—" : m(r.commission)) : hidden}</td>
+                  <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon ? (profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>) : hidden}</td>
+                  <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon ? <span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span> : hidden}</td>
+                  <td data-label={t("adm.ex.so.paid")} className="r num">{m(r.paid)}</td>
+                  <td data-label={t("adm.ex.so.balance")} className="r num">{Number(r.balance) > 0 ? <b className="neg">{m(r.balance)}</b> : <span className="muted">—</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="so-total">
+              <td data-label={t("adm.ex.so.total")} colSpan="10"><b>{t("adm.ex.so.total")}</b> <small className="muted">{t("adm.ex.so.rows", { n: totals.count })}</small></td>
+              <td className="so-items muted">{totals.units}</td>
+              <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(totals.total)}</b></td>
+              <td data-label={t("adm.ex.so.discount")} className="r num">{totals.discount > 0 ? `−${m(totals.discount)}` : "—"}</td>
+              <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon && totals.hasEcon ? <b>{m(totals.cost)}</b> : hidden}</td>
+              <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission && totals.hasCommission ? <b>{m(totals.commission)}</b> : hidden}</td>
+              <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon && totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : hidden}</td>
+              <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon && totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : hidden}</td>
+              <td data-label={t("adm.ex.so.paid")} className="r num"><b>{m(totals.paid)}</b></td>
+              <td data-label={t("adm.ex.so.balance")} className="r num"><b className={totals.balance > 0 ? "neg" : ""}>{m(totals.balance)}</b></td>
+            </tr>
+          </tfoot>
+        </table>
+      )}
       {sp.panel}
     </div>
   );
@@ -374,14 +600,62 @@ export function storeLabelFor(stores, t) {
 }
 
 /**
- * Standalone (pestaña "storeorders"): tienda, período y exportación propios.
- * `embedded` lo monta el Ejecutivo con `data` ya cargada y sin cabecera.
+ * Lista + etapas: lo que el Ejecutivo monta en «Pedidos y etapas» y la pestaña
+ * en solitario pinta bajo su barra. `data` (useStoreSales) y `stages`
+ * (useOrderStages) los carga quien monta (los comparte con sus KPI); `params`
+ * sigue el contrato de arriba (seller / stage / q / order); `onChanged` avisa a
+ * quien monta tras cobrar, entregar, anular o avanzar (recarga sus cifras).
  */
-export default function StoreOrders({ me, go, embedded = false, data: given, storeLabel: givenLabel, openSale }) {
+export function OrdersStagesView({ data, stages, storeLabel, params, me, compact = false, onChanged }) {
+  const { t } = useLang();
+  const { toast, confirm } = useFeedback();
+  const filters = useListFilters(params);
+  const [busyId, setBusyId] = useState(null);
+  // Vendedor y texto acotan la base (la tira cuenta sobre ella); la etapa acota la lista.
+  const base = useMemo(() => data.rows.filter((r) => (!filters.seller || String(r.seller_code || "").toUpperCase() === filters.seller) && matchesQuery(r, filters.q, t)), [data.rows, filters.seller, filters.q, t]);
+  const rows = useMemo(() => base.filter((r) => matchesStageFilter(stageOfRow(r, stages.byOrder), filters.stage)), [base, stages.byOrder, filters.stage]);
+  const changed = () => { stages.reload(); data.reload?.(); onChanged?.(); };
+  const advance = async (r, stage) => {
+    const st = STAGE_BY_KEY[stage];
+    const n = saleNumber(r, t);
+    if (!(await confirm({ title: t("adm.ex.stg.confirmTitle", { n, stage: t(st.label) }), message: t("adm.ex.stg.confirmBody", { action: t(st.action) }) }))) return;
+    setBusyId(r.order_id);
+    try {
+      const after = await setOrderStage(r.order_id, stage);
+      if (after) stages.patch(after); else stages.reload();
+      toast({ tone: "success", title: t("adm.ex.stg.moved", { n, stage: t(st.label) }) });
+      onChanged?.();
+    } catch (e) {
+      toast({ tone: "error", title: stageErrorText(t, e) });
+    } finally { setBusyId(null); }
+  };
+  return (
+    <div className="so-view">
+      <StageStrip rows={base} byOrder={stages.byOrder} stages={stages} filters={filters} compact={compact} />
+      <StoreOrdersTable data={data} rows={rows} storeLabel={storeLabel} compact={compact} me={me} byOrder={stages.byOrder} onAdvance={advance} onChanged={changed} busyId={busyId}
+        autoOpen={params?.order ? { id: String(params.order) } : null} />
+    </div>
+  );
+}
+
+/**
+ * Standalone (pestaña "storeorders"): tienda, período y exportación propios, y
+ * la misma vista de etapas + lista del Ejecutivo. `params`: contrato de arriba.
+ * `embedded` (compatibilidad) pinta solo la tabla con `data` ya cargada.
+ */
+export default function StoreOrders({ me, go, params = null, embedded = false, data: given, storeLabel: givenLabel, openSale }) {
   const { t, lang } = useLang();
   const sf = useStoreFilter(me);
   const per = usePeriod("month");
+  const pkey = paramsKey(params);
+  // store / period / from / to de los params → filtro global y período, una vez por salto.
+  useEffect(() => {
+    if (!params) return;
+    if (params.store) sf.setStoreId(params.store);
+    per.applyParams(params);
+  }, [pkey]); // eslint-disable-line react-hooks/exhaustive-deps
   const own = useStoreSales({ from: per.range.from, to: per.range.to, storeId: sf.storeId }, !embedded);
+  const stages = useOrderStages({ from: per.range.from, to: per.range.to, storeId: sf.storeId }, !embedded);
   const data = embedded && given ? given : own;
   const storeLabel = givenLabel || storeLabelFor(sf.stores, t);
   const ref = useRef(null);
@@ -390,27 +664,28 @@ export default function StoreOrders({ me, go, embedded = false, data: given, sto
   if (embedded) return <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} compact me={me} />;
   const scope = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb ? t("adm.ex.scope.web") : `${sf.store?.code || ""} ${sf.store?.name || ""}`.trim();
   const meta = `${scope} · ${per.range.from} → ${per.range.to}`;
+  const stageOf = (r) => stageOfRow(r, stages.byOrder);
   // PDF / Excel / CSV: el reporte formal (ReportDoc) con la lista completa, una línea por venta.
   const report = () => salesReportSpec({
-    rows: data.rows, totals: data.totals, access: data.access, t, lang, storeLabel, stores: sf.stores,
+    rows: data.rows, totals: data.totals, access: data.access, t, lang, storeLabel, stores: sf.stores, stageOf,
     scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from: per.range.from, to: per.range.to },
   });
   return (
     <div className="adm-section ex-root so-root">
       <div className="ex-head">
-        <h2>{t("adm.ex.so.title")}</h2>
+        <h2>{t("adm.ex.acc.stages")}</h2>
         <p>{t("adm.ex.so.sub")}</p>
       </div>
       <div className="ex-bar adm-noprint">
         <StoreFilter me={me} compact />
         <PeriodBar {...per} />
         <span className="ex-export">
-          <ExportMenu targetRef={ref} title={t("adm.ex.so.title")} name={t("adm.ex.so.exportName")} compact={false} meta={meta} report={report}
-            xlsx={() => ({ filename: `${t("adm.ex.so.exportName")}-${per.range.from}-${per.range.to}.xlsx`, sheets: salesSheets(data.rows, data.totals, { t, lang, storeLabel, access: data.access }) })} />
+          <ExportMenu targetRef={ref} title={t("adm.ex.acc.stages")} name={t("adm.ex.so.exportName")} compact={false} meta={meta} report={report}
+            xlsx={() => ({ filename: `${t("adm.ex.so.exportName")}-${per.range.from}-${per.range.to}.xlsx`, sheets: salesSheets(data.rows, data.totals, { t, lang, storeLabel, access: data.access, stageOf }) })} />
         </span>
       </div>
       <div ref={ref}>
-        <StoreOrdersTable data={data} storeLabel={sf.isAll ? storeLabel : null} onOpen={onOpen} me={me} />
+        <OrdersStagesView data={data} stages={stages} storeLabel={sf.isAll ? storeLabel : null} params={params} me={me} />
       </div>
     </div>
   );

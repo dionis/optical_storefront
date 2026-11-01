@@ -1,40 +1,53 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { listSessions, openSession } from "../../../../lib/cash";
+import { cleanText } from "../../../../lib/establishments";
 import { posHandler, posScope, scopeStoreIds, sellableStore } from "../../../../lib/pos-route";
 import { PosError } from "../../../../lib/pos-data";
-import { sellerTillProblem } from "../../../../lib/pos";
 
 /**
- * CAJA (HU-32).
+ * CAJA (HU-32) — the STORE's register (owner, 2026-11: one opening and one
+ * closing per store, not per till).
  *
- *   GET  /admin/pos/cash-sessions?store= — cajas abiertas y recientes de las tiendas del usuario.
- *   POST /admin/pos/cash-sessions — { store, terminal_id, opening } abre la caja
- *        de un punto de venta con el fondo inicial. Una abierta por punto de venta.
+ *   GET  /admin/pos/cash-sessions?store= — the open / pending / recent sessions
+ *        of the user's stores, each with its ledger (movements with who, till,
+ *        sale) so the panel needs one call.
+ *   POST /admin/pos/cash-sessions — { store, opening, signature, note? } opens
+ *        the store's register with the float and the opener's initials
+ *        (2–4 letters, `cash_signature_required`). One open per store
+ *        (`cash_already_open`). Every role that sells at the store may open:
+ *        the owner's rule is that the opening is the operator's first act —
+ *        and the first cash payment opens it on its own anyway.
  *
- * El efectivo cobrado en ese punto de venta mientras está abierta entra solo.
+ * Each opening is audited (cash.open) and mailed to the owner (cash-emails.ts).
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
     const scope = await posScope(req);
     const q = req.query as Record<string, string | undefined>;
     const ids = q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope);
-    const sessions = ids && !ids.length ? [] : await listSessions(req.scope, ids);
-    // A counter seller sees only their own till's register, not the other tills' counts.
-    const own = !scope.is_admin && scope.role === "seller" ? scope.seller?.terminal_id ?? "" : null;
-    res.json({ sessions: own === null ? sessions : sessions.filter((s) => s.terminal_id === own) });
+    const take = Math.min(200, Math.max(1, Number(q.limit) || 30));
+    const sessions = ids && !ids.length ? [] : await listSessions(req.scope, ids, take);
+    res.json({ sessions });
   });
 }
 
-export async function POST(req: AuthenticatedMedusaRequest<{ store?: string; terminal_id?: string; opening?: unknown }>, res: MedusaResponse): Promise<void> {
+type Body = { store?: string; establishment_id?: string; opening?: unknown; signature?: unknown; note?: string; terminal_id?: string };
+
+export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaResponse): Promise<void> {
   await posHandler(req, res, async () => {
     const scope = await posScope(req);
-    const body = (req.body ?? {}) as { store?: string; terminal_id?: string; opening?: unknown };
-    const store = await sellableStore(req, scope, body.store);
-    // A counter seller opens only the register of their own till.
-    const till = sellerTillProblem(scope, store.id, String(body.terminal_id ?? ""));
-    if (till) throw new PosError(till, 403);
+    const body = (req.body ?? {}) as Body;
+    const store = await sellableStore(req, scope, body.store ?? body.establishment_id);
     const opening = Number(body.opening ?? 0);
     if (!Number.isFinite(opening) || opening < 0 || opening > 100000) throw new PosError("bad_payment");
-    res.json({ session: await openSession(req.scope, { establishmentId: store.id, terminalId: String(body.terminal_id ?? ""), openingCents: Math.round(opening * 100), actorId: scope.user_id }) });
+    const session = await openSession(req.scope, {
+      establishmentId: store.id,
+      openingCents: Math.round(opening * 100),
+      actorId: scope.user_id,
+      signature: typeof body.signature === "string" ? body.signature : "",
+      note: cleanText(body.note, 200),
+      terminalId: typeof body.terminal_id === "string" && body.terminal_id ? body.terminal_id : scope.seller?.terminal_id ?? null,
+    });
+    res.json({ session });
   });
 }

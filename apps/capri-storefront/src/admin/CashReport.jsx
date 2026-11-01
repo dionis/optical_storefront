@@ -1,7 +1,10 @@
 // Dónde se usa: Caja → «Movimientos» (PosCash.jsx). Todo lo cobrado por método
-// de pago, las entradas y salidas de efectivo con su motivo, los arqueos y la
-// serie por día del periodo. El servidor (GET /admin/pos/cash-report) acota por
-// rol: aquí solo se elige periodo, tienda y persona dentro de lo permitido.
+// de pago, el libro de caja (cobros en efectivo, devoluciones, fondo inicial y
+// las entradas y salidas manuales con su motivo), los arqueos con sus firmas y
+// estado, y la serie por día del periodo. El servidor (GET /admin/pos/cash-report)
+// acota por rol: aquí solo se elige periodo, tienda y persona dentro de lo
+// permitido; motivo y caja se filtran en el navegador. Cada movimiento abre
+// CashMovementPanel.jsx con todo el detalle (quién, cuándo, dónde, venta…).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
@@ -15,9 +18,13 @@ import "./cash-report.css";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
+import { useSalePanel } from "./SaleDetailPanel.jsx";
+import { useMovementPanel } from "./CashMovementPanel.jsx";
+import "./cash.css";
 
 const PERIODS = ["today", "week", "month", "year", "range"];
-const CATEGORIES = ["supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
+/** Automatic ledger lines first (what the register wrote), then the reasons a person picks (CASH_CATEGORIES). */
+const CATEGORIES = ["sale_payment", "sale_refund", "opening_float", "supplier_payment", "expense", "owner_withdrawal", "bank_deposit", "change_fund", "refund", "correction", "other"];
 
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -65,6 +72,7 @@ export default function CashReport({ ctx, me }) {
   const storeId = isAll || isWeb ? "" : globalId;
   const [personId, setPersonId] = useState("");
   const [cat, setCat] = useState("");
+  const [till, setTill] = useState("");
   const [data, setData] = useState(null);
   const [people, setPeople] = useState([]);
   const [error, setError] = useState(null);
@@ -80,6 +88,8 @@ export default function CashReport({ ctx, me }) {
   const catLabel = (c) => t(c ? `adm.cash.cat.${c}` : "adm.cash.cat.none");
   const storeLabel = (id) => { const s = stores.find((x) => x.id === id); return s ? `${s.code} · ${s.name}` : id || "—"; };
   const personLabel = (p) => (p ? `${p.name}${p.code ? ` (${p.code})` : ""}` : "—");
+  const sp = useSalePanel({ me, ctx });
+  const mp = useMovementPanel({ stores, openSale: sp.open });
 
   const pick = (key) => { setPeriod(key); if (key !== "range") setRange(periodRange(key)); };
 
@@ -104,16 +114,21 @@ export default function CashReport({ ctx, me }) {
   }, [range.from, range.to, storeId, personId]);
 
   const totals = data?.totals;
-  const movements = useMemo(() => (data?.movements || []).filter((x) => !cat || (x.category || "none") === cat), [data, cat]);
+  const movements = useMemo(() => (data?.movements || []).filter((x) => (!cat || (x.category || "none") === cat) && (!till || (x.terminal_code || "—") === till)), [data, cat, till]);
   const catCounts = useMemo(() => {
     const out = {};
     for (const x of data?.movements || []) { const k = x.category || "none"; out[k] = (out[k] || 0) + 1; }
     return out;
   }, [data]);
+  const tillCounts = useMemo(() => {
+    const out = {};
+    for (const x of data?.movements || []) { const k = x.terminal_code || "—"; out[k] = (out[k] || 0) + 1; }
+    return out;
+  }, [data]);
   // Cabeceras que ordenan (useSortable.js); los pies de totales van aparte y quedan abajo.
   const methodsSorted = useSortable(data?.by_method || [], { id: "cash-methods", defaultKey: "net_cents", defaultDir: "desc", deps: [lang], getters: { method: methodLabel } });
-  const movesSorted = useSortable(movements, { id: "cash-moves", defaultKey: "at", defaultDir: "desc", deps: [lang], getters: { kind: (x) => t(`adm.cash.mv.${x.kind}`), category: (x) => catLabel(x.category), who: (x) => personLabel(x.by), amount: (x) => (x.kind === "out" ? -x.amount_cents : x.amount_cents) } });
-  const sessionsSorted = useSortable(data?.sessions || [], { id: "cash-sessions", defaultKey: "opened_at", defaultDir: "desc" });
+  const movesSorted = useSortable(movements, { id: "cash-moves", defaultKey: "at", defaultDir: "desc", deps: [lang], getters: { kind: (x) => t(`adm.cash.mv.${x.kind}`), category: (x) => catLabel(x.category), who: (x) => personLabel(x.by), sale: (x) => (x.sale_id ? x.note || "" : ""), amount: (x) => (x.kind === "out" ? -x.amount_cents : x.amount_cents) } });
+  const sessionsSorted = useSortable(data?.sessions || [], { id: "cash-sessions", defaultKey: "opened_at", defaultDir: "desc", deps: [lang], getters: { opened_by: (s) => personLabel(s.opened_by), closed_by: (s) => personLabel(s.closed_by), status: (s) => t(`adm.cash.status.${s.status}`) } });
   const daysSorted = useSortable(data?.series || [], { id: "cash-days", defaultKey: "date", defaultDir: "asc" });
   const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
   const periodText = `${range.from} → ${range.to}`;
@@ -172,7 +187,8 @@ export default function CashReport({ ctx, me }) {
           { header: t("adm.cash.rep.till"), key: "terminal_code" },
           { header: t("adm.cash.rep.type"), get: (r) => t(`adm.cash.mv.${r.kind}`) },
           { header: t("adm.cash.category"), get: (r) => catLabel(r.category), width: 20 },
-          { header: t("adm.cash.rep.note"), key: "note", width: 40 },
+          { header: t("adm.cash.sale"), get: (r) => (r.sale_id ? r.note || "" : ""), width: 14 },
+          { header: t("adm.cash.rep.note"), get: (r) => (r.sale_id ? "" : r.note || ""), width: 40 },
           { header: t("adm.cash.rep.who"), get: (r) => personLabel(r.by), width: 22 },
           { header: t("adm.cash.rep.amount"), get: (r) => (r.kind === "out" ? -d(r.amount_cents) : d(r.amount_cents)), type: "money" },
         ],
@@ -189,6 +205,9 @@ export default function CashReport({ ctx, me }) {
           { header: t("adm.cash.expected"), get: (r) => (r.expected_cents == null ? "" : d(r.expected_cents)), type: "money" },
           { header: t("adm.cash.counted"), get: (r) => (r.counted_cents == null ? "" : d(r.counted_cents)), type: "money" },
           { header: t("adm.cash.diffCol"), get: (r) => (r.diff_cents == null ? "" : d(r.diff_cents)), type: "money" },
+          { header: t("adm.cash.openedBy"), get: (r) => `${personLabel(r.opened_by)}${r.opened_signature ? ` · ${r.opened_signature}` : ""}`, width: 24 },
+          { header: t("adm.cash.closedBy"), get: (r) => `${personLabel(r.closed_by)}${r.closed_signature ? ` · ${r.closed_signature}` : ""}`, width: 24 },
+          { header: t("adm.cash.statusCol"), get: (r) => `${t(`adm.cash.status.${r.status}`)}${r.approval_signature ? ` · ${personLabel(r.approved_by)} · ${r.approval_signature}` : ""}`, width: 24 },
           { header: t("adm.cash.rep.note"), key: "note", width: 30 },
         ],
         rows: data.sessions,
@@ -280,34 +299,43 @@ export default function CashReport({ ctx, me }) {
             ) : <div className="cr-empty">{t("adm.cash.rep.empty")}</div>}
           </Acc>
 
-          <Acc icon="history" title={t("adm.cash.rep.manual")} count={t("adm.cash.rep.nMovements", { n: data.movements.length })}
+          <Acc icon="history" title={t("adm.cash.ledger")} count={t("adm.cash.rep.nMovements", { n: data.movements.length })}
             sum={<><span className="cr-pos">+{m(totals.movements_in_cents)}</span><span className="cr-neg">−{m(totals.movements_out_cents)}</span></>}>
             {data.movements.length > 0 && (
-              <span className="cr-chips adm-noprint">
+              <span className="cr-chips adm-noprint" role="group" aria-label={t("adm.cash.category")}>
                 <button type="button" className={`cr-chip cat ${!cat ? "on" : ""}`} onClick={() => setCat("")}>{t("adm.cash.rep.all")} · {data.movements.length}</button>
                 {[...CATEGORIES, "none"].filter((c) => catCounts[c]).map((c) => (
                   <button key={c} type="button" className={`cr-chip cat ${cat === c ? "on" : ""}`} onClick={() => setCat(cat === c ? "" : c)}>{catLabel(c === "none" ? null : c)} · {catCounts[c]}</button>
                 ))}
               </span>
             )}
+            {Object.keys(tillCounts).length > 1 && (
+              <span className="cr-chips adm-noprint" role="group" aria-label={t("adm.cash.rep.till")}>
+                {Object.keys(tillCounts).sort().map((c) => (
+                  <button key={c} type="button" className={`cr-chip cat ${till === c ? "on" : ""}`} onClick={() => setTill(till === c ? "" : c)}><Icon name="receipt" size={11} /> {c} · {tillCounts[c]}</button>
+                ))}
+              </span>
+            )}
+            <p className="cash-hint adm-noprint">{t("adm.cash.rep.ledgerHint")}</p>
             {data.truncated && <div className="cr-trunc">{t("adm.cash.rep.truncated", { n: data.movements.length })}</div>}
             {movements.length ? (
-              <table className="adm-table responsive">
-                <thead><tr>{sth(movesSorted, "at", t("adm.cash.rep.when"))}{sth(movesSorted, "terminal_code", t("adm.cash.rep.till"))}{sth(movesSorted, "kind", t("adm.cash.rep.type"))}{sth(movesSorted, "category", t("adm.cash.category"))}{sth(movesSorted, "note", t("adm.cash.rep.note"))}{sth(movesSorted, "who", t("adm.cash.rep.who"))}{sth(movesSorted, "amount", t("adm.cash.rep.amount"), "r")}</tr></thead>
+              <table className="adm-table responsive cash-ledger">
+                <thead><tr>{sth(movesSorted, "at", t("adm.cash.rep.when"))}{sth(movesSorted, "terminal_code", t("adm.cash.rep.till"))}{sth(movesSorted, "kind", t("adm.cash.rep.type"))}{sth(movesSorted, "category", t("adm.cash.category"))}{sth(movesSorted, "sale", t("adm.cash.sale"))}{sth(movesSorted, "note", t("adm.cash.rep.note"))}{sth(movesSorted, "who", t("adm.cash.rep.who"))}{sth(movesSorted, "amount", t("adm.cash.rep.amount"), "r")}</tr></thead>
                 <tbody>
                   {movesSorted.rows.map((x) => (
-                    <tr key={x.id}>
+                    <tr key={x.id} tabIndex={0} onClick={() => mp.open(x)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); mp.open(x); } }} title={t("adm.cash.rowHint")}>
                       <td data-label={t("adm.cash.rep.when")}>{when(x.at)}</td>
                       <td data-label={t("adm.cash.rep.till")}>{x.terminal_code || "—"}{!storeId && stores.length > 1 && <small className="cr-note"> · {storeLabel(x.establishment_id)}</small>}</td>
-                      <td data-label={t("adm.cash.rep.type")}><span className={`cr-kind ${x.kind}`}>{t(`adm.cash.mv.${x.kind}`)}</span></td>
+                      <td data-label={t("adm.cash.rep.type")}><span className={`cr-kind ${x.kind}`}>{t(`adm.cash.mv.${x.kind}`)}</span>{x.auto && <span className="cash-auto">{t("adm.cash.panel.auto")}</span>}</td>
                       <td data-label={t("adm.cash.category")} className="cr-cat">{catLabel(x.category)}</td>
-                      <td data-label={t("adm.cash.rep.note")} className="wrap cr-note">{x.note || "—"}</td>
+                      <td data-label={t("adm.cash.sale")}>{x.sale_id ? <code>{x.note}</code> : "—"}</td>
+                      <td data-label={t("adm.cash.rep.note")} className="wrap cr-note">{x.sale_id ? "—" : x.note || "—"}</td>
                       <td data-label={t("adm.cash.rep.who")} className="cr-who">{x.by ? <>{x.by.name}{x.by.code && <> <code>{x.by.code}</code></>}</> : "—"}</td>
                       <td data-label={t("adm.cash.rep.amount")} className={`r num ${x.kind === "out" ? "cr-neg" : "cr-pos"}`}><b>{x.kind === "out" ? "−" : "+"}{m(x.amount_cents)}</b></td>
                     </tr>
                   ))}
                 </tbody>
-                {cat && <tfoot><tr><td colSpan="6">{catLabel(cat === "none" ? null : cat)}</td><td className="r num">{m(movements.reduce((s, x) => s + (x.kind === "out" ? -x.amount_cents : x.amount_cents), 0))}</td></tr></tfoot>}
+                {(cat || till) && <tfoot><tr><td colSpan="7">{[cat ? catLabel(cat === "none" ? null : cat) : "", till].filter(Boolean).join(" · ")}</td><td className="r num">{m(movements.reduce((s, x) => s + (x.kind === "out" ? -x.amount_cents : x.amount_cents), 0))}</td></tr></tfoot>}
               </table>
             ) : <div className="cr-empty">{t("adm.cash.rep.empty")}</div>}
           </Acc>
@@ -316,18 +344,23 @@ export default function CashReport({ ctx, me }) {
             sum={<><span>{t("adm.cash.diffCol")}</span><b className={tone(totals.sessions_diff_cents) === "" ? "" : "cr-neg"}>{m(totals.sessions_diff_cents)}</b></>} open={data.sessions.length > 0}>
             {data.sessions.length ? (
               <table className="adm-table responsive">
-                <thead><tr>{sth(sessionsSorted, "opened_at", t("adm.cash.openedAt"))}{sth(sessionsSorted, "closed_at", t("adm.cash.rep.closedAt"))}{sth(sessionsSorted, "terminal_code", t("adm.cash.rep.till"))}{sth(sessionsSorted, "opening_cents", t("adm.cash.opening"), "r")}{sth(sessionsSorted, "expected_cents", t("adm.cash.expected"), "r")}{sth(sessionsSorted, "counted_cents", t("adm.cash.counted"), "r")}{sth(sessionsSorted, "diff_cents", t("adm.cash.diffCol"), "r")}</tr></thead>
+                <thead><tr>{sth(sessionsSorted, "opened_at", t("adm.cash.openedAt"))}{sth(sessionsSorted, "closed_at", t("adm.cash.rep.closedAt"))}{sth(sessionsSorted, "opened_by", t("adm.cash.openedBy"))}{sth(sessionsSorted, "closed_by", t("adm.cash.closedBy"))}{sth(sessionsSorted, "opening_cents", t("adm.cash.opening"), "r")}{sth(sessionsSorted, "expected_cents", t("adm.cash.expected"), "r")}{sth(sessionsSorted, "counted_cents", t("adm.cash.counted"), "r")}{sth(sessionsSorted, "diff_cents", t("adm.cash.diffCol"), "r")}{sth(sessionsSorted, "status", t("adm.cash.statusCol"))}</tr></thead>
                 <tbody>
                   {sessionsSorted.rows.map((s) => (
                     <tr key={s.id}>
-                      <td data-label={t("adm.cash.openedAt")}>{when(s.opened_at)}</td>
+                      <td data-label={t("adm.cash.openedAt")}>{when(s.opened_at)}{!storeId && stores.length > 1 && <small className="cr-note"> · {storeLabel(s.establishment_id)}</small>}{s.terminal_code && <small className="cr-note"> · {s.terminal_code}</small>}</td>
                       <td data-label={t("adm.cash.rep.closedAt")}>{s.closed_at ? when(s.closed_at) : <span className="adm-chip ok">{t("adm.cash.rep.stillOpen")}</span>}</td>
-                      <td data-label={t("adm.cash.rep.till")}>{s.terminal_code || "—"}{!storeId && stores.length > 1 && <small className="cr-note"> · {storeLabel(s.establishment_id)}</small>}</td>
+                      <td data-label={t("adm.cash.openedBy")} className="cr-who">{personLabel(s.opened_by)} <span className="cash-sig">{s.opened_signature || "—"}</span></td>
+                      <td data-label={t("adm.cash.closedBy")} className="cr-who">{s.closed_by ? <>{personLabel(s.closed_by)} <span className="cash-sig">{s.closed_signature || "—"}</span></> : "—"}</td>
                       <td className="r num" data-label={t("adm.cash.opening")}>{m(s.opening_cents)}</td>
                       <td className="r num" data-label={t("adm.cash.expected")}>{s.expected_cents == null ? "—" : m(s.expected_cents)}</td>
                       <td className="r num" data-label={t("adm.cash.counted")}>{s.counted_cents == null ? "—" : m(s.counted_cents)}</td>
                       <td className={`r num ${s.diff_cents ? (s.diff_cents < 0 ? "cr-neg" : "cr-pos") : ""}`} data-label={t("adm.cash.diffCol")}>
                         <b>{s.diff_cents == null ? "—" : m(s.diff_cents)}</b>{s.note && <small className="cr-note"> · {s.note}</small>}
+                      </td>
+                      <td data-label={t("adm.cash.statusCol")}>
+                        <span className={`adm-chip cash-status-chip ${s.status}`}>{t(`adm.cash.status.${s.status}`)}</span>
+                        {s.approval_signature && <small className="cr-note"> · {t("adm.cash.approvedBy", { who: personLabel(s.approved_by) })} <span className="cash-sig">{s.approval_signature}</span></small>}
                       </td>
                     </tr>
                   ))}
@@ -365,6 +398,8 @@ export default function CashReport({ ctx, me }) {
           </Acc>
         </div>
       )}
+      {mp.panel}
+      {sp.panel}
     </div>
   );
 }

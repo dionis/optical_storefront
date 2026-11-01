@@ -1,16 +1,11 @@
 /* Estado de cuenta por tienda (StoreStatement.jsx). Tokens --adm-* del panel,
    acordeones .cost-accordion de admin.css; aquí solo lo propio del documento:
-   barra de filtros fija, cabecera tipo factura, franja de totales y la hoja
+   cabecera tipo factura, franja de totales y la hoja
    de impresión (carta vertical, cabecera de tabla repetida por página). */
 
-.stmt-bar { position: sticky; top: var(--adm-top-h, 56px); z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 12px; background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: 12px; box-shadow: 0 4px 14px rgba(15, 36, 64, .06); }
-.stmt-bar select, .stmt-bar input[type="date"] { height: 32px; padding: 0 8px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-ink); font: inherit; font-size: 13px; }
-.stmt-bar select { max-width: 260px; }
-.stmt-chips { display: inline-flex; gap: 4px; padding: 3px; background: var(--adm-bg); border-radius: 9px; }
-.stmt-chips button { border: 0; background: transparent; color: var(--adm-muted); font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 7px; cursor: pointer; }
-.stmt-chips button.on { background: var(--adm-surface); color: var(--adm-navy); box-shadow: 0 1px 3px rgba(15, 36, 64, .12); }
-.stmt-range { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--adm-muted); }
-.stmt-bar-actions { margin-left: auto; display: inline-flex; gap: 6px; }
+/* Tienda, período y PDF/Excel viven en la barra de filtros global del panel
+   (GlobalFilterBar.jsx); aquí solo queda la línea que dice el período cubierto. */
+.stmt-period { display: inline-flex; align-items: center; gap: 6px; margin: -4px 0 10px; font-weight: 600; }
 
 /* ── El documento ─────────────────────────────────────────────────────── */
 .stmt-doc { background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: var(--adm-radius); padding: clamp(14px, 2vw, 28px); color: var(--adm-ink); }
@@ -70,14 +65,13 @@
   .stmt-head { grid-template-columns: 1fr; }
   .stmt-meta { text-align: left; }
   .stmt-foot { grid-template-columns: 1fr; }
-  .stmt-bar-actions { margin-left: 0; }
 }
 
 /* ── Impresión (PDF): carta vertical, 10.5–11px, cabecera repetida ───── */
 @media print {
   @page { size: letter portrait; }
   #adm-print-root .stmt-doc { border: 0; padding: 0; color: #17191f; font-size: 10.5px; }
-  #adm-print-root .stmt-bar, #adm-print-root .stmt-acc .cost-acc-arrow, #adm-print-root button { display: none !important; }
+  #adm-print-root .stmt-acc .cost-acc-arrow, #adm-print-root button { display: none !important; }
   #adm-print-root .stmt-head { border-bottom-color: #17191f; break-inside: avoid; }
   #adm-print-root .stmt-store { background: #f3f4f6; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #adm-print-root .stmt-kpis { grid-template-columns: repeat(4, 1fr); gap: 4px; break-inside: avoid; }

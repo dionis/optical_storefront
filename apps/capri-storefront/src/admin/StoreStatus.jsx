@@ -19,7 +19,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { useRegisterExport } from "./GlobalFilterBar.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import { exportReport } from "./ReportDoc.jsx";
 import { useSortable } from "./useSortable.js";
@@ -101,6 +102,11 @@ export default function StoreStatus({ go, tabs = [], me }) {
   const sellersSorted = useSortable(s?.sellers || [], { id: "ss-sellers", defaultKey: "today_total", defaultDir: "desc", getters: { kind: (v) => (v.has_user ? 1 : 0) } });
   const recentSorted = useSortable(s?.recent || [], { id: "ss-recent", defaultKey: "created_at", defaultDir: "desc", getters: { status: (r) => (r.status === "voided" ? 2 : r.delivered ? 1 : 0) } });
   const sth = (sorted, col, label, align = "") => <SortTh col={col} sort={sorted.sort} onSort={sorted.toggle} align={align}>{label}</SortTh>;
+  // El reporte (PDF / Excel / CSV) sale por la barra global del panel; `report`
+  // se define más abajo (necesita los datos), así que se lee por ref al pulsar.
+  const reportRef = useRef(null);
+  const run = (kind) => () => { if (reportRef.current) exportReport(kind, reportRef.current()); };
+  useRegisterExport(s ? { pdf: run("pdf"), xlsx: run("xlsx"), csv: run("csv"), label: t("adm.tab.storestatus") } : null);
 
   if (state === "loading" && !data) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (state === "error" && !data) {
@@ -188,6 +194,7 @@ export default function StoreStatus({ go, tabs = [], me }) {
       landscape: true,
     };
   };
+  reportRef.current = report;
 
   const kpi = (key, { label, value, note, tone, onClick, hero, on }) => (
     <button type="button" key={key} className={`adm-fit-kpi ${hero ? "hero" : ""} ${on ? "on" : ""}`} onClick={onClick} disabled={!onClick}>
@@ -205,8 +212,8 @@ export default function StoreStatus({ go, tabs = [], me }) {
           <h2>{t("adm.tab.storestatus")}</h2>
           <p className="adm-fit-sub">{t("adm.ss.sub")}</p>
         </div>
+        {/* La tienda y el reporte (PDF/Excel/CSV) van en la barra de filtros global del panel. */}
         <div className="adm-fit-tools adm-noprint">
-          <StoreFilter me={me} />
           {/* Con «Todas» o la online se enseña la primera tienda: se dice cuál. */}
           {(!globalStore || globalStore.id !== s.store.id) && (
             <span className="scr-store-note" title={data.stores.length > 1 ? t("adm.scr.storeHint") : undefined}>
@@ -214,11 +221,6 @@ export default function StoreStatus({ go, tabs = [], me }) {
             </span>
           )}
           <button type="button" className="btn-xs" onClick={() => load(storeId, { force: true })} disabled={state === "loading"} aria-label={t("adm.my.refresh")} title={t("adm.my.refresh")}><Icon name="refresh" size={13} /></button>
-          <span className="adm-fit-export adm-export-menu">
-            <button type="button" className="btn-xs" title={t("adm.ui.pdf")} onClick={() => exportReport("pdf", report())}><Icon name="printer" size={14} />PDF</button>
-            <button type="button" className="btn-xs" title={t("adm.ui.xlsx")} onClick={() => exportReport("xlsx", report())}><Icon name="sheet" size={14} />Excel</button>
-            <button type="button" className="btn-xs" title={t("adm.ui.csv")} onClick={() => exportReport("csv", report())}><Icon name="excel" size={14} />CSV</button>
-          </span>
         </div>
       </div>
 

@@ -51,6 +51,10 @@
 //   dropZero: { key }                      // quita las filas cuyo valor en esa columna es 0 o vacío, y lo dice
 //                                          // en una nota al pie: «N sin ventas en el período»
 //
+//   Una columna con `hidden: true` no sale en ningún formato (PDF, Excel ni CSV):
+//   es lo que DataTable.jsx (tableSpecFrom) marca cuando quien mira apagó esa
+//   columna con el selector «Columnas» — el reporte lleva lo mismo que la pantalla.
+//
 //   El reporte de vendedores de todas las tiendas, por ejemplo:
 //   { …, groupBy: { get: (r) => r.establishment_id, label: storeLabel, colorOf, order: "total-desc", subtotalKeys: ["sales"] },
 //     sortBy: { key: "sales", dir: "desc" }, dropZero: { key: "sales" } }
@@ -194,6 +198,8 @@ function colWidths(cols) {
   return w.map((x) => Math.round((x / sum) * 1000) / 10);
 }
 
+/** Las columnas que van al reporte: sin las apagadas (`hidden`, selector «Columnas» de DataTable). */
+export const shownCols = (cols) => (cols || []).filter((c) => c && !c.hidden);
 const colByKey = (cols, key) => cols.find((c) => c.key === key) || null;
 const valueOf = (cols, key, r) => { const c = colByKey(cols, key); return c ? rawOf(c, r) : r?.[key]; };
 const tr0 = (t) => (k, p) => (typeof t === "function" ? t(k, p) : k);
@@ -251,7 +257,7 @@ function tableHtml(tb, lang, t) {
   const tr = tr0(t);
   const { rows, groups, dropped } = prepareTable(tb, t);
   // Con bloques por grupo, la columna que repite el grupo (`groupHide`, p. ej. «Tienda») sobra en el papel; Excel y CSV la conservan.
-  const cols = (tb.cols || []).filter((c) => !(groups && c.groupHide));
+  const cols = shownCols(tb.cols).filter((c) => !(groups && c.groupHide));
   const widths = colWidths(cols);
   const align = (c) => (c.align === "r" || (!c.align && (c.type === "money" || c.type === "int" || c.type === "pct")) ? "r" : c.align === "c" ? "c" : "");
   const num = (c) => (c.type === "money" || c.type === "int" || c.type === "pct" ? "num" : "");
@@ -394,13 +400,14 @@ export function reportSheets(spec) {
   for (const tb of spec.tables || []) {
     const name = tb.sheet || tb.title || tr("adm.rpt.detail");
     const { rows, groups } = prepareTable(tb, t);
-    const cols = tb.cols.map((c, i) => ({ header: c.header, key: c.key, get: (r) => (r && r.__rp ? r.__rp[i] : rawOf(c, r)), type: c.type, width: c.width }));
+    const shown = shownCols(tb.cols);
+    const cols = shown.map((c, i) => ({ header: c.header, key: c.key, get: (r) => (r && r.__rp ? r.__rp[i] : rawOf(c, r)), type: c.type, width: c.width }));
     if (groups && tb.groupBy.groupSheets) {
       for (const g of groups) sheets.push({ name: g.label || name, cols, rows: g.rows, totals: g.subtotals, totalsLabel: tr("adm.rpt.subtotal", { group: g.label }) });
       continue;
     }
     const flat = groups
-      ? groups.flatMap((g) => [syntheticRow(tb.cols, `${g.label} · ${g.countText}`), ...g.rows, syntheticRow(tb.cols, tr("adm.rpt.subtotal", { group: g.label }), g.subtotals)])
+      ? groups.flatMap((g) => [syntheticRow(shown, `${g.label} · ${g.countText}`), ...g.rows, syntheticRow(shown, tr("adm.rpt.subtotal", { group: g.label }), g.subtotals)])
       : rows;
     sheets.push({ name, cols, rows: flat, totals: tb.totals, totalsLabel: tb.totalsLabel });
   }
@@ -416,7 +423,8 @@ export function reportCsv(spec) {
   const main = (spec.tables || []).find((tb) => tb.main) || (spec.tables || [])[0];
   const head = "\ufeff" + lines.join("\n");
   if (!main) return head;
-  const cols = main.cols.map((c) => [c.header, (r) => rawOf(c, r)]);
+  const shown = shownCols(main.cols);
+  const cols = shown.map((c) => [c.header, (r) => rawOf(c, r)]);
   const { rows, groups, dropped } = prepareTable(main, spec.t);
   const strip = (csv) => csv.replace(/^\ufeff/, "").split("\n").slice(1).join("\n");
   const headerLine = rowsToCsv(cols, []).replace(/^\ufeff/, "");
@@ -425,7 +433,7 @@ export function reportCsv(spec) {
     body = groups.map((g) => [
       csvEsc(`${g.label} · ${g.countText}`),
       strip(rowsToCsv(cols, g.rows)),
-      main.cols.map((c, i) => csvEsc(i === 0 ? tr("adm.rpt.subtotal", { group: g.label }) : c.key != null ? g.subtotals[c.key] ?? "" : "")).join(","),
+      shown.map((c, i) => csvEsc(i === 0 ? tr("adm.rpt.subtotal", { group: g.label }) : c.key != null ? g.subtotals[c.key] ?? "" : "")).join(","),
     ].filter(Boolean).join("\n")).join("\n");
   } else body = strip(rowsToCsv(cols, rows));
   const foot = dropped ? `\n${csvEsc(tr("adm.rpt.dropZero", { n: dropped }))}` : "";

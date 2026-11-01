@@ -1,7 +1,9 @@
 // Dónde se usa: pestaña Vendedores de /admin — alta y gestión de vendedores,
 // enlace de referido para redes sociales, enlace a su propio panel (/vendedor)
-// y ventas/comisión por vendedor. Backend: /admin/sellers*.
-import { useEffect, useMemo, useState } from "react";
+// y ventas/comisión por vendedor. Backend: /admin/sellers*. La tienda y el
+// período (ventas y comisión del ranking) son los globales de la barra de
+// filtros del panel; el ranking se exporta desde esa misma barra.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
@@ -19,16 +21,11 @@ import { SellerChannels, useSellerPanel } from "./SellerPanel.jsx";
 import { Card } from "./ui.jsx";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import "./screens.css";
 
-const ymd = (d) => new Date(d).toISOString().slice(0, 10);
-const RANGES = ["30d", "90d", "ytd", "all"];
-function rangeFrom(k) {
-  if (k === "all") return "";
-  if (k === "ytd") return `${new Date().getFullYear()}-01-01`;
-  return ymd(Date.now() - ({ "30d": 30, "90d": 90 }[k] || 30) * 864e5);
-}
 const EMPTY = { name: "", email: "", phone: "", address: "", code: "", commission_pct: "10", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
 // Un vendedor activo siempre tiene tienda y un único punto de venta de esa
 // tienda; inactivo puede no tener ninguno. El servidor aplica la misma regla
@@ -162,7 +159,8 @@ export default function Sellers({ onChanged, go, me }) {
   const [terminals, setTerminals] = useState([]);
   const [stats, setStats] = useState(null);
   const [state, setState] = useState("loading");
-  const [range, setRange] = useState("30d");
+  // Período global del panel: ventas y comisión del ranking entre `from` y `to`.
+  const { from, to, label: periodLabel } = usePeriodFilter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
   const [addressConflict, setAddressConflict] = useState(null);
@@ -170,17 +168,17 @@ export default function Sellers({ onChanged, go, me }) {
   const [q, setQ] = useState("");
   // El panel del vendedor: su resumen de inicio delante de la lista, con el mismo rango.
   const sp = useSellerPanel({ go, me });
-  // «Todo» no cabe en un rango del panel: los últimos diez años (el máximo de la analítica).
-  const openPanel = (x) => sp.open(x.code, { from: rangeFrom(range) || ymd(Date.now() - 3650 * 864e5), to: ymd(Date.now()), store: storeOnly });
+  const openPanel = (x) => sp.open(x.code, { from, to, store: storeOnly });
+  const rootRef = useRef(null);
 
   const load = () => {
     if (demo) { setState("demo"); return; }
     setState("loading");
-    Promise.all([fetchSellers(), fetchSellerStats({ from: rangeFrom(range) })])
+    Promise.all([fetchSellers(), fetchSellerStats({ from, to })])
       .then(([a, b]) => { setSellers((a.sellers || []).map(onThisOrigin)); setStats(b); setState("ok"); })
       .catch(() => setState("error"));
   };
-  useEffect(load, [range, demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [from, to, demo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (demo) return;
     fetchStores().then((r) => setStores(r.establishments || [])).catch(() => setStores([]));
@@ -204,6 +202,14 @@ export default function Sellers({ onChanged, go, me }) {
   const inStore = useMemo(() => (storeOnly ? new Set(sellers.filter((s) => s.establishment_id === storeOnly).map((s) => s.id)) : null), [sellers, storeOnly]);
   const statRows = useMemo(() => (stats?.sellers || []).filter((s) => !inStore || inStore.has(s.id)), [stats, inStore]);
   const totals = statRows.reduce((a, s) => ({ orders: a.orders + s.orders, revenue: a.revenue + s.revenue, commission: a.commission + s.commission }), { orders: 0, revenue: 0, commission: 0 });
+  // Exportar desde la barra global: el ranking (CSV / Excel) y la pantalla entera (PDF).
+  const rankCols = [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]];
+  const rankRows = statRows.filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue);
+  useRegisterExport(stats ? menuHandlers({
+    targetRef: rootRef, title: t("adm.sel.ranking"), name: "ranking-vendedores", meta: `${periodLabel(t)} · ${from} → ${to}`,
+    csv: { cols: rankCols, rows: rankRows },
+    xlsx: () => ({ filename: `ranking-vendedores-${from}-${to}.xlsx`, sheets: [{ name: t("adm.sel.ranking"), cols: [{ header: t("adm.sel.name"), key: "name", width: 24 }, { header: t("adm.sel.code"), key: "code", width: 10 }, { header: t("adm.kpi.orders"), key: "orders", type: "int" }, { header: t("adm.sel.sales"), key: "revenue", type: "money" }, { header: "%", key: "commission_pct", type: "pct" }, { header: t("adm.sel.commissions"), key: "commission", type: "money" }], rows: rankRows, totals: { orders: totals.orders, revenue: totals.revenue, commission: totals.commission }, totalsLabel: t("adm.sel.sales") }] }),
+  }) : null);
 
   const run = async (fn, okKey) => {
     setBusy(true);
@@ -228,12 +234,11 @@ export default function Sellers({ onChanged, go, me }) {
   };
 
   return (
-    <div className="adm-section">
+    <div className="adm-section" ref={rootRef}>
       <div className="adm-head-row">
         <h2>{t("adm.tab.sellers")}</h2>
+        {/* Tienda y período: barra de filtros global del panel (AdminShell). */}
         <div className="adm-orders-tools">
-          <StoreFilter me={me} />
-          <div className="adm-range">{RANGES.map((k) => <button key={k} className={range === k ? "on" : ""} onClick={() => setRange(k)}>{t(`adm.range.${k}`)}</button>)}</div>
           <label className="adm-find compact"><Icon name="search" size={15} /><input placeholder={t("adm.sel.searchPh")} value={q} onChange={(e) => setQ(e.target.value)} /></label>
           <button className="btn-sm primary" disabled={demo} onClick={() => { setCreating(true); setEditing(null); }}><Icon name="plus" size={14} />{t("adm.sel.new")}</button>
         </div>
@@ -268,12 +273,12 @@ export default function Sellers({ onChanged, go, me }) {
         )}
 
       {stats && statRows.length > 0 && (
-        <Card icon="sales" title={t("adm.sel.ranking")} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: [[t("adm.sel.name"), "name"], [t("adm.sel.code"), "code"], [t("adm.kpi.orders"), "orders"], [t("adm.sel.sales"), "revenue"], ["%", "commission_pct"], [t("adm.sel.commissions"), "commission"]], rows: statRows }}>
+        <Card icon="sales" title={`${t("adm.sel.ranking")} · ${periodLabel(t)}`} hint={t("adm.sel.rankingHint")} name="ranking-vendedores" style={{ marginTop: 16 }} csv={{ cols: rankCols, rows: statRows }}>
           <div className="adm-table-wrap">
             <table className="adm-table responsive">
               <thead><tr><th>#</th><th>{t("adm.sel.name")}</th><th>{t("adm.sel.code")}</th><th className="r">{t("adm.kpi.orders")}</th><th className="r">{t("adm.sel.sales")}</th><th className="r">%</th><th className="r">{t("adm.sel.commissions")}</th><th className="r">{t("adm.ex.sellers.share")}</th><th>{t("adm.sel.lastOrderCol")}</th></tr></thead>
               <tbody>
-                {statRows.filter((s) => s.orders > 0).sort((a, b) => b.revenue - a.revenue).map((s, i) => (
+                {rankRows.map((s, i) => (
                   <tr key={s.id} className={demo ? "" : "sp-rowlink"} onClick={demo ? undefined : () => openPanel(s)} title={demo ? undefined : t("adm.sp.open")}>
                     <td data-label="#">{i + 1}</td><td data-label={t("adm.sel.name")}><b>{s.name}</b></td><td data-label={t("adm.sel.code")}><span className="sel-code">{s.code}</span></td>
                     <td data-label={t("adm.kpi.orders")} className="r num">{s.orders}</td>

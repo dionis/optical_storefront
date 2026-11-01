@@ -598,6 +598,25 @@ const TOPICS_ES = {
     why: "Es un costo real de cada venta: ya está restado en la ganancia. Pagarla con otra base (el total con impuestos, por ejemplo) descuadra el margen.",
     pitfalls: ["Pagar sobre el total cobrado en caja: la comisión se calcula sobre lo vendido en el período, no sobre lo cobrado."],
   },
+  /* ─────────────── Caja (cierre de tienda, nov-2026) ─────────────── */
+  "cash.close": {
+    title: "Cerrar la caja de la tienda y autorizar diferencias",
+    short: "La caja es de toda la tienda. Al cerrar se cuenta el cajón (contador de billetes), se firma con las iniciales y, si no cuadra, el cierre queda pendiente hasta que el dueño lo autorice con su firma.",
+    what: "Desde noviembre de 2026 hay UNA caja por tienda, no una por punto de venta: el primer cobro en efectivo del día la abre solo (con lo que quedó contado en el último cierre) y todo el efectivo de cualquier punto de venta entra en el mismo libro. Cada cobro en efectivo, cada devolución y cada movimiento manual es una línea del libro; «Debe haber» = fondo inicial + entradas − salidas. Al cerrar, el sistema compara lo contado con lo que debe haber. Si cuadra, la caja queda cerrada. Si no cuadra, el cierre queda «Pendiente de autorizar» y solo el dueño (o un superadministrador) lo cierra firmando con sus iniciales; el dueño puede hacerlo en el mismo paso si es él quien cierra. La apertura y el cierre se imprimen por duplicado (copia de la tienda y copia de quien cierra) y llegan por correo al dueño.",
+    how: [
+      "Pulsa «Cerrar caja». Cuenta el cajón con el contador (cuántos billetes de 100, 50, 20… y monedas) o escribe el total a mano.",
+      "Mira la diferencia en vivo: verde si cuadra, rojo si falta, ámbar si sobra. Escribe tus iniciales (2 a 4 letras) y, si hay diferencia, una nota con lo que pasó.",
+      "Si eres el dueño y hay diferencia, escribe también tus iniciales en «Autorizar con mi firma» para cerrar de una vez. Si no, el cierre aparece arriba en «pendientes» hasta que el dueño pulse «Aprobar».",
+      "Imprime el cierre (2 copias) y guarda la de la tienda con el efectivo; el correo al dueño sale solo (y se puede reenviar).",
+    ],
+    why: "El dueño pidió que el cierre siempre cuadre al entregar el dinero y que una discrepancia solo la autorice él, con firma. Las iniciales en el documento y en la auditoría dicen quién contó y quién autorizó, sin firmar en papel.",
+    example: "Fondo 100 + cobros en efectivo 850 − devolución 20 − pago a proveedor 200 = debe haber 730. Contado 725 → diferencia −5: queda pendiente; el dueño la autoriza con «DR» y la caja pasa a cerrada.",
+    pitfalls: [
+      "Cerrar escribiendo el «debe haber» en vez de contar: la caja cuadra siempre y no sirve para nada.",
+      "Dejar cierres pendientes acumulados: cada uno es dinero sin explicar; se revisan el mismo día.",
+      "Registrar un cobro en efectivo como tarjeta: no entra en el libro y al cierre «sobra» o «falta» sin motivo.",
+    ],
+  },
 };
 
 const TOPICS_EN = {
@@ -1151,6 +1170,25 @@ const TOPICS_EN = {
     ],
     why: "It is a real cost of each sale: it is already subtracted from the profit. Paying it on another base (the total with tax, say) throws the margin off.",
     pitfalls: ["Paying on what the till collected: the commission is computed on what was sold in the period, not on what was collected."],
+  },
+  /* ─────────────── Cash till (store closing, Nov 2026) ─────────────── */
+  "cash.close": {
+    title: "Closing the store's register and approving differences",
+    short: "The register belongs to the whole store. Closing counts the drawer (bill counter), signs with initials and, if it does not balance, the closing waits until the owner approves it with their signature.",
+    what: "Since November 2026 there is ONE register per store, not one per till: the first cash payment of the day opens it on its own (with what was counted at the last closing) and every cash payment at any till goes into the same ledger. Each cash payment, each refund and each manual movement is one ledger line; Expected = opening float + cash in − cash out. On closing, the system compares the count with the expected amount. If it balances, the register is closed. If not, the closing is \"Awaiting approval\" and only the owner (or a superadmin) closes it by signing with their initials; the owner may do it in the same step when they are the one closing. Opening and closing print twice (store copy and closer's copy) and are emailed to the owner.",
+    how: [
+      "Click \"Close register\". Count the drawer with the counter (how many 100s, 50s, 20s… and coins) or type the total by hand.",
+      "Watch the live difference: green when it balances, red when short, amber when over. Type your initials (2 to 4 letters) and, if there is a difference, a note with what happened.",
+      "If you are the owner and there is a difference, also type your initials under \"Approve with my signature\" to close in one go. Otherwise the closing shows at the top under \"awaiting approval\" until the owner clicks \"Approve\".",
+      "Print the closing (2 copies) and keep the store copy with the cash; the email to the owner goes out on its own (and can be re-sent).",
+    ],
+    why: "The owner asked that the closing always balance on hand-over and that only they approve a discrepancy, with a signature. The initials on the document and in the audit log say who counted and who approved, without signing on paper.",
+    example: "Float 100 + cash payments 850 − refund 20 − supplier payment 200 = expected 730. Counted 725 → difference −5: awaits approval; the owner approves with \"DR\" and the register becomes closed.",
+    pitfalls: [
+      "Closing by typing the expected amount instead of counting: the register always balances and tells nothing.",
+      "Letting pending closings pile up: each one is unexplained money; review them the same day.",
+      "Recording a cash payment as card: it never enters the ledger and the closing is over or short for no reason.",
+    ],
   },
 };
 

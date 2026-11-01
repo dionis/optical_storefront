@@ -4,7 +4,11 @@
 // una tienda familiar/asociada/en consignación. Documento imprimible (carta)
 // y exportable a Excel (Ventas / Cobros / Vendedores / Días). Todo importe lo
 // calcula el servidor; aquí solo se pinta y se formatea.
-import { useEffect, useRef, useState } from "react";
+//
+// Tienda y período salen de la barra de filtros global del panel (AdminShell):
+// «Mes» = el mes natural entero, «Mes pasado» = el anterior entero, y cualquier
+// otro período o rango se toma tal cual. PDF y Excel se registran en esa barra.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useLensCatalog } from "../data/lensCatalog.js";
 import { TENANT } from "../config/tenant.js";
@@ -15,7 +19,9 @@ import { downloadXlsx } from "./exportXlsx.js";
 import { printElement } from "./exportUtils.js";
 import { inkOn } from "./ReportDoc.jsx";
 import { fetchStatement, posContext } from "./posApi.js";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
+import { useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
@@ -62,9 +68,9 @@ export default function StoreStatement({ me }) {
   const { t, lang } = useLang();
   const catalog = useLensCatalog();
   const [ctx, setCtx] = useState(null);
-  const [mode, setMode] = useState("this");
-  const [range, setRange] = useState(monthRange(0));
-  const [draft, setDraft] = useState(monthRange(0));
+  // Período global del panel: el mes natural entero para «Mes» y «Mes pasado»; el resto, tal cual.
+  const per = usePeriodFilter();
+  const range = useMemo(() => (per.period === "month" ? monthRange(0) : per.period === "lastMonth" ? monthRange(-1) : { from: per.from, to: per.to }), [per.period, per.from, per.to]);
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   const [error, setError] = useState("");
@@ -129,16 +135,6 @@ export default function StoreStatement({ me }) {
     return `${itemName(it)}${it.qty > 1 ? ` ×${it.qty}` : ""}${lens ? ` · ${lens}` : it.kind === "frame" ? ` · ${t("adm.pos.sum.frameOnly")}` : ""}`;
   };
   const itemsText = (s) => s.items.map(itemLine).join(" | ");
-
-  const pick = (next) => {
-    setMode(next);
-    if (next === "this") { setRange(monthRange(0)); setDraft(monthRange(0)); }
-    if (next === "last") { setRange(monthRange(-1)); setDraft(monthRange(-1)); }
-  };
-  const applyDraft = () => {
-    if (!DAY_RE.test(draft.from) || !DAY_RE.test(draft.to) || draft.from > draft.to) return;
-    setRange({ from: draft.from, to: draft.to });
-  };
 
   const totals = data?.totals;
   const pct = (part, whole) => (whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : "—");
@@ -218,6 +214,9 @@ export default function StoreStatement({ me }) {
   };
 
   const acc = (k) => ({ open: printing || open[k], onToggle: (v) => { if (!printing) setOpen((o) => (o[k] === v ? o : { ...o, [k]: v })); } });
+  // PDF y Excel desde la barra global del panel; sin datos todavía, no hay nada que exportar (ambos apagados).
+  const canExport = Boolean(data) && !printing;
+  useRegisterExport(canExport ? { pdf: () => setPrinting(true), xlsx: onExcel, label: `${t("adm.stmt.title")} ${data?.number || ""}`.trim() } : null);
 
   if (!ctx) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (!ctx.stores.length && !isAdmin) return <div className="adm-section"><div className="adm-empty"><Icon name="store" size={36} /><b>{t("adm.stmt.noStores")}</b></div></div>;
@@ -233,26 +232,8 @@ export default function StoreStatement({ me }) {
         <h2><Icon name="clipboard" size={20} /> {t("adm.stmt.title")}<HelpTip topic="statement.what" size={16} /></h2>
       </div>
       <p className="adm-sub">{t("adm.stmt.sub")}</p>
-
-      <div className="stmt-bar adm-noprint">
-        {who && <StoreFilter me={who} />}
-        <span className="stmt-chips" role="tablist">
-          <button type="button" className={mode === "this" ? "on" : ""} onClick={() => pick("this")}>{t("adm.stmt.thisMonth")}</button>
-          <button type="button" className={mode === "last" ? "on" : ""} onClick={() => pick("last")}>{t("adm.stmt.lastMonth")}</button>
-          <button type="button" className={mode === "range" ? "on" : ""} onClick={() => pick("range")}>{t("adm.stmt.range")}</button>
-        </span>
-        {mode === "range" && (
-          <span className="stmt-range">
-            <label>{t("adm.stmt.from")} <input type="date" value={draft.from} max={draft.to} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} /></label>
-            <label>{t("adm.stmt.to")} <input type="date" value={draft.to} min={draft.from} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} /></label>
-            <button type="button" className="btn-xs" disabled={!DAY_RE.test(draft.from) || !DAY_RE.test(draft.to) || draft.from > draft.to} onClick={applyDraft}>{t("adm.stmt.apply")}</button>
-          </span>
-        )}
-        <span className="stmt-bar-actions">
-          <button type="button" className="btn-xs" disabled={!data || printing} onClick={() => setPrinting(true)} title={t("adm.ui.pdf")}><Icon name="printer" size={14} /> {t("adm.stmt.pdf")}</button>
-          <button type="button" className="btn-xs" disabled={!data} onClick={onExcel}><Icon name="excel" size={14} /> {t("adm.stmt.excel")}</button>
-        </span>
-      </div>
+      {/* Tienda, período y PDF/Excel: barra de filtros global del panel (AdminShell). */}
+      <p className="adm-sub stmt-period adm-noprint"><Icon name="calendar" size={13} /> {t("adm.stmt.period")}: {dayLabel(range.from, lang)} – {dayLabel(range.to, lang)}</p>
 
       {state === "loading" && !data && <div className="adm-src-note loading">{t("adm.stmt.loading")}</div>}
       {state === "error" && <div className="adm-login-err">{t(error)}</div>}

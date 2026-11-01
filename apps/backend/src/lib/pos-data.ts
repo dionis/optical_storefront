@@ -13,6 +13,7 @@ import type PosModuleService from "../modules/pos/service";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
 import { recordAudit } from "./audit";
+import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
 import { computeLensBreakdown } from "./lens-quote";
@@ -1269,11 +1270,34 @@ async function stampOrder(container: MedusaContainer, orderId: string, patch: Re
   return Number(order.display_id) || null;
 }
 
-/** The till's open cash register, if any: cash payments and refunds go into it (HU-32). */
-async function openCashSession(container: MedusaContainer, terminalId: string | null): Promise<string | null> {
-  if (!terminalId) return null;
-  const [s] = await pos(container).listCashSessions({ terminal_id: terminalId, closed_at: null } as never, { take: 1 });
-  return s?.id ?? null;
+/**
+ * The STORE's open cash register, opened on the spot when there is none (the
+ * owner's rule: the first cash payment is the opening). Cash payments and
+ * refunds go into it as ledger lines (lib/cash.ts — a circular import, used
+ * only at call time, like cash.ts's use of PosError). Null only when the register cannot be opened — the payment
+ * is still recorded, the register just will not see it.
+ */
+async function openCashSession(container: MedusaContainer, args: { establishmentId: string; terminalId: string | null; actorId: string | null }): Promise<string | null> {
+  try {
+    return await ensureStoreSession(container, args);
+  } catch (e) {
+    container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).error(`[pos] cash register of ${args.establishmentId} could not be opened: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+/** Ledger lines of the cash rows just written (lib/cash.ts recordSalePayments). Best-effort: logged, never undoes the payment. */
+async function ledgerCashPayments(
+  container: MedusaContainer,
+  args: { sessionId: string | null; saleId: string; terminalId: string | null; actorId: string | null; rows: Array<{ id: string; amount_cents: unknown; counts_as_cash?: boolean | null }> }
+): Promise<void> {
+  const cash = args.rows.filter((r) => r.counts_as_cash).map((r) => ({ id: r.id, amount_cents: Math.round(Number(r.amount_cents) || 0) }));
+  if (!args.sessionId || !cash.length) return;
+  try {
+    await recordSalePayments(container, { sessionId: args.sessionId, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, payments: cash });
+  } catch (e) {
+    container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).error(`[pos] cash ledger of sale ${args.saleId} not written: ${(e as Error).message}`);
+  }
 }
 
 /** Writes payments to the ledger; an insurer's part also opens its claim (HU-113). */
@@ -1283,8 +1307,8 @@ async function writePayments(
 ): Promise<void> {
   const svc = pos(container);
   if (!args.payments.length) return;
-  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, args.terminalId) : null;
-  await svc.createPosSalePayments(
+  const cashSession = args.payments.some((p) => p.counts_as_cash) ? await openCashSession(container, { establishmentId: args.establishmentId, terminalId: args.terminalId, actorId: args.actorId }) : null;
+  const written = await svc.createPosSalePayments(
     args.payments.map((p) => ({
       sale_id: args.saleId,
       method_code: p.method_code,
@@ -1299,6 +1323,7 @@ async function writePayments(
       cash_session_id: p.counts_as_cash ? cashSession : null,
     }))
   );
+  await ledgerCashPayments(container, { sessionId: cashSession, saleId: args.saleId, terminalId: args.terminalId, actorId: args.actorId, rows: written });
   for (const p of args.payments.filter((x) => x.insurance)) {
     await svc.createInsuranceClaims({
       sale_id: args.saleId,
@@ -1516,21 +1541,24 @@ export async function voidSale(
   const byMethod = new Map<string, number>();
   for (const p of sale.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
   const methods = new Map((await listPaymentMethods(container)).map((m) => [m.code, m]));
-  const cashSession = await openCashSession(container, sale.terminal_id);
-  const ledger = [...byMethod.entries()]
-    .filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable))
-    .map(([code, amount]) => ({
-      sale_id: sale.id,
-      method_code: code,
-      amount_cents: -amount,
-      kind: "refund" as const,
-      establishment_id: sale.establishment_id,
-      received_by: actorId,
-      counts_as_cash: Boolean(methods.get(code)?.counts_as_cash),
-      cash_session_id: methods.get(code)?.counts_as_cash ? cashSession : null,
-      reference: null,
-    }));
-  if (ledger.length) await svc.createPosSalePayments(ledger);
+  const refundable = [...byMethod.entries()].filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable));
+  // A cash refund leaves the store's register (opening it if nobody has yet); other methods never touch it.
+  const cashSession = refundable.some(([code]) => methods.get(code)?.counts_as_cash) ? await openCashSession(container, { establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId }) : null;
+  const ledger = refundable.map(([code, amount]) => ({
+    sale_id: sale.id,
+    method_code: code,
+    amount_cents: -amount,
+    kind: "refund" as const,
+    establishment_id: sale.establishment_id,
+    received_by: actorId,
+    counts_as_cash: Boolean(methods.get(code)?.counts_as_cash),
+    cash_session_id: methods.get(code)?.counts_as_cash ? cashSession : null,
+    reference: null,
+  }));
+  if (ledger.length) {
+    const written = await svc.createPosSalePayments(ledger);
+    await ledgerCashPayments(container, { sessionId: cashSession, saleId: sale.id, terminalId: sale.terminal_id, actorId, rows: written });
+  }
   // The insurer's open claims of a voided sale are rejected: nothing to collect.
   const claims = await svc.listInsuranceClaims({ sale_id: sale.id, status: ["pending", "submitted"] } as never, { take: 20 });
   if (claims.length) await svc.updateInsuranceClaims(claims.map((c) => ({ id: c.id, status: "rejected", note: "sale voided" })) as never);

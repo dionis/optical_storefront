@@ -2,7 +2,10 @@
 // variables y compartidos de cada tienda, el resultado del mes con el punto de
 // equilibrio, las comisiones por vendedor y la liquidación con las tiendas que
 // no son propias (HU-33, HU-34, HU-90 a HU-97). Con el privilegio «Ver costos»
-// se lee; con «Gestionar costos» se edita.
+// se lee; con «Gestionar costos» se edita. La tienda y el mes del resultado
+// salen de la barra de filtros global del panel: el mes es el del final del
+// período elegido («Mes» = este mes, «Mes pasado» = el anterior, un rango = el
+// mes de su última fecha).
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
@@ -10,7 +13,8 @@ import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { posContext } from "./posApi.js";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import "./screens.css";
@@ -27,7 +31,8 @@ export default function StoreCosts({ me }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const [ctx, setCtx] = useState(null);
-  const [month, setMonth] = useState(thisMonth());
+  const { to: periodTo } = usePeriodFilter();
+  const month = String(periodTo || "").slice(0, 7) || thisMonth();
   const [pnl, setPnl] = useState(null);
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(null); // EMPTY or item being edited (with id)
@@ -78,9 +83,9 @@ export default function StoreCosts({ me }) {
     <div className="adm-section pos">
       <div className="adm-head-row">
         <h2>{t("adm.tab.storecosts")}</h2>
+        {/* Tienda y período: barra de filtros global del panel; aquí se dice qué mes se lee. */}
         <div className="scr-tools">
-          {who && <StoreFilter me={who} />}
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("adm.costs2.month")} title={t("adm.costs2.month")} />
+          <span className="adm-chip neutral" title={t("adm.costs2.month")}><Icon name="calendar" size={12} /> {t("adm.costs2.month")}: {month}</span>
         </div>
       </div>
       <p className="adm-sub">{t("adm.costs2.sub")}</p>

@@ -8,6 +8,7 @@ import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
+import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
 
 /**
@@ -158,6 +159,27 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
     return () => window.removeEventListener("keydown", onKey);
   }, [showProfile]);
 
+  // La barra de filtros global va pegada justo bajo la cabecera, mida lo que
+  // mida (en el móvil la cabecera crece): se miden las dos y se publican como
+  // --adm-top-real / --adm-bar-h en el armazón, para la barra y para lo que
+  // deba restar su alto (fit.css).
+  const shellRef = useRef(null);
+  const topRef = useRef(null);
+  const barRef = useRef(null);
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return undefined;
+    const apply = () => {
+      shell.style.setProperty("--adm-top-real", `${topRef.current?.offsetHeight || 0}px`);
+      shell.style.setProperty("--adm-bar-h", `${barRef.current?.offsetHeight || 0}px`);
+    };
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (topRef.current) ro?.observe(topRef.current);
+    if (barRef.current) ro?.observe(barRef.current);
+    return () => ro?.disconnect();
+  }, [tab]);
+
   const go = (key) => { onTab(key); setDrawer(false); setFly(null); };
   const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
   const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
@@ -257,7 +279,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   ) : null;
 
   return (
-    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
+    <div ref={shellRef} className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
           <div className="adm-side-title" style={{ paddingLeft: 4 }}>
@@ -284,7 +306,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
       <div className="adm-scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
 
       <div className="adm-main">
-        <header className="adm-top">
+        <header className="adm-top" ref={topRef}>
           <button type="button" className="adm-burger" onClick={() => setDrawer(true)} aria-label={t("adm.nav.open")}>
             <Icon name="menu" size={22} />
           </button>
@@ -322,7 +344,14 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             </button>
           </div>
         </header>
-        <main className="adm-body" key={tab}>{children}</main>
+        {/* Filtros globales (tienda · período · rango · exportar), pegados bajo la
+            cabecera en todas las pestañas que los usan (BAR_TABS). Exportar manda
+            a la pantalla abierta: ExportRegistry guarda lo que registra con
+            useRegisterExport. */}
+        <ExportRegistry>
+          <GlobalFilterBar tab={tab} me={me} barRef={barRef} />
+          <main className="adm-body" key={tab}>{children}</main>
+        </ExportRegistry>
       </div>
 
       {showProfile && (

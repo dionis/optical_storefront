@@ -288,6 +288,13 @@
 .adm-section h2::after { content: ""; flex: 1; height: 2px; min-width: 18px; background: linear-gradient(90deg, var(--adm-accent), var(--adm-accent-line), transparent); border-radius: 2px; opacity: .9; }
 .adm-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 2px 0 10px; }
 .adm-head-row h3 { margin: 0; }
+/* Los títulos del panel llevan la tinta del MODO (--adm-ink), nunca la de la
+   tienda pública: styles/index.css pinta `h1, h2, h3 { color: var(--ink) }` y en
+   oscuro eso es navy sobre navy («Ventas de tienda», «Auditoría»… ilegibles).
+   `:where()` deja la especificidad en 0,0,1: cualquier regla propia de una
+   pantalla (.adm-danger h3, .sp-row-head h3…) sigue mandando. */
+:where(.adm-shell) h1, :where(.adm-shell) h2, :where(.adm-shell) h3, :where(.adm-shell) h4 { color: var(--adm-ink); }
+.adm-shell[data-mode="dark"] .adm-section h2, .adm-shell[data-mode="dark"] .adm-head-row h2, .adm-shell[data-mode="dark"] .adm-head-row h3, .adm-shell[data-mode="dark"] .adm-section > h3 { color: var(--adm-ink); }
 .adm-sub { margin: 2px 0 10px; color: var(--adm-muted); font-size: 12.5px; }
 .muted { color: var(--adm-faint); }
 .adm-actions { display: flex; gap: 6px; flex-wrap: wrap; }

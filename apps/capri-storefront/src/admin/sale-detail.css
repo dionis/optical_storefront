@@ -68,6 +68,26 @@
 .sd-rx-grid td { min-width: 56px; padding: 6px 4px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface-2); }
 .sd-rx-grid td.empty { color: var(--adm-faint); }
 
+
+/* Etapa del pedido: cinco pasos en fila (hecho · actual · pendiente) y los botones para avanzar */
+.sd-stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; position: relative; }
+.sd-stages::before { content: ""; position: absolute; left: 10%; right: 10%; top: 11px; height: 2px; background: var(--adm-line); }
+.sd-stage { position: relative; display: grid; justify-items: center; text-align: center; gap: 3px; min-width: 0; }
+.sd-stage-dot { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--adm-surface-2); border: 2px solid var(--adm-line); color: var(--adm-muted); position: relative; z-index: 1; }
+.sd-stage b { font-size: 11.5px; font-weight: 800; color: var(--adm-muted); line-height: 1.15; }
+.sd-stage small { font-size: 10.5px; color: var(--adm-faint); line-height: 1.2; overflow-wrap: anywhere; }
+.sd-stage.done .sd-stage-dot { background: var(--adm-green-soft); border-color: var(--adm-green); color: var(--adm-green-dark); }
+.sd-stage.done b { color: var(--adm-ink); }
+.sd-stage.done small { color: var(--adm-muted); }
+.sd-stage.current .sd-stage-dot { background: var(--adm-accent); border-color: var(--adm-accent-deep, var(--adm-accent)); color: var(--st-ink, #fff); box-shadow: var(--adm-shadow-glow); }
+.sd-stage.current b { color: var(--adm-accent-ink); }
+.sd-stage.current small { color: var(--adm-accent-ink); font-weight: 700; }
+.sd-stage.todo .sd-stage-dot { border-style: dashed; }
+.sd-stage.off { opacity: .45; }
+.sd-stage-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px dashed var(--adm-line); padding-top: 8px; }
+.sd-stage-actions input { min-height: 36px; flex: 1 1 160px; min-width: 0; font-size: 13px; }
+.sd-stage-actions .btn-sm { flex: 0 0 auto; }
+
 /* Importes */
 .sd-totals { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 0; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .sd-totals dt { color: var(--adm-muted); }
@@ -147,6 +167,10 @@
   .sd-panel { width: 100%; border-left: 0; }
   .sd-head, .sd-body, .sd-foot { padding-left: 14px; padding-right: 14px; }
   .sd-line { grid-template-columns: 96px 1fr; }
+  .sd-stages { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .sd-stage b { font-size: 10.5px; }
+  .sd-stage small { display: none; }
+  .sd-stage.current small { display: block; }
   .sd-line .pos-frame-photo.md { width: 96px; }
   .sd-card .pos-docs { grid-template-columns: 1fr; }
   .sd-foot .btn-sm { flex: 1 1 auto; }
@@ -154,9 +178,9 @@
 
 /* ── Impresión: solo la ficha ── */
 @media print {
-  body.sd-open > :not(.sd-root) { display: none !important; }
+  body.sd-open > :not(.sd-root):not(.adm-shell), body.sd-open .adm-shell > :not(.sd-root) { display: none !important; }
   .sd-root { position: static; display: block; }
-  .sd-backdrop, .sd-head-actions, .sd-foot, .sd-collect, .sd-card .pos-docs, .sd-noprint { display: none !important; }
+  .sd-backdrop, .sd-head-actions, .sd-foot, .sd-collect, .sd-card .pos-docs, .sd-noprint, .sd-stage-actions { display: none !important; }
   .sd-panel { width: 100%; height: auto; box-shadow: none; border: 0; background: #fff; color: #111; animation: none; }
   .sd-body { overflow: visible; padding: 0; }
   .sd-head { border-bottom: 2px solid #111; padding: 0 0 8px; }

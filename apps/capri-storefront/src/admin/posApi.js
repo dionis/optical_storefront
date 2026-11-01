@@ -64,6 +64,23 @@ export const setClaim = (id, status, paid) => call(`/admin/pos/insurance-claims/
 /** Estado de cuenta de una tienda ({ establishment_id: id | "all", from, to } en YYYY-MM-DD; sin fechas = mes en curso). */
 export const fetchStatement = (params) => call(`/admin/pos/statement${qs(params)}`);
 
+/** Caja de la TIENDA (HU-32): sesiones con su libro de movimientos; `store` = id de la tienda. */
+export const listCashSessions = (store, limit) => call(`/admin/pos/cash-sessions${qs({ store, limit })}`);
+/** Una sesión con su libro completo, las ventas enlazadas ({ [sale_id]: { number, customer_name… } }) y su auditoría. */
+export const fetchCashSession = (id) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}`);
+/** { store, opening, signature (iniciales), note?, terminal_id? } abre la caja de la tienda. */
+export const openCashSession = (body) => call("/admin/pos/cash-sessions", { method: "POST", body });
+/** { kind, amount, category, note, terminal_id? } entrada o salida manual. */
+export const addCashMovement = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/movement`, { method: "POST", body });
+/** { counted, signature, note?, approval_signature? } cierra con el conteo y las iniciales. */
+export const closeCashSession = (id, body) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/close`, { method: "POST", body });
+/** { approval_signature } el dueño autoriza una diferencia con sus iniciales. */
+export const approveCashSession = (id, approvalSignature) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/approve`, { method: "POST", body: { approval_signature: approvalSignature } });
+/** Documento de apertura o cierre; `print` registra la impresión en auditoría. */
+export const fetchCashDocument = (id, kind, print = false) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/document${qs({ kind, print: print ? 1 : "" })}`);
+/** Reenvía el documento al dueño y a la lista de administradores. */
+export const emailCashDocument = (id, kind) => call(`/admin/pos/cash-sessions/${encodeURIComponent(id)}/email`, { method: "POST", body: { kind } });
+
 export const listMethods = () => call("/admin/pos/payment-methods");
 export const createMethod = (body) => call("/admin/pos/payment-methods", { method: "POST", body });
 export const updateMethod = (id, body) => call(`/admin/pos/payment-methods/${encodeURIComponent(id)}`, { method: "POST", body });

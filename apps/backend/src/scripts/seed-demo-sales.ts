@@ -222,13 +222,14 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
     await moveNew("insurance_claim", { sale_id: saleId }, ts);
   };
 
-  // Registers: opened on first use of the day, closed at the end of it.
+  // Registers: ONE per store (CreatePos5: the till is the store's, not a terminal's),
+  // opened on first use of the day, closed at the end of it.
   const open = new Map<string, string>();
   const ensureCash = async (ctx: StoreCtx, terminal: TerminalRow, day: number, actor: string) => {
-    if (open.has(terminal.id)) return;
+    if (open.has(ctx.store.id)) return;
     const at = new Date(Date.parse(`${dates[day]}T14:30:00Z`));
-    const row = await pos.createCashSessions({ establishment_id: ctx.store.id, terminal_id: terminal.id, opened_by: actor, opened_at: at > latest ? latest : at, opening_cents: between(rng, 10, 20) * 1000 });
-    open.set(terminal.id, row.id);
+    const row = await pos.createCashSessions({ establishment_id: ctx.store.id, terminal_id: terminal.id, opened_by: actor, opened_at: at > latest ? latest : at, opening_cents: between(rng, 10, 20) * 1000, status: "open", opened_signature: "DEMO" } as never);
+    open.set(ctx.store.id, row.id);
     await pg("cash_session").where({ id: row.id }).update({ created_at: at > latest ? latest : at });
     if (rng() < 0.2) {
       const mv = await pos.createCashMovements({ session_id: row.id, kind: "out", amount_cents: between(rng, 8, 45) * 100, note: "Compra de insumos", created_by: actor });
@@ -236,7 +237,7 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
     }
   };
   const closeRegisters = async (day: number) => {
-    for (const [terminalId, sessionId] of open) {
+    for (const [storeId, sessionId] of open) {
       const [s] = await pos.listCashSessions({ id: sessionId }, { take: 1 });
       const payments = await pos.listPosSalePayments({ cash_session_id: sessionId } as never, { take: 5000 });
       const movements = await pos.listCashMovements({ session_id: sessionId }, { take: 500 });
@@ -253,9 +254,11 @@ async function seed(container: MedusaContainer, pg: Knex, logger: Logger, stores
         counted_cents: expected + diff,
         diff_cents: diff,
         note: diff ? "Diferencia al contar" : null,
+        status: "closed",
+        closed_signature: "DEMO",
         updated_at: at,
       });
-      open.delete(terminalId);
+      open.delete(storeId);
     }
   };
 

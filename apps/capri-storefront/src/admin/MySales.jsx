@@ -5,42 +5,32 @@
 // del laboratorio (HU-50, HU-52, HU-53); debajo, la lista de sus ventas del
 // período (HU-51, GET /admin/sales-analytics/sales) y los cobros pendientes de
 // su tienda (PendingBalances). Regla del dueño: el vendedor no ve el estado de
-// la tienda — `store_today` solo llega para los demás roles.
-import { useEffect, useMemo, useRef, useState } from "react";
+// la tienda — `store_today` solo llega para los demás roles. La tienda y el
+// período de la lista son los globales de la barra de filtros del panel (las
+// tres tarjetas hoy/semana/mes también lo cambian); la lista se exporta desde
+// esa barra.
+import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { money, shortDate } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import Accordion from "./Accordion.jsx";
 import PendingBalances from "./PendingBalances.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
-import { ExportMenu } from "./ui.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { usePeriodFilter } from "./periodStore.js";
+import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import "./screens.css";
 import "./roles.css";
 
 const PERIODS = ["today", "week", "month"];
 const ZERO = { total: 0, count: 0, avg_ticket: 0 };
 
-/** Primer y último día (YYYY-MM-DD, hora local) de hoy, la semana ISO (lunes) o el mes. */
-export function periodRange(period, now = new Date()) {
-  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const to = ymd(now);
-  if (period === "week") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    return { from: ymd(d), to };
-  }
-  if (period === "month") return { from: `${to.slice(0, 8)}01`, to };
-  return { from: to, to };
-}
-
 /** Las ventas propias del período: número, fecha, cliente, artículos, total, cobrado, saldo y comisión. */
-function MySalesList({ me, period, storeParam, openSale }) {
+function MySalesList({ me, range, storeParam, openSale }) {
   const { t, lang } = useLang();
   const [rows, setRows] = useState(null);
   const [state, setState] = useState("loading");
   const bodyRef = useRef(null);
-  const range = useMemo(() => periodRange(period), [period]);
   const m = (v) => money(v, "usd", lang);
   useEffect(() => {
     setState("loading");
@@ -70,6 +60,8 @@ function MySalesList({ me, period, storeParam, openSale }) {
     sheets: [{ name: t("adm.my.list"), cols, rows: list, totals: { total: sum("total"), paid: sum("paid"), balance: sum("balance"), ...(hasCommission ? { commission: sum("commission") } : {}) }, totalsLabel: t("adm.my.totalRow") }],
   });
   const csv = { cols: cols.map((c) => [c.header, c.get || c.key]), rows: list };
+  // PDF · Excel · CSV desde la barra global del panel.
+  useRegisterExport(rows ? menuHandlers({ targetRef: bodyRef, title: `${t("adm.my.list")} · ${range.from} – ${range.to}`, name: "mis-ventas", csv, xlsx }) : null);
   const summary = [
     { label: t("adm.my.sales"), value: list.length },
     { label: t("adm.pb.total"), value: m(sum("total")), strong: true },
@@ -77,8 +69,7 @@ function MySalesList({ me, period, storeParam, openSale }) {
     ...(hasCommission ? [{ label: t("adm.my.commissionCol"), value: m(sum("commission")) }] : []),
   ];
   return (
-    <Accordion id="my-sales-list" icon="receipt" title={t("adm.my.list")} subtitle={`${t("adm.my.listSub")} · ${range.from} – ${range.to}`} summary={summary} defaultOpen
-      right={<ExportMenu targetRef={bodyRef} title={`${t("adm.my.list")} · ${range.from} – ${range.to}`} name="mis-ventas" csv={csv} xlsx={xlsx} />}>
+    <Accordion id="my-sales-list" icon="receipt" title={t("adm.my.list")} subtitle={`${t("adm.my.listSub")} · ${range.from} – ${range.to}`} summary={summary} defaultOpen>
       <div ref={bodyRef}>
         {state === "loading" && !rows ? <div className="adm-src-note loading">{t("adm.my.listLoading")}</div>
           : state === "error" ? <div className="adm-demo-banner">{t("adm.err.pos.generic")}</div>
@@ -129,7 +120,7 @@ export default function MySales({ go, me, openSale }) {
   const { t, lang } = useLang();
   const [d, setD] = useState(null);
   const [state, setState] = useState("loading");
-  const [period, setPeriod] = useState("month");
+  const { period, range, setPeriod } = usePeriodFilter();
   const { storeId, stores, isAll, isWeb } = useStoreFilter(me);
   // Solo con varias tiendas tiene sentido elegir; la online no tiene mostrador.
   const multi = Boolean(me) && stores.length > 1;
@@ -166,7 +157,6 @@ export default function MySales({ go, me, openSale }) {
           )}
         </div>
         <div className="my-head-tags">
-          {multi && <StoreFilter me={me} />}
           {wp && (
             <button type="button" className={`adm-chip ${wp.cash_open ? "ok" : "neutral"}`} onClick={() => go?.("cash")} title={t("adm.my.cashHint")}>
               <Icon name="wallet" size={12} /> {t(wp.cash_open ? "adm.my.cashOpen" : "adm.my.cashClosed")}
@@ -271,13 +261,8 @@ export default function MySales({ go, me, openSale }) {
 
       {seller && (
         <>
-          <div className="adm-head-row adm-noprint">
-            <span className="muted">{t("adm.my.period")}</span>
-            <div className="pos-filters">
-              {PERIODS.map((k) => <button type="button" key={k} className={`btn-xs ${k === period ? "primary" : ""}`} onClick={() => setPeriod(k)} aria-pressed={k === period}>{t(`adm.my.${k}`)}</button>)}
-            </div>
-          </div>
-          <MySalesList me={me} period={period} storeParam={storeParam} openSale={openSale} />
+          {/* El período de la lista es el global (barra de filtros del panel); las tarjetas de arriba lo cambian. */}
+          <MySalesList me={me} range={range} storeParam={storeParam} openSale={openSale} />
           <PendingBalances me={me} openSale={openSale} embedded />
         </>
       )}

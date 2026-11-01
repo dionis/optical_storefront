@@ -1,31 +1,40 @@
 // Dónde se usa: sección Ejecutivo de /admin (pestaña "exec"). La cabina del
 // dueño en UNA pantalla: barra fija (tienda · período · desde–hasta · PDF/Excel),
 // tira de diez KPI (ventas, nº, unidades, ticket, cobrado, por cobrar, costo
-// real, ganancia, margen, efectivo en caja) y acordeones con resumen ejecutivo
-// en la cabecera, de modo que todo se lee sin abrir nada: Pedidos de la tienda
-// (StoreOrders), Cobros y caja (cash-report), Vendedores (insights por
-// vendedor), Costos y margen (ExecutiveCosts), Pedidos web (Executive: el
-// tablero online), Catálogo, Resumen y Ventas en detalle (las vistas que
-// AdminDashboard pasa en `views`). Nada se pierde del Ejecutivo anterior: se
-// reorganiza. Costo y ganancia solo se pintan cuando el servidor los manda
-// (`access.profit`); la tienda elegida es la global del panel (useStoreFilter).
+// real, ganancia, margen, efectivo en caja — la ÚNICA tira: ningún acordeón la
+// repite) y acordeones con resumen ejecutivo en la cabecera, de modo que todo
+// se lee sin abrir nada:
+//   · Pedidos y etapas (StoreOrders.OrdersStagesView): todo lo vendido en el
+//     período con su etapa, StageBar + chips (pendientes primero), «Avanzar» en
+//     la fila y la ficha (SaleDetailPanel) al pulsar. Sigue el filtro global de
+//     tienda (todas / web / una) y el período. Sustituye a «Pedidos de la
+//     tienda», «Pedidos web» y «Ventas en detalle».
+//   · Cobros y caja (cash-report) · Vendedores (insights por vendedor; una fila
+//     abre el panel del vendedor) · Costos y margen (ExecutiveCosts).
+//   · Tendencias (Executive.jsx Trends): las gráficas del período, cada una una
+//     sola vez, de las mismas ventas que la tira y la lista. Sustituye a «Resumen».
+//   · Catálogo.
+// Costo y ganancia solo se pintan cuando el servidor los manda (`access.profit`);
+// la tienda elegida es la global del panel (useStoreFilter).
 //
-//   <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} views={{ overview, sales }} />
+//   <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
+// `params` sigue el contrato de StoreOrders.jsx (seller / stage / q / period /
+// from / to / store / order): la lista abre ya filtrada por ese elemento.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { adminFetch } from "./adminApi.js";
 import { isDemoLogin } from "./adminAuth.js";
 import { money as fmtMoney } from "./adminOrders.js";
-import { fetchBoardWindow } from "./realAnalytics.js";
 import { useCatalog } from "../data/catalogStore.js";
 import { ExportMenu } from "./ui.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
-import Executive, { CatalogMini } from "./Executive.jsx";
+import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
+import Trends, { CatalogMini } from "./Executive.jsx";
 import ExecutiveCosts from "./ExecutiveCosts.jsx";
-import { PERIODS, StoreOrdersTable, datesOf, pct, salesReportSpec, salesSheets, storeLabelFor, usePeriod, useStoreSales, ymd } from "./StoreOrders.jsx";
+import { OrdersStagesView, PERIODS, datesOf, isStuck, paramsKey, pct, salesReportSpec, salesSheets, stageOfRow, storeLabelFor, useOrderStages, usePeriod, useStoreSales, ymd } from "./StoreOrders.jsx";
 import { collectCharts, summariesFromAccordions } from "./ReportDoc.jsx";
 import { periodRange } from "./SalesBoard.jsx";
 import { kpiDelta } from "./charts.jsx";
@@ -33,9 +42,13 @@ import { fetchSellers } from "./adminSellers.js";
 import { sellerRowsFromInsights, sellerRowsTotals, sellersReportSpec, useSellerPanel, SellerChannels } from "./SellerPanel.jsx";
 import "./exec.css";
 
-/** Las pestañas antiguas siguen siendo destinos válidos de go("exec", { sub }): abren su acordeón. */
-export const EXEC_TABS = ["sales", "costs", "overview", "detail"];
-const SUB_ACC = { sales: "ex-web", costs: "ex-costs", overview: "ex-overview", detail: "ex-detail" };
+/**
+ * Destinos de go("exec", { sub }): abren su acordeón. Nuevos: "stages" (Pedidos
+ * y etapas), "trends" (Tendencias), "costs". Los antiguos se mapean:
+ * sales / detail / orders → stages · overview → trends.
+ */
+export const EXEC_TABS = ["stages", "trends", "costs", "sales", "overview", "detail", "orders"];
+const SUB_ACC = { stages: "ex-stages", sales: "ex-stages", detail: "ex-stages", orders: "ex-stages", trends: "ex-trends", overview: "ex-trends", costs: "ex-costs" };
 const CARD_KINDS = new Set(["card", "debit", "credit"]);
 
 const int = (n, lang) => (Number(n) || 0).toLocaleString(lang === "en" ? "en-US" : "es-US");
@@ -146,7 +159,7 @@ function ExecPeriod({ period, range, pick, setDate }) {
   );
 }
 
-export default function ExecutiveHub({ me, go, sub, onSub, views }) {
+export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const { t, lang } = useLang();
   const demo = isDemoLogin();
   const sf = useStoreFilter(me);
@@ -159,16 +172,44 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   const m = (v) => fmtMoney(v, "usd", lang);
   const storeLabel = useMemo(() => storeLabelFor(sf.stores, t), [sf.stores, t]);
 
+  // Salto con elemento (contrato de StoreOrders.jsx): tienda y período a la
+  // barra; vendedor / etapa / texto / pedido a la lista, que abre filtrada. Un
+  // salto interno (panel del vendedor → «Ver sus pedidos») hace lo mismo sin
+  // cambiar de pestaña, porque el dueño no tiene la pestaña "storeorders".
+  const [listParams, setListParams] = useState(params);
+  const [forcedAcc, setForcedAcc] = useState(null);
+  const pkey = paramsKey(params);
+  useEffect(() => {
+    if (!params) return;
+    if (params.store) sf.setStoreId(params.store);
+    per.applyParams(params);
+    if (params.seller || params.stage || params.q || params.order) { setListParams(params); setForcedAcc("ex-stages"); }
+  }, [pkey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasOrdersTab = useMemo(() => tabsOf(navGroupsFor(me)).includes("storeorders"), [me]);
+  const goFromPanel = (tab, p = {}) => {
+    if (tab === "storeorders" && !hasOrdersTab) {
+      if (p.store) sf.setStoreId(p.store);
+      per.applyParams(p);
+      setListParams({ ...p, _n: Date.now() });
+      setForcedAcc("ex-stages");
+      onSub?.("stages");
+      bodyRef.current?.querySelector('[data-acc="ex-stages"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    go(tab, p);
+  };
+
   const [ins, setIns] = useState(null);
   const [cash, setCash] = useState(null);
+  const [tick, setTick] = useState(0);
   // El período equivalente anterior (previousRangeOf): sus cifras llegan en
   // paralelo con las actuales y alimentan la variación de TODAS las tarjetas.
   const prevRange = useMemo(() => previousRangeOf(per.period, per.range), [per.period, per.range]);
   const [prevIns, setPrevIns] = useState(null);
   const [prevCash, setPrevCash] = useState(null);
-  const [web, setWeb] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
   const sales = useStoreSales({ from, to, storeId });
+  const stages = useOrderStages({ from, to, storeId });
   const prevSales = useStoreSales({ from: prevRange?.from, to: prevRange?.to, storeId }, !!prevRange);
   const { products, cases } = useCatalog();
   const bodyRef = useRef(null);
@@ -176,7 +217,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   // Vendedores (solo el dueño/superadmin los ve): la lista de fichas da la tienda
   // de cada uno (bloques por tienda del reporte) y el panel se abre al pulsar una fila.
   const [sellerList, setSellerList] = useState([]);
-  const sellerPanel = useSellerPanel({ go, me });
+  const sellerPanel = useSellerPanel({ go: goFromPanel, me });
   useEffect(() => {
     if (demo || !isAdmin) return undefined;
     let on = true;
@@ -226,16 +267,9 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
       .then(([a, c, pa, pc]) => { if (on) { setIns(a); setCash(c); setPrevIns(pa); setPrevCash(pc); setState("ok"); } })
       .catch(() => { if (on) setState("error"); });
     return () => { on = false; };
-  }, [from, to, prevRange, storeId, sf.isAll, sf.isWeb, physical, demo]);
-
-  // La tienda online: el mismo tablero que pinta Executive (cacheado), para las pastillas de su acordeón.
-  const showWeb = isAdmin && (sf.isAll || sf.isWeb);
-  useEffect(() => {
-    if (demo || !showWeb) { setWeb(null); return undefined; }
-    let on = true;
-    fetchBoardWindow({ from: dates.from, to: dates.to, store: "web" }).then((w) => { if (on) setWeb(w); }).catch(() => { if (on) setWeb(null); });
-    return () => { on = false; };
-  }, [dates, showWeb, demo]);
+  }, [from, to, prevRange, storeId, sf.isAll, sf.isWeb, physical, demo, tick]);
+  // Tras cobrar, entregar, anular o avanzar desde la lista o la ficha: las cifras se releen.
+  const refresh = () => setTick((n) => n + 1);
 
   const tot = ins?.totals || {};
   const access = ins?.access || sales.access || {};
@@ -296,18 +330,21 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
     });
   };
 
-  // Pedidos web: etapas del tablero online.
-  const webOps = useMemo(() => {
-    const out = { n: 0, toPrepare: 0, inDelivery: 0, total: 0 };
-    for (const o of web?.orders || []) {
-      if (o.terminal) continue;
-      out.n += 1;
-      out.total += Number(o.total) || 0;
-      if (o.stage === "confirmed" || o.stage === "in_lab") out.toPrepare += 1;
-      if (o.stage === "shipped" || o.stage === "in_transit") out.inDelivery += 1;
+  // Pedidos y etapas: cuántas ventas del período siguen pendientes, en reparto,
+  // entregadas, y cuántas llevan más de 7 días sin salir (pastillas del acordeón).
+  const stageOf = (r) => stageOfRow(r, stages.byOrder);
+  const ops = useMemo(() => {
+    const out = { pending: 0, inDelivery: 0, delivered: 0, stuck: 0 };
+    const now = Date.now();
+    for (const r of sales.rows) {
+      const st = stageOfRow(r, stages.byOrder);
+      if (st === "confirmed" || st === "in_lab" || st === "payment_pending") out.pending += 1;
+      else if (st === "shipped" || st === "in_transit") out.inDelivery += 1;
+      else if (st === "delivered") out.delivered += 1;
+      if (isStuck(r, st, now)) out.stuck += 1;
     }
     return out;
-  }, [web]);
+  }, [sales.rows, stages.byOrder]);
 
   // Caja: por método, agrupado como el informe (efectivo · tarjetas · Zelle · otros).
   const byMethod = useMemo(() => {
@@ -327,10 +364,10 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
   const meta = `${scopeText} · ${from} → ${to}`;
   const title = t("adm.ex.title");
 
-  // Sub-pestaña antigua → su acordeón abierto; al abrirlo a mano, la URL lo recuerda.
-  const forced = SUB_ACC[sub];
+  // Sub-pestaña (nueva o antigua) → su acordeón abierto; al abrirlo a mano, la URL lo recuerda.
+  const forced = forcedAcc || SUB_ACC[sub];
   const openOf = (id) => (forced === id ? true : undefined);
-  const toggled = (key) => (open) => { if (open) onSub?.(key); };
+  const toggled = (key) => (open) => { setForcedAcc(null); if (open) onSub?.(key); };
 
   const beforePrint = () => {
     // El PDF lleva todas las secciones: se abren para el clon y se devuelven.
@@ -348,7 +385,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
     ];
     const sheets = [
       { name: t("adm.ex.export.kpis"), cols: [{ header: t("adm.ex.export.kpi"), key: "label", width: 30 }, { header: t("adm.ex.export.value"), key: "value", type: "money", width: 16 }], rows: [{ label: t("adm.ex.period"), value: meta }, ...kpis.map(([label, value]) => ({ label, value: value ?? "" }))] },
-      ...salesSheets(sales.rows, sales.totals, { t, lang, storeLabel }),
+      ...salesSheets(sales.rows, sales.totals, { t, lang, storeLabel, stageOf }),
       ...(isAdmin ? [{
         name: t("adm.ex.export.sellers"),
         cols: [
@@ -382,7 +419,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
       const kpiOf = (label, value, raw, extra = {}) => ({ label, value, raw, ...extra });
       const d = (k) => (deltas[k] ? { sub: `${deltas[k].text} ${vs}`, tone: deltas[k].zero ? undefined : deltas[k].good ? "good" : "bad" } : {});
       return salesReportSpec({
-        rows: sales.rows, totals: sales.totals, access, t, lang, storeLabel,
+        rows: sales.rows, totals: sales.totals, access, t, lang, storeLabel, stageOf,
         scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from, to },
         title: t("adm.rpt.execTitle", { store: sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "" }),
         kpis: [
@@ -444,15 +481,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
         </div>
 
         <AccordionGroup>
-          <Accordion id="ex-orders" icon="receipt" title={t("adm.ex.acc.orders")} subtitle={t("adm.ex.acc.ordersSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}
+          <Accordion id="ex-stages" icon="receipt" title={t("adm.ex.acc.stages")} subtitle={t("adm.ex.acc.stagesSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}
+            open={openOf("ex-stages")} onToggle={toggled("stages")}
             summary={[
               { label: t("adm.ex.pill.sales"), value: m(sales.totals.total), strong: true },
-              { label: t("adm.ex.pill.paid"), value: m(sales.totals.paid) },
+              { label: t("adm.ex.pill.pending"), value: int(ops.pending, lang), tone: ops.stuck ? "bad" : ops.pending ? "warn" : "muted", hint: ops.stuck ? t("adm.ex.stg.stuck", { n: ops.stuck }) : undefined },
+              { label: t("adm.ex.pill.inDelivery"), value: int(ops.inDelivery, lang) },
+              { label: t("adm.ex.pill.delivered"), value: int(ops.delivered, lang), tone: "good" },
               sales.totals.balance > 0 ? { label: t("adm.ex.pill.balance"), value: m(sales.totals.balance), tone: "bad" } : null,
-              showProfit && sales.totals.hasEcon ? { label: t("adm.ex.pill.profit"), value: m(sales.totals.profit), tone: sales.totals.profit < 0 ? "bad" : "good" } : null,
-              showProfit && sales.totals.hasEcon ? { label: t("adm.ex.pill.margin"), value: pct(sales.totals.margin_pct) } : null,
             ]}>
-            <StoreOrdersTable data={sales} storeLabel={sf.isAll ? storeLabel : null} compact />
+            <OrdersStagesView data={sales} stages={stages} storeLabel={sf.isAll ? storeLabel : null} params={listParams} me={me} compact onChanged={refresh} />
           </Accordion>
 
           {!sf.isWeb && (
@@ -576,15 +614,13 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
             </Accordion>
           )}
 
-          {showWeb && (
-            <Accordion id="ex-web" icon="globe" title={t("adm.ex.acc.web")} subtitle={t("adm.ex.acc.webSub")} open={openOf("ex-web")} onToggle={toggled("sales")} badge={webOps.n || null}
-              summary={web ? [
-                { label: t("adm.ex.pill.sales"), value: m(webOps.total), strong: true },
-                { label: t("adm.ex.pill.webOrders"), value: int(webOps.n, lang) },
-                { label: t("adm.ex.pill.toPrepare"), value: int(webOps.toPrepare, lang), tone: webOps.toPrepare ? "warn" : "muted" },
-                { label: t("adm.ex.pill.inDelivery"), value: int(webOps.inDelivery, lang) },
-              ] : []}>
-              <Executive range={dates} store="web" go={go} compact />
+          {isAdmin && (
+            <Accordion id="ex-trends" icon="trendUp" title={t("adm.ex.acc.trends")} subtitle={t("adm.ex.acc.trendsSub")} open={openOf("ex-trends")} onToggle={toggled("trends")}
+              summary={[
+                topSeller ? { label: t("adm.ex.pill.top"), value: `${topSeller.name} · ${m(topSeller.sales)}` } : null,
+                { label: t("adm.ex.pill.count"), value: int(sales.totals.count, lang) },
+              ]}>
+              <Trends rows={sales.rows} range={dates} web={sf.isAll || sf.isWeb} sellers={sellerRows.rows} zero={sellerRows.zero} onSeller={openSeller} go={go} showCommission={showCommission} loading={sales.state === "loading"} />
             </Accordion>
           )}
 
@@ -599,16 +635,6 @@ export default function ExecutiveHub({ me, go, sub, onSub, views }) {
             </Accordion>
           )}
 
-          {isAdmin && views?.overview && (
-            <Accordion id="ex-overview" icon="overview" title={t("adm.ex.acc.overview")} subtitle={t("adm.ex.acc.overviewSub")} open={openOf("ex-overview")} onToggle={toggled("overview")}>
-              {views.overview}
-            </Accordion>
-          )}
-          {isAdmin && views?.sales && (
-            <Accordion id="ex-detail" icon="sales" title={t("adm.ex.acc.detail")} subtitle={t("adm.ex.acc.detailSub")} open={openOf("ex-detail")} onToggle={toggled("detail")}>
-              {views.sales}
-            </Accordion>
-          )}
         </AccordionGroup>
       </div>
     </div>

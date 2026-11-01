@@ -29,7 +29,7 @@ export const HELP_GROUPS = {
   sale: ["pos.step.customer", "pos.step.frame", "pos.ownFrame", "pos.step.lenses", "pos.step.price", "pos.step.payment"],
   exec: ["exec.overview", "exec.period", "exec.storeFilter", "exec.kpi.sales", "exec.kpi.collected", "exec.kpi.balance", "exec.kpi.cost", "exec.kpi.profit", "exec.kpi.margin", "exec.orders", "exec.cash", "exec.sellers.quota", "exec.sellers.avgProfit", "exec.sellers.commission"],
   cost: ["cost.paid", "cost.net", "cost.cost", "cost.profit", "cost.target", "cost.incomplete", "cost.split", "cost.materials", "cost.percent", "cost.deductions", "cost.commission", "cost.marginChart"],
-  cash: ["cash.session", "cash.movement", "cash.report"],
+  cash: ["cash.session", "cash.movement", "cash.report", "cash.close"],
   reports: ["statement.what", "salesboard.what", "salesboard.grain"],
   setup: ["stores.color", "team.roles", "posconfig.methods"],
 };

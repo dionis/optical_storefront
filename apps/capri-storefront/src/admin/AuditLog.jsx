@@ -1,7 +1,9 @@
 // Dónde se usa: pestaña «Auditoría» de /admin (dueño y superadmin): quién cambió
 // precios, roles, privilegios, descuentos, anulaciones… (HU-72). Solo lectura.
-// La tienda la fija el filtro global del panel (StoreFilter → ?store=) y los
-// eventos se agrupan en un acordeón por tipo de acción, con su conteo.
+// La tienda y el período los fija la barra de filtros global del panel
+// (StoreFilter → ?store=; el período se aplica aquí sobre `created_at`, la
+// ruta no filtra por fecha) y los eventos se agrupan en un acordeón por tipo
+// de acción, con su conteo.
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { adminFetch } from "./adminApi.js";
@@ -10,7 +12,8 @@ import { fetchStores } from "./adminStores.js";
 import { isDemoLogin } from "./adminAuth.js";
 import Icon from "./icons.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
+import { boundsOf, usePeriodFilter } from "./periodStore.js";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import "./screens.css";
@@ -79,6 +82,7 @@ export default function AuditLog({ me }) {
   const { storeId, isAll, isWeb } = useStoreFilter(me);
   // La tienda online no genera eventos de tienda: con ella elegida se enseñan todos.
   const storeParam = isAll || isWeb ? "" : storeId;
+  const { range } = usePeriodFilter();
 
   useEffect(() => {
     if (demo) return;
@@ -108,13 +112,16 @@ export default function AuditLog({ me }) {
 
   // Un grupo por acción, el más reciente primero (los eventos ya vienen ordenados por fecha).
   const groups = useMemo(() => {
+    const { from, to } = boundsOf(range);
     const map = new Map();
     for (const e of events) {
+      const at = new Date(e.created_at);
+      if (at < from || at > to) continue;
       if (!map.has(e.action)) map.set(e.action, []);
       map.get(e.action).push(e);
     }
     return [...map.entries()];
-  }, [events]);
+  }, [events, range]);
 
   const table = (action, list) => <AuditTable id={action} list={list} who={who} people={people} stores={stores} />;
 
@@ -123,7 +130,6 @@ export default function AuditLog({ me }) {
       <div className="adm-head-row">
         <h2>{t("adm.tab.audit")}</h2>
         <div className="scr-tools">
-          <StoreFilter me={me} />
           <select value={action} onChange={(e) => setAction(e.target.value)} aria-label={t("adm.audit.filter")} title={t("adm.audit.filter")}>
             <option value="">{t("adm.audit.all")}</option>
             {actions.map((a) => <option key={a} value={a}>{t(`adm.audit.action.${a}`)}</option>)}
@@ -134,7 +140,7 @@ export default function AuditLog({ me }) {
       {demo && <div className="adm-demo-banner">{t("adm.team.demoNote")}</div>}
       {state === "error" && <div className="adm-demo-banner">{t("adm.err.audit.loadFailed")}</div>}
       {state === "loading" && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
-      {state === "ok" && events.length === 0 && (
+      {state === "ok" && groups.length === 0 && (
         <div className="adm-card"><div className="adm-empty"><Icon name="history" size={32} /><b>{t("adm.audit.empty")}</b></div></div>
       )}
       <AccordionGroup>
