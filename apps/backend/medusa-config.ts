@@ -329,5 +329,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/store-cost",
     },
+    // Corridas del scraper de catálogo (mensual y a demanda) y su programación. Configuración e historial, nunca se purga.
+    {
+      resolve: "./src/modules/catalog-sync",
+    },
   ],
 });

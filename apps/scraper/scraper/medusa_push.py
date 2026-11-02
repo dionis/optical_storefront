@@ -2,6 +2,8 @@
 
 import atexit
 import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -275,21 +277,51 @@ def _as_update_payload(
        one is CREATED rather than matched — silently duplicating every colour on
        each sync. Match the existing rows by SKU (falling back to title, since the
        colour name is what the SKU is derived from) and carry their ids over.
+
+    3. Medusa REPLACES `metadata` on update (2.17.2 has no merge). Sending only
+       the scraper's keys used to erase every key somebody else wrote: the
+       product's `first_seen_at`, and on variants the generated `views`/`video`
+       that `media sync` copies there. Existing keys are kept and ours win, so
+       the scraper still owns its own fields and nothing else.
     """
     update = {key: value for key, value in payload.items() if key != "options"}
+
+    update["metadata"] = {
+        **(existing.get("metadata") or {}),
+        **(payload.get("metadata") or {}),
+    }
 
     existing_variants = existing.get("variants") or []
     by_sku = {v["sku"]: v["id"] for v in existing_variants if v.get("sku") and v.get("id")}
     by_title = {v["title"]: v["id"] for v in existing_variants if v.get("title") and v.get("id")}
+    metadata_by_id = {v["id"]: v.get("metadata") or {} for v in existing_variants if v.get("id")}
 
     variants = []
     for variant in update.get("variants") or []:
         variant_id = by_sku.get(variant.get("sku")) or by_title.get(variant.get("title"))
-        variants.append({**variant, "id": variant_id} if variant_id else variant)
+        if variant_id:
+            variant = {
+                **variant,
+                "id": variant_id,
+                "metadata": {
+                    **metadata_by_id.get(variant_id, {}),
+                    **(variant.get("metadata") or {}),
+                },
+            }
+        variants.append(variant)
     if variants:
         update["variants"] = variants
 
     return update
+
+
+@dataclass(frozen=True)
+class UpsertResult:
+    """What one push did. `created` is the source of truth for "new model":
+    the local state cache can be empty (a fresh container), Medusa cannot."""
+
+    product_id: str
+    created: bool
 
 
 def upsert_product(
@@ -297,10 +329,16 @@ def upsert_product(
     config: Config,
     pricing: dict[str, Any],
     dry_run: bool = False,
-) -> str | None:
+    run_id: str | None = None,
+) -> UpsertResult | None:
     """
     Upsert a product in Medusa by handle.
-    Returns the Medusa product ID on success, None on dry-run.
+    Returns the product id and whether it was created, or None on dry-run.
+
+    A created product is stamped `metadata.first_seen_at` (and the catalog run
+    that found it, when there is one). That stamp is how the admin panel tells
+    a new model from one the store already had; the merge in
+    `_as_update_payload` keeps it on every later update.
     """
     payload = _build_medusa_payload(
         product, pricing, sales_channel_id=config.medusa_sales_channel_id or None
@@ -319,8 +357,9 @@ def upsert_product(
         client,
         f"{base_url}/admin/products",
         # Variants are needed to carry their ids into the update payload, and
-        # they are not part of the default field set.
-        params={"handle": product.handle, "fields": "id,handle,*variants"},
+        # they are not part of the default field set. Metadata is needed to keep
+        # the keys this payload does not own (see _as_update_payload).
+        params={"handle": product.handle, "fields": "id,handle,metadata,*variants"},
     )
     search_resp.raise_for_status()
     products = search_resp.json().get("products", [])
@@ -333,6 +372,9 @@ def upsert_product(
             json=_as_update_payload(payload, existing),
         )
     else:
+        payload["metadata"]["first_seen_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+        if run_id:
+            payload["metadata"]["first_seen_run"] = run_id
         resp = _post(client, f"{base_url}/admin/products", json=payload)
 
     # `raise_for_status()` reports only the status line, but Medusa puts the
@@ -344,7 +386,10 @@ def upsert_product(
             f"Medusa rejected {'update' if products else 'create'} of "
             f"{product.handle!r} with HTTP {resp.status_code}: {resp.text[:800]}"
         )
-    return str(resp.json().get("product", {}).get("id", ""))
+    return UpsertResult(
+        product_id=str(resp.json().get("product", {}).get("id", "")),
+        created=not products,
+    )
 
 
 def _list_published_handles(

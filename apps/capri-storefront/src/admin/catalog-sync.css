@@ -1,0 +1,65 @@
+/* Pestaña «Sincronización del catálogo» (CatalogSync.jsx) y la marca «Nuevo»
+   de Productos (CatalogManager.jsx). Solo tokens --adm-*: así siguen el modo
+   claro/oscuro y los colores de la tienda (admin-theme.css). */
+
+.cs-wrap { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }
+.cs-wrap .adm-grid-2 { margin-bottom: 0; }
+
+.cs-hint { margin: 0 0 10px; font-size: 12.5px; color: var(--adm-amber-dark); }
+.cs-next { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 13px; color: var(--adm-muted); font-weight: 600; }
+.cs-run-form { margin-bottom: 12px; }
+.cs-check span { display: inline-flex; align-items: center; gap: 6px; color: var(--adm-ink); }
+.cs-check small { font-weight: 500; }
+.cs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+
+/* Barra de progreso */
+.cs-bar { height: 10px; border-radius: 999px; background: var(--adm-line-2); overflow: hidden; margin: 6px 0 8px; }
+.cs-bar span { display: block; height: 100%; border-radius: inherit; background: var(--adm-grad-brand); transition: width .6s var(--adm-ease); }
+.cs-bar span.indeterminate { width: 30% !important; animation: csSlide 1.4s var(--adm-ease) infinite; }
+@keyframes csSlide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .cs-bar span.indeterminate { animation: none; width: 100% !important; opacity: .4; } }
+.cs-progress { margin: 0; font-size: 12.5px; }
+.cs-active h3 { display: flex; align-items: center; gap: 8px; }
+
+/* Detalle de una corrida */
+.cs-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 12.5px; }
+.cs-reason { margin: 0 0 10px; padding: 8px 12px; border-radius: var(--adm-radius-sm); background: var(--adm-red-soft); color: var(--adm-red-dark); border: 1px solid var(--adm-red-line); font-size: 13px; }
+.cs-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr)); gap: 8px; margin-bottom: 14px; }
+.cs-kpi { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--adm-radius-sm); border: 1px solid var(--adm-line); background: var(--adm-surface-2); min-width: 0; }
+.cs-kpi b { font-family: var(--adm-display); font-size: clamp(18px, 1.8vw, 24px); color: var(--adm-navy); letter-spacing: -.02em; }
+.cs-kpi small { font-size: 11.5px; color: var(--adm-muted); font-weight: 600; overflow-wrap: anywhere; }
+.cs-kpi.gold { background: var(--adm-gold-soft); border-color: var(--adm-gold-line); }
+.cs-kpi.gold b { color: var(--adm-gold-dark); }
+.cs-kpi.bad { background: var(--adm-red-soft); border-color: var(--adm-red-line); }
+.cs-kpi.bad b { color: var(--adm-red-dark); }
+.cs-kpi.views { grid-column: span 2; }
+@media (max-width: 520px) { .cs-kpi.views { grid-column: auto; } }
+
+.cs-h4 { display: flex; align-items: center; gap: 6px; margin: 4px 0 10px; font-size: 14px; color: var(--adm-ink); }
+.cs-new-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); gap: 10px; }
+.cs-new { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 8px; border-radius: var(--adm-radius-sm); border: 1px solid var(--adm-gold-line); background: var(--adm-surface); }
+.cs-new b { font-size: 12.5px; color: var(--adm-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-new small { font-size: 11px; }
+.cs-new-img { position: relative; aspect-ratio: 16 / 10; border-radius: 8px; background: var(--adm-surface-2); display: grid; place-items: center; overflow: hidden; color: var(--adm-faint); }
+.cs-new-img img { width: 100%; height: 100%; object-fit: contain; }
+
+/* La marca «Nuevo»: la misma en el resultado de la corrida y en Productos */
+.cs-new-badge, .adm-new-tag {
+  display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+  font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+  background: var(--adm-gold); color: var(--adm-navy-deep); box-shadow: 0 2px 6px rgba(0, 0, 0, .12);
+}
+.cs-new-badge { position: absolute; top: 6px; left: 6px; }
+.adm-new-tag { margin-left: 6px; vertical-align: middle; }
+.adm-cat-row.is-new { box-shadow: inset 3px 0 0 var(--adm-gold); }
+.adm-cat-newfilter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--adm-muted); margin: 0 0 8px; }
+
+.cs-errors { list-style: none; margin: 10px 0 0; padding: 0; max-height: 260px; overflow: auto; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); }
+.cs-errors li { padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--adm-line-2); overflow-wrap: anywhere; }
+.cs-errors li:last-child { border-bottom: 0; }
+.cs-errors li span { color: var(--adm-muted); }
+.cs-log { margin: 10px 0 0; max-height: 360px; overflow: auto; padding: 10px 12px; border-radius: var(--adm-radius-sm); background: var(--adm-navy-deep); color: #e5e7eb; font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.cs-history tbody tr { cursor: pointer; }
+.cs-history tbody tr.on { background: var(--adm-row-hover); }
+.cs-history tbody tr:focus-visible { outline: 2px solid var(--adm-blue); outline-offset: -2px; }

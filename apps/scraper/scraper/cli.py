@@ -49,11 +49,39 @@ def sync_cmd(full: bool, collection_slug: str | None, dry_run: bool) -> None:
         # Surface the actual cause instead of a network traceback 130 products in.
         raise click.ClickException(str(err)) from err
     collections = [collection_slug] if collection_slug else None
-    asyncio.run(sync(config, collections=collections, full=full, dry_run=dry_run))
+    report = asyncio.run(sync(config, collections=collections, full=full, dry_run=dry_run))
+    report.print_summary(click.echo)
+    if report.aborted:
+        raise SystemExit(1)
 
 
 # Register 'sync' as the public command name
 cli.add_command(sync_cmd, name="sync")
+
+
+@cli.command("worker")
+@click.option("--once", is_flag=True, help="Poll once, run what is queued, exit.")
+@click.option("--interval", type=float, default=None, help="Seconds between polls (default 60).")
+@click.option("--worker-id", default=None, help="Name shown in the panel (default: hostname).")
+def worker_cmd(once: bool, interval: float | None, worker_id: str | None) -> None:
+    """Run catalog syncs queued in Medusa (panel button or monthly schedule).
+
+    The process the Coolify app runs. It never scrapes on its own initiative:
+    the schedule and the «Ejecutar ahora» button live in the admin panel.
+    """
+    from scraper import worker
+
+    try:
+        config = get_config()
+        config.validate()
+    except ConfigError as err:
+        raise click.ClickException(str(err)) from err
+    wid = worker_id or worker.default_worker_id()
+    if once:
+        status = worker.poll_once(config, wid)
+        click.echo(f"[worker] {status or 'nothing queued'}")
+        return
+    worker.loop(config, wid, interval=interval or worker.POLL_SECONDS)
 
 # `media` is the generated-media executor: 4 views, promo video, 3D work orders.
 # It lives here rather than in its own app so it reuses what the scraper already

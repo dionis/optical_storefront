@@ -126,6 +126,9 @@ function toFrame(product) {
     rating: typeof m.rating === "number" ? m.rating : 4.6,
     reviews: typeof m.review_count === "number" ? m.review_count : 0,
     medusaId: product.id,
+    // Cuándo lo creó el scraper (solo modelos que entraron con la marca); el
+    // panel lo usa para la etiqueta «Nuevo». Los anteriores no la tienen.
+    firstSeenAt: typeof m.first_seen_at === "string" ? m.first_seen_at : null,
   };
 }
 

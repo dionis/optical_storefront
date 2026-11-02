@@ -33,6 +33,7 @@ export const AUDIT_ACTIONS = [
   "settings.change",
   "alert.rule",
   "assortment.change",
+  "catalog.sync",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

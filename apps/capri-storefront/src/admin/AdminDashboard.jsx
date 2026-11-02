@@ -11,6 +11,7 @@ import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
 import { Card } from "./ui.jsx";
 import { printElement } from "./exportUtils.js";
 import CatalogManager from "./CatalogManager.jsx";
+import CatalogSync from "./CatalogSync.jsx";
 import Team from "./Team.jsx";
 import Stores from "./Stores.jsx";
 import Security from "./Security.jsx";
@@ -1227,6 +1228,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
           <Products preset={preset} setPreset={setPreset} />
         </>
       )}
+      {tab === "catalogsync" && <CatalogSync />}
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}

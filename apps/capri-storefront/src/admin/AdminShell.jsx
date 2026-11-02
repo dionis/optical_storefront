@@ -36,6 +36,7 @@ export const NAV_GROUPS = [
   ] },
   { key: "catalog", icon: "products", items: [
     { key: "products", icon: "products" },
+    { key: "catalogsync", icon: "refresh" },
   ] },
   { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },

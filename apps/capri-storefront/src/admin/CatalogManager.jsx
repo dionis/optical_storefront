@@ -11,6 +11,8 @@ import {
   fetchDiscontinued, exportCatalogCsv, exportCatalogExcel,
 } from "./catalogAdmin.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
+import { isNewModel, dateTime } from "./catalogSync.js";
+import "./catalog-sync.css";
 
 /**
  * GESTIÓN DEL CATÁLOGO (real, vía Admin API de Medusa):
@@ -33,17 +35,23 @@ export default function CatalogManager() {
   const [off, setOff] = useState([]);            // descontinuadas (draft en Medusa)
   const [progress, setProgress] = useState(null); // {done,total} en lotes de marca
   const [cardProduct, setCardProduct] = useState(null); // producto seleccionado → ficha
+  const [onlyNew, setOnlyNew] = useState(false);
 
   const refreshOff = () => { if (!demo) fetchDiscontinued().then(setOff).catch(() => {}); };
   useEffect(refreshOff, [demo]);
 
+  // «Nuevo» = el scraper lo creó hace menos de NEW_MODEL_DAYS (metadata.first_seen_at).
+  const newCount = useMemo(() => products.filter((p) => isNewModel(p.firstSeenAt)).length, [products]);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const base = needle
+    let base = needle
       ? products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(needle))
       : products;
+    if (onlyNew) base = base.filter((p) => isNewModel(p.firstSeenAt));
+    // Los nuevos primero: son los que el dueño todavía no ha revisado.
+    base = [...base].sort((a, b) => Number(isNewModel(b.firstSeenAt)) - Number(isNewModel(a.firstSeenAt)));
     return base.slice(0, 60);
-  }, [products, q]);
+  }, [products, q, onlyNew]);
 
   const brands = useMemo(() => {
     const m = new Map();
@@ -145,12 +153,23 @@ export default function CatalogManager() {
         <Icon name="search" size={15} />
         <input placeholder={t("adm.cat.search")} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
+      {newCount > 0 && (
+        <label className="adm-cat-newfilter">
+          <input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} />
+          {t("adm.cat.newOnly", { n: newCount })}
+        </label>
+      )}
       <div className="adm-cat-rows">
-        {list.map((p) => (
-          <div key={p.slug} className="adm-cat-row">
+        {list.map((p) => {
+          const isNew = isNewModel(p.firstSeenAt);
+          return (
+          <div key={p.slug} className={`adm-cat-row${isNew ? " is-new" : ""}`}>
             <div className="adm-tb-thumb sm" style={{ cursor: "pointer" }} onClick={() => setCardProduct(p)}>{p.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" /> : <span>◈</span>}</div>
             <div className="adm-cat-main" style={{ cursor: "pointer" }} onClick={() => setCardProduct(p)}>
-              <b>{p.name}</b>
+              <b>
+                {p.name}
+                {isNew && <span className="adm-new-tag" title={t("adm.cat.newTitle", { when: dateTime(p.firstSeenAt, lang) })}>{t("adm.cat.newTag")}</span>}
+              </b>
               <small className="muted">{p.brand} · {usd(p.price)}</small>
             </div>
             <div className="adm-cat-actions">
@@ -164,7 +183,8 @@ export default function CatalogManager() {
                       onClick={() => doStatus(p, true)}>{t("adm.cat.off")}</button>
             </div>
           </div>
-        ))}
+          );
+        })}
         {list.length === 0 && <div className="adm-nodata">{t("adm.chart.noData")}</div>}
       </div>
 

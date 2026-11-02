@@ -1,0 +1,13 @@
+# Used by BuildKit instead of the root .dockerignore when building
+# apps/scraper/Dockerfile (context = repo root). Allow-list: only what the
+# image copies, so a local .env or state.db can never end up in it.
+*
+!apps/scraper/pyproject.toml
+!apps/scraper/uv.lock
+!apps/scraper/README.md
+!apps/scraper/pricing.yaml
+!apps/scraper/__main__.py
+!apps/scraper/scraper
+apps/scraper/scraper/**/__pycache__
+!apps/backend/src/lib/frame-media-pilot.json
+!apps/capri-storefront/public/catalog.json

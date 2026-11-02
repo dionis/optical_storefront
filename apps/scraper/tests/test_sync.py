@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from scraper.config import Config
+from scraper.medusa_push import UpsertResult
 from scraper.models import ScrapedProduct
 from scraper.sync import _parse_product_from_html_page, _resolve_category_id, sync
 
@@ -177,11 +178,11 @@ class TestSyncSurvivesTransientFailures:
         self, sync_harness: dict[str, Any]
     ) -> None:
         sync_harness["upsert"].side_effect = [
-            "prod_1",
+            UpsertResult("prod_1", created=False),
             httpx.ReadError("[SSL: SSLV3_ALERT_BAD_RECORD_MAC] sslv3 alert bad record mac"),
-            "prod_3",
-            "prod_4",
-            "prod_5",
+            UpsertResult("prod_3", created=False),
+            UpsertResult("prod_4", created=False),
+            UpsertResult("prod_5", created=False),
         ]
 
         await sync(Config(), collections=["4u"])
@@ -194,11 +195,11 @@ class TestSyncSurvivesTransientFailures:
     ) -> None:
         """Otherwise the next run skips it as unchanged and the gap is permanent."""
         sync_harness["upsert"].side_effect = [
-            "prod_1",
+            UpsertResult("prod_1", created=False),
             httpx.ReadError("boom"),
-            "prod_3",
-            "prod_4",
-            "prod_5",
+            UpsertResult("prod_3", created=False),
+            UpsertResult("prod_4", created=False),
+            UpsertResult("prod_5", created=False),
         ]
 
         await sync(Config(), collections=["4u"])
@@ -227,9 +228,9 @@ class TestSyncSurvivesTransientFailures:
         """Alternating failures are flakiness, not an outage — keep going."""
         sync_harness["upsert"].side_effect = [
             httpx.ReadError("boom"),
-            "prod_2",
+            UpsertResult("prod_2", created=False),
             httpx.ReadError("boom"),
-            "prod_4",
+            UpsertResult("prod_4", created=False),
             httpx.ReadError("boom"),
         ]
 
@@ -237,3 +238,76 @@ class TestSyncSurvivesTransientFailures:
             await sync(Config(), collections=["4u"])
 
         assert sync_harness["upsert"].call_count == 5
+
+
+class TestSyncReport:
+    """The numbers the owner reads in the panel come from here."""
+
+    @pytest.mark.asyncio
+    async def test_counts_new_updated_and_failed(self, sync_harness: dict[str, Any]) -> None:
+        sync_harness["upsert"].side_effect = [
+            UpsertResult("prod_1", created=True),
+            UpsertResult("prod_2", created=False),
+            httpx.ReadError("boom"),
+            UpsertResult("prod_4", created=True),
+            UpsertResult("prod_5", created=False),
+        ]
+
+        report = await sync(Config(), collections=["4u"])
+
+        assert (report.found, report.new, report.updated, report.failed) == (5, 2, 2, 1)
+        assert report.new_handles == ["h0", "h3"]
+        assert report.new_products[0]["collection"] == "4u"
+        assert report.errors[0]["handle"] == "h2"
+        assert report.outcome == "partial"
+
+    @pytest.mark.asyncio
+    async def test_unchanged_products_are_counted_not_pushed(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        sync_harness["state"].has_changed.return_value = False
+
+        report = await sync(Config(), collections=["4u"])
+
+        assert report.unchanged == 5
+        assert sync_harness["upsert"].call_count == 0
+        assert report.outcome == "succeeded"
+
+    @pytest.mark.asyncio
+    async def test_a_stop_from_the_panel_ends_between_products(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        sync_harness["upsert"].return_value = UpsertResult("p", created=False)
+        calls = iter([False, False, True])
+
+        report = await sync(Config(), collections=["4u", "grande"], should_stop=lambda: next(calls))
+
+        assert sync_harness["upsert"].call_count == 2
+        assert report.canceled
+        assert report.outcome == "canceled"
+        assert report.collections == 1, "the second collection must not start"
+
+    @pytest.mark.asyncio
+    async def test_progress_reports_each_pushed_product(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        sync_harness["upsert"].return_value = UpsertResult("p", created=False)
+        seen: list[dict[str, Any]] = []
+
+        await sync(Config(), collections=["4u"], on_progress=seen.append)
+
+        products = [p for p in seen if p["phase"] == "products"]
+        assert [p["position"] for p in products] == [1, 2, 3, 4, 5]
+        assert products[-1]["total"] == 5
+        assert products[0]["collections_total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_an_outage_marks_the_run_failed(self, sync_harness: dict[str, Any]) -> None:
+        sync_harness["upsert"].side_effect = httpx.ConnectError("backend down")
+
+        with patch("scraper.sync._MAX_CONSECUTIVE_FAILURES", 3):
+            report = await sync(Config(), collections=["4u", "grande"])
+
+        assert report.aborted
+        assert report.outcome == "failed"
+        assert report.collections == 1, "an outage must not grind through the next collection"

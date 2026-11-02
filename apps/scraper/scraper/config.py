@@ -123,7 +123,10 @@ class Config:
         )
     )
     base_url: str = "https://caprioptics.com"
-    state_db_path: str = "state.db"
+    # The incremental-sync cache. In the Coolify worker it must sit on a
+    # persistent volume (SCRAPER_STATE_DB=/data/state.db): an empty cache makes
+    # every product look changed, re-pushes the catalog and re-pays translation.
+    state_db_path: str = field(default_factory=lambda: _env("SCRAPER_STATE_DB", "state.db"))
 
     # Collections to scrape (in priority order)
     collections: list[str] = field(
