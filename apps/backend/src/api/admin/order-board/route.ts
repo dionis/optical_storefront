@@ -26,7 +26,12 @@ import { parseBoardDate } from "../../../lib/board-dates";
  *   terminal          canceled | refunded | payment_pending
  *   has_prescription  "true" | "false"
  *   seller            referral code (exact) | "none" (unattributed)
+ *   store             establishment id (till sales of that store) | "web" (online store)
  *   limit / offset    page window (default 20, max 100)
+ *   view              "stages" = slim rows (id, stage, next_stages, history,
+ *                     totals — no items/addresses), max 300 per page, so the
+ *                     executive list gets the stage of every sale of a period
+ *                     in one request and merges it by `order_id`.
  */
 export async function GET(
   req: AuthenticatedMedusaRequest,
@@ -85,8 +90,10 @@ export async function GET(
             ? false
             : undefined,
       seller: query.seller || undefined,
+      store: query.store || undefined,
       limit: query.limit ? Number(query.limit) : undefined,
       offset: query.offset ? Number(query.offset) : undefined,
+      view: query.view === "stages" ? "stages" : "full",
     });
 
     res.status(200).json({

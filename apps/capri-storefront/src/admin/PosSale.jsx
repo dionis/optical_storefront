@@ -35,9 +35,12 @@ import FieldError from "../components/FieldError.jsx";
 import PosSaleSummary from "./PosSaleSummary.jsx";
 import { customerProblems, LIMITS, paymentProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import RxForm from "./PosRx.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, validateRx } from "./rxRules.js";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
+// Tema de ayuda (HelpTip) de cada paso; la receta tiene los suyos en la cuadrícula.
+const STEP_HELP = { customer: "pos.step.customer", frame: "pos.step.frame", rx: "pos.rx.howToRead", lenses: "pos.step.lenses", price: "pos.step.price", payment: "pos.step.payment" };
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const EMPTY_OWN = { open: false, description: "", photo: null };
@@ -129,7 +132,7 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   return (
     <div className="pos-lens">
       <label>
-        {t("adm.pos.lens.design")}
+        <span>{t("adm.pos.lens.design")}<HelpTip topic="pos.step.lenses" /></span>
         <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null })}>
           {line.kind === "frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
           {designs.map((d) => <option key={d.id} value={d.id}>{L(d.label)}</option>)}
@@ -138,21 +141,21 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
       {sel.design_code !== "frame-only" && (
         <>
           <label>
-            {t("adm.pos.lens.material")}
+            <span>{t("adm.pos.lens.material")}<HelpTip topic="pos.step.lenses" /></span>
             <select value={sel.material_code || ""} onChange={(e) => set({ material_code: e.target.value || null })}>
               <option value="">—</option>
               {MATERIALS.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
             </select>
           </label>
           <label>
-            {t("adm.pos.lens.photo")}
+            <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" /></span>
             <select value={sel.photo_code || ""} onChange={(e) => set({ photo_code: e.target.value || null })}>
               <option value="">{t("adm.pos.lens.none")}</option>
               {photos.map((p) => <option key={p.id} value={p.id}>{L(p.label)} · {p.colors.map((c) => PHOTO_COLORS[c]?.[lang] || c).join("/")}</option>)}
             </select>
           </label>
           <label>
-            {t("adm.pos.lens.ar")}
+            <span>{t("adm.pos.lens.ar")}<HelpTip topic="pos.step.lenses" /></span>
             <select value={sel.ar_code || ""} onChange={(e) => set({ ar_code: e.target.value || null })}>
               <option value="">{t("adm.pos.lens.none")}</option>
               {ars.map((a) => <option key={a.id} value={a.id}>{L(a.label)}</option>)}
@@ -496,6 +499,7 @@ export default function PosSale({ me }) {
           {STEPS.slice(0, -1).map((s, i) => (
             <li key={s} className={i === step ? "on" : i < step ? "ok" : ""}>
               <button type="button" disabled={i > step} onClick={() => setStep(i)}>{i + 1}. {t(`adm.pos.step.${s}`)}</button>
+              {i === step && STEP_HELP[s] && <HelpTip topic={STEP_HELP[s]} />}
             </li>
           ))}
         </ol>
@@ -552,7 +556,7 @@ export default function PosSale({ me }) {
             {wears && (
               <div className="pos-worn-now">
                 <p className="adm-sub">{t("adm.pos.worn.hint")}</p>
-                <h3>{t("adm.pos.rx.worn")}</h3>
+                <h3>{t("adm.pos.rx.worn")}<HelpTip topic="pos.rx.worn" /></h3>
                 {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
                 {/* Misma cuadrícula que la receta nueva; aquí la altura no es obligatoria (el lensómetro no la da). */}
                 <RxForm mode="worn" idp="worn" value={rxWorn} onChange={setRxWorn} type={rxWorn.type} errors={wornCheck.errors} warnings={wornCheck.warnings}
@@ -571,6 +575,7 @@ export default function PosSale({ me }) {
                 <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
                   <Icon name={own.open ? "barcode" : "camera"} size={14} /> {t(own.open ? "adm.pos.own.useStock" : "adm.pos.own.add")}
                 </button>
+                <HelpTip topic="pos.ownFrame" />
                 {own.open && (
                   <div className="pos-own">
                     <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
@@ -633,6 +638,7 @@ export default function PosSale({ me }) {
                       <Icon name="upload" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.upload")}
                       <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
                     </label>
+                    <HelpTip topic="pos.rx.ocr" />
                   </div>
                 </div>
                 {ocr.status === "done" && !ocr.confirmed && (
@@ -692,7 +698,7 @@ export default function PosSale({ me }) {
                   </tbody>
                 </table>
                 <div className="pos-discount">
-                  <label>{t("adm.pos.price.discount")}<input inputMode="decimal" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
+                  <label><span>{t("adm.pos.price.discount")}<HelpTip topic="pos.step.price" /></span><input inputMode="decimal" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
                   <small className="muted">{ctx.discount_limit_pct == null ? t("adm.pos.price.noLimit") : t("adm.pos.price.limit", { n: ctx.discount_limit_pct })}</small>
                 </div>
                 <dl className="pos-totals">
@@ -760,7 +766,7 @@ export default function PosSale({ me }) {
             <dl className="pos-totals">
               <dt>{t("adm.pos.pay.paid")}</dt><dd>{m(payState.paid)}</dd>
               {payState.ins > 0 && <><dt>{t("adm.pos.pay.insurance")}</dt><dd>{m(payState.ins)}</dd></>}
-              <dt className="big">{t("adm.pos.pay.balance")}</dt><dd className={`big ${payState.balance < 0 ? "neg" : ""}`}>{m(payState.balance)}</dd>
+              <dt className="big">{t("adm.pos.pay.balance")}<HelpTip topic="pos.step.payment" /></dt><dd className={`big ${payState.balance < 0 ? "neg" : ""}`}>{m(payState.balance)}</dd>
             </dl>
             {payState.balance < 0 && <div className="adm-demo-banner">{t("adm.err.pos.overpaid")}</div>}
             <fieldset className="pos-wears">

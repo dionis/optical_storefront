@@ -1,0 +1,133 @@
+/* Caja de la TIENDA (PosCash.jsx): tarjeta de estado de la sesión abierta,
+   acciones, libro de movimientos; panel del movimiento (CashMovementPanel.jsx)
+   y panel de cierre con contador de billetes (CashClosePanel.jsx). Los dos
+   paneles son capas sobre el área de contenido (.adm-main, como SellerPanel):
+   fondo difuminado, la barra lateral sigue usable. Solo tokens --adm-*. */
+
+/* ── Estado de la caja ───────────────────────────────────────────────── */
+.cash-status { display: grid; gap: 12px; }
+.cash-status-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cash-status-head h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.cash-status-head .cash-since { font-size: 12px; color: var(--adm-muted); }
+.cash-sig { font: 800 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; padding: 3px 7px; border-radius: 6px; background: var(--adm-gold-soft); color: var(--adm-gold-dark); border: 1px solid var(--adm-gold-line); display: inline-block; vertical-align: middle; }
+.cash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; }
+.cash-tile { background: var(--adm-bg); border: 1px solid var(--adm-line); border-radius: 10px; padding: 8px 11px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cash-tile small { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cash-tile b { font-family: var(--adm-display); font-size: clamp(15px, 1.4vw, 19px); color: var(--adm-navy); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cash-tile span { font-size: 11.5px; color: var(--adm-muted); }
+.cash-tile.main { border-color: var(--adm-gold-line); background: var(--adm-gold-soft); }
+.cash-tile.main b { color: var(--adm-gold-dark); font-size: clamp(18px, 1.9vw, 24px); }
+.cash-tile.pos b { color: var(--adm-green); }
+.cash-tile.neg b { color: var(--adm-red); }
+.cash-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cash-actions .spacer { flex: 1; }
+.cash-closed-note { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--adm-muted); flex-wrap: wrap; }
+
+/* Formularios en línea (abrir / movimiento) */
+.cash-form { display: grid; gap: 10px; }
+.cash-form-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.cash-form-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--adm-muted); flex: 1 1 150px; min-width: 0; }
+.cash-form-row label.sm { flex: 0 1 120px; }
+.cash-form-row label.lg { flex: 2 1 240px; }
+.cash-form-row input, .cash-form-row select { min-height: 40px; font-size: 15px; width: 100%; box-sizing: border-box; }
+.cash-form-row input.sig { text-transform: uppercase; letter-spacing: .18em; font-weight: 800; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 120px; }
+.cash-hint { font-size: 12px; color: var(--adm-muted); margin: 0; }
+
+/* Pendientes de autorización */
+.cash-pending { border: 1px solid var(--adm-amber-line, var(--adm-line)); background: var(--adm-amber-soft); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.cash-pending h3 { margin: 0; font-size: 13px; color: var(--adm-amber-dark); display: flex; align-items: center; gap: 6px; }
+.cash-pending-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.cash-pending-row .grow { flex: 1; min-width: 160px; }
+.cash-pending-row b.neg { color: var(--adm-red); }
+.cash-pending-row b.pos { color: var(--adm-amber-dark); }
+
+/* Libro de movimientos */
+.cash-ledger-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cash-ledger-head h3 { margin: 0; flex: 1; }
+.cash-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.cash-chip { border: 1px solid var(--adm-line); background: var(--adm-bg); color: var(--adm-muted); border-radius: 999px; padding: 3px 10px; font: 600 12px var(--adm-font); cursor: pointer; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.cash-chip:hover { color: var(--adm-blue); border-color: var(--adm-blue-line); }
+.cash-chip.on { background: var(--adm-blue-soft); color: var(--adm-blue); border-color: var(--adm-blue-line); }
+.cash-ledger tbody tr { cursor: pointer; }
+.cash-ledger tbody tr:hover td { background: var(--adm-accent-soft); }
+.cash-ledger tbody tr:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+.cash-kind { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; font-size: 11.5px; border-radius: 999px; padding: 1px 7px; }
+.cash-kind.in { background: var(--adm-green-soft); color: var(--adm-green); }
+.cash-kind.out { background: var(--adm-red-soft); color: var(--adm-red); }
+.cash-auto { font-size: 10.5px; color: var(--adm-faint); margin-left: 4px; }
+.cash-amt.in { color: var(--adm-green); } .cash-amt.out { color: var(--adm-red); }
+.cash-status-chip.closed { background: var(--adm-green-soft); color: var(--adm-green-dark); }
+.cash-status-chip.pending_approval { background: var(--adm-amber-soft); color: var(--adm-amber-dark); }
+.cash-status-chip.open { background: var(--adm-blue-soft); color: var(--adm-blue); }
+.cash-row-actions { display: inline-flex; gap: 4px; }
+
+/* ── Capa común de los dos paneles (portal en .adm-main) ─────────────── */
+.cash-overlay { position: fixed; top: 0; right: 0; bottom: 0; left: var(--cash-left, 0px); z-index: 60; display: flex; align-items: flex-start; justify-content: center; padding: clamp(12px, 3vh, 36px) 16px; overflow: auto; -webkit-overflow-scrolling: touch; }
+.cash-backdrop { position: fixed; inset: 0 0 0 var(--cash-left, 0px); background: rgba(27, 31, 58, .35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 0; padding: 0; margin: 0; cursor: pointer; }
+.adm-shell[data-mode="dark"] .cash-backdrop { background: rgba(3, 5, 16, .5); }
+.cash-card {
+  position: relative; z-index: 1; width: min(720px, 100%); max-width: 94vw; margin: auto 0;
+  display: grid; gap: 14px; padding: 20px 22px 18px;
+  background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius); box-shadow: var(--adm-shadow-lg); overflow: hidden;
+  animation: cashIn .22s var(--adm-ease, ease-out);
+}
+.cash-card.wide { width: min(860px, 100%); }
+.cash-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--adm-accent), var(--adm-gold)); }
+.cash-card:focus { outline: none; }
+@keyframes cashIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cash-card { animation: none; } }
+.cash-card-head { display: flex; align-items: center; gap: 12px; padding-right: 36px; flex-wrap: wrap; }
+.cash-card-head h2 { margin: 0; font: 800 clamp(17px, 2vw, 21px)/1.15 var(--adm-display); color: var(--adm-ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cash-card-head small { font-size: 12.5px; color: var(--adm-muted); display: block; margin-top: 3px; }
+.cash-card-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-muted); cursor: pointer; border-radius: 50%; display: grid; place-items: center; transition: background .15s, color .15s, border-color .15s; }
+.cash-card-close:hover { background: var(--adm-surface-2); color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.cash-card-close:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.cash-card-foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--adm-line); padding-top: 12px; }
+.cash-card-foot .grow { flex: 1; }
+.cash-amount-big { font-family: var(--adm-display); font-size: clamp(24px, 3vw, 34px); font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cash-amount-big.in { color: var(--adm-green); } .cash-amount-big.out { color: var(--adm-red); }
+
+/* Panel del movimiento: ficha clave/valor */
+.cm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 8px 14px; }
+.cm-kv { display: grid; gap: 2px; min-width: 0; padding: 8px 10px; background: var(--adm-bg); border: 1px solid var(--adm-line); border-radius: 10px; }
+.cm-kv small { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--adm-muted); }
+.cm-kv b { font-size: 14px; color: var(--adm-ink); overflow-wrap: anywhere; }
+.cm-kv span { font-size: 12px; color: var(--adm-muted); }
+.cm-kv.wide { grid-column: 1 / -1; }
+.cm-sale { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--adm-accent-line); background: var(--adm-accent-soft); border-radius: 10px; }
+.cm-sale .grow { flex: 1; min-width: 160px; }
+.cm-sale b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+.cm-section h4 { margin: 0 0 6px; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--adm-muted); display: flex; align-items: center; gap: 6px; }
+.cm-audit { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+.cm-audit li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cm-audit li time { color: var(--adm-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-audit li code { font-size: 11px; color: var(--adm-faint); }
+
+/* Panel de cierre: contador de denominaciones y firma */
+.cc-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.cc-denoms { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.cc-denom { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; border: 1px solid var(--adm-line); border-radius: 10px; padding: 6px 8px; background: var(--adm-bg); }
+.cc-denom b { font-family: var(--adm-display); font-size: 14px; color: var(--adm-navy); grid-row: span 2; }
+.cc-denom input { min-height: 32px; font-size: 14px; width: 100%; box-sizing: border-box; text-align: right; }
+.cc-denom small { font-size: 10.5px; color: var(--adm-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.cc-sum { display: grid; gap: 8px; align-content: start; }
+.cc-sum .cc-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13.5px; padding: 6px 0; border-bottom: 1px dotted var(--adm-line); }
+.cc-sum .cc-line b { font-variant-numeric: tabular-nums; }
+.cc-sum .cc-line.big { font-size: 15px; border-bottom: 2px solid var(--adm-line); }
+.cc-diff { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-weight: 800; font-size: 15px; }
+.cc-diff.ok { background: var(--adm-green-soft); color: var(--adm-green-dark); }
+.cc-diff.short { background: var(--adm-red-soft); color: var(--adm-red-dark); }
+.cc-diff.over { background: var(--adm-amber-soft); color: var(--adm-amber-dark); }
+.cc-diff b { font-family: var(--adm-display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.cc-note { font-size: 12.5px; color: var(--adm-muted); padding: 8px 10px; border-left: 3px solid var(--adm-amber); background: var(--adm-amber-soft); border-radius: 6px; }
+.cc-approve { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed var(--adm-gold-line); border-radius: 10px; background: var(--adm-gold-soft); }
+.cc-approve label { font-size: 12px; font-weight: 700; color: var(--adm-gold-dark); display: flex; flex-direction: column; gap: 4px; }
+.cc-counted input { min-height: 44px; font-size: 20px; font-weight: 800; text-align: right; width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .cash-overlay { padding: 8px; }
+  .cash-card { padding: 16px 14px 14px; }
+  .cc-layout { grid-template-columns: 1fr; }
+}
+@media print { .cash-overlay { display: none !important; } }

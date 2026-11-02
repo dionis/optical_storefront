@@ -8,6 +8,7 @@ import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
+import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
 
 /**
@@ -27,10 +28,10 @@ export const NAV_GROUPS = [
     { key: "storecosts", icon: "costs" },
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
-    { key: "alerts", icon: "bell" },
   ] },
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
+    { key: "pricing", icon: "prices" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
@@ -40,6 +41,10 @@ export const NAV_GROUPS = [
   ] },
   { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },
+    // Las alertas se configuran desde Administración (decisión del dueño), no
+    // dentro de Tiendas: son reglas del negocio, no de una tienda. El
+    // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).
+    { key: "alerts", icon: "bell" },
     { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
   ] },
@@ -57,6 +62,7 @@ const WORK_GROUP = { key: "work", icon: "dollar", items: [
 /** Dueño y superadmin: el punto de venta con las aprobaciones; su perfil, desde la cabecera. */
 const ADMIN_WORK_GROUP = { key: "work", icon: "dollar", items: [
   ...WORK_GROUP.items.map((i) => (i.key === "profile" ? { ...i, navHidden: true } : i)),
+  { key: "pendingbalances", icon: "hand" },
   { key: "approvals", icon: "hand" },
 ] };
 
@@ -67,11 +73,24 @@ const ADMIN_WORK_GROUP = { key: "work", icon: "dollar", items: [
  */
 export function navGroupsFor(me) {
   if (!me || me.is_admin !== false) return [NAV_GROUPS[0], ADMIN_WORK_GROUP, ...NAV_GROUPS.slice(1)];
+  // Regla del dueño: el vendedor no ve el estado general de nada, ni de su
+  // tienda. Solo sus ventas, lo que va a cobrar y su comisión («Mi panel»,
+  // primero y por defecto), vender, los cobros pendientes de su tienda (los de
+  // sus compañeros incluidos: cobrar un saldo atrasado), su caja y su perfil.
+  if (me.role === "seller") {
+    return [{ ...WORK_GROUP, items: [
+      { key: "mysales", icon: "trendUp" },
+      { key: "pos", icon: "dollar" },
+      { key: "pendingbalances", icon: "hand" },
+      { key: "cash", icon: "wallet" },
+      { key: "profile", icon: "user" },
+    ] }];
+  }
   // Encargado (puntos de venta y seguros de su tienda) o quien gestiona formas de pago.
   const config = me.role === "manager" || (me.privileges || []).includes("payments.manage");
   const extra = [
-    // El panel de ventas, cada cual sobre lo suyo: sus tiendas (HU-67) o, el vendedor, sus ventas.
-    ...(me.role === "supervisor" || me.role === "manager" || me.role === "seller" ? [{ key: "salesboard", icon: "sales" }] : []),
+    // El panel de ventas, cada cual sobre sus tiendas (HU-67).
+    ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "salesboard", icon: "sales" }] : []),
     ...(config ? [{ key: "posconfig", icon: "settings" }] : []),
     // El supervisor configura sus propias alertas (matriz acordada: «Las suyas»).
     ...(me.role === "supervisor" ? [{ key: "alerts", icon: "bell" }] : []),
@@ -80,13 +99,13 @@ export function navGroupsFor(me) {
     // Estado de cuenta del período: supervisor y encargado, sobre sus tiendas.
     ...(me.role === "supervisor" || me.role === "manager" ? [{ key: "statement", icon: "clipboard" }] : []),
   ];
-  // El vendedor arranca en su panel («Mi panel»): primero en su menú, y la
-  // primera pestaña es la que abre el panel cuando el enlace no pide otra.
-  // El supervisor y el encargado arrancan en «Estado de tienda» (sus tiendas).
-  const lead = me.role === "supervisor" || me.role === "manager" ? [{ key: "storestatus", icon: "store" }] : [];
-  const items = me.role === "seller"
-    ? [...WORK_GROUP.items.filter((i) => i.key === "mysales"), ...WORK_GROUP.items.filter((i) => i.key !== "mysales")]
-    : [...lead, ...WORK_GROUP.items];
+  // El supervisor y el encargado arrancan en «Estado de tienda» (sus tiendas),
+  // con el ejecutivo y los pedidos de sus tiendas, y cobran saldos pendientes.
+  const lead = me.role === "supervisor" || me.role === "manager"
+    ? [{ key: "storestatus", icon: "store" }, { key: "exec", icon: "dashboard" }]
+    : [];
+  const items = [...lead, ...WORK_GROUP.items, { key: "pendingbalances", icon: "hand" }];
+  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" });
   return [{ ...WORK_GROUP, items: [...items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
@@ -145,17 +164,43 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
     return () => window.removeEventListener("keydown", onKey);
   }, [showProfile]);
 
+  // La barra de filtros global va pegada justo bajo la cabecera, mida lo que
+  // mida (en el móvil la cabecera crece): se miden las dos y se publican como
+  // --adm-top-real / --adm-bar-h en el armazón, para la barra y para lo que
+  // deba restar su alto (fit.css).
+  const shellRef = useRef(null);
+  const topRef = useRef(null);
+  const barRef = useRef(null);
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return undefined;
+    const apply = () => {
+      shell.style.setProperty("--adm-top-real", `${topRef.current?.offsetHeight || 0}px`);
+      shell.style.setProperty("--adm-bar-h", `${barRef.current?.offsetHeight || 0}px`);
+    };
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    if (topRef.current) ro?.observe(topRef.current);
+    if (barRef.current) ro?.observe(barRef.current);
+    return () => ro?.disconnect();
+  }, [tab]);
+
   const go = (key) => { onTab(key); setDrawer(false); setFly(null); };
   const displayName = me?.display_name || me?.name || String(user || "?").split("@")[0];
   const userRole = me?.role || (me?.is_admin !== false ? "admin" : "staff");
-  // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js),
-  // y su nombre siempre a la vista en la barra superior, también en el móvil.
-  const { theme, store, stores, multi } = useStoreTheme(me);
+  // Tema por tienda: color de la tienda activa en el cromo (useStoreTheme.js)
+  // solo donde se opera (OPERATIONAL_TABS; el administrador ve neutro en las
+  // pestañas informativas), y su nombre siempre a la vista en la barra
+  // superior, también en el móvil, con el punto de SU color aunque el cromo
+  // vaya en neutro (`storeTheme`).
+  const { theme, storeTheme, store, stores, multi } = useStoreTheme(me, { tab });
   // Claro / oscuro / sistema: `data-mode` en el armazón; admin.css redefine los tokens.
   const { mode, resolved: colorMode, cycle: cycleMode } = useColorMode();
-  const storeName = store ? (store.online ? t("adm.theme.online") : store.name) : "";
-  const userStore = store ? `${store.code} · ${storeName}` : me?.store_name || me?.store_code || "";
+  // El nombre es el guardado en Tiendas (`name`), tal cual; el código delante.
+  const storeName = store ? (store.online ? t("adm.theme.online") : String(store.name || store.code || "")) : "";
+  const userStore = store ? [store.code, storeName].filter(Boolean).join(" · ") : me?.store_name || me?.store_code || "";
   const storeLabel = store ? storeName : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
+  const dotStyle = store && !storeTheme.neutral ? { background: storeTheme.accent } : undefined;
   const initials = displayName.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   const item = (it, sub = false) => {
@@ -239,7 +284,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
   ) : null;
 
   return (
-    <div className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
+    <div ref={shellRef} className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
           <div className="adm-side-title" style={{ paddingLeft: 4 }}>
@@ -266,7 +311,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
       <div className="adm-scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
 
       <div className="adm-main">
-        <header className="adm-top">
+        <header className="adm-top" ref={topRef}>
           <button type="button" className="adm-burger" onClick={() => setDrawer(true)} aria-label={t("adm.nav.open")}>
             <Icon name="menu" size={22} />
           </button>
@@ -276,7 +321,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             {me?.is_admin !== false && <em className="adm-badge">ADMIN</em>}
             {/* Dónde estoy: punto del color de la tienda + su nombre, siempre visible. */}
             <span className="adm-store-pill" title={`${t("adm.theme.current")}: ${storeLabel}`} aria-label={`${t("adm.theme.current")}: ${storeLabel}`}>
-              <i className="adm-store-dot" aria-hidden="true" />
+              <i className="adm-store-dot" aria-hidden="true" style={dotStyle} />
               <span className="adm-store-pill-txt">{storeLabel}</span>
             </span>
           </div>
@@ -304,7 +349,14 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             </button>
           </div>
         </header>
-        <main className="adm-body" key={tab}>{children}</main>
+        {/* Filtros globales (tienda · período · rango · exportar), pegados bajo la
+            cabecera en todas las pestañas que los usan (BAR_TABS). Exportar manda
+            a la pantalla abierta: ExportRegistry guarda lo que registra con
+            useRegisterExport. */}
+        <ExportRegistry>
+          <GlobalFilterBar tab={tab} me={me} barRef={barRef} />
+          <main className="adm-body" key={tab}>{children}</main>
+        </ExportRegistry>
       </div>
 
       {showProfile && (

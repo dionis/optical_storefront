@@ -1,0 +1,243 @@
+/* Ejecutivo de una pantalla (ExecutiveHub.jsx) y Pedidos de la tienda
+   (StoreOrders.jsx): barra de filtros fija, tira de KPI densa y acordeones con
+   resumen en la cabecera. Tokens --adm-* (admin.css) y --st-* (tema de tienda,
+   admin-theme.css). Nada de aquí se aplica fuera de .ex-root. */
+
+/* ── Cabecera: título legible en claro y oscuro (tinta del modo, nunca navy) ─ */
+.ex-root .ex-head { display: flex; flex-direction: column; gap: 2px; margin: 0 0 8px; }
+.ex-root .ex-head h2 { margin: 0; font-size: clamp(19px, 1.7vw, 23px); color: var(--adm-ink); display: inline-flex; align-items: center; gap: 8px; }
+.ex-root .ex-head h2::after { display: none; }
+.ex-root .ex-head p { margin: 0; color: var(--adm-muted); font-size: 12.5px; max-width: 72ch; }
+
+/* ── Barra de filtros: una fila. Izquierda = tienda · período segmentado ·
+   rango; derecha = exportar en grupo. En el móvil se parte en dos filas. ──── */
+.ex-bar {
+  position: sticky; top: var(--ex-top, var(--adm-top-h)); z-index: 30;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  min-height: 48px; padding: 7px 0; margin: 0 0 10px;
+  background: var(--st-bg, var(--adm-bg)); border-bottom: 1px solid var(--adm-line);
+}
+.ex-bar.busy .ex-bar-filters { opacity: .75; }
+.ex-bar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; flex: 1 1 auto; }
+.ex-bar-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ex-bar-item .adm-help-btn { flex: 0 0 auto; }
+.ex-bar-period { flex-wrap: wrap; gap: 6px 8px; }
+
+/* Control segmentado: un contenedor redondeado; el activo va relleno con el
+   acento y su tinta (botón, no texto: siempre con borde y fondo). */
+.ex-seg { display: inline-flex; align-items: stretch; padding: 3px; gap: 2px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ex-seg::-webkit-scrollbar { display: none; }
+.ex-seg button { flex: 0 0 auto; border: 1px solid transparent; background: transparent; border-radius: 999px; padding: 4px 11px; min-height: 26px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.ex-seg button:hover { color: var(--adm-ink); background: var(--adm-surface-2); border-color: var(--adm-line); }
+.ex-seg button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.ex-seg button.on:hover { color: var(--st-ink, #fff); background: var(--adm-accent-deep, var(--adm-accent)); }
+.ex-seg button:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+
+/* Chips sueltos y fechas de la lista en solitario (PeriodBar en StoreOrders.jsx). */
+.ex-chips { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.ex-chips button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 999px; padding: 4px 9px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; transition: background .15s, color .15s, border-color .15s; }
+.ex-chips button:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.ex-chips button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); }
+.ex-dates { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--adm-muted); }
+.ex-dates input[type="date"] { min-height: 30px; height: 30px; font: 600 12px var(--adm-font); color: var(--adm-ink); padding: 2px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); max-width: 150px; }
+
+/* Rango: dos fechas en una sola píldora, unidas por «–». Resaltada cuando manda. */
+.ex-range { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 8px 2px 10px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); box-shadow: var(--adm-shadow-card); transition: border-color .15s, box-shadow .15s; }
+.ex-range .adm-ico { flex: 0 0 auto; }
+.ex-range-sep { color: var(--adm-faint); font-weight: 700; padding: 0 1px; }
+.ex-range input[type="date"] { min-height: 26px; height: 26px; width: 118px; font: 600 12px var(--adm-font); color: var(--adm-muted); padding: 0 2px; border: 0; border-radius: 6px; background: transparent; }
+.ex-range input[type="date"]:focus { outline: none; color: var(--adm-ink); background: var(--adm-surface-2); }
+.ex-range:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-range.on { border-color: var(--adm-accent-line); color: var(--adm-ink); }
+.ex-range.on input[type="date"] { color: var(--adm-ink); }
+/* Rango cerrado: un botón con las fechas en corto; pulsarlo abre las dos fechas. */
+.ex-range-btn { font: 600 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; padding-right: 11px; white-space: nowrap; }
+.ex-range-btn:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.ex-range-btn:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-range input[type="date"]::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+.ex-range input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+/* Exportar: PDF · Excel · CSV como un solo grupo segmentado, a la derecha. */
+.ex-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.ex-export .adm-export-menu { display: inline-flex; gap: 0; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); overflow: hidden; }
+.ex-export .adm-export-menu .btn-xs { min-height: 30px; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0 11px; font-weight: 700; color: var(--adm-ink); gap: 5px; }
+.ex-export .adm-export-menu .btn-xs + .btn-xs { border-left: 1px solid var(--adm-line); }
+.ex-export .adm-export-menu .btn-xs:hover { background: var(--adm-accent-soft); color: var(--adm-accent-ink); transform: none; }
+.ex-export .adm-export-menu .btn-xs:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+.ex-export .adm-export-menu .btn-xs .adm-ico { color: var(--adm-muted); }
+.ex-export .adm-export-menu .btn-xs:hover .adm-ico { color: inherit; }
+.ex-note { font-size: 12px; color: var(--adm-muted); flex-basis: 100%; }
+.ex-note.err { color: var(--adm-red-dark); }
+
+/* ── Tira de KPI: diez cifras en una fila de escritorio, cada una con su
+   variación contra el período anterior (misma línea, mismo contrato). ──── */
+.ex-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr)); gap: 6px; margin: 0 0 8px; }
+.ex-kpi { min-height: 62px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 7px 10px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-surface); min-width: 0; text-align: left; font-family: var(--adm-font); cursor: default; position: relative; overflow: hidden; box-shadow: var(--adm-shadow-card); }
+.ex-kpi::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--adm-accent); opacity: .6; }
+.ex-kpi.click { cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; }
+.ex-kpi.click:hover { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); box-shadow: var(--adm-shadow-hover); }
+.ex-kpi.click:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.ex-kpi small { display: flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ex-kpi-flag { display: inline-flex; align-items: center; gap: 2px; text-transform: none; letter-spacing: 0; font-style: normal; font-size: 10px; padding: 0 5px; border-radius: 999px; color: var(--adm-amber-dark, #92400e); background: var(--adm-amber-soft); }
+.ex-kpi b { font-size: 16.5px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--adm-accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* En oscuro la cifra va en la tinta del modo: el acento aclarado del neutro (gris) quedaba por debajo de la etiqueta. */
+.adm-shell[data-mode="dark"] .ex-kpi b { color: var(--adm-ink); }
+.ex-kpi b.neg, .adm-shell[data-mode="dark"] .ex-kpi b.neg { color: var(--adm-red-dark); }
+.ex-kpi i { font-style: normal; font-size: 10.5px; color: var(--adm-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* La variación: cifra en negrita y, si no cabe al lado, «vs. …» en su propia línea. */
+.ex-delta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; font-variant-numeric: tabular-nums; white-space: normal; line-height: 1.3; }
+.ex-delta-arrow { font-size: 8px; align-self: center; }
+.ex-delta-txt { font-weight: 800; white-space: nowrap; }
+.ex-delta-vs { color: var(--adm-faint); font-weight: 600; white-space: nowrap; }
+.ex-delta.good .ex-delta-txt, .ex-delta.good .ex-delta-arrow { color: var(--adm-green-dark, #116633); }
+.ex-delta.bad .ex-delta-txt, .ex-delta.bad .ex-delta-arrow { color: var(--adm-red-dark); }
+.ex-delta.flat .ex-delta-txt { color: var(--adm-muted); }
+.ex-delta.wait .ex-delta-txt { color: var(--adm-faint); font-weight: 600; }
+.ex-kpi i.good { color: var(--adm-green-dark, #116633); }
+.ex-kpi i.bad { color: var(--adm-red-dark); }
+.ex-kpi i.warn { color: var(--adm-amber-dark, #92400e); }
+.ex-kpi.skel b { color: transparent; background: var(--adm-surface-2); border-radius: 6px; }
+
+/* Escritorio: las diez tarjetas en UNA fila (1366 px: ~105 px cada una), para
+   que barra + KPI + cabeceras de los acordeones quepan sin desplazar la página. */
+@media (min-width: 1200px) {
+  .ex-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100px, 100%), 1fr)); gap: 5px; }
+  .ex-kpi { padding: 6px 8px; min-height: 58px; }
+  .ex-kpi b { font-size: 15px; }
+  .ex-kpi small { font-size: 9.5px; letter-spacing: .03em; }
+  .ex-kpi i { font-size: 10px; }
+  .ex-delta-txt { white-space: normal; }
+}
+/* Pantalla baja (portátil 768 px): el subtítulo de la cabecera sobra. */
+@media (max-height: 820px) and (min-width: 900px) {
+  .ex-root .ex-head p { display: none; }
+  .ex-root .ex-head { margin-bottom: 4px; }
+}
+
+/* ── Acordeones del Ejecutivo ───────────────────────────────────────────── */
+.ex-root .adm-acc > summary { min-height: 46px; padding: 6px 12px; }
+.ex-root .acc-body { padding-top: 8px; }
+.ex-root .adm-acc .adm-exec { gap: 8px; }
+.ex-root .adm-acc .adm-exec-kpis { margin-bottom: 8px; }
+.ex-root .exec-grid.cols-1-2 { grid-template-columns: minmax(min(220px, 30vw), 1fr) minmax(0, 1.6fr); }
+.ex-root .adm-acc .adm-card { box-shadow: none; }
+.ex-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font: 700 12px var(--adm-font); color: var(--st-accent, var(--adm-blue)); background: none; border: 0; cursor: pointer; padding: 0; }
+.ex-link:hover { text-decoration: underline; }
+.ex-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 10px; }
+.ex-two h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--adm-muted); }
+.ex-root .adm-table.dense th, .ex-root .adm-table.dense td { padding: 5px 8px; font-size: 12.5px; }
+.ex-root .adm-table tfoot td { font-weight: 800; background: var(--st-soft, var(--adm-surface-2)); border-top: 2px solid var(--adm-line); }
+.ex-root td.num, .ex-root th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.ex-root .neg { color: var(--adm-red-dark); }
+.ex-root .pos { color: var(--adm-green-dark, #116633); }
+.ex-root .margin-pct.good { color: var(--adm-green-dark, #116633); }
+.ex-root .margin-pct.mid { color: var(--adm-amber-dark, #92400e); }
+.ex-root .margin-pct.bad { color: var(--adm-red-dark); }
+.ex-catalog { padding: 2px 0 4px; }
+.ex-catalog .exec-mini-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* ── Pedidos de la tienda ───────────────────────────────────────────────── */
+.so-wrap { max-height: min(62vh, 640px); overflow: auto; }
+.so-wrap.compact { max-height: min(48vh, 520px); }
+.so-table th, .so-table td { padding: 5px 8px; font-size: 12.5px; }
+.so-table td.so-items, .so-table th.so-items { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-table tr.so-voided td { opacity: .55; text-decoration: line-through; }
+.so-table tr.so-voided td:last-child { text-decoration: none; }
+.so-table .so-warn { margin-left: 4px; padding: 0 4px; min-height: 16px; }
+.so-table .so-store { font-weight: 600; }
+.so-table tfoot tr.so-total td { position: sticky; bottom: 0; }
+
+
+/* ── Pedidos y etapas: tira (StageBar + chips + alertas + filtros activos) ── */
+.so-view { display: grid; gap: 8px; }
+.so-strip { display: grid; gap: 6px; }
+.so-strip .so-stagebar { box-shadow: none; }
+.so-strip .so-stagebar .adm-card-head { margin-bottom: 4px; }
+.so-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.so-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 3px 10px 3px 8px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); font: 700 12px var(--adm-font); cursor: pointer; line-height: 1.2; transition: background .15s, color .15s, border-color .15s; }
+.so-chip b { font-size: 11px; padding: 0 6px; min-width: 18px; border-radius: 999px; background: var(--adm-surface-2); color: var(--adm-ink); text-align: center; font-variant-numeric: tabular-nums; }
+.so-chip:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.so-chip.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); }
+.so-chip.on b { background: rgba(255, 255, 255, .22); color: inherit; }
+.so-chip.pending:not(.on) { color: var(--adm-amber-dark); }
+.so-chip.delivered:not(.on) { color: var(--adm-green-dark); }
+.so-chip.voided:not(.on) { color: var(--adm-red-dark); }
+.so-chip:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.so-search { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; min-height: 28px; padding: 0 8px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); }
+.so-search input { border: 0; background: transparent; color: var(--adm-ink); font: 600 12px var(--adm-font); min-width: 150px; outline: none; min-height: 24px; }
+.so-search:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.so-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 22px; font-size: 12px; }
+.so-alert { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font: 700 12px var(--adm-font); border: 1px solid transparent; }
+.so-alert.crit { background: var(--adm-red-soft); color: var(--adm-red-dark); border-color: var(--adm-red-line); cursor: pointer; }
+.so-alert.crit:hover { filter: brightness(.97); }
+.so-alert.ok { background: var(--adm-green-soft); color: var(--adm-green-dark); }
+.so-alert.info { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
+.so-alert.warn { background: var(--adm-amber-soft); color: var(--adm-amber-dark); }
+.so-active { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+.so-flt { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: 999px; background: var(--adm-gold-soft); color: var(--adm-gold-dark); border: 1px solid var(--adm-gold-line); font: 600 12px var(--adm-font); }
+.so-flt small { font-size: 11px; opacity: .8; }
+.so-flt b { font-weight: 800; }
+.so-flt button { display: grid; place-items: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.so-flt button:hover { background: rgba(0, 0, 0, .1); }
+.so-flt-clear { border: 0; background: none; color: var(--adm-muted); font: 700 12px var(--adm-font); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.so-flt-clear:hover { color: var(--adm-ink); }
+.so-showing { margin: 0 0 4px; font-size: 12px; }
+
+/* ── Chip de etapa (lista, ficha, tarjetas) y botón «Avanzar» en la fila ── */
+.so-stg { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; min-height: 22px; border-radius: 999px; font: 700 11.5px var(--adm-font); white-space: nowrap; border: 1px solid transparent; background: var(--adm-line-2); color: var(--adm-muted); }
+.so-stg.sm { min-height: 20px; font-size: 11px; padding: 1px 7px; }
+.so-stg.confirmed { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
+.so-stg.in_lab, .so-stg.pending { background: var(--adm-amber-soft); color: var(--adm-amber-dark); }
+.so-stg.shipped { background: var(--adm-blue-soft); color: var(--adm-blue-dark); }
+.so-stg.in_transit { background: var(--adm-blue-soft); color: var(--adm-blue-dark); border-color: var(--adm-blue-line); }
+.so-stg.delivered { background: var(--adm-green-soft); color: var(--adm-green-dark); }
+.so-stg.payment_pending { background: var(--adm-amber-soft); color: var(--adm-amber-dark); border-color: var(--adm-gold-line); }
+.so-stg.voided, .so-stg.canceled, .so-stg.refunded { background: var(--adm-red-soft); color: var(--adm-red-dark); }
+.so-stg.none { border-style: dashed; border-color: var(--adm-line); background: transparent; }
+.so-stage-cell { white-space: nowrap; }
+.so-stage-wrap { display: inline-flex; align-items: center; gap: 5px; }
+.so-adv { display: inline-flex; align-items: center; gap: 3px; min-height: 22px; padding: 1px 8px 1px 6px; border: 1px solid var(--adm-accent-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-accent-ink); font: 700 11px var(--adm-font); cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.so-adv:hover { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); }
+.so-adv:disabled { opacity: .5; cursor: progress; }
+.so-adv:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.so-table tr.so-stuck td:first-child { box-shadow: inset 3px 0 0 var(--adm-red); }
+
+/* ── Tendencias ── */
+.ex-trends { gap: 8px; }
+.ex-trends .adm-fit-row.cols-1 { grid-template-columns: minmax(0, 1fr); }
+.ex-trends .adm-fit-row.cols-1 > .adm-card { max-width: 520px; }
+.ex-tr-note { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; }
+
+/* ── Móvil: KPI de dos en dos, pastillas que se envuelven, tabla en fichas ─ */
+@media (max-width: 900px) {
+  .ex-two { grid-template-columns: 1fr; }
+  .ex-root .exec-grid.cols-1-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .ex-kpis { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ex-bar { position: static; gap: 8px; }
+  .ex-bar-filters { gap: 8px; }
+  .ex-bar-period { flex-basis: 100%; }
+  .ex-seg { max-width: 100%; flex-wrap: wrap; overflow: visible; border-radius: 16px; }
+  .ex-seg button { padding: 4px 9px; }
+  .ex-range { flex: 0 1 auto; justify-content: center; }
+  .ex-range input[type="date"] { width: 112px; }
+  .ex-export { margin-left: 0; flex-basis: 100%; justify-content: flex-end; }
+  .so-wrap, .so-wrap.compact { max-height: none; overflow: visible; }
+  .so-table td.so-items { max-width: none; white-space: normal; }
+  .so-table tfoot tr.so-total td { position: static; }
+  .so-table.responsive tfoot, .so-table.responsive tfoot tr { display: block; width: 100%; }
+  .so-table.responsive tfoot td { display: flex; justify-content: space-between; gap: 10px; border: none; padding: 5px 0; }
+  .so-table.responsive tfoot td:empty { display: none; }
+  .ex-catalog .exec-mini-kpis { grid-template-columns: 1fr 1fr; }
+  .so-search { margin-left: 0; flex-basis: 100%; }
+  .so-search input { min-width: 0; flex: 1; }
+  .so-active { margin-left: 0; }
+  .so-stage-cell { white-space: normal; }
+  .ex-trends .adm-fit-row.cols-1 > .adm-card { max-width: none; }
+}
+@media print {
+  .ex-bar, .ex-export, .so-chips, .so-search, .so-adv { display: none; }
+  .so-wrap, .so-wrap.compact { max-height: none; overflow: visible; }
+  .ex-kpis { grid-template-columns: repeat(5, 1fr); }
+}

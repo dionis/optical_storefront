@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
@@ -270,7 +271,7 @@ export default function Team() {
 
   return (
     <div className="adm-section">
-      <div className="adm-head-row"><h2>{t("adm.team.title")}</h2></div>
+      <div className="adm-head-row"><h2>{t("adm.team.title")}<HelpTip topic="team.roles" size={16} /></h2></div>
       {demo && <div className="adm-demo-banner">{t("adm.team.demoNote")}</div>}
       {state === "error" && <div className="adm-demo-banner">{t("adm.err.team.loadFailed")}</div>}
 
@@ -286,9 +287,12 @@ export default function Team() {
           <FieldError error={shownNew("firstName")} />
           <input maxLength={LIMITS.name} aria-invalid={shownNew("lastName") ? true : undefined} placeholder={t("adm.team.lastName")} value={form.lastName} onChange={set("lastName")} />
           <FieldError error={shownNew("lastName")} />
-          <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
-            {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
-          </select>
+          <span className="adm-help-row">
+            <select aria-label={t("adm.team.role")} title={t("adm.team.role")} value={newRole} onChange={set("role")}>
+              {grantable.map((r) => <option key={r} value={r}>{t(roleKey(r))}</option>)}
+            </select>
+            <HelpTip topic="team.roles" />
+          </span>
           <button className="btn-sm primary" disabled={demo || busy || (newRole === "seller" && linkMissing(newLink))}>{busy ? "…" : t("adm.team.create")}</button>
         </form>
         {newRole === "seller" && (

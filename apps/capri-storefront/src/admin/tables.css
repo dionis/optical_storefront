@@ -1,0 +1,85 @@
+/* Dónde se usa: SortTh.jsx — las cabeceras que ordenan las tablas del panel
+   (adm-table, adm-fit-table, stmt-tbl, sb-table…). admin.css ya pinta
+   `th.sortable` (cursor, color al pasar y `.on`); aquí va solo el botón de
+   dentro y la flecha, para que la cabecera siga pareciendo una cabecera y no
+   un botón: mismo tipo, mismo color, sin fondo ni borde. La flecha se apaga en
+   las columnas que no mandan y se enciende (color de acento) en la activa.
+   Funciona en modo claro y oscuro porque solo usa tokens --adm-*. */
+
+th.sortable { padding: 0 !important; }
+th.sortable .sort-btn {
+  appearance: none; background: none; border: 0; margin: 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; width: 100%; min-height: 100%;
+  padding: 6px 10px; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-align: inherit; white-space: nowrap; border-radius: 4px; transition: color .15s, background .15s;
+}
+.adm-fit-table th.sortable .sort-btn, .stmt-tbl th.sortable .sort-btn { padding: 5px 8px; }
+.stmt-tbl th.sortable .sort-btn { padding: 5px 7px; }
+th.sortable.r .sort-btn, th.sortable.num .sort-btn { justify-content: flex-end; }
+th.sortable.c .sort-btn { justify-content: center; }
+th.sortable .sort-btn:hover { color: var(--adm-accent-ink, var(--adm-ink)); }
+th.sortable .sort-btn:focus-visible { outline: 2px solid var(--adm-accent, #c9a227); outline-offset: -2px; }
+th.sortable .sort-arr { font-size: 8px; line-height: 1; opacity: .3; transform: translateY(-.5px); transition: opacity .15s; }
+th.sortable .sort-btn:hover .sort-arr { opacity: .6; }
+th.sortable.on .sort-arr { opacity: 1; color: var(--adm-accent, #c9a227); }
+th.sortable.on .sort-label { color: var(--adm-accent-ink, var(--adm-ink)); }
+/* Las tablas que no son .adm-table (fit, estado de cuenta) no traen `.r` en admin.css */
+.adm-fit-table th.sortable.r, .stmt-tbl th.sortable.r { text-align: right; }
+
+/* Al imprimir la cabecera va limpia: sin flechas apagadas, sin aspecto de control. */
+@media print {
+  th.sortable .sort-arr { display: none; }
+  th.sortable.on .sort-arr { display: inline; opacity: 1; color: inherit; }
+}
+
+/* ── DataTable.jsx: barra de cabecera, selector de columnas, desplazamiento y totales ──
+   Solo tokens --adm-*: funciona en claro y oscuro (admin-theme.css) y con el color de la tienda. */
+.dt { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dt-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.dt-bar-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.dt-bar-tools { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.dt-title { margin: 0; font-size: 14px; font-weight: 800; color: var(--adm-ink); }
+.dt-count.adm-chip { font-weight: 700; }
+.dt-loading { color: var(--adm-faint); font-size: 12px; }
+.dt-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dt-scroll { overflow: auto; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); scrollbar-width: thin; }
+.dt-scroll.sticky .adm-table th { position: sticky; top: 0; z-index: 1; }
+.dt-table.dense th, .dt-table.dense td { padding: 5px 8px; font-size: 12px; }
+.dt-table tbody tr[tabindex]:focus-visible > td { outline: 2px solid var(--adm-accent, #c9a227); outline-offset: -2px; }
+.dt-table tfoot td { font-weight: 700; background: var(--adm-surface-2); border-top: 2px solid var(--adm-line); border-bottom: 0; }
+.dt-table td .dt-empty { color: var(--adm-faint); }
+.dt-table td.c { text-align: center; }
+
+/* El selector: un botón pequeño y, debajo a la derecha, un globo con las casillas. */
+.dt-picker { position: relative; display: inline-flex; }
+.dt-picker-btn small { font-weight: 600; color: var(--adm-faint); margin-left: 2px; }
+.dt-picker-btn small.custom { color: var(--adm-accent-ink, var(--adm-ink)); }
+.dt-picker.open .dt-picker-btn { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); }
+.dt-pop {
+  position: fixed; z-index: 60; min-width: 220px; max-width: min(360px, 92vw); display: flex; flex-direction: column;
+  background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm);
+  box-shadow: var(--adm-shadow-lg, 0 10px 30px -8px rgba(0,0,0,.25)); padding: 8px; font: 13px/1.3 var(--adm-font, inherit);
+}
+.dt-pop-tools { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--adm-line-2); }
+.dt-pop-tools .btn-xs { min-height: 24px; padding: 0 8px; font-size: 11.5px; }
+.dt-pop-list { list-style: none; margin: 0; padding: 0; min-height: 0; overflow: auto; scrollbar-width: thin; columns: 1; }
+.dt-pop-list li { break-inside: avoid; }
+.dt-pop-list label { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; font-size: 13px; cursor: pointer; user-select: none; }
+.dt-pop-list label:hover { background: var(--adm-row-hover); }
+.dt-pop-list label.ess span::after { content: "•"; color: var(--adm-accent, #c9a227); margin-left: 5px; font-weight: 800; }
+.dt-pop-list input { margin: 0; accent-color: var(--adm-accent, #c9a227); width: 15px; height: 15px; flex: none; }
+.dt-pop-list input:focus-visible { outline: 2px solid var(--adm-accent, #c9a227); outline-offset: 1px; }
+@media (min-width: 640px) { .dt-pop.wide .dt-pop-list { columns: 2; column-gap: 8px; } }
+
+/* En el móvil cada fila es una tarjeta (admin.css .responsive): el pie de totales también, y el globo ocupa el ancho. */
+@media (max-width: 768px) {
+  .dt-scroll { max-height: none !important; overflow: visible; border: 0; }
+  .dt-table.responsive tfoot, .dt-table.responsive tfoot tr, .dt-table.responsive tfoot td { display: block; width: 100%; }
+  .dt-table.responsive tfoot tr { border: 1px solid var(--adm-line); border-radius: 12px; padding: 8px 10px; background: var(--adm-surface-2); }
+  .dt-table.responsive tfoot td { border: 0; padding: 4px 0; display: flex; justify-content: space-between; gap: 10px; }
+  .dt-table.responsive tfoot td:empty { display: none; }
+  .dt-table.responsive tfoot td::before { content: attr(data-label); font-size: 11px; font-weight: 700; color: var(--adm-faint); text-transform: uppercase; letter-spacing: .05em; }
+  .dt-table.responsive tr[tabindex]:focus-visible { outline: 2px solid var(--adm-accent, #c9a227); }
+  .dt-pop { max-width: none; }
+}
+@media print { .dt-pop, .dt-picker, .dt-loading { display: none !important; } }

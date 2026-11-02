@@ -157,9 +157,14 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "DELETE", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/insurance-claims\/[^/]+$/ },
   { method: "GET", path: /^\/admin\/pos\/cash-sessions$/ },
+  { method: "GET", path: /^\/admin\/pos\/start-map$/ },
   // Cash movements report and the store statement: each route scopes to the person's stores (lib/pos-route.ts).
   { method: "GET", path: /^\/admin\/pos\/(cash-report|statement)$/ },
   { method: "POST", path: /^\/admin\/pos\/cash-sessions(\/[^/]+\/(movement|close))?$/ },
+  // Store register: one session's ledger + audit trail, its opening / closing document, and re-sending it to the owner.
+  // Approving a difference (POST …/approve) is deliberately NOT here: owner and superadmin only (the route checks is_admin).
+  { method: "GET", path: /^\/admin\/pos\/cash-sessions\/[^/]+(\/document)?$/ },
+  { method: "POST", path: /^\/admin\/pos\/cash-sessions\/[^/]+\/email$/ },
   // Store status: the route lets in admins, supervisors and managers, for their stores.
   { method: "GET", path: /^\/admin\/store-status$/ },
   // Dashboards: every role, each scoped by lib/analytics-route.ts (a seller sees their own).

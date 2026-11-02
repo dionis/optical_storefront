@@ -7,6 +7,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
 import { downloadXlsx } from "./exportXlsx.js";
+import { exportReport } from "./ReportDoc.jsx";
 
 /**
  * Alto de gráfico proporcional a la pantalla (los SVG necesitan un número):
@@ -62,34 +63,49 @@ export function InfoTip({ text, title }) {
  * `meta` (texto o función) va bajo el título del PDF: los filtros aplicados;
  * `beforePrint` se llama antes de clonar el nodo (abrir acordeones…) y puede
  * devolver una función que lo deshace.
+ * `report` (función que devuelve la especificación de ReportDoc.jsx) sustituye
+ * los tres formatos por el reporte formal: PDF apaisado con cabecera en el
+ * color de la tienda, Excel con hoja «Resumen» + una por tabla, CSV con el
+ * bloque general arriba y la lista debajo. Si devuelve null, se usa lo de antes.
  */
-export function ExportMenu({ targetRef, title, csv, xlsx, onCsv: customCsv, meta, beforePrint, name = "export", compact = true }) {
+export function ExportMenu({ targetRef, title, csv, xlsx, onCsv: customCsv, meta, beforePrint, report, name = "export", compact = true }) {
   const { t } = useLang();
+  const viaReport = (kind) => {
+    if (typeof report !== "function") return false;
+    const spec = report(kind);
+    if (!spec) return false;
+    exportReport(kind, spec);
+    return true;
+  };
   const onCsv = (e) => {
     e.stopPropagation();
+    if (viaReport("csv")) return undefined;
     if (customCsv) return customCsv();
     const text = csv ? rowsToCsv(csv.cols, csv.rows) : elementToCsv(targetRef?.current);
     return downloadText(`${name}-${new Date().toISOString().slice(0, 10)}.csv`, text);
   };
   const onXlsx = (e) => {
     e.stopPropagation();
+    if (viaReport("xlsx")) return;
     const spec = typeof xlsx === "function" ? xlsx() : xlsx;
     if (!spec?.sheets?.length) return;
     downloadXlsx(spec.filename || `${name}-${new Date().toISOString().slice(0, 10)}.xlsx`, spec.sheets);
   };
   const onPdf = (e) => {
     e.stopPropagation();
+    if (viaReport("pdf")) return;
     const restore = beforePrint?.();
     printElement(targetRef?.current, title, typeof meta === "function" ? meta() : meta);
     if (typeof restore === "function") restore();
   };
   const cls = compact ? "adm-mini" : "btn-xs";
+  const withXlsx = Boolean(xlsx || report);
   const pdf = <button key="pdf" type="button" className={cls} title={t("adm.ui.pdf")} onClick={onPdf}><Icon name="printer" size={14} />{!compact && "PDF"}</button>;
   const csvBtn = <button key="csv" type="button" className={cls} title={t("adm.ui.csv")} onClick={onCsv}><Icon name="excel" size={14} />{!compact && "CSV"}</button>;
-  const xlsxBtn = xlsx ? <button key="xlsx" type="button" className={cls} title={t("adm.ui.xlsx")} onClick={onXlsx}><Icon name="sheet" size={14} />{!compact && "Excel"}</button> : null;
+  const xlsxBtn = withXlsx ? <button key="xlsx" type="button" className={cls} title={t("adm.ui.xlsx")} onClick={onXlsx}><Icon name="sheet" size={14} />{!compact && "Excel"}</button> : null;
   return (
     <span className="adm-export-menu adm-noprint">
-      {xlsx ? [pdf, xlsxBtn, csvBtn] : [csvBtn, pdf]}
+      {withXlsx ? [pdf, xlsxBtn, csvBtn] : [csvBtn, pdf]}
     </span>
   );
 }

@@ -57,6 +57,46 @@ async function markTryon(scope: MedusaContainer, orders: BoardOrder[]): Promise<
 }
 
 /**
+ * Una venta de caja se entrega en el POS (`pos_sale.delivered_at`, lib/pos-data
+ * markDelivered), no con un envío de Medusa: el pedido seguiría «en laboratorio»
+ * en el tablero mientras el cliente ya se fue con sus gafas. Una consulta por
+ * lote lee esa fecha para las órdenes que tienen `metadata.pos_sale_id` y
+ * `applyPosDelivery` la aplica a la proyección. Mejor esfuerzo, como markTryon.
+ */
+async function markPosDelivered(scope: MedusaContainer, orders: BoardOrder[]): Promise<void> {
+  const ids = orders.map((o) => o.pos_sale_id).filter((id): id is string => Boolean(id));
+  if (!ids.length) return;
+  try {
+    const pg = scope.resolve(ContainerRegistrationKeys.PG_CONNECTION) as Knex;
+    const rows = (await pg("pos_sale")
+      .select("id", "delivered_at")
+      .whereIn("id", ids)
+      .whereNotNull("delivered_at")) as Array<{ id: string; delivered_at: Date | string }>;
+    const at = new Map(rows.map((r) => [String(r.id), r.delivered_at instanceof Date ? r.delivered_at.toISOString() : String(r.delivered_at)]));
+    applyPosDelivery(orders, at);
+  } catch {
+    /* best-effort: la etapa queda como la derive Medusa */
+  }
+}
+
+/**
+ * Pura: las órdenes cuya venta de caja ya se entregó pasan a `delivered` sin
+ * más movimientos posibles (`next_stages: []`) y llevan `pos_delivered_at`.
+ * Un estado terminal (cancelado, reembolsado, pago pendiente) no se toca.
+ */
+export function applyPosDelivery(orders: BoardOrder[], deliveredAt: Map<string, string>): void {
+  for (const o of orders) {
+    const at = o.pos_sale_id ? deliveredAt.get(o.pos_sale_id) : undefined;
+    if (!at) continue;
+    o.pos_delivered_at = at;
+    if (o.terminal) continue;
+    o.stage = "delivered";
+    o.stage_index = stageIndex("delivered");
+    o.next_stages = [];
+  }
+}
+
+/**
  * Fields to select. The long tail of relations is NOT optional: order totals are
  * computed, not stored, and the order module only produces a correct number when
  * the rows they are summed from came back too. Prune this list and every row on
@@ -148,8 +188,15 @@ export interface BoardQuery {
   has_prescription?: boolean;
   /** Seller code (exact, case-insensitive); "none" = orders with no seller. */
   seller?: string;
+  /** Establishment id of a till sale, or "web" = the online store (orders not placed at a till). */
+  store?: string;
   limit?: number;
   offset?: number;
+  /**
+   * "stages" = the slim rows of `slimBoardOrder`, up to MAX_BOARD_SCAN per
+   * page, so one request covers a whole period for the executive list.
+   */
+  view?: "full" | "stages";
 }
 
 interface RawItem {
@@ -356,6 +403,86 @@ export function availableTransitions(
 
 export type BoardOrder = ReturnType<typeof projectBoardOrder>;
 
+/**
+ * Medusa's payment records on an order (`payment_collections.payments`), only
+ * selected for one order at a time (`fetchBoardOrder` with `withPayments`):
+ * the list is already heavy enough and only the order's own sheet shows them.
+ */
+export const ORDER_PAYMENT_FIELDS = [
+  "payment_collections.id",
+  "payment_collections.status",
+  "payment_collections.amount",
+  "payment_collections.payments.id",
+  "payment_collections.payments.provider_id",
+  "payment_collections.payments.amount",
+  "payment_collections.payments.currency_code",
+  "payment_collections.payments.created_at",
+  "payment_collections.payments.captured_at",
+  "payment_collections.payments.canceled_at",
+  "payment_collections.payments.captures.amount",
+  "payment_collections.payments.refunds.amount",
+];
+
+interface RawPayment {
+  id?: string;
+  provider_id?: string | null;
+  amount?: number | null;
+  currency_code?: string | null;
+  created_at?: string | null;
+  captured_at?: string | null;
+  canceled_at?: string | null;
+  captures?: { amount?: number | null }[] | null;
+  refunds?: { amount?: number | null }[] | null;
+}
+
+/** Payments as the sale sheet lists them: one row per payment, with what was captured and refunded. Pure. */
+export function projectPayments(order: { payment_collections?: { payments?: RawPayment[] | null }[] | null }) {
+  const sum = (list: { amount?: number | null }[] | null | undefined) => (list ?? []).reduce((s, x) => s + num(x?.amount), 0);
+  return (order.payment_collections ?? []).flatMap((pc) => (pc?.payments ?? []).map((p) => ({
+    id: p.id ?? null,
+    provider_id: p.provider_id ?? null,
+    amount: num(p.amount),
+    currency_code: p.currency_code ?? "usd",
+    created_at: p.created_at ?? null,
+    captured_at: p.captured_at ?? null,
+    canceled_at: p.canceled_at ?? null,
+    captured: sum(p.captures),
+    refunded: sum(p.refunds),
+  })));
+}
+
+/**
+ * The stage-only view of a row (`GET /admin/order-board?view=stages`): what the
+ * executive list needs to put an "Etapa" chip and an "Avanzar" button next to a
+ * sale it already has the money of (`/admin/sales-analytics/sales`), merged by
+ * `id` = the sale's `order_id`. No items, no addresses, no customer: a whole
+ * period fits in one response. Pure.
+ */
+export function slimBoardOrder(o: BoardOrder) {
+  return {
+    id: o.id,
+    display_id: o.display_id,
+    created_at: o.created_at,
+    total: o.total,
+    currency_code: o.currency_code,
+    stage: o.stage,
+    stage_index: o.stage_index,
+    terminal: o.terminal,
+    next_stages: o.next_stages,
+    stage_history: o.stage_history,
+    channel: o.channel,
+    establishment_id: o.establishment_id,
+    seller_code: o.seller_code,
+    pos_sale_id: o.pos_sale_id,
+    pos_sale_number: o.pos_sale_number,
+    pos_delivered_at: o.pos_delivered_at,
+    fulfillments: o.fulfillments,
+    has_prescription: o.has_prescription,
+  };
+}
+
+export type SlimBoardOrder = ReturnType<typeof slimBoardOrder>;
+
 /** One row of the board. */
 export function projectBoardOrder(order: Record<string, unknown>) {
   const rawItems = (order["items"] as RawItem[]) ?? [];
@@ -455,13 +582,24 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     // Which network the referral link was shared on (`src=` of the link →
     // `metadata.seller_source`); null when the link had no tag.
     seller_source: sellerSource,
+    // Where it was sold: a till (`metadata.source === "pos"`, with its
+    // establishment) or the online store. The executive panel filters on it.
+    channel: metadata["source"] === "pos" ? "pos" : "web",
+    establishment_id: typeof metadata["establishment_id"] === "string" && metadata["establishment_id"] ? String(metadata["establishment_id"]) : null,
     // Free-text note the owner keeps on the order (panel + sheet).
     owner_note: ownerNote,
     // Every stage change recorded by transitionOrderStage, oldest first.
     stage_history: stageHistory,
+    // The till sale behind a POS order (stamped by lib/pos-data createSale), so
+    // the panel opens the sale's sheet from the order and vice versa.
+    pos_sale_id: typeof metadata["pos_sale_id"] === "string" && metadata["pos_sale_id"] ? String(metadata["pos_sale_id"]) : null,
+    pos_sale_number: typeof metadata["pos_sale_number"] === "string" && metadata["pos_sale_number"] ? String(metadata["pos_sale_number"]) : null,
+    // When the till handed the glasses over (applyPosDelivery); null until then.
+    pos_delivered_at: null as string | null,
 
     fulfillments: fulfillments.map((f) => ({
       id: f.id,
+      created_at: f.created_at ?? null,
       packed_at: f.packed_at ?? null,
       shipped_at: f.shipped_at ?? null,
       delivered_at: f.delivered_at ?? null,
@@ -472,6 +610,8 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     next_stages: availableTransitions({ fulfillments, items: rawItems }, progress),
 
     items: rawItems.map(projectItem),
+    // Only filled by fetchBoardOrder(..., { withPayments: true }).
+    payments: projectPayments(order as { payment_collections?: { payments?: RawPayment[] }[] }),
   };
 }
 
@@ -498,6 +638,14 @@ function haystack(row: BoardOrder): string {
     .toLowerCase();
 }
 
+/** `store` = "web" keeps online orders; an establishment id keeps that till's sales; empty keeps all. Pure. */
+export function matchesStore(row: Pick<BoardOrder, "channel" | "establishment_id">, store: string | undefined | null): boolean {
+  const s = String(store ?? "").trim();
+  if (!s || s === "all") return true;
+  if (s === "web") return row.channel !== "pos";
+  return row.channel === "pos" && row.establishment_id === s;
+}
+
 /**
  * The in-memory filters (everything but the date range, which the database
  * applies). Pure, so the seller/stage/text rules can be tested on literals.
@@ -516,13 +664,14 @@ export function filterBoardRows(
     if (params.has_prescription === false && row.has_prescription) return false;
     if (seller === "none" && row.seller_code) return false;
     if (seller && seller !== "none" && row.seller_code !== seller) return false;
+    if (!matchesStore(row, params.store)) return false;
     if (q && !haystack(row).includes(q)) return false;
     return true;
   });
 }
 
 export interface BoardResult {
-  orders: BoardOrder[];
+  orders: BoardOrder[] | SlimBoardOrder[];
   /** Rows matching the filters, within the scanned window. */
   count: number;
   /** Rows read from the database before filtering. */
@@ -545,14 +694,16 @@ export async function fetchBoardOrders(
   scope: MedusaContainer,
   params: BoardQuery
 ): Promise<BoardResult> {
-  const limit = Math.min(Math.max(Number(params.limit) || DEFAULT_BOARD_LIMIT, 1), 100);
+  const slim = params.view === "stages";
+  const limit = Math.min(Math.max(Number(params.limit) || DEFAULT_BOARD_LIMIT, 1), slim ? MAX_BOARD_SCAN : 100);
   const offset = Math.max(Number(params.offset) || 0, 0);
 
   const { orders: projected, scanned, truncated } = await scanBoardWindow(scope, params);
   const filtered = filterBoardRows(projected, params);
+  const page = filtered.slice(offset, offset + limit);
 
   return {
-    orders: filtered.slice(offset, offset + limit),
+    orders: slim ? page.map(slimBoardOrder) : page,
     count: filtered.length,
     scanned,
     truncated,
@@ -596,22 +747,27 @@ export async function scanBoardWindow(
   >[];
 
   const projected = rawOrders.map(projectBoardOrder);
-  // Señal de prueba virtual por orden (una consulta por lote para toda la página).
-  await markTryon(scope, projected);
+  // Señal de prueba virtual y entrega en caja por orden (una consulta por lote cada una).
+  await Promise.all([markTryon(scope, projected), markPosDelivered(scope, projected)]);
 
   // `raw` is kept (same index as `orders`) for readers that need what the
   // projection leaves out, e.g. the stored cost sheet in metadata.
   return { orders: projected, raw: rawOrders, scanned: rawOrders.length, truncated: rawOrders.length >= MAX_BOARD_SCAN };
 }
 
-/** Re-read one order after a transition, so the panel repaints from the truth. */
+/**
+ * Re-read one order after a transition, so the panel repaints from the truth.
+ * `withPayments` also selects Medusa's payment records (the sale sheet lists
+ * them); the list never does.
+ */
 export async function fetchBoardOrder(
   scope: MedusaContainer,
-  id: string
+  id: string,
+  { withPayments = false }: { withPayments?: boolean } = {}
 ): Promise<BoardOrder | null> {
   const { result } = await getOrdersListWorkflow(scope).run({
     input: {
-      fields: ORDER_BOARD_FIELDS,
+      fields: withPayments ? [...ORDER_BOARD_FIELDS, ...ORDER_PAYMENT_FIELDS] : ORDER_BOARD_FIELDS,
       variables: { filters: { id }, skip: 0, take: 1 },
     },
   });
@@ -621,7 +777,7 @@ export async function fetchBoardOrder(
   >[];
   if (!rows[0]) return null;
   const order = projectBoardOrder(rows[0]);
-  await markTryon(scope, [order]);
+  await Promise.all([markTryon(scope, [order]), markPosDelivered(scope, [order])]);
   return order;
 }
 

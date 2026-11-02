@@ -96,6 +96,8 @@ const PATHS = {
   excel: ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z", "M14 2v4a2 2 0 0 0 2 2h4", "m9 12 6 6", "m15 12-6 6"],
   save: ["M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z", "M17 21v-8H7v8", "M7 3v5h8"],
   undo: ["M3 7v6h6", "M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"],
+  // Desactivar una tienda o un punto de venta (no es «borrar»: se apaga).
+  power: ["M12 2v10", "M18.4 6.6a9 9 0 1 1-12.77.04"],
 };
 
 export const ICON_NAMES = Object.keys(PATHS);

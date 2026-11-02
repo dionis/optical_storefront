@@ -37,6 +37,9 @@ function medusaModels(): { entities: Set<string>; tables: Set<string> } {
   const entities = new Set<string>();
   const tables = new Set<string>();
   const medusaDir = dirname(require.resolve("@medusajs/medusa/package.json"));
+  // Medusa's dependency list is read at run time, from the installed package:
+  // the set of core modules is whatever this install ships, not a literal.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic read of an installed package.json
   const deps = Object.keys(require(join(medusaDir, "package.json")).dependencies ?? {});
   for (const dep of deps.filter((d) => d.startsWith("@medusajs/"))) {
     let pkgDir: string;

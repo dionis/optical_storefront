@@ -47,6 +47,11 @@ export const LensDesign = model.define("lens_design", {
   requires_add: model.boolean().default(false),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
+  /** Named progressive designs: the owner's tier label ("Básico" … "Elite"). */
+  tier: model.text().nullable(),
+  /** Short "who is it for" text shown next to the tier. */
+  use_es: model.text().nullable(),
+  use_en: model.text().nullable(),
 });
 
 /** Lens material (columns of the matrix). `max_abs` = max recommended Rx magnitude. */
@@ -108,4 +113,22 @@ export const LensTreatmentPrice = model.define("lens_treatment_price", {
   material_code: model.text(),
   treatment_code: model.text(),
   price_cents: model.number().default(0),
+});
+
+/**
+ * A store's variation of the master lens list (pricing panel, "Lentes" per
+ * store). `item_kind` "adjust" = one percentage over the whole master
+ * (`item_key` "all", `value` = percent); "base" = exact cents of a
+ * (design, material) cell (`item_key` "<design>:<material>"); "photo" = exact
+ * cents of a photochromic option in a category (`item_key` "<code>:<sv|bifocal|prog>");
+ * "ar" = exact cents of an AR option (`item_key` "<code>"). A cell override
+ * wins over the percentage. Read by lens-quote.ts when quoting for a store.
+ */
+export const LensStorePrice = model.define("lens_store_price", {
+  id: model.id().primaryKey(),
+  establishment_id: model.text(),
+  item_kind: model.text(),
+  item_key: model.text(),
+  value: model.float(),
+  created_by: model.text().nullable(),
 });

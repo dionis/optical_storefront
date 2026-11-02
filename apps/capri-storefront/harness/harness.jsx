@@ -11,7 +11,7 @@ import RxForm from "/src/admin/PosRx.jsx";
 import { EMPTY_RX, validateRx } from "/src/admin/rxRules.js";
 import PosFrameCard from "/src/admin/PosFrameCard.jsx";
 import AdminShell from "/src/admin/AdminShell.jsx";
-import { KpiCard } from "/src/admin/charts.jsx";
+import { KpiCard, kpiDelta } from "/src/admin/charts.jsx";
 import Icon from "/src/admin/icons.jsx";
 import { receiptDuoHtml, receiptHtml, jobHtml, PRINT_CSS, DUO_PAGE_CSS } from "/src/admin/SaleDocuments.jsx";
 
@@ -76,7 +76,9 @@ function ShellSink() {
         <div className="adm-kpis">
           <KpiCard label="Ventas" value="$4,320" delta="+12%" deltaGood icon={<Icon name="dollar" size={18} />} sub="vs. ayer" />
           <KpiCard label="Tickets" value="27" delta="-3%" icon={<Icon name="receipt" size={18} />} sub="vs. ayer" />
-          <KpiCard label="Ticket medio" value="$160" icon={<Icon name="trendUp" size={18} />} />
+          <KpiCard label="Ticket medio" value="$160" icon={<Icon name="trendUp" size={18} />} delta={kpiDelta(160, 160, { kind: "money", fmt: (v) => `$${v.toFixed(2)}` })} sub="vs. ayer" />
+          <KpiCard label="Costo" value="$1,980" icon={<Icon name="costs" size={18} />} delta={kpiDelta(1980, 2100, { kind: "money", invert: true, fmt: (v) => `$${v.toFixed(2)}` })} sub="vs. ayer" />
+          <KpiCard label="Margen" value="48%" icon={<Icon name="percent" size={18} />} delta={kpiDelta(48, 46.5, { kind: "pct" })} sub="vs. ayer" />
         </div>
         <div className="sb-root"><div className="sb-bar" style={{ position: "static" }}>
           <div className="sb-chips"><button type="button" className="on">Día</button><button type="button">Semana</button><button type="button">Mes</button></div>

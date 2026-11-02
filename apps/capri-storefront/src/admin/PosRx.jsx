@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { LIMITS, typedDecimal, typedSigned } from "../data/fieldRules.js";
 import { PRISM_BASES, RX_TYPES, binocularPd, inferType, normalizeField, setEyeField, setPd, validateRx, withType } from "./rxRules.js";
+import HelpTip from "./HelpTip.jsx";
 import "./pos-rx.css";
 
 const COLS = { sv: ["sph", "cyl", "axis", "prism", "base", "pd"], multifocal: ["sph", "cyl", "axis", "add", "prism", "base", "pd", "seg"] };
@@ -16,6 +17,8 @@ const WORN_SOURCES = ["previous_rx", "lensometer", "prior_sale"];
 const FRAME_FIELDS = ["lens_width", "bridge", "temple", "lens_height", "total_width"];
 const FRAME_LABEL = { lens_width: "lensWidth", bridge: "bridge", temple: "temple", lens_height: "lensHeight", total_width: "totalWidth" };
 const FRAME_PH = { lens_width: "50", bridge: "18", temple: "140", lens_height: "35", total_width: "136" };
+// Tema de ayuda (HelpTip) de cada columna de la cuadrícula.
+const HELP = { sph: "pos.rx.sph", cyl: "pos.rx.cyl", axis: "pos.rx.axis", add: "pos.rx.add", prism: "pos.rx.prism", base: "pos.rx.base", pd: "pos.rx.pd", seg: "pos.rx.seg" };
 
 /**
  * Cuadrícula de una receta.
@@ -100,15 +103,18 @@ export default function RxForm({
 
   return (
     <div className={`pos-rx pos-rx--${mode}`}>
-      <div className="pos-rx-type" role="radiogroup" aria-label={t("adm.pos.rx.type")}>
-        {RX_TYPES.map((k) => (
-          <button key={k} type="button" role="radio" aria-checked={rxType === k} className={rxType === k ? "on" : ""} disabled={disabled} onClick={() => rxType !== k && changeType(k)}>{t(`adm.pos.rx.type.${k}`)}</button>
-        ))}
+      <div className="adm-help-row">
+        <div className="pos-rx-type" role="radiogroup" aria-label={t("adm.pos.rx.type")}>
+          {RX_TYPES.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={rxType === k} className={rxType === k ? "on" : ""} disabled={disabled} onClick={() => rxType !== k && changeType(k)}>{t(`adm.pos.rx.type.${k}`)}</button>
+          ))}
+        </div>
+        <HelpTip topic="pos.rx.type" />
       </div>
       <div className="pos-rx-scroll">
         <table className={`pos-rx-grid cols-${cols.length}`}>
           <thead>
-            <tr><th />{cols.map((k) => <th key={k} title={t(k === "pd" ? "adm.pos.rx.dnp" : k === "seg" ? "adm.pos.rx.alt" : k === "base" ? "adm.pos.rx.base" : `adm.pos.rx.${k}`)}>{t(`adm.pos.rx.h.${k}`)}</th>)}</tr>
+            <tr><th><HelpTip topic="pos.rx.howToRead" size={13} /></th>{cols.map((k) => <th key={k} title={t(k === "pd" ? "adm.pos.rx.dnp" : k === "seg" ? "adm.pos.rx.alt" : k === "base" ? "adm.pos.rx.base" : `adm.pos.rx.${k}`)}>{t(`adm.pos.rx.h.${k}`)}<HelpTip topic={HELP[k]} size={12} /></th>)}</tr>
           </thead>
           <tbody>
             {["od", "os"].map((eye) => <tr key={eye}><th scope="row">{t(`adm.pos.rx.${eye}`)}</th>{cols.map((k) => cell(eye, k))}</tr>)}

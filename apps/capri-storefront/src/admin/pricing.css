@@ -1,0 +1,88 @@
+/* «Precios y costos» (admin/PricingPanel.jsx + admin/pricing/*).
+   Minimalista por pedido del dueño: nada de aire que no sirva — filas de una
+   línea, campos del ancho del número que llevan y la matriz de lentes como una
+   tabla densa que se edita en la propia celda. Tokens --adm-* y --st-* (tema de
+   tienda); modo oscuro heredado del armazón, sin un solo color a mano. */
+
+.pp { display: flex; flex-direction: column; gap: 8px; }
+.pp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-head h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.pp-scope { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  background: var(--adm-accent-soft, var(--adm-surface-2)); color: var(--adm-accent-ink, var(--adm-navy)); border: 1px solid var(--adm-accent-line, var(--adm-line)); }
+.pp-intro { margin: 0 0 2px; font-size: 12px; color: var(--adm-muted); max-width: 86ch; }
+
+/* Una fila de edición: etiqueta, control(es) y el botón. Nunca ocupa dos líneas en escritorio. */
+.pp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.pp-row + .pp-row { border-top: 1px dashed var(--adm-line-2); }
+.pp-row > label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--adm-ink); min-width: 0; }
+.pp-row .pp-now { font-size: 11.5px; color: var(--adm-muted); font-variant-numeric: tabular-nums; }
+.pp-row .pp-grow { flex: 1 1 120px; min-width: 0; }
+.pp-hint { margin: 0; font-size: 11px; color: var(--adm-muted); max-width: 84ch; }
+
+.pp-block { padding: 2px 0 4px; }
+.pp-block + .pp-block { margin-top: 6px; border-top: 1px solid var(--adm-line-2); padding-top: 8px; }
+.pp-block h4 { margin: 0 0 4px; font-size: 12.5px; font-weight: 800; display: flex; align-items: center; gap: 6px; color: var(--adm-ink); }
+.pp-block h4 small { font-weight: 600; color: var(--adm-muted); font-size: 11px; }
+
+/* Campos: el ancho lo decide el dato, no el contenedor. */
+.pp-num { width: 7.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+.pp-num.wide { width: 10ch; }
+.pp-input { padding: 3px 7px; font-size: 12.5px; border: 1px solid var(--adm-line); border-radius: 6px; background: var(--adm-surface); color: var(--adm-ink); }
+.pp-input:focus-visible { outline: none; border-color: var(--adm-accent, var(--adm-blue)); box-shadow: 0 0 0 2px var(--adm-accent-soft, transparent); }
+.pp-unit { font-size: 11.5px; color: var(--adm-muted); font-weight: 700; }
+
+.pp-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  background: var(--adm-surface-2); color: var(--adm-muted); border: 1px solid var(--adm-line); white-space: nowrap; }
+.pp-badge.inherit { background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); border-color: transparent; }
+.pp-badge.off { background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); border-color: transparent; }
+
+/* Buscador de modelo + resultados como pastillas en una sola tira. */
+.pp-search { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); max-width: 420px; }
+.pp-search input { border: 0; background: none; outline: none; font-size: 12.5px; color: var(--adm-ink); width: 100%; }
+.pp-matches { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 0; padding: 0; list-style: none; }
+.pp-matches li { display: inline-flex; }
+
+/* Matriz de lentes: cabecera fija, celdas editables, cero relleno inútil. */
+.pp-grid-wrap { overflow: auto; max-height: 56vh; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 8px); }
+table.pp-grid { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12px; }
+table.pp-grid th, table.pp-grid td { padding: 3px 6px; border-bottom: 1px solid var(--adm-line-2); white-space: nowrap; }
+table.pp-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--adm-surface-2); font-size: 11px; font-weight: 800; color: var(--adm-muted); text-align: right; }
+table.pp-grid thead th:first-child { text-align: left; left: 0; z-index: 3; }
+table.pp-grid tbody th { position: sticky; left: 0; z-index: 1; background: var(--adm-surface); text-align: left; font-weight: 700; font-size: 11.5px; }
+table.pp-grid td { text-align: right; }
+table.pp-grid tbody tr:hover td { background: var(--adm-surface-2); }
+.pp-cell { width: 8ch; text-align: right; font-variant-numeric: tabular-nums; padding: 2px 5px; font-size: 12px;
+  border: 1px solid transparent; border-radius: 5px; background: none; color: var(--adm-ink); }
+.pp-cell:hover { border-color: var(--adm-line); }
+.pp-cell:focus-visible { outline: none; border-color: var(--adm-accent, var(--adm-blue)); background: var(--adm-surface); }
+.pp-cell.own { font-weight: 800; color: var(--adm-accent-ink, var(--adm-navy)); background: var(--adm-accent-soft, transparent); border-color: transparent; }
+.pp-cell.na { color: var(--adm-muted); }
+.pp-tier { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 800;
+  background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); }
+.pp-use { display: block; font-size: 10.5px; font-weight: 500; color: var(--adm-muted); }
+
+/* Lista densa (comisiones, costos): una línea por cosa, el número a la derecha. */
+.pp-list { margin: 0; padding: 0; list-style: none; }
+.pp-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--adm-line-2); font-size: 12.5px; }
+.pp-list li:last-child { border-bottom: 0; }
+.pp-list .pp-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pp-list .pp-sub { font-size: 11px; color: var(--adm-muted); font-weight: 600; }
+.pp-list li.is-off .pp-name { color: var(--adm-muted); text-decoration: line-through; }
+
+/* Interruptor de un costo: casilla grande para el dedo, texto corto al lado. */
+.pp-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--adm-muted); cursor: pointer; }
+.pp-switch input { width: 16px; height: 16px; accent-color: var(--adm-accent, var(--adm-blue)); cursor: pointer; }
+.pp-switch.disabled { cursor: not-allowed; opacity: .55; }
+
+.pp-empty { font-size: 12px; color: var(--adm-muted); padding: 8px 0; }
+.pp-err { font-size: 12px; color: var(--adm-red-dark, #991b1b); }
+
+@media (max-width: 720px) {
+  .pp-row { align-items: stretch; }
+  .pp-search { max-width: none; }
+  .pp-grid-wrap { max-height: 50vh; }
+}
+@media print {
+  .pp-search, .pp-matches, .pp-switch, .pp-row button { display: none; }
+  .pp-grid-wrap { max-height: none; overflow: visible; }
+}

@@ -104,20 +104,47 @@ export interface StoreLinePrice {
   adjustment: { mode: "percent" | "delta"; value: number } | null;
 }
 
+/**
+ * The adjustment that covers a whole component, most specific first. The
+ * pricing panel writes "a rule for ALL frames" (scope "frame", no target) and
+ * "a rule for ALL cases" (scope "case"); the older general adjustment (scope
+ * "all") still covers both, and the owner's own rule (establishment_id null) is
+ * the master every store falls back to.
+ *
+ *   store, scope  >  store, "all"  >  master, scope  >  master, "all"
+ */
+function generalAdjustment(
+  rules: PriceRuleLike[],
+  est: string,
+  scope: "frame" | "case",
+  now: Date
+): PriceRuleLike | null {
+  const of = (establishment: string | null, which: string) =>
+    pick(rules, now, (r) =>
+      r.establishment_id === establishment && r.scope === which && r.target == null && (r.mode === "percent" || r.mode === "delta")
+    );
+  return of(est, scope) ?? of(est, "all") ?? of(null, scope) ?? of(null, "all");
+}
+
 export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, now = new Date()): StoreLinePrice {
   const est = input.establishmentId;
   const base = globalPrice(rules, input.scope, input.target, input.base, now);
   const exact = pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override");
-  const general = pick(rules, now, (r) => r.establishment_id === est && r.scope === "all" && (r.mode === "percent" || r.mode === "delta"));
+  const general = generalAdjustment(rules, est, input.scope, now);
   const adjustment = general ? { mode: general.mode as "percent" | "delta", value: Number(general.value) } : null;
 
+  // A rule written for ALL FRAMES (or all cases) is about that component only:
+  // the lens add-on has its own per-store percentage (the lens matrix' "% sobre
+  // el maestro", lib/pricing-overview.ts). The legacy general adjustment
+  // (scope "all") keeps covering frame AND lenses, as it always did.
+  const coversLenses = general?.scope === "all";
   const pct = adjustment?.mode === "percent" ? 1 + adjustment.value / 100 : 1;
   let frame = exact ? Number(exact.value) : base * pct;
-  let lenses = input.lenses * pct;
+  let lenses = input.lenses * (coversLenses ? pct : 1);
   if (adjustment?.mode === "delta") {
     // Once per line, on the first component that is not an exact price.
     if (!exact) frame += adjustment.value;
-    else if (input.lenses > 0) lenses += adjustment.value;
+    else if (coversLenses && input.lenses > 0) lenses += adjustment.value;
   }
   frame = cents(frame);
   lenses = cents(lenses);

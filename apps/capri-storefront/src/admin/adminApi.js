@@ -21,6 +21,8 @@
 // CORS to keep in sync. VITE_ADMIN_MEDUSA_URL overrides this for the unusual
 // deployment that has no proxy in front of it.
 
+import { cachedGet, clearCache, configureCache, invalidate } from "./adminCache.js";
+
 const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 
 const ORIGIN =
@@ -77,6 +79,8 @@ function jwtExpiry(token) {
 }
 
 function saveSession(user, token) {
+  // A new login never inherits what the previous account had read.
+  clearCache();
   const session = { user, token, exp: jwtExpiry(token) };
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -201,6 +205,36 @@ export async function adminFetch(path, options = {}) {
   }
 }
 
+/* ─────────────────────────────  cached reads  ───────────────────────────── */
+
+/**
+ * `path` + `query` as one canonical string (sorted keys, empty values out):
+ * the cache key, so two screens asking the same thing share one entry.
+ */
+export function queryKey(path, query) {
+  const entries = Object.entries(query || {})
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => [k, String(v)])
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  if (!entries.length) return path;
+  const qs = new URLSearchParams(entries).toString();
+  return `${path}${path.includes("?") ? "&" : "?"}${qs}`;
+}
+
+// The cache only knows how to call us back: one authenticated GET per key.
+configureCache({ fetcher: (key) => adminFetch(key) });
+
+/**
+ * Cached GET (adminCache.js): what was read before is returned at once and
+ * refreshed in the background when older than `ttl`; identical concurrent
+ * reads become one request. Mutations keep using `adminFetch` and call
+ * `invalidate(prefix)` afterwards. `force` skips the cache.
+ */
+export function adminGet(path, { query, ttl, force } = {}) {
+  return cachedGet(queryKey(path, query), { ttl, force });
+}
+export { invalidate as invalidateCache };
+
 /* ─────────────────────────────  login  ───────────────────────────── */
 
 // Held between the password step and the code step. Never persisted: it is a
@@ -286,4 +320,5 @@ export async function verifyMfa(code) {
 export function logout() {
   pendingMfa = null;
   clearSession();
+  clearCache();
 }

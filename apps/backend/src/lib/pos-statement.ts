@@ -108,7 +108,12 @@ export interface Statement {
   sales: StatementSale[];
   totals: StatementTotals;
   settlement: Settlement | null;
-  /** More sales than MAX_STATEMENT_SALES in the period: the listing is partial. */
+  /**
+   * More sales than MAX_STATEMENT_SALES in the period. The listing AND the
+   * totals are then partial (the totals are the sum of the sales listed, which
+   * is what keeps `by_seller` / `by_day` adding up to them). A statement is a
+   * document: the panel must show this, never print a short total in silence.
+   */
   truncated: boolean;
 }
 
@@ -272,7 +277,20 @@ export function buildSales(input: StatementInput): StatementSale[] {
     });
 }
 
-/** Period totals over completed sales; voided ones only count in `voided_count`. Pure. */
+/**
+ * Period totals over completed sales; voided ones only count in
+ * `voided_count`. Pure.
+ *
+ * Identities the statement must satisfy (tests/accounting-reconciliation.test.ts
+ * pins them, docs/CONTABILIDAD.md explains them):
+ *   Σ by_seller.total_cents = Σ by_day.total_cents = total_cents
+ *   Σ by_method.cents       = paid_cents + insurance_cents
+ *   balance_cents           = total_cents − paid_cents − insurance_cents
+ *
+ * `by_method` carries the insurer's part because it is a method like any
+ * other at the counter, while `paid_cents` is only the customer's money —
+ * that is why the second identity adds `insurance_cents` and is NOT a bug.
+ */
 export function statementTotals(sales: StatementSale[]): StatementTotals {
   const live = sales.filter((s) => s.status !== "voided");
   const sum = (k: "list_cents" | "discount_cents" | "tax_cents" | "total_cents" | "paid_cents" | "insurance_cents" | "balance_cents") => live.reduce((a, s) => a + s[k], 0);

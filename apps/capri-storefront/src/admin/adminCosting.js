@@ -9,7 +9,8 @@ export const deleteCostRule = (id) => adminFetch(`/admin/costing/rules/${encodeU
 export const fetchOrderCost = (orderId) => adminFetch(`/admin/costing/orders/${encodeURIComponent(orderId)}`);
 export const saveOrderCost = (orderId, lines) => adminFetch(`/admin/costing/orders/${encodeURIComponent(orderId)}`, { method: "PUT", body: { lines } });
 export const resetOrderCost = (orderId) => adminFetch(`/admin/costing/orders/${encodeURIComponent(orderId)}`, { method: "PUT", body: { reset: true } });
-export const fetchCostSummary = ({ from = "", to = "", seller = "" } = {}) => adminFetch("/admin/costing/summary", { query: { from, to, seller } });
+/** `store`: establishment id or "web"; empty = every store. */
+export const fetchCostSummary = ({ from = "", to = "", seller = "", store = "" } = {}) => adminFetch("/admin/costing/summary", { query: { from, to, seller, store: store === "all" ? "" : store } });
 
 /** Grupos de reglas tal como se presentan (clave de diccionario + kinds). */
 export const RULE_GROUPS = [

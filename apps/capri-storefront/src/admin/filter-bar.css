@@ -1,0 +1,98 @@
+/* Barra de filtros global del panel (GlobalFilterBar.jsx): pegada bajo la
+   cabecera (.adm-top) en TODAS las pestañas, misma posición y mismo orden —
+   [tienda] [período segmentado] [rango] … [PDF · Excel · CSV]. Tokens --adm-*
+   (admin.css) y --st-* (tema de tienda, admin-theme.css). AdminShell mide la
+   cabecera real (--adm-top-real: en el móvil crece) y la propia barra
+   (--adm-bar-h) para que lo que va debajo pueda contar con ellas (fit.css). */
+
+.adm-bar {
+  position: sticky; top: var(--adm-top-real, var(--adm-top-h)); z-index: 35;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  min-height: 46px; padding: 6px clamp(12px, 1.8vw, 24px);
+  background: var(--st-bg, var(--adm-bg));
+  border-bottom: 1px solid var(--adm-line);
+  box-shadow: 0 1px 2px rgba(27, 31, 58, .03);
+}
+.adm-shell[data-mode="dark"] .adm-bar { box-shadow: 0 2px 10px -6px rgba(0, 0, 0, .6); }
+.adm-bar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; flex: 1 1 auto; }
+.adm-bar-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.adm-bar-period { flex-wrap: wrap; gap: 6px 8px; flex: 1 1 auto; }
+
+/* El selector de tienda, a la altura de las píldoras del resto de la barra. */
+.adm-bar .adm-store-filter.compact .adm-sf-btn { min-height: 32px; }
+.adm-bar .adm-store-filter.static { min-height: 32px; }
+
+/* Control segmentado: un contenedor redondeado; el activo va relleno con el
+   acento y su tinta (botón, no texto: siempre con borde y fondo). */
+.adm-bar-seg { display: inline-flex; align-items: stretch; padding: 3px; gap: 2px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.adm-bar-seg::-webkit-scrollbar { display: none; }
+.adm-bar-seg button { flex: 0 0 auto; border: 1px solid transparent; background: transparent; border-radius: 999px; padding: 4px 9px; min-height: 24px; font: 700 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; line-height: 1.3; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.adm-bar-seg button:hover { color: var(--adm-ink); background: var(--adm-surface-2); border-color: var(--adm-line); }
+.adm-bar-seg button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep, var(--adm-accent)); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.adm-bar-seg button.on:hover { color: var(--st-ink, #fff); background: var(--adm-accent-deep, var(--adm-accent)); }
+.adm-bar-seg button:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+
+/* Rango: píldora con las dos fechas (cuando manda) o botón con el rango en corto. */
+.adm-bar-range { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 8px 2px 10px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-muted); box-shadow: var(--adm-shadow-card); transition: border-color .15s, box-shadow .15s; }
+.adm-bar-range .adm-ico { flex: 0 0 auto; }
+.adm-bar-range-sep { color: var(--adm-faint); font-weight: 700; padding: 0 1px; }
+.adm-bar-range input[type="date"] { min-height: 26px; height: 26px; width: 106px; font: 600 12px var(--adm-font); color: var(--adm-muted); padding: 0 2px; border: 0; border-radius: 6px; background: transparent; }
+.adm-bar-range input[type="date"]:focus { outline: none; color: var(--adm-ink); background: var(--adm-surface-2); }
+.adm-bar-range:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.adm-bar-range.on { border-color: var(--adm-accent-line); color: var(--adm-ink); }
+.adm-bar-range.on input[type="date"] { color: var(--adm-ink); }
+.adm-bar-range-btn { font: 600 12px var(--adm-font); color: var(--adm-muted); cursor: pointer; padding-right: 11px; white-space: nowrap; }
+.adm-bar-range-btn:hover { color: var(--adm-ink); border-color: var(--adm-accent-line); }
+.adm-bar-range-btn:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.adm-bar-range input[type="date"]::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+.adm-bar-range input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+/* Exportar: los tres formatos en un grupo redondeado, siempre a la derecha. */
+.adm-bar-export { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.adm-bar-export .adm-export-menu { display: inline-flex; gap: 0; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); box-shadow: var(--adm-shadow-card); overflow: hidden; }
+.adm-bar-export .adm-export-menu .btn-xs { min-height: 30px; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0 10px; font-weight: 700; color: var(--adm-ink); gap: 5px; }
+.adm-bar-export .adm-export-menu .btn-xs + .btn-xs { border-left: 1px solid var(--adm-line); }
+.adm-bar-export .adm-export-menu .btn-xs:hover:not(:disabled) { background: var(--adm-accent-soft); color: var(--adm-accent-ink); transform: none; }
+.adm-bar-export .adm-export-menu .btn-xs:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: -2px; }
+.adm-bar-export .adm-export-menu .btn-xs .adm-ico { color: var(--adm-muted); }
+.adm-bar-export .adm-export-menu .btn-xs:hover:not(:disabled) .adm-ico { color: inherit; }
+.adm-bar-export .adm-export-menu .btn-xs:disabled { opacity: .45; }
+.adm-bar-export .adm-export-menu.idle { border-style: dashed; }
+
+/* Escritorio: UNA fila siempre. Si no cabe todo (portátil con la barra lateral
+   abierta y «Rango» con sus dos fechas), cede el período segmentado: se
+   desplaza por dentro (el activo se mantiene a la vista) y un degradado avisa
+   de que hay más; exportar no baja de fila. */
+@media (min-width: 769px) {
+  .adm-bar { flex-wrap: nowrap; }
+  .adm-bar-filters { flex: 1 1 0; flex-wrap: nowrap; }
+  .adm-bar-period { flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; }
+  .adm-bar-store, .adm-bar-range, .adm-bar-export { flex: 0 0 auto; }
+  .adm-bar-seg { flex: 1 1 auto; min-width: 0; max-width: max-content; }
+  .adm-bar-seg.scrolls { mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+}
+
+/* Teléfono: dos filas y sigue pegada. 1.ª: tienda · rango … exportar; 2.ª: el
+   período segmentado a lo ancho. Los envoltorios pasan a `display: contents`
+   para que las piezas se ordenen entre sí como hijas directas de la barra. */
+@media (max-width: 768px) {
+  .adm-bar { gap: 6px 8px; padding: 6px clamp(10px, 2vw, 14px); }
+  .adm-bar-filters, .adm-bar-period { display: contents; }
+  .adm-bar-store { order: 1; }
+  .adm-bar-range { order: 2; flex: 0 1 auto; justify-content: center; }
+  .adm-bar-export { order: 3; margin-left: auto; }
+  .adm-bar-seg { order: 4; flex-basis: 100%; max-width: 100%; flex-wrap: wrap; overflow: visible; justify-content: space-between; border-radius: 16px; }
+  .adm-bar-seg button { padding: 5px 7px; min-height: 30px; flex: 1 1 auto; text-align: center; font-size: 11.5px; }
+  .adm-bar-range input[type="date"] { width: 108px; }
+  .adm-bar-export .adm-export-menu .btn-xs { min-height: 34px; padding: 0 9px; }
+  .adm-bar .adm-store-filter.compact .adm-sf-txt { max-width: 34vw; }
+}
+@media (max-width: 420px) {
+  .adm-bar-export .adm-export-menu .btn-xs { padding: 0 8px; font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-bar, .adm-bar-seg button, .adm-bar-range { transition: none; }
+}
+@media print {
+  .adm-bar { display: none !important; }
+}

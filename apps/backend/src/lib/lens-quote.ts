@@ -1,4 +1,5 @@
 import type { Knex } from "@mikro-orm/knex";
+import { applyStoreLensBreakdown, loadStoreLensPricesPg } from "./pricing-overview";
 
 /** Lens selection sent from the storefront wizard. */
 export interface LensSelection {
@@ -41,23 +42,11 @@ const EMPTY: LensBreakdown = {
  */
 export async function computeLensBreakdown(
   pg: Knex,
-  selection: LensSelection
+  selection: LensSelection,
+  /** Quote for this store: its own cell prices and its % over the master apply. */
+  establishmentId: string | null = null
 ): Promise<LensBreakdown> {
   if (!selection || selection.design_code === "frame-only") return { ...EMPTY };
-
-  const [design] = await pg("lens_design")
-    .whereNull("deleted_at")
-    .where({ code: selection.design_code, is_active: true });
-  if (!design) throw new Error(`Unknown lens design: ${selection.design_code}`);
-  const category = String((design as { category: string }).category);
-
-  let lens_base_cents = 0;
-  if (selection.material_code) {
-    const [cell] = await pg("lens_base_price")
-      .whereNull("deleted_at")
-      .where({ design_code: selection.design_code, material_code: selection.material_code });
-    lens_base_cents = n((cell as { price_cents?: number } | undefined)?.price_cents);
-  }
 
   // Precio del tratamiento por (diseño × material) desde lens_treatment_price.
   // Si esa tabla aún no existe o no tiene la celda, se cae al modelo antiguo.
@@ -75,15 +64,41 @@ export async function computeLensBreakdown(
     return cell ? n(cell.price_cents) : null;
   };
 
+  // The design, the base cell and the two treatment cells do not depend on one
+  // another: one round trip instead of up to four in a row. Every POS quote and
+  // every step of the web wizard goes through here, so the saved latency is
+  // paid back on every keystroke of the funnel. The option tables (which DO
+  // need the design's category, or only answer when the matrix has no cell)
+  // are read after, and still in parallel.
+  const [designRows, baseRows, photoTreat, arTreat] = await Promise.all([
+    pg("lens_design").whereNull("deleted_at").where({ code: selection.design_code, is_active: true }),
+    selection.material_code
+      ? pg("lens_base_price").whereNull("deleted_at").where({ design_code: selection.design_code, material_code: selection.material_code })
+      : Promise.resolve([] as unknown[]),
+    selection.photo_code ? treatmentCell("photo") : Promise.resolve(null),
+    selection.ar_code && (selection.ar_code === "ar-green" || selection.ar_code === "ar-blue") ? treatmentCell(selection.ar_code) : Promise.resolve(null),
+  ]);
+
+  const design = (designRows as unknown[])[0];
+  if (!design) throw new Error(`Unknown lens design: ${selection.design_code}`);
+  const category = String((design as { category: string }).category);
+  const lens_base_cents = n(((baseRows as { price_cents?: number }[])[0] ?? {}).price_cents);
+
+  const [photoRows, arRows] = await Promise.all([
+    selection.photo_code && photoTreat == null
+      ? pg("lens_photo_option").whereNull("deleted_at").where({ code: selection.photo_code, is_active: true })
+      : Promise.resolve([] as unknown[]),
+    selection.ar_code && arTreat == null
+      ? pg("lens_ar_option").whereNull("deleted_at").where({ code: selection.ar_code, is_active: true })
+      : Promise.resolve([] as unknown[]),
+  ]);
+
   let photo_cents = 0;
   if (selection.photo_code) {
-    const fromTreat = await treatmentCell("photo");
-    if (fromTreat != null) {
-      photo_cents = fromTreat;
+    if (photoTreat != null) {
+      photo_cents = photoTreat;
     } else {
-      const [photo] = await pg("lens_photo_option")
-        .whereNull("deleted_at")
-        .where({ code: selection.photo_code, is_active: true });
+      const photo = (photoRows as unknown[])[0];
       if (photo) {
         const p = photo as {
           price_sv_cents: number | null;
@@ -103,34 +118,22 @@ export async function computeLensBreakdown(
 
   let ar_cents = 0;
   if (selection.ar_code) {
-    const fromTreat =
-      selection.ar_code === "ar-green" || selection.ar_code === "ar-blue"
-        ? await treatmentCell(selection.ar_code)
-        : null;
-    if (fromTreat != null) {
-      ar_cents = fromTreat;
-    } else {
-      const [ar] = await pg("lens_ar_option")
-        .whereNull("deleted_at")
-        .where({ code: selection.ar_code, is_active: true });
-      ar_cents = n((ar as { price_cents?: number } | undefined)?.price_cents);
-    }
+    ar_cents = arTreat != null ? arTreat : n(((arRows as { price_cents?: number }[])[0] ?? {}).price_cents);
   }
 
-  return {
-    lens_base_cents,
-    photo_cents,
-    ar_cents,
-    total_cents: lens_base_cents + photo_cents + ar_cents,
-    category,
-  };
+  return applyStoreLensBreakdown(
+    { lens_base_cents, photo_cents, ar_cents, total_cents: lens_base_cents + photo_cents + ar_cents, category },
+    await loadStoreLensPricesPg(pg, establishmentId),
+    selection
+  );
 }
 
 /** Convenience wrapper for callers that only need the summed add-on. */
 export async function computeLensAddonCents(
   pg: Knex,
-  selection: LensSelection
+  selection: LensSelection,
+  establishmentId: string | null = null
 ): Promise<number> {
-  const { total_cents } = await computeLensBreakdown(pg, selection);
+  const { total_cents } = await computeLensBreakdown(pg, selection, establishmentId);
   return total_cents;
 }

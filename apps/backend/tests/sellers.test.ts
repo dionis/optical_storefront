@@ -18,6 +18,7 @@ import {
   sellerPlacementProblem,
   sellerSourceOf,
   signSellerToken,
+  statsDayFilter,
   verifySellerToken, projectSeller } from "../src/lib/sellers";
 import { normalizeSellerCodeLoose } from "../src/lib/order-board";
 import { EMPTY_TERMINAL_USAGE, sellerTillProblem, terminalDeactivateProblem, terminalDeleteProblem, type TerminalUsage } from "../src/lib/pos";
@@ -198,6 +199,40 @@ describe("groupSellerStats", () => {
       sellers
     );
     expect(sources.map((s) => s.source)).toEqual(["facebook", "whatsapp", "tiktok"]);
+  });
+
+  it("adds units, the average ticket and the quota (share of EVERY sale, attributed or not), biggest first", () => {
+    const withItems = orders.map((o, i) => ({ ...o, id: `o${i}`, items: [{ quantity: 2 }, { quantity: 1 }] }));
+    const { sellers: rows } = groupSellerStats(withItems, sellers);
+    const ana = rows[0];
+    expect(ana.code).toBe("ANA");
+    expect(ana.units).toBe(6);
+    expect(ana.avg_ticket).toBe(75.25);
+    // 150.5 of 200.5 (ana + the two unattributed orders).
+    expect(ana.share_pct).toBe(75.1);
+    expect(ana.profit).toBeNull();
+    expect(ana.avg_profit).toBeNull();
+    expect(rows[1]).toMatchObject({ code: "LUIS", units: 0, avg_ticket: 0, share_pct: 0 });
+  });
+
+  it("fills profit and the average profit per sale only when a profit map is given", () => {
+    const withIds = orders.map((o, i) => ({ ...o, id: `o${i}` }));
+    const profit = new Map([["o0", 40], ["o1", 10.5], ["o2", 500], ["o3", 9]]);
+    const { sellers: rows } = groupSellerStats(withIds, sellers, profit);
+    const ana = rows.find((r) => r.code === "ANA")!;
+    // The canceled order (o2) counts for nobody, whatever its profit.
+    expect(ana.profit).toBe(50.5);
+    expect(ana.avg_profit).toBe(25.25);
+    expect(rows.find((r) => r.code === "LUIS")).toMatchObject({ profit: 0, avg_profit: 0 });
+  });
+});
+
+describe("statsDayFilter", () => {
+  it("turns the board window into local days for the economics, tomorrow when open-ended", () => {
+    const now = new Date("2026-11-01T23:30:00Z");
+    expect(statsDayFilter({ from: "2026-10-01T00:00:00.000Z", to: "2026-10-31T23:59:59.999Z", store: "est_1" }, now)).toEqual({ from: "2026-10-01", to: "2026-10-31", stores: ["est_1"] });
+    expect(statsDayFilter({ from: null, to: null, store: "all" }, now)).toEqual({ from: "2000-01-01", to: "2026-11-02", stores: null });
+    expect(statsDayFilter({ store: "web" }, now).stores).toEqual(["web"]);
   });
 });
 

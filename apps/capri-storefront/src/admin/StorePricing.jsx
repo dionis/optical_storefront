@@ -2,6 +2,13 @@
 // general (porcentaje o monto fijo por venta), precios exactos por modelo,
 // vista previa con el mismo cálculo del servidor e historial de cambios.
 // Backend: /admin/store-pricing/:id (lib/store-pricing.ts).
+//
+// REAGRUPADO (nov-2026): todo esto vive ahora en «Precios y costos»
+// (admin/PricingPanel.jsx, pestaña `pricing`), junto a los lentes, las
+// comisiones, los costos y el impuesto, con el selector de tienda global —
+// como pidió el dueño. Esta pantalla se mantiene solo por el botón «Precios»
+// de Tiendas y por el historial y la vista previa, que el panel nuevo todavía
+// no reproduce; cuando Tiendas deje de abrirla, se puede borrar.
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";

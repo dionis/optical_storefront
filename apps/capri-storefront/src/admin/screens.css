@@ -1,0 +1,104 @@
+/* Resumen de bienvenida (WelcomeBriefing.jsx) y detalles de las pantallas con
+   filtro de tienda compartido (PosSales, PosApprovals, AuditLog, StoreStatus,
+   Sellers, StoreCosts…). Tokens --adm-* (admin.css) y --st-* (tema de tienda). */
+
+/* ── Resumen de bienvenida: tarjeta flotante arriba, nunca bloquea el panel ── */
+.wb-wrap { position: fixed; top: 10px; left: 0; right: 0; z-index: 290; display: flex; justify-content: center; padding: 0 12px; pointer-events: none; }
+.wb-card {
+  pointer-events: auto; position: relative; width: min(560px, 100%);
+  background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: calc(var(--adm-radius) * 1.25);
+  box-shadow: 0 18px 50px rgba(15,36,64,.28), 0 0 0 1px rgba(255,255,255,.04);
+  padding: 16px 18px 14px; display: grid; gap: 12px;
+  animation: wbIn .32s var(--adm-ease, ease) both;
+}
+.wb-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; border-radius: inherit inherit 0 0; background: var(--st-accent, var(--adm-navy)); }
+.wb-close { position: absolute; top: 10px; right: 10px; border: 0; background: transparent; color: var(--adm-muted); cursor: pointer; padding: 4px; border-radius: 8px; display: grid; place-items: center; }
+.wb-close:hover { background: var(--adm-surface-2); color: var(--adm-ink); }
+.wb-head { display: flex; align-items: center; gap: 12px; min-width: 0; padding-right: 28px; }
+.wb-avatar { width: 50px; height: 50px; border-radius: 50%; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--adm-grad-dark, var(--adm-navy)); color: #fff; font-weight: 800; font-size: 18px; border: 2px solid var(--st-accent, var(--adm-gold)); }
+.wb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.wb-who { min-width: 0; display: grid; gap: 2px; }
+.wb-who h2 { margin: 0; font-size: 17px; font-weight: 800; color: var(--adm-ink); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-who small { font-size: 12px; color: var(--adm-muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wb-who .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.wb-scope { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--adm-muted); margin: 0; }
+.wb-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.wb-kpi { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface-2); border: 1px solid var(--adm-line-2); min-width: 0; }
+.wb-kpi.hero { background: var(--st-soft, var(--adm-surface-2)); border-color: transparent; }
+.wb-kpi small { font-size: 11px; font-weight: 700; color: var(--adm-muted); }
+.wb-kpi b { font-size: clamp(17px, 2.6vw, 21px); font-weight: 800; color: var(--adm-ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.wb-kpi.hero b { color: var(--st-accent, var(--adm-navy)); }
+.wb-kpi span { font-size: 11.5px; color: var(--adm-muted); }
+.wb-kpi .adm-skel { height: 22px; width: 70%; }
+.wb-stores { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.wb-store { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, minmax(64px, auto)); align-items: center; gap: 10px; font-size: 12.5px; padding: 4px 0; border-top: 1px solid var(--adm-line-2); }
+.wb-store:first-child { border-top: 0; }
+.wb-store .name { display: flex; align-items: center; gap: 7px; min-width: 0; font-weight: 700; color: var(--adm-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-store .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px var(--adm-surface); }
+.wb-store b { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--adm-ink); }
+.wb-store b.hero { color: var(--st-accent, var(--adm-navy)); }
+.wb-store .adm-skel { height: 14px; }
+.wb-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.wb-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--adm-surface-2); border: 1px solid var(--adm-line-2); color: var(--adm-ink); cursor: default; }
+.wb-pill.click { cursor: pointer; }
+.wb-pill.click:hover { border-color: var(--st-accent, var(--adm-navy)); }
+.wb-pill.warn { background: var(--adm-gold-soft, #fdf3d8); color: var(--adm-amber-dark, #92400e); border-color: transparent; }
+.wb-pill.ok { color: var(--adm-green-dark, #116633); }
+.wb-pill.gold { color: var(--adm-gold-dark, var(--adm-gold)); }
+.wb-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.wb-foot .btn-sm { min-width: 120px; justify-content: center; }
+.wb-err { font-size: 12px; color: var(--adm-red, #b91c1c); margin: 0; }
+@keyframes wbIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 560px) {
+  .wb-wrap { top: 6px; padding: 0 8px; }
+  .wb-card { padding: 14px 14px 12px; gap: 10px; }
+  .wb-kpis { gap: 6px; }
+  .wb-kpi { padding: 8px 9px; }
+  .wb-store { grid-template-columns: minmax(0, 1fr) auto; }
+  .wb-store b:not(.hero) { display: none; }
+  .wb-foot .btn-sm { flex: 1; min-width: 0; }
+}
+@media print { .wb-wrap { display: none; } }
+
+/* ── Pantallas: nota de la tienda mostrada y pastilla del filtro en cabeceras ── */
+.scr-store-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--adm-muted); }
+.scr-store-note .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.scr-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.scr-acc-table { padding-top: 8px; }
+.scr-acc-cards { padding-top: 8px; }
+.scr-inline-select { font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); color: var(--adm-ink); }
+
+/* ── Resultado por tienda (StoreCosts.jsx) ─────────────────────────────────
+   Sin filtros propios (los pone la barra global): una tira de indicadores, el
+   resultado del mes en una tabla compacta (una columna por tienda) y los costos
+   registrados en una DataTable. Denso y legible en claro y en oscuro: todo
+   color sale de los tokens --adm-*, así el modo oscuro va solo. */
+.sc .sc-note { display: inline-flex; align-items: center; gap: 6px; margin: -6px 0 10px; font-size: 12px; }
+.sc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; margin: 0 0 12px; }
+.sc-kpi { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface); box-shadow: var(--adm-shadow-card); min-width: 0; }
+.sc-kpi small { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-muted); }
+.sc-kpi b { font-family: var(--adm-display); font-size: clamp(17px, 2.2vw, 21px); letter-spacing: -.02em; color: var(--adm-ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.sc-kpi span { font-size: 10.5px; color: var(--adm-faint); line-height: 1.25; }
+.sc-kpi.hero { background: var(--st-soft, var(--adm-surface-2)); border-color: var(--adm-accent-line, var(--adm-line)); }
+.sc-kpi b.good { color: var(--adm-green); }
+.sc-kpi b.neg { color: var(--adm-red); }
+.sc .sc-card { margin-bottom: 10px; }
+.sc .sc-card > h3, .sc .sc-card .adm-head-row h3 { margin: 0 0 8px; font-size: 14px; color: var(--adm-ink); }
+.sc .sc-card .adm-head-row { margin-bottom: 6px; }
+/* El resultado: filas fijas × tiendas. Cabeceras pegadas, cifras tabulares y
+   las dos filas que importan (contribución y resultado) con fondo propio. */
+.sc-pnl { font-size: 12.5px; max-width: 1000px; }
+/* Las columnas de cifras, de ancho fijo: el concepto se queda con el resto y
+   los números no se van al otro extremo de la pantalla con una sola tienda. */
+.sc-pnl thead th:not(:first-child), .sc-pnl tbody td { width: 150px; }
+.sc-pnl th, .sc-pnl td { padding: 4px 8px; }
+.sc-pnl thead th { position: sticky; top: 0; z-index: 1; background: var(--adm-surface); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-muted); }
+.sc-pnl tbody th[scope="row"] { font-weight: 600; color: var(--adm-muted); white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.sc-pnl td { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--adm-ink); }
+.sc-pnl tr.strong th[scope="row"], .sc-pnl tr.strong td { font-weight: 800; color: var(--adm-ink); background: var(--adm-surface-2); }
+.sc-pnl td.neg { color: var(--adm-red); }
+.sc .sc-items .alr-form { margin-bottom: 10px; }
+@media (max-width: 720px) {
+  .sc-pnl thead th { position: static; }
+  .sc-kpi b { font-size: 18px; }
+}

@@ -8,32 +8,59 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 // disabled under `prefers-reduced-motion: reduce`.
 // Brand palette. Neutrals follow the panel's --adm-* tokens (admin.css) so the
 // charts switch with light/dark mode; the hex is the fallback outside the panel.
+// Non-invasive: the accent carries the main series, the second series is a
+// muted blue (--adm-chart-2), gridlines are hairlines and axis text is 11 px
+// muted. Semantic green/red appear only in deltas (tooltips, KPI pills).
 const BRAND = {
-  primary: "#0E5AD0",
-  accent: "#FD0E3F",
+  primary: "var(--adm-chart-1, var(--adm-accent, #4f5bd5))",
+  accent: "var(--adm-chart-2, #7d8bbf)",
   ink: "var(--adm-ink, #16181d)",
-  muted: "var(--adm-muted, #5c6470)",
-  line: "var(--adm-line, #e6e8ec)",
+  muted: "var(--adm-chart-axis, var(--adm-muted, #5c6470))",
+  line: "var(--adm-chart-grid, var(--adm-line, #e6e8ec))",
   soft: "var(--adm-surface-2, #f5f6f8)",
   surface: "var(--adm-surface, #fff)",
-  ok: "var(--adm-green-dark, #2e7d46)",
-  warn: "var(--adm-gold-dark, #b26a00)",
+  ok: "var(--adm-green-dark, #10754d)",
+  warn: "var(--adm-gold-dark, #8a5a0c)",
 };
 
-// Categorical palette for donut / multi-series when no explicit color given.
+// Categorical palette for donut / funnel / multi-series when no explicit color
+// is given: the store accent first, then muted blues/greys and one warm sand
+// (tokens --adm-chart-* in admin.css, light and dark).
 const PALETTE = [
-  "#0E5AD0",
-  "#FD0E3F",
-  "#2e7d46",
-  "#b26a00",
-  "#7b4aa0",
-  "#4bb8c4",
-  "#c9a44a",
-  "#5c6470",
+  "var(--adm-chart-1, var(--adm-accent, #4f5bd5))",
+  "var(--adm-chart-2, #7d8bbf)",
+  "var(--adm-chart-4, #c3b48a)",
+  "var(--adm-chart-5, #6f9bb3)",
+  "var(--adm-chart-3, #a3acc4)",
+  "var(--adm-chart-6, #b8bfcf)",
+  "var(--adm-purple, #6d4fc2)",
+  "var(--adm-gold, #c9a24a)",
 ];
 
-const FONT =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const FONT = 'var(--adm-font, "Manrope", system-ui, sans-serif)';
+const DISPLAY = 'var(--adm-display, "Fraunces", Georgia, serif)';
+const AXIS_FS = 11;           // axis / label text, never below 11 px
+const LINE_W = 1.5;           // series stroke
+const BAR_FRAC = 0.6;         // bar width as a fraction of its slot
+const HAIR = { strokeWidth: 1, vectorEffect: "non-scaling-stroke" }; // gridlines stay 1 px whatever the scale
+const AREA_OP = "var(--adm-chart-area, 0.16)";
+
+/**
+ * Real width of the chart box (ResizeObserver), so the SVG draws 1:1 and the
+ * text keeps its pixel size at 120–160 px tall cards instead of being scaled
+ * down with a fixed 720-wide viewBox. Falls back to 720 before the first measure.
+ */
+function useBoxWidth(fallback = 720) {
+  const ref = useRef(null);
+  const [w, setW] = useState(fallback);
+  useEffect(() => {
+    if (!ref.current || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => { const cw = Math.round(e.contentRect.width); if (cw > 0) setW(cw); });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w];
+}
 
 // ---- helpers --------------------------------------------------------------
 function fmt(n) {
@@ -66,6 +93,12 @@ function niceMax(max) {
 function labelStep(count, maxTicks = 7) {
   if (count <= maxTicks) return 1;
   return Math.ceil(count / maxTicks);
+}
+// Every `step`-th label plus the last one — unless the last sits on top of the
+// previous shown label, which is then skipped.
+function showLabel(i, n, step) {
+  if (i === n - 1) return true;
+  return i % step === 0 && (n - 1 - i) * 2 >= step;
 }
 
 function Empty({ height, msg }) {
@@ -135,8 +168,47 @@ function deltaLine(value, ref, labelText) {
 
 // ---------------------------------------------------------------------------
 // 1. KpiCard
+const SIGN = (n) => (n > 0 ? "+" : n < 0 ? "−" : "");
+const LOCALE = (lang) => (lang === "en" ? "en-US" : "es-US");
+
+/**
+ * Variación de un KPI contra el período anterior — el MISMO contrato en todas
+ * las tarjetas del panel (ExecutiveHub.jsx la usa en su tira, KpiCard la
+ * acepta en `delta`). Devuelve null mientras no haya período anterior
+ * (cargando / sin dato); si no, { value, pct, good, zero, text }:
+ *   value  cur − prev, en la unidad del KPI
+ *   pct    variación en %, o null si prev es 0 (no hay con qué comparar)
+ *   good   si la variación es buena: subir, salvo `invert` (un costo que baja es bueno)
+ *   zero   sin cambio (se pinta en gris con «=»)
+ *   text   `+$123.00 (+12%)` (money) · `+3` / `−2` (count) · `+1.5 pt` (pct) · `=`
+ * `fmt` da formato al importe absoluto (p. ej. (v) => money(v, "usd", lang)).
+ */
+export function kpiDelta(cur, prev, { kind = "count", invert = false, lang = "es", fmt } = {}) {
+  const a = Number(cur);
+  const b = Number(prev);
+  if (prev == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const value = a - b;
+  const eps = kind === "count" ? 0.5 : 0.005;
+  const zero = Math.abs(value) < eps;
+  const pct = b !== 0 && kind !== "pct" ? Math.round((value / Math.abs(b)) * 1000) / 10 : null;
+  const good = zero ? null : invert ? value < 0 : value > 0;
+  const abs = Math.abs(value);
+  let text;
+  if (zero) text = "=";
+  else if (kind === "money") text = `${SIGN(value)}${fmt ? fmt(abs) : abs.toFixed(2)}${pct == null ? "" : ` (${SIGN(pct)}${Math.abs(pct).toLocaleString(LOCALE(lang), { maximumFractionDigits: Math.abs(pct) < 10 ? 1 : 0 })}%)`}`;
+  else if (kind === "pct") text = `${SIGN(value)}${abs.toLocaleString(LOCALE(lang), { maximumFractionDigits: 1 })} pt`;
+  else text = `${SIGN(value)}${Math.round(abs).toLocaleString(LOCALE(lang))}`;
+  return { value, pct, good, zero, text };
+}
+
 export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hint }) {
-  const good = !!deltaGood;
+  // `delta` puede ser el objeto de kpiDelta() o, como antes, un texto con `deltaGood`.
+  const obj = delta && typeof delta === "object" ? delta : null;
+  const deltaText = obj ? obj.text : delta;
+  const flat = obj ? obj.zero : false;
+  const good = obj ? !!obj.good : !!deltaGood;
+  // La flecha dice hacia dónde fue la cifra; el color, si eso es bueno (un costo que baja: ▼ en verde).
+  const up = obj ? obj.value > 0 : good;
   const clickable = typeof onClick === "function";
   return (
     <div
@@ -151,12 +223,12 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         fontFamily: FONT,
         background: BRAND.surface,
         border: `1px solid ${BRAND.line}`,
-        borderRadius: 14,
-        padding: "16px 18px",
-        boxShadow: "0 1px 2px rgba(16,24,40,0.04)",
+        borderRadius: "var(--adm-radius, 14px)",
+        padding: "10px 14px",
+        boxShadow: "var(--adm-shadow-card, 0 1px 2px rgba(16,24,40,0.04))",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: 3,
         minWidth: 0,
       }}
     >
@@ -169,9 +241,10 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         }}
       >
         <span
+          className="cx-kpi-label"
           style={{
             fontSize: 11,
-            fontWeight: 600,
+            fontWeight: 800,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
             color: BRAND.muted,
@@ -186,37 +259,44 @@ export function KpiCard({ label, value, delta, deltaGood, icon, sub, onClick, hi
         ) : null}
       </div>
       <div
+        className="cx-kpi-value"
         style={{
           // Dentro de .board-kpis el tamaño sigue al ancho de la tarjeta; fuera, se queda en 26.
-          fontSize: "clamp(17px, 11.5cqi, 26px)",
-          fontWeight: 700,
-          color: BRAND.ink,
+          fontFamily: DISPLAY,
+          fontOpticalSizing: "auto",
+          fontSize: "clamp(20px, 11.5cqi, 26px)",
+          fontWeight: 600,
+          letterSpacing: "-0.02em",
+          fontVariantNumeric: "tabular-nums",
+          color: "var(--adm-accent-ink, " + BRAND.ink + ")",
           lineHeight: 1.1,
         }}
       >
         {value}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {delta !== undefined && delta !== null && delta !== "" ? (
+        {deltaText !== undefined && deltaText !== null && deltaText !== "" ? (
           <span
+            className={`cx-kpi-delta ${flat ? "flat" : good ? "good" : "bad"}`}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 3,
-              fontSize: 12,
-              fontWeight: 600,
-              padding: "2px 8px",
+              fontSize: 11.5,
+              fontWeight: 700,
+              padding: "1px 7px",
               borderRadius: 999,
-              color: good ? BRAND.ok : BRAND.accent,
-              background: good ? "rgba(46,125,70,0.10)" : "rgba(253,14,63,0.10)",
+              fontVariantNumeric: "tabular-nums",
+              color: flat ? BRAND.muted : good ? "var(--adm-green-dark, #10754d)" : "var(--adm-red-dark, #b02a37)",
+              background: flat ? BRAND.soft : good ? "var(--adm-green-soft, #ebf8f2)" : "var(--adm-red-soft, #fdf1f2)",
             }}
           >
-            <span aria-hidden="true">{good ? "▲" : "▼"}</span>
-            {delta}
+            {!flat && <span aria-hidden="true">{up ? "▲" : "▼"}</span>}
+            {deltaText}
           </span>
         ) : null}
         {sub ? (
-          <span style={{ fontSize: 12, color: BRAND.muted }}>{sub}</span>
+          <span style={{ fontSize: 11.5, color: BRAND.muted }}>{sub}</span>
         ) : null}
       </div>
     </div>
@@ -284,7 +364,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={t("adm.chart.ariaTrend", { n, series: series.map((s) => s.label).join(", ") })} style={{ display: "block" }}>
             {ticks.map((v) => (
               <g key={v}>
-                <line x1={padL} x2={W - padR} y1={yAt(v)} y2={yAt(v)} stroke={v === 0 ? "var(--adm-faint, #c9cdd4)" : BRAND.line} strokeWidth="1" />
+                <line x1={padL} x2={W - padR} y1={yAt(v)} y2={yAt(v)} stroke={v === 0 ? "var(--adm-faint, #c9cdd4)" : BRAND.line} {...HAIR} />
                 <text x={padL - 8} y={yAt(v) + 4} textAnchor="end" fontSize="11" fill={BRAND.muted}>{axis(v)}</text>
               </g>
             ))}
@@ -293,7 +373,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
               <text key={i} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="11" fill={BRAND.muted}>{l}</text>
             ) : null))}
             {bars && labels.map((_, i) => {
-              const groupW = Math.min(band * 0.78, series.length * 34);
+              const groupW = Math.min(band * BAR_FRAC, series.length * 30);
               const w = (groupW - 2 * (series.length - 1)) / series.length;
               return series.map((s, k) => {
                 const v = Number(s.values[i]) || 0;
@@ -303,7 +383,7 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
               });
             })}
             {!bars && series.map((s) => (
-              <path key={s.key} d={s.values.map((v, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)},${yAt(Number(v) || 0).toFixed(1)}`).join(" ")} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+              <path key={s.key} d={s.values.map((v, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)},${yAt(Number(v) || 0).toFixed(1)}`).join(" ")} fill="none" stroke={s.color} strokeWidth={LINE_W} strokeLinejoin="round" strokeLinecap="round" />
             ))}
             {!bars && (hover !== null ? [hover] : n === 1 ? [0] : []).flatMap((i) => series.map((s) => (
               <circle key={s.key + i} cx={xAt(i)} cy={yAt(Number(s.values[i]) || 0)} r="4.5" fill={s.color} stroke={BRAND.surface} strokeWidth="2" />
@@ -326,83 +406,55 @@ export function TrendChart({ labels, series, height = 260, format = fmt, axisFor
 }
 
 // ---------------------------------------------------------------------------
-// 2. LineChart
+// 2. LineChart — one series over time; draws at the real width of its box.
 export function LineChart({
   data,
   height = 220,
-  color = "#0E5AD0",
+  color = BRAND.primary,
   valuePrefix = "",
   area = true,
 }) {
   const { t } = useLang();
   const gid = useId().replace(/[:]/g, "");
   const [hover, setHover] = useState(null); // {x, y, i}
-  const wrapRef = useRef(null);
+  const [wrapRef, W] = useBoxWidth();
 
   if (!Array.isArray(data) || data.length === 0)
-    return <Empty height={height} />;
+    return <div ref={wrapRef}><Empty height={height} /></div>;
 
-  const W = 720;
   const H = height;
-  const padL = 46;
-  const padR = 14;
-  const padT = 14;
-  const padB = 28;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-
   const values = data.map((d) => Number(d.value) || 0);
   const rawMax = Math.max(...values, 0);
   const max = niceMax(rawMax);
   const n = data.length;
   const total = values.reduce((s, v) => s + v, 0);
   const avg = n > 0 ? total / n : 0;
+  const compact = H < 170;
+  const padL = Math.min(72, 12 + (valuePrefix + fmt(max)).length * 6.6);
+  const padR = 10;
+  const padT = 8;
+  const padB = 22;
+  const plotW = Math.max(10, W - padL - padR);
+  const plotH = H - padT - padB;
 
   const xAt = (i) => (n === 1 ? padL + plotW / 2 : padL + (plotW * i) / (n - 1));
   const yAt = (v) => padT + plotH - (plotH * v) / max;
 
-  const pts = data.map((d, i) => ({
-    x: xAt(i),
-    y: yAt(Number(d.value) || 0),
-    d,
-    i,
-  }));
+  const pts = data.map((d, i) => ({ x: xAt(i), y: yAt(Number(d.value) || 0), d, i }));
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const areaPath = `M${pts[0].x.toFixed(1)},${(padT + plotH).toFixed(1)} ` + pts.map((p) => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") + ` L${pts[n - 1].x.toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
 
-  const linePath = pts
-    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-    .join(" ");
-  const areaPath =
-    `M${pts[0].x.toFixed(1)},${(padT + plotH).toFixed(1)} ` +
-    pts.map((p) => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
-    ` L${pts[n - 1].x.toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
-
-  const gridN = 4;
-  const grid = Array.from({ length: gridN + 1 }, (_, i) => {
-    const v = (max * i) / gridN;
-    return { v, y: yAt(v) };
-  });
-
-  const step = labelStep(n, 7);
+  const gridN = compact ? 2 : 4;
+  const grid = Array.from({ length: gridN + 1 }, (_, i) => { const v = (max * i) / gridN; return { v, y: yAt(v) }; });
+  const step = labelStep(n, Math.max(3, Math.floor(plotW / 56)));
 
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = ((e.clientX - rect.left) / rect.width) * W;
-    // nearest point index
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < n; i++) {
-      const dx = Math.abs(xAt(i) - relX);
-      if (dx < bestD) {
-        bestD = dx;
-        best = i;
-      }
-    }
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < n; i++) { const dx = Math.abs(xAt(i) - relX); if (dx < bestD) { bestD = dx; best = i; } }
     setHover({ i: best, x: pts[best].x, y: pts[best].y });
   };
-
-  const ariaLabel = `Gráfico de línea, ${n} puntos, máximo ${valuePrefix}${fmt(
-    rawMax
-  )}`;
 
   const hp = hover ? pts[hover.i] : null;
   const hv = hp ? Number(hp.d.value) || 0 : 0;
@@ -411,149 +463,56 @@ export function LineChart({
 
   return (
     <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        height={H}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={ariaLabel}
-        style={{ display: "block", overflow: "visible" }}
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-      >
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img"
+        aria-label={t("adm.chart.ariaSparkline", { n })}
+        style={{ display: "block", overflow: "visible" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
         <defs>
           <linearGradient id={`lg-${gid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="0%" stopColor={color} stopOpacity={AREA_OP} />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-
-        {/* gridlines + y labels */}
         {grid.map((g, i) => (
           <g key={i}>
-            <line
-              x1={padL}
-              y1={g.y}
-              x2={W - padR}
-              y2={g.y}
-              stroke={BRAND.line}
-              strokeWidth="1"
-            />
-            <text
-              x={padL - 8}
-              y={g.y + 4}
-              textAnchor="end"
-              fontSize="10"
-              fill={BRAND.muted}
-            >
-              {valuePrefix}
-              {fmt(g.v)}
-            </text>
+            <line x1={padL} y1={g.y} x2={W - padR} y2={g.y} stroke={BRAND.line} {...HAIR} />
+            <text x={padL - 6} y={g.y + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{valuePrefix}{fmt(g.v)}</text>
           </g>
         ))}
-
-        {/* x labels (thinned) */}
-        {data.map((d, i) =>
-          i % step === 0 || i === n - 1 ? (
-            <text
-              key={i}
-              x={xAt(i)}
-              y={H - 8}
-              textAnchor="middle"
-              fontSize="10"
-              fill={BRAND.muted}
-            >
-              {d.label}
-            </text>
-          ) : null
-        )}
-
-        {area ? (
-          <path
-            d={areaPath}
-            fill={`url(#lg-${gid})`}
-            style={{ animation: "cxFadeIn 1.1s ease .25s both" }}
-          />
-        ) : null}
-        <path
-          d={linePath}
-          fill="none"
-          stroke={color}
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          style={{
-            strokeDasharray: DRAW,
-            "--cx-len": `${DRAW}px`,
-            animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both",
-          }}
-        />
-
-        {/* hover guide */}
-        {hp ? (
-          <line
-            x1={hp.x}
-            y1={padT}
-            x2={hp.x}
-            y2={padT + plotH}
-            stroke={color}
-            strokeWidth="1"
-            strokeDasharray="3 3"
-            opacity="0.6"
-          />
-        ) : null}
-
-        {/* dots */}
+        {data.map((d, i) => (showLabel(i, n, step) ? (
+          <text key={i} x={xAt(i)} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"} fontSize={AXIS_FS} fill={BRAND.muted}>{d.label}</text>
+        ) : null))}
+        {area ? <path d={areaPath} fill={`url(#lg-${gid})`} style={{ animation: "cxFadeIn 1.1s ease .25s both" }} /> : null}
+        <path d={linePath} fill="none" stroke={color} strokeWidth={LINE_W} strokeLinejoin="round" strokeLinecap="round"
+          style={{ strokeDasharray: DRAW, "--cx-len": `${DRAW}px`, animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both" }} />
+        {hp ? <line x1={hp.x} y1={padT} x2={hp.x} y2={padT + plotH} stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" /> : null}
         {pts.map((p) => (
-          <circle
-            key={p.i}
-            cx={p.x}
-            cy={p.y}
-            r={hover && hover.i === p.i ? 5 : 2.5}
-            fill={BRAND.surface}
-            stroke={color}
-            strokeWidth={hover && hover.i === p.i ? 2.5 : 2}
-            style={{
-              transition: "r .15s ease, stroke-width .15s ease",
-              animation: `cxFadeIn .5s ease ${0.6 + p.i * 0.02}s both`,
-            }}
-          />
+          <circle key={p.i} cx={p.x} cy={p.y} r={hover && hover.i === p.i ? 4 : n > 40 ? 0 : 2} fill={BRAND.surface} stroke={color}
+            strokeWidth={hover && hover.i === p.i ? 2 : 1.5} style={{ transition: "r .15s ease, stroke-width .15s ease" }} />
         ))}
       </svg>
-
       {hp ? (
-        <Tip
-          x={hp.x}
-          y={hp.y}
-          W={W}
-          H={H}
-          caption={hp.d.label}
-          value={`${valuePrefix}${fmt(hv)}`}
-          lines={[
-            { text: t("adm.chart.pctOfTotal", { pct: hpct.toFixed(1) }), color: "rgba(255,255,255,0.72)" },
-            deltaLine(hv, avg, t("adm.chart.vsAvg")),
-          ].filter(Boolean)}
-        />
+        <Tip x={hp.x} y={hp.y} W={W} H={H} caption={hp.d.label} value={`${valuePrefix}${fmt(hv)}`}
+          lines={[{ text: t("adm.chart.pctOfTotal", { pct: hpct.toFixed(1) }), color: "rgba(255,255,255,0.72)" }, deltaLine(hv, avg, t("adm.chart.vsAvg"))].filter(Boolean)} />
       ) : null}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 3. BarChart
+// 3. BarChart — bars at 60 % of their slot, soft fill, hairline grid.
 export function BarChart({
   data,
   height = 220,
-  color = "#0E5AD0",
+  color = BRAND.primary,
   horizontal = false,
   valuePrefix = "",
 }) {
   const { t } = useLang();
   const [hover, setHover] = useState(null);
+  const [wrapRef, W] = useBoxWidth();
 
   if (!Array.isArray(data) || data.length === 0)
-    return <Empty height={height} />;
+    return <div ref={wrapRef}><Empty height={height} /></div>;
 
   const values = data.map((d) => Number(d.value) || 0);
   const rawMax = Math.max(...values, 0);
@@ -561,268 +520,94 @@ export function BarChart({
   const n = data.length;
   const total = values.reduce((s, v) => s + v, 0);
   const avg = n > 0 ? total / n : 0;
-  const W = 720;
   const H = height;
-
   const ariaLabel = t("adm.chart.ariaBar", { n, max: `${valuePrefix}${fmt(rawMax)}` });
-
-  const tipLines = (v) =>
-    [
-      {
-        text: t("adm.chart.pctOfTotal", { pct: total > 0 ? ((v / total) * 100).toFixed(1) : "0" }),
-        color: "rgba(255,255,255,0.72)",
-      },
-      deltaLine(v, avg, t("adm.chart.vsAvg")),
-    ].filter(Boolean);
+  const tipLines = (v) => [
+    { text: t("adm.chart.pctOfTotal", { pct: total > 0 ? ((v / total) * 100).toFixed(1) : "0" }), color: "rgba(255,255,255,0.72)" },
+    deltaLine(v, avg, t("adm.chart.vsAvg")),
+  ].filter(Boolean);
 
   if (horizontal) {
-    const padL = 120;
-    const padR = 60;
-    const padT = 8;
-    const padB = 8;
-    const plotW = W - padL - padR;
+    const padL = Math.min(140, 16 + Math.max(...data.map((d) => String(d.label).slice(0, 16).length)) * 6.4);
+    const padR = 56, padT = 6, padB = 6;
+    const plotW = Math.max(10, W - padL - padR);
     const rowH = (H - padT - padB) / n;
-    const barH = Math.min(26, rowH * 0.62);
+    const barH = Math.min(18, rowH * BAR_FRAC);
     const hv = hover != null ? values[hover] : 0;
-    const hy =
-      hover != null
-        ? padT + rowH * hover + (rowH - barH) / 2 + barH / 2
-        : 0;
-    const hx =
-      hover != null ? padL + Math.max(0, (plotW * hv) / max) : 0;
-
+    const hy = hover != null ? padT + rowH * hover + rowH / 2 : 0;
+    const hx = hover != null ? padL + Math.max(0, (plotW * hv) / max) : 0;
     return (
-      <div style={{ position: "relative", width: "100%", fontFamily: FONT }}>
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          width="100%"
-          height={H}
-          preserveAspectRatio="xMidYMid meet"
-          role="img"
-          aria-label={ariaLabel}
-          style={{ display: "block" }}
-        >
+      <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label={ariaLabel} style={{ display: "block" }}>
           {data.map((d, i) => {
             const v = Number(d.value) || 0;
             const y = padT + rowH * i + (rowH - barH) / 2;
             const w = Math.max(0, (plotW * v) / max);
             const hovered = hover === i;
             return (
-              <g
-                key={i}
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <text
-                  x={padL - 10}
-                  y={y + barH / 2 + 4}
-                  textAnchor="end"
-                  fontSize="11"
-                  fill={hovered ? BRAND.ink : BRAND.muted}
-                  fontWeight={hovered ? "700" : "400"}
-                  style={{ transition: "fill .15s ease" }}
-                >
-                  {String(d.label).length > 16
-                    ? String(d.label).slice(0, 15) + "…"
-                    : d.label}
+              <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+                <rect x={0} y={padT + rowH * i} width={W} height={rowH} fill="transparent" />
+                <text x={padL - 8} y={y + barH / 2 + 4} textAnchor="end" fontSize={AXIS_FS} fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "500"}>
+                  {String(d.label).length > 16 ? String(d.label).slice(0, 15) + "…" : d.label}
                 </text>
-                <rect
-                  x={padL}
-                  y={y}
-                  width={plotW}
-                  height={barH}
-                  rx={barH / 2}
-                  fill={BRAND.soft}
-                  style={{ animation: "none" }}
-                />
-                <g
-                  style={{
-                    transform: hovered ? "translateX(3px)" : "none",
-                    transition: "transform .18s cubic-bezier(.2,.8,.2,1)",
-                  }}
-                >
-                  <rect
-                    x={padL}
-                    y={y}
-                    width={w}
-                    height={barH}
-                    rx={barH / 2}
-                    fill={color}
-                    opacity={hovered ? 1 : 0.9}
-                    style={{
-                      transformBox: "fill-box",
-                      transformOrigin: "left",
-                      transition: "opacity .15s ease, filter .18s ease",
-                      filter: hovered
-                        ? `brightness(1.06) drop-shadow(0 2px 6px ${color}55)`
-                        : "none",
-                      animation: `cxGrowRight .7s cubic-bezier(.2,.85,.25,1) ${i * 40}ms both`,
-                    }}
-                  />
-                </g>
-                <text
-                  x={padL + w + 8}
-                  y={y + barH / 2 + 4}
-                  fontSize="11"
-                  fontWeight="600"
-                  fill={hovered ? BRAND.ink : BRAND.muted}
-                  style={{ transition: "fill .15s ease" }}
-                >
-                  {valuePrefix}
-                  {fmt(v)}
-                </text>
+                <rect x={padL} y={y} width={plotW} height={barH} rx={barH / 2} fill={BRAND.soft} />
+                <rect x={padL} y={y} width={w} height={barH} rx={barH / 2} fill={color} opacity={hovered ? 1 : 0.8}
+                  style={{ transformBox: "fill-box", transformOrigin: "left", transition: "opacity .15s ease", animation: `cxGrowRight .7s cubic-bezier(.2,.85,.25,1) ${i * 40}ms both` }} />
+                <text x={padL + w + 6} y={y + barH / 2 + 4} fontSize={AXIS_FS} fontWeight="600" fill={hovered ? BRAND.ink : BRAND.muted}>{valuePrefix}{fmt(v)}</text>
               </g>
             );
           })}
         </svg>
-        {hover != null ? (
-          <Tip
-            x={hx}
-            y={hy}
-            W={W}
-            H={H}
-            caption={data[hover].label}
-            value={`${valuePrefix}${fmt(hv)}`}
-            lines={tipLines(hv)}
-          />
-        ) : null}
+        {hover != null ? <Tip x={hx} y={hy} W={W} H={H} caption={data[hover].label} value={`${valuePrefix}${fmt(hv)}`} lines={tipLines(hv)} /> : null}
       </div>
     );
   }
 
   // vertical
-  const padL = 44;
-  const padR = 14;
-  const padT = 18;
-  const padB = 34;
-  const plotW = W - padL - padR;
+  const compact = H < 170;
+  const padL = Math.min(72, 12 + (valuePrefix + fmt(max)).length * 6.6);
+  const padR = 8, padT = 8;
+  const padB = 22;
+  const plotW = Math.max(10, W - padL - padR);
   const plotH = H - padT - padB;
   const slot = plotW / n;
-  const barW = Math.min(48, slot * 0.6);
+  const barW = Math.min(40, slot * BAR_FRAC);
   const yAt = (v) => padT + plotH - (plotH * v) / max;
-
-  const gridN = 4;
-  const grid = Array.from({ length: gridN + 1 }, (_, i) => {
-    const v = (max * i) / gridN;
-    return { v, y: yAt(v) };
-  });
-
-  const step = labelStep(n, 8);
-  const rotate = n > 8;
-
+  const gridN = compact ? 2 : 4;
+  const grid = Array.from({ length: gridN + 1 }, (_, i) => { const v = (max * i) / gridN; return { v, y: yAt(v) }; });
+  const step = labelStep(n, Math.max(3, Math.floor(plotW / 48)));
   const hv = hover != null ? values[hover] : 0;
   const hcx = hover != null ? padL + slot * hover + slot / 2 : 0;
   const hy = hover != null ? yAt(hv) : 0;
 
   return (
-    <div style={{ position: "relative", width: "100%", fontFamily: FONT }}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        height={H}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={ariaLabel}
-        style={{ display: "block" }}
-      >
+    <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label={ariaLabel} style={{ display: "block" }}>
         {grid.map((g, i) => (
           <g key={i}>
-            <line
-              x1={padL}
-              y1={g.y}
-              x2={W - padR}
-              y2={g.y}
-              stroke={BRAND.line}
-              strokeWidth="1"
-            />
-            <text
-              x={padL - 8}
-              y={g.y + 4}
-              textAnchor="end"
-              fontSize="10"
-              fill={BRAND.muted}
-            >
-              {valuePrefix}
-              {fmt(g.v)}
-            </text>
+            <line x1={padL} y1={g.y} x2={W - padR} y2={g.y} stroke={BRAND.line} {...HAIR} />
+            <text x={padL - 6} y={g.y + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{valuePrefix}{fmt(g.v)}</text>
           </g>
         ))}
-
         {data.map((d, i) => {
           const v = Number(d.value) || 0;
           const cx = padL + slot * i + slot / 2;
-          const bx = cx - barW / 2;
           const by = yAt(v);
-          const bh = padT + plotH - by;
+          const bh = Math.max(0, padT + plotH - by);
           const hovered = hover === i;
           return (
-            <g
-              key={i}
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-            >
-              {/* transparent hit slot so the whole column is hoverable */}
-              <rect
-                x={padL + slot * i}
-                y={padT}
-                width={slot}
-                height={plotH}
-                fill="transparent"
-              />
-              <g
-                style={{
-                  transform: hovered ? "translateY(-4px)" : "none",
-                  transition: "transform .18s cubic-bezier(.2,.8,.2,1)",
-                }}
-              >
-                <rect
-                  x={bx}
-                  y={by}
-                  width={barW}
-                  height={Math.max(0, bh)}
-                  rx={6}
-                  fill={color}
-                  opacity={hovered ? 1 : 0.9}
-                  style={{
-                    transformBox: "fill-box",
-                    transformOrigin: "bottom",
-                    transition: "opacity .15s ease, filter .18s ease",
-                    filter: hovered
-                      ? `brightness(1.06) drop-shadow(0 4px 8px ${color}55)`
-                      : "none",
-                    animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 40}ms both`,
-                  }}
-                />
-              </g>
-              {i % step === 0 || i === n - 1 ? (
-                <text
-                  x={cx}
-                  y={H - (rotate ? 6 : 12)}
-                  textAnchor={rotate ? "end" : "middle"}
-                  fontSize="10"
-                  fill={hovered ? BRAND.ink : BRAND.muted}
-                  fontWeight={hovered ? "700" : "400"}
-                  transform={rotate ? `rotate(-35 ${cx} ${H - 6})` : undefined}
-                  style={{ transition: "fill .15s ease" }}
-                >
-                  {d.label}
-                </text>
+            <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+              <rect x={padL + slot * i} y={padT} width={slot} height={plotH} fill={hovered ? BRAND.soft : "transparent"} />
+              <rect x={cx - barW / 2} y={by} width={barW} height={bh} rx={Math.min(4, barW / 2)} fill={color} opacity={hovered ? 1 : 0.8}
+                style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 30}ms both` }} />
+              {showLabel(i, n, step) ? (
+                <text x={cx} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"} fontSize={AXIS_FS} fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "400"}>{d.label}</text>
               ) : null}
             </g>
           );
         })}
       </svg>
-      {hover != null ? (
-        <Tip
-          x={hcx}
-          y={hy}
-          W={W}
-          H={H}
-          caption={data[hover].label}
-          value={`${valuePrefix}${fmt(hv)}`}
-          lines={tipLines(hv)}
-        />
-      ) : null}
+      {hover != null ? <Tip x={hcx} y={hy} W={W} H={H} caption={data[hover].label} value={`${valuePrefix}${fmt(hv)}`} lines={tipLines(hv)} /> : null}
     </div>
   );
 }
@@ -835,6 +620,9 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
 
   if (!Array.isArray(data) || data.length === 0)
     return <Empty height={height} />;
+  // The ring never exceeds the card height; the legend sits beside it and
+  // scrolls when there are more rows than the height allows.
+  size = Math.max(84, Math.min(size, height));
 
   const items = data.map((d, i) => ({
     label: d.label,
@@ -844,7 +632,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
   const total = items.reduce((s, d) => s + d.value, 0);
 
   const S = size;
-  const stroke = Math.max(14, S * 0.16);
+  const stroke = Math.max(12, S * 0.15);
   const r = (S - stroke) / 2;
   const cx = S / 2;
   const cy = S / 2;
@@ -875,13 +663,13 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: 20,
+        gap: 16,
       }}
     >
       <svg
         viewBox={`0 0 ${S} ${S}`}
         width={S}
-        height={Math.min(height, S)}
+        height={S}
         role="img"
         aria-label={ariaLabel}
         style={{ flex: "0 0 auto", maxWidth: "100%" }}
@@ -932,20 +720,20 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
               x={cx}
               y={cy - S * 0.11}
               textAnchor="middle"
-              fontSize="9.5"
+              fontSize="11"
               fontWeight="600"
-              fill={active.color}
+              fill={BRAND.muted}
               style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}
             >
-              {String(active.label).length > 12
-                ? String(active.label).slice(0, 11) + "…"
+              {String(active.label).length > 10
+                ? String(active.label).slice(0, 9) + "…"
                 : active.label}
             </text>
             <text
               x={cx}
               y={cy + S * 0.02}
               textAnchor="middle"
-              fontSize={S * 0.15}
+              fontSize={Math.max(14, S * 0.15)}
               fontWeight="700"
               fill={BRAND.ink}
             >
@@ -968,7 +756,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
               x={cx}
               y={cy - 2}
               textAnchor="middle"
-              fontSize={S * 0.16}
+              fontSize={Math.max(14, S * 0.16)}
               fontWeight="700"
               fill={BRAND.ink}
             >
@@ -978,7 +766,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
               x={cx}
               y={cy + S * 0.12}
               textAnchor="middle"
-              fontSize="10"
+              fontSize="11"
               fill={BRAND.muted}
             >
               Total
@@ -994,9 +782,11 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
           padding: 0,
           flex: "1 1 160px",
           minWidth: 140,
+          maxHeight: height,
+          overflow: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 4,
+          gap: 2,
         }}
       >
         {segs.map((s, i) => (
@@ -1011,10 +801,11 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
               alignItems: "center",
               gap: 8,
               fontSize: 12,
-              padding: "4px 6px",
+              lineHeight: 1.25,
+              padding: "2px 6px",
               borderRadius: 8,
               cursor: "pointer",
-              background: hi === i ? "rgba(14,90,208,0.06)" : "transparent",
+              background: hi === i ? "var(--adm-accent-soft, rgba(14,90,208,0.06))" : "transparent",
               opacity: hi >= 0 && hi !== i ? 0.55 : 1,
               transition: "background .15s ease, opacity .15s ease",
             }}
@@ -1054,7 +845,7 @@ export function DonutChart({ data, height = 220, size = 180, iconByLabel, onSele
 
 // ---------------------------------------------------------------------------
 // 5. Sparkline
-export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 }) {
+export function Sparkline({ data, color = BRAND.primary, width = 120, height = 34 }) {
   // Above the empty-data guard: hooks cannot sit behind an early return.
   const { t } = useLang();
   if (!Array.isArray(data) || data.length === 0) {
@@ -1125,12 +916,15 @@ export function Sparkline({ data, color = "#0E5AD0", width = 120, height = 34 })
 
 // ---------------------------------------------------------------------------
 // 6. Funnel
-export function Funnel({ steps }) {
+export function Funnel({ steps, height, rowHeight }) {
   const { t } = useLang();
   const [hi, setHi] = useState(-1);
 
   if (!Array.isArray(steps) || steps.length === 0)
-    return <Empty height={160} />;
+    return <Empty height={height || 160} />;
+  // Rows share the given height (gap included); 26 px bars by default.
+  const gap = 6;
+  const rowH = rowHeight || (height ? Math.max(18, Math.min(30, Math.floor((height - gap * (steps.length - 1)) / steps.length))) : 26);
 
   const rows = steps.map((s) => ({
     label: s.label,
@@ -1147,7 +941,7 @@ export function Funnel({ steps }) {
         fontFamily: FONT,
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap,
       }}
       role="img"
       aria-label={t("adm.chart.ariaFunnel", { n: rows.length })}
@@ -1174,12 +968,15 @@ export function Funnel({ steps }) {
           >
             <div
               style={{
-                width: 120,
+                width: 104,
                 flex: "0 0 auto",
                 fontSize: 12,
                 color: BRAND.ink,
                 fontWeight: 600,
                 textAlign: "right",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
               {r.label}
@@ -1188,8 +985,8 @@ export function Funnel({ steps }) {
               style={{
                 flex: 1,
                 background: BRAND.soft,
-                borderRadius: 8,
-                height: 30,
+                borderRadius: 6,
+                height: rowH,
                 position: "relative",
                 overflow: "hidden",
                 minWidth: 0,
@@ -1200,10 +997,11 @@ export function Funnel({ steps }) {
                   width: `${wpct}%`,
                   height: "100%",
                   background: c,
-                  borderRadius: 8,
+                  opacity: 0.9,
+                  borderRadius: 6,
                   display: "flex",
                   alignItems: "center",
-                  paddingLeft: 10,
+                  paddingLeft: 8,
                   boxSizing: "border-box",
                   transformOrigin: "left",
                   filter: hovered ? "brightness(1.07)" : "none",
@@ -1211,10 +1009,17 @@ export function Funnel({ steps }) {
                   animation: `cxGrowRight .8s cubic-bezier(.2,.85,.25,1) ${i * 70}ms both`,
                 }}
               >
-                <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>
+                {wpct >= 14 ? (
+                  <span style={{ color: "#fff", fontSize: 11, fontWeight: 700, textShadow: "0 1px 1px rgba(0,0,0,.25)" }}>
+                    {fmt(r.value)}
+                  </span>
+                ) : null}
+              </div>
+              {wpct < 14 ? (
+                <span style={{ position: "absolute", left: `calc(${wpct}% + 6px)`, top: "50%", transform: "translateY(-50%)", fontSize: 11, fontWeight: 700, color: BRAND.ink, pointerEvents: "none" }}>
                   {fmt(r.value)}
                 </span>
-              </div>
+              ) : null}
               {hovered && i > 0 ? (
                 <span
                   style={{
@@ -1224,8 +1029,8 @@ export function Funnel({ steps }) {
                     transform: "translateY(-50%)",
                     fontSize: 11,
                     fontWeight: 700,
-                    color: BRAND.accent,
-                    background: "rgba(255,255,255,0.9)",
+                    color: "var(--adm-red-dark, #b02a37)",
+                    background: "var(--adm-surface, rgba(255,255,255,0.9))",
                     padding: "1px 6px",
                     borderRadius: 999,
                     pointerEvents: "none",
@@ -1237,11 +1042,11 @@ export function Funnel({ steps }) {
             </div>
             <div
               style={{
-                width: 54,
+                width: 44,
                 flex: "0 0 auto",
                 fontSize: 12,
                 fontWeight: 600,
-                color: i === 0 ? BRAND.muted : BRAND.primary,
+                color: i === 0 ? BRAND.muted : "var(--adm-accent-ink, " + BRAND.ink + ")",
                 textAlign: "right",
               }}
             >
@@ -1256,156 +1061,250 @@ export function Funnel({ steps }) {
 
 // ---------------------------------------------------------------------------
 // Combo: daily ACCESSES (line/area) vs PURCHASES (bars) on the same chart.
-// data = [{ label, access, orders }]
+// data = [{ label, access, orders }]. Draws at the real width of its box so the
+// text keeps 11 px at 120–160 px tall cards.
 export function AccessVsBuyChart({ data, height = 250 }) {
   const { t } = useLang();
   const gid = useId();
   const [hi, setHi] = useState(-1);
-  const W = 720, H = height, PL = 44, PR = 14, PT = 18, PB = 30;
-  const iw = W - PL - PR, ih = H - PT - PB;
-  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
+  const [wrapRef, W] = useBoxWidth();
+  const H = height, PR = 8, PT = 8, PB = 22;
+  if (!data || !data.length) return <div ref={wrapRef} className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
   const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
   const nice = Math.ceil(max / 4) * 4;
-  const x = (i) => PL + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
+  const PL = Math.min(60, 12 + fmt(nice).length * 6.6);
+  const iw = Math.max(10, W - PL - PR), ih = H - PT - PB;
+  const n = data.length;
+  const slot = iw / n;
+  const x = (i) => PL + slot * (i + 0.5);
   const y = (v) => PT + ih - (v / nice) * ih;
-  const bw = Math.max(2, Math.min(16, iw / data.length * 0.5));
-  const linePts = data.map((d, i) => `${x(i)},${y(d.access)}`).join(" ");
-  const areaPts = `${PL},${PT + ih} ${linePts} ${PL + iw},${PT + ih}`;
-  const step = Math.ceil(data.length / 7);
+  const bw = Math.max(2, Math.min(18, slot * BAR_FRAC));
+  const linePts = data.map((d, i) => `${x(i).toFixed(1)},${y(d.access).toFixed(1)}`).join(" ");
+  const areaPts = `${x(0).toFixed(1)},${PT + ih} ${linePts} ${x(n - 1).toFixed(1)},${PT + ih}`;
+  const step = labelStep(n, Math.max(3, Math.floor(iw / 56)));
+  const compact = H < 170;
+  const gridN = compact ? 2 : 4;
   const hd = hi >= 0 ? data[hi] : null;
-  const conv = hd && hd.access ? (hd.orders / hd.access) * 100 : 0;
+  const convText = hd ? convLabel(hd.access, hd.orders, t) : "";
   return (
     <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaAccessVsBuy")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
-        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
+        <span><i style={{ background: BRAND.primary }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: BRAND.accent }} />{t("adm.chart.buys")}</span>
       </div>
-      <div style={{ position: "relative" }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
-             style={{ display: "block" }}
-             onMouseLeave={() => setHi(-1)}>
+      <div ref={wrapRef} style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }} onMouseLeave={() => setHi(-1)}>
           <defs>
             <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor="#0E5AD0" stopOpacity="0.22" /><stop offset="1" stopColor="#0E5AD0" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id={gid + "b"} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" />
+              <stop offset="0" stopColor={BRAND.primary} stopOpacity={AREA_OP} /><stop offset="1" stopColor={BRAND.primary} stopOpacity="0" />
             </linearGradient>
           </defs>
-          {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih; const val = Math.round(nice - (g / 4) * nice);
-            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" /><text x={PL - 8} y={yy + 4} textAnchor="end" fontSize="11" fill="#98a1b0">{val}</text></g>; })}
+          {Array.from({ length: gridN + 1 }, (_, g) => { const yy = PT + (g / gridN) * ih; const val = Math.round(nice - (g / gridN) * nice);
+            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} {...HAIR} /><text x={PL - 6} y={yy + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{val}</text></g>; })}
           <polygon points={areaPts} fill={`url(#${gid})`} style={{ animation: "cxFadeIn 1.1s ease .3s both" }} />
-          <polyline points={linePts} fill="none" stroke="#0E5AD0" strokeWidth="2.5" strokeLinejoin="round"
-                    style={{ strokeDasharray: "3000", "--cx-len": "3000px", animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both" }} />
           {data.map((d, i) => {
             const hovered = hi === i;
             return (
               <g key={i} onMouseEnter={() => setHi(i)}>
-                <g style={{ transform: hovered ? "translateY(-3px)" : "none", transition: "transform .18s cubic-bezier(.2,.8,.2,1)" }}>
-                  <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx="3"
-                        fill={`url(#${gid + "b"})`} opacity={hi < 0 || hovered ? 1 : 0.55}
-                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
-                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 30}ms both` }} />
-                </g>
-                {i % step === 0 && <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="10.5" fill={hovered ? "#16181d" : "#98a1b0"} fontWeight={hovered ? "700" : "400"}>{d.label}</text>}
-                <rect x={x(i) - iw / data.length / 2} y={PT} width={iw / data.length} height={ih} fill="transparent" />
+                <rect x={PL + slot * i} y={PT} width={slot} height={ih} fill={hovered ? BRAND.soft : "transparent"} />
+                <rect x={x(i) - bw / 2} y={y(d.orders)} width={bw} height={Math.max(0, PT + ih - y(d.orders))} rx={Math.min(3, bw / 2)}
+                  fill={BRAND.accent} opacity={hi < 0 || hovered ? 0.85 : 0.5}
+                  style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 30}ms both` }} />
+                {showLabel(i, n, step) && <text x={x(i)} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"} fontSize={AXIS_FS} fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "400"}>{d.label}</text>}
               </g>
             );
           })}
-          {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke="#0E5AD0" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
-          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="5" fill="#0E5AD0" stroke={BRAND.surface} strokeWidth="2" />}
+          <polyline points={linePts} fill="none" stroke={BRAND.primary} strokeWidth={LINE_W} strokeLinejoin="round" strokeLinecap="round"
+            style={{ strokeDasharray: "3000", "--cx-len": "3000px", animation: "cxDraw 1.4s cubic-bezier(.3,.8,.25,1) both", pointerEvents: "none" }} />
+          {hi >= 0 && <line x1={x(hi)} x2={x(hi)} y1={PT} y2={PT + ih} stroke={BRAND.primary} strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />}
+          {hi >= 0 && <circle cx={x(hi)} cy={y(data[hi].access)} r="4" fill={BRAND.primary} stroke={BRAND.surface} strokeWidth="1.5" />}
         </svg>
         {hd && (
-          <Tip
-            x={x(hi)}
-            y={Math.min(y(hd.access), y(hd.orders))}
-            W={W}
-            H={H}
-            caption={hd.label}
-            value={null}
+          <Tip x={x(hi)} y={Math.min(y(hd.access), y(hd.orders))} W={W} H={H} caption={hd.label} value={null}
             lines={[
-              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#8fc0ff" },
-              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#ff9db0" },
-              { text: t("adm.chart.conv", { pct: conv.toFixed(1) }), color: "#7ee2a0" },
-            ]}
-          />
+              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#b9c4ff" },
+              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#e2e6f5" },
+              { text: convText, color: "rgba(255,255,255,0.8)" },
+            ]} />
         )}
       </div>
     </div>
   );
 }
 
+/**
+ * Conversion = purchases ÷ accesses. Accesses are counted in the browser
+ * (localStorage) while purchases come from the store, so a day can have
+ * purchases and no accesses — or more purchases than accesses. Those cases are
+ * not a conversion rate: they render as "—" and the hint says why.
+ */
+export function convRate(access, orders) {
+  const a = Number(access) || 0, o = Number(orders) || 0;
+  if (a <= 0 || o > a) return null;
+  return Math.round((o / a) * 1000) / 10;
+}
+const convLabel = (access, orders, t) => { const c = convRate(access, orders); return c == null ? t("adm.fit.convNa") : t("adm.chart.conv", { pct: c }); };
+
 // Grouped bars per weekday: accesses vs purchases. data = [{label, access, orders, conv}]
 export function WeekdayChart({ data, height = 230 }) {
   const { t } = useLang();
   const [hi, setHi] = useState(-1);
-  const gid = useId();
-  const W = 720, H = height, PL = 40, PR = 12, PT = 16, PB = 42;
-  const iw = W - PL - PR, ih = H - PT - PB;
-  if (!data || !data.length) return <div className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
+  const [wrapRef, W] = useBoxWidth();
+  const H = height, PR = 8, PT = 8, PB = 34;
+  if (!data || !data.length) return <div ref={wrapRef} className="chart-empty" style={{ height }}>{t("adm.chart.noData")}</div>;
   const max = Math.max(1, ...data.map((d) => Math.max(d.access, d.orders)));
   const nice = Math.ceil(max / 4) * 4;
-  const gw = iw / data.length, bw = Math.min(22, gw / 3);
+  const PL = Math.min(60, 12 + fmt(nice).length * 6.6);
+  const iw = Math.max(10, W - PL - PR), ih = H - PT - PB;
+  const gw = iw / data.length, bw = Math.min(18, (gw * BAR_FRAC) / 2);
   const y = (v) => PT + ih - (v / nice) * ih;
+  const compact = H < 170;
+  const gridN = compact ? 2 : 4;
   // best day = most purchases (ties → highest conversion)
   let bestIdx = 0;
   data.forEach((d, i) => {
     const b = data[bestIdx];
-    if (d.orders > b.orders || (d.orders === b.orders && (d.conv || 0) > (b.conv || 0))) bestIdx = i;
+    if (d.orders > b.orders || (d.orders === b.orders && (convRate(d.access, d.orders) || 0) > (convRate(b.access, b.orders) || 0))) bestIdx = i;
   });
   const hd = hi >= 0 ? data[hi] : null;
+  const convOf = (d) => { const c = convRate(d.access, d.orders); return c == null ? "—" : `${c}%`; };
   return (
     <div className="chart-wrap" role="img" aria-label={t("adm.chart.ariaWeekday")}>
       <div className="chart-legend">
-        <span><i style={{ background: "#0E5AD0" }} />{t("adm.chart.access")}</span>
-        <span><i style={{ background: "#FD0E3F" }} />{t("adm.chart.buys")}</span>
+        <span><i style={{ background: BRAND.primary }} />{t("adm.chart.access")}</span>
+        <span><i style={{ background: BRAND.accent }} />{t("adm.chart.buys")}</span>
       </div>
-      <div style={{ position: "relative" }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }} onMouseLeave={() => setHi(-1)}>
-          <defs>
-            <linearGradient id={gid + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#3d84ea" /><stop offset="1" stopColor="#0E5AD0" /></linearGradient>
-            <linearGradient id={gid + "o"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#FF3B62" /><stop offset="1" stopColor="#FD0E3F" /></linearGradient>
-          </defs>
-          {[0, 1, 2, 3, 4].map((g) => { const yy = PT + (g / 4) * ih;
-            return <line key={g} x1={PL} x2={W - PR} y1={yy} y2={yy} stroke="#eef1f6" />; })}
+      <div ref={wrapRef} style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }} onMouseLeave={() => setHi(-1)}>
+          {Array.from({ length: gridN + 1 }, (_, g) => { const yy = PT + (g / gridN) * ih; const val = Math.round(nice - (g / gridN) * nice);
+            return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} {...HAIR} /><text x={PL - 6} y={yy + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{val}</text></g>; })}
           {data.map((d, i) => {
             const cx = PL + gw * i + gw / 2;
             const hovered = hi === i;
-            const isBest = i === bestIdx;
+            const isBest = i === bestIdx && d.orders > 0;
             return (
               <g key={i} onMouseEnter={() => setHi(i)}>
-                <rect x={PL + gw * i} y={PT} width={gw} height={ih} fill={hovered ? "rgba(14,90,208,0.05)" : "transparent"} />
-                <g style={{ transform: hovered ? "translateY(-5px)" : "none", transition: "transform .18s cubic-bezier(.2,.8,.2,1)" }}>
-                  <rect x={cx - bw - 2} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx="4"
-                        fill={`url(#${gid + "a"})`} opacity={hi < 0 || hovered ? 1 : 0.6}
-                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
-                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45}ms both` }} />
-                  <rect x={cx + 2} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx="4"
-                        fill={`url(#${gid + "o"})`} opacity={hi < 0 || hovered ? 1 : 0.6}
-                        style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease",
-                                 animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45 + 60}ms both` }} />
-                </g>
-                {isBest && <text x={cx} y={Math.min(y(d.access), y(d.orders)) - 6} textAnchor="middle" fontSize="12" fill="#c9a44a">★</text>}
-                <text x={cx} y={H - 24} textAnchor="middle" fontSize="12" fill={hovered || isBest ? "#16181d" : "#5c6470"} fontWeight={hovered || isBest ? "700" : "600"}>{d.label}</text>
-                <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="#98a1b0">{d.conv}%</text>
+                <rect x={PL + gw * i} y={PT} width={gw} height={ih} fill={hovered ? BRAND.soft : "transparent"} />
+                <rect x={cx - bw - 1} y={y(d.access)} width={bw} height={PT + ih - y(d.access)} rx={Math.min(3, bw / 2)}
+                  fill={BRAND.primary} opacity={hi < 0 || hovered ? 0.85 : 0.5}
+                  style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45}ms both` }} />
+                <rect x={cx + 1} y={y(d.orders)} width={bw} height={PT + ih - y(d.orders)} rx={Math.min(3, bw / 2)}
+                  fill={BRAND.accent} opacity={hi < 0 || hovered ? 0.85 : 0.5}
+                  style={{ transformBox: "fill-box", transformOrigin: "bottom", transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 45 + 60}ms both` }} />
+                {isBest && <text x={cx} y={Math.min(y(d.access), y(d.orders)) - 4} textAnchor="middle" fontSize="11" fill="var(--adm-gold-dark, #8a5a0c)">★</text>}
+                <text x={cx} y={H - 20} textAnchor="middle" fontSize={AXIS_FS} fill={hovered || isBest ? BRAND.ink : BRAND.muted} fontWeight={hovered || isBest ? "700" : "600"}>{d.label}</text>
+                <text x={cx} y={H - 6} textAnchor="middle" fontSize={AXIS_FS} fill={BRAND.muted}>{convOf(d)}</text>
               </g>
             );
           })}
         </svg>
         {hd && (
-          <Tip
-            x={PL + gw * hi + gw / 2}
-            y={Math.min(y(hd.access), y(hd.orders))}
-            W={W}
-            H={H}
-            caption={`${hd.label}${hi === bestIdx ? `  ${t("adm.chart.bestDay")}` : ""}`}
-            value={null}
+          <Tip x={PL + gw * hi + gw / 2} y={Math.min(y(hd.access), y(hd.orders))} W={W} H={H}
+            caption={`${hd.label}${hi === bestIdx && hd.orders > 0 ? `  ${t("adm.chart.bestDay")}` : ""}`} value={null}
             lines={[
-              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#8fc0ff" },
-              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#ff9db0" },
-              { text: t("adm.chart.conv", { pct: hd.conv }), color: "#7ee2a0" },
-            ]}
-          />
+              { text: t("adm.chart.accessN", { n: fmt(hd.access) }), color: "#b9c4ff" },
+              { text: t("adm.chart.buysN", { n: fmt(hd.orders) }), color: "#e2e6f5" },
+              { text: convLabel(hd.access, hd.orders, t), color: "rgba(255,255,255,0.8)" },
+            ]} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CompareBarChart: per bucket (a day), two bars side by side — sales in the
+// accent and cost in the muted second series — with the margin % printed above
+// each pair so the gap between what came in and what was kept is read at a
+// glance. One money axis for both (same unit), tooltip with sales / cost /
+// profit / margin. Draws at the real width of its box (useBoxWidth); never
+// overflows: the % labels thin out when the slots get narrow and come back on
+// hover.
+//
+//   <CompareBarChart data={[{ label: "10-03", sales: 820, cost: 510 }]} height={220}
+//     format={(v) => money(v, "usd", lang)} labels={{ sales, cost, profit, margin }} />
+//
+// `margin` is derived (sales − cost) unless the row brings its own `profit`.
+// `onSelect(row, i)` makes a pair clickable. Colors default to --adm-chart-1/2.
+export function CompareBarChart({ data, height = 220, format = (v) => `$${fmt(v)}`, axisFormat, labels = {}, colors = {}, onSelect, showPct = true }) {
+  const { t } = useLang();
+  const [hi, setHi] = useState(-1);
+  const [wrapRef, W] = useBoxWidth();
+  const L = { sales: labels.sales || t("adm.chart.sales"), cost: labels.cost || t("adm.chart.cost"), profit: labels.profit || t("adm.chart.profit"), margin: labels.margin || t("adm.chart.margin") };
+  const cSales = colors.sales || BRAND.primary;
+  const cCost = colors.cost || BRAND.accent;
+  const rows = (data || []).map((d) => {
+    const sales = Math.max(0, Number(d.sales) || 0);
+    const cost = Math.max(0, Number(d.cost) || 0);
+    const profit = d.profit != null ? Number(d.profit) || 0 : sales - cost;
+    const pct = sales > 0 ? (profit / sales) * 100 : null;
+    return { ...d, sales, cost, profit, pct };
+  });
+  const n = rows.length;
+  const empty = n === 0 || rows.every((r) => !r.sales && !r.cost);
+  const H = height, PR = 8, PT = showPct ? 20 : 8, PB = 22;
+  const max = niceMax(Math.max(0, ...rows.map((r) => Math.max(r.sales, r.cost))));
+  const axis = axisFormat || ((v) => format(v));
+  const PL = Math.min(72, 12 + String(axis(max)).length * 6.6);
+  const iw = Math.max(10, W - PL - PR), ih = H - PT - PB;
+  const slot = iw / Math.max(1, n);
+  const gap = 2;
+  const bw = Math.max(2, Math.min(22, (slot * 0.72 - gap) / 2));
+  const cx = (i) => PL + slot * i + slot / 2;
+  const y = (v) => PT + ih - (v / max) * ih;
+  const compact = H < 170;
+  const gridN = compact ? 2 : 4;
+  const step = labelStep(n, Math.max(3, Math.floor(iw / 48)));
+  const showAxis = (i) => (i === n - 1 ? true : i % step === 0 && n - 1 - i >= step);
+  // % labels: one per pair while they fit ("38%" ≈ 22 px); otherwise every k-th, and always the hovered one.
+  const pctStep = slot >= 26 ? 1 : Math.ceil(26 / slot);
+  const pctText = (p) => (p == null ? "—" : `${Math.round(p)}%`);
+  const hd = hi >= 0 ? rows[hi] : null;
+  const aria = t("adm.chart.ariaCompare", { n, sales: L.sales, cost: L.cost });
+  const pick = (i) => { if (onSelect) onSelect(rows[i], i); };
+  return (
+    <div className="chart-wrap cx-compare" role="img" aria-label={aria}>
+      <div className="chart-legend">
+        <span><i style={{ background: cSales }} />{L.sales}</span>
+        <span><i style={{ background: cCost }} />{L.cost}</span>
+        {showPct && <span className="cx-compare-pctkey"><b>38%</b> {L.margin}</span>}
+      </div>
+      <div ref={wrapRef} style={{ position: "relative", width: "100%", fontFamily: FONT }}>
+        {empty ? <Empty height={H} /> : (
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: "block", overflow: "hidden" }} onMouseLeave={() => setHi(-1)}>
+            {Array.from({ length: gridN + 1 }, (_, g) => { const val = (max * g) / gridN; const yy = y(val);
+              return <g key={g}><line x1={PL} x2={W - PR} y1={yy} y2={yy} stroke={BRAND.line} {...HAIR} /><text x={PL - 6} y={yy + 4} textAnchor="end" fontSize={AXIS_FS} fill={BRAND.muted}>{axis(val)}</text></g>; })}
+            {rows.map((r, i) => {
+              const hovered = hi === i;
+              const x0 = cx(i) - bw - gap / 2;
+              const x1 = cx(i) + gap / 2;
+              const top = Math.min(y(r.sales), y(r.cost));
+              const showP = showPct && (hovered || i % pctStep === 0);
+              const neg = r.pct != null && r.pct < 0;
+              return (
+                <g key={i} onMouseEnter={() => setHi(i)} onClick={onSelect ? () => pick(i) : undefined} style={onSelect ? { cursor: "pointer" } : undefined}>
+                  <rect x={PL + slot * i} y={PT} width={slot} height={ih} fill={hovered ? BRAND.soft : "transparent"} />
+                  {r.sales > 0 && <path d={barPath(x0, y(0), y(r.sales), bw, 3)} fill={cSales} opacity={hi < 0 || hovered ? 0.92 : 0.5}
+                    style={{ transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 25}ms both`, transformBox: "fill-box", transformOrigin: "bottom" }} />}
+                  {r.cost > 0 && <path d={barPath(x1, y(0), y(r.cost), bw, 3)} fill={cCost} opacity={hi < 0 || hovered ? 0.92 : 0.5}
+                    style={{ transition: "opacity .15s ease", animation: `cxGrowUp .7s cubic-bezier(.2,.85,.25,1) ${i * 25 + 50}ms both`, transformBox: "fill-box", transformOrigin: "bottom" }} />}
+                  {showP && (r.sales > 0 || r.cost > 0) && (
+                    <text x={cx(i)} y={Math.max(9, top - 4)} textAnchor="middle" fontSize="10" fontWeight={hovered ? "800" : "700"} fill={neg ? "var(--adm-red-dark, #b02a37)" : hovered ? BRAND.ink : BRAND.muted} style={{ fontVariantNumeric: "tabular-nums" }}>{pctText(r.pct)}</text>
+                  )}
+                  {showAxis(i) && <text x={cx(i)} y={H - 6} textAnchor={i === n - 1 && n > 1 ? "end" : i === 0 ? "start" : "middle"} fontSize={AXIS_FS} fill={hovered ? BRAND.ink : BRAND.muted} fontWeight={hovered ? "700" : "400"}>{r.label}</text>}
+                </g>
+              );
+            })}
+          </svg>
+        )}
+        {hd && (
+          <Tip x={cx(hi)} y={Math.min(y(hd.sales), y(hd.cost))} W={W} H={H} caption={hd.label} value={null}
+            lines={[
+              { text: `${L.sales}: ${format(hd.sales)}`, color: "#e2e6f5" },
+              { text: `${L.cost}: ${format(hd.cost)}`, color: "#b9c4ff" },
+              { text: `${L.profit}: ${format(hd.profit)}`, color: hd.profit >= 0 ? "#7ee2a0" : "#ff9db0" },
+              { text: `${L.margin}: ${pctText(hd.pct)}`, color: "rgba(255,255,255,0.8)" },
+            ]} />
         )}
       </div>
     </div>

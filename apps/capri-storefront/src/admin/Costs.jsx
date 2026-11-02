@@ -380,7 +380,12 @@ export function OrderCostSheet({ orderId, onClose, onChanged, go }) {
 }
 
 /* ── Rentabilidad del período ───────────────────────────────────────────── */
-function Profitability({ sellers, focusOrder, go }) {
+/**
+ * Fichas de costo por pedido. Exportada porque «Precios y costos»
+ * (PricingPanel.jsx) la enseña como acordeón «Fichas de costo por pedido»: el
+ * panel de precios reagrupa lo del dueño, y esta pantalla es la misma.
+ */
+export function Profitability({ sellers, focusOrder, go }) {
   const { t, lang } = useLang();
   const [range, setRange] = useState(focusOrder ? "all" : "30d");
   const [seller, setSeller] = useState("");
@@ -490,9 +495,16 @@ function Profitability({ sellers, focusOrder, go }) {
   );
 }
 
-const SUBS = ["profit", "rules", "allocation", "prices"];
+const SUBS = ["profit", "rules", "allocation"];
 
-export default function Costs({ params = {}, sellers = [], go, onSub, pricesView }) {
+/**
+ * La parte de PRECIOS de esta pantalla se fue a «Precios y costos»
+ * (PricingPanel.jsx, pestaña `pricing`): allí está la regla de monturas y
+ * estuches, la matriz de lentes, las comisiones, los costos con su interruptor
+ * por tienda y el impuesto, todo junto, como pidió el dueño. Aquí quedan la
+ * rentabilidad por pedido, las fichas de costo y la distribución por %.
+ */
+export default function Costs({ params = {}, sellers = [], go, onSub }) {
   const { t, lang } = useLang();
   const demo = isDemoLogin();
   const [view, setView] = useState(SUBS.includes(params.sub) ? params.sub : "profit");
@@ -506,7 +518,6 @@ export default function Costs({ params = {}, sellers = [], go, onSub, pricesView
     { key: "profit", icon: "trendUp", label: t("adm.cost.tab.profit") },
     { key: "rules", icon: "clipboard", label: t("adm.cost.tab.rules") },
     { key: "allocation", icon: "percent", label: t("adm.cost.tab.allocation") },
-    { key: "prices", icon: "prices", label: t("adm.tab.prices") },
   ];
   const rulesBody = rulesState === "loading" ? <div className="adm-src-note loading">{t("adm.real.loading")}</div> : rulesState === "error" ? <div className="adm-login-err">{t("adm.err.cost.loadFailed")}</div> : null;
 
@@ -523,7 +534,6 @@ export default function Costs({ params = {}, sellers = [], go, onSub, pricesView
         {!demo && view === "profit" && <Profitability sellers={sellers} focusOrder={params.order} go={go} />}
         {!demo && view === "rules" && (rulesBody || <RulesEditor data={rulesData} onSaved={loadRules} />)}
         {!demo && view === "allocation" && (rulesBody || <AllocationEditor data={rulesData} onSaved={loadRules} lang={lang} go={go} />)}
-        {view === "prices" && pricesView}
       </div>
     </div>
   );

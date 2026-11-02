@@ -6,6 +6,7 @@ import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
 import type LensConfigModuleService from "../modules/lens-config/service";
 import type { BoardOrder } from "./order-board";
 import { listSellers } from "./sellers";
+import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-toggle";
 
 /**
  * Ficha de costo por venta — what each order cost the shop, so the panel can
@@ -1031,13 +1032,17 @@ export async function costSheetForOrder(
   order: BoardOrder,
   rules: CostRule[],
   sellerByCode: Map<string, { commission_pct: number }>,
-  metadata?: Record<string, unknown> | null
+  metadata?: Record<string, unknown> | null,
+  toggles: CostToggleRow[] = []
 ): Promise<CostSheet> {
   const seller = order.seller_code ? sellerByCode.get(order.seller_code) ?? null : null;
   const stored = readStoredSheet(metadata);
+  // A store may switch a cost rule off for itself (pricing panel → Costos).
+  // Without toggles every rule counts, which is what the chain-wide views want.
+  const live = rules.filter((r) => isEnabled(r.id ?? `${r.kind}:${r.match_key}`, order.establishment_id, toggles));
   return computeCostSheet(
     { total: order.total, shipping_total: order.shipping_total, tax_total: order.tax_total, paid: order.paid, items: order.items },
-    rules,
+    live,
     seller,
     stored
   );
@@ -1046,7 +1051,7 @@ export async function costSheetForOrder(
 /** Rules + seller commission map in one call; empty on failure (callers degrade). */
 export async function loadCostingContext(
   container: MedusaContainer
-): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number; name: string }> }> {
+): Promise<{ rules: CostRule[]; sellerByCode: Map<string, { commission_pct: number; name: string }>; toggles: CostToggleRow[] }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   let rules: CostRule[] = [];
   const sellerByCode = new Map<string, { commission_pct: number; name: string }>();
@@ -1060,5 +1065,11 @@ export async function loadCostingContext(
   } catch (error) {
     logger.warn(`[costing] sellers unavailable: ${(error as Error).message}`);
   }
-  return { rules, sellerByCode };
+  let toggles: CostToggleRow[] = [];
+  try {
+    toggles = await loadCostToggles(container);
+  } catch (error) {
+    logger.warn(`[costing] cost toggles unavailable: ${(error as Error).message}`);
+  }
+  return { rules, sellerByCode, toggles };
 }

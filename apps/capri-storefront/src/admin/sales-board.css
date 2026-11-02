@@ -6,9 +6,12 @@
 .sb-root .sb-head h2 { margin: 0; }
 .sb-root .sb-head p { margin: 0; color: var(--adm-faint); font-size: 12.5px; }
 
-/* ── Barra de filtros: una fila en escritorio, se envuelve en el móvil ──── */
+/* ── Barra propia del tablero (granularidad · vendedor · comparar · filtros
+   finos), pegada justo bajo la barra de filtros GLOBAL del panel (AdminShell
+   mide la cabecera y la barra: --adm-top-real / --adm-bar-h). Tienda, período,
+   rango y exportar ya no van aquí. ──────────────────────────────────────── */
 .sb-bar {
-  position: sticky; top: var(--sb-top, var(--adm-top-h)); z-index: 30;
+  position: sticky; top: calc(var(--adm-top-real, var(--adm-top-h)) + var(--adm-bar-h, 0px)); z-index: 30;
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   padding: 8px 0 6px; margin: 0 0 8px; background: var(--st-bg, var(--adm-bg)); border-bottom: 1px solid var(--adm-line);
 }

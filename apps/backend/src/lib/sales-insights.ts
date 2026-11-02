@@ -4,7 +4,8 @@ import type { Knex } from "@mikro-orm/knex";
 import { computeCostSheet, isPaymentFeeRule, loadCostingContext, type CostRule } from "./costing";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
-import { applyFilter, previousPeriod, type AnalyticsFilter, type Breakdown } from "./sales-analytics";
+import { applyFilter, previousPeriod, type AnalyticsFilter, type Breakdown, type SaleListRow } from "./sales-analytics";
+import { hasPrivilege } from "./staff-profile";
 import { profilesByUser } from "./staff-profile-data";
 import { tenant } from "./tenant";
 
@@ -92,8 +93,47 @@ export interface LineEconomics {
 
 const MATERIAL_KINDS = new Set(["frame_brand", "frame_sku", "lens_design", "lens_material", "lens_photo", "lens_ar"]);
 
+/**
+ * Splits `amount` cents among `weights` so the parts add up to `amount`
+ * EXACTLY: the proportional part of each weight, floored, and the leftover
+ * cents handed to the biggest remainders (largest remainder / Hare quota,
+ * the same rule as lib/store-costs.ts allocateShared). Equal parts when every
+ * weight is zero. A negative amount is split with the sign kept. Pure.
+ *
+ * Rounding each part on its own would lose or invent a cent on a sale with
+ * several lines, and a statement that is off by a cent is a statement nobody
+ * trusts.
+ */
+export function allocateCents(amount: number, weights: readonly number[]): number[] {
+  const count = weights.length;
+  if (!count) return [];
+  const whole = Math.round(amount);
+  if (whole === 0) return weights.map(() => 0);
+  const sign = whole < 0 ? -1 : 1;
+  const abs = Math.abs(whole);
+  let w = weights.map((x) => (Number.isFinite(x) && x > 0 ? x : 0));
+  let total = w.reduce((s, x) => s + x, 0);
+  if (total === 0) {
+    w = weights.map(() => 1);
+    total = count;
+  }
+  const raw = w.map((x) => (abs * x) / total);
+  const parts = raw.map((v) => Math.floor(v));
+  let left = abs - parts.reduce((s, v) => s + v, 0);
+  const order = raw.map((v, i) => [v - Math.floor(v), i] as const).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  for (const [, i] of order) {
+    if (left <= 0) break;
+    parts[i] += 1;
+    left -= 1;
+  }
+  return parts.map((v) => v * sign);
+}
+
 /** The money of each line, in cents. Pure. */
 export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): LineEconomics[] {
+  // computeCostSheet drops the inactive rules itself (ruleIndex), so an
+  // inactive material rule leaves its line "without a cost defined" — the same
+  // answer the Costs tab gives.
   const materials = ctx.rules.filter((r) => MATERIAL_KINDS.has(r.kind));
   const active = ctx.rules.filter((r) => r.active);
   const orderFixed = active.filter((r) => r.kind === "order_fixed").reduce((s, r) => s + Math.round(r.amount * 100), 0);
@@ -126,14 +166,44 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     return out;
   };
 
-  return lines.map((l) => {
-    const net = l.total_cents - l.tax_cents;
-    const order = ctx.orders.get(l.order_id) ?? { gross: l.total_cents, net, lines: 1 };
-    const share = order.net > 0 ? net / order.net : 1 / Math.max(1, order.lines);
-    const orderFee = l.sale_id ? ctx.saleFees.get(l.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
+  const nets = lines.map((l) => l.total_cents - l.tax_cents);
+
+  // The payment fee and the per-order fixed costs belong to the WHOLE sale, so
+  // they are charged once and split among its lines in proportion to their net.
+  // A filter that selects part of a sale (one product, one lens design) only
+  // carries the matching share: `coverage` is how much of the sale is here.
+  const byOrder = new Map<string, number[]>();
+  lines.forEach((l, i) => {
+    const group = byOrder.get(l.order_id);
+    if (group) group.push(i);
+    else byOrder.set(l.order_id, [i]);
+  });
+  const fixedOf = new Array<number>(lines.length).fill(0);
+  const feeOf = new Array<number>(lines.length).fill(0);
+  for (const [orderId, idx] of byOrder) {
+    const first = lines[idx[0]];
+    const order = ctx.orders.get(orderId) ?? { gross: first.total_cents, net: nets[idx[0]], lines: idx.length };
+    const presentNet = idx.reduce((s, i) => s + nets[i], 0);
+    // A sale that left no net (a 100 % discount) is split by line count instead,
+    // and never beyond the whole of it.
+    const coverage = order.net > 0 ? presentNet / order.net : Math.min(1, idx.length / Math.max(1, order.lines));
+    const weights = order.net > 0 ? idx.map((i) => nets[i]) : idx.map(() => 1);
+    // Till sale: the fee recorded with its payments. Web order: the gateway's
+    // % of what the customer was charged, plus its fixed fee.
+    const feeTotal = first.sale_id ? ctx.saleFees.get(first.sale_id) ?? 0 : Math.round((order.gross * gatewayPct) / 100) + gatewayFixed;
+    const fixedParts = allocateCents(orderFixed * coverage, weights);
+    const feeParts = allocateCents(feeTotal * coverage, weights);
+    idx.forEach((i, k) => {
+      fixedOf[i] = fixedParts[k];
+      feeOf[i] = feeParts[k];
+    });
+  }
+
+  return lines.map((l, i) => {
+    const net = nets[i];
     const material = materialCost(l);
-    const cost = material.cost + Math.round(orderFixed * share);
-    const fee = Math.round(orderFee * share);
+    const cost = material.cost + fixedOf[i];
+    const fee = feeOf[i];
     const commission = Math.round((net * (ctx.commissionPct(l) ?? 0)) / 100);
     return { net, cost, fee, commission, profit: net - cost - fee - commission, missing_cost: material.missing };
   });
@@ -447,6 +517,12 @@ export interface InsightAccess {
   commission: boolean;
 }
 
+/** The rule the insights route applies: profit for admins and costs.view/costs.manage; a seller also sees their commission. */
+export function insightAccess(scope: { is_admin: boolean; role: string | null; privileges?: readonly string[] }): InsightAccess & { role: string | null } {
+  const profit = hasPrivilege(scope, "costs.view") || hasPrivilege(scope, "costs.manage");
+  return { profit, commission: profit || scope.role === "seller", role: scope.role };
+}
+
 /**
  * Takes out what the caller may not see, here and not in the panel: hiding a
  * column in the browser would still send a store's margin to a seller. Pure.
@@ -475,6 +551,68 @@ export function redactInsights(data: Insights, access: InsightAccess): Insights 
     missing_cost_lines: access.profit ? data.missing_cost_lines : 0,
     cost_rules_missing: access.profit ? data.cost_rules_missing : false,
   };
+}
+
+// ── Per-sale economics (the list of sales of a store) ─────────────────────
+
+/** The money of one sale, in cents: its lines added up (lineEconomics). */
+export interface SaleEconomics {
+  net: number;
+  cost: number;
+  fee: number;
+  commission: number;
+  profit: number;
+  /** Some line has a frame or lens without a cost rule: the profit reads too high. */
+  missing_cost: boolean;
+}
+
+/** Adds the lines of each order up. Pure. */
+export function sumEconomicsByOrder(lines: InsightLine[], econ: LineEconomics[]): Map<string, SaleEconomics> {
+  const out = new Map<string, SaleEconomics>();
+  lines.forEach((l, i) => {
+    const e = econ[i];
+    const cur = out.get(l.order_id) ?? { net: 0, cost: 0, fee: 0, commission: 0, profit: 0, missing_cost: false };
+    cur.net += e.net;
+    cur.cost += e.cost;
+    cur.fee += e.fee;
+    cur.commission += e.commission;
+    cur.profit += e.profit;
+    cur.missing_cost = cur.missing_cost || e.missing_cost;
+    out.set(l.order_id, cur);
+  });
+  return out;
+}
+
+/** A sale of the list with its money: null where the caller may not see it (redacted here, never in the panel). */
+export interface SaleListEconomics extends SaleListRow {
+  /** Total minus sales tax; null when the sale's lines were not read. Not redacted: it is not a cost. */
+  net: number | null;
+  cost: number | null;
+  fee: number | null;
+  commission: number | null;
+  profit: number | null;
+  /** Profit over the net, in %. */
+  margin_pct: number | null;
+  missing_cost: boolean | null;
+}
+
+/** Puts each sale's money on its row, in dollars, redacted by `access`. Pure. */
+export function attachSaleEconomics(rows: SaleListRow[], econ: Map<string, SaleEconomics>, access: InsightAccess): SaleListEconomics[] {
+  const d = (v: number) => v / 100;
+  return rows.map((r) => {
+    const e = econ.get(r.order_id);
+    const profit = access.profit && e ? d(e.profit) : null;
+    return {
+      ...r,
+      net: e ? d(e.net) : null,
+      cost: access.profit && e ? d(e.cost) : null,
+      fee: access.profit && e ? d(e.fee) : null,
+      commission: access.commission && e ? d(e.commission) : null,
+      profit,
+      margin_pct: access.profit && e && e.net > 0 ? Math.round((e.profit / e.net) * 1000) / 10 : null,
+      missing_cost: access.profit && e ? e.missing_cost : null,
+    };
+  });
 }
 
 // ── Loading ──────────────────────────────────────────────────────────────────
@@ -510,8 +648,10 @@ export function saleFeesQuery(pg: Knex, f: AnalyticsFilter): Knex.QueryBuilder {
     .select("p.sale_id", pg.raw("COALESCE(SUM(p.fee_cents), 0)::bigint AS fee"));
 }
 
-async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string): Promise<{ lines: InsightLine[]; truncated: boolean }> {
-  const rows = (await linesQuery(pg, f, tz)) as Array<Record<string, unknown>>;
+async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string, orderIds?: string[]): Promise<{ lines: InsightLine[]; truncated: boolean }> {
+  const q = linesQuery(pg, f, tz);
+  if (orderIds) q.whereIn("sale_fact.order_id", orderIds);
+  const rows = (await q) as Array<Record<string, unknown>>;
   const truncated = rows.length > MAX_INSIGHT_LINES;
   const kept = truncated ? rows.slice(0, MAX_INSIGHT_LINES) : rows;
   const meta = await loadProductMetadata(pg, [...new Set(kept.map((r) => String(r.product_id ?? "")).filter(Boolean))]);
@@ -531,13 +671,46 @@ async function loadLines(pg: Knex, f: AnalyticsFilter, tz: string): Promise<{ li
   };
 }
 
-async function loadOrderContext(pg: Knex, f: AnalyticsFilter): Promise<{ orders: Map<string, OrderTotals>; saleFees: Map<string, number> }> {
-  const orderRows = (await orderTotalsQuery(pg, f)) as Array<Record<string, unknown>>;
-  const feeRows = (await saleFeesQuery(pg, f)) as Array<Record<string, unknown>>;
+async function loadOrderContext(pg: Knex, f: AnalyticsFilter, orderIds?: string[]): Promise<{ orders: Map<string, OrderTotals>; saleFees: Map<string, number> }> {
+  const totalsQ = orderTotalsQuery(pg, f);
+  const feesQ = saleFeesQuery(pg, f);
+  if (orderIds) {
+    totalsQ.whereIn("o.order_id", orderIds);
+    feesQ.whereIn("p.sale_id", pg("sale_fact").whereNull("sale_fact.deleted_at").whereIn("sale_fact.order_id", orderIds).whereNotNull("sale_fact.sale_id").select("sale_fact.sale_id"));
+  }
+  // Both aggregates at once: they are independent, and the panel waits for the
+  // slowest of them instead of their sum.
+  const [orderRows, feeRows] = (await Promise.all([totalsQ, feesQ])) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
   return {
     orders: new Map(orderRows.map((r) => [String(r.order_id), { gross: Number(r.gross), net: Number(r.net), lines: Number(r.lines) }])),
     saleFees: new Map(feeRows.map((r) => [String(r.sale_id), Number(r.fee)])),
   };
+}
+
+/** Same precedence as the seller's own panel: their profile, then their seller record. */
+async function commissionResolver(container: MedusaContainer, lines: InsightLine[], costing: Awaited<ReturnType<typeof loadCostingContext>>): Promise<(l: InsightLine) => number | null> {
+  const sellerIds = [...new Set(lines.map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
+  const profiles = await profilesByUser(container, sellerIds);
+  return (l: InsightLine) => {
+    const own = l.seller_id ? profiles.get(l.seller_id)?.commission_pct ?? null : null;
+    if (own !== null) return own;
+    return l.seller_code ? costing.sellerByCode.get(l.seller_code)?.commission_pct ?? null : null;
+  };
+}
+
+/**
+ * The money of the given sales (one page of the sales list), from the same
+ * rules and lines as the panel, so the list and the figures agree. The sales
+ * must be within `f` (the list was read with it); other lines of those orders
+ * still count for the whole-order fee and fixed costs.
+ */
+export async function orderEconomics(container: MedusaContainer, f: AnalyticsFilter, orderIds: string[]): Promise<Map<string, SaleEconomics>> {
+  const ids = [...new Set(orderIds)];
+  if (!ids.length) return new Map();
+  const pg = pgOf(container);
+  const [cur, ctx, costing] = await Promise.all([loadLines(pg, f, tenant().timezone, ids), loadOrderContext(pg, f, ids), loadCostingContext(container)]);
+  const commissionPct = await commissionResolver(container, cur.lines, costing);
+  return sumEconomicsByOrder(cur.lines, lineEconomics(cur.lines, { rules: costing.rules, ...ctx, commissionPct }));
 }
 
 /** `by` is the main dimension; `bys` the others to group by in the same pass (one query, many tables). */
@@ -554,14 +727,7 @@ export async function salesInsights(container: MedusaContainer, f: AnalyticsFilt
     loadCostingContext(container),
     listEstablishments(container),
   ]);
-  const sellerIds = [...new Set([...cur.lines, ...old.lines].map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
-  const profiles = await profilesByUser(container, sellerIds);
-  // Same precedence as the seller's own panel: their profile, then their seller record.
-  const commissionPct = (l: InsightLine) => {
-    const own = l.seller_id ? profiles.get(l.seller_id)?.commission_pct ?? null : null;
-    if (own !== null) return own;
-    return l.seller_code ? costing.sellerByCode.get(l.seller_code)?.commission_pct ?? null : null;
-  };
+  const commissionPct = await commissionResolver(container, [...cur.lines, ...old.lines], costing);
   const econ = lineEconomics(cur.lines, { rules: costing.rules, ...curOrders, commissionPct });
   const oldEcon = lineEconomics(old.lines, { rules: costing.rules, ...oldOrders, commissionPct });
   const byStore = new Map(stores.map((s) => [s.id, s]));
