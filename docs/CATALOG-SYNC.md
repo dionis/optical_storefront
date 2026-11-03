@@ -117,6 +117,18 @@ ver `docs/frame-media-generation.md` §C.7).
 El workflow de GitHub `scraper-sync.yml` ya no tiene cron (antes era diario): queda solo
 como disparo manual de respaldo.
 
+## Problemas conocidos
+
+| Síntoma | Causa | Qué hacer |
+|---|---|---|
+| «Worker sin conexión» y en el log `backend unavailable: Unauthorized` | `MEDUSA_ADMIN_API_KEY` no es una Secret API Key (`sk_…`) **del Medusa de staging** | Crearla en el admin de staging, ponerla en Coolify y redesplegar |
+| `[images] Failed … An error occurred () when calling the PutObject operation` | Supabase Storage rechaza la firma (403 sin texto): clave de Storage S3 mal copiada | Revisar `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`. El worker y el backend ya recortan comillas y `<`/`>` sobrantes, pero avisan en el log |
+| Modelos creados sin fotos | Lo anterior | Ya no se dan por procesados: salen en «Errores» y la siguiente corrida reintenta. Cuando por fin reciben fotos, sus 4 vistas se encolan como las de un modelo nuevo |
+| `Option value X does not exist for option Color` | Medusa 2.16+ no deja tocar las opciones en un update | Resuelto: las variantes existentes no envían `options` y un color nuevo se enlaza antes por `/admin/products/:id/options/batch` |
+
+Los modelos que una versión anterior ya marcó como procesados sin fotos necesitan
+una vez **Revisión completa** de su colección.
+
 ## Probar en local
 
 ```bash

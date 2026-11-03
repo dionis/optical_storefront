@@ -32,7 +32,36 @@ def _env_url(name: str, default: str = "") -> str:
 _PLACEHOLDER_MARKERS = ("<", "your-", "change-me", "example.com")
 
 
-def _env_optional(name: str, default: str = "", *, url: bool = False) -> str:
+#: Characters no real key contains but a copy-paste drags along: the quotes
+#: around a value, or one half of the `<key>` template it replaced.
+_STRAY_KEY_CHARS = "\"'`<>"
+
+
+def _env_secret(name: str) -> str:
+    """Read a credential, trimming quotes and stray `<`/`>` at its ends.
+
+    A secret key pasted as `3fe…04>` (the template's closing bracket kept)
+    fails every request with a bare 403 that names nothing: S3 PutObject
+    answers `An error occurred ()`. Real keys never contain these characters,
+    so trimming them is safe; a value wrapped whole in `<…>` is still the
+    template, and `_env_optional` blanks it as before. Warns without
+    printing the key.
+    """
+    raw = _env(name)
+    if raw.startswith("<") and raw.endswith(">"):
+        return raw
+    cleaned = raw.strip(_STRAY_KEY_CHARS).strip()
+    if cleaned != raw:
+        print(
+            f"[config] WARNING: {name} had quotes or '<'/'>' at its ends — "
+            "trimmed. Fix the value where it is set."
+        )
+    return cleaned
+
+
+def _env_optional(
+    name: str, default: str = "", *, url: bool = False, secret: bool = False
+) -> str:
     """Read an env var for an OPTIONAL integration, blanking template values.
 
     Every caller of these has a graceful "not configured" path (hotlink the
@@ -44,7 +73,7 @@ def _env_optional(name: str, default: str = "", *, url: bool = False) -> str:
     Only for optional credentials: `SCRAPER_USER_AGENT` legitimately defaults to
     a contact address at example.com and must never be blanked.
     """
-    raw = _env(name, default)
+    raw = (_env_secret(name) or default) if secret else _env(name, default)
     if raw and any(marker in raw.lower() for marker in _PLACEHOLDER_MARKERS):
         print(
             f"[config] WARNING: {name} still holds the .env.example placeholder "
@@ -70,7 +99,7 @@ class Config:
         default_factory=lambda: _env_url("MEDUSA_BACKEND_URL", "http://localhost:9000")
     )
     medusa_admin_api_key: str = field(
-        default_factory=lambda: _env("MEDUSA_ADMIN_API_KEY")
+        default_factory=lambda: _env_secret("MEDUSA_ADMIN_API_KEY")
     )
     # Sales channel the storefront sells from. Products MUST be associated with it,
     # or the Store API (queried via the publishable key) returns nothing. Obtain the
@@ -79,10 +108,10 @@ class Config:
         default_factory=lambda: _env("MEDUSA_SALES_CHANNEL_ID")
     )
     r2_access_key_id: str = field(
-        default_factory=lambda: _env_optional("R2_ACCESS_KEY_ID")
+        default_factory=lambda: _env_optional("R2_ACCESS_KEY_ID", secret=True)
     )
     r2_secret_access_key: str = field(
-        default_factory=lambda: _env_optional("R2_SECRET_ACCESS_KEY")
+        default_factory=lambda: _env_optional("R2_SECRET_ACCESS_KEY", secret=True)
     )
     r2_bucket: str = field(
         default_factory=lambda: _env("R2_BUCKET", "eyewear-assets")
@@ -106,13 +135,13 @@ class Config:
         default_factory=lambda: _env_optional("MEILISEARCH_MASTER_KEY")
     )
     anthropic_api_key: str = field(
-        default_factory=lambda: _env("ANTHROPIC_API_KEY")
+        default_factory=lambda: _env_secret("ANTHROPIC_API_KEY")
     )
     # Generated media (4 views / promo video). Only `media generate` needs this;
     # every other media subcommand works without it, so it is optional here and
     # checked by `validate_media()` at the point where a missing key costs money.
     gemini_api_key: str = field(
-        default_factory=lambda: _env_optional("GEMINI_API_KEY")
+        default_factory=lambda: _env_optional("GEMINI_API_KEY", secret=True)
     )
     rate_limit_seconds: float = field(
         default_factory=lambda: _env_float("SCRAPER_RATE_LIMIT", 1.0)

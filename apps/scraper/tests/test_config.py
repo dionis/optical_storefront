@@ -57,3 +57,19 @@ def test_invalid_rate_limit_raises(monkeypatch):
     monkeypatch.setenv("SCRAPER_RATE_LIMIT", "fast")
     with pytest.raises(ConfigError, match="SCRAPER_RATE_LIMIT"):
         Config()
+
+
+@pytest.mark.parametrize("pasted", ["3fe04>", "<3fe04", '"3fe04"', "'3fe04' ", "3fe04"])
+def test_keys_lose_stray_quotes_and_brackets(monkeypatch, pasted):
+    # `3fe…04>` — the template's closing bracket kept — failed every upload
+    # with a bare 403 that named nothing.
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", pasted)
+    monkeypatch.setenv("MEDUSA_ADMIN_API_KEY", pasted)
+    config = Config()
+    assert config.r2_access_key_id == "3fe04"
+    assert config.medusa_admin_api_key == "3fe04"
+
+
+def test_a_whole_template_key_is_still_unset(monkeypatch):
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "<your-key>")
+    assert Config().r2_access_key_id == ""

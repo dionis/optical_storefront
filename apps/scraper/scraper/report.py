@@ -30,6 +30,10 @@ class SyncReport:
     empty_collections: list[str] = field(default_factory=list)
     # [{handle, title, brand, thumbnail, colors, collection}] — models CREATED this run.
     new_products: list[dict[str, Any]] = field(default_factory=list)
+    # [{handle, collection}] — models that existed WITHOUT pictures and got them
+    # this run (an earlier run whose uploads all failed). Their 4 views were
+    # never possible, so the worker treats them like new models.
+    images_recovered: list[dict[str, str]] = field(default_factory=list)
     errors: list[dict[str, str | None]] = field(default_factory=list)
     # Ten consecutive failures: the backend or the network is down.
     aborted: bool = False
@@ -58,7 +62,9 @@ class SyncReport:
             return "canceled"
         if self.aborted:
             return "failed"
-        if self.failed or self.empty_collections:
+        # Errors without a failed product count too: a model created with no
+        # pictures, or views that could not be queued, still need a look.
+        if self.failed or self.empty_collections or self.errors:
             return "partial"
         return "succeeded"
 

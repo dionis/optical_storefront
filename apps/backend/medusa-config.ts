@@ -2,6 +2,23 @@ import { loadEnv, defineConfig } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
+// Storage keys pasted with quotes or half of the `<key>` template (`3fe…04>`)
+// fail every upload with a bare 403 that names nothing. Real keys never contain
+// these characters, so trim them once here, where both this file and
+// src/lib/s3.ts read the same process.env. The scraper does the same
+// (`_env_secret` in apps/scraper/scraper/config.py).
+for (const name of ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]) {
+  const raw = process.env[name]?.trim();
+  if (!raw || (raw.startsWith("<") && raw.endsWith(">"))) continue;
+  const cleaned = raw.replace(/^["'`<>]+|["'`<>]+$/g, "").trim();
+  if (cleaned !== process.env[name]) {
+    if (cleaned !== raw) {
+      console.warn(`[file] ${name} had quotes or '<'/'>' at its ends — trimmed. Fix the value where it is set.`);
+    }
+    process.env[name] = cleaned;
+  }
+}
+
 // The S3 provider throws from its constructor when credentials are absent,
 // which takes the whole server down at boot rather than degrading. Register it
 // only when it can actually work, so a deployment without R2 still starts.

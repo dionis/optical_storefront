@@ -178,3 +178,18 @@ def test_bad_configuration_fails_the_run_with_a_reason() -> None:
 
     assert status == "failed"
     assert fake.finished()["error_reason"] == "config_error"
+
+
+def test_views_also_cover_models_whose_pictures_arrived_late() -> None:
+    # Created bare by a run whose uploads all failed: no photo, so no views.
+    # The run that finally stores their pictures must queue them like new ones.
+    report = _report(NEW)
+    report.images_recovered = [
+        {"handle": "pt215-peachtree", "collection": "peachtree"},
+        {"handle": "dc1-di-caprio", "collection": "di-caprio"},
+        {"handle": "case-2-case", "collection": "case"},
+    ]
+    with patch("scraper.worker.media_api.enqueue", return_value={}) as enqueue:
+        worker.generate_views(Config(), report, 0, MagicMock())
+
+    assert enqueue.call_args.args[1] == ["dc1-di-caprio", "pt215-peachtree"]

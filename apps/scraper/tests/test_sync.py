@@ -311,3 +311,35 @@ class TestSyncReport:
         assert report.aborted
         assert report.outcome == "failed"
         assert report.collections == 1, "an outage must not grind through the next collection"
+
+    @pytest.mark.asyncio
+    async def test_a_model_whose_images_all_failed_is_retried_next_run(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        # Storage rejected every upload (a bad key): the product reached Medusa
+        # bare. Marking it seen made every later run skip it as "unchanged".
+        for p in sync_harness["products"]:
+            p.image_urls = ["https://supplier/x.jpg"]
+        sync_harness["products"][1].r2_image_keys = ["products/h1/h1_00.webp"]
+        sync_harness["upsert"].return_value = UpsertResult("p", created=False)
+
+        report = await sync(Config(), collections=["4u"])
+
+        marked = {call.args[0] for call in sync_harness["state"].mark_seen.call_args_list}
+        assert marked == {"h1"}
+        assert [e["handle"] for e in report.errors] == ["h0", "h2", "h3", "h4"]
+        assert "0 of 1 images" in str(report.errors[0]["message"])
+        assert report.outcome == "partial"
+
+    @pytest.mark.asyncio
+    async def test_a_model_whose_pictures_arrived_late_is_reported(
+        self, sync_harness: dict[str, Any]
+    ) -> None:
+        sync_harness["upsert"].side_effect = [
+            UpsertResult("p0", created=False, images_recovered=True),
+            *[UpsertResult(f"p{i}", created=False) for i in range(1, 5)],
+        ]
+
+        report = await sync(Config(), collections=["4u"])
+
+        assert report.images_recovered == [{"handle": "h0", "collection": "4u"}]

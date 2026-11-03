@@ -400,9 +400,21 @@ async def sync(
 
                 consecutive_failures = 0
                 medusa_id = result.product_id if result else None
+                # Every picture failed (storage down, a bad key): the product is in
+                # Medusa but bare. Leave it out of the state cache so the next run
+                # retries the images instead of calling it "unchanged" forever.
+                images_lost = (
+                    not dry_run and bool(product.image_urls) and not product.r2_image_keys
+                )
+                if images_lost:
+                    report.add_error(
+                        product.handle,
+                        f"0 of {len(product.image_urls)} images stored — "
+                        "see the [images] lines in the log",
+                    )
                 if medusa_id or dry_run:
                     pushed += 1
-                    if not dry_run:
+                    if not dry_run and not images_lost:
                         state.mark_seen(product.handle, product.content_hash)
                 if result and result.created:
                     report.new += 1
@@ -418,6 +430,10 @@ async def sync(
                     )
                 elif result:
                     report.updated += 1
+                    if result.images_recovered:
+                        report.images_recovered.append(
+                            {"handle": product.handle, "collection": product.collection_slug}
+                        )
 
                 print(
                     f"[scraper]   [{position}/{total}] {product.handle} "

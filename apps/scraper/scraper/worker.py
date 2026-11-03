@@ -185,12 +185,18 @@ def finish(
 
 
 def generate_views(config: Config, report: SyncReport, max_cost: float, ctx: RunContext) -> None:
-    """Queue — and, within `max_cost`, generate — the 4 views of the new models."""
-    handles = [
-        p["handle"]
-        for p in report.new_products
-        if p.get("collection") not in VIEW_EXCLUDED_COLLECTIONS
-    ]
+    """Queue — and, within `max_cost`, generate — the 4 views of the new models.
+
+    "New" includes models whose pictures only arrived this run: created bare by
+    an earlier run (every upload failed), they could never get views — the
+    view prompt starts from the product photo. Queueing is idempotent and
+    finished views are never claimed again, so this costs nothing twice.
+    """
+    handles: list[str] = []
+    for p in [*report.new_products, *report.images_recovered]:
+        if p.get("collection") in VIEW_EXCLUDED_COLLECTIONS or p["handle"] in handles:
+            continue
+        handles.append(p["handle"])
     if not handles:
         return
 
