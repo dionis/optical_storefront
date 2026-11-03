@@ -4,7 +4,15 @@ import { upsertVariantPricesWorkflow } from "@medusajs/medusa/core-flows";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import { recordAudit } from "./audit";
 import type StorePricingModuleService from "../modules/store-pricing/service";
-import type { PriceRuleLike, RuleMode, RuleScope } from "./store-pricing";
+import { globalPriceOverrides, type PriceRuleLike, type RuleMode, type RuleScope } from "./store-pricing";
+import {
+  clearPriceBandCache,
+  normalizeModel,
+  priceBandCacheStale,
+  setPriceBandCache,
+  toPriceBand,
+  type PriceBand,
+} from "./pricing";
 
 /**
  * Reads and writes of price rules. Every write closes the open rule it replaces
@@ -36,8 +44,18 @@ function toRow(r: Record<string, unknown>): PriceRuleRow {
   };
 }
 
-/** Open rules (valid_to null) of the given stores plus every global price. */
+/**
+ * Open rules (valid_to null) of the given stores plus every global price.
+ *
+ * It also warms the PRICE BAND cache (see `ensurePriceBandCache`), because this
+ * is the one gateway every price computation goes through — the point of sale,
+ * the store catalogue, the panel's preview and price-sync all load the rules
+ * before they compute anything — and `storeLinePrice` has to stay synchronous.
+ */
 export async function openRules(container: MedusaContainer, establishmentIds: string[]): Promise<PriceRuleRow[]> {
+  // Only when it is actually stale: a warm cache must not add two queries to
+  // every quote. Never throws — see `ensurePriceBandCache`.
+  if (priceBandCacheStale()) await ensurePriceBandCache(container);
   // SQL `IN (…, NULL)` never matches NULL rows, so the global prices need their
   // own branch of the OR.
   const which = establishmentIds.length
@@ -118,6 +136,227 @@ export async function replaceRule(
       created_by: actorId,
     } as never);
   }
+}
+
+// ── The price band: the floor and ceiling of a converted price ──────────────
+
+/**
+ * Reads and writes of `store_price_band` (the chain's) and
+ * `store_price_band_variation` (one store's own). The pure math — the
+ * precedence, the adjustment itself and the validation — is in lib/pricing.ts;
+ * this file only moves the rows and keeps the process cache that lets
+ * `storeLinePrice` stay synchronous.
+ *
+ * Unlike a price rule, a band is UPDATED in place rather than closed and
+ * reopened: there is one live band per scope and its history is the audit log
+ * (`price.band`), which is where "who moved the floor" is actually looked up.
+ */
+
+/** A band plus who last moved it — the API's shape. */
+export interface PriceBandRow extends PriceBand {
+  /** The store, or null for the chain's master. */
+  establishment_id: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+/** Always "chain": the master table holds exactly one live row (see its migration). */
+const CHAIN_SCOPE = "chain";
+
+function toBandRow(r: Record<string, unknown>, establishmentId: string | null): PriceBandRow {
+  const band = toPriceBand(r as Partial<PriceBand>) as PriceBand;
+  const at = r["updated_at"];
+  return {
+    ...band,
+    establishment_id: establishmentId,
+    updated_at: at ? new Date(String(at)).toISOString() : null,
+    updated_by: (r["updated_by"] as string | null) ?? null,
+  };
+}
+
+/** The chain's band, or null when the owner has not set one. Throws. */
+export async function loadChainPriceBand(container: MedusaContainer): Promise<PriceBandRow | null> {
+  const rows = (await svc(container).listStorePriceBands({ scope: CHAIN_SCOPE } as never, {
+    take: 1,
+  })) as unknown as Record<string, unknown>[];
+  const live = rows.find((r) => !r["deleted_at"]);
+  return live ? toBandRow(live, null) : null;
+}
+
+/**
+ * Every store's own band, or one store's. Throws — the routes report it,
+ * `ensurePriceBandCache` swallows it on purpose.
+ *
+ * One row per store at most (six stores), so reading them all is one small
+ * query and the cache can answer for any store without a query per store.
+ */
+export async function loadStorePriceBands(
+  container: MedusaContainer,
+  storeId?: string | null
+): Promise<PriceBandRow[]> {
+  const filter = storeId ? ({ establishment_id: storeId } as never) : ({} as never);
+  const rows = (await svc(container).listStorePriceBandVariations(filter, {
+    take: 1000,
+  })) as unknown as Record<string, unknown>[];
+  return rows
+    .filter((r) => !r["deleted_at"] && r["establishment_id"])
+    .map((r) => toBandRow(r, String(r["establishment_id"])));
+}
+
+/** Group a flat list of variations the way the cache (and `resolvePriceBand`) reads it. */
+export function indexPriceBands(rows: readonly PriceBandRow[]): Map<string, PriceBand> {
+  const out = new Map<string, PriceBand>();
+  for (const r of rows) {
+    if (r.establishment_id) out.set(r.establishment_id, r);
+  }
+  return out;
+}
+
+/**
+ * Warm the band cache if it is older than its TTL — the master AND every
+ * store's variation, in one pass. NEVER THROWS: an un-migrated table must not
+ * take a sale or a dashboard down, and the degraded answer is "no band", which
+ * is the price the shop sold at before this layer existed.
+ */
+export async function ensurePriceBandCache(container: MedusaContainer): Promise<void> {
+  try {
+    const [master, variations] = await Promise.all([
+      loadChainPriceBand(container),
+      loadStorePriceBands(container).catch(() => [] as PriceBandRow[]),
+    ]);
+    setPriceBandCache(master, indexPriceBands(variations));
+  } catch {
+    // Leave whatever the cache had (possibly nothing) and try again after the
+    // TTL. A failure never marks it loaded, so prices stay un-banded.
+  }
+}
+
+/**
+ * The price-book keys of the models the owner priced BY HAND, so the impact
+ * preview can leave them out of the counts: the band never moves them.
+ *
+ * His global prices are keyed by Medusa product id and the price book by
+ * normalised model name, so the bridge is the product title — the very same
+ * one `price-sync` matches on, which is what keeps the preview's "285 models"
+ * and the job's actual writes talking about the same 285 models.
+ *
+ * Best effort: with no catalogue behind it the set is empty and the preview
+ * simply counts those models too, which over-states the impact rather than
+ * under-stating it.
+ */
+export async function ownerPricedKeys(container: MedusaContainer): Promise<Set<string>> {
+  try {
+    const overrides = globalPriceOverrides(await openRules(container, []));
+    if (!overrides.size) return new Set();
+    const products = await productPrices(container, [...overrides.keys()]);
+    return new Set(products.map((p) => normalizeModel(p.title)).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Audit payload of a band — the four numbers and the two switches, nothing else. */
+export function priceBandAudit(band: PriceBand | null): Record<string, unknown> | null {
+  if (!band) return null;
+  return {
+    floor_below_cents: band.floor_below_cents,
+    floor_to_cents: band.floor_to_cents,
+    cap_above_cents: band.cap_above_cents,
+    cap_to_cents: band.cap_to_cents,
+    apply_to_cases: band.apply_to_cases,
+    enabled: band.enabled,
+  };
+}
+
+const bandFields = (band: PriceBand) => ({
+  floor_below_cents: band.floor_below_cents,
+  floor_to_cents: band.floor_to_cents,
+  cap_above_cents: band.cap_above_cents,
+  cap_to_cents: band.cap_to_cents,
+  apply_to_cases: band.apply_to_cases,
+  enabled: band.enabled,
+});
+
+/**
+ * Set THE CHAIN's band, or (with `band` null) remove it so no price is
+ * adjusted anywhere. Every store without a band of its own follows this one.
+ *
+ * A store's own variation is NOT touched either way: the owner moving the
+ * chain's floor is not the owner moving a store's. Audited by the caller's
+ * route with `price.band`; returns the band before and after.
+ */
+export async function setChainPriceBand(
+  container: MedusaContainer,
+  band: PriceBand | null,
+  actorId: string | null
+): Promise<{ row: PriceBandRow | null; before: PriceBandRow | null }> {
+  const service = svc(container);
+  const existing = (await service.listStorePriceBands({ scope: CHAIN_SCOPE } as never, {
+    take: 1,
+  })) as unknown as Record<string, unknown>[];
+  const current = existing.find((r) => !r["deleted_at"]);
+  const before = current ? toBandRow(current, null) : null;
+
+  if (band === null) {
+    if (current) await service.softDeleteStorePriceBands([String(current["id"])]);
+    clearPriceBandCache();
+    return { row: null, before };
+  }
+  if (current) {
+    await service.updateStorePriceBands([{ id: current["id"], ...bandFields(band), updated_by: actorId }] as never);
+  } else {
+    await service.createStorePriceBands({ scope: CHAIN_SCOPE, ...bandFields(band), updated_by: actorId } as never);
+  }
+  clearPriceBandCache();
+  return {
+    row: { ...band, establishment_id: null, updated_at: new Date().toISOString(), updated_by: actorId },
+    before,
+  };
+}
+
+/**
+ * Set ONE STORE's band, or (with `band` null) remove the variation so the store
+ * inherits the chain's again.
+ *
+ * Removing is a real delete, not a band of nulls: the absence of a row IS "this
+ * store follows the chain", the same thing a removed lens cell or a removed
+ * cost variation means, and it is why reading back after a removal gives the
+ * master's floor instead of no floor at all.
+ */
+export async function setStorePriceBand(
+  container: MedusaContainer,
+  storeId: string,
+  band: PriceBand | null,
+  actorId: string | null
+): Promise<{ row: PriceBandRow | null; before: PriceBandRow | null }> {
+  const service = svc(container);
+  const existing = (await service.listStorePriceBandVariations({ establishment_id: storeId } as never, {
+    take: 1,
+  })) as unknown as Record<string, unknown>[];
+  const current = existing.find((r) => !r["deleted_at"]);
+  const before = current ? toBandRow(current, storeId) : null;
+
+  if (band === null) {
+    if (current) await service.deleteStorePriceBandVariations([String(current["id"])]);
+    clearPriceBandCache();
+    return { row: null, before };
+  }
+  if (current) {
+    await service.updateStorePriceBandVariations([
+      { id: current["id"], ...bandFields(band), updated_by: actorId },
+    ] as never);
+  } else {
+    await service.createStorePriceBandVariations({
+      establishment_id: storeId,
+      ...bandFields(band),
+      updated_by: actorId,
+    } as never);
+  }
+  clearPriceBandCache();
+  return {
+    row: { ...band, establishment_id: storeId, updated_at: new Date().toISOString(), updated_by: actorId },
+    before,
+  };
 }
 
 export interface ProductPrice {

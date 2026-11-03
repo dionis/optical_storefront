@@ -9,3 +9,5 @@ export * from "./price-rule";
 export * from "./cost-toggle";
 export * from "./frame-cost";
 export * from "./frame-cost-variation";
+export * from "./price-band";
+export * from "./price-band-variation";

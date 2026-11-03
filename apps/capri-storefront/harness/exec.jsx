@@ -65,7 +65,7 @@ const figures = (from, to, stores) => {
   const count = Math.round(64 * k);
   return { sales, net, tax: sales - net, cost, fee, commission, profit, margin_pct: Math.round((profit / net) * 1000) / 10, count, units: Math.round(count * 1.8), avg_ticket: Math.round((sales / count) * 100) / 100 };
 };
-const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 /* ── Permisos simulados, como los calcula el servidor ──────────────────────
    lib/sales-insights.ts insightAccess: `profit` para el administrador y para
@@ -167,6 +167,10 @@ const CM_RULES = new Map([["brand:trendy", false], ["product:prod_DC203", false]
    en todo lo demás, la columna «Maestro» al lado y la cobertura de ESA tienda.
    Se recuerda en memoria: fijar y deshacer se puede probar de verdad.         */
 const COST_TIERS = [
+  // AGO: la gama cara de la lista real ($74.95 de costo → $150 de venta), que
+  // es la que hace saltar el TECHO en el banco; sin ella el suelo se vería
+  // solo y la vista previa del techo saldría siempre en 0.
+  ["AGO", 15999, 7495],
   ["PRX", 10999, 2999], ["DC", 8999, 1699], ["FX", 8999, 1699], ["GR", 7999, 1699],
   ["TY", 5999, 850], ["ML", 5499, 625], ["PT", 4999, 375], ["U", 3999, 299],
 ].sort((a, b) => b[0].length - a[0].length);
@@ -203,6 +207,9 @@ addCost("SIMPLYLITECASE", "SimplyLite Case", true);
 addCost("DC241", "DC241", false);
 addCost("FL118", "FL 118", false);
 addCost("CS-RIG", "Estuche rígido", true);
+// Dos modelos caros de verdad, para ver trabajar el techo del precio.
+addCost("AGO1005", "AGO 1005", false);
+addCost("AGO1006", "AGO 1006", false);
 
 /** Costo propio de cada tienda: Map<establishment_id, Map<sku, cents>>. */
 const CM_STORE_COSTS = new Map([
@@ -225,6 +232,77 @@ const costRowFor = (row, storeId) => {
     return { ...row, cost_cents: own, origin: "store_variation", master_cost_cents: master, inherited: false, updated_at: "2026-10-31T16:40:00Z" };
   }
   return { ...row, origin: row.source, master_cost_cents: master, inherited: Boolean(storeId) };
+};
+
+/* ── Suelo y techo del precio (GET/POST /admin/pricing/frames/band) ─────────
+   El contrato tal cual: la banda del alcance pedido, la del maestro al lado, y
+   `impact` con cuántos modelos sube el suelo, cuántos baja el techo y ejemplos
+   con nombre («READ 2: $8 → $60»). `dry_run: true` contesta el impacto de la
+   banda que viene en el cuerpo y NO guarda nada: es la vista previa que ve el
+   dueño mientras teclea.
+
+   El precio «después de conversión» se calcula aquí con la MISMA regla del
+   servidor (lib/pricing.ts sellingPrice) sobre el costo de proveedor que ya
+   tiene el banco, así que las cifras del impacto son creíbles y cuadran con la
+   columna de costos de al lado.
+
+   El maestro arranca con el ejemplo del dueño puesto (30 → 60 y techo en 100) y
+   El Rancho 39 (est_02) con una banda propia más alta, para ver «Propio», el
+   «Heredado» de las demás tiendas y el botón de volver a heredar.           */
+const sellingPriceOf = (wholesale, isCase) => {
+  const up = Math.ceil(wholesale);
+  if (isCase) return up * 5;
+  if (up <= 4) return up * 4;
+  if (up <= 15) return up * 3;
+  return up * 2;
+};
+const CM_BAND = {
+  master: { floor_below_cents: 3000, floor_to_cents: 6000, cap_above_cents: 10000, cap_to_cents: 10000, apply_to_cases: false, enabled: true, updated_at: "2026-11-03T10:05:00Z", updated_by: "usr_owner" },
+  stores: new Map([["est_02", { floor_below_cents: 3500, floor_to_cents: 7000, cap_above_cents: 12000, cap_to_cents: 12000, apply_to_cases: false, enabled: true, updated_at: "2026-11-03T11:20:00Z", updated_by: "usr_owner" }]]),
+};
+/** Los modelos del banco con su precio después de conversión, en dólares. */
+const bandItems = () => [...CM_COSTS.values()]
+  .filter((r) => r.cost_cents != null)
+  .map((r) => {
+    const isCase = ckey(r.sku).includes("CASE");
+    return { key: ckey(r.sku), model: r.model || r.sku, kind: isCase ? "case" : "frame", price: sellingPriceOf(r.cost_cents / 100, isCase) };
+  });
+const bandApply = (price, band, kind) => {
+  if (!band || band.enabled === false || !(price > 0)) return price;
+  if (kind === "case" && !band.apply_to_cases) return price;
+  let out = price;
+  if (band.floor_below_cents != null && band.floor_to_cents != null && out * 100 < band.floor_below_cents) out = band.floor_to_cents / 100;
+  if (band.cap_above_cents != null && band.cap_to_cents != null && out * 100 > band.cap_above_cents) out = band.cap_to_cents / 100;
+  return out;
+};
+const bandImpact = (band) => {
+  const out = { total: 0, raised: 0, lowered: 0, unchanged: 0, owner_priced: 2, cases_skipped: 0, cases_would_raise: 0, examples: { raised: [], lowered: [] } };
+  for (const it of bandItems()) {
+    out.total++;
+    if (it.kind === "case" && !band?.apply_to_cases) {
+      out.cases_skipped++;
+      out.unchanged++;
+      if (bandApply(it.price, band ? { ...band, apply_to_cases: true } : null, "case") > it.price) out.cases_would_raise++;
+      continue;
+    }
+    const after = bandApply(it.price, band, it.kind);
+    if (after > it.price) { out.raised++; if (out.examples.raised.length < 5) out.examples.raised.push({ model: it.model, kind: it.kind, from: it.price, to: after }); }
+    else if (after < it.price) { out.lowered++; if (out.examples.lowered.length < 5) out.examples.lowered.push({ model: it.model, kind: it.kind, from: it.price, to: after }); }
+    else out.unchanged++;
+  }
+  return out;
+};
+const bandScope = (storeId, band) => {
+  const own = storeId ? CM_BAND.stores.get(storeId) || null : null;
+  const effective = own ?? CM_BAND.master;
+  return {
+    store: storeId,
+    band: band === undefined ? effective : band,
+    origin: own ? "store_variation" : CM_BAND.master ? "chain_master" : "none",
+    inherited: Boolean(storeId) && !own,
+    master: CM_BAND.master,
+    impact: bandImpact(band === undefined ? effective : band),
+  };
 };
 
 const realFetch = window.fetch.bind(window);
@@ -288,6 +366,48 @@ window.fetch = async (input, init) => {
         store_variations: storeId ? CM_STORE_COSTS.get(storeId)?.size ?? 0 : 0,
       },
     });
+  }
+  // Suelo y techo del precio: leer el alcance, o guardar / previsualizar.
+  if (p === "/admin/pricing/frames/band") {
+    if ((init?.method || "GET") === "GET") {
+      const asked = g("store");
+      return json(bandScope(asked && asked !== "all" && asked !== "web" ? asked : null));
+    }
+    const body = JSON.parse(init?.body || "{}");
+    const asked = body.store;
+    const storeId = asked && asked !== "all" && asked !== "web" ? asked : null;
+    const proposed = body.clear
+      ? null
+      : {
+        floor_below_cents: body.floor_below_cents ?? null,
+        floor_to_cents: body.floor_to_cents ?? null,
+        cap_above_cents: body.cap_above_cents ?? null,
+        cap_to_cents: body.cap_to_cents ?? null,
+        apply_to_cases: Boolean(body.apply_to_cases),
+        enabled: body.enabled !== false,
+      };
+    if (body.dry_run) return json({ ...bandScope(storeId), impact: bandImpact(proposed), saved: false });
+    // Las mismas negativas del servidor, para poder ver el mensaje de error.
+    if (proposed) {
+      const half = (a, b) => (proposed[a] == null) !== (proposed[b] == null);
+      const reason = half("floor_below_cents", "floor_to_cents") || half("cap_above_cents", "cap_to_cents")
+        ? "band_incomplete"
+        : proposed.floor_to_cents != null && proposed.floor_below_cents != null && proposed.floor_to_cents < proposed.floor_below_cents
+          ? "floor_below_threshold"
+          : proposed.cap_to_cents != null && proposed.cap_above_cents != null && proposed.cap_to_cents > proposed.cap_above_cents
+            ? "cap_above_threshold"
+            : proposed.floor_to_cents != null && proposed.cap_to_cents != null && proposed.floor_to_cents > proposed.cap_to_cents
+              ? "band_crossed"
+              : null;
+      if (reason) return json({ type: "invalid_data", reason, message: "Invalid price band." }, 422);
+    }
+    const stamped = proposed ? { ...proposed, updated_at: new Date().toISOString(), updated_by: "usr_owner" } : null;
+    if (storeId) {
+      if (stamped) CM_BAND.stores.set(storeId, stamped); else CM_BAND.stores.delete(storeId);
+    } else {
+      CM_BAND.master = stamped;
+    }
+    return json({ ...bandScope(storeId), saved: true });
   }
   // Fijar o devolver el costo de un modelo, en el MAESTRO o en una tienda. El
   // banco lo recuerda EN MEMORIA, así que se puede ver aparecer la pastilla

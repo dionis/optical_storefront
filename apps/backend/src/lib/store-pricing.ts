@@ -17,7 +17,13 @@
  * Rules are immutable rows: changing one closes the current row (valid_to) and
  * creates another, so the history and scheduled changes come from one model.
  * Amounts are dollars; everything is rounded to cents and never below zero.
+ *
+ * On top of all of it sits the PRICE BAND (lib/pricing.ts): the floor and the
+ * ceiling the owner holds a computed price between, chain-wide and bendable
+ * store by store. It is the LAST thing applied to the frame component and it
+ * never touches a price he typed for a model.
  */
+import { applyPriceBandUsd, priceBandFor, type PriceBand } from "./pricing";
 
 export const RULE_SCOPES = ["all", "frame", "case"] as const;
 export type RuleScope = (typeof RULE_SCOPES)[number];
@@ -69,6 +75,28 @@ export function globalPrice(
 }
 
 /**
+ * True when the owner typed his own price for this model. `globalPrice` returns
+ * a number either way, so this is the only way to tell "the base is $60 because
+ * he said so" from "the base is $60 because a rule got there" — and the floor
+ * and the ceiling must leave the first one exactly where he put it.
+ */
+export function hasGlobalPrice(
+  rules: PriceRuleLike[],
+  scope: "frame" | "case",
+  target: string,
+  now = new Date()
+): boolean {
+  if (!target) return false;
+  return (
+    pick(
+      rules,
+      now,
+      (x) => x.establishment_id == null && x.scope === scope && x.target === target && x.mode === "override"
+    ) !== null
+  );
+}
+
+/**
  * The owner's open global prices by product id — what price-sync must keep
  * instead of the wholesale-derived price. Latest active rule wins.
  */
@@ -102,6 +130,11 @@ export interface StoreLinePrice {
   /** What produced the frame part: the store's exact price, or base + adjustment. */
   frame_source: "store_exact" | "adjusted";
   adjustment: { mode: "percent" | "delta"; value: number } | null;
+  /**
+   * The floor or the ceiling that moved the frame, in dollars; null when the
+   * band changed nothing (or was not applied — see `storeLinePrice`).
+   */
+  band: { from: number; to: number } | null;
 }
 
 /**
@@ -126,7 +159,12 @@ function generalAdjustment(
   return of(est, scope) ?? of(est, "all") ?? of(null, scope) ?? of(null, "all");
 }
 
-export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, now = new Date()): StoreLinePrice {
+export function storeLinePrice(
+  rules: PriceRuleLike[],
+  input: StoreLineInput,
+  now = new Date(),
+  band: PriceBand | null = priceBandFor(input.establishmentId)
+): StoreLinePrice {
   const est = input.establishmentId;
   const base = globalPrice(rules, input.scope, input.target, input.base, now);
   const exact = pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override");
@@ -148,12 +186,35 @@ export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, no
   }
   frame = cents(frame);
   lenses = cents(lenses);
+
+  // ── The floor and the ceiling, last ──
+  //
+  // The band is the owner's answer to "what is the cheapest and the dearest
+  // thing we are willing to put on the shelf", so it goes AFTER everything
+  // that computes the frame's price and BEFORE the line is quoted or stored.
+  //
+  // Two things it must never touch, in the owner's own order of priority:
+  //
+  //  · A PRICE HE TYPED FOR A MODEL. That is his decision, and his decision
+  //    beats the floor and the ceiling — both the store's exact price
+  //    (`store_exact`) and his own global price for the model, which arrives
+  //    here as the base. Hence `hasGlobalPrice`: the base being 60 because he
+  //    said 60 is not the same thing as the base being 60 because of a rule.
+  //  · THE LENS ADD-ON. The band is about frames and cases; the lens matrix
+  //    has its own per-store prices and its own "% sobre el maestro" (see
+  //    lib/pricing-overview.ts), and a $30 floor applied to a $12 lens add-on
+  //    would quietly rewrite that whole table.
+  const banded = !exact && !hasGlobalPrice(rules, input.scope, input.target, now);
+  const frameBefore = frame;
+  if (banded) frame = cents(applyPriceBandUsd(frame, band, input.scope));
   return {
     frame,
     lenses,
     total: cents(frame + lenses),
     frame_source: exact ? "store_exact" : "adjusted",
     adjustment,
+    /** What the band did to the frame, so a quote can explain the figure. */
+    band: banded && frame !== frameBefore ? { from: frameBefore, to: frame } : null,
   };
 }
 

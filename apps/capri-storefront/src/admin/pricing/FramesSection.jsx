@@ -18,6 +18,11 @@
 // una tienda elegida arriba se ve y se edita LA VARIACIÓN DE ESA TIENDA, con la
 // pastilla «Heredado» y el maestro a la vista cuando no maneja costo propio.
 // El alcance viaja en `store`, el mismo que ya usan la regla y el precio exacto.
+//
+// Y desde el 3-nov-2026 lleva el SUELO Y EL TECHO del precio (GET/POST
+// /admin/pricing/frames/band): lo que el dueño pone una vez para toda la cadena
+// y luego dobla tienda por tienda, con la vista previa de a cuántos modelos le
+// mueve el precio ANTES de guardar. Ver `BandBlock`.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import { money } from "../adminOrders.js";
@@ -26,8 +31,8 @@ import DataTable from "../DataTable.jsx";
 import HelpTip from "../HelpTip.jsx";
 import Icon from "../icons.jsx";
 import {
-  costOf, isOwnCost, loadFrameCosts, marginPct,
-  savePricingOverride, savePricingRule, saveFrameCost, skuKey,
+  centsToUsd, costOf, isOwnCost, loadFrameCosts, loadPriceBand, marginPct,
+  previewPriceBand, savePriceBand, savePricingOverride, savePricingRule, saveFrameCost, skuKey,
 } from "./api.js";
 
 /** La regla en UNA fila editable: modo, valor y guardar. */
@@ -89,6 +94,269 @@ function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
       )}
       <button className="btn-xs primary" disabled={busy}>{t("adm.price.save")}</button>
     </form>
+  );
+}
+
+/**
+ * SUELO Y TECHO del precio («la banda»), tal como lo pidió el dueño: si el
+ * precio después de conversión queda por debajo de un umbral se lleva a una
+ * cifra fija, y si queda por encima de otro se baja a un tope. Dos números por
+ * lado — «menos de 30 vale 60» no se puede decir con uno solo.
+ *
+ * Mismas dos capas que todo lo demás del panel: con «Todas las tiendas» se
+ * edita el MAESTRO (el dueño lo pone una vez para toda la cadena) y con una
+ * tienda elegida arriba, SU variación, con la pastilla «Heredado» mientras no
+ * maneje banda propia. Quitar la variación la devuelve a heredar.
+ *
+ * Y lo que no puede faltar: QUÉ LE PASA A LOS PRECIOS REALES ANTES DE GUARDAR.
+ * Mientras se teclea, el servidor contesta (sin guardar) cuántos modelos sube
+ * el suelo, cuántos baja el techo y algunos ejemplos con nombre y apellido
+ * («READ 2: $8 → $60»). El dueño acaba de vivir que un cambio de regla le
+ * moviera 147 precios: esto es para que no vuelva a pasar a ciegas.
+ */
+function BandBlock({ store, onError }) {
+  const { t, lang } = useLang();
+  const [data, setData] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const usd = (v) => money(Number(v) || 0, "usd", lang);
+  // Lo que viene del servidor, en dólares y con la forma que edita la pantalla.
+  const draftOf = (band) => ({
+    enabled: band ? band.enabled !== false : true,
+    floorBelow: centsToUsd(band?.floor_below_cents ?? null),
+    floorTo: centsToUsd(band?.floor_to_cents ?? null),
+    capAbove: centsToUsd(band?.cap_above_cents ?? null),
+    capTo: centsToUsd(band?.cap_to_cents ?? null),
+    applyToCases: Boolean(band?.apply_to_cases),
+  });
+  // El techo es un solo número para quien lo escribe: por dentro son dos
+  // (umbral y destino) y se guardan iguales.
+  const setCap = (e) => { const v = e.target.value; setDraft((d) => ({ ...d, capAbove: v, capTo: v })); };
+
+  const sign = (d) => (d ? [d.enabled, d.floorBelow, d.floorTo, d.capAbove, d.capTo, d.applyToCases].join("|") : "");
+
+  const reload = useCallback(async (force) => {
+    const d = await loadPriceBand({ store, force });
+    setData(d);
+    // Con una tienda elegida que hereda, el formulario arranca con la banda del
+    // maestro a la vista: es la que está rigiendo en ese mostrador.
+    setDraft(draftOf(d.band));
+    setPreview(null);
+  }, [store]);
+
+  useEffect(() => {
+    let on = true;
+    setData(null);
+    setDraft(null);
+    setPreview(null);
+    loadPriceBand({ store }).then((d) => {
+      if (!on) return;
+      setData(d);
+      setDraft(draftOf(d.band));
+    });
+    return () => { on = false; };
+  }, [store]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Vista previa del borrador, con freno: cada tecla no puede ser una petición.
+  const saved = data?.band ?? null;
+  const dirty = Boolean(draft) && sign(draft) !== sign(draftOf(saved));
+  useEffect(() => {
+    if (!draft || !dirty || data?.offline) { setPreview(null); return undefined; }
+    let on = true;
+    setChecking(true);
+    const timer = setTimeout(() => {
+      previewPriceBand({ band: draft, store })
+        .then((r) => { if (on) { setPreview(r.impact); setChecking(false); } })
+        // Un borrador inválido (medio lado, o el suelo por encima del techo) no
+        // es un error que interrumpa: se dice al intentar guardar.
+        .catch(() => { if (on) { setPreview(null); setChecking(false); } });
+    }, 450);
+    return () => { on = false; clearTimeout(timer); setChecking(false); };
+  }, [sign(draft), dirty, store, data?.offline]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const write = async (clear) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await savePriceBand({ band: draft, store, clear });
+      setData({ ...r, offline: false });
+      setDraft(draftOf(r.band));
+      setPreview(null);
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inStore = Boolean(store && store !== "all" && store !== "web");
+  const inherited = inStore && data?.inherited !== false && !data?.offline;
+  const impact = preview ?? data?.impact ?? null;
+  const can = Boolean(draft) && !data?.offline && !busy;
+  const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value.replace(/[^0-9.]/g, "") }));
+
+  return (
+    <div className="pp-block">
+      <h4>
+        {t(inStore ? "adm.price.frames.band.titleStore" : "adm.price.frames.band.title")}
+        <small>{t("adm.price.frames.band.sub")}</small>
+      </h4>
+
+      {data?.offline && (
+        <p className="pp-cover bad"><Icon name="alert" size={13} /> {t("adm.price.frames.band.offline")}</p>
+      )}
+
+      {draft && (
+        <>
+          <div className="pp-row">
+            <label className="pp-lbl" htmlFor="pp-band-on">
+              <input
+                id="pp-band-on"
+                type="checkbox"
+                disabled={!can}
+                checked={draft.enabled}
+                onChange={(e) => setDraft((d) => ({ ...d, enabled: e.target.checked }))}
+              />
+              {" "}{t("adm.price.frames.band.enabled")}
+            </label>
+            {inherited && (
+              <span className="pp-badge inherit" title={t("adm.price.frames.band.inheritHint")}>
+                {t("adm.price.inherited")}
+              </span>
+            )}
+            {!inherited && inStore && !data?.offline && (
+              <span className="pp-badge" title={t("adm.price.frames.band.storeHint")}>
+                {t("adm.price.frames.band.storeBadge")}
+              </span>
+            )}
+            {!draft.enabled && <span className="pp-now">{t("adm.price.frames.band.offHint")}</span>}
+          </div>
+
+          {/* El suelo: «por debajo de X, llévalo a Y». */}
+          <div className="pp-row">
+            <label className="pp-lbl" htmlFor="pp-band-floor-below">{t("adm.price.frames.band.floorBelow")}</label>
+            <input
+              id="pp-band-floor-below"
+              className="pp-input pp-num"
+              inputMode="decimal"
+              disabled={!can}
+              aria-label={t("adm.price.frames.band.floorBelowAria")}
+              value={draft.floorBelow}
+              onChange={set("floorBelow")}
+            />
+            <span className="pp-unit">USD</span>
+            <label className="pp-lbl" htmlFor="pp-band-floor-to">{t("adm.price.frames.band.floorTo")}</label>
+            <input
+              id="pp-band-floor-to"
+              className="pp-input pp-num"
+              inputMode="decimal"
+              disabled={!can}
+              aria-label={t("adm.price.frames.band.floorToAria")}
+              value={draft.floorTo}
+              onChange={set("floorTo")}
+            />
+            <span className="pp-unit">USD</span>
+          </div>
+
+          {/* El techo: UN solo número. El dueño lo dijo así — «que no sobrepase
+              100» —, no «por encima de X bájalo a Y». El esquema guarda umbral
+              y destino por separado, así que aquí se escriben los dos iguales:
+              nada por encima de ese número. Pedirle la misma cifra dos veces
+              solo añade una forma de equivocarse. */}
+          <div className="pp-row">
+            <label className="pp-lbl" htmlFor="pp-band-cap">{t("adm.price.frames.band.cap")}</label>
+            <input
+              id="pp-band-cap"
+              className="pp-input pp-num"
+              inputMode="decimal"
+              disabled={!can}
+              aria-label={t("adm.price.frames.band.capAria")}
+              value={draft.capAbove}
+              onChange={setCap}
+            />
+            <span className="pp-unit">USD</span>
+          </div>
+
+          {/* Los estuches, con el número delante: por defecto se quedan fuera
+              porque un estuche de $0,98 se vende a $5 y el suelo lo pondría a
+              $60. Es un interruptor, no una decisión escondida. */}
+          <div className="pp-row">
+            <label className="pp-lbl" htmlFor="pp-band-cases">
+              <input
+                id="pp-band-cases"
+                type="checkbox"
+                disabled={!can}
+                checked={draft.applyToCases}
+                onChange={(e) => setDraft((d) => ({ ...d, applyToCases: e.target.checked }))}
+              />
+              {" "}{t("adm.price.frames.band.cases")}
+            </label>
+            <span className="pp-now">
+              {draft.applyToCases
+                ? t("adm.price.frames.band.casesIn")
+                : t("adm.price.frames.band.casesOut", { n: impact?.cases_would_raise ?? 0 })}
+            </span>
+          </div>
+
+          {/* QUÉ LE PASA A LOS PRECIOS. Lo último antes de los botones, a
+              propósito: es lo que hay que leer antes de pulsar «Guardar». */}
+          <p className={`pp-cover ${impact && (impact.raised || impact.lowered) ? "bad" : "ok"}`}>
+            <Icon name={impact && (impact.raised || impact.lowered) ? "alert" : "checkCircle"} size={13} />
+            {checking
+              ? t("adm.price.frames.band.checking")
+              : !impact
+                ? t("adm.price.frames.band.noImpact")
+                : t(dirty ? "adm.price.frames.band.impactDraft" : "adm.price.frames.band.impactSaved", {
+                  raised: impact.raised,
+                  lowered: impact.lowered,
+                  unchanged: impact.unchanged,
+                })}
+            {impact?.owner_priced > 0 && (
+              <span className="pp-badge" title={t("adm.price.frames.band.ownPricedHint")}>
+                {t("adm.price.frames.band.ownPriced", { n: impact.owner_priced })}
+              </span>
+            )}
+          </p>
+
+          {!checking && impact && (impact.examples?.raised?.length > 0 || impact.examples?.lowered?.length > 0) && (
+            <ul className="pp-matches">
+              {[...(impact.examples.raised || []), ...(impact.examples.lowered || [])].map((ex) => (
+                <li key={`${ex.model}:${ex.from}:${ex.to}`}>
+                  <span className="adm-chip">
+                    {t("adm.price.frames.band.example", { model: ex.model, from: usd(ex.from), to: usd(ex.to) })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="pp-row">
+            <button type="button" className="btn-xs primary" disabled={!can || !dirty} onClick={() => write(false)}>
+              {t(inStore ? "adm.price.frames.band.saveStore" : "adm.price.save")}
+            </button>
+            {(inStore ? !inherited : Boolean(saved)) && !data?.offline && (
+              <button
+                type="button"
+                className="btn-xs warn"
+                disabled={!can}
+                title={t(inStore ? "adm.price.frames.band.clearStore" : "adm.price.frames.band.clear")}
+                onClick={() => write(true)}
+              >
+                <Icon name="undo" size={12} /> {t(inStore ? "adm.price.frames.band.clearStore" : "adm.price.frames.band.clear")}
+              </button>
+            )}
+            {dirty && (
+              <button type="button" className="btn-xs" disabled={busy} onClick={() => reload(true)}>
+                {t("adm.price.frames.band.discard")}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -604,6 +872,7 @@ export default function FramesSection({ frames, store, storeId, onSaved, onError
     <>
       <RuleRow scope="frame" rule={frames.rule} store={store} onSaved={onSaved} onError={onError} t={t} lang={lang} />
       <RuleRow scope="case" rule={frames.case_rule} store={store} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+      <BandBlock store={store} onError={onError} />
       <OverrideForm
         store={store}
         storeId={storeId}

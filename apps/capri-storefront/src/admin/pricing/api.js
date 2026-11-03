@@ -224,6 +224,83 @@ export function costOf(index, product) {
   };
 }
 
+/* ──────────── Suelo y techo del precio (la «banda») ────────────
+   Lo que pidió el dueño: si el precio DESPUÉS DE CONVERSIÓN queda por debajo
+   de un umbral, se lleva a una cifra fija; si queda por encima de otro, se baja
+   a un tope. Dos números por lado, porque «menos de 30 vale 60» no se puede
+   decir con uno solo.
+
+   Tiene las MISMAS dos capas que el costo y el precio: con «Todas las tiendas»
+   se lee y se escribe el MAESTRO (lo que el dueño pone una vez para toda la
+   cadena) y con una tienda elegida, SU variación, con «Heredado» cuando no
+   maneja banda propia.
+     GET  /admin/pricing/frames/band?store=<id>
+     POST /admin/pricing/frames/band  { …cents…, store?, clear?, dry_run? }
+   La respuesta trae siempre `impact`: cuántos modelos sube el suelo, cuántos
+   baja el techo y ejemplos concretos. Con `dry_run: true` NO guarda nada: es
+   la vista previa que se enseña ANTES de guardar.
+
+   En esta capa los números viajan en CENTAVOS (como los costos) y la pantalla
+   trabaja en dólares; `usdToCents`/`centsToUsd` son la frontera.               */
+
+const BAND_PATH = "/admin/pricing/frames/band";
+
+/** Dólares de un campo de texto a centavos enteros; vacío = ese lado no se usa. */
+export const usdToCents = (v) =>
+  v === null || v === undefined || String(v).trim() === "" ? null : Math.round(Number(v) * 100);
+
+/** Centavos a dólares para pintar en un campo; null se queda vacío. */
+export const centsToUsd = (c) => (c === null || c === undefined ? "" : String(Number(c) / 100));
+
+/** El cuerpo que esperan las rutas, desde el borrador de la pantalla. */
+const bandBody = (band, store) => ({
+  store,
+  floor_below_cents: usdToCents(band?.floorBelow),
+  floor_to_cents: usdToCents(band?.floorTo),
+  cap_above_cents: usdToCents(band?.capAbove),
+  cap_to_cents: usdToCents(band?.capTo),
+  apply_to_cases: Boolean(band?.applyToCases),
+  enabled: band?.enabled !== false,
+});
+
+/**
+ * La banda del alcance pedido, con la del maestro al lado y el impacto de la
+ * que está guardada. Nunca rechaza: sin servidor devuelve `offline` y la
+ * pantalla avisa de que no se puede editar (igual que los costos).
+ */
+export async function loadPriceBand({ store = "all", force = false } = {}) {
+  try {
+    const data = await adminGet(BAND_PATH, { query: { store }, ttl: COSTS_TTL, force });
+    return { ...data, offline: false };
+  } catch {
+    return { store: null, band: null, master: null, origin: "none", inherited: false, impact: null, offline: true };
+  }
+}
+
+/**
+ * Qué le pasaría a los precios con ESTA banda, sin guardar nada. Es lo que se
+ * enseña mientras el dueño teclea: ya vivió que un cambio de regla le moviera
+ * 147 precios, y no puede volver a pasar a ciegas.
+ */
+export function previewPriceBand({ band, store = "all" }) {
+  return post(BAND_PATH, { ...bandBody(band, store), dry_run: true });
+}
+
+/**
+ * Guarda la banda del alcance: con «Todas las tiendas» la de la cadena, con una
+ * tienda su variación. `clear: true` la quita — el maestro deja de ajustar
+ * nada y una tienda vuelve a heredar el maestro.
+ *
+ * Después olvida las entradas cacheadas de la banda Y de los costos: la banda
+ * mueve precios, y el margen que se pinta al lado del costo sale de ellos.
+ */
+export async function savePriceBand({ band, store = "all", clear = false }) {
+  const data = await post(BAND_PATH, clear ? { store, clear: true } : bandBody(band, store));
+  invalidateCache(BAND_PATH);
+  invalidateCache(COSTS_PATH);
+  return data;
+}
+
 /** Margen sobre el precio de venta, en por ciento entero. null si no se puede saber. */
 export function marginPct(price, cost) {
   const p = Number(price);

@@ -123,6 +123,48 @@ const es = {
   "adm.price.frames.cost.col.master": "Maestro",
   "adm.price.frames.cost.col.costStore": "Costo de la tienda",
 
+  // ── Suelo y techo del precio (GET/POST /admin/pricing/frames/band) ──
+  // Lo que pidió el dueño con sus palabras: «si el precio después de conversión
+  // es menor que 30, podemos definir que se lleva hasta por ejemplo 60, un
+  // número fijo. Si el precio después de conversión es muy alto, también poder
+  // reducirlo hasta un monto que no sobrepase un umbral de, no sé, 100
+  // dólares». Dos números por lado, y la vista previa de a cuántos modelos les
+  // mueve el precio ANTES de guardar.
+  "adm.price.frames.band.title": "Suelo y techo del precio",
+  "adm.price.frames.band.titleStore": "Suelo y techo de esta tienda",
+  "adm.price.frames.band.sub":
+    "Se aplica al precio que sale de la conversión del costo. No toca los modelos a los que les pusiste precio propio.",
+  "adm.price.frames.band.enabled": "Aplicar suelo y techo",
+  "adm.price.frames.band.offHint": "Apagado: los números se guardan, pero ningún precio se mueve.",
+  "adm.price.frames.band.storeBadge": "Propio",
+  "adm.price.frames.band.storeHint": "Suelo y techo propios de esta tienda: no sigue al maestro.",
+  "adm.price.frames.band.inheritHint": "Esta tienda no maneja suelo y techo propios: usa los del maestro.",
+  "adm.price.frames.band.floorBelow": "Si queda por debajo de",
+  "adm.price.frames.band.floorTo": "llévalo a",
+  "adm.price.frames.band.floorBelowAria": "Precio por debajo del cual se aplica el suelo, en dólares",
+  "adm.price.frames.band.floorToAria": "Precio al que se lleva lo que queda por debajo del suelo, en dólares",
+  "adm.price.frames.band.cap": "Que ningún precio pase de",
+  "adm.price.frames.band.capAria": "Techo del precio de venta, en dólares",
+  "adm.price.frames.band.cases": "Aplicarlo también a los estuches",
+  "adm.price.frames.band.casesIn": "Los estuches también se ajustan.",
+  "adm.price.frames.band.casesOut":
+    "Los estuches se quedan fuera. Si lo enciendes, el suelo le subiría el precio a {n} estuches.",
+  "adm.price.frames.band.checking": "Calculando a cuántos modelos les cambia el precio…",
+  "adm.price.frames.band.noImpact": "Sin suelo ni techo: ningún precio se mueve.",
+  "adm.price.frames.band.impactDraft":
+    "Con esto: sube {raised} modelos · baja {lowered} · {unchanged} se quedan igual.",
+  "adm.price.frames.band.impactSaved":
+    "Ahora mismo: sube {raised} modelos · baja {lowered} · {unchanged} se quedan igual.",
+  "adm.price.frames.band.example": "{model}: {from} → {to}",
+  "adm.price.frames.band.ownPriced": "{n} con precio propio, sin tocar",
+  "adm.price.frames.band.ownPricedHint":
+    "Modelos a los que les pusiste precio a mano: tu decisión manda sobre el suelo y el techo.",
+  "adm.price.frames.band.saveStore": "Guardar en esta tienda",
+  "adm.price.frames.band.clear": "Quitar el suelo y el techo",
+  "adm.price.frames.band.clearStore": "Volver a heredar el maestro",
+  "adm.price.frames.band.discard": "Deshacer los cambios",
+  "adm.price.frames.band.offline": "El servidor no dio el suelo y el techo: ahora no se pueden ver ni editar.",
+
   // ── Lentes ──
   "adm.price.lenses.title": "Lentes",
   "adm.price.lenses.sub": "La matriz diseño × material, por tipo de diseño: elige el tipo y ves solo sus precios.",
@@ -209,6 +251,11 @@ const es = {
 
   // ── Errores del servidor (adm.err.pricing.<reason>) ──
   "adm.err.pricing.bad_scope": "Ese ámbito no existe (monturas, estuches o todo).",
+  "adm.err.pricing.bad_band": "Revisa las cifras del suelo y del techo: tienen que ser importes mayores que cero.",
+  "adm.err.pricing.band_incomplete": "A ese lado le falta una cifra: hace falta el umbral Y el precio al que se lleva.",
+  "adm.err.pricing.floor_below_threshold": "El suelo baja el precio en vez de subirlo: el precio al que se lleva no puede ser menor que el umbral.",
+  "adm.err.pricing.cap_above_threshold": "El techo sube el precio en vez de bajarlo: el precio al que se baja no puede ser mayor que el umbral.",
+  "adm.err.pricing.band_crossed": "El suelo pasaría por encima del techo: baja el suelo o sube el techo.",
   "adm.err.pricing.bad_mode": "Elige porcentaje o monto fijo.",
   "adm.err.pricing.bad_value": "Ese valor no sirve: revisa el número.",
   "adm.err.pricing.bad_kind": "Ese tipo de precio no existe.",
@@ -337,6 +384,42 @@ const en = {
   "adm.price.frames.cost.col.master": "Master",
   "adm.price.frames.cost.col.costStore": "Store cost",
 
+  // ── Price floor and ceiling (GET/POST /admin/pricing/frames/band) ──
+  "adm.price.frames.band.title": "Price floor and ceiling",
+  "adm.price.frames.band.titleStore": "This store's floor and ceiling",
+  "adm.price.frames.band.sub":
+    "Applied to the price that comes out of the cost conversion. It never touches a model you priced by hand.",
+  "adm.price.frames.band.enabled": "Apply the floor and the ceiling",
+  "adm.price.frames.band.offHint": "Switched off: the numbers are kept, but no price moves.",
+  "adm.price.frames.band.storeBadge": "Own",
+  "adm.price.frames.band.storeHint": "This store's own floor and ceiling: it does not follow the master.",
+  "adm.price.frames.band.inheritHint": "This store has no floor and ceiling of its own: it uses the master's.",
+  "adm.price.frames.band.floorBelow": "If it lands below",
+  "adm.price.frames.band.floorTo": "take it up to",
+  "adm.price.frames.band.floorBelowAria": "Price below which the floor applies, in dollars",
+  "adm.price.frames.band.floorToAria": "Price anything under the floor is taken up to, in dollars",
+  "adm.price.frames.band.cap": "No price goes above",
+  "adm.price.frames.band.capAria": "Ceiling for the selling price, in dollars",
+  "adm.price.frames.band.cases": "Apply it to cases too",
+  "adm.price.frames.band.casesIn": "Cases are adjusted too.",
+  "adm.price.frames.band.casesOut":
+    "Cases are left out. Turn this on and the floor would raise the price of {n} cases.",
+  "adm.price.frames.band.checking": "Working out how many models change price…",
+  "adm.price.frames.band.noImpact": "No floor and no ceiling: no price moves.",
+  "adm.price.frames.band.impactDraft":
+    "With this: {raised} models go up · {lowered} come down · {unchanged} stay as they are.",
+  "adm.price.frames.band.impactSaved":
+    "Right now: {raised} models go up · {lowered} come down · {unchanged} stay as they are.",
+  "adm.price.frames.band.example": "{model}: {from} → {to}",
+  "adm.price.frames.band.ownPriced": "{n} priced by hand, untouched",
+  "adm.price.frames.band.ownPricedHint":
+    "Models you priced by hand: your decision wins over the floor and the ceiling.",
+  "adm.price.frames.band.saveStore": "Save for this store",
+  "adm.price.frames.band.clear": "Remove the floor and the ceiling",
+  "adm.price.frames.band.clearStore": "Go back to inheriting the master",
+  "adm.price.frames.band.discard": "Discard the changes",
+  "adm.price.frames.band.offline": "The server did not return the floor and ceiling: they cannot be seen or edited now.",
+
   "adm.price.lenses.title": "Lenses",
   "adm.price.lenses.sub": "The design × material matrix, by design type: pick the type and you see only its prices.",
   "adm.price.lenses.matrix": "Matrix: design × material",
@@ -417,6 +500,11 @@ const en = {
   "adm.price.sheets.sub": "What each sale left, with its editable sheet.",
 
   "adm.err.pricing.bad_scope": "That scope does not exist (frames, cases or everything).",
+  "adm.err.pricing.bad_band": "Check the floor and ceiling figures: they have to be amounts above zero.",
+  "adm.err.pricing.band_incomplete": "That side is missing a figure: it needs the threshold AND the price it is taken to.",
+  "adm.err.pricing.floor_below_threshold": "That floor lowers the price instead of raising it: the price it takes to cannot be under the threshold.",
+  "adm.err.pricing.cap_above_threshold": "That ceiling raises the price instead of lowering it: the price it brings down to cannot be over the threshold.",
+  "adm.err.pricing.band_crossed": "The floor would push a price over the ceiling: lower the floor or raise the ceiling.",
   "adm.err.pricing.bad_mode": "Pick a percentage or a fixed amount.",
   "adm.err.pricing.bad_value": "That value will not do: check the number.",
   "adm.err.pricing.bad_kind": "That kind of price does not exist.",
