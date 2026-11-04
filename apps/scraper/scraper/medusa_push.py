@@ -153,6 +153,31 @@ def _post(client: httpx.Client, url: str, **kwargs: Any) -> httpx.Response:
     return client.post(url, **kwargs)
 
 
+def report_ai_usage(config: Config, events: list[dict[str, Any]]) -> bool:
+    """Send AI usage events to the backend's «Consumo IA» (`POST /admin/ai-usage/ingest`).
+
+    Best-effort: a backend that does not have the route yet (404), a network
+    error or a rejected event never interrupts the sync — it is logged and
+    dropped. Returns whether the backend accepted the batch.
+    """
+    if not events or not config.medusa_admin_api_key:
+        return False
+    base_url = config.medusa_backend_url.rstrip("/")
+    try:
+        resp = _post(
+            _admin_client(config),
+            f"{base_url}/admin/ai-usage/ingest",
+            json={"events": events[:200]},
+        )
+        if resp.status_code >= 400:
+            print(f"[scraper] AI usage report refused ({resp.status_code}) — not counted.")
+            return False
+        return True
+    except Exception as err:  # noqa: BLE001 — tracking must not stop a sync
+        print(f"[scraper] AI usage report failed: {type(err).__name__}: {err}")
+        return False
+
+
 def _build_medusa_payload(
     product: ScrapedProduct,
     pricing: dict[str, Any],

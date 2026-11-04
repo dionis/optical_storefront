@@ -19,5 +19,6 @@ import pricing from "./pricing.js";
 import sellers from "./sellers.js";
 import costs from "./costs.js";
 import catalogSync from "./catalog-sync.js";
+import aiUsage from "./ai-usage.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage];

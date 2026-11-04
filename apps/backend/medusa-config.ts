@@ -350,5 +350,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/catalog-sync",
     },
+    // Consumo de IA por actividad, recargas del dueño y alertas de saldo bajo. Historial y configuración, nunca se purga.
+    {
+      resolve: "./src/modules/ai-usage",
+    },
   ],
 });

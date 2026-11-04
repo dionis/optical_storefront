@@ -10,7 +10,12 @@ import yaml
 from scraper.config import Config, get_config
 from scraper.http_client import RateLimitedClient
 from scraper.images import process_product_images
-from scraper.medusa_push import close_admin_client, reconcile_discontinued, upsert_product
+from scraper.medusa_push import (
+    close_admin_client,
+    reconcile_discontinued,
+    report_ai_usage,
+    upsert_product,
+)
 from scraper.models import ScrapedProduct
 from scraper.normalize import brand_name
 from scraper.parser import (
@@ -362,10 +367,24 @@ async def sync(
                     # AI-assisted es/fr translation of title+description (skips
                     # gracefully if ANTHROPIC_API_KEY is unset or the call fails)
                     if config.anthropic_api_key:
+                        usage: list[dict[str, Any]] = []
                         product.translations = (
-                            translate_product(product.model_name, product.description_en, config)
+                            translate_product(
+                                product.model_name,
+                                product.description_en,
+                                config,
+                                on_usage=usage.append,
+                            )
                             or {}
                         )
+                        # The call is billed even on a dry run, so it is always
+                        # reported. One key per call: a re-sent report counts once.
+                        for i, event in enumerate(usage):
+                            event["ref_id"] = product.handle
+                            event["event_key"] = (
+                                f"translate:{run_id or 'cli'}:{product.handle}:{started:.3f}:{i}"
+                            )
+                        report_ai_usage(config, usage)
 
                     # Image pipeline (download → optimize → R2 upload)
                     product = process_product_images(product, config, dry_run=dry_run)

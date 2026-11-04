@@ -58,3 +58,69 @@ class TestTranslateProduct:
         assert result is not None
         assert "es" in result
         assert "fr" not in result
+
+
+class TestTranslationUsage:
+    """Token counts reach the backend's «Consumo IA»; a failure to report never breaks a sync."""
+
+    def test_usage_is_reported_with_model_and_tokens(self) -> None:
+        canned = _fake_message('{"es": {"title": "DC101", "description": "x"}}')
+        canned.usage = SimpleNamespace(input_tokens=210, output_tokens=95)
+        events: list[dict] = []
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            MockAnthropic.return_value.messages.create.return_value = canned
+            translate_product("DC101", "A classic frame.", _config_with_key(), on_usage=events.append)
+
+        assert events == [
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4-5",
+                "activity": "translation",
+                "input_tokens": 210,
+                "output_tokens": 95,
+            }
+        ]
+
+    def test_unusable_answer_is_still_reported(self) -> None:
+        canned = _fake_message("not valid json")
+        canned.usage = SimpleNamespace(input_tokens=200, output_tokens=40)
+        events: list[dict] = []
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            MockAnthropic.return_value.messages.create.return_value = canned
+            result = translate_product("DC101", "A classic frame.", _config_with_key(), on_usage=events.append)
+
+        assert result is None
+        assert events[0]["output_tokens"] == 40
+
+    def test_no_credit_error_is_reported(self) -> None:
+        events: list[dict] = []
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            MockAnthropic.return_value.messages.create.side_effect = RuntimeError(
+                "Your credit balance is too low to access the Anthropic API."
+            )
+            translate_product("DC101", "A classic frame.", _config_with_key(), on_usage=events.append)
+
+        assert events == [
+            {"provider": "anthropic", "model": "claude-sonnet-4-5", "activity": "translation", "status": "no_credit"}
+        ]
+
+    def test_rate_limit_is_not_a_credit_problem(self) -> None:
+        events: list[dict] = []
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            MockAnthropic.return_value.messages.create.side_effect = RuntimeError("rate limited")
+            translate_product("DC101", "A classic frame.", _config_with_key(), on_usage=events.append)
+
+        assert events == []
+
+    def test_a_failing_sink_does_not_break_translation(self) -> None:
+        canned = _fake_message('{"es": {"title": "DC101", "description": "x"}}')
+        canned.usage = SimpleNamespace(input_tokens=1, output_tokens=1)
+
+        def broken(_event: dict) -> None:
+            raise RuntimeError("backend down")
+
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            MockAnthropic.return_value.messages.create.return_value = canned
+            result = translate_product("DC101", "A classic frame.", _config_with_key(), on_usage=broken)
+
+        assert result is not None and result["es"]["title"] == "DC101"

@@ -1,0 +1,58 @@
+/* Pestaña «Consumo IA» (AiUsage.jsx). Solo tokens --adm-*: así sigue el modo
+   claro/oscuro y los colores de la tienda (admin-theme.css). */
+
+.ai-wrap { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }
+.ai-wrap h3 { display: flex; align-items: center; gap: 8px; }
+.ai-note { margin: 6px 0 0; font-size: 12px; }
+.ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.ai-wide { grid-column: 1 / -1; }
+.ai-check span { display: inline-flex; align-items: center; gap: 6px; color: var(--adm-ink); }
+
+/* Aviso visual cuando un proveedor pide atención */
+.ai-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--adm-radius-sm);
+  background: var(--adm-red-soft); color: var(--adm-red-dark); border: 1px solid var(--adm-red-line); font-size: 13.5px; font-weight: 600; }
+.ai-banner p { margin: 0 0 4px; }
+.ai-banner p:last-child { margin-bottom: 0; }
+
+/* Tarjetas de saldo por proveedor */
+.ai-prov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: clamp(10px, 1.4vw, 16px); }
+.ai-prov { margin: 0; min-width: 0; }
+.ai-prov.low { border-color: var(--adm-amber); }
+.ai-prov.empty, .ai-prov.no_credit { border-color: var(--adm-red-line); }
+.ai-balance { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
+.ai-balance b { font-family: var(--adm-display); font-size: clamp(24px, 2.6vw, 32px); color: var(--adm-navy); letter-spacing: -.02em; }
+.ai-prov.low .ai-balance b { color: var(--adm-amber-dark); }
+.ai-prov.empty .ai-balance b, .ai-prov.no_credit .ai-balance b { color: var(--adm-red-dark); }
+.ai-balance small { font-size: 12px; color: var(--adm-muted); font-weight: 600; }
+.ai-bar { height: 8px; border-radius: 999px; background: var(--adm-line-2); overflow: hidden; margin-bottom: 10px; }
+.ai-bar span { display: block; height: 100%; border-radius: inherit; background: var(--adm-grad-brand); transition: width .6s var(--adm-ease); }
+.ai-prov.low .ai-bar span { background: var(--adm-amber); }
+.ai-prov.empty .ai-bar span, .ai-prov.no_credit .ai-bar span { background: var(--adm-red-dark); }
+.ai-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; }
+.ai-facts div { min-width: 0; }
+.ai-facts dt { font-size: 11.5px; color: var(--adm-muted); font-weight: 600; }
+.ai-facts dd { margin: 0; font-size: 13.5px; font-weight: 700; color: var(--adm-ink); overflow-wrap: anywhere; }
+.ai-since { margin: 10px 0 0; font-size: 12px; }
+.ai-refused { margin: 8px 0 0; padding: 6px 10px; border-radius: var(--adm-radius-sm); background: var(--adm-red-soft); color: var(--adm-red-dark); font-size: 12.5px; font-weight: 600; }
+
+/* Alertas */
+.ai-alert-form { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--adm-line); }
+.ai-alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ai-alerts li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: var(--adm-surface-2); }
+.ai-alerts li.off { opacity: .6; }
+.ai-alert-txt { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.ai-alert-txt b { font-size: 13.5px; color: var(--adm-ink); }
+.ai-alert-txt small { font-size: 12px; overflow-wrap: anywhere; }
+
+/* Filtros y totales del periodo */
+.ai-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); gap: 8px; margin-top: 12px; }
+.ai-kpi { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--adm-radius-sm); border: 1px solid var(--adm-line); background: var(--adm-surface-2); min-width: 0; }
+.ai-kpi b { font-family: var(--adm-display); font-size: clamp(17px, 1.7vw, 22px); color: var(--adm-navy); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.ai-kpi small { font-size: 11.5px; color: var(--adm-muted); font-weight: 600; }
+.ai-kpi.gold { background: var(--adm-gold-soft); border-color: var(--adm-gold-line); }
+.ai-kpi.gold b { color: var(--adm-gold-dark); }
+.ai-kpi.bad { background: var(--adm-red-soft); border-color: var(--adm-red-line); }
+.ai-kpi.bad b { color: var(--adm-red-dark); }
+.ai-kpi.warn { background: var(--adm-amber-soft); }
+.ai-kpi.warn b { color: var(--adm-amber-dark); }
+.ai-wrap code { font-size: 12px; overflow-wrap: anywhere; }

@@ -34,6 +34,8 @@ import PosSales from "./PosSales.jsx";
 import PosApprovals from "./PosApprovals.jsx";
 import PosConfig from "./PosConfig.jsx";
 import AlertRules from "./AlertRules.jsx";
+import AiUsage from "./AiUsage.jsx";
+import { fetchAiStatus } from "./aiUsage.js";
 import SalesBoard from "./SalesBoard.jsx";
 import StoreStatus from "./StoreStatus.jsx";
 import MySales from "./MySales.jsx";
@@ -1056,6 +1058,18 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   useEffect(() => { if (demo) ensureSeed(); }, [demo]);
   const loadSellers = () => { if (demo || restricted) return; fetchSellers().then((r) => setSellers(r?.sellers ?? [])).catch(() => {}); };
   useEffect(loadSellers, [demo]);
+  // Insignia de «Consumo IA»: proveedores con saldo bajo, agotado o rechazando
+  // llamadas. Se relee cada 10 min y al entrar o salir de la pestaña.
+  const [aiAttention, setAiAttention] = useState(0);
+  const canSeeAi = !demo && tabs.includes("aiusage");
+  useEffect(() => {
+    if (!canSeeAi) return undefined;
+    let alive = true;
+    const read = () => fetchAiStatus().then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); }).catch(() => {});
+    read();
+    const id = setInterval(read, 600000);
+    return () => { alive = false; clearInterval(id); };
+  }, [canSeeAi, nav.tab]);
 
   /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
   // Ficha de una venta delante de cualquier pantalla (Mi panel, Cobros pendientes…).
@@ -1080,7 +1094,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={aiAttention ? { aiusage: aiAttention } : undefined}>
       {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
@@ -1105,6 +1119,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}
+      {tab === "aiusage" && <AiUsage />}
       {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
       {tab === "mysales" && <MySales go={go} me={me} openSale={salePanel.open} />}

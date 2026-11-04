@@ -47,6 +47,8 @@ export const NAV_GROUPS = [
     { key: "alerts", icon: "bell" },
     { key: "audit", icon: "history" },
     { key: "security", icon: "security" },
+    // Créditos y consumo de los proveedores de IA: solo dueño y superadmin.
+    { key: "aiusage", icon: "sparkles" },
   ] },
 ];
 

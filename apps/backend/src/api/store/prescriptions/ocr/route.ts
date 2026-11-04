@@ -10,6 +10,7 @@ import {
 import { downscaleForOcr } from "../../../../lib/image-downscale";
 import { resolveOcrSettings } from "../../../../lib/ocr-settings";
 import { getOcrModel } from "../../../../lib/ocr-models";
+import { recordAiUsage } from "../../../../lib/ai-usage-data";
 import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../../modules/prescription/service";
 import type { Prescription, PrescriptionValidationResult } from "@eyewear/shared";
@@ -111,7 +112,8 @@ type SourceBlock =
 async function readWithModel(
   client: Anthropic,
   modelId: string,
-  sourceBlock: SourceBlock
+  sourceBlock: SourceBlock,
+  onUsage?: (usage: { input_tokens?: number | null; output_tokens?: number | null }) => void
 ): Promise<Partial<Prescription> | null> {
   // Safety classifiers occasionally decline benign health-adjacent images;
   // `fallbacks` re-runs the request on a substitute model instead of handing us
@@ -142,6 +144,9 @@ async function readWithModel(
       },
     ],
   });
+
+  // Billed whether or not the reading is usable — count it before deciding.
+  onUsage?.(message.usage ?? {});
 
   if (message.stop_reason === "refusal") return null;
 
@@ -400,12 +405,27 @@ export async function POST(
     // telemetry, not health data.
   });
 
+  // Every attempt is billed, the escalation included: record each one for the
+  // «Consumo IA» tab. Tokens and model only — never the image or the reading.
+  const readId = randomUUID();
+  const track = (modelId: string, attempt: string) =>
+    (usage: { input_tokens?: number | null; output_tokens?: number | null }) =>
+      void recordAiUsage(req.scope, {
+        provider: "anthropic",
+        model: modelId,
+        activity: "ocr",
+        input_tokens: usage.input_tokens ?? null,
+        output_tokens: usage.output_tokens ?? null,
+        event_key: `ocr:${readId}:${attempt}`,
+        ref_id: readId,
+      });
+
   let extracted: Partial<Prescription> | null;
   let modelUsed = settings.model_id;
   let escalated = false;
 
   try {
-    extracted = await readWithModel(client, settings.model_id, sourceBlock);
+    extracted = await readWithModel(client, settings.model_id, sourceBlock, track(settings.model_id, "primary"));
 
     // Cascade: only pay for the stronger model when the cheap one came back
     // unusable. At a ~20% escalation rate this lands near the cheap model's
@@ -418,7 +438,8 @@ export async function POST(
         const retry = await readWithModel(
           client,
           settings.escalation_model_id,
-          sourceBlock
+          sourceBlock,
+          track(settings.escalation_model_id, "escalation")
         );
         if (retry) {
           extracted = retry;
@@ -429,6 +450,18 @@ export async function POST(
     }
   } catch (err: unknown) {
     const failure = classifyModelFailure(err);
+
+    // Out of credit: the alert job emails the owner within minutes.
+    if (failure.code === "ocr_no_credit") {
+      void recordAiUsage(req.scope, {
+        provider: "anthropic",
+        model: settings.model_id,
+        activity: "ocr",
+        status: "no_credit",
+        event_key: `ocr:${readId}:no_credit`,
+        ref_id: readId,
+      });
+    }
 
     // Log it. An earlier version swallowed the upstream error entirely, so a
     // production outage showed up as a bare 503 with nothing in the logs to say
