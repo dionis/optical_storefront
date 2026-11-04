@@ -1,6 +1,6 @@
 # Plataforma de óptica online — Guía general
 
-_Versión 27/10/2026. Describe la plataforma tal como está hoy (un solo inquilino en
+_Versión 04/11/2026. Describe la plataforma tal como está hoy (un solo inquilino en
 producción: RUBI LENS) y lo que un dueño de óptica recibe cuando se le entrega su
 tienda. La parte técnica de cómo se da de alta otra óptica está en
 [MULTI-TENANT-TECNICO.md](MULTI-TENANT-TECNICO.md)._
@@ -30,7 +30,7 @@ otra.
 | **Receta** | El cliente escribe sus valores o **sube una foto**; la IA la lee, rellena el formulario y el cliente confirma. La imagen se guarda en un almacenamiento privado (dato de salud). |
 | **Pago** | Resumen completo del pedido, teléfono del paciente, avisos por correo/SMS opcionales y pago con tarjeta (Stripe; PayPal y Square disponibles). |
 | **Mis pedidos** | Sin contraseña: el cliente recibe un enlace mágico en su correo y ve todos sus pedidos con su etapa (`confirmado → en laboratorio → enviado → en tránsito → entregado`). Puede escribir a soporte y, cuando la política lo permite, cancelar. |
-| **Idioma** | Español por defecto, inglés con un clic. Moneda y fechas siguen el idioma. |
+| **Idioma** | Español por defecto, inglés y francés con un clic (el francés está en preparación). Moneda y fechas siguen el idioma. |
 
 ## 3. Qué ve el dueño: el panel `/admin`
 
@@ -51,7 +51,7 @@ todo exportable a CSV o PDF, todo en español e inglés.
 | **Auditoría** | Registro de quién cambió qué. |
 | **Catálogo y media** | Gestión del catálogo y generación de fotos/vídeo de monturas con IA (con presupuesto mensual). |
 | **Seguridad** | Semáforo de configuración: secretos, https, Stripe en vivo, webhook, correo, SMS, hoja de Google, OCR. Nunca muestra valores. Incluye la "zona de peligro" para borrar pedidos de prueba. |
-| **Ajustes** | Correos y teléfono del dueño para avisos, lista de administradores a notificar, correo de soporte, proveedor de pago activo, impuesto de montura, modelo de IA para recetas. |
+| **Ajustes** | Correos y teléfono del dueño para avisos, lista de administradores a notificar, correo de soporte, proveedor de pago activo, impuesto de montura, modelo de IA para recetas. **Marca** (en preparación): el dueño cambia su logo y sus colores con vista previa, sin pedírnoslo. |
 
 ### Hoja de Google
 
@@ -119,13 +119,34 @@ propio.
 
 | Concepto | Orden de magnitud |
 |---|---|
-| Servidor (Hetzner + Coolify) | ~€4–10 / mes por óptica |
-| Tienda web (Vercel) | plan gratuito o Pro compartido |
-| Correo (Resend), SMS (Twilio) | según volumen; el SMS es opcional |
-| IA (lectura de recetas, medición, fotos) | por uso; con límites por hora/día y presupuesto mensual |
+| Servidor (Hetzner + Coolify) | ~€4–10 / mes por óptica (de quién es la cuenta: por acordar en el contrato) |
+| Tienda web (Vercel) | plan gratuito o Pro compartido (por acordar en el contrato) |
+| Correo (Resend), SMS (Twilio) | según volumen, en la cuenta del dueño; el SMS es opcional |
+| IA (lectura de recetas, medición, fotos) | por uso, **con las claves del dueño**; la pestaña Consumo IA le muestra el saldo y le avisa antes de que se acabe |
 | Stripe | comisión por cobro, en la cuenta del dueño |
 
-## 8. Glosario rápido
+**Cuentas propias.** Todos los servicios de pago (IA, Stripe, correo, SMS, mapas)
+van con cuentas y claves a nombre del dueño: él paga directamente lo que usa.
+
+**Proveedor compartido.** Si dos ópticas venden el mismo proveedor de monturas,
+comparten el catálogo (modelos, fotos, textos). Precios, márgenes y pedidos son
+siempre de cada una.
+
+## 8. Si una óptica deja la plataforma
+
+Decidido el 04/11/2026; va en el contrato. Los plazos cuentan desde el día en que el
+dueño avisa, y **cada paso se le notifica por correo**:
+
+| Cuándo | Qué pasa | Aviso al dueño |
+|---|---|---|
+| Al avisar | Se registra su salida y se fijan las fechas. | Acuse con el calendario: fecha de entrega y fecha de borrado. |
+| Antes de 30 días | Recibe sus pedidos, clientes, recetas con fotos, catálogo, precios y costos en hojas de cálculo, más una copia de su base de datos. Sus cuentas (Stripe, dominio, Google, IA) ya son suyas: solo se nos retira el acceso. | Entrega realizada, con el enlace de descarga. |
+| 7 días antes del borrado | Última ocasión para pedir otra descarga. | Recordatorio. |
+| A los 90 días | Se borran todos sus datos de nuestros servidores y copias de seguridad. | Constancia escrita del borrado. |
+
+Si necesita más tiempo, se mueve la fecha de borrado y se le avisa de la nueva.
+
+## 9. Glosario rápido
 
 - **Inquilino (tenant)**: una óptica cliente de la plataforma, con su despliegue propio.
 - **Sucursal (establishment)**: una tienda física _dentro_ de una misma óptica.
