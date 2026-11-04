@@ -387,6 +387,7 @@ export default function PosSale({ me }) {
   // Receta nueva: el servidor es la última palabra, pero lo que el laboratorio no corta no sale de aquí.
   const rxCheck = validateRx(rxNew, rxNew.type, { mode: "new" });
   const fmtEye = (e) => [e.sph, e.cyl && `${e.cyl}×${e.axis || "—"}`, e.add && `ADD ${e.add}`].filter(Boolean).join(" ");
+  const m = (v) => money(v, "usd", lang);
   // La montura que se está vendiendo, siempre a la vista en los pasos siguientes.
   const frameCards = lines.filter((l) => l.kind === "frame").map((l) => <PosFrameCard key={l.key} frame={l} money={m} compact />);
   const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
@@ -472,7 +473,6 @@ export default function PosSale({ me }) {
     return { problem, props: { name: k, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
   };
   const stepName = STEPS[step];
-  const m = (v) => money(v, "usd", lang);
 
   return (
     <div className="adm-section pos">
