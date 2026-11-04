@@ -1068,22 +1068,26 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   const { store, customer, quote } = input;
   if (!store.sales_channel_id) throw new PosError("store_without_channel", 409);
 
-  let approval: ApprovalRow | null = null;
-  if (input.needsApproval) {
-    approval = input.approvalId ? await getApproval(container, input.approvalId) : null;
-    assertApprovalFits(approval, store, quote);
-  }
+  // Every query here is a round trip to the database (~45 ms from the server
+  // in staging, see "db ping" in pos-after-sale.ts), so whatever does not
+  // depend on another step runs alongside it. Reads first: nothing is written
+  // until the approval is known to fit.
+  const [regionId, approval] = await Promise.all([
+    usdRegionId(container),
+    input.needsApproval && input.approvalId ? getApproval(container, input.approvalId) : Promise.resolve(null),
+  ]);
+  if (input.needsApproval) assertApprovalFits(approval, store, quote);
 
-  const regionId = await usdRegionId(container);
-  const customerId = await upsertCustomer(container, customer, input.customerId);
-  const rx = await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId);
-
-  // Photos of frames the customer brought go to the private bucket: they travel
-  // with the lab ticket to the main store (HU-89).
-  const photoKeys: Array<string | null> = [];
-  for (const line of input.lines) {
-    photoKeys.push(line.kind === "own_frame" ? await uploadPrivateImage(line.photo, "posframe") : null);
-  }
+  // The prescription needs the customer; the photos of frames the customer
+  // brought (private bucket, they travel with the lab ticket to the main
+  // store, HU-89) need neither.
+  const [{ customerId, rx }, photoKeys] = await Promise.all([
+    upsertCustomer(container, customer, input.customerId).then(async (customerId) => ({
+      customerId,
+      rx: await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId),
+    })),
+    Promise.all(input.lines.map((line) => (line.kind === "own_frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
+  ]);
 
   const address = {
     first_name: customer.first_name,
@@ -1165,13 +1169,18 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     throw new PosError("total_changed", 409);
   }
 
-  await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
-  const { data: withCollection } = await query.graph({
-    entity: "cart",
-    fields: ["id", "payment_collection.id"],
-    filters: { id: cartId },
-  });
-  const collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
+  // The workflow returns the collection it created; reading it back from the
+  // cart is only a fallback.
+  const { result: collection } = await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
+  let collectionId = (collection as { id?: string } | undefined)?.id;
+  if (!collectionId) {
+    const { data: withCollection } = await query.graph({
+      entity: "cart",
+      fields: ["id", "payment_collection.id"],
+      filters: { id: cartId },
+    });
+    collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
+  }
   if (!collectionId) throw new PosError("payment_failed", 500);
   await createPaymentSessionsWorkflow(container).run({
     input: { payment_collection_id: collectionId, provider_id: MANUAL_PROVIDER_ID, customer_id: customerId },
@@ -1211,10 +1220,18 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     currency_code: "usd",
     own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
   });
-  const tray = withLenses ? await takeTray(container, store.id, sale.id) : null;
-  if (tray !== null) await svc.updatePosSales({ id: sale.id, tray_number: tray });
-  await writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments });
-  if (approval) await svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never);
+  // Tray, payments and the approval touch different rows of the new sale:
+  // none waits for the others. The order's stamp below needs the tray.
+  const [tray] = await Promise.all([
+    withLenses
+      ? takeTray(container, store.id, sale.id).then(async (n) => {
+          await svc.updatePosSales({ id: sale.id, tray_number: n });
+          return n;
+        })
+      : Promise.resolve(null),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
+    approval ? svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never) : Promise.resolve(),
+  ]);
 
   // The order board, the Sheet and the emails show the store's number and the
   // balance. Best-effort: the sale row already links both ways.
