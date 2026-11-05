@@ -186,6 +186,13 @@ const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privileg
   { method: "GET", path: /^\/admin\/store-costs(\/pnl)?$/, privilege: "costs.manage" },
   { method: "POST", path: /^\/admin\/store-costs(\/[^/]+)?$/, privilege: "costs.manage" },
   { method: "DELETE", path: /^\/admin\/store-costs\/[^/]+$/, privilege: "costs.manage" },
+  // Frame costs and the price band: the guard lets the privilege in, and
+  // lib/frame-cost-route.ts repeats the check per route (read with either
+  // privilege, write with costs.manage). Without these entries that second
+  // check never ran for a manager: the guard refused first (audit 5-nov-2026).
+  { method: "GET", path: /^\/admin\/pricing\/frames\/(costs|band)$/, privilege: "costs.view" },
+  { method: "GET", path: /^\/admin\/pricing\/frames\/(costs|band)$/, privilege: "costs.manage" },
+  { method: "POST", path: /^\/admin\/pricing\/frames\/(cost|band)$/, privilege: "costs.manage" },
 ];
 
 export function isAllowedForRestrictedRole(method: string, url: string, privileges: readonly string[] = []): boolean {
