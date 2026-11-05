@@ -38,4 +38,12 @@ export const StaffProfile = model.define("staff_profile", {
   privileges: model.json().nullable(),
   internal_notes: model.text().nullable(),
   updated_by: model.text().nullable(),
+  /**
+   * Set when the person was deactivated (HU-04): they keep their user, history
+   * and profile but lib/staff-scope.ts resolves them to "no access" on every
+   * request, which is what closes their open sessions. null = active.
+   */
+  disabled_at: model.dateTime().nullable(),
+  /** Who deactivated them (user id); cleared on reactivation. */
+  disabled_by: model.text().nullable(),
 });

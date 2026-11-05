@@ -6,7 +6,7 @@ import { SELLER_MODULE } from "../modules/seller";
 import type SellerModuleService from "../modules/seller/service";
 import type { CounterSeller } from "./pos";
 import { recordAudit } from "./audit";
-import { profilesByUser } from "./staff-profile-data";
+import { accessStatusByUser, profilesByUser } from "./staff-profile-data";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
@@ -35,6 +35,54 @@ export interface StaffScope extends ResolvedRole {
    * It fixes the store and the one till they sell from (pos.ts sellerTillProblem).
    */
   seller?: CounterSeller | null;
+  /** When the person was deactivated (HU-04); null = active. Set ⇒ role null. */
+  disabled_at: string | null;
+}
+
+/**
+ * Why `actorRole` may not deactivate or reactivate someone; null when allowed.
+ * Mirrors the vetoes and reason codes of DELETE /admin/team/:id, since a
+ * deactivation is "a delete that keeps the history":
+ *   · the owner is never deactivated, whoever asks     → `super_admin`
+ *   · only owner and superadmin manage the team         → `forbidden_role`
+ *   · nobody deactivates themselves (ghost session)     → `self`
+ *   · only the owner touches a superadmin               → `owner_only`
+ * The same vetoes apply to reactivation: whoever may switch someone off is
+ * whoever may switch them back on. Pure: no container, no database.
+ */
+export function statusChangeDenied(args: {
+  actorRole: StaffRole | null;
+  targetIsOwner: boolean;
+  targetRole: StaffRole | null;
+  actorIsTarget: boolean;
+}): "super_admin" | "forbidden_role" | "self" | "owner_only" | null {
+  if (args.targetIsOwner) return "super_admin";
+  if (!isAdminRole(args.actorRole)) return "forbidden_role";
+  if (args.actorIsTarget) return "self";
+  if (args.targetRole === "superadmin" && args.actorRole !== "owner") return "owner_only";
+  return null;
+}
+
+/**
+ * The scope of someone who may do nothing in the panel: a deleted user whose
+ * token has not expired yet, or a deactivated person. The guard answers 403
+ * `inactive` to it (role null), and every role-scoped route sees no stores.
+ */
+function noAccessScope(userId: string, disabledAt: string | null): StaffScope {
+  return {
+    role: null,
+    establishment_ids: [],
+    discount_limit_pct: null,
+    can_void: false,
+    legacy: false,
+    user_id: userId,
+    is_owner: false,
+    is_admin: false,
+    privileges: [],
+    seller_code: null,
+    seller: null,
+    disabled_at: disabledAt,
+  };
 }
 
 /** Live seller record linked to a panel user, or null. */
@@ -132,17 +180,50 @@ export async function writeStaffAssignment(
   });
 }
 
+/**
+ * Whether the authenticated user still exists. Medusa's `authenticate` only
+ * verifies the JWT signature: it never checks that the user row is still there.
+ * Without this, a person deleted from Equipo kept a working token until it
+ * expired, and — with no assignment rows left, since DELETE soft-deletes them —
+ * resolveRole's "no rows = admin from before roles" rule made that ghost a
+ * SUPERADMIN. Errors propagate: the guard answers 503 rather than failing open.
+ */
+async function userExists(container: MedusaContainer, userId: string): Promise<boolean> {
+  const users = container.resolve<IUserModuleService>(Modules.USER);
+  const rows = await users.listUsers({ id: [userId] }, { take: 1, select: ["id"] });
+  return rows.length > 0;
+}
+
+/**
+ * Also the session revocation of the panel. Medusa's JWTs cannot be revoked
+ * server-side without a denylist, so the deleted / deactivated checks here, run
+ * on every /admin request, ARE what closes a person's open sessions — within the
+ * TTL_MS cache window (invalidateStaffScope() shortens it to zero on a change
+ * made from this process). A no-access result is cached for the same 30 s and
+ * no longer: a reactivation must take effect just as fast.
+ */
 export async function getStaffScope(container: MedusaContainer, userId: string): Promise<StaffScope> {
   const hit = cache.get(userId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.scope;
 
-  const [ownerId, byUser, profiles] = await Promise.all([
+  const [exists, ownerId, byUser, profiles, access] = await Promise.all([
+    userExists(container, userId),
     ownerUserId(container),
     assignmentsByUser(container, [userId]),
     profilesByUser(container, [userId]),
+    accessStatusByUser(container, [userId]),
   ]);
-  const profile = profiles.get(userId);
   const isOwner = ownerId === userId;
+  const disabledAt = access.get(userId)?.disabled_at ?? null;
+  // The owner can never be deactivated (statusChangeDenied), so a stray flag on
+  // their row is ignored rather than locking the store out of its root admin.
+  if (!exists || (disabledAt && !isOwner)) {
+    const scope = noAccessScope(userId, exists ? disabledAt : null);
+    cache.set(userId, { at: Date.now(), scope });
+    return scope;
+  }
+
+  const profile = profiles.get(userId);
   const resolved = resolveRole({ isOwner, assignments: byUser.get(userId) ?? [] });
   const seller = resolved.role === "seller" ? await counterSellerFor(container, userId) : null;
   const scope: StaffScope = {
@@ -154,6 +235,7 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
     // The seller record's code identifies a counter seller when the profile has none.
     seller_code: profile?.seller_code ?? seller?.code ?? null,
     seller,
+    disabled_at: null,
   };
   cache.set(userId, { at: Date.now(), scope });
   return scope;

@@ -18,6 +18,8 @@ export const AUDIT_ACTIONS = [
   "stores.change",
   "privileges.change",
   "profile.change",
+  "user.deactivate",
+  "user.reactivate",
   "discount.request",
   "discount.approve",
   "discount.reject",

@@ -56,6 +56,28 @@ panel `https://www.rubilens.com/vendedor?t=<token HMAC>` (se invalida con
 "Nuevo enlace"). Atribución: `cart.metadata.seller_code` → `order.metadata`.
 Estadísticas y panel público acotados a la ventana del board (300 pedidos).
 
+## Equipo: desactivar sin borrar y cierre de sesiones
+
+Además de **Eliminar**, cada fila del Equipo tiene **Desactivar / Reactivar**
+(`POST /admin/team/:id/status { active }`, HU-04). Desactivar pone
+`staff_profile.disabled_at` + `disabled_by` y no borra nada: la persona conserva
+usuario, rol, perfil, ficha de vendedor e historial, y al reactivarla vuelve con
+el rol que tenía. Mismos vetos y códigos que Eliminar (`super_admin` para el
+dueño, `self`, `owner_only` para un superadmin si no eres el dueño,
+`forbidden_role`); la lista expone `disabled_at` e `is_disabled` y el panel pinta
+el chip «Inactivo». Queda en Auditoría como `user.deactivate` / `user.reactivate`.
+
+**Cierre de sesiones.** Los JWT de Medusa no se pueden revocar en el servidor sin
+una lista negra, y `authenticate` no comprueba que el usuario siga existiendo.
+Por eso `getStaffScope` (`src/lib/staff-scope.ts`), que corre en **cada**
+petición a `/admin`, comprueba que el usuario exista y que no tenga
+`disabled_at`: si falla cualquiera de las dos, resuelve a «sin acceso» (rol
+`null`) y el guard responde 403 `inactive`. Esa comprobación por petición **es**
+la revocación, con un retraso máximo de 30 s (la caché del scope, que la ruta
+vacía para la persona afectada). Antes, un usuario eliminado con un token aún
+válido quedaba sin filas de rol y la regla «sin filas = admin anterior a los
+roles» lo convertía en superadmin fantasma hasta que el token caducara.
+
 ## QA
 
 Playwright (`chromium` del sistema) con `VITE_ADMIN_DEMO_LOGIN=true` para la

@@ -2,7 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
-import { profilesByUser } from "../../../lib/staff-profile-data";
+import { accessStatusByUser, profilesByUser } from "../../../lib/staff-profile-data";
 import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
 import { listSellers } from "../../../lib/sellers";
 import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
@@ -45,6 +45,13 @@ export interface TeamMember {
   display_name: string | null;
   /** Seller record of a user with the `seller` role: store and till they sell from. */
   seller: { id: string; code: string; name: string; active: boolean; establishment_id: string | null; terminal_id: string | null } | null;
+  /**
+   * Deactivated (HU-04, POST /admin/team/:id/status): keeps user, role rows and
+   * history, but gets no access until reactivated. `role` stays what it will be
+   * again on reactivation; `is_disabled` is what the panel shows.
+   */
+  disabled_at: string | null;
+  is_disabled: boolean;
 }
 
 /** Display name of a new user, for the seller record created with them. */
@@ -61,15 +68,18 @@ export function sellerLinkRefusal(res: MedusaResponse, error: unknown): boolean 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  const [byUser, profiles, sellers] = await Promise.all([
+  const [byUser, profiles, access, sellers] = await Promise.all([
     assignmentsByUser(req.scope, all.map((u) => u.id)),
     profilesByUser(req.scope, all.map((u) => u.id)),
+    accessStatusByUser(req.scope, all.map((u) => u.id)),
     listSellers(req.scope),
   ]);
   const sellerByUser = new Map(sellers.filter((s) => s.user_id).map((s) => [s.user_id as string, s]));
   return all.map((u, i) => {
     // El más antiguo es el dueño (super admin) del sistema.
     const resolved = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] });
+    // The owner is never deactivated (lib/staff-scope.ts ignores the flag for them too).
+    const disabledAt = i === 0 ? null : (access.get(u.id)?.disabled_at ?? null);
     return {
       id: u.id,
       email: u.email,
@@ -87,6 +97,8 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
         const s = sellerByUser.get(u.id);
         return s ? { id: s.id, code: s.code, name: s.name, active: s.active, establishment_id: s.establishment_id, terminal_id: s.terminal_id } : null;
       })(),
+      disabled_at: disabledAt,
+      is_disabled: disabledAt != null,
     };
   });
 }

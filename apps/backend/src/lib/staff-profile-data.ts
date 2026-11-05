@@ -32,6 +32,57 @@ export async function profileOf(container: MedusaContainer, userId: string): Pro
   return (await profilesByUser(container, [userId])).get(userId) ?? toData(undefined);
 }
 
+/**
+ * Whether a person was deactivated (HU-04). Kept apart from StaffProfileData on
+ * purpose: it is an access flag read by the staff guard, not profile content
+ * anyone edits through the profile routes.
+ */
+export interface StaffAccessStatus {
+  /** ISO instant of the deactivation; null = active. */
+  disabled_at: string | null;
+  /** User id of who deactivated them; null when active. */
+  disabled_by: string | null;
+}
+
+const ACTIVE: StaffAccessStatus = { disabled_at: null, disabled_by: null };
+
+function toStatus(r: Record<string, unknown> | undefined): StaffAccessStatus {
+  if (!r || !r.disabled_at) return ACTIVE;
+  const at = r.disabled_at instanceof Date ? r.disabled_at.toISOString() : String(r.disabled_at);
+  return { disabled_at: at, disabled_by: r.disabled_by == null ? null : String(r.disabled_by) };
+}
+
+export async function accessStatusByUser(container: MedusaContainer, userIds: string[]): Promise<Map<string, StaffAccessStatus>> {
+  const out = new Map<string, StaffAccessStatus>();
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return out;
+  const rows = await svc(container).listStaffProfiles({ user_id: ids }, { take: 1000 });
+  for (const id of ids) out.set(id, toStatus(rows.find((r) => r.user_id === id) as unknown as Record<string, unknown> | undefined));
+  return out;
+}
+
+/**
+ * Deactivates (`disabled` true) or reactivates a person, creating their profile
+ * row when they have none yet. Returns the previous and the new status for the
+ * audit log. The caller invalidates the scope cache and applies the vetoes
+ * (lib/staff-scope.ts statusChangeDenied): this only writes.
+ */
+export async function setAccessDisabled(
+  container: MedusaContainer,
+  userId: string,
+  disabled: boolean,
+  actorId: string | null
+): Promise<{ before: StaffAccessStatus; after: StaffAccessStatus }> {
+  const s = svc(container);
+  const [row] = await s.listStaffProfiles({ user_id: userId }, { take: 1 });
+  const before = toStatus(row as unknown as Record<string, unknown> | undefined);
+  const after: StaffAccessStatus = disabled ? { disabled_at: new Date().toISOString(), disabled_by: actorId } : ACTIVE;
+  const data = { disabled_at: after.disabled_at ? new Date(after.disabled_at) : null, disabled_by: after.disabled_by, updated_by: actorId };
+  if (row) await s.updateStaffProfiles({ id: row.id, ...data } as never);
+  else await s.createStaffProfiles({ user_id: userId, ...data } as never);
+  return { before, after };
+}
+
 /** Seller codes in use by live profiles, except `exceptUserId`'s. */
 export async function takenSellerCodes(container: MedusaContainer, exceptUserId?: string): Promise<string[]> {
   const rows = await svc(container).listStaffProfiles({}, { take: 1000 });
