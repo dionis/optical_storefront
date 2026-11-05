@@ -149,7 +149,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
   // "Cerrar sesión en todos mis equipos": any role, only on oneself.
   { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
-  { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims)$/ },
+  // lens-matrix: the price list the till picks lenses from (store prices, never costs; lib/lens-matrix.ts).
+  { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims|lens-matrix)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals|prescriptions\/ocr)$/ },
   { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt|documents)$/ },

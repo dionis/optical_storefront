@@ -12,9 +12,14 @@
 //
 // Displayed prices remain an estimate only — the authoritative total for the cart comes
 // from POST /store/lens-config/quote, never from this data.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { medusa, USE_MEDUSA } from "./medusa.js";
 import { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT } from "./lensPricing.js";
+// The panel's authenticated, cached GET (adminApi.js + adminCache.js). Both
+// modules are self-contained (no UI, no catalog), so the public wizard's chunk
+// only grows by the fetch helper; the admin hook below is the only user here.
+import { adminGet, queryKey } from "../admin/adminApi.js";
+import { useCached } from "../admin/adminCache.js";
 
 /** The bundled 2026 list — first paint, offline, and fallback. */
 export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT };
@@ -168,6 +173,53 @@ export function useLensCatalog() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
+
+  return { ...catalog, live: catalog !== STATIC_CATALOG };
+}
+
+// ── The panel's copy (point of sale, statements, sales board) ────────────────
+//
+// GET /admin/pos/lens-matrix answers the same payload as the public route, with
+// the chosen store's variations already applied (lib/lens-matrix.ts), through
+// the admin session — no publishable key and no VITE_USE_MEDUSA involved. The
+// deployed storefront builds never set that flag, so the till used to render
+// the bundled list below and the owner's edits in «Precios y costos → Lentes»
+// (digital finish cells included) never reached the picker.
+
+/** The admin route; `store` empty = the master list. Also the cache prefix pricing/api.js invalidates on every lens-price write. */
+export const ADMIN_LENS_MATRIX_PATH = "/admin/pos/lens-matrix";
+const ADMIN_LENS_MATRIX_TTL = 60_000;
+
+const adminMatrixKey = (storeId) => queryKey(ADMIN_LENS_MATRIX_PATH, { store: storeId || "" });
+
+/**
+ * Resolves to the catalog the panel should price from (store prices when
+ * `storeId` is given), or STATIC_CATALOG when the route fails. Cached and
+ * de-duplicated by adminCache.js like every other panel read.
+ */
+export function loadAdminLensCatalog(storeId = "") {
+  return adminGet(ADMIN_LENS_MATRIX_PATH, { query: { store: storeId || "" }, ttl: ADMIN_LENS_MATRIX_TTL })
+    .then((r) => adaptLensMatrix(r) || STATIC_CATALOG)
+    .catch(() => STATIC_CATALOG);
+}
+
+/**
+ * Lens catalog for the panel. Renders the bundled list until the backend's
+ * arrives (and whenever it fails), then the live one; a change in
+ * «Precios y costos» re-reads it through the cache's invalidation, and so does
+ * coming back to the tab. `live` is false while the screen shows the bundled
+ * fallback — the POS says so next to the picker, because then the finish
+ * toggle and the option list may not match what the quote will accept.
+ */
+export function useAdminLensCatalog(storeId = "") {
+  const { data, refresh } = useCached(adminMatrixKey(storeId), { ttl: ADMIN_LENS_MATRIX_TTL });
+  const catalog = useMemo(() => (data ? adaptLensMatrix(data) : null) || STATIC_CATALOG, [data]);
+
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
 
   return { ...catalog, live: catalog !== STATIC_CATALOG };
 }

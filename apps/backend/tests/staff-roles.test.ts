@@ -168,6 +168,9 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/products?store=est_1&q=ray")).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/quote")).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/sales")).toBe(true);
+    // The lens price list the till picks from (every POS role, store prices only).
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/lens-matrix")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pos/lens-matrix?store=est_1")).toBe(true);
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/payment-methods")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods/pospm_cash")).toBe(false);

@@ -7,6 +7,7 @@ import { adminFetch, adminGet, invalidateCache } from "../adminApi.js";
 // pantalla no quede en blanco; en ese estado NO se puede editar, porque lo que
 // se guarda vive en el servidor y escribir sobre un dato viejo mentiría.
 import { capriPrice } from "../../data/capriPrices.js";
+import { ADMIN_LENS_MATRIX_PATH as LENS_MATRIX_PATH } from "../../data/lensCatalog.js";
 
 const key = (e, fallback) => {
   const r = (e && e.reason) || (e && e.payload && e.payload.reason);
@@ -52,14 +53,19 @@ export function savePricingOverride({ productId, variantId, price, kind = "frame
  * `field` "cost" escribe el costo del laboratorio de esa celda (solo maestro,
  * solo con permiso de costos); por defecto, el precio.
  */
-export function savePricingLens({ kind, key: itemKey, value, store, field }) {
-  return post("/admin/pricing/lenses", {
+export async function savePricingLens({ kind, key: itemKey, value, store, field }) {
+  const data = await post("/admin/pricing/lenses", {
     kind,
     key: itemKey,
     value: value === null || value === "" ? null : Number(value),
     store,
     ...(field === "cost" ? { field: "cost" } : {}),
   });
+  // La lista que el POS enseña (lensCatalog.js `useAdminLensCatalog`) sale de
+  // esta misma matriz: se olvida la de TODAS las tiendas (prefijo), porque
+  // mover el maestro cambia lo que heredan todas.
+  invalidateCache(LENS_MATRIX_PATH);
+  return data;
 }
 
 /** Comisión por defecto y/o la de cada vendedor. */

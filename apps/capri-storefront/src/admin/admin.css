@@ -1297,6 +1297,8 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .pos-change tr.sig td { color: var(--adm-red); font-weight: 800; }
 .pos-lens-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .pos-lens-lines > li { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+/* The lens step is pricing from the bundled list (the backend did not answer): a note, not an alarm. */
+.pos-lens-offline { display: block; margin-top: 8px; font-size: 12px; }
 .pos-lens { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
 .pos-quote tr.warn td { background: var(--adm-red-soft); }
 .pos-flag { color: var(--adm-red); font-weight: 800; }

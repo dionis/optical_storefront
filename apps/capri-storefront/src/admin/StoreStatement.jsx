@@ -21,7 +21,7 @@
 // una de sus tiendas aunque la barra tenga otra elegida.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
-import { useLensCatalog } from "../data/lensCatalog.js";
+import { useAdminLensCatalog } from "../data/lensCatalog.js";
 import { TENANT } from "../config/tenant.js";
 import Icon from "./icons.jsx";
 import HelpTip from "./HelpTip.jsx";
@@ -90,7 +90,7 @@ function Acc({ open, onToggle, title, sum, children }) {
 /** Props: `me` (alcance del usuario; `go` del panel se acepta y no se usa). */
 export default function StoreStatement({ me }) {
   const { t, lang } = useLang();
-  const catalog = useLensCatalog();
+  const catalog = useAdminLensCatalog();
   const [ctx, setCtx] = useState(null);
   // Período global del panel: el mes natural entero para «Mes» y «Mes pasado»; el resto, tal cual.
   const per = usePeriodFilter();

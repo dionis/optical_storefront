@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { defaultFinishFor, useLensCatalog } from "../data/lensCatalog.js";
+import { defaultFinishFor, useAdminLensCatalog } from "../data/lensCatalog.js";
 import { FRAME_ONLY, PHOTO_COLORS, arGroupFor } from "../data/lensPricing.js";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
@@ -296,10 +296,13 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
 export default function PosSale({ me }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const catalog = useLensCatalog();
   const [ctx, setCtx] = useState(null);
   const [ctxError, setCtxError] = useState(null);
   const [storeId, setStoreId] = useState("");
+  // The lens list of the store being sold in (GET /admin/pos/lens-matrix): the
+  // owner's cells and finishes, at that store's prices. Until it arrives, or
+  // if it fails, the bundled list — and the lens step says so (`catalog.live`).
+  const catalog = useAdminLensCatalog(storeId);
   const [terminalId, setTerminalId] = useState("");
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -889,6 +892,7 @@ export default function PosSale({ me }) {
             ))}
             {!noRx && isMulti(rxNew) && num(rxNew.seg_height) === null && <div className="adm-demo-banner">{t("adm.pos.lens.needSeg")}</div>}
           </ul>
+          {!catalog.live && <small className="muted pos-lens-offline" title={t("adm.pos.lens.offlineListHint")}>{t("adm.pos.lens.offlineList")}</small>}
           </>
         )}
 
