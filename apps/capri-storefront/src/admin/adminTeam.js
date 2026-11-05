@@ -1,6 +1,6 @@
 // Equipo de administradores del panel (API real /admin/team). Módulo sin hook
 // de idioma: los errores viajan como CLAVES adm.err.team.* y traduce quien pinta.
-import { adminFetch } from "./adminApi.js";
+import { adminFetch, getSession, login } from "./adminApi.js";
 
 const reasonKey = (e, fallback) => {
   const r = (e && e.reason) || (e && e.payload && e.payload.reason);
@@ -67,13 +67,48 @@ export async function deleteAdmin(id) {
 }
 
 export async function changeOwnPassword({ currentPassword, newPassword }) {
+  let result;
   try {
-    return await adminFetch("/admin/team/password", {
+    result = await adminFetch("/admin/team/password", {
       method: "POST",
       body: { current_password: currentPassword, new_password: newPassword },
     });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.team.passwordFailed"));
+  }
+  // The server signs every other device out (tokens older than the change are
+  // refused); this tab signs in again with the new password so the person
+  // does not land on the login screen. If that fails, the next request's 401
+  // sends them there anyway — nothing is lost.
+  const email = getSession()?.user;
+  if (result?.sessions_revoked && email) await login(email, newPassword).catch(() => null);
+  return result;
+}
+
+/** Dueño o superadmin: cierra la sesión de otra persona en todos sus equipos. */
+export async function signOutEverywhere(id) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/sessions`, { method: "DELETE" });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.sessionsFailed"));
+  }
+}
+
+/** La propia: «cerrar sesión en todos mis equipos». Esta pestaña también sale. */
+export async function signMeOutEverywhere() {
+  try {
+    return await adminFetch("/admin/team/me/sessions", { method: "DELETE" });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.sessionsFailed"));
+  }
+}
+
+/** Dueño o superadmin: desactiva (active=false) o reactiva a una persona sin borrarla. */
+export async function setActive(id, active) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/active`, { method: "POST", body: { active } });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.activeFailed"));
   }
 }
 

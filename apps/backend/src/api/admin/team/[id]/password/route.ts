@@ -4,6 +4,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../../lib/audit";
 import { passwordResetDenied } from "../../../../../lib/staff-roles";
 import { getStaffScope } from "../../../../../lib/staff-scope";
+import { revokeSessions } from "../../../../../lib/session-control";
 
 /**
  * POST /admin/team/:id/password { new_password } — el dueño o un superadmin
@@ -54,6 +55,8 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
 
   await users.updateUsers({ id: target.id, metadata: { ...((target.metadata as Record<string, unknown>) ?? {}), must_change_password: true } });
   await recordAudit(req.scope, { actorId, action: "password.reset", entity: "user", entityId: target.id });
+  // Whoever held that account's sessions is out: the temporary password is the only way back in.
+  await revokeSessions(req.scope, { userId: target.id, actorId, reason: "password_reset" });
   logger.info(`[team] password of ${target.email} reset by ${actorId}`);
-  res.json({ ok: true });
+  res.json({ ok: true, sessions_revoked: true });
 }

@@ -183,4 +183,10 @@ describe("securityAudit", () => {
     expect(JSON.stringify(audit)).not.toContain("sk_test_123");
     expect(JSON.stringify(audit)).not.toContain(strong);
   });
+
+  it("reports a boot whose migrations failed (docker-entrypoint.sh leaves the mark)", () => {
+    expect(securityAudit(good).checks.find((c) => c.key === "db.migrations_applied")?.ok).toBe(true);
+    const bad = securityAudit({ ...good, MEDUSA_MIGRATE_STATUS: "failed" });
+    expect(bad.checks.find((c) => c.key === "db.migrations_applied")?.ok).toBe(false);
+  });
 });

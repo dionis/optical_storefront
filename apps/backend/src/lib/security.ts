@@ -33,6 +33,28 @@ export const adminLoginRateLimit = createRateLimit({
   message: "Too many sign-in attempts. Wait a few minutes and try again.",
 });
 
+// ── Password recovery ───────────────────────────────────────────────────────
+// `POST /auth/user/emailpass/reset-password` sends an e-mail per call. Without
+// a cap, one script could flood a staff inbox (or Resend's quota). 5 per hour
+// per IP and per e-mail is plenty for a person who forgot their password.
+export const PASSWORD_RESET_WINDOW_MS = 60 * 60 * 1000;
+export const PASSWORD_RESET_MAX = 5;
+
+export const passwordResetRateLimit = createRateLimit({
+  name: "password-reset",
+  windowMs: PASSWORD_RESET_WINDOW_MS,
+  max: PASSWORD_RESET_MAX,
+  maxEnv: "PASSWORD_RESET_RATE_LIMIT",
+  keys: (req) => {
+    const keys = [`ip:${clientIp(req)}`];
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const id = typeof body["identifier"] === "string" ? body["identifier"].trim().toLowerCase() : "";
+    if (id) keys.push(`email:${id}`);
+    return keys;
+  },
+  message: "Too many password-reset requests. Wait an hour and try again.",
+});
+
 // ── Self-registration of admin identities ───────────────────────────────────
 // `POST /auth/user/emailpass/register` lets anyone create an auth identity for
 // the `user` actor. Alone it cannot open the panel (a `user` row is still
@@ -134,6 +156,14 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "node_env.production", ok: production, detail: env.NODE_ENV || "" });
   checks.push({ key: "security.strict_mode", ok: env.SECURITY_STRICT === "1" });
   checks.push({ key: "auth.self_register_blocked", ok: env.ADMIN_SELF_REGISTER !== "1" });
+  checks.push({
+    key: "auth.password_reset_rate_limit",
+    ok: true,
+    detail: `${Number(env.PASSWORD_RESET_RATE_LIMIT) > 0 ? env.PASSWORD_RESET_RATE_LIMIT : PASSWORD_RESET_MAX}/h`,
+  });
+  // docker-entrypoint.sh sets this when `db:migrate` failed at boot: the server
+  // is up on an old schema and the routes that needed the change will 500.
+  checks.push({ key: "db.migrations_applied", ok: env.MEDUSA_MIGRATE_STATUS !== "failed", detail: env.MEDUSA_MIGRATE_STATUS || "" });
   checks.push({
     key: "auth.login_rate_limit",
     ok: true,

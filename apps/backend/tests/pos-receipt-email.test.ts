@@ -10,7 +10,7 @@ const rx: PrescriptionForEmail = {
 
 const doc = {
   kind: "receipt",
-  business: { name: "RUBI LENS", legal_name: "RUBI", url: "https://x", support_email: null },
+  business: { name: "RUBI LENS", legal_name: "RUBI", url: "https://x", support_email: null, timezone: "America/Chicago" },
   store: { code: "Op1", name: "Tienda Norte", address: "1 Main St", phone: "+1 713 555 0100", receipt_note: null },
   terminal: { code: "Op1-POS1", receipt_locale: "es", ticket_locale: "en" },
   sale: { id: "s1", number: "Op1-000001", created_at: "2026-10-01T15:00:00Z", updated_at: "2026-10-01T15:00:00Z", promised_on: "2026-10-15", seller_code: "ANA", tray: "Op1-3", status: "completed", voided_at: null, delivery: "pickup" },
@@ -93,5 +93,34 @@ describe("the simple receipt email, the default", () => {
     expect(r.html).toContain("no incluye los valores de tu receta");
     expect(r.text).toContain("no incluye los valores de tu receta");
     expect(renderReceiptEmail(doc, "en").html).toContain("does not include your prescription values");
+  });
+});
+
+describe("dates and money on the receipt", () => {
+  it("shows the sale's time in the store's timezone, not the server's (UTC)", () => {
+    // 2026-10-01T23:30Z is 6:30 pm in Chicago (CDT) — still October 1st there.
+    const evening = { ...doc, sale: { ...doc.sale, created_at: "2026-10-01T23:30:00Z" } } as SaleDocument;
+    const es = renderReceiptEmail(evening, "es");
+    expect(es.text).toMatch(/1 oct 2026, 6:30\s?p\.?\s?m\.?/i);
+    expect(es.text).not.toContain("2 oct");
+    const en = renderReceiptEmail(evening, "en");
+    expect(en.text).toMatch(/Oct 1, 2026, 6:30\s?PM/);
+  });
+
+  it("prints list prices per line, then subtotal, discount and total once", () => {
+    const es = renderReceiptEmail(doc, "es");
+    // Lines at list price (166 + 80 = 260), subtotal 260, −14 discount, total 246.
+    expect(es.text).toContain("Di Caprio 407 · Negro: $166.00");
+    expect(es.text).toContain("Subtotal (precio de lista): $260.00");
+    expect(es.text).toContain("Descuento 5 %: −$14.00");
+    expect(es.text).toContain("Total: $246.00");
+    const idxSub = es.text.indexOf("Subtotal"), idxDisc = es.text.indexOf("Descuento"), idxTot = es.text.indexOf("Total: $246");
+    expect(idxSub).toBeLessThan(idxDisc);
+    expect(idxDisc).toBeLessThan(idxTot);
+  });
+
+  it("without discount or tax there is no subtotal row", () => {
+    const plain = { ...doc, totals: { ...doc.totals!, discount: 0, discount_pct: 0, list: 246 } } as SaleDocument;
+    expect(renderReceiptEmail(plain, "es").text).not.toContain("Subtotal");
   });
 });

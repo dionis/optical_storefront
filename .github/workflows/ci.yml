@@ -66,6 +66,12 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @eyewear/shared build
 
+      # The production image runs `medusa build` (apps/backend/Dockerfile); a
+      # backend that only boots under `medusa develop` can still fail to build.
+      - name: Production build compiles
+        working-directory: apps/backend
+        run: npx medusa build
+
       - name: Run every module migration
         working-directory: apps/backend
         run: npx medusa db:migrate
@@ -153,7 +159,9 @@ jobs:
   deploy:
     name: Deploy to Coolify
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, test-backend, test-scraper]
+    # A backend that does not migrate and boot on a clean database, or a
+    # storefront wired to the wrong backend, must not reach production.
+    needs: [check-config, backend-boot, lint-typecheck, test-backend, test-scraper]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Trigger Coolify deployment

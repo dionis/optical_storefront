@@ -81,7 +81,8 @@ export interface DocLine {
 
 export interface SaleDocument {
   kind: DocumentKind;
-  business: { name: string; legal_name: string; url: string; support_email: string | null };
+  /** `timezone`: the store's IANA zone; every date on a document is shown in it, never in the server's (UTC). */
+  business: { name: string; legal_name: string; url: string; support_email: string | null; timezone: string };
   store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null };
   /** `printer`: the till's printer as configured (free text such as "thermal 80mm" or "HP LaserJet"); null when unknown. */
   terminal: { code: string | null; receipt_locale: string; ticket_locale: string; printer: string | null };
@@ -270,7 +271,7 @@ export async function buildSaleDocument(
   const t = tenant();
   const base: SaleDocument = {
     kind,
-    business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail },
+    business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail, timezone: t.timezone },
     store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note },
     terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en", printer },
     sale: {

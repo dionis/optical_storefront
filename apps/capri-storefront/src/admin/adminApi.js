@@ -317,6 +317,41 @@ export async function verifyMfa(code) {
   }
 }
 
+/**
+ * Password recovery, step 1: asks the backend to e-mail a reset link. Always
+ * resolves ok (the server answers the same whether or not the address exists,
+ * so nobody can enumerate accounts); `rateLimited` when the cap was hit.
+ */
+export async function requestPasswordReset(email) {
+  const identifier = String(email || "").trim();
+  if (!identifier) return { ok: false, error: "adm.login.forgot.needEmail" };
+  try {
+    await call("/auth/user/emailpass/reset-password", { method: "POST", body: { identifier } });
+    return { ok: true };
+  } catch (error) {
+    if (error.reason === "offline") return { ok: false, error: "adm.err.offline" };
+    if (error.status === 429) return { ok: false, error: "adm.login.forgot.tooMany" };
+    // Medusa validates the body; anything else is still "we sent it if it exists".
+    return error.status >= 500 ? { ok: false, error: "adm.err.generic" } : { ok: true };
+  }
+}
+
+/**
+ * Password recovery, step 2: the token from the e-mail sets the new password
+ * (Medusa's `/auth/user/emailpass/update`, bearer = that token). On success the
+ * person is signed in with the new password right away.
+ */
+export async function completePasswordReset({ email, token, password }) {
+  try {
+    await call("/auth/user/emailpass/update", { method: "POST", token, body: { email: String(email || "").trim(), password } });
+  } catch (error) {
+    if (error.reason === "offline") return { ok: false, error: "adm.err.offline" };
+    if (error.status === 401 || error.status === 400) return { ok: false, error: "adm.login.forgot.badToken" };
+    return { ok: false, error: "adm.err.generic" };
+  }
+  return login(email, password);
+}
+
 export function logout() {
   pendingMfa = null;
   clearSession();

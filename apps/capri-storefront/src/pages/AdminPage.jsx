@@ -1,8 +1,9 @@
 // Dónde se usa: /admin — envoltorio del panel corporativo: login (fondo navy de marca), gate de primera contraseña y montaje del dashboard.
 import { TENANT } from "../config/tenant.js";
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout } from "../admin/adminAuth.js";
+import { requestPasswordReset, completePasswordReset } from "../admin/adminApi.js";
 import { isDemoLogin } from "../admin/adminAuth.js";
 import { fetchMe, changeOwnPassword, roleKey } from "../admin/adminTeam.js";
 import { fetchBackendFeatures } from "../admin/backendFeatures.js";
@@ -10,17 +11,50 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import AdminDashboard from "../admin/AdminDashboard.jsx";
 import "../admin/admin.css";
 
-function Login({ onOk }) {
+function Login({ onOk, note }) {
   const { t } = useLang();
+  const location = useLocation();
+  const navigate = useNavigate();
   // adminAuth returns dictionary keys, never prose — it has no language hook of
   // its own. Anything that is not a key falls through unchanged.
   const errText = (key) => (key ? t(key) : "");
-  const [user, setUser] = useState("");
+  // A recovery link (subscribers/auth-password-reset.ts) lands here with the
+  // token and the address in the URL: the form then asks for the new password.
+  const params = new URLSearchParams(location.search);
+  const resetToken = params.get("reset_token") || "";
+  const resetEmail = params.get("email") || "";
+  const [user, setUser] = useState(resetEmail);
   const [pass, setPass] = useState("");
+  const [again, setAgain] = useState("");
   const [otp, setOtp] = useState("");
-  const [stage, setStage] = useState("creds"); // 'creds' | 'otp'
-  const [err, setErr] = useState("");
+  // 'creds' | 'otp' | 'forgot' (ask for the e-mail) | 'sent' | 'reset' (new password from the link)
+  const [stage, setStage] = useState(resetToken ? "reset" : "creds");
+  // `note`: why the person is back at the login (a deactivated account, a
+  // session closed elsewhere) — shown until they try again.
+  const [err, setErr] = useState(note || "");
   const [busy, setBusy] = useState(false);
+
+  const submitForgot = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr("");
+    const r = await requestPasswordReset(user);
+    setBusy(false);
+    if (r.ok) setStage("sent"); else setErr(r.error || "adm.err.generic");
+  };
+  const submitReset = async (e) => {
+    e.preventDefault();
+    setErr("");
+    if (pass.length < 8) { setErr("adm.err.team.weak_password"); return; }
+    if (pass !== again) { setErr("adm.team.gate.mismatch"); return; }
+    setBusy(true);
+    const r = await completePasswordReset({ email: user, token: resetToken, password: pass });
+    setBusy(false);
+    if (r.ok) {
+      // The token is spent: drop it from the address bar before the panel mounts.
+      navigate(location.pathname, { replace: true });
+      if (r.twofa || r.mfa) setStage("otp"); else onOk();
+    } else setErr(r.error || "adm.err.generic");
+  };
 
   const submitCreds = async (e) => {
     e.preventDefault();
@@ -50,7 +84,37 @@ function Login({ onOk }) {
           <label>{t("adm.login.pass")}<input type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" /></label>
           {err && <div className="adm-login-err">{errText(err)}</div>}
           <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.login.checking") : t("adm.login.submit")}</button>
+          <button type="button" className="adm-back" onClick={() => { setStage("forgot"); setErr(""); }}>{t("adm.login.forgot.link")}</button>
           <Link to="/" className="adm-back">{t("adm.login.back")}</Link>
+        </form>
+      ) : stage === "forgot" ? (
+        <form className="adm-login-card" onSubmit={submitForgot}>
+          <img src={TENANT.logo} alt={TENANT.name} className="adm-login-logo" />
+          <h1>{t("adm.login.forgot.title")}</h1>
+          <p className="muted">{t("adm.login.forgot.sub")}</p>
+          <label>{t("adm.login.email")}<input type="email" autoFocus value={user} placeholder={t("adm.login.emailPh")} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
+          {err && <div className="adm-login-err">{errText(err)}</div>}
+          <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.login.checking") : t("adm.login.forgot.send")}</button>
+          <button type="button" className="adm-back" onClick={() => { setStage("creds"); setErr(""); }}>{t("adm.login.forgot.backToLogin")}</button>
+        </form>
+      ) : stage === "sent" ? (
+        <div className="adm-login-card">
+          <img src={TENANT.logo} alt={TENANT.name} className="adm-login-logo" />
+          <h1>{t("adm.login.forgot.sentTitle")}</h1>
+          <p className="muted">{t("adm.login.forgot.sentSub", { email: user })}</p>
+          <button type="button" className="btn btn-primary big" onClick={() => { setStage("creds"); setErr(""); }}>{t("adm.login.forgot.backToLogin")}</button>
+        </div>
+      ) : stage === "reset" ? (
+        <form className="adm-login-card" onSubmit={submitReset}>
+          <img src={TENANT.logo} alt={TENANT.name} className="adm-login-logo" />
+          <h1>{t("adm.login.forgot.resetTitle")}</h1>
+          <p className="muted">{t("adm.login.forgot.resetSub")}</p>
+          <label>{t("adm.login.email")}<input type="email" value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
+          <label>{t("adm.team.gate.new")}<input type="password" autoFocus value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" /></label>
+          <label>{t("adm.team.gate.again")}<input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></label>
+          {err && <div className="adm-login-err">{errText(err)}</div>}
+          <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.login.checking") : t("adm.team.gate.save")}</button>
+          <button type="button" className="adm-back" onClick={() => { navigate(location.pathname, { replace: true }); setStage("creds"); setErr(""); }}>{t("adm.login.forgot.backToLogin")}</button>
         </form>
       ) : (
         <form className="adm-login-card" onSubmit={submitOtp}>
@@ -140,6 +204,8 @@ export default function AdminPage() {
   // What the backend supports (admin/backendFeatures.js); null while asking, so the
   // panel never flashes tabs the backend cannot serve.
   const [features, setFeatures] = useState(null);
+  // Reason the session was dropped by the server (lib/staff-guard.ts), for the login screen.
+  const [loginNote, setLoginNote] = useState("");
 
   useEffect(() => {
     if (!session) return undefined;
@@ -154,13 +220,22 @@ export default function AdminPage() {
     let on = true;
     fetchMe()
       .then((r) => { if (on) { setMe(r || null); setMustChange(Boolean(r && r.must_change_password)); } })
-      .catch(() => { if (on) setMustChange(false); }); // la API puede no estar desplegada aún
+      .catch((e) => {
+        if (!on) return;
+        // A deactivated account or a session closed from elsewhere: back to the
+        // login with the reason; anything else is tolerated (older API).
+        if (e && (e.reason === "disabled" || e.reason === "session_revoked" || e.status === 401)) {
+          logout(); setSession(null); setMe(null); setLoginNote(e.reason === "disabled" ? "adm.err.disabled" : "adm.err.session_revoked");
+          return;
+        }
+        setMustChange(false);
+      });
     return () => { on = false; };
   }, [session]);
 
   const signOut = () => { logout(); setSession(null); setMe(null); };
 
-  if (!session) return <Login onOk={() => { setMustChange(null); setSession(getSession()); }} />;
+  if (!session) return <Login note={loginNote} onOk={() => { setLoginNote(""); setMustChange(null); setSession(getSession()); }} />;
   if (mustChange === null || features === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
   if (mustChange) return <FirstPasswordGate onDone={() => setMustChange(false)} />;
   // `is_admin` ausente = backend anterior a los roles: se comporta como antes.

@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../lib/audit";
+import { revokeSessions } from "../../../../lib/session-control";
 
 /**
  * POST /admin/team/password — el admin AUTENTICADO cambia SU contraseña.
@@ -61,6 +62,10 @@ export async function POST(
   await users.updateUsers({ id: me.id, metadata });
 
   await recordAudit(req.scope, { actorId, action: "password.change", entity: "user", entityId: me.id });
+  // Every other device is signed out: a stolen or forgotten session does not
+  // survive the new password. The panel signs in again with it right away
+  // (adminTeam.js changeOwnPassword), so the person does not notice.
+  await revokeSessions(req.scope, { userId: me.id, actorId, reason: "password_changed" });
   logger.info(`[team] ${me.email} changed their password`);
-  res.json({ ok: true });
+  res.json({ ok: true, sessions_revoked: true });
 }

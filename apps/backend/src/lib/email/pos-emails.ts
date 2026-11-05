@@ -60,7 +60,7 @@ const COPY = {
     receipt_brand: "Marca",
     receipt_size: "Medida",
     receipt_frame_only: "Solo montura",
-    receipt_list: "Precio de lista",
+    receipt_list: "Subtotal (precio de lista)",
     receipt_items: "Tu compra",
     receipt_keep_rx: "Este correo incluye los datos de tu receta: guárdalo y compártelo solo con quien tú decidas.",
     receipt_no_rx: "Por privacidad, este recibo no incluye los valores de tu receta. Si los necesitas, pídelos en la tienda.",
@@ -118,7 +118,7 @@ const COPY = {
     receipt_brand: "Brand",
     receipt_size: "Size",
     receipt_frame_only: "Frame only",
-    receipt_list: "List price",
+    receipt_list: "Subtotal (list price)",
     receipt_items: "Your purchase",
     receipt_keep_rx: "This email includes your prescription: keep it, and share it only with whom you choose.",
     receipt_no_rx: "For your privacy, this receipt does not include your prescription values. Ask at the store if you need them.",
@@ -228,7 +228,9 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
   const storeLabel = `${doc.business.name} · ${doc.store.name}`;
   const subject = posT(locale, "receipt_subject", { number: doc.sale.number, store: doc.store.name });
   const intro = posT(locale, "receipt_intro", { store: storeLabel });
-  const when = new Date(doc.sale.created_at).toLocaleString(locale === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" });
+  // In the store's timezone: the server clock is UTC and a 6 pm sale in Texas
+  // would otherwise read as midnight of the next day.
+  const when = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "es-US", { timeZone: doc.business.timezone || "UTC", dateStyle: "medium", timeStyle: "short" }).format(new Date(doc.sale.created_at));
   const lbl = (b: { es: string; en: string } | null) => (b ? b[locale] : "");
   const detailed = extras.detailed === true;
   const lines = (doc.lines ?? []).map((l, i) => {
@@ -237,8 +239,11 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
     const size = l.frame?.eye_size ? [l.frame.eye_size, l.frame.bridge].filter(Boolean).join("-") : "";
     const specs = [l.sku && `${posT(locale, "receipt_code")}: ${l.sku}`, l.frame?.brand && `${posT(locale, "receipt_brand")}: ${l.frame.brand}`, size && `${posT(locale, "receipt_size")}: ${size}`].filter(Boolean).join(" · ");
     const parts = [l.kind === "frame" && l.frame_price > 0 && `${posT(locale, "receipt_frame")}: ${money(l.frame_price, locale)}`, l.lens_price > 0 && `${posT(locale, "receipt_lenses")}: ${money(l.lens_price, locale)}`, l.tax_amount > 0 && `${posT(locale, "receipt_tax")}: ${money(l.tax_amount, locale)}`].filter(Boolean).join(" · ");
-    if (!detailed) return { name, lens, specs: "", parts: "", price: l.unit_price, image: null, cid: null };
-    return { name, lens: lens || (l.design_code === "frame-only" ? posT(locale, "receipt_frame_only") : ""), specs, parts, price: l.unit_price, image: l.image_url ?? null, cid: extras.itemImages?.[i]?.cid ?? null };
+    // Each line shows its LIST price: the lines add up to the subtotal, then the
+    // discount and the tax are taken once, visibly. (Showing the already
+    // discounted price and then "−discount" again read as a double discount.)
+    if (!detailed) return { name, lens, specs: "", parts: "", price: l.list, image: null, cid: null };
+    return { name, lens: lens || (l.design_code === "frame-only" ? posT(locale, "receipt_frame_only") : ""), specs, parts, price: l.list, image: l.image_url ?? null, cid: extras.itemImages?.[i]?.cid ?? null };
   });
   // The shared prescription block, fed with this sale's lines.
   const orderLike = {
@@ -277,7 +282,7 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
     ${detailed ? `<div style="margin-top:18px;font-size:15px;font-weight:800;color:#0b2f66">${esc(posT(locale, "receipt_items"))}</div>` : ""}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:${detailed ? 6 : 16}px">${itemRows}</table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px">
-      ${detailed && tot.discount > 0 ? sum(posT(locale, "receipt_list"), money(tot.list, locale)) : ""}
+      ${tot.discount > 0 || tot.tax > 0 ? sum(posT(locale, "receipt_list"), money(tot.list, locale)) : ""}
       ${tot.discount > 0 ? sum(posT(locale, "receipt_discount", { pct: tot.discount_pct }), `−${money(tot.discount, locale)}`) : ""}
       ${tot.tax > 0 ? sum(posT(locale, "receipt_tax"), money(tot.tax, locale)) : ""}
       ${sum(posT(locale, "receipt_total"), money(tot.total, locale), true)}
@@ -307,7 +312,9 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
       "",
       ...lines.flatMap((l) => [`${l.name}: ${money(l.price, locale)}`, ...[l.specs, l.lens, l.parts].filter(Boolean).map((x) => `  ${x}`)]),
       "",
+      ...(tot.discount > 0 || tot.tax > 0 ? [`${posT(locale, "receipt_list")}: ${money(tot.list, locale)}`] : []),
       ...(tot.discount > 0 ? [`${posT(locale, "receipt_discount", { pct: tot.discount_pct })}: −${money(tot.discount, locale)}`] : []),
+      ...(tot.tax > 0 ? [`${posT(locale, "receipt_tax")}: ${money(tot.tax, locale)}`] : []),
       `${posT(locale, "receipt_total")}: ${money(tot.total, locale)}`,
       ...pays.map((p) => `${p.label}: ${money(p.amount, locale)}`),
       `${posT(locale, "receipt_balance")}: ${money(tot.balance, locale)}`,

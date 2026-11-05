@@ -51,6 +51,8 @@ import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
 import { TENANT } from "../config/tenant.js";
 import { useCatalog } from "../data/catalogStore.js";
+import { supplierPriceFor } from "../data/products.js";
+import { FRAME_MARKUP } from "../config/features.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -415,7 +417,7 @@ function Prices({ preQ }) {
       <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
         <div className="adm-pp-left">
           <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{p.supplierPrice ? `${t("adm.prices.supplier")} ${money(p.supplierPrice)} × ${p.markup || 3} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
+          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{supplierPriceFor(p.sku) ? `${t("adm.prices.supplier")} ${money(supplierPriceFor(p.sku))} × ${FRAME_MARKUP} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
         </div>
         <div className="adm-pp-right">
           {ev === 0
@@ -1065,9 +1067,13 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   useEffect(() => {
     if (!canSeeAi) return undefined;
     let alive = true;
-    const read = () => fetchAiStatus().then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); }).catch(() => {});
+    // A 404 means the backend does not have the AI-usage module yet (older
+    // deploy): stop asking instead of logging a failed request every 10 min.
+    const id = setInterval(() => read(), 600000);
+    const read = () => fetchAiStatus()
+      .then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); })
+      .catch((e) => { if (e?.status === 404) clearInterval(id); });
     read();
-    const id = setInterval(read, 600000);
     return () => { alive = false; clearInterval(id); };
   }, [canSeeAi, nav.tab]);
 

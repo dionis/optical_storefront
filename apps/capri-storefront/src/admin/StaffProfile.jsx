@@ -7,7 +7,8 @@ import { formatAddressLine } from "../data/addressAutocomplete.js";
 import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
-import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile } from "./adminTeam.js";
+import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile, signMeOutEverywhere } from "./adminTeam.js";
+import { logout } from "./adminAuth.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
 
@@ -146,10 +147,27 @@ const GROUPS = [
 /** Mi contraseña, cuando la persona quiera: pide la actual. Formulario propio, separado de los datos del perfil. */
 function OwnPassword() {
   const { t } = useLang();
-  const { toast } = useFeedback();
+  const { toast, confirm } = useFeedback();
   const [f, setF] = useState({ current: "", next: "", again: "" });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
+  // Every device, this one included: the server refuses the old tokens and the
+  // panel returns to the login on purpose (a forgotten open session elsewhere
+  // is exactly what this closes).
+  const signOutAll = async () => {
+    if (busy) return;
+    const ok = await confirm({ tone: "danger", title: t("adm.profile.sessions.confirmTitle"), message: t("adm.profile.sessions.confirmBody") });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await signMeOutEverywhere();
+      logout();
+      window.location.reload();
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+      setBusy(false);
+    }
+  };
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -176,7 +194,11 @@ function OwnPassword() {
       </fieldset>
       <div className="adm-profile-actions">
         <button className="btn-sm primary" disabled={busy}><Icon name="lock" size={14} /> {busy ? "…" : t("adm.profile.pw.save")}</button>
+        <button type="button" className="btn-sm" disabled={busy} onClick={signOutAll} title={t("adm.profile.sessions.help")}>
+          <Icon name="logout" size={14} /> {t("adm.profile.sessions.all")}
+        </button>
       </div>
+      <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{t("adm.profile.sessions.help")}</p>
     </form>
   );
 }

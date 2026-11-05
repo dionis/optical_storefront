@@ -22,8 +22,16 @@ set -e
 
 cd /app/apps/backend/.medusa/server
 # Non-blocking: a migration failure must never take the whole deploy down with
-# it (see the Dockerfile's own note on this line's history).
-/app/apps/backend/node_modules/.bin/medusa db:migrate || echo "[deploy] db:migrate fallo; arrancando de todos modos"
+# it (see the Dockerfile's own note on this line's history). It is NOT silent
+# either: the status travels to `GET /version` ("migrations": "failed") so the
+# panel's Security tab and whoever deploys can see it, instead of discovering
+# it through 500s on the routes that needed the new columns.
+if /app/apps/backend/node_modules/.bin/medusa db:migrate; then
+  export MEDUSA_MIGRATE_STATUS=ok
+else
+  echo "[deploy] db:migrate FAILED; starting anyway — GET /version reports migrations=failed. Run the migration by hand and redeploy." >&2
+  export MEDUSA_MIGRATE_STATUS=failed
+fi
 
 # exec replaces this shell with Medusa as PID 1, so Coolify/Docker's SIGTERM
 # on stop reaches Medusa directly for a clean shutdown instead of being

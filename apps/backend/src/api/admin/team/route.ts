@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { sessionControlFrom } from "../../../lib/session-control";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
 import { profilesByUser } from "../../../lib/staff-profile-data";
 import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
@@ -34,6 +35,8 @@ export interface TeamMember {
   created_at: string;
   is_super: boolean;
   must_change_password: boolean;
+  /** Cuenta desactivada sin borrar (lib/session-control.ts): no puede entrar; sus datos siguen. */
+  disabled_at: string | null;
   /** null = sus roles están todos desactivados: sin acceso. */
   role: StaffRole | null;
   /** Admin anterior a los roles, que conserva su acceso como superadmin. */
@@ -78,6 +81,7 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
       created_at: String(u.created_at),
       is_super: i === 0,
       must_change_password: Boolean((u.metadata as Record<string, unknown> | null)?.["must_change_password"]),
+      disabled_at: sessionControlFrom(u.metadata as Record<string, unknown> | null).disabled_at,
       role: resolved.role,
       role_legacy: resolved.legacy,
       establishment_ids: resolved.establishment_ids,

@@ -18,11 +18,14 @@ import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
 import { computeLensBreakdown } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
-import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
+import { LAB_BUSINESS_DAYS } from "./order-status";
+import { tenant } from "./tenant";
 import {
   discountLine,
+  localYear,
   lowestFreeTray,
   nextTerminalCode,
+  promisedDate,
   rxNumber,
   saleNumber,
   type CleanedPayments,
@@ -480,7 +483,9 @@ export function checkPrescriptions(
 }
 
 async function nextRxNumber(container: MedusaContainer, now = new Date()): Promise<string> {
-  const year = now.getUTCFullYear();
+  // The store's year, not the server's: on New Year's Eve the till is still in
+  // the old year while the UTC clock already turned.
+  const year = localYear(now, tenant().timezone);
   const res = await pgOf(container).raw(
     `INSERT INTO rx_sequence (year, last_value) VALUES (?, 1)
      ON CONFLICT (year) DO UPDATE SET last_value = rx_sequence.last_value + 1
@@ -1063,9 +1068,7 @@ export async function createPosSale(container: MedusaContainer, input: CreateSal
 }
 
 async function recordSale(container: MedusaContainer, input: CreateSaleInput): Promise<CreatedSale> {
-  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
-  const { store, customer, quote } = input;
+  const { store, quote } = input;
   if (!store.sales_channel_id) throw new PosError("store_without_channel", 409);
 
   // Every query here is a round trip to the database (~45 ms from the server
@@ -1077,6 +1080,42 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     input.needsApproval && input.approvalId ? getApproval(container, input.approvalId) : Promise.resolve(null),
   ]);
   if (input.needsApproval) assertApprovalFits(approval, store, quote);
+  // One approval, one sale: it is taken *now*, atomically, so two tills (or a
+  // double submit) cannot both sell against the same approved discount. The
+  // row is handed back if the sale fails below, and linked to the sale once
+  // the sale exists.
+  if (approval) await claimApproval(container, approval.id);
+  try {
+    return await writeSale(container, input, { regionId, approval });
+  } catch (e) {
+    if (approval) await releaseApproval(container, approval.id).catch(() => undefined);
+    throw e;
+  }
+}
+
+/** `approved` → `used` only if still `approved`; anything else means someone got there first. */
+async function claimApproval(container: MedusaContainer, id: string): Promise<void> {
+  const res = (await pgOf(container).raw(
+    `UPDATE discount_approval SET status = 'used', updated_at = now() WHERE id = ? AND status = 'approved' RETURNING id`,
+    [id]
+  )) as { rowCount?: number; rows?: unknown[] };
+  if (!(res.rows?.length ?? res.rowCount ?? 0)) throw new PosError("approval_used", 409);
+}
+
+/** Undo `claimApproval` when the sale did not happen (the approval is still valid). */
+async function releaseApproval(container: MedusaContainer, id: string): Promise<void> {
+  await pgOf(container).raw(`UPDATE discount_approval SET status = 'approved', sale_id = NULL, updated_at = now() WHERE id = ? AND status = 'used' AND sale_id IS NULL`, [id]);
+}
+
+async function writeSale(
+  container: MedusaContainer,
+  input: CreateSaleInput,
+  ctx: { regionId: string; approval: ApprovalRow | null }
+): Promise<CreatedSale> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { store, customer, quote } = input;
+  const { regionId, approval } = ctx;
 
   // The prescription needs the customer; the photos of frames the customer
   // brought (private bucket, they travel with the lab ticket to the main
@@ -1193,7 +1232,9 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   const seq = await nextSaleSeq(container, store.id);
   const number = saleNumber(store.code, seq);
   const withLenses = quote.lines.some((l) => l.lens_category);
-  const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
+  // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
+  // there although the UTC date has already moved on (lib/pos.ts).
+  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const svc = pos(container);
   const p = input.payments;
   const sale = await svc.createPosSales({
@@ -1230,7 +1271,8 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
         })
       : Promise.resolve(null),
     writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
-    approval ? svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never) : Promise.resolve(),
+    // Already `used` (claimed before any write); only the link to the sale is new.
+    approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
   ]);
 
   // The order board, the Sheet and the emails show the store's number and the
@@ -1539,8 +1581,36 @@ export async function voidSale(
   reason: VoidReason,
   note: string | null
 ): Promise<{ sale: SaleRow; order_canceled: boolean }> {
-  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  // A void writes refunds: two confirmations of the same sale (a double click,
+  // two managers at once) must never refund twice. Only one void of a sale
+  // runs at a time, and it re-reads the sale once it holds the turn.
+  const running = voiding.get(sale.id);
+  if (running) throw new PosError("sale_voided", 409);
+  const work = (async () => {
+    const fresh = (await getSale(container, sale.id)) ?? sale;
+    if (fresh.status === "voided") throw new PosError("sale_voided", 409);
+    return doVoidSale(container, fresh, actorId, reason, note);
+  })();
+  voiding.set(sale.id, work);
+  try {
+    return await work;
+  } finally {
+    voiding.delete(sale.id);
+  }
+}
+
+/** Voids in flight, by sale id (one server process; the till talks to one). */
+const voiding = new Map<string, Promise<{ sale: SaleRow; order_canceled: boolean }>>();
+
+async function doVoidSale(
+  container: MedusaContainer,
+  sale: SaleRow,
+  actorId: string,
+  reason: VoidReason,
+  note: string | null
+): Promise<{ sale: SaleRow; order_canceled: boolean }> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const svc = pos(container);
   let orderCanceled = false;
   if (sale.order_id) {

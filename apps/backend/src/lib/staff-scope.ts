@@ -7,6 +7,7 @@ import type SellerModuleService from "../modules/seller/service";
 import type { CounterSeller } from "./pos";
 import { recordAudit } from "./audit";
 import { profilesByUser } from "./staff-profile-data";
+import { sessionControlFrom } from "./session-control";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
@@ -35,6 +36,9 @@ export interface StaffScope extends ResolvedRole {
    * It fixes the store and the one till they sell from (pos.ts sellerTillProblem).
    */
   seller?: CounterSeller | null;
+  /** Session control marks from the user's metadata (lib/session-control.ts); the guard enforces them. */
+  sessions_revoked_at: string | null;
+  disabled_at: string | null;
 }
 
 /** Live seller record linked to a panel user, or null. */
@@ -136,11 +140,14 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
   const hit = cache.get(userId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.scope;
 
-  const [ownerId, byUser, profiles] = await Promise.all([
+  const users = container.resolve<IUserModuleService>(Modules.USER);
+  const [ownerId, byUser, profiles, user] = await Promise.all([
     ownerUserId(container),
     assignmentsByUser(container, [userId]),
     profilesByUser(container, [userId]),
+    users.retrieveUser(userId, { select: ["id", "metadata"] }).catch(() => null),
   ]);
+  const control = sessionControlFrom((user?.metadata as Record<string, unknown> | null) ?? null);
   const profile = profiles.get(userId);
   const isOwner = ownerId === userId;
   const resolved = resolveRole({ isOwner, assignments: byUser.get(userId) ?? [] });
@@ -154,6 +161,8 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
     // The seller record's code identifies a counter seller when the profile has none.
     seller_code: profile?.seller_code ?? seller?.code ?? null,
     seller,
+    sessions_revoked_at: control.sessions_revoked_at,
+    disabled_at: control.disabled_at,
   };
   cache.set(userId, { at: Date.now(), scope });
   return scope;

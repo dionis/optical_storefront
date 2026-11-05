@@ -85,7 +85,9 @@ function hash(str) {
 // Precio base del proveedor (costo antes del markup).
 // Usa el listado REAL de Capri Optics (capriPrices.js); si el SKU no está en la
 // tabla, cae al hash determinístico anterior como último respaldo.
-function supplierPriceFor(sku) {
+// Exported for the owner's pricing panel only; the public product objects no
+// longer carry the supplier cost (see enrichProducts).
+export function supplierPriceFor(sku) {
   const real = capriPrice(sku);
   if (real != null) return real;
   // Respaldo para SKUs no listados en la hoja de Capri
@@ -122,8 +124,11 @@ export function enrichProducts(list) {
       slug: String(p.sku).toLowerCase().replace(/[^a-z0-9]+/g, ""),
       price: applyFrame(p.sku, priceFor(p.sku)),
       basePrice: priceFor(p.sku),
-      supplierPrice: supplierPriceFor(p.sku),
-      markup: FRAME_MARKUP,
+      // No `supplierPrice`/`markup` here: these objects feed the public catalog
+      // (and `window`-level state any visitor can read). The owner's pricing
+      // panel asks supplierPriceFor() itself. The retail rule (cost × markup)
+      // is still a storefront convention until prices come only from Medusa
+      // (VITE_USE_MEDUSA); see docs/SEGURIDAD-PRECIOS.md.
       rating: ratingFor(p.sku),
       reviews: reviewsFor(p.sku),
       colors: p.colors.map((c) => ({ ...c, hex: c.hex || hexFor(c.name) })),

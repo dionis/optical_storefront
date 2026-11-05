@@ -6,7 +6,7 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, setActive, signOutEverywhere } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -227,6 +227,37 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
+  // Desactivar sin borrar: la persona no puede entrar, pero sus ventas, roles y
+  // auditoría quedan; reactivar devuelve la misma cuenta. Mismos vetos que borrar.
+  const toggleActive = async (m) => {
+    const deactivating = !m.disabled_at;
+    if (deactivating) {
+      const ok = await confirm({ tone: "danger", title: t("adm.team.deactivateConfirm", { email: m.email }), message: t("adm.team.deactivateBody") });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      const r = await setActive(m.id, !deactivating);
+      setTeam(r.team || []);
+      toast({ tone: "success", title: t(deactivating ? "adm.team.deactivated" : "adm.team.reactivated", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  // Cierre de sesión remoto: sus pestañas abiertas quedan fuera en la siguiente petición.
+  const kickSessions = async (m) => {
+    const ok = await confirm({ title: t("adm.team.sessions.confirm", { email: m.email }), message: t("adm.team.sessions.body") });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await signOutEverywhere(m.id);
+      toast({ tone: "success", title: t("adm.team.sessions.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
   const changeStores = async (m, ids) => {
     setBusy(true);
     try {
@@ -317,6 +348,7 @@ export default function Team() {
               {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
+              {m.disabled_at && <span className="adm-team-tag legacy" title={shortDate(m.disabled_at, lang)}>{t("adm.team.disabledTag")}</span>}
               {m.role_legacy && <span className="adm-team-tag legacy" title={t("adm.team.roleLegacy")}>{t("adm.team.roleLegacyTag")}</span>}
               {canEditRole(m) ? (
                 <select className="adm-team-role" aria-label={t("adm.team.role")} title={t("adm.team.role")}
@@ -340,9 +372,17 @@ export default function Team() {
                 <StorePicker member={m} stores={stores} disabled={busy || demo} onSave={(ids) => changeStores(m, ids)} />
               )}
               {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
-                <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>
-                  {t("adm.team.delete")}
-                </button>
+                <>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => toggleActive(m)} title={t(m.disabled_at ? "adm.team.reactivateHelp" : "adm.team.deactivateHelp")}>
+                    <Icon name={m.disabled_at ? "check" : "power"} size={12} /> {t(m.disabled_at ? "adm.team.reactivate" : "adm.team.deactivate")}
+                  </button>
+                  <button className="btn-xs" disabled={busy || demo} onClick={() => kickSessions(m)} title={t("adm.team.sessions.help")}>
+                    <Icon name="logout" size={12} /> {t("adm.team.sessions.kick")}
+                  </button>
+                  <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>
+                    {t("adm.team.delete")}
+                  </button>
+                </>
               )}
               {!demo && m.id !== meId && (
                 <button className="btn-xs" aria-expanded={pwFor === m.id} onClick={() => { setPwValue(""); setPwFor((o) => (o === m.id ? null : m.id)); }}>

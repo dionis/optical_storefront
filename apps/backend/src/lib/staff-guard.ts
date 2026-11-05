@@ -3,6 +3,7 @@ import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { isAllowedForRestrictedRole } from "./staff-roles";
 import { getStaffScope } from "./staff-scope";
+import { sessionRejected, tokenIssuedAt } from "./session-control";
 
 /**
  * Role gate for every /admin route, ours and Medusa's.
@@ -37,6 +38,15 @@ export async function staffGuard(
       .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
       .error(`[staff-guard] could not resolve role for ${ctx.actor_id}: ${(error as Error).message}`);
     res.status(503).json({ type: "unexpected_state", reason: "scope_unavailable", message: "Could not resolve the user's role." });
+    return;
+  }
+
+  // Deactivated person, or a token older than their last "log out everywhere"
+  // (password change, remote logout): refused before any role check, admins
+  // included. 401 makes the panel drop its session and show the login.
+  const rejected = sessionRejected(scope, tokenIssuedAt(req.get("authorization")));
+  if (rejected) {
+    res.status(rejected === "disabled" ? 403 : 401).json({ type: "not_allowed", reason: rejected, message: rejected === "disabled" ? "This account is deactivated." : "This session was signed out; sign in again." });
     return;
   }
 

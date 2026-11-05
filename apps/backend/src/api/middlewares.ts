@@ -6,7 +6,7 @@ import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
-import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
+import { adminLoginRateLimit, blockAdminSelfRegister, passwordResetRateLimit, securityHeaders } from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { staffGuard } from "../lib/staff-guard";
 
@@ -224,6 +224,14 @@ export default defineMiddlewares({
       matcher: "/auth/user/emailpass",
       method: ["POST"],
       middlewares: [adminLoginRateLimit],
+    },
+    {
+      // Password recovery: one e-mail per call, so it is capped per IP and per
+      // address (lib/security.ts). The link is delivered by
+      // subscribers/auth-password-reset.ts.
+      matcher: "/auth/user/emailpass/reset-password",
+      method: ["POST"],
+      middlewares: [passwordResetRateLimit],
     },
     {
       // Nobody self-registers an admin identity here (admins are created with
