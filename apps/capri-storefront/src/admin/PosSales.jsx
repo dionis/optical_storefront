@@ -19,7 +19,7 @@
 // sin esperar a nada. La segunda llamada, GET /admin/sales-analytics/sales
 // (useSaleDetails), queda SOLO para la economía de la venta: costo, comisión,
 // ganancia y margen, que viven en la analítica y solo las ve quien puede.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { adminFetch } from "./adminApi.js";
@@ -111,13 +111,16 @@ export function mergeSaleDetails(s, d) {
   };
 }
 
-/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
-export default function PosSales({ me }) {
+/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS.
+ *  `params.number` (de la URL, `?tab=possales&number=Op2-000147`) precarga el filtro por número y abre esa
+ *  venta: es el enlace que llevan los avisos por correo (p. ej. «anulación solicitada»). */
+export default function PosSales({ me, params }) {
   const { t, lang } = useLang();
   const [ctx, setCtx] = useState(null);
   const [sales, setSales] = useState([]);
   const [state, setState] = useState("loading");
-  const [f, setF] = useState({ terminal: "", with_balance: false, status: "", number: "" });
+  const linkedNumber = String(params?.number || "").trim();
+  const [f, setF] = useState({ terminal: "", with_balance: false, status: "", number: linkedNumber });
   // La tienda la decide el filtro global del panel (StoreFilter); la online no tiene ventas de mostrador.
   const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
   const { storeId, isAll, isWeb } = useStoreFilter(who);
@@ -128,6 +131,13 @@ export default function PosSales({ me }) {
   const [tick, setTick] = useState(0);
   // La ficha de la venta (cajón lateral): abrirla no cambia la lista; cobrar/entregar/anular la refresca.
   const sp = useSalePanel({ me: who, ctx, onChanged: () => setTick((n) => n + 1) });
+  // Llegó por enlace con número: en cuanto la lista trae esa venta, se abre su ficha (una sola vez).
+  const openedLink = useRef("");
+  useEffect(() => {
+    if (!linkedNumber || openedLink.current === linkedNumber) return;
+    const hit = sales.find((s) => String(s.number) === linkedNumber);
+    if (hit) { openedLink.current = linkedNumber; sp.open(hit.id); }
+  }, [linkedNumber, sales, sp]);
 
   useEffect(() => { posContext().then(setCtx).catch(() => setState("error")); }, []);
   useEffect(() => {

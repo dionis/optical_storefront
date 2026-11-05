@@ -949,7 +949,7 @@ function navFromUrl(tabs) {
   const want = q.get("tab") || "";
   if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q", "approval"]) if (q.get(k)) params[k] = q.get(k);
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number"]) if (q.get(k)) params[k] = q.get(k);
   // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
@@ -1027,7 +1027,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "security" && <Security />}
       {tab === "audit" && <AuditLog me={me} />}
       {tab === "pos" && <PosSale me={me} />}
-      {tab === "possales" && <PosSales me={me} />}
+      {tab === "possales" && <PosSales me={me} params={nav.params} />}
       {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}
