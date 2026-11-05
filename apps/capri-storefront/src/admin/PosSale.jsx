@@ -776,7 +776,7 @@ export default function PosSale({ me }) {
                 {custInfo?.last_prescription && <small className="muted">{t("adm.pos.rx.proposed")}</small>}
                 {/* Misma cuadrícula que la receta nueva; aquí la altura no es obligatoria (el lensómetro no la da). */}
                 <RxForm mode="worn" idp="worn" value={rxWorn} onChange={setRxWorn} type={rxWorn.type} errors={wornCheck.errors} warnings={wornCheck.warnings}
-                  showErrors={showCustErrors || rxFilled(rxWorn)} worn={worn} onWornChange={setWorn} wornFrame={wornFrame} onWornFrameChange={setWornFrame} history={custInfo?.history || []} />
+                  showErrors={showCustErrors || rxFilled(rxWorn)} showMissingDate={showCustErrors} worn={worn} onWornChange={setWorn} wornFrame={wornFrame} onWornFrameChange={setWornFrame} history={custInfo?.history || []} />
               </div>
             )}
           </>

@@ -89,7 +89,7 @@ export default function CatalogManager({ me = null, params = null }) {
   const { t, lang } = useLang();
   const usd = (n) => money(n, "usd", lang);
   const { toast, confirm } = useFeedback();
-  const { products, cases, meta } = useCatalog();
+  const { products: rawProducts, cases: rawCases, meta } = useCatalog();
   const demo = isDemoLogin();
 
   // El selector de tienda es el GLOBAL de la barra de filtros. «Todas las
@@ -151,6 +151,15 @@ export default function CatalogManager({ me = null, params = null }) {
     return index;
   }, [demo, priceScope]);
   useEffect(() => { setCosts(null); loadCosts(); }, [loadCosts]);
+
+  // El modelo necesita su `medusaId` para el interruptor, el precio propio y
+  // «Descontinuar». Con VITE_USE_MEDUSA el catálogo ya lo trae; sin él (los
+  // builds desplegados no lo fijan) el catálogo es el empaquetado y no lo
+  // tiene, así que se toma de /admin/pricing/frames/costs, que devuelve
+  // `product_id` por SKU — la misma fila de la que sale el costo.
+  const linkId = useCallback((p) => p.medusaId || costOf(costs, p)?.row?.product_id || null, [costs]);
+  const products = useMemo(() => rawProducts.map((p) => (p.medusaId ? p : { ...p, medusaId: linkId(p) || undefined })), [rawProducts, linkId]);
+  const cases = useMemo(() => rawCases.map((p) => (p.medusaId ? p : { ...p, medusaId: linkId(p) || undefined })), [rawCases, linkId]);
 
   // Surtido: solo existe por tienda. Una sola lectura trae la regla de cada
   // marca y las excepciones por modelo; la precedencia se resuelve al pintar.

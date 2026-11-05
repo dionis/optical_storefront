@@ -328,7 +328,8 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   }
   if (existing) {
     const metadata = { ...(existing.metadata ?? {}) } as Record<string, unknown>;
-    if (!metadata.birth_date) metadata.birth_date = c.birth_date;
+    // Never erase a known birth date with a blank one.
+    if (!metadata.birth_date && c.birth_date) metadata.birth_date = c.birth_date;
     await svc.updateCustomers(existing.id, {
       first_name: existing.first_name || c.first_name,
       last_name: existing.last_name || c.last_name,

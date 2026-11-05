@@ -281,7 +281,11 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
   }
 
   const c = (v: number) => v / 100;
-  const stores: StorePnl[] = allStores.map((s) => {
+  // A deactivated store keeps its history: it stays in the month it still has
+  // sales or costs in, and disappears from the months where it has nothing
+  // (an empty «Op3 · $0.00» column for every store ever closed is noise).
+  const hasFigures = (id: string) => Boolean(netByStore.get(id) || cogsByStore.get(id) || feesByStore.get(id) || commissionByStore.get(id) || variable.get(id) || fixed.get(id) || shared.get(id) || countByStore.get(id)?.size);
+  const stores: StorePnl[] = allStores.filter((s) => s.is_active || hasFigures(s.id)).map((s) => {
     const p = computePnl({
       net_sales: netByStore.get(s.id) ?? 0,
       cogs: cogsByStore.get(s.id) ?? 0,

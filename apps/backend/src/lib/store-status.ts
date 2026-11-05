@@ -19,13 +19,28 @@ import { tenant } from "./tenant";
 /** Register open longer than this is flagged: it was probably not closed last night. */
 export const LONG_OPEN_REGISTER_HOURS = 14;
 
+/**
+ * The register a till works on. Since the owner made the register STORE-wide
+ * (lib/cash.ts: sessions carry `terminal_id: null`), every active till shows
+ * the same open session — `shared: true` says so, and the panel counts its
+ * money once, not per till.
+ */
+export interface RegisterView {
+  id: string;
+  opened_at: string;
+  opening: number;
+  expected: number;
+  cash_in_sales: number;
+  /** True when this is the store's single register (terminal_id null), seen from every till. */
+  shared: boolean;
+}
+
 export interface TillStatus {
   id: string;
   code: string;
   name: string | null;
   is_active: boolean;
-  /** Open register on this till, null when closed. */
-  register: { id: string; opened_at: string; opening: number; expected: number; cash_in_sales: number } | null;
+  register: RegisterView | null;
   /** Seller records assigned to it. */
   sellers: Array<{ id: string; code: string; name: string; active: boolean }>;
 }
@@ -77,10 +92,13 @@ export function storeAttention(
   const out: Attention[] = [];
   const active = input.tills.filter((t) => t.is_active);
   if (!active.length) out.push({ kind: "no_active_till", n: 0, tone: "bad" });
+  const seen = new Set<string>();
   for (const t of input.tills) {
-    if (!t.register) continue;
+    if (!t.register || seen.has(t.register.id)) continue;
+    seen.add(t.register.id);
     const hours = Math.floor((now.getTime() - Date.parse(t.register.opened_at)) / 3_600_000);
-    if (hours >= LONG_OPEN_REGISTER_HOURS) out.push({ kind: "register_open_long", n: hours, ref: t.code, tone: "bad" });
+    // A shared (store-wide) register is one warning for the store, not one per till.
+    if (hours >= LONG_OPEN_REGISTER_HOURS) out.push({ kind: "register_open_long", n: hours, ref: t.register.shared ? undefined : t.code, tone: "bad" });
   }
   if (input.approvals_pending) out.push({ kind: "approvals_pending", n: input.approvals_pending, tone: "warn" });
   if (input.voids_requested) out.push({ kind: "voids_requested", n: input.voids_requested, tone: "warn" });
@@ -102,6 +120,8 @@ export interface StoreStatus {
   balance_due: number;
   insurance_due: number;
   tills: TillStatus[];
+  /** The store's open register (store-wide session), null when none is open. */
+  register: RegisterView | null;
   sellers: SellerStatus[];
   pending: {
     approvals: number;
@@ -136,7 +156,14 @@ export async function storeStatus(container: MedusaContainer, store: Establishme
     listSales(container, { establishmentIds: [store.id], status: "completed" }, 300),
   ]);
 
-  const open = new Map(sessions.filter((s) => !s.closed_at).map((s) => [s.terminal_id, s]));
+  const live = sessions.filter((s) => !s.closed_at);
+  const open = new Map(live.filter((s) => s.terminal_id).map((s) => [s.terminal_id, s]));
+  const view = (s: (typeof live)[number], shared: boolean): RegisterView => ({ id: s.id, opened_at: s.opened_at, opening: s.opening, expected: s.expected, cash_in_sales: s.cash_in_sales, shared });
+  // The store-wide session (terminal_id null) is THE register of every active
+  // till: before, it matched no till and the screen said "closed" with the
+  // drawer open and money in it.
+  const storeSession = live.find((s) => !s.terminal_id) ?? null;
+  const storeRegister = storeSession ? view(storeSession, true) : null;
   const sellers = allSellers.filter((s) => s.establishment_id === store.id);
   const tillCode = new Map(tills.map((t) => [t.id, t.code]));
   const todayByCode = new Map(bySeller.map((r) => [String(r.key ?? "").toUpperCase(), r]));
@@ -151,7 +178,7 @@ export async function storeStatus(container: MedusaContainer, store: Establishme
         code: t.code,
         name: t.name,
         is_active: t.is_active,
-        register: s ? { id: s.id, opened_at: s.opened_at, opening: s.opening, expected: s.expected, cash_in_sales: s.cash_in_sales } : null,
+        register: s ? view(s, false) : t.is_active ? storeRegister : null,
         sellers: sellers.filter((x) => x.terminal_id === t.id).map((x) => ({ id: x.id, code: x.code, name: x.name, active: x.active })),
       };
     });
@@ -186,6 +213,7 @@ export async function storeStatus(container: MedusaContainer, store: Establishme
     balance_due: m.balance_due,
     insurance_due: m.insurance_due,
     tills: tillRows,
+    register: storeRegister,
     sellers: sellerRows,
     pending: {
       approvals: approvals.length,

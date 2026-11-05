@@ -269,6 +269,11 @@ export async function login(email, password) {
     if (error.status === 401 || error.status === 400) {
       return { ok: false, error: "adm.err.badCredentials" };
     }
+    // The login rate limit (src/lib/security.ts): say so, or the person keeps
+    // retrying a password that was right all along.
+    if (error.status === 429) {
+      return { ok: false, error: "adm.auth.tooMany" };
+    }
     return { ok: false, error: "adm.err.auth" };
   }
 

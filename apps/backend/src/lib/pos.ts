@@ -222,8 +222,8 @@ export interface PosCustomer {
   last_name: string;
   email: string;
   phone: string;
-  /** YYYY-MM-DD */
-  birth_date: string;
+  /** YYYY-MM-DD, or null: the counter only requires the contact data (owner's decision, same rule as `customerProblems` in the panel). */
+  birth_date: string | null;
   /** Only for shipping; optional (owner's decision). */
   address: { address_1: string; city: string; province: string | null; postal_code: string; country_code: string } | null;
 }
@@ -231,8 +231,11 @@ export interface PosCustomer {
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 /**
- * The customer data the owner asked for: full name, email, phone and birth
- * date, required; the address only when the glasses are shipped.
+ * The customer data the owner asked for: full name, email and phone,
+ * required; the birth date only validated when given (the panel treats it as
+ * optional — `customerProblems` in src/data/fieldRules.js — and both sides
+ * must agree, or the sale fails at the very last step); the address only
+ * when the glasses are shipped.
  */
 export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date()): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
@@ -247,13 +250,17 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
   const phone = text(c.phone, FIELD_LIMITS.phone + 1);
   if (!isValidPhone(phone)) return { reason: "customer_phone" };
 
-  const birth_date = text(c.birth_date, 10);
-  const born = /^\d{4}-\d{2}-\d{2}$/.test(birth_date) ? new Date(`${birth_date}T00:00:00Z`) : null;
-  if (!born || Number.isNaN(born.getTime()) || born.toISOString().slice(0, 10) !== birth_date) {
-    return { reason: "customer_birth_date" };
+  const birthText = text(c.birth_date, 10);
+  let birth_date: string | null = null;
+  if (birthText) {
+    const born = /^\d{4}-\d{2}-\d{2}$/.test(birthText) ? new Date(`${birthText}T00:00:00Z`) : null;
+    if (!born || Number.isNaN(born.getTime()) || born.toISOString().slice(0, 10) !== birthText) {
+      return { reason: "customer_birth_date" };
+    }
+    const age = (now.getTime() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
+    if (age < 0 || age > 120) return { reason: "customer_birth_date" };
+    birth_date = birthText;
   }
-  const age = (now.getTime() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
-  if (age < 0 || age > 120) return { reason: "customer_birth_date" };
 
   let address: PosCustomer["address"] = null;
   const a = c.address;

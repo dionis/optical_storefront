@@ -229,8 +229,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
 
   // El pedido: el dado (`orderId`) o el de la venta (`sale.order_id`). Sin pedido, sin etapas.
   const orderIdToLoad = givenOrderId || data?.sale?.order_id || null;
+  // El tablero de pedidos no admite al vendedor (boardAccessFor: forbidden_role):
+  // no se pide, y la sección de etapa no se pinta en vez de decir «no se pudo
+  // leer», que suena a avería.
+  const canReadBoard = !who || who.is_admin !== false || who.role === "supervisor" || who.role === "manager";
   useEffect(() => {
     if (!open) return undefined;
+    if (!canReadBoard) { setOrder(null); setOrderState("none"); return undefined; }
     if (!orderIdToLoad) { if (givenSaleId && data) { setOrder(null); setOrderState("none"); } else { setOrder(null); setOrderState("idle"); } return undefined; }
     let on = true;
     setOrderState("loading");
@@ -240,7 +245,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
       .catch(() => { if (on) { setOrder(null); setOrderState("error"); } });
     return () => { on = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, orderIdToLoad, tick, oTick, Boolean(data)]);
+  }, [open, orderIdToLoad, tick, oTick, Boolean(data), canReadBoard]);
   useEffect(() => { if (!open) { setOrder(null); setOrderState("idle"); } }, [open]);
   // Sin venta (ficha de pedido web, o cerrada): nada de la venta anterior se queda pintado.
   useEffect(() => { if (!saleId) { setData(null); setDoc(null); setCustomer(null); setRxDoc(null); setState("idle"); } }, [saleId]);
@@ -380,7 +385,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   ].filter((h) => h.at).sort((a, b) => new Date(a.at) - new Date(b.at));
   const headNumber = s ? s.number : o ? orderLabel(o) : "…";
   const stageRight = order && orderState === "ok" ? <StageChip stage={order.terminal === "canceled" || order.terminal === "refunded" ? "voided" : order.terminal || order.stage} t={t} /> : null;
-  const stageSection = (
+  const stageSection = !canReadBoard ? null : (
     <Section icon="layers" title={t("adm.sd.sec.stage")} right={stageRight}>
       <StageBlock order={order} state={orderState} moving={moving} onMove={moveStage} tracking={tracking} setTracking={setTracking} />
     </Section>

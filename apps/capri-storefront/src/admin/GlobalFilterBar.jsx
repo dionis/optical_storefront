@@ -107,8 +107,11 @@ export const BAR_TABS = {
   approvals: { store: true, period: false, export: false },
   audit: { store: true, period: true, export: false },
   orders: { store: false, period: true, export: true },
+  // Productos necesita la tienda: sus interruptores de marca y modelo (surtido)
+  // y el costo/precio propio actúan sobre la tienda elegida arriba («Elige una
+  // tienda arriba…»); sin el selector en la barra no había dónde elegirla.
+  products: { store: true, period: false, export: false },
   // ── Solo el buscador ──
-  products: NONE,
   stores: NONE,
   team: NONE,
   security: NONE,

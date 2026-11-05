@@ -83,7 +83,10 @@ export default function StoreStatus({ go, tabs = [], me }) {
     for (const a of attention) sev[a.tone] = (sev[a.tone] || 0) + 1;
     const openRegisters = s.tills.filter((x) => x.register).length;
     const activeTills = s.tills.filter((x) => x.is_active).length;
-    const cashExpected = s.tills.reduce((a, x) => a + (x.register?.expected || 0), 0);
+    // La caja es de toda la tienda (una sesión, `register.shared`): su dinero se
+    // cuenta UNA vez aunque la enseñe cada punto de venta.
+    const registers = new Map(s.tills.filter((x) => x.register).map((x) => [x.register.id, x.register]));
+    const cashExpected = [...registers.values()].reduce((a, r) => a + (r.expected || 0), 0);
     const p = s.pending;
     const pendingN = p.approvals + p.voids + p.ready.length + p.with_balance.count + p.insurance_claims;
     const sellersActive = s.sellers.filter((v) => v.active).length;
@@ -120,7 +123,8 @@ export default function StoreStatus({ go, tabs = [], me }) {
   const stamp = new Date().toISOString().slice(0, 10);
   const fileBase = `${t("adm.fit.ss.exportName")}-${s.store.code}-${stamp}`;
   const sevText = (tone) => t(`adm.fit.ss.sev.${tone}`);
-  const attText = (a) => t(`adm.ss.att.${a.kind}`, { n: a.n, ref: a.ref || "" });
+  // Sin `ref` el aviso es de la caja de la tienda (compartida), no de un punto de venta.
+  const attText = (a) => t(a.kind === "register_open_long" && !a.ref ? "adm.ss.att.register_open_long_store" : `adm.ss.att.${a.kind}`, { n: a.n, ref: a.ref || "" });
   const tillStatus = (x) => (!x.is_active ? t("adm.stores.tills.status.inactive") : x.register ? t("adm.fit.ss.open") : t("adm.my.cashClosed"));
   const sellerKind = (v) => (v.has_user ? t("adm.sel.counterUser") : t("adm.ss.referralOnly"));
   const saleStatus = (r) => (r.status === "voided" ? t("adm.my.voided") : r.delivered ? t("adm.my.delivered") : t("adm.fit.ss.status.completed"));
