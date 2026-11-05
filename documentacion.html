@@ -20,6 +20,7 @@
   th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; }
   th,td { padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
   code { background:#f2f5fa; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12.5px; }
+  code, a { overflow-wrap:anywhere; }
   .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; }
   .ok { background:var(--okbg); color:var(--ok); }
   .wip { background:#fff7e6; color:#7a5b00; }
@@ -27,13 +28,13 @@
   li { margin:3px 0; }
   .muted { color:var(--muted); }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:760px){ .grid { grid-template-columns:1fr; } }
+  @media (max-width:760px){ .grid { grid-template-columns:1fr; } section { overflow-x:auto; } }
 </style>
 </head>
 <body>
 <header>
   <h1>RUBI LENS — Documentación del proyecto</h1>
-  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 31-oct-2026</p>
+  <p>Tienda online de espejuelos graduados · probador virtual con IA · receta con OCR · Medusa v2 + React/Vite · Actualizado: 5-nov-2026</p>
 </header>
 <main>
 
@@ -48,6 +49,7 @@
     <tr><td>Checkout + entrega (teléfono, email, dirección)</td><td><span class="tag ok">Funcional</span></td><td><code>MedusaCheckout.jsx</code>: Stripe, datos del paciente, confirmaciones email/SMS</td></tr>
     <tr><td>Panel admin <code>/admin</code></td><td><span class="tag ok">Completo</span></td><td>Dashboard EJECUTIVO (KPIs, alertas, pipeline), Pedidos (etapas + tracking con URL + email automático al cliente), catálogo (precios, descontinuar monturas/marcas, exportar a Excel/CSV), identidad propia navy/ADMIN</td></tr>
     <tr><td>Cuentas y seguimiento del cliente</td><td><span class="tag ok">Funcional</span></td><td>Cuentas con email+contraseña (auth de Medusa) que abren TODOS los pedidos de ese correo; enlace mágico como acceso sin contraseña; cancelación con política de plazos</td></tr>
+    <tr><td>Panel de tienda (staging, rama <code>develop_optical_storepos</code>)</td><td><span class="tag wip">Pendiente de push/redeploy por el dueño</span></td><td>8 commits del 5-nov-2026 (<code>226e97a</code>…<code>1e08fcf</code>) en local. Al desplegar: <code>medusa db:migrate</code> (StaffProfileDisabled4, UpgradeLensListFinish8, ExtendSaleFactLensFinish2). Comprobar backend en <a href="https://api-staging.161-153-9-98.sslip.io/version">api-staging.161-153-9-98.sslip.io/version</a> y panel en <a href="https://rubilens-staging.vercel.app">rubilens-staging.vercel.app</a>.</td></tr>
   </table>
 </section>
 
@@ -64,6 +66,48 @@
     <tr><td>Tras desplegar</td><td><span class="tag wip">Pendiente</span></td><td>Coolify: <code>medusa db:migrate</code> (photo_url, category de caja, colores por defecto). Revisar en staging: venta completa, ventas por semana, movimientos, estado de cuenta, modo oscuro.</td></tr>
     <tr><td>Siguiente</td><td><span class="tag wip">Por hacer</span></td><td>Plantillas de lente para montura propia; optimización de espacios en Pedidos / Costos / Tiendas; toasts en modo oscuro; rotación del secreto del webhook y contraseña admin.</td></tr>
   </table>
+</section>
+
+<section>
+  <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
+  <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
+
+  <h3>Corregido o añadido hoy (un commit por fila)</h3>
+  <table>
+    <tr><th>Qué</th><th>HU</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><code>226e97a</code> · Los privilegios «Ver costos» / «Gestionar costos» ya alcanzan los costos de montura y la banda de precios: un encargado con el permiso recibía 403 porque <code>/admin/pricing/*</code> no estaba en la lista de rutas permitidas a no administradores; ahora se nombran las tres rutas y el resto de <code>/admin/pricing</code> sigue solo para admin.</td><td>HU-12 / roles</td><td><span class="tag ok">Listo</span></td><td><code>apps/backend/src/lib/staff-roles.ts</code>, <code>src/api/middlewares.ts</code>, <code>/admin/pricing/frames/{costs,cost,band}</code>; <code>tests/staff-roles.test.ts</code></td></tr>
+    <tr><td><code>a3fd890</code> · Una persona borrada o desactivada pierde el acceso en su siguiente petición (antes un token vivo tras <code>DELETE /admin/team/:id</code> resolvía como superadmin hasta caducar). Nuevo <b>Desactivar / Reactivar</b> sin borrar: usuario, roles, perfil, ficha de vendedor e historial se conservan; chip «Inactivo» en Equipo; auditoría <code>user.deactivate</code> / <code>user.reactivate</code>.</td><td>HU-04</td><td><span class="tag ok">Listo</span></td><td><code>lib/staff-scope.ts</code>, <code>POST /admin/team/:id/status</code>, migración <code>StaffProfileDisabled4</code>, <code>src/admin/Team.jsx</code>; <code>docs/ADMIN-PANEL.md</code> «Equipo: desactivar sin borrar…»</td></tr>
+    <tr><td><code>23e3d00</code> · Tres carreras leer-y-escribir del POS cerradas con un solo <code>UPDATE … RETURNING</code> guardado: una aprobación de descuento se usa una sola vez (y se libera si la venta falla); decidir una aprobación solo sobre una pendiente; cobrar un saldo suma en la base y rechaza <code>overpaid</code> / <code>nothing_due</code> / <code>sale_voided</code>; el libro y <code>sale_fact</code> se escriben después de la reclamación.</td><td>HU-27, HU-30</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-data.ts</code>; <code>tests/pos-data-atomic.test.ts</code> (17 pruebas)</td></tr>
+    <tr><td><code>34ff37b</code> · Importes de la franja de etapas solo para administradores (el servidor los anula para encargados/supervisores, <code>redactBoardMoney</code>; vendedores 403); chip <b>«Atrasados»</b> y píldora «N d» en pedidos pasados de <code>promised_on</code>; filas de surtido con <code>sku</code> y de costos con <code>price_cents</code> para que costo → precio → margen se rellene en todos los modelos; correos de etapa respetan la baja de <code>notify_email</code>.</td><td>HU-33, HU-12</td><td><span class="tag ok">Listo</span></td><td><code>lib/order-board.ts</code>, <code>/admin/order-board</code>, <code>/admin/store-assortment/:id/products</code>, <code>src/admin/StoreOrders.jsx</code>, <code>lateness.js</code></td></tr>
+    <tr><td><code>069e1b8</code> · Lente <b>stock vs tallado digital</b>: una celda por (diseño, material, acabado) con precio y costo de laboratorio, editable en Precios y costos → Lentes (costo solo maestro y con privilegio); el POS manda <code>selection.finish</code> y el servidor responde <code>finish_unavailable</code> si no está tarifada; recibos, ticket y ficha nombran el acabado; el costo de la celda vendida manda en márgenes y tableros; la matriz pública nunca lleva costos.</td><td>HU-10, HU-11</td><td><span class="tag ok">Listo</span></td><td><code>lib/lens-finish.ts</code>, <code>lib/lens-cost.ts</code>, migraciones <code>UpgradeLensListFinish8</code> y <code>ExtendSaleFactLensFinish2</code>, <code>src/admin/pricing/LensesSection.jsx</code>; <code>docs/HITOS-PANEL-TIENDA.md</code> hito 6</td></tr>
+    <tr><td><code>803a641</code> · POS: <b>total en curso</b> pegajoso desde el paso Montura (misma cotización <code>/admin/pos/quote</code>, 400 ms, respuestas viejas descartadas, solo precios de lista); <b>opciones rápidas</b> de lente para montura propia (monofocal básico / AR / fotocromático, bifocal, progresivo / + AR); aviso de <b>teléfono o correo ya registrado</b> con «Usar este cliente» / «Es otra persona»; el servidor rechaza con 422 lo que antes solo sugería el navegador (<code>design_needs_add</code>, <code>design_no_add</code>, <code>rx_add_mismatch</code>, <code>photo_unavailable</code> —se cobraba $0—, <code>ar_unavailable</code>, <code>rx_unconfirmed</code>).</td><td>HU-18, HU-20, HU-22</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos-lens-rules.ts</code>, <code>lib/lens-quote.ts</code>, <code>src/admin/PosSale.jsx</code>, <code>PosSaleSummary.jsx</code>, <code>harness/pos.jsx</code>; hitos 7 y 8</td></tr>
+    <tr><td><code>27ebe66</code> · <b>Recuperar la contraseña uno mismo</b> («¿Olvidaste tu contraseña?», flujo de Medusa, enlace de 15 min de un solo uso, límites por IP y correo); <b>un modelo en todas las tiendas</b> (bloque en Precios → Monturas, misma fórmula de la caja, clic en la celda cambia de tienda); <b>historial de precios</b> con quién, qué, antes → después y reglas de la cadena; <b>cobrar saldo y entregar</b> en un paso (entrega atómica que recorre la etapa del pedido hasta «entregado», un solo correo); <b>aviso de anulación solicitada</b> por correo a los administradores; resumen diario con pedidos web, centavos enteros y anuladas fuera de «tienda sin ventas»; job <code>sale-fact-reconcile</code> cada 6 h; <b>meta del mes por vendedor</b> para el dueño (base neta, como la comisión). +66 pruebas (1157 en total).</td><td>HU-03, HU-13, HU-15, HU-28, HU-32, HU-40</td><td><span class="tag ok">Listo</span></td><td><code>lib/password-reset.ts</code> + subscriber <code>auth-password-reset.ts</code>, <code>GET /admin/pricing/frames/across</code> (<code>lib/pricing-across.ts</code>), <code>lib/store-pricing-data.ts</code>, <code>POST /admin/pos/sales/:id/deliver</code>, <code>lib/alerts.ts</code>, <code>jobs/sale-fact-reconcile.ts</code>, <code>/admin/sellers/stats</code>; <code>docs/ADMIN-PANEL.md</code> (HU-03, HU-13/HU-15), <code>docs/CONTABILIDAD.md</code> «Notas del 5-nov-2026», hito 9</td></tr>
+    <tr><td><code>1e08fcf</code> · El enlace «Abrir la venta» del correo de anulación solicitada aterriza en la venta: <code>/admin?tab=possales&amp;number=…</code> filtra Ventas de tienda por número y abre su ficha en cuanto la lista la tiene.</td><td>HU-28</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/PosSales.jsx</code></td></tr>
+  </table>
+
+  <h3>Sigue pendiente del documento v2.2</h3>
+  <table>
+    <tr><th>HU</th><th>Qué falta</th></tr>
+    <tr><td>HU-05</td><td>Elección de tienda al entrar (hoy: selector global dentro del panel).</td></tr>
+    <tr><td>HU-06</td><td>Carga de catálogo desde Excel.</td></tr>
+    <tr><td>HU-07</td><td>Alta manual de una montura desde el panel propio.</td></tr>
+    <tr><td>HU-09</td><td>Etiquetas de producto y lectura con cámara.</td></tr>
+    <tr><td>HU-14</td><td>Programar precios a futuro.</td></tr>
+    <tr><td>HU-21</td><td>Recordatorio de receta con más de 1 año.</td></tr>
+    <tr><td>HU-29</td><td>Devolución / cambio.</td></tr>
+    <tr><td>HU-31</td><td>Etapa «listo para recoger».</td></tr>
+    <tr><td>HU-34</td><td>Rehecho por garantía.</td></tr>
+    <tr><td>HU-72</td><td>Copia diaria de la base real (Supabase).</td></tr>
+    <tr><td class="muted">—</td><td>Número propio de ficha de laboratorio y bandejas por tienda.</td></tr>
+  </table>
+
+  <h3>Decisiones del dueño que difieren del documento</h3>
+  <ul>
+    <li>Comisión del encargado <b>15 %</b> (el documento dice 20 %).</li>
+    <li>Aprobación de descuentos <b>solo dueño / superadmin</b>.</li>
+    <li>Códigos de tienda <code>Op#</code> (el documento usa <code>T#</code>).</li>
+    <li>Material por encima de <code>max_abs</code> queda como <b>recomendación</b>, no como bloqueo.</li>
+  </ul>
 </section>
 
 <section>
