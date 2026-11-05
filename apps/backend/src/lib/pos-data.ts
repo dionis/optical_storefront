@@ -925,6 +925,34 @@ export async function createApproval(
   return toApproval(created as unknown as Record<string, unknown>);
 }
 
+/** A statement and its bindings, kept apart from the connection so the guards can be unit-tested. */
+export interface SqlPlan {
+  sql: string;
+  bindings: Array<string | number | null>;
+}
+
+/** Rows a `pg.raw` UPDATE … RETURNING gave back (the pg driver shape). */
+type RawRows<T> = { rows: T[] };
+
+/**
+ * The decision as one guarded UPDATE. Two owners deciding the same request
+ * at once (or one double-clicking) used to both read "pending" and both
+ * write: the second decision silently overwrote the first, and both were
+ * audited as if taken. With the status in the WHERE clause the database lets
+ * exactly one through; the loser gets 0 rows and is told the current state.
+ * An expired request is left alone for the same reason `toApproval` reports
+ * it as expired: nobody can approve what the till can no longer use.
+ */
+export function approvalDecisionPlan(id: string, decision: "approved" | "rejected", actorId: string, note: string | null): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = ?, decided_by = ?, decided_at = now(), decision_note = ?, updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'pending' AND expires_at > now()
+       RETURNING *`,
+    bindings: [decision, actorId, note, id],
+  };
+}
+
 /** Owner or superadmin decision; only a pending, unexpired request can be decided. */
 export async function decideApproval(
   container: MedusaContainer,
@@ -933,20 +961,86 @@ export async function decideApproval(
   actorId: string,
   note: string | null
 ): Promise<ApprovalRow> {
-  const current = await getApproval(container, id);
-  if (!current) throw new PosError("approval_not_found", 404);
-  if (current.status !== "pending") throw new PosError(`approval_${current.status}`, 409);
-  await pos(container).updateDiscountApprovals({ id, status: decision, decided_by: actorId, decided_at: new Date(), decision_note: note } as never);
+  const plan = approvalDecisionPlan(id, decision, actorId, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<Record<string, unknown>>;
+  const row = res.rows[0];
+  if (!row) {
+    // Lost the race, or there was nothing to decide: say which.
+    const current = await getApproval(container, id);
+    if (!current) throw new PosError("approval_not_found", 404);
+    throw new PosError(`approval_${current.status === "pending" ? "expired" : current.status}`, 409);
+  }
+  const decided = toApproval(row);
   await recordAudit(container, {
     actorId,
     action: decision === "approved" ? "discount.approve" : "discount.reject",
     entity: "discount_approval",
     entityId: id,
-    establishmentId: current.establishment_id,
+    establishmentId: decided.establishment_id,
     before: { status: "pending" },
-    after: { status: decision, pct: current.discount_pct, note },
+    after: { status: decision, pct: decided.discount_pct, note },
   });
-  return (await getApproval(container, id)) as ApprovalRow;
+  return decided;
+}
+
+/**
+ * Takes an approved discount for a sale about to be recorded. The approval is
+ * single-use, but `assertApprovalFits` only *reads* it: two tills recording
+ * two sales with the same approval id at the same moment both saw "approved"
+ * and both sold with the discount, and the second `status = 'used'` write
+ * hid the first. The status guard makes the database the arbiter — one
+ * UPDATE matches, the other finds 0 rows. The expiry is checked here too, by
+ * the database clock, so a request that lapsed between the read and the
+ * claim is not consumed.
+ */
+export function approvalClaimPlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'used', updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'approved'
+             AND (expires_at IS NULL OR expires_at > now())
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/**
+ * Gives a claimed approval back when the sale it was taken for never got its
+ * row. Guarded on `sale_id IS NULL`: once the sale exists the approval is
+ * spent for good, whatever fails afterwards.
+ */
+export function approvalReleasePlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'approved', updated_at = now()
+           WHERE id = ? AND status = 'used' AND sale_id IS NULL
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/** Claims the approval or throws the reason it cannot be used (`approval_used`, `approval_expired`…). */
+export async function claimApproval(container: MedusaContainer, id: string): Promise<void> {
+  const plan = approvalClaimPlan(id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+  if (res.rows.length) return;
+  const current = await getApproval(container, id);
+  if (!current) throw new PosError("approval_not_found", 404);
+  // "approved" on re-read means the claim lost only to the clock: it expired
+  // between our read and the UPDATE and `toApproval` has not caught up yet.
+  throw new PosError(current.status === "approved" ? "approval_expired" : `approval_${current.status}`, 409);
+}
+
+/** Best-effort release (logged, never thrown): the caller is already failing and must rethrow its own error. */
+async function releaseApproval(container: MedusaContainer, id: string): Promise<void> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const plan = approvalReleasePlan(id);
+    const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+    if (res.rows.length) logger.warn(`[pos] approval ${id} released: the sale it was claimed for was not recorded.`);
+  } catch (e) {
+    logger.error(`[pos] approval ${id} could not be released after a failed sale: ${(e as Error).message}`);
+  }
 }
 
 /**
@@ -1065,8 +1159,7 @@ export async function createPosSale(container: MedusaContainer, input: CreateSal
 
 async function recordSale(container: MedusaContainer, input: CreateSaleInput): Promise<CreatedSale> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
-  const { store, customer, quote } = input;
+  const { store, quote } = input;
   if (!store.sales_channel_id) throw new PosError("store_without_channel", 409);
 
   // Every query here is a round trip to the database (~45 ms from the server
@@ -1079,6 +1172,101 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   ]);
   if (input.needsApproval) assertApprovalFits(approval, store, quote);
 
+  // From here on the approval is spent. Everything up to the sale row is a
+  // chain of writes (customer, prescriptions, cart, order) any of which can
+  // fail; if one does, the approval goes back so the till can retry with it.
+  if (approval) await claimApproval(container, approval.id);
+  let placed: PlacedSale;
+  try {
+    placed = await placeOrderAndSale(container, input, approval, regionId);
+  } catch (e) {
+    if (approval) await releaseApproval(container, approval.id);
+    throw e;
+  }
+  const { sale, orderId, number, promisedOn, withLenses, rx } = placed;
+  const svc = pos(container);
+  const p = input.payments;
+  // Tray, payments and the approval touch different rows of the new sale:
+  // none waits for the others. The order's stamp below needs the tray. The
+  // approval was already claimed (status "used") before the order was placed;
+  // only the link to the sale is written now that the sale exists.
+  const [tray] = await Promise.all([
+    withLenses
+      ? takeTray(container, store.id, sale.id).then(async (n) => {
+          await svc.updatePosSales({ id: sale.id, tray_number: n });
+          return n;
+        })
+      : Promise.resolve(null),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
+    approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
+  ]);
+
+  // The order board, the Sheet and the emails show the store's number and the
+  // balance. Best-effort: the sale row already links both ways.
+  let displayId: number | null = null;
+  try {
+    displayId = await stampOrder(container, orderId, {
+      pos_sale_number: number,
+      pos_sale_id: sale.id,
+      tray: tray === null ? null : `${store.code}-${tray}`,
+      balance_due_cents: p.balance_cents,
+      paid_cents: p.paid_cents + p.insurance_cents,
+      promised_on: promisedOn,
+    });
+  } catch (e) {
+    logger.warn(`[pos] sale ${number}: could not stamp the order ${orderId}: ${(e as Error).message}`);
+  }
+
+  // Dashboards (sale_fact), after the order carries the sale's id.
+  await projectOrder(container, orderId);
+
+  logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
+
+  const pn = input.prescriptions;
+  const change =
+    pn.worn && pn.new
+      ? opticalChange(
+          { od: pn.worn.rx.od, os: pn.worn.rx.os, rx_date: input.rxMeta.worn?.rx_date ?? null },
+          { od: pn.new.rx.od, os: pn.new.rx.os },
+          { thresholds: input.thresholds }
+        )
+      : null;
+
+  return {
+    id: sale.id,
+    number,
+    order_id: orderId,
+    display_id: displayId,
+    total: quote.total,
+    paid: dollars(p.paid_cents),
+    insurance: dollars(p.insurance_cents),
+    balance: dollars(p.balance_cents),
+    tray: tray === null ? null : `${store.code}-${tray}`,
+    rx_number: rx.rxNumber,
+    promised_on: promisedOn,
+    optical_change: change,
+  };
+}
+
+/** What `placeOrderAndSale` hands back to the rest of `recordSale`. */
+interface PlacedSale {
+  sale: { id: string };
+  orderId: string;
+  number: string;
+  promisedOn: string;
+  withLenses: boolean;
+  rx: { newId: string | null; wornId: string | null; rxNumber: string | null };
+}
+
+/**
+ * Customer, prescriptions, cart, Medusa order and the pos_sale row — the part
+ * of a sale that must either finish or leave nothing behind that needs the
+ * discount approval (recordSale releases it when this throws).
+ */
+async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleInput, approval: ApprovalRow | null, regionId: string): Promise<PlacedSale> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { store, customer, quote } = input;
   // The prescription needs the customer; the photos of frames the customer
   // brought (private bucket, they travel with the lab ticket to the main
   // store, HU-89) need neither.
@@ -1195,9 +1383,8 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   const number = saleNumber(store.code, seq);
   const withLenses = quote.lines.some((l) => l.lens_category);
   const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
-  const svc = pos(container);
   const p = input.payments;
-  const sale = await svc.createPosSales({
+  const sale = await pos(container).createPosSales({
     number,
     establishment_id: store.id,
     seq,
@@ -1221,64 +1408,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     currency_code: "usd",
     own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
   });
-  // Tray, payments and the approval touch different rows of the new sale:
-  // none waits for the others. The order's stamp below needs the tray.
-  const [tray] = await Promise.all([
-    withLenses
-      ? takeTray(container, store.id, sale.id).then(async (n) => {
-          await svc.updatePosSales({ id: sale.id, tray_number: n });
-          return n;
-        })
-      : Promise.resolve(null),
-    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
-    approval ? svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never) : Promise.resolve(),
-  ]);
-
-  // The order board, the Sheet and the emails show the store's number and the
-  // balance. Best-effort: the sale row already links both ways.
-  let displayId: number | null = null;
-  try {
-    displayId = await stampOrder(container, orderId, {
-      pos_sale_number: number,
-      pos_sale_id: sale.id,
-      tray: tray === null ? null : `${store.code}-${tray}`,
-      balance_due_cents: p.balance_cents,
-      paid_cents: p.paid_cents + p.insurance_cents,
-      promised_on: promisedOn,
-    });
-  } catch (e) {
-    logger.warn(`[pos] sale ${number}: could not stamp the order ${orderId}: ${(e as Error).message}`);
-  }
-
-  // Dashboards (sale_fact), after the order carries the sale's id.
-  await projectOrder(container, orderId);
-
-  logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
-
-  const pn = input.prescriptions;
-  const change =
-    pn.worn && pn.new
-      ? opticalChange(
-          { od: pn.worn.rx.od, os: pn.worn.rx.os, rx_date: input.rxMeta.worn?.rx_date ?? null },
-          { od: pn.new.rx.od, os: pn.new.rx.os },
-          { thresholds: input.thresholds }
-        )
-      : null;
-
-  return {
-    id: sale.id,
-    number,
-    order_id: orderId,
-    display_id: displayId,
-    total: quote.total,
-    paid: dollars(p.paid_cents),
-    insurance: dollars(p.insurance_cents),
-    balance: dollars(p.balance_cents),
-    tray: tray === null ? null : `${store.code}-${tray}`,
-    rx_number: rx.rxNumber,
-    promised_on: promisedOn,
-    optical_change: change,
-  };
+  return { sale, orderId, number, promisedOn, withLenses, rx };
 }
 
 async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
@@ -1507,6 +1637,32 @@ export async function getSale(container: MedusaContainer, id: string): Promise<S
   return toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>);
 }
 
+/**
+ * The collection as one guarded UPDATE on the sale's own figures. The old
+ * code added the payment to the `paid`/`balance` the caller had read, so two
+ * clerks collecting the same balance at once (two tills, or a double tap)
+ * both started from the same stale numbers: the second write erased the
+ * first and the customer paid twice for one balance. Here the database adds
+ * to what is *currently* paid, and the WHERE refuses the update when the sale
+ * was voided meanwhile, when nothing is owed any more, or when this payment
+ * would take the sale over its total (the losing twin of a race, or a stale
+ * screen). In SET the right-hand columns are the row's values before the
+ * update, so `balance_cents` is computed from the same figures it adds to.
+ */
+export function paymentClaimPlan(saleId: string, paidCents: number, insuranceCents: number): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET paid_cents = paid_cents + ?,
+                 insurance_cents = insurance_cents + ?,
+                 balance_cents = total_cents - (paid_cents + ?) - (insurance_cents + ?),
+                 updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents > 0
+             AND (paid_cents + insurance_cents + ? + ?) <= total_cents
+       RETURNING paid_cents, insurance_cents, balance_cents`,
+    bindings: [paidCents, insuranceCents, paidCents, insuranceCents, saleId, paidCents, insuranceCents],
+  };
+}
+
 /** Collects (part of) the balance — usually when the glasses are picked up (HU-29). */
 export async function collectPayment(
   container: MedusaContainer,
@@ -1514,13 +1670,27 @@ export async function collectPayment(
   payments: CleanedPayments,
   actorId: string | null
 ): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance <= 0) throw new PosError("nothing_due", 409);
-  const paid = cents(sale.paid) + payments.paid_cents;
-  const insurance = cents(sale.insurance) + payments.insurance_cents;
-  const balance = cents(sale.total) - paid - insurance;
+  const plan = paymentClaimPlan(sale.id, payments.paid_cents, payments.insurance_cents);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ paid_cents: unknown; insurance_cents: unknown; balance_cents: unknown }>;
+  const claimed = res.rows[0];
+  if (!claimed) {
+    // Refused: nothing was written, so the ledger stays as it was. Say why,
+    // from the sale as it is now rather than as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance <= 0) throw new PosError("nothing_due", 409);
+    throw new PosError("overpaid", 409, { balance: now.balance });
+  }
+  const paid = Number(claimed.paid_cents);
+  const insurance = Number(claimed.insurance_cents);
+  const balance = Number(claimed.balance_cents);
+  // The ledger rows only once the sale has accepted the money: a refused
+  // collection must not leave payments that no balance accounts for.
   await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId, kind: "balance", payments: payments.payments });
-  await pos(container).updatePosSales({ id: sale.id, paid_cents: paid, insurance_cents: insurance, balance_cents: balance });
   if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance, paid_cents: paid + insurance }).catch(() => null);
   await recordAudit(container, {
     actorId,
@@ -1528,9 +1698,21 @@ export async function collectPayment(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { balance_cents: cents(sale.balance) },
+    // From the figures the database returned, not from the caller's screen.
+    before: { balance_cents: balance + payments.paid_cents + payments.insurance_cents },
     after: { balance_cents: balance, collected_cents: payments.paid_cents + payments.insurance_cents },
   });
+  // The dashboards' payment-method dimension (sale_fact.payment_methods) was
+  // projected when the sale was made; a balance paid later with another method
+  // would otherwise never show under that method's filter. Best-effort, like
+  // every projection: the money is already recorded.
+  if (sale.order_id) {
+    try {
+      await projectOrder(container, sale.order_id);
+    } catch (e) {
+      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[pos] sale ${sale.number}: facts not reprojected after the collection: ${(e as Error).message}`);
+    }
+  }
   return (await getSale(container, sale.id)) as SaleRow;
 }
 
@@ -1549,13 +1731,27 @@ export type VoidReason = (typeof VOID_REASONS)[number];
 /** A seller asks; a manager of the store (or someone with sale.void) decides (HU-28). */
 export async function requestVoid(container: MedusaContainer, sale: SaleRow, actorId: string, reason: VoidReason, note: string | null): Promise<SaleRow> {
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
-  await pos(container).updatePosSales({ id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note });
+  const svc = pos(container);
+  // A repeated request (the seller comes back to add detail, or a colleague
+  // asks again) used to overwrite who asked first and when, which is what the
+  // manager's queue is ordered by and what the audit trail points to. The
+  // first request keeps its timestamp and requester; only the reason and the
+  // note move, and the audit shows what they moved from.
+  const [raw] = (await svc.listPosSales({ id: sale.id }, { take: 1 })) as unknown as Array<Record<string, unknown>>;
+  const pending = Boolean(raw?.void_requested_at);
+  const before = pending ? { reason: (raw.void_reason as string | null) ?? null, note: (raw.void_note as string | null) ?? null } : undefined;
+  await svc.updatePosSales(
+    pending
+      ? { id: sale.id, void_reason: reason, void_note: note }
+      : { id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note }
+  );
   await recordAudit(container, {
     actorId,
     action: "sale.void_request",
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
+    before,
     after: { reason, note },
   });
   return (await getSale(container, sale.id)) as SaleRow;
