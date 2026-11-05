@@ -36,6 +36,8 @@ export const SaleFact = model.define("sale_fact", {
   lens_material: model.text().nullable(),
   lens_photo: model.text().nullable(),
   lens_ar: model.text().nullable(),
+  /** "stock" | "digital" (lib/lens-finish.ts); null = bare frame or projected before finishes existed. */
+  lens_finish: model.text().nullable(),
   has_prescription: model.boolean().default(false),
   qty: model.number().default(1),
   list_cents: model.number(),

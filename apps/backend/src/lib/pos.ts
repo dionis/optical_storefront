@@ -6,6 +6,7 @@
  * `adm.err.pos.<reason>`) or the cleaned value — never prose.
  */
 import { FIELD_LIMITS, isValidEmail, isValidName, isValidPhone, isValidUsZip } from "./field-rules";
+import { parseLensFinish, type LensFinish } from "./lens-finish";
 
 /** `Op2-000147`: the store's code and its own six-digit sequence. */
 export function saleNumber(storeCode: string, seq: number): string {
@@ -239,6 +240,8 @@ export interface PosLineInput {
     material_code?: unknown;
     photo_code?: unknown;
     ar_code?: unknown;
+    /** "stock" | "digital" (lib/lens-finish.ts); absent = the design's default. */
+    finish?: unknown;
   } | null;
   /** Own frame: what the customer brought, for the lab ticket ("Ray-Ban negro"). */
   description?: unknown;
@@ -249,7 +252,7 @@ export interface PosLineInput {
 export interface PosLine {
   kind: "frame" | "own_frame";
   variant_id: string | null;
-  selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null };
+  selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null; finish: LensFinish | null };
   description: string | null;
   photo: string | null;
 }
@@ -277,6 +280,10 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
     // A frame the customer brought only makes sense with lenses for it.
     if (kind === "own_frame" && design_code === "frame-only") return { reason: "own_frame_needs_lenses" };
     const photo = typeof raw.photo === "string" && raw.photo.startsWith("data:image/") ? raw.photo : null;
+    // Only the two finish codes; anything else is a bad line, not a silent default.
+    const rawFinish = raw.selection?.finish;
+    const finish = rawFinish == null || rawFinish === "" ? null : parseLensFinish(rawFinish);
+    if (rawFinish != null && rawFinish !== "" && !finish) return { reason: "bad_line" };
     lines.push({
       kind,
       variant_id: kind === "frame" ? variant_id : null,
@@ -285,6 +292,7 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
         material_code: code(raw.selection?.material_code),
         photo_code: code(raw.selection?.photo_code),
         ar_code: code(raw.selection?.ar_code),
+        finish: design_code === "frame-only" ? null : finish,
       },
       description: kind === "own_frame" ? text(raw.description, 160) || null : null,
       photo: kind === "own_frame" ? photo : null,

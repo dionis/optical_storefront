@@ -7,6 +7,7 @@ import { localParts } from "./alerts";
 import { computeCostSheet, listCostRules, lineGroup, type CostOrderLike } from "./costing";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish } from "./lens-finish";
 import { listSellers } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
 import { allocateShared, computePnl, monthlyCharge, type CostItemLike, type Pnl } from "./store-costs";
@@ -167,7 +168,7 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
     .where("channel", "pos")
     .whereIn("establishment_id", ids.length ? ids : ["-"])
     .where("sold_date_local", "like", `${month}-%`)
-    .select("order_id", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar")) as Array<Record<string, unknown>>;
+    .select("order_id", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish")) as Array<Record<string, unknown>>;
 
   // Cost of goods with the owner's rules, one sheet per sale.
   const [rules, meta] = await Promise.all([
@@ -197,7 +198,7 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
           quantity: Number(l.qty),
           sku: (l.sku as string | null) ?? null,
           brand_slug: (m.brand_slug as string | undefined) ?? (m.collection_slug as string | undefined) ?? null,
-          lens: l.lens_design ? { design_code: l.lens_design as string, material_code: (l.lens_material as string | null) ?? null, photo_code: (l.lens_photo as string | null) ?? null, ar_code: (l.lens_ar as string | null) ?? null } : null,
+          lens: l.lens_design ? { design_code: l.lens_design as string, material_code: (l.lens_material as string | null) ?? null, photo_code: (l.lens_photo as string | null) ?? null, ar_code: (l.lens_ar as string | null) ?? null, finish: parseLensFinish(l.lens_finish) } : null,
         };
       }),
     };

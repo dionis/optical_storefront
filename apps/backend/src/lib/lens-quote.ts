@@ -1,4 +1,5 @@
 import type { Knex } from "@mikro-orm/knex";
+import { cellForFinish, LensFinishError, resolveLensFinish, type LensFinish } from "./lens-finish";
 import { applyStoreLensBreakdown, loadStoreLensPricesPg } from "./pricing-overview";
 
 /** Lens selection sent from the storefront wizard. */
@@ -7,6 +8,8 @@ export interface LensSelection {
   material_code?: string | null;
   photo_code?: string | null;
   ar_code?: string | null;
+  /** Stock or surfaced lens (lib/lens-finish.ts); absent = the design's default. */
+  finish?: LensFinish | null;
 }
 
 /** Per-component split of the lens add-on, in USD cents. */
@@ -18,6 +21,10 @@ export interface LensBreakdown {
   total_cents: number;
   /** The design's category ("sv" | "bifocal" | "prog"), which prices photochromics. */
   category: string | null;
+  /** The finish the base cell was read for; null for a bare frame. */
+  finish: LensFinish | null;
+  /** The lab's cost of that cell when the owner typed one (never sent to a client). */
+  cost_cents: number | null;
 }
 
 const n = (v: unknown): number => {
@@ -31,6 +38,8 @@ const EMPTY: LensBreakdown = {
   ar_cents: 0,
   total_cents: 0,
   category: null,
+  finish: null,
+  cost_cents: null,
 };
 
 /**
@@ -82,7 +91,16 @@ export async function computeLensBreakdown(
   const design = (designRows as unknown[])[0];
   if (!design) throw new Error(`Unknown lens design: ${selection.design_code}`);
   const category = String((design as { category: string }).category);
-  const lens_base_cents = n(((baseRows as { price_cents?: number }[])[0] ?? {}).price_cents);
+  // The cell of the requested finish (or the design's default). A material
+  // with no cell for that finish is not quoted at 0: the seller asked for a
+  // lens the list does not price, and the POS must say so (`finish_unavailable`).
+  const finish = resolveLensFinish(selection.finish ?? null, category);
+  const cell = cellForFinish(baseRows as Array<{ finish?: unknown; price_cents?: number | null; cost_cents?: number | null }>, finish);
+  if (selection.material_code && (!cell || cell.price_cents == null)) {
+    throw new LensFinishError(selection.design_code, selection.material_code, finish);
+  }
+  const lens_base_cents = n(cell?.price_cents);
+  const cost_cents = cell?.cost_cents == null ? null : n(cell.cost_cents);
 
   const [photoRows, arRows] = await Promise.all([
     selection.photo_code && photoTreat == null
@@ -122,7 +140,7 @@ export async function computeLensBreakdown(
   }
 
   return applyStoreLensBreakdown(
-    { lens_base_cents, photo_cents, ar_cents, total_cents: lens_base_cents + photo_cents + ar_cents, category },
+    { lens_base_cents, photo_cents, ar_cents, total_cents: lens_base_cents + photo_cents + ar_cents, category, finish, cost_cents },
     await loadStoreLensPricesPg(pg, establishmentId),
     selection
   );

@@ -11,6 +11,7 @@ import {
   LensStorePrice,
 } from "./models/index";
 import type { LensConfig, UsageType } from "@eyewear/shared";
+import { cellForFinish, defaultLensFinish } from "../../lib/lens-finish";
 
 export interface ComputedLensPrice {
   frame_price_cents: number;
@@ -97,14 +98,16 @@ export default class LensConfigModuleService extends MedusaService({
     }
     const category = (design as { category: string }).category;
 
-    // Base lens price for the (design, material) cell.
+    // Base lens price for the (design, material) cell, at the design's default
+    // finish (this legacy path has no finish; lib/lens-quote.ts is the real quote).
     let lens_base_cents = 0;
     if (selection.material_code) {
-      const [cell] = await this.listLensBasePrices({
+      const cells = (await this.listLensBasePrices({
         design_code: selection.design_code,
         material_code: selection.material_code,
-      });
-      lens_base_cents = (cell as { price_cents?: number } | undefined)?.price_cents ?? 0;
+      })) as unknown as Array<{ finish?: unknown; price_cents?: number }>;
+      const cell = cellForFinish(cells, defaultLensFinish(category));
+      lens_base_cents = cell?.price_cents ?? 0;
     }
 
     // Photochromic add-on, priced by the design's category.

@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { useLensCatalog } from "../data/lensCatalog.js";
+import { defaultFinishFor, useLensCatalog } from "../data/lensCatalog.js";
 import { FRAME_ONLY, PHOTO_COLORS, arGroupFor } from "../data/lensPricing.js";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
@@ -130,10 +130,13 @@ function OpticalChange({ change }) {
   );
 }
 
+/** Acabado con el que arranca una línea: stock salvo en progresivos, que son siempre digitales (lib/lens-finish.ts en el servidor). */
+const finishFor = (catalog, designId) => (designId === "frame-only" ? null : defaultFinishFor(catalog.DESIGNS.find((d) => d.id === designId)?.cat));
+
 /** Diseño, material y tratamientos de una línea, con las mismas reglas que el asistente web. */
 function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   const { t, lang } = useLang();
-  const { DESIGNS, MATERIALS, PHOTO, AR } = catalog;
+  const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
   const L = (o) => (o ? o[lang] ?? o.es : "");
   const sel = line.selection;
   const design = sel.design_code === "frame-only" ? FRAME_ONLY : DESIGNS.find((d) => d.id === sel.design_code) || null;
@@ -145,11 +148,17 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
   const set = (patch) => onChange({ ...line, selection: { ...sel, ...patch } });
   // Filtro por tipo de receta: monofocal → solo visión sencilla; multifocal → bifocal o progresivo.
   const designs = noRx ? [] : DESIGNS.filter((d) => (isMulti(rxForm) ? d.cat !== "sv" : d.cat === "sv"));
+  // Stock o tallado digital: solo donde el diseño admite los dos (visión
+  // sencilla y bifocal). Un acabado sin precio en la lista se ve pero no se
+  // elige: el servidor lo rechazaría con `finish_unavailable`.
+  const priced = (sel.material_code && FINISHES?.[sel.design_code]?.[sel.material_code]) || { stock: null, digital: null };
+  const finishOptions = cat && cat !== "prog" ? ["stock", "digital"] : [];
+  const finish = sel.finish || finishFor(catalog, sel.design_code);
   return (
     <div className="pos-lens">
       <label>
         <span>{t("adm.pos.lens.design")}<HelpTip topic="pos.step.lenses" /></span>
-        <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null })}>
+        <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null, finish: finishFor(catalog, e.target.value) })}>
           {line.kind === "frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
           {designs.map((d) => <option key={d.id} value={d.id}>{L(d.label)}</option>)}
         </select>
@@ -158,10 +167,45 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
         <>
           <label>
             <span>{t("adm.pos.lens.material")}<HelpTip topic="pos.step.lenses" /></span>
-            <select value={sel.material_code || ""} onChange={(e) => set({ material_code: e.target.value || null })}>
+            <select
+              value={sel.material_code || ""}
+              onChange={(e) => {
+                const material_code = e.target.value || null;
+                // Un material sin precio para el acabado elegido vuelve a stock, que es lo que la lista siempre tiene.
+                const cell = material_code && FINISHES?.[sel.design_code]?.[material_code];
+                const keep = !cell || finishOptions.length === 0 || cell[finish] != null;
+                set({ material_code, ...(keep ? {} : { finish: "stock" }) });
+              }}
+            >
               <option value="">—</option>
               {MATERIALS.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
             </select>
+          </label>
+          <label>
+            <span>{t("adm.pos.lens.finish")}<HelpTip topic="pos.step.lenses" /></span>
+            {finishOptions.length ? (
+              <div className="pos-rx-type" role="radiogroup" aria-label={t("adm.pos.lens.finish")}>
+                {finishOptions.map((f) => {
+                  const unpriced = sel.material_code ? priced[f] == null : false;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      role="radio"
+                      aria-checked={finish === f}
+                      className={finish === f ? "on" : ""}
+                      disabled={unpriced}
+                      title={unpriced ? t("adm.pos.lens.finishUnpriced") : undefined}
+                      onClick={() => set({ finish: f })}
+                    >
+                      {t(`adm.pos.lens.finish.${f}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <span className="pos-picked" title={t("adm.pos.lens.finishProg")}>{t("adm.pos.lens.finish.digital")}</span>
+            )}
           </label>
           <label>
             <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" /></span>
@@ -281,12 +325,12 @@ export default function PosSale({ me }) {
   const newCustomer = () => { setCustomerId(null); setCustInfo(null); setCustomer(EMPTY_CUSTOMER); setTouched({}); setShowCustErrors(false); };
 
   const addFrame = (p, v) => {
-    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } }]);
+    setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }]);
     setOwn(EMPTY_OWN);
   };
   const addOwn = () => {
     if (!own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
-    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null } }]);
+    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
     setOwn(EMPTY_OWN);
   };
   const onOwnPhoto = async (e) => {
@@ -316,7 +360,7 @@ export default function PosSale({ me }) {
   useEffect(() => {
     if (STEPS[step] !== "lenses") return;
     setLines((ls) => ls.map((l) => {
-      if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null } };
+      if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } };
       const multi = isMulti(rxNew);
       const d = l.selection.design_code;
       const fits = d === "frame-only" ? l.kind === "frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
@@ -324,7 +368,7 @@ export default function PosSale({ me }) {
       const first = catalog.DESIGNS.find((x) => (multi ? x.cat === "prog" : x.cat === "sv"));
       const power = maxPower(rxNew);
       const mat = catalog.MATERIALS.find((m) => power <= m.maxAbs) || catalog.MATERIALS[catalog.MATERIALS.length - 1];
-      return { ...l, touched: true, selection: { design_code: first?.id || "sv", material_code: mat?.id || null, photo_code: null, ar_code: null } };
+      return { ...l, touched: true, selection: { design_code: first?.id || "sv", material_code: mat?.id || null, photo_code: null, ar_code: null, finish: finishFor(catalog, first?.id || "sv") } };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);

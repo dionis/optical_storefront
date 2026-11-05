@@ -10,6 +10,10 @@ import type { Knex } from "@mikro-orm/knex";
  *
  * Reads via the shared Postgres connection (Knex) rather than the module service,
  * which keeps this independent of the lens-config module's ORM manager lifecycle.
+ *
+ * `base_prices` rows carry `finish` ("stock" | "digital", lib/lens-finish.ts)
+ * and are selected column by column on purpose: the table also holds the lab's
+ * `cost_cents`, which is internal and must NEVER reach this public route.
  */
 export async function GET(
   req: MedusaRequest,
@@ -24,7 +28,11 @@ export async function GET(
   const [designs, materials, base_prices, photos, ars, treatment_prices] = await Promise.all([
     pg("lens_design").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_material").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
-    pg("lens_base_price").whereNull("deleted_at"),
+    pg("lens_base_price")
+      .whereNull("deleted_at")
+      .select("design_code", "material_code", "finish", "price_cents")
+      // Before the finish migration the column is missing: same rows, no finish.
+      .catch(() => pg("lens_base_price").whereNull("deleted_at").select("design_code", "material_code", "price_cents")),
     pg("lens_photo_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_ar_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     treatmentPrices,

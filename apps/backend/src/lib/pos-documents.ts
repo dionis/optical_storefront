@@ -9,6 +9,7 @@ import { loadOrderImages } from "./email/order-images";
 import { renderReceiptEmail } from "./email/pos-emails";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish, resolveLensFinish, withFinishSuffix, type LensFinish } from "./lens-finish";
 import { storefrontOrigin } from "./order-access";
 import { getSale, listPaymentMethods, listTerminals, PosError, type SaleRow } from "./pos-data";
 import { loadPrescriptionRecords } from "./prescription-read";
@@ -72,7 +73,13 @@ export interface DocLine {
    */
   image_url?: string | null;
   design_code: string | null;
-  lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null } | null;
+  /**
+   * `design` already carries the finish word where it matters — "Visión
+   * Sencilla (tallado digital)" — so every print, the e-mail and the sale
+   * panel name the lens the lab has to cut without each formatting it;
+   * `finish` is the code for anything that needs to branch on it.
+   */
+  lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null; finish: LensFinish | null } | null;
   handling: "lenses_only" | "frame_supplied" | "patient_own_frame" | null;
   frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
   own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null; photo_key?: string | null } | null;
@@ -236,13 +243,19 @@ export async function buildSaleDocument(
       image_url: own ? ownPhotoUrl : productImageUrl((it.thumbnail as string | null) || thumbs.get(String(it.product_id ?? "")) || null),
       design_code: s.design_code ?? null,
       lens: withLenses
-        ? {
-            design: bi(labels.designs.get(String(s.design_code)) as never),
-            material: s.material_code ? bi(labels.materials.get(s.material_code) as never) : null,
-            photo: s.photo_code ? bi(labels.photos.get(s.photo_code) as never) : null,
-            ar: s.ar_code ? bi(labels.ars.get(s.ar_code) as never) : null,
-            category: (labels.designs.get(String(s.design_code))?.category as string | undefined) ?? null,
-          }
+        ? (() => {
+            const category = (labels.designs.get(String(s.design_code))?.category as string | undefined) ?? null;
+            // A line sold before finishes existed has none: it was the design's default cell.
+            const finish = resolveLensFinish(parseLensFinish(s.finish), category);
+            return {
+              design: withFinishSuffix(bi(labels.designs.get(String(s.design_code)) as never), finish, category),
+              material: s.material_code ? bi(labels.materials.get(s.material_code) as never) : null,
+              photo: s.photo_code ? bi(labels.photos.get(s.photo_code) as never) : null,
+              ar: s.ar_code ? bi(labels.ars.get(s.ar_code) as never) : null,
+              category,
+              finish,
+            };
+          })()
         : null,
       handling: own ? "patient_own_frame" : withLenses ? "frame_supplied" : null,
       frame: own

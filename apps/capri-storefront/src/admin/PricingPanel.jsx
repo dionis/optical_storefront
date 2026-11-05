@@ -158,7 +158,11 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
             rows: data.lenses.base.map((cell) => ({
               design: labelOf(designs.get(cell.design_code) || { code: cell.design_code }),
               tier: designs.get(cell.design_code)?.tier || "",
-              material: labelOf(materials.get(cell.material_code) || { code: cell.material_code }),
+              // El acabado se nombra donde el diseño admite los dos (stock / tallado digital).
+              material: [
+                labelOf(materials.get(cell.material_code) || { code: cell.material_code }),
+                designs.get(cell.design_code)?.category !== "prog" && cell.finish ? t(`adm.price.lens.finish.${cell.finish}`) : "",
+              ].filter(Boolean).join(" · "),
               price: priceOf(cell),
             })),
           },

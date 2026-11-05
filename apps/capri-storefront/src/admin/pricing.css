@@ -169,6 +169,17 @@ table.pp-grid tbody tr:hover td { background: var(--adm-surface-2); }
 .pp-cell:focus-visible { outline: none; border-color: var(--adm-accent, var(--adm-blue)); background: var(--adm-surface); }
 .pp-cell.own { font-weight: 800; color: var(--adm-accent-ink, var(--adm-navy)); background: var(--adm-accent-soft, transparent); border-color: transparent; }
 .pp-cell.na { color: var(--adm-muted); }
+/* Acabado (stock / tallado digital): dos columnas por material en visión
+   sencilla y bifocal. La primera de cada par lleva una raya a la izquierda
+   para que se lea el par; debajo del precio, para quien ve costos, el costo
+   del laboratorio en una casilla más chica y apagada. */
+table.pp-grid th.pp-finish.stock, table.pp-grid td.pp-finish-td.stock { border-left: 1px solid var(--adm-line); }
+.pp-finish-tag { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--adm-muted); }
+th.pp-finish.digital .pp-finish-tag { color: var(--adm-accent-ink, var(--adm-navy)); }
+.pp-cost { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px; font-size: 9.5px; font-weight: 700; color: var(--adm-muted); text-transform: uppercase; letter-spacing: .02em; }
+.pp-cell.cost { width: 7.5ch; font-size: 11px; color: var(--adm-muted); background: var(--adm-surface-2); border-color: transparent; }
+.pp-cell.cost:focus-visible { color: var(--adm-ink); }
+.pp-cell:disabled { opacity: .55; cursor: not-allowed; }
 .pp-tier { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 800;
   background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); }
 .pp-use { display: block; font-size: 10.5px; font-weight: 500; color: var(--adm-muted); }

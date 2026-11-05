@@ -4,6 +4,7 @@ import type { Knex } from "@mikro-orm/knex";
 import { computeCostSheet, isPaymentFeeRule, loadCostingContext, type CostRule } from "./costing";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish } from "./lens-finish";
 import { applyFilter, previousPeriod, type AnalyticsFilter, type Breakdown, type SaleListRow } from "./sales-analytics";
 import { hasPrivilege } from "./staff-profile";
 import { profilesByUser } from "./staff-profile-data";
@@ -61,6 +62,8 @@ export interface InsightLine {
   lens_material: string | null;
   lens_photo: string | null;
   lens_ar: string | null;
+  /** Stock or surfaced lens; null on rows projected before finishes existed (the design's default). */
+  lens_finish?: string | null;
   payment_methods: string[] | null;
   qty: number;
   total_cents: number;
@@ -163,7 +166,7 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
     // model (store_frame_cost_variation), so two stores selling the same
     // frame must not share a memo entry — that would cost one with the
     // other's money.
-    const key = [l.establishment_id, l.sku, l.brand_slug, l.category, l.lens_design, l.lens_material, l.lens_photo, l.lens_ar, l.qty].join("|");
+    const key = [l.establishment_id, l.sku, l.brand_slug, l.category, l.lens_design, l.lens_material, l.lens_photo, l.lens_ar, l.lens_finish ?? "", l.qty].join("|");
     const hit = memo.get(key);
     if (hit) return hit;
     const sheet = computeCostSheet(
@@ -175,7 +178,7 @@ export function lineEconomics(lines: InsightLine[], ctx: EconomicsContext): Line
           quantity: l.qty,
           sku: l.sku,
           brand_slug: l.brand_slug,
-          lens: { design_code: l.lens_design, material_code: l.lens_material, photo_code: l.lens_photo, ar_code: l.lens_ar },
+          lens: { design_code: l.lens_design, material_code: l.lens_material, photo_code: l.lens_photo, ar_code: l.lens_ar, finish: parseLensFinish(l.lens_finish) },
         }],
       },
       materials,
@@ -682,7 +685,7 @@ export function linesQuery(pg: Knex, f: AnalyticsFilter, tz: string): Knex.Query
     .select(
       "sale_fact.order_id", "sale_fact.sale_id", "sale_fact.channel", "sale_fact.establishment_id", "sale_fact.terminal_id",
       "sale_fact.seller_id", "sale_fact.seller_code", "sale_fact.product_id", "sale_fact.sku", "sale_fact.title", "sale_fact.brand",
-      "sale_fact.category", "sale_fact.lens_design", "sale_fact.lens_material", "sale_fact.lens_photo", "sale_fact.lens_ar",
+      "sale_fact.category", "sale_fact.lens_design", "sale_fact.lens_material", "sale_fact.lens_photo", "sale_fact.lens_ar", "sale_fact.lens_finish",
       "sale_fact.payment_methods", "sale_fact.qty", "sale_fact.total_cents", "sale_fact.tax_cents", "sale_fact.sold_date_local",
       pg.raw("EXTRACT(HOUR FROM sale_fact.sold_at AT TIME ZONE ?)::int AS hour", [tz])
     )

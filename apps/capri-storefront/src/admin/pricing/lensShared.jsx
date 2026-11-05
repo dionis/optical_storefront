@@ -22,7 +22,7 @@ export const labelOf = (row, lang) => String((lang === "en" ? row.label_en : row
  * con Enter). Guardar al salir del campo y no con un botón por celda es lo que
  * hace que la matriz se pueda repasar de corrido, que es como el dueño la lee.
  */
-export function Cell({ cents, masterCents, own, title, disabled, onSave }) {
+export function Cell({ cents, masterCents, own, title, disabled, onSave, allowEmpty = false, className = "", placeholder }) {
   const { lang } = useLang();
   const [value, setValue] = useState(dollars(cents));
   const [busy, setBusy] = useState(false);
@@ -32,17 +32,20 @@ export function Cell({ cents, masterCents, own, title, disabled, onSave }) {
   const commit = async () => {
     const next = value.trim();
     if (busy || next === dollars(cents)) return;
-    if (next === "") { setValue(dollars(cents)); return; }
+    // Vaciar una casilla solo significa algo donde «sin valor» existe (el costo
+    // de una celda); un precio en blanco vuelve a lo que había.
+    if (next === "" && !allowEmpty) { setValue(dollars(cents)); return; }
     setBusy(true);
     try {
-      await onSave(Number(next));
+      await onSave(next === "" ? null : Number(next));
     } finally {
       setBusy(false);
     }
   };
   return (
     <input
-      className={`pp-cell ${own ? "own" : ""}`}
+      className={`pp-cell ${own ? "own" : ""} ${className}`.trim()}
+      placeholder={placeholder}
       type="number"
       step="0.01"
       min="0"

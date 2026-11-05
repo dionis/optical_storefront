@@ -68,6 +68,7 @@ import {
 } from "./frame-cost";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { projectBoardOrder } from "./order-board";
+import { lensFinishLabel } from "./lens-finish";
 import { loadPricingOverview, type PricingOverview } from "./pricing-overview";
 import {
   KIND_LABEL,
@@ -2607,13 +2608,19 @@ export function pricesSheetRows(overview: PricingOverview): Cell[][] {
     ]);
   }
 
-  // 2 — Lentes: la matriz diseño × material.
+  // 2 — Lentes: la matriz diseño × material, una fila por acabado (stock /
+  // tallado digital) donde el diseño admite los dos. El costo del laboratorio
+  // NO se escribe: la pestaña la lee quien no tiene permiso de costos.
+  const designCategory = new Map(
+    (overview.lenses.designs as Array<Record<string, unknown>>).map((d) => [String(d["code"]), String(d["category"] ?? "")])
+  );
   for (const cell of overview.lenses.base) {
     const price = overview.store && cell.store_cents != null ? cell.store_cents : cell.cents;
+    const finishWord = designCategory.get(cell.design_code) === "prog" ? "" : lensFinishLabel(cell.finish).es;
     rows.push([
       "Lentes",
       designLabel.get(cell.design_code) ?? cell.design_code,
-      materialLabel.get(cell.material_code) ?? cell.material_code,
+      [materialLabel.get(cell.material_code) ?? cell.material_code, finishWord].filter(Boolean).join(" · "),
       dollarsOf(price),
       "USD",
       [designTier.get(cell.design_code) || "", overview.store && cell.store_cents !== cell.cents ? `maestro ${dollarsOf(cell.cents)}` : ""].filter(Boolean).join(" · "),

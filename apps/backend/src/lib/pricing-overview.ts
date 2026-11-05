@@ -9,6 +9,7 @@ import { listSellers } from "./sellers";
 import { resolveStoreSettings } from "./store-settings";
 import { disabledIds, loadCostToggles, loadDefaultCommissionPct } from "./store-cost-toggle";
 import { brandOf } from "./store-assortment";
+import { defaultLensFinish, LENS_FINISHES, parseLensFinish, type LensFinish } from "./lens-finish";
 import { isActiveAt, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices, type PriceRuleRow } from "./store-pricing-data";
 import { STORE_COST_MODULE } from "../modules/store-cost";
@@ -59,8 +60,34 @@ export interface LensStorePriceRow extends LensStorePriceLike {
   created_by: string | null;
 }
 
-/** The `item_key` of each kind of cell, so every writer spells it the same. */
-export const lensBaseKey = (designCode: string, materialCode: string): string => `${designCode}:${materialCode}`;
+/**
+ * The `item_key` of each kind of cell, so every writer spells it the same.
+ *
+ * A base cell's key is "<design>:<material>" for a STOCK cell and
+ * "<design>:<material>:digital" for a surfaced one. The stock spelling is the
+ * one every row written before finishes existed already carries, so those
+ * variations keep applying. A progressive's single cell is digital by nature
+ * but keeps the short key ("prog-mid:cr39"): it was written that way and the
+ * panel never shows a stock column for it — `lensBaseKey(design, material,
+ * finish, category)` makes that choice so no caller has to.
+ */
+export const lensBaseKey = (
+  designCode: string,
+  materialCode: string,
+  finish: LensFinish = "stock",
+  category: string | null = null
+): string => {
+  const base = `${designCode}:${materialCode}`;
+  return finish === "digital" && defaultLensFinish(category) !== "digital" ? `${base}:digital` : base;
+};
+/** Splits a base key back into its parts; null when it is not one. */
+export function parseLensBaseKey(key: string): { design_code: string; material_code: string; finish: LensFinish } | null {
+  const [design_code, material_code, rest, ...more] = key.split(":");
+  if (!design_code || !material_code || more.length) return null;
+  if (rest === undefined) return { design_code, material_code, finish: "stock" };
+  const finish = parseLensFinish(rest);
+  return finish ? { design_code, material_code, finish } : null;
+}
 export const lensPhotoKey = (code: string, category: string): string => `${code}:${category}`;
 export const lensArKey = (code: string): string => code;
 export const LENS_ADJUST_KEY = "all";
@@ -111,6 +138,8 @@ export interface LensBreakdownLike {
   ar_cents: number;
   total_cents: number;
   category: string | null;
+  /** Which base cell was quoted (lib/lens-finish.ts); absent on older callers = the design's default. */
+  finish?: LensFinish | null;
 }
 
 export interface LensSelectionLike {
@@ -126,17 +155,17 @@ export interface LensSelectionLike {
  * the photochromic and the AR each resolve on their own, so a store can put an
  * exact price on just one cell and let the percentage cover the rest.
  */
-export function applyStoreLensBreakdown(
-  breakdown: LensBreakdownLike,
+export function applyStoreLensBreakdown<T extends LensBreakdownLike>(
+  breakdown: T,
   storeRows: LensStorePriceLike[],
   selection: LensSelectionLike
-): LensBreakdownLike {
+): T {
   if (!storeRows?.length) return breakdown;
   const category = breakdown.category ?? "";
   const lens_base_cents = selection.material_code
     ? applyStoreLensPrice(breakdown.lens_base_cents, storeRows, {
         kind: "base",
-        key: lensBaseKey(selection.design_code, selection.material_code),
+        key: lensBaseKey(selection.design_code, selection.material_code, breakdown.finish ?? defaultLensFinish(category), category),
       })
     : breakdown.lens_base_cents;
   const photo_cents =
@@ -163,6 +192,7 @@ export function applyStoreLensBreakdown(
 export function lensPriceDenied(kind: unknown, key: unknown, value: unknown): string | null {
   if (typeof kind !== "string" || !(LENS_STORE_KINDS as readonly string[]).includes(kind)) return "bad_kind";
   if (typeof key !== "string" || !key.trim() || key.length > 120) return "bad_key";
+  if (kind === "base" && !parseLensBaseKey(key)) return "bad_key";
   if (kind === "adjust") {
     if (key !== LENS_ADJUST_KEY) return "bad_key";
     if (value === null) return null;
@@ -335,7 +365,14 @@ export interface PricingOverview {
   lenses: {
     designs: Array<Record<string, unknown>>;
     materials: Array<Record<string, unknown>>;
-    base: Array<{ design_code: string; material_code: string; cents: number; store_cents: number | null }>;
+    /**
+     * One row per priced cell: (design, material, finish). `cost_cents` is the
+     * lab's cost and is present ONLY for a reader with cost privileges
+     * (`redactLensCosts`); a plain reader never receives the key.
+     */
+    base: LensBaseCellView[];
+    /** Whether this payload carries `cost_cents` (the panel shows the cost row only then). */
+    cost_access: boolean;
     photo: Array<{ code: string; label_es: string; label_en: string; colors: string[]; sv: number | null; bifocal: number | null; prog: number | null; store: Record<string, number> }>;
     ar: Array<{ code: string; label_es: string; label_en: string; ar_group: string; cents: number; store_cents: number | null }>;
     store: { adjust_pct: number | null; cells: Array<{ kind: string; key: string; value: number }> } | null;
@@ -350,6 +387,36 @@ export interface PricingOverview {
     variable: Array<Record<string, unknown>>;
     taxes: { rate_pct: number; source: string };
     profit_target_pct: number | null;
+  };
+}
+
+export interface LensBaseCellView {
+  design_code: string;
+  material_code: string;
+  finish: LensFinish;
+  /** Master price of the cell. */
+  cents: number;
+  /** What the open store charges (its own cell, or its % over the master); null when reading the master. */
+  store_cents: number | null;
+  /** Lab cost of the cell (master only; null = unknown). Stripped for readers without cost privileges. */
+  cost_cents?: number | null;
+}
+
+/**
+ * The lens half of the payload as a reader WITHOUT cost privileges may see it:
+ * `cost_cents` removed from every cell and `cost_access` false. Done on the
+ * server, never by hiding a column in the browser (same rule as
+ * `redactInsights` in lib/sales-insights.ts). Pure.
+ */
+export function redactLensCosts<T extends { base: LensBaseCellView[]; cost_access: boolean }>(lenses: T, canSeeCosts: boolean): T {
+  if (canSeeCosts) return { ...lenses, cost_access: true };
+  return {
+    ...lenses,
+    cost_access: false,
+    base: lenses.base.map((cell) => {
+      const { cost_cents: _cost, ...rest } = cell;
+      return rest;
+    }),
   };
 }
 
@@ -428,14 +495,27 @@ export async function loadPricingOverview(
   // ── Lenses ──
   const designs = lensMatrix.designs as Array<Record<string, unknown>>;
   const materials = lensMatrix.materials as Array<Record<string, unknown>>;
-  const base = (lensMatrix.base_prices as Array<Record<string, unknown>>).map((c) => {
+  const categoryOf = new Map(designs.map((d) => [String(d["code"]), String(d["category"] ?? "")]));
+  const base: LensBaseCellView[] = (lensMatrix.base_prices as Array<Record<string, unknown>>).map((c) => {
     const design_code = String(c["design_code"]);
     const material_code = String(c["material_code"]);
+    const category = categoryOf.get(design_code) ?? null;
+    // A row from a database without the finish column is the design's only cell.
+    const finish = parseLensFinish(c["finish"]) ?? defaultLensFinish(category);
     const cents = Number(c["price_cents"]) || 0;
-    const key = lensBaseKey(design_code, material_code);
+    const key = lensBaseKey(design_code, material_code, finish, category);
     const resolved = applyStoreLensPrice(cents, storeLens, { kind: "base", key });
-    return { design_code, material_code, cents, store_cents: effectiveStore ? resolved : null };
+    const cost = c["cost_cents"];
+    return {
+      design_code,
+      material_code,
+      finish,
+      cents,
+      store_cents: effectiveStore ? resolved : null,
+      cost_cents: cost == null || cost === "" ? null : Math.round(Number(cost)) || 0,
+    };
   });
+  base.sort((a, b) => a.design_code.localeCompare(b.design_code) || a.material_code.localeCompare(b.material_code) || LENS_FINISHES.indexOf(a.finish) - LENS_FINISHES.indexOf(b.finish));
   const photo = (lensMatrix.photos as Array<Record<string, unknown>>).map((p) => {
     const code = String(p["code"]);
     const perCat: Record<string, number | null> = {
@@ -509,6 +589,8 @@ export async function loadPricingOverview(
       designs,
       materials,
       base,
+      // The loader answers the full master; the route redacts per reader.
+      cost_access: true,
       photo,
       ar,
       store: effectiveStore

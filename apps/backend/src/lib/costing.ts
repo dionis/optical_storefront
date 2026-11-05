@@ -5,6 +5,8 @@ import type CostingModuleService from "../modules/costing/service";
 import { LENS_CONFIG_MODULE } from "../modules/lens-config/index";
 import type LensConfigModuleService from "../modules/lens-config/service";
 import { ensureFrameCostCache, frameCostCents, type FrameCostLookup } from "./frame-cost";
+import { ensureLensCellCostCache, lensCellCostCents, type LensCostLookup } from "./lens-cost";
+import { lensFinishLabel, type LensFinish } from "./lens-finish";
 import type { BoardOrder } from "./order-board";
 import { listSellers } from "./sellers";
 import { isEnabled, loadCostToggles, type CostToggleRow } from "./store-cost-toggle";
@@ -428,7 +430,14 @@ export interface CostOrderLike {
     quantity?: unknown;
     sku?: string | null;
     brand_slug?: string | null;
-    lens?: { design_code?: string | null; material_code?: string | null; photo_code?: string | null; ar_code?: string | null } | null;
+    lens?: {
+      design_code?: string | null;
+      material_code?: string | null;
+      photo_code?: string | null;
+      ar_code?: string | null;
+      /** Stock or surfaced (lib/lens-finish.ts); absent = the design's default cell. */
+      finish?: LensFinish | null;
+    } | null;
   }>;
 }
 
@@ -551,6 +560,12 @@ function suggestedPrice(m: SheetModel, manual: boolean): number | null {
  * any caller that already holds the rows inject their own lookup. It is asked
  * for `order.establishment_id`, so a sale of a store is costed with THAT
  * store's figure and falls back to the chain's only where the store inherits.
+ *
+ * `lensCost` is the same idea for the lens: the matrix cell's `cost_cents`
+ * (lib/lens-cost.ts) is the lab's real price list, so when the sold
+ * (design, material, finish) cell carries one it REPLACES the `lens_design` +
+ * `lens_material` rule lines; the photochromic and AR rules still add on top.
+ * Cells without a cost, and a cache that never loaded, leave the rules in charge.
  */
 export function computeCostSheet(
   order: CostOrderLike,
@@ -558,7 +573,8 @@ export function computeCostSheet(
   seller?: { commission_pct: number } | null,
   manual?: StoredCostSheet | null,
   targetPct?: number | null,
-  frameCost: FrameCostLookup = frameCostCents
+  frameCost: FrameCostLookup = frameCostCents,
+  lensCost: LensCostLookup = lensCellCostCents
 ): CostSheet {
   const gross = round2(num(order.total));
   // Which store's costs this sale is priced with. Read once: every frame line
@@ -704,12 +720,40 @@ export function computeCostSheet(
       });
     }
     const lens = item.lens ?? {};
-    const lensParts: Array<[CostKind, string | null | undefined]> = [
-      ["lens_design", lens.design_code],
-      ["lens_material", lens.material_code],
-      ["lens_photo", lens.photo_code],
-      ["lens_ar", lens.ar_code],
-    ];
+    const cellCents =
+      lens.design_code && lens.design_code !== "frame-only" && lens.material_code
+        ? lensCost(lens.design_code, lens.material_code, lens.finish ?? null)
+        : null;
+    if (cellCents !== null) {
+      // One line for the lens itself, priced by the lab's list for that cell.
+      // Kind and key stay `lens_design:<design>` so the by-kind summaries and
+      // `lineKind` read it as the lens line it replaces.
+      const amount = round2(cellCents / 100);
+      const finishWord = lens.finish ? ` · ${lensFinishLabel(lens.finish).es}` : "";
+      materials.push({
+        key: `lens_design:${lens.design_code}`,
+        kind: "lens_design",
+        group: "material",
+        label: `Lente ${lens.design_code} · ${lens.material_code}${finishWord}`,
+        amount,
+        qty,
+        subtotal: round2(amount * qty),
+        source: "supplier",
+        match_key: `${lens.design_code}:${lens.material_code}${lens.finish ? `:${lens.finish}` : ""}`,
+        undefined_cost: amount === 0,
+      });
+    }
+    const lensParts: Array<[CostKind, string | null | undefined]> = cellCents !== null
+      ? [
+          ["lens_photo", lens.photo_code],
+          ["lens_ar", lens.ar_code],
+        ]
+      : [
+          ["lens_design", lens.design_code],
+          ["lens_material", lens.material_code],
+          ["lens_photo", lens.photo_code],
+          ["lens_ar", lens.ar_code],
+        ];
     for (const [kind, code] of lensParts) {
       if (!code || code === "frame-only") continue;
       const rule = idx.get(`${kind}:${normalizeMatchKey(kind, code)}`);
@@ -1024,7 +1068,7 @@ function rowToRule(r: Record<string, unknown>): CostRule {
 export async function listCostRules(container: MedusaContainer): Promise<CostRule[]> {
   const svc = costingService(container);
   const rows = (await svc.listCostRules({}, { take: 1000 })) as unknown as Record<string, unknown>[];
-  await ensureFrameCostCache(container);
+  await Promise.all([ensureFrameCostCache(container), ensureLensCellCostCache(container)]);
   return rows
     .filter((r) => !r["deleted_at"])
     .map(rowToRule)

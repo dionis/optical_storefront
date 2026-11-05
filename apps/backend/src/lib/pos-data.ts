@@ -16,6 +16,7 @@ import { recordAudit } from "./audit";
 import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
+import { LensFinishError } from "./lens-finish";
 import { computeLensBreakdown } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
@@ -737,7 +738,10 @@ export async function quoteSale(
       const b = await computeLensBreakdown(pg, line.selection, establishmentId);
       lensCents = b.total_cents;
       category = b.category;
-    } catch {
+    } catch (e) {
+      // The finish the seller picked has no priced cell (a digital single
+      // vision the owner has not priced yet, or "stock" on a progressive).
+      if (e instanceof LensFinishError) throw new PosError(e.reason, 422, { design_code: e.design_code, material_code: e.material_code, finish: e.finish });
       throw new PosError("bad_lens");
     }
 

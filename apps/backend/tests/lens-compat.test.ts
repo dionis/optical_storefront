@@ -17,6 +17,7 @@ import {
   resolveLegacySelection,
   LensCompatError,
 } from "../src/lib/lens-compat";
+import { LensFinishError } from "../src/lib/lens-finish";
 import { computeLensBreakdown } from "../src/lib/lens-quote";
 
 // ── Fixtures: the rows SeedLens2026Data3 puts in the database ────────────────
@@ -46,14 +47,23 @@ const BASE_USD: Record<string, Record<string, number>> = {
   "prog-high": { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 },
 };
 
-const BASE_PRICES = Object.entries(BASE_USD).flatMap(([design_code, row]) =>
-  Object.entries(row).map(([material_code, usd]) => ({
-    design_code,
-    material_code,
-    price_cents: usd * 100,
-    deleted_at: null,
-  }))
-);
+/** Which finish each seeded cell has after UpgradeLensListFinish8: progressives are digital, the rest stock. */
+const finishOf = (design_code: string) => (design_code.startsWith("prog") ? "digital" : "stock");
+
+const BASE_PRICES = [
+  ...Object.entries(BASE_USD).flatMap(([design_code, row]) =>
+    Object.entries(row).map(([material_code, usd]) => ({
+      design_code,
+      material_code,
+      finish: finishOf(design_code),
+      price_cents: usd * 100,
+      cost_cents: null as number | null,
+      deleted_at: null,
+    }))
+  ),
+  // The owner priced ONE surfaced single-vision cell so far (with its lab cost).
+  { design_code: "sv", material_code: "cr39", finish: "digital", price_cents: 9500, cost_cents: 3100, deleted_at: null },
+];
 
 const PHOTOS = [
   { code: "photo-grey", label_es: "Fotocromático Grey", label_en: "Photochromic Grey", colors: ["grey"], price_sv_cents: c(85), price_bifocal_cents: c(110), price_prog_cents: c(90), sort: 0, is_active: true, deleted_at: null },
@@ -148,7 +158,9 @@ describe("refractiveIndexOf", () => {
 describe("listCompatLensOptions", () => {
   it("returns one row per priced (design, material) cell", async () => {
     const options = await listCompatLensOptions(pg);
-    expect(options).toHaveLength(BASE_PRICES.length); // 4 designs × 6 materials
+    // 4 designs × 6 materials: the legacy contract knows no finish, so the
+    // extra digital sv cell does not add a row.
+    expect(options).toHaveLength(BASE_PRICES.filter((b) => b.finish === finishOf(b.design_code)).length);
   });
 
   it("prices each row from the matrix, in cents", async () => {
@@ -413,5 +425,35 @@ describe("legacy request pricing", () => {
     await expect(
       computeLensBreakdown(pg, { design_code: "nope", material_code: "cr39" })
     ).rejects.toThrow(/Unknown lens design/);
+  });
+
+  it("quotes the stock cell by default and the digital one on request", async () => {
+    const stock = await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39" });
+    expect(stock.finish).toBe("stock");
+    expect(stock.lens_base_cents).toBe(6000);
+    expect(stock.cost_cents).toBeNull();
+    const digital = await computeLensBreakdown(pg, { design_code: "sv", material_code: "cr39", finish: "digital" });
+    expect(digital.finish).toBe("digital");
+    expect(digital.lens_base_cents).toBe(9500);
+    expect(digital.cost_cents).toBe(3100);
+  });
+
+  it("refuses a finish the list does not price instead of quoting it at 0", async () => {
+    await expect(computeLensBreakdown(pg, { design_code: "sv", material_code: "poly", finish: "digital" })).rejects.toBeInstanceOf(LensFinishError);
+    await expect(computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39", finish: "stock" })).rejects.toMatchObject({ reason: "finish_unavailable" });
+  });
+
+  it("treats a progressive as digital whether or not the client says so", async () => {
+    const implicit = await computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39" });
+    const explicit = await computeLensBreakdown(pg, { design_code: "prog-mid", material_code: "cr39", finish: "digital" });
+    expect(implicit.finish).toBe("digital");
+    expect(explicit.lens_base_cents).toBe(implicit.lens_base_cents);
+  });
+
+  it("keeps the legacy option list on the default (stock) cell, so the web wizard is unchanged", async () => {
+    const options = await listCompatLensOptions(pg, "single_vision_distance");
+    const cr39 = options.filter((o) => o.design_code === "sv" && o.material_code === "cr39");
+    expect(cr39).toHaveLength(1);
+    expect(cr39[0].price_modifier_cents).toBe(6000);
   });
 });

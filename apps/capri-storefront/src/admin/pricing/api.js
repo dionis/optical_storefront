@@ -46,9 +46,20 @@ export function savePricingOverride({ productId, variantId, price, kind = "frame
   });
 }
 
-/** Una casilla de lentes: kind "base"|"photo"|"ar"|"adjust". value null la devuelve al maestro. */
-export function savePricingLens({ kind, key: itemKey, value, store }) {
-  return post("/admin/pricing/lenses", { kind, key: itemKey, value: value === null || value === "" ? null : Number(value), store });
+/**
+ * Una casilla de lentes: kind "base"|"photo"|"ar"|"adjust". value null la
+ * devuelve al maestro. Clave de una celda base: "diseño:material[:digital]".
+ * `field` "cost" escribe el costo del laboratorio de esa celda (solo maestro,
+ * solo con permiso de costos); por defecto, el precio.
+ */
+export function savePricingLens({ kind, key: itemKey, value, store, field }) {
+  return post("/admin/pricing/lenses", {
+    kind,
+    key: itemKey,
+    value: value === null || value === "" ? null : Number(value),
+    store,
+    ...(field === "cost" ? { field: "cost" } : {}),
+  });
 }
 
 /** Comisión por defecto y/o la de cada vendedor. */

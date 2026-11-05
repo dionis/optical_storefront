@@ -13,6 +13,13 @@
 //
 // Los fotocromáticos y los antirreflejos se fueron a su propia pestaña
 // (TreatmentsSection.jsx): son tratamientos, no diseños de lente.
+//
+// ACABADO: visión sencilla y bifocal tienen dos celdas por material — Stock y
+// Tallado digital — cada una con su precio y, para quien ve costos, su costo
+// de laboratorio debajo (`cost_cents`, que el servidor solo manda con permiso
+// de costos: `lenses.cost_access`). Los progresivos son digitales de suyo y
+// llevan una sola columna. La clave de una celda es "diseño:material" (stock)
+// o "diseño:material:digital"; el costo se escribe solo en el maestro.
 import { useMemo, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import HelpTip from "../HelpTip.jsx";
@@ -56,8 +63,13 @@ export default function LensesSection({ lenses, store, cat, onCat, onSaved, onEr
   const picked = tiers.some((x) => x === tier) ? tier : null;
   const rows = picked === null ? designs : designs.filter((d) => (d.tier || null) === picked);
 
-  const baseCell = (design, material) =>
-    lenses.base.find((b) => b.design_code === design && b.material_code === material) ?? null;
+  const baseCell = (design, material, finish) =>
+    lenses.base.find((b) => b.design_code === design && b.material_code === material && (b.finish || "stock") === finish) ?? null;
+  // Columnas por material en este tipo: dos acabados, o uno (digital) en progresivos.
+  const finishes = active === "prog" ? ["digital"] : ["stock", "digital"];
+  const finishKey = (design, material, finish) => (finish === "digital" && active !== "prog" ? `${design}:${material}:digital` : `${design}:${material}`);
+  const finishName = (f) => (active === "prog" ? t("adm.price.lens.finish.digitalOnly") : t(`adm.price.lens.finish.${f}`));
+  const showCost = Boolean(lenses.cost_access);
 
   return (
     <>
@@ -106,9 +118,16 @@ export default function LensesSection({ lenses, store, cat, onCat, onSaved, onEr
       <div className="pp-grid-wrap tall">
         <table className="pp-grid">
           <thead>
+            {/* Una sola fila de cabecera (es pegajosa): el material arriba y,
+                debajo, el acabado de esa columna. */}
             <tr>
               <th>{t("adm.price.lenses.design")}</th>
-              {lenses.materials.map((m) => <th key={m.code}>{labelOf(m, lang)}</th>)}
+              {lenses.materials.map((m) => finishes.map((f) => (
+                <th key={`${m.code}:${f}`} className={`pp-finish ${f}`}>
+                  {labelOf(m, lang)}
+                  {finishes.length > 1 && <span className="pp-finish-tag">{finishName(f)}</span>}
+                </th>
+              )))}
             </tr>
           </thead>
           <tbody>
@@ -119,27 +138,50 @@ export default function LensesSection({ lenses, store, cat, onCat, onSaved, onEr
                   {d.tier && <span className="pp-tier">{d.tier}</span>}
                   {(lang === "en" ? d.use_en : d.use_es) && <span className="pp-use">{lang === "en" ? d.use_en : d.use_es}</span>}
                 </th>
-                {lenses.materials.map((m) => {
-                  const cell = baseCell(d.code, m.code);
-                  const key = `${d.code}:${m.code}`;
-                  const shown = isStore ? (cell?.store_cents ?? cell?.cents ?? 0) : (cell?.cents ?? 0);
+                {lenses.materials.map((m) => finishes.map((f) => {
+                  const cell = baseCell(d.code, m.code, f);
+                  const key = finishKey(d.code, m.code, f);
+                  const unpriced = !cell;
+                  const shown = unpriced ? null : isStore ? (cell.store_cents ?? cell.cents ?? 0) : (cell.cents ?? 0);
+                  const names = { design: labelOf(d, lang), material: labelOf(m, lang), finish: finishName(f) };
+                  const priceTitle = finishes.length > 1 ? t("adm.price.lens.finish.editCell", names) : t("adm.price.lenses.editCell", names);
                   return (
-                    <td key={m.code}>
+                    <td key={key} className={`pp-finish-td ${f}`}>
                       <Cell
                         cents={shown}
                         masterCents={cell?.cents ?? null}
                         own={isStore && isOwn("base", key)}
-                        title={t("adm.price.lenses.editCell", { design: labelOf(d, lang), material: labelOf(m, lang) })}
+                        className={unpriced ? "na" : ""}
+                        placeholder={unpriced ? "—" : undefined}
+                        // Una celda que el maestro no tiene no se puede variar por tienda: primero se le pone precio en el maestro.
+                        disabled={unpriced && isStore}
+                        title={unpriced ? `${priceTitle} · ${t("adm.price.lens.finish.unpriced")}` : priceTitle}
                         onSave={(v) => save({ kind: "base", key, value: v })}
                       />
+                      {showCost && (
+                        <label className="pp-cost" title={isStore ? t("adm.price.lens.finish.costMasterOnly") : t("adm.price.lens.finish.costHint")}>
+                          <span>{t("adm.price.lens.finish.cost")}</span>
+                          <Cell
+                            cents={cell?.cost_cents ?? null}
+                            masterCents={null}
+                            own={false}
+                            allowEmpty
+                            className="cost"
+                            placeholder="—"
+                            disabled={isStore || unpriced}
+                            title={t("adm.price.lens.finish.editCost", names)}
+                            onSave={(v) => save({ kind: "base", key, value: v, field: "cost" })}
+                          />
+                        </label>
+                      )}
                     </td>
                   );
-                })}
+                }))}
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td className="pp-empty" colSpan={lenses.materials.length + 1}>{t("adm.price.lenses.catEmpty")}</td>
+                <td className="pp-empty" colSpan={lenses.materials.length * finishes.length + 1}>{t("adm.price.lenses.catEmpty")}</td>
               </tr>
             )}
           </tbody>

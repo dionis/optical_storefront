@@ -41,8 +41,11 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
 
   const lensText = (selection) => {
     if (selection.design_code === "frame-only") return L(FRAME_ONLY.label) || t("adm.pos.sum.frameOnly");
+    const design = catalog.DESIGNS.find((d) => d.id === selection.design_code);
+    // El acabado se nombra donde el diseño admite los dos (stock / tallado digital); un progresivo es digital de suyo.
+    const finish = design && design.cat !== "prog" && selection.finish ? ` (${t(`adm.pos.lens.finish.${selection.finish}`)})` : "";
     return [
-      L(catalog.DESIGNS.find((d) => d.id === selection.design_code)?.label),
+      design ? `${L(design.label)}${finish}` : "",
       L(catalog.MATERIALS.find((m) => m.id === selection.material_code)?.label),
       L(catalog.PHOTO.find((p) => p.id === selection.photo_code)?.label),
       L(Object.values(catalog.AR).flat().find((a) => a.id === selection.ar_code)?.label),

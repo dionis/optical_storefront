@@ -7,6 +7,7 @@ import { SALES_ANALYTICS_MODULE } from "../modules/sales-analytics";
 import type SalesAnalyticsModuleService from "../modules/sales-analytics/service";
 import { localParts } from "./alerts";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish } from "./lens-finish";
 import { normalizeSellerCodeLoose } from "./order-board";
 import { tenant } from "./tenant";
 
@@ -68,6 +69,7 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
     lens_material: withLenses ? sel.material_code ?? null : null,
     lens_photo: withLenses ? sel.photo_code ?? null : null,
     lens_ar: withLenses ? sel.ar_code ?? null : null,
+    lens_finish: withLenses ? parseLensFinish(sel.finish) : null,
     has_prescription: Boolean(md.prescription_id),
     qty,
     list_cents: list,
