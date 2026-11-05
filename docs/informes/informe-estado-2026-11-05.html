@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RUBI LENS · Informe de estado 5-nov-2026</title>
+<style>
+  @page { size: Letter; margin: 18mm 16mm 20mm 16mm; }
+  :root { --navy:#182a4e; --blue:#0E5AD0; --ink:#17203a; --muted:#5b6472; --line:#dde3ee; --soft:#f4f7fc;
+          --ok:#116633; --okbg:#e6f6ec; --mid:#7a5b00; --midbg:#fff4d6; --bad:#8a1c1c; --badbg:#fde8e8; --gold:#b8860b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:10.6pt/1.45 "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); }
+  h1 { font-size:26pt; margin:0 0 6px; color:var(--navy); letter-spacing:.01em; }
+  h2 { font-size:15pt; margin:0 0 8px; color:var(--navy); border-bottom:2px solid var(--line); padding-bottom:4px; page-break-after:avoid; }
+  h3 { font-size:11.5pt; margin:14px 0 4px; color:var(--blue); page-break-after:avoid; }
+  p { margin:5px 0 8px; }
+  .cover { height:230mm; display:flex; flex-direction:column; justify-content:center; page-break-after:always; }
+  .cover .kicker { color:var(--gold); font-weight:700; letter-spacing:.14em; text-transform:uppercase; font-size:9.5pt; }
+  .cover .sub { font-size:13pt; color:var(--muted); margin-top:8px; }
+  .cover .meta { margin-top:40px; font-size:10pt; color:var(--muted); line-height:1.7; }
+  .cover .box { margin-top:34px; border-left:5px solid var(--gold); background:var(--soft); padding:14px 18px; }
+  section { page-break-before:auto; margin-top:18px; }
+  section.flow { page-break-before:auto; }
+  table { width:100%; border-collapse:collapse; font-size:9.3pt; margin:6px 0 12px; page-break-inside:auto; }
+  tr { page-break-inside:avoid; }
+  th { text-align:left; background:var(--soft); color:var(--muted); font-weight:700; border-bottom:1.5px solid var(--line); }
+  th, td { padding:5px 7px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.c { text-align:center; white-space:nowrap; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:8.5pt; font-weight:700; white-space:nowrap; }
+  .ok { background:var(--okbg); color:var(--ok); } .mid { background:var(--midbg); color:var(--mid); } .bad { background:var(--badbg); color:var(--bad); }
+  .new { background:#e8efff; color:#1b3f9e; }
+  code { font-family: Consolas, "Courier New", monospace; font-size:8.8pt; background:#f2f5fa; border:1px solid var(--line); border-radius:4px; padding:0 4px; }
+  ul { margin:4px 0 8px; padding-left:18px; } li { margin:2px 0; }
+  .kpis { display:flex; gap:10px; margin:10px 0 14px; }
+  .kpi { flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:#fff; }
+  .kpi b { display:block; font-size:20pt; color:var(--navy); line-height:1.1; }
+  .kpi span { color:var(--muted); font-size:9pt; }
+  .note { border-left:4px solid var(--blue); background:var(--soft); padding:8px 12px; margin:8px 0 12px; }
+  .warn { border-left:4px solid var(--gold); background:var(--midbg); padding:8px 12px; margin:8px 0 12px; }
+  .muted { color:var(--muted); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  footer { position:fixed; bottom:-12mm; left:0; right:0; text-align:center; font-size:8pt; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">RUBI LENS · Gestión de tiendas</div>
+  <h1>Informe de estado, brechas y mejoras</h1>
+  <div class="sub">Qué está, qué no está, qué se debe mejorar y por qué — contraste del documento «Gestión de Tiendas RUBI LENS v2.2» (25-oct-2026) con el proyecto real: rama <code>develop_optical_storepos</code>, repo local, GitHub, Vercel y Coolify.</div>
+  <div class="box">
+    <b>En una frase:</b> el sistema cubre ya el 80 % del documento (incluidas las fases 1 a 3 completas y buena parte de la 4), hoy se corrigieron 13 fallos —dos de ellos de seguridad— y se añadieron 9 historias que faltaban; <b>nada de lo hecho desde el 1 de noviembre está desplegado todavía</b>: 21 commits esperan el <code>push</code> del dueño y un <i>Redeploy</i> en Coolify.
+  </div>
+  <div class="meta">
+    Fecha: jueves 5 de noviembre de 2026<br>
+    Para: Daniel (dueño)<br>
+    Roles aplicados en la revisión: QA senior · ingeniería fullstack senior · jefe de proyecto · dueño de tienda · diseño web/responsive<br>
+    Base de código revisada: commit <code>1d1a332</code> (21 commits sobre <code>origin/6ddebb6</code>) · 64 suites / 1.157 pruebas en verde · i18n 5.457 claves × 2 idiomas
+  </div>
+</div>
+
+<section class="flow">
+  <h2>1. Resumen ejecutivo</h2>
+  <div class="kpis">
+    <div class="kpi"><b>45 → 54</b><span>historias del documento <strong>hechas</strong> (antes → después de hoy)</span></div>
+    <div class="kpi"><b>24 → 17</b><span>parciales (funcionan, falta algo)</span></div>
+    <div class="kpi"><b>11 → 9</b><span>faltan por completo</span></div>
+    <div class="kpi"><b>13</b><span>fallos corregidos hoy (2 de seguridad, 3 de concurrencia)</span></div>
+  </div>
+  <p><b>Lo que funciona bien.</b> Tiendas, usuarios y roles con alcance en el servidor; catálogo por tienda; precios maestro/por tienda con ajuste, precio exacto, mínimo, banda piso/techo y costos reales de Capri 2026; POS de 7 pasos con receta (OCR o a mano), lentes, descuentos con aprobación, varias formas de pago, anticipos, recibos térmicos y en carta, ficha de laboratorio con bandeja; caja con apertura/cierre y diferencias; alertas por venta, reglas y resumen diario; paneles del vendedor y global con filtros combinables, comparación, ranking, drill-down y exportación; liquidación mensual por tienda; costos fijos/variables con punto de equilibrio; auditoría; español/inglés.</p>
+  <p><b>Lo más importante que se corrigió hoy.</b> (1) Un usuario borrado del equipo seguía entrando como <i>superadmin</i> mientras su sesión no caducara. (2) Una aprobación de descuento podía usarse en dos ventas y dos cobros simultáneos del mismo saldo perdían uno. (3) Los importes por etapa se ocultaban solo en el navegador. (4) El servidor aceptaba combinaciones de lentes imposibles y cobraba $0 por un fotocromático no disponible.</p>
+  <p><b>Lo que falta del documento</b> y conviene decidir si entra: carga del catálogo desde Excel y alta manual de montura (hoy todo entra por el scraper de Capri), etiquetas de producto y lectura con la cámara, programar precios a futuro, devolución/cambio y rehecho por garantía, etapa «listo para recoger», recordatorio de receta de más de un año, copia de seguridad diaria de la base real y elección de tienda al entrar para quien trabaja en varias.</p>
+  <div class="warn"><b>Riesgo principal ahora mismo:</b> la versión en staging y la de producción son del 3 de noviembre y del 26 de octubre. Todo lo de este informe (y lo de los días 1 a 4) solo existe en el repositorio local de Daniel. Hasta que no se suba y se redespliegue, las tiendas siguen con los fallos descritos.</div>
+</section>
+
+<section>
+  <h2>2. Alcance, método y fuentes</h2>
+  <p>Se leyeron las 40 páginas del documento v2.2 (módulos M1–M20, flujo del POS, HU-01…HU-115, costos por tienda, formas de pago, perfil del equipo, identificadores, ficha de laboratorio, matriz de permisos, 22 decisiones, fases 1–5) y se contrastó cada punto con el código real, no con la documentación: rutas del backend (<code>apps/backend/src/api/admin/*</code>), librerías (<code>src/lib</code>), modelos y migraciones (<code>src/modules</code>), pantallas del panel (<code>apps/capri-storefront/src/admin</code>) y pruebas (<code>tests/</code>). Cuatro revisores en paralelo cubrieron bloques disjuntos y un quinto integró; después se corrigió en orden de gravedad, siempre con pruebas y sin tocar los ficheros que Eyewear Dev edita (sincronización del catálogo, consumo de IA, scraper).</p>
+  <table>
+    <tr><th>Fuente</th><th>Qué se revisó</th><th>Estado al cierre</th></tr>
+    <tr><td>Documento «Gestión de Tiendas RUBI LENS v2.2»</td><td>Completo (p. 1–40)</td><td>Base de la auditoría</td></tr>
+    <tr><td>GitHub <code>dionis/optical_storefront</code>, rama <code>develop_optical_storepos</code></td><td>HEAD <code>6ddebb6</code> (Eyewear Dev, 4-nov)</td><td>Sin los commits del 1 al 5 de noviembre</td></tr>
+    <tr><td>Repo local <code>D:\PROYECTOS\OPTICA-TIENDA</code></td><td>21 commits por subir, árbol idéntico al del entorno de trabajo</td><td>Listo para <code>sync-repo.bat → S</code></td></tr>
+    <tr><td>Vercel staging <code>rubilens-staging.vercel.app</code></td><td>Bundle <code>index-DShVKRE9.js</code></td><td>Incluye el arreglo del 4-nov de Eyewear Dev, no lo de hoy</td></tr>
+    <tr><td>Coolify staging <code>api-staging.161-153-9-98.sslip.io</code></td><td><code>/version</code> → <code>2fa7d4c</code> (3-nov)</td><td>Auto-deploy no funciona: hace falta <i>Redeploy</i> manual</td></tr>
+    <tr><td>Coolify producción <code>api.161-153-9-98.sslip.io</code> (www.rubilens.com)</td><td><code>/version</code> → <code>efce7ec</code> (26-oct)</td><td>Rama <code>main</code>; el panel de tiendas aún no se ha llevado a producción</td></tr>
+  </table>
+  <p class="muted">Verificación en vivo del panel de staging (con la sesión del dueño en su navegador) queda pendiente de que la nueva versión esté desplegada; todo lo demás se verificó con el código, 1.157 pruebas unitarias, los <i>builds</i> de ambos lados y un arnés del POS con capturas a 390 px y 1280 px.</p>
+</section>
+
+<section>
+  <h2>3. Estado de despliegue y acciones del dueño</h2>
+  <table>
+    <tr><th>#</th><th>Acción</th><th>Por qué</th><th>Cómo</th></tr>
+    <tr><td class="c">1</td><td><b>Subir la rama</b></td><td>21 commits locales (1–5 nov) no están en GitHub; Vercel no puede desplegarlos y Coolify tampoco.</td><td><code>sync-repo.bat</code> → S. No hay parches pendientes: los de hoy ya están aplicados y archivados en <code>_patches\aplicados</code>.</td></tr>
+    <tr><td class="c">2</td><td><b>Redeploy en Coolify staging</b></td><td>El auto-deploy de la app <code>optical_storefront:develop_optical_storepos</code> no dispara.</td><td>Botón <i>Redeploy</i>. Al arrancar, <code>medusa db:migrate</code> aplica las migraciones nuevas (ver §3.1). Comprobar luego <code>/version</code>.</td></tr>
+    <tr><td class="c">3</td><td><b><code>ANTHROPIC_API_KEY</code> en Coolify</b></td><td>El OCR de recetas responde <code>503 ocr_unavailable</code> sin ella (y el consumo de IA no puede registrarse).</td><td>Variables de entorno de la app de staging (y de producción cuando toque). Nunca por chat.</td></tr>
+    <tr><td class="c">4</td><td><b>Rotar el secreto del webhook de Stripe y la contraseña del admin</b></td><td>Ambos aparecieron en capturas de pantalla compartidas.</td><td>Stripe → Webhooks → <i>Roll secret</i> y actualizar <code>STRIPE_WEBHOOK_SECRET</code> en Coolify; contraseña desde Mi perfil.</td></tr>
+    <tr><td class="c">5</td><td><b>Decidir el paso a producción</b></td><td>El documento exige todo desplegado también en producción; hoy producción es la tienda online del 26-oct. El panel de tiendas, el POS y la contabilidad viven solo en staging.</td><td>Plan sugerido en §9: una semana de uso real en staging con datos de prueba, luego <code>develop_optical_storepos → main</code> con la lista de comprobación de <code>docs/ENTORNOS-Y-RAMAS.md</code>.</td></tr>
+    <tr><td class="c">6</td><td>Probar Precios → Lentes: teclear los precios y costos de las celdas <b>Tallado digital</b></td><td>Las celdas digitales de monofocal y bifocal nacen vacías a propósito: hasta que no tengan precio, el POS no las ofrece.</td><td>Precios y costos → Lentes → columna «Tallado digital».</td></tr>
+    <tr><td class="c">7</td><td>Copia de seguridad de la base real</td><td>HU-72. El script de respaldo apunta a un Postgres local; la base real es la de Supabase/Coolify.</td><td>Ver §6 (mejoras).</td></tr>
+  </table>
+  <h3>3.1 Migraciones que corre el próximo despliegue</h3>
+  <table>
+    <tr><th>Migración</th><th>Qué hace</th><th>Riesgo</th></tr>
+    <tr><td><code>CreateStoreFrameCost4/5</code>, <code>CreateStorePriceBand6</code> (1–4 nov)</td><td>Costos de montura (maestro + variación por tienda) y banda piso/techo por tienda.</td><td>Ninguno: tablas nuevas, sembradas desde la lista Capri 2026.</td></tr>
+    <tr><td><code>CreateAiUsage1</code> (Eyewear Dev)</td><td>Consumo de IA.</td><td>Ninguno: tablas nuevas.</td></tr>
+    <tr><td><code>StaffProfileDisabled4</code></td><td>Columnas <code>disabled_at/disabled_by</code> en el perfil del equipo.</td><td>Ninguno: columnas opcionales.</td></tr>
+    <tr><td><code>UpgradeLensListFinish8</code></td><td>Celdas de lente por acabado (<code>finish</code>) con costo; progresivos pasan a «digital»; índice único por acabado.</td><td>Bajo: no cambia precios existentes; idempotente; con <i>down</i>.</td></tr>
+    <tr><td><code>ExtendSaleFactLensFinish2</code></td><td>Columna <code>lens_finish</code> en la proyección analítica.</td><td>Ninguno.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>4. Lo que está (por bloque del documento)</h2>
+  <table>
+    <tr><th style="width:34%">Bloque</th><th>Historias cubiertas</th><th style="width:36%">Evidencia</th></tr>
+    <tr><td>Acceso y establecimientos</td><td>HU-01 tiendas (se desactivan, no se borran) · HU-02 usuarios, rol y tiendas · HU-04 <span class="tag new">hoy</span> desactivar sin borrar · HU-70 datos del recibo por tienda · HU-71 auditoría · HU-73 ES/EN · perfil del equipo completo · matriz de permisos en el servidor</td><td><code>api/admin/establishments</code>, <code>api/admin/team/*</code>, <code>lib/staff-roles.ts</code>, <code>lib/staff-guard.ts</code>, <code>lib/audit.ts</code>, <code>AuditLog.jsx</code>, 24 diccionarios</td></tr>
+    <tr><td>Catálogo</td><td>Surtido por tienda con interruptor por marca y modelo · pantalla Productos en acordeón por marca con SKU, colores, medidas, costo y precio; estuches aparte · escaneo con lector USB</td><td><code>store_assortment_rule</code>, <code>CatalogManager.jsx</code>, <code>BrandAccordion.jsx</code>, <code>PosFrameSearch.jsx</code></td></tr>
+    <tr><td>Precios</td><td>HU-10 precios base · HU-11 ajuste general por tienda · HU-12 precio exacto que gana · HU-13 <span class="tag new">hoy</span> un modelo en todas las tiendas · HU-15 <span class="tag new">hoy</span> historial con quién, qué y antes→después · HU-16 mínimo y límite por rol con aprobación · HU-17 el vendedor ve el precio de su tienda y no lo cambia · costo real Capri 2026 editable y por tienda · banda piso/techo · lentes stock/digital con costo <span class="tag new">hoy</span></td><td><code>lib/pricing.ts</code>, <code>store_price_rule</code>, <code>store_frame_cost(_variation)</code>, <code>store_price_band</code>, <code>lib/pricing-across.ts</code>, <code>lib/lens-finish.ts</code>, <code>PricingPanel.jsx</code></td></tr>
+    <tr><td>Clientes y recetas</td><td>HU-18 buscar/registrar, con aviso de teléfono o correo repetido <span class="tag new">hoy</span> · HU-19 receta por foto o a mano con revisión obligatoria (ahora también en el servidor) · HU-20 historial por API</td><td><code>lib/pos-data.ts</code>, <code>PosRx.jsx</code>, <code>rxRules.js</code>, <code>lib/pos-lens-rules.ts</code></td></tr>
+    <tr><td>Ventas y pagos</td><td>HU-22 empezar por la montura (nombre, SKU, propia con foto) · HU-23 lentes paso a paso con precio del servidor y total acumulado en cada paso <span class="tag new">hoy</span> · HU-24 anticipo y saldo · HU-25 varias formas de pago, configurables, seguro con reclamo · HU-26 aprobación de descuento desde el móvil · HU-27 recibo por correo (simple, HIPAA) o impreso (80 mm, doble en carta) · HU-28 anulación con motivo, aprobación y aviso <span class="tag new">hoy</span> · una montura por venta · plantillas para montura propia <span class="tag new">hoy</span></td><td><code>PosSale.jsx</code>, <code>PosSaleSummary.jsx</code>, <code>lib/pos.ts</code>, <code>lib/pos-documents.ts</code>, <code>lib/alerts.ts</code></td></tr>
+    <tr><td>Laboratorio y entregas</td><td>HU-30 estado de cada venta · HU-32 <span class="tag new">hoy</span> cobrar saldo y entregar en un paso (y la etapa pasa a Entregado) · HU-33 <span class="tag new">hoy</span> atrasados respecto a la fecha prometida · ficha de laboratorio en carta con identificadores, bandeja y receta en inglés</td><td><code>SaleDetailPanel.jsx</code>, <code>StoreOrders.jsx</code>, <code>SaleDocuments.jsx</code>, <code>lib/order-board.ts</code></td></tr>
+    <tr><td>Caja, liquidación, comisiones</td><td>HU-38 abrir/cerrar con diferencia y alerta al dueño · HU-39 liquidación mensual por tipo de tienda (propia/familiar/socio/consignación) · HU-40 comisión y, desde hoy, avance de meta por vendedor para el dueño · costos fijos/variables/compartidos, resultado y punto de equilibrio</td><td><code>lib/cash.ts</code>, <code>lib/store-pnl.ts</code>, <code>lib/pos-statement.ts</code>, <code>lib/store-costs.ts</code>, <code>StoreCosts.jsx</code></td></tr>
+    <tr><td>Alertas</td><td>HU-41 aviso por venta · HU-42 destinatarios por tienda · HU-43 reglas (importe, % descuento, tienda sin ventas desde las 14:00) · HU-44 resumen diario (hoy también pedidos web y en centavos enteros) · HU-46 historial con entregado/fallido</td><td><code>lib/alerts*.ts</code>, <code>jobs/sales-alerts.ts</code>, <code>AlertRules.jsx</code></td></tr>
+    <tr><td>Paneles y reportes</td><td>HU-50…52 panel del vendedor · HU-60…64 global con filtros combinables en SQL, comparación con período anterior, ranking, drill-down · HU-65 Excel/CSV/PDF · HU-66 lentes y tratamientos más vendidos · HU-68 supervisor acotado · Ejecutivo sin costos para vendedores (en servidor), informe compartible sin costos, barra global de filtros, búsqueda universal, período vacío</td><td><code>lib/sales-insights.ts</code>, <code>lib/analytics-route.ts</code>, <code>ExecutiveHub.jsx</code>, <code>SalesBoard.jsx</code>, <code>ReportDoc.jsx</code>, <code>OmniSearch.jsx</code></td></tr>
+    <tr><td>Configuración y seguridad</td><td>HU-03 <span class="tag new">hoy</span> recuperar la contraseña uno mismo · cabeceras, límites de intentos, registro cerrado, pestaña Seguridad · HU-71 auditoría</td><td><code>lib/password-reset.ts</code>, <code>lib/security.ts</code>, <code>api/middlewares.ts</code>, <code>Security.jsx</code></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>5. Lo que no está — y por qué conviene (o no) hacerlo</h2>
+  <table>
+    <tr><th style="width:26%">Historia</th><th>Situación real</th><th>Por qué importa</th><th style="width:9%">Tamaño</th></tr>
+    <tr><td>HU-06 Carga del catálogo desde Excel con errores por fila</td><td>El catálogo entra solo por el scraper de Capri (proceso de Eyewear Dev). No hay lector de hojas.</td><td>Mientras todo lo que se vende venga de Capri, no hace falta. Hará falta el día que se venda otra marca o producto fuera de ese catálogo.</td><td class="c">M</td></tr>
+    <tr><td>HU-07 Alta manual de una montura</td><td>Solo desde el admin genérico de Medusa, sin formulario de montura (marca, color, talla, código).</td><td>Igual que la anterior: necesaria para productos fuera de Capri; hoy el dueño no la echa en falta.</td><td class="c">M</td></tr>
+    <tr><td>HU-09 Etiquetas con código de barras y lectura con cámara</td><td>El lector USB/teclado funciona; no hay impresión de etiquetas de producto ni lectura con la cámara del móvil.</td><td>Las monturas de Capri traen su código; imprimir etiquetas solo aporta si se cambia el etiquetado. La cámara (BarcodeDetector/zxing) sí ahorra el lector en tiendas sin él.</td><td class="c">S–M</td></tr>
+    <tr><td>HU-14 Programar un cambio de precio</td><td>Las reglas ya tienen <code>valid_from/valid_to</code>, pero la escritura siempre pone «ahora».</td><td>Útil para promociones de fecha fija. Cambio pequeño en el servidor (aceptar fecha) y un campo en la pantalla.</td><td class="c">S</td></tr>
+    <tr><td>HU-21 Recordatorio de receta de más de un año</td><td>No hay tarea ni correo.</td><td>Es la palanca de recompra más clara de una óptica. Fase 5 del documento; recomendable después de un mes de ventas reales (hay que tener recetas).</td><td class="c">M</td></tr>
+    <tr><td>HU-29 Devolución o cambio de montura</td><td>Lo más cercano es anular la venta o un movimiento de caja «reembolso».</td><td>Sin esto, un cambio de montura obliga a anular y volver a vender (se pierde el hilo y el número). Importante para la contabilidad fiable que pide el dueño.</td><td class="c">M–L</td></tr>
+    <tr><td>HU-31 Etapa «listo para recoger» con correo</td><td>Las etapas son las del envío (<i>confirmado → laboratorio → enviado → en tránsito → entregado</i>); el correo más cercano dice «listo para el transportista».</td><td>Para una venta de mostrador el texto confunde. Añadir la etapa toca la línea de tiempo en tres sitios (servidor, seguimiento web, panel) y los correos; conviene hacerlo con calma.</td><td class="c">M</td></tr>
+    <tr><td>HU-34 Rehecho por garantía sin cobrar</td><td>No existe.</td><td>El laboratorio rehace lentes con cierta frecuencia; sin registro, el costo desaparece del margen y el cliente no tiene trazabilidad.</td><td class="c">M</td></tr>
+    <tr><td>HU-72 Copia de seguridad diaria</td><td>Hay un script nocturno a R2, pero apunta a un Postgres local; la base real está en Supabase/Coolify.</td><td>Es el único punto del documento que puede costar el negocio entero. Acción de infraestructura, no de código.</td><td class="c">S</td></tr>
+    <tr><td>HU-05 Elegir tienda al entrar</td><td>El vendedor tiene una sola tienda (por diseño); quien tiene varias la elige con el selector global.</td><td>Correcto para el modelo actual (un vendedor, una tienda). Si alguien rota entre tiendas, habrá que permitir varias tiendas por vendedor.</td><td class="c">S</td></tr>
+    <tr><td>Número propio de ficha de laboratorio y bandejas por tienda</td><td>La ficha usa el número de la venta; las bandejas se asignan libres sin tope.</td><td>Decisión 20 del documento sigue abierta (¿cuántas bandejas tiene cada tienda?). Cuando se responda, es un campo por tienda y una comprobación.</td><td class="c">S</td></tr>
+    <tr><td>HU-65 Enviar un filtro a Google Sheets</td><td>Excel/CSV/PDF sí; la hoja es espejo automático de pedidos, no destino de exportaciones.</td><td>Poco valor añadido frente al Excel; se puede cubrir con una pestaña «Exportaciones» en la hoja si se pide.</td><td class="c">S</td></tr>
+  </table>
+  <p class="muted">Tamaño: S = horas, M = uno a tres días, L = más de tres días, siempre con pruebas y documentación.</p>
+</section>
+
+<section>
+  <h2>6. Lo que se debe mejorar — parciales y por qué</h2>
+  <table>
+    <tr><th style="width:26%">Punto</th><th>Qué le falta</th><th>Por qué</th></tr>
+    <tr><td>HU-08 Compatibilidad de lentes editable</td><td>Hoy la compatibilidad está implícita (precio nulo = no disponible, grupo de AR). Desde hoy el servidor la impone; falta una matriz que el dueño pueda editar y que el material respete la graduación como regla y no solo como ★ recomendado.</td><td>El dueño decidió que el material sea recomendación; si cambia de idea, la regla ya tiene sitio en <code>lib/pos-lens-rules.ts</code>.</td></tr>
+    <tr><td>Precio de venta derivado del costo editado</td><td>El precio de venta de una montura sale del libro de precios estático; editar el costo en Productos no vuelve a calcular el precio.</td><td>Dos fuentes de verdad pueden divergir. Propuesta: botón «Recalcular desde el costo» por marca o para todo, con vista previa del impacto (como se hizo el 4-nov).</td></tr>
+    <tr><td>HU-20 Historial del cliente en pantalla</td><td>La API lo devuelve (ventas en todas las tiendas y última receta); el POS solo muestra un conteo y precarga la receta.</td><td>Una ficha de cliente con su historial evita preguntar lo que ya se sabe y es la base de HU-21.</td></tr>
+    <tr><td>HU-24 Recordatorio de saldo</td><td>Saldos pendientes y atrasos se ven en el panel; el cliente no recibe recordatorio.</td><td>Correo/SMS a los N días con el saldo y la tienda: reutiliza el proveedor de correo existente.</td></tr>
+    <tr><td>HU-47 Alertas del encargado</td><td>Depende de que el dueño cree la regla con su correo y su tienda; el encargado no configura las suyas.</td><td>Permitir reglas «solo de mi tienda» al encargado (mismo código de alcance que ya usa el supervisor).</td></tr>
+    <tr><td>Identificadores</td><td>Códigos de tienda <code>Op1, Op2…</code> (el documento dice <code>T1, T2…</code>).</td><td>Las tiendas ya existen con esos códigos y aparecen en recibos y hoja: se recomienda <b>no cambiarlos</b>; es una decisión documentada del dueño.</td></tr>
+    <tr><td>Venta fallida con huérfanos</td><td>Cliente, recetas y número de Rx se escriben antes de completar el carrito; si falla el pago quedan sin venta.</td><td>No afecta al dinero (no hay cobro) pero ensucia los datos. Propuesta: escribir recetas y número de Rx después de confirmar el pedido, o limpiar en el <i>catch</i>.</td></tr>
+    <tr><td>Reintentos concurrentes de una misma venta</td><td>La idempotencia es por proceso; con dos instancias podría quedar un pedido Medusa huérfano (la venta no se duplica gracias al índice único).</td><td>Con una sola instancia en Coolify no ocurre. Si se escala, mover la guarda a la base (ya está hecho así para aprobaciones, cobros y entregas).</td></tr>
+    <tr><td>Datos de salud</td><td>Cualquier rol del POS puede leer la receta de cualquier cliente por API; la búsqueda global permite enumerar clientes con 2 letras.</td><td>Decisión 15 del documento («¿quién puede ver las recetas?») sigue abierta. Propuesta: receta visible para quien vende en esa tienda y auditar la lectura de la ficha de laboratorio.</td></tr>
+    <tr><td>Alertas fallidas</td><td>Un correo que falla queda «fallido» y no se reintenta.</td><td>Reintento con espera creciente (3 intentos) en el <i>job</i> horario.</td></tr>
+    <tr><td>Vendedores (dueño)</td><td>Las cifras de la pantalla Vendedores salen de la ventana del tablero de pedidos (≈300), no de <code>sale_fact</code>.</td><td>Puede diferir del Ejecutivo. Unificar sobre <code>sale_fact</code> cuando se cierre la contabilidad.</td></tr>
+    <tr><td>Períodos parciales</td><td>«Este mes» se compara con el mes anterior completo.</td><td>Pregunta abierta 5 de <code>docs/CONTABILIDAD.md</code>: comparar con «mismo tramo del mes anterior» o dejarlo como está y rotularlo.</td></tr>
+    <tr><td>Secretos por defecto</td><td><code>jwtSecret/cookieSecret</code> caen a <code>change-me-in-production</code> con solo un aviso salvo <code>SECURITY_STRICT=1</code>.</td><td>Poner <code>SECURITY_STRICT=1</code> en Coolify para que el arranque falle si falta un secreto.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>7. Fallos encontrados y corregidos hoy</h2>
+  <table>
+    <tr><th style="width:4%">#</th><th style="width:30%">Fallo</th><th>Riesgo que tenía</th><th>Corrección (commit)</th></tr>
+    <tr><td class="c">1</td><td>Usuario borrado = superadmin hasta caducar el token</td><td><span class="tag bad">Seguridad</span> acceso total de alguien que ya no trabaja aquí</td><td>El alcance comprueba que el usuario existe y no está desactivado en cada petición; nuevo Desactivar/Reactivar (<code>a3fd890</code>)</td></tr>
+    <tr><td class="c">2</td><td>Aprobación de descuento usable dos veces; decisión con carrera</td><td><span class="tag bad">Dinero</span> dos ventas con un solo permiso</td><td>Reclamo atómico <code>UPDATE … WHERE status='approved'</code> antes de escribir la venta, liberación si falla (<code>23e3d00</code>)</td></tr>
+    <tr><td class="c">3</td><td>Dos cobros simultáneos del mismo saldo perdían uno</td><td><span class="tag bad">Dinero</span> caja descuadrada</td><td>Suma en la base con guardas (<i>overpaid</i>, <i>nothing_due</i>); libro de pagos solo tras el reclamo (<code>23e3d00</code>)</td></tr>
+    <tr><td class="c">4</td><td>Forma de pago desactualizada al cobrar un saldo</td><td>Reportes por forma de pago incompletos</td><td>Reproyección de <code>sale_fact</code> tras el cobro (<code>23e3d00</code>)</td></tr>
+    <tr><td class="c">5</td><td>Importes por etapa ocultos solo en el navegador y fallo «abierto»</td><td><span class="tag bad">Confidencialidad</span> vendedores veían totales</td><td>Redacción en el servidor por rol; el cliente no muestra dinero hasta confirmar que es administrador (<code>34ff37b</code>)</td></tr>
+    <tr><td class="c">6</td><td>Privilegio «Ver costos» no llegaba a costos de montura ni banda</td><td>Función muerta para el encargado</td><td>Lista de rutas con privilegio (<code>226e97a</code>)</td></tr>
+    <tr><td class="c">7</td><td>Servidor cobraba $0 por fotocromático no disponible y aceptaba AR fuera de grupo, monofocal con ADD, bifocal sin ADD</td><td><span class="tag bad">Dinero</span> y pedidos imposibles al laboratorio</td><td>Reglas en el servidor con razones 422 (<code>803a641</code>)</td></tr>
+    <tr><td class="c">8</td><td>Receta OCR marcada como verificada aunque nadie la confirmara</td><td>Datos de salud sin revisión humana</td><td>El panel manda la verdad; el servidor rechaza OCR sin confirmar (<code>803a641</code>)</td></tr>
+    <tr><td class="c">9</td><td>Correos de etapa ignoraban «sin correo» de la venta</td><td>Cliente que pidió no recibir correo lo recibía</td><td><code>wantsStageEmail</code> (<code>34ff37b</code>)</td></tr>
+    <tr><td class="c">10</td><td>Resumen diario: sin pedidos web, sumas en flotante, «tienda sin ventas» contaba anuladas</td><td>Cifras del resumen no fiables</td><td>Lee <code>sale_fact</code>, centavos enteros, excluye anuladas (<code>27ebe66</code>)</td></tr>
+    <tr><td class="c">11</td><td>Pedidos sin filas en <code>sale_fact</code>; ventas POS sin <code>source</code> contadas como web</td><td>Ejecutivo incompleto</td><td>Reconciliador cada 6 h y recuperación por <code>pos_sale</code> (<code>27ebe66</code>)</td></tr>
+    <tr><td class="c">12</td><td>Meta del vendedor sobre bruto y comisión sobre neto</td><td>Dos bases distintas para la misma persona</td><td>Ambas sobre el neto (<code>27ebe66</code>)</td></tr>
+    <tr><td class="c">13</td><td>Entregar no movía la etapa del pedido; cobrar y entregar eran dos acciones</td><td>Seguimiento del cliente desincronizado</td><td>Entrega atómica que avanza la etapa y correo único; «Cobrar saldo y entregar» (<code>27ebe66</code>)</td></tr>
+  </table>
+  <div class="note">Todo lo anterior va con pruebas unitarias (de 996 a 1.157), tipos estrictos, <i>lint</i> sin errores, paridad ES/EN comprobada y <i>build</i> del panel; los cambios de base de datos son aditivos y reversibles.</div>
+</section>
+
+<section>
+  <h2>8. Las 22 decisiones del documento — cómo quedaron</h2>
+  <table>
+    <tr><th style="width:4%">#</th><th style="width:28%">Decisión</th><th>Recomendación del documento</th><th>Cómo está en el sistema</th></tr>
+    <tr><td class="c">1</td><td>Camino de construcción</td><td>A · Sistema a medida</td><td><span class="tag ok">A</span> Medusa v2 + React, propio del dueño</td></tr>
+    <tr><td class="c">2</td><td>Relación con cada tienda</td><td>—</td><td><span class="tag ok">Resuelto</span> tipo por tienda: propia / familiar / socio (%) / consignación; liquidación mensual</td></tr>
+    <tr><td class="c">3</td><td>Precio por tienda</td><td>A · Ajuste general + excepciones</td><td><span class="tag ok">A</span> ajuste %, precio exacto, mínimo y banda piso/techo por tienda</td></tr>
+    <tr><td class="c">4</td><td>Quién cambia precios</td><td>A · Solo el dueño</td><td><span class="tag ok">A</span> dueño y superadmin; encargado solo con privilegio de costos (lectura)</td></tr>
+    <tr><td class="c">5</td><td>Límites de descuento</td><td>Vendedor 10 %, encargado 20 %</td><td><span class="tag mid">Variante</span> vendedor 10 %, encargado 15 %, supervisor 20 % (decisión del dueño, configurable); límite personal por persona</td></tr>
+    <tr><td class="c">6</td><td>Formas de pago</td><td>Terminal actual y se anota</td><td><span class="tag ok">A</span> métodos configurables; seguro con reclamo; sin lista de aseguradoras (texto libre)</td></tr>
+    <tr><td class="c">7</td><td>Anticipos y saldos</td><td>Sí, con recordatorio</td><td><span class="tag mid">Parcial</span> anticipo y saldo sí; recordatorio al cliente no</td></tr>
+    <tr><td class="c">8</td><td>Frecuencia de alertas</td><td>B · Resumen diario + avisos importantes</td><td><span class="tag ok">B</span> reglas inmediatas + resumen diario/semanal</td></tr>
+    <tr><td class="c">9</td><td>Segunda persona que recibe alertas</td><td>—</td><td><span class="tag ok">Resuelto</span> destinatarios por regla y por tienda</td></tr>
+    <tr><td class="c">10</td><td>Internet en tiendas</td><td>A · Siempre con conexión</td><td><span class="tag ok">A</span></td></tr>
+    <tr><td class="c">11</td><td>Caja diaria</td><td>A · Apertura y cierre con conteo</td><td><span class="tag ok">A</span> + diferencia con aprobación del dueño</td></tr>
+    <tr><td class="c">12</td><td>Comisiones y metas</td><td>B · Más adelante</td><td><span class="tag ok">Adelantado</span> ya existen (comisión, meta, avance)</td></tr>
+    <tr><td class="c">13</td><td>Recibo: datos y garantía</td><td>—</td><td><span class="tag ok">Resuelto</span> texto de garantía y datos por tienda</td></tr>
+    <tr><td class="c">14</td><td>Costo de los productos</td><td>B · Solo ventas al principio</td><td><span class="tag ok">Adelantado (A)</span> costo real Capri 2026, por tienda, con margen</td></tr>
+    <tr><td class="c">15</td><td>Recetas: quién las ve, foto o valores</td><td>—</td><td><span class="tag mid">Abierta</span> se guardan valores y foto (bucket privado); cualquier rol del POS las lee por API</td></tr>
+    <tr><td class="c">16</td><td>Laboratorio: uno o varios, costo</td><td>—</td><td><span class="tag mid">Abierta</span> un laboratorio implícito; costo por celda de lente desde hoy</td></tr>
+    <tr><td class="c">17</td><td>Datos actuales a migrar</td><td>—</td><td><span class="tag mid">Abierta</span> no hay importador (HU-06)</td></tr>
+    <tr><td class="c">18</td><td>Tienda online como establecimiento</td><td>—</td><td><span class="tag ok">Resuelto</span> la web es un canal más en el Ejecutivo y en el resumen</td></tr>
+    <tr><td class="c">19</td><td>Puntos de venta por tienda</td><td>A · Uno, con impresora</td><td><span class="tag ok">A+</span> varias cajas posibles (<code>Op2-POS1</code>), impresión 80 mm y carta</td></tr>
+    <tr><td class="c">20</td><td>Identificadores</td><td>T1, T2…; bandejas; campos en inglés</td><td><span class="tag mid">Variante</span> <code>Op1, Op2…</code> (se conservan); bandejas sin tope; ficha en inglés sí</td></tr>
+    <tr><td class="c">21</td><td>Quién gestiona costos</td><td>A · Dueño y alguien con privilegio</td><td><span class="tag ok">A</span> privilegios «Ver costos» / «Gestionar costos»</td></tr>
+    <tr><td class="c">22</td><td>Perfil del equipo</td><td>—</td><td><span class="tag ok">Resuelto</span> contacto, emergencia, foto, código, comisión, meta</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>9. Lectura por rol y plan sugerido</h2>
+  <div class="two">
+    <div>
+      <h3>Dueño</h3>
+      <ul>
+        <li>Tiene todo el control de precios, costos, márgenes y liquidaciones; lo que le falta ver es el historial del cliente y la devolución/garantía.</li>
+        <li>Acción inmediata: subir y redesplegar; teclear celdas «digital»; rotar secretos; decidir producción.</li>
+      </ul>
+      <h3>Supervisor</h3>
+      <ul><li>Panel global acotado a sus tiendas, alertas propias, anulaciones. Correcto según la matriz.</li></ul>
+      <h3>Encargado</h3>
+      <ul>
+        <li>Caja, anulaciones, estado de la tienda y, con privilegio, costos. No aprueba descuentos (decisión del dueño) y hoy no configura sus alertas (mejora).</li>
+        <li>Ahora recibe aviso cuando un vendedor pide anular.</li>
+      </ul>
+      <h3>Vendedor</h3>
+      <ul>
+        <li>Vende en 7 pasos con el total a la vista, plantillas para montura propia, aviso de cliente repetido, aprobación por móvil, recibo. Ve solo lo suyo y nunca costos.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>QA</h3>
+      <ul>
+        <li>1.157 pruebas unitarias; falta la prueba de extremo a extremo en staging con la nueva versión (pendiente del despliegue) y una venta real con tarjeta en producción (solo el dueño, Stripe LIVE).</li>
+      </ul>
+      <h3>Ingeniería</h3>
+      <ul>
+        <li>Código tipado estricto, comentarios con el porqué, errores por código, i18n completa; las carreras de dinero se resuelven en la base, no en memoria.</li>
+        <li>Deuda: dos fuentes de precio (libro estático vs costo editado), pantalla Vendedores sobre otra fuente, idempotencia de venta por proceso.</li>
+      </ul>
+      <h3>Diseño / responsive</h3>
+      <ul>
+        <li>POS y nuevas franjas comprobadas a 390 px; tablas con <i>data-label</i> en móvil; documentación sin desbordes.</li>
+        <li>Mejora: ficha de cliente con historial; etiqueta clara «listo para recoger» en el seguimiento.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Plan sugerido (hitos cortos)</h3>
+  <table>
+    <tr><th style="width:12%">Hito</th><th>Contenido</th><th style="width:12%">Tamaño</th></tr>
+    <tr><td>H10 · Salida</td><td>Push + redeploy staging; verificación en vivo rol por rol; celdas digitales; secretos rotados; <code>SECURITY_STRICT=1</code>; copia de seguridad de Supabase programada.</td><td class="c">S</td></tr>
+    <tr><td>H11 · Posventa</td><td>Devolución/cambio (HU-29) y rehecho por garantía (HU-34) con su efecto en caja y margen; etapa «listo para recoger» (HU-31).</td><td class="c">L</td></tr>
+    <tr><td>H12 · Cliente</td><td>Ficha de cliente con historial (HU-20), recordatorio de saldo (HU-24) y de receta anual (HU-21).</td><td class="c">M</td></tr>
+    <tr><td>H13 · Catálogo propio</td><td>Alta manual de montura (HU-07), importación desde Excel con validación (HU-06), etiquetas y cámara (HU-09), precios programados (HU-14).</td><td class="c">M–L</td></tr>
+    <tr><td>H14 · Producción</td><td>Fusión a <code>main</code>, migraciones en producción, hoja y correos en modo real, prueba de compra real por el dueño.</td><td class="c">M</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>10. Anexo — documentación técnica y verificación</h2><style>section:last-of-type table{font-size:8.6pt} section:last-of-type td,section:last-of-type th{padding:3px 6px}</style>
+  <table>
+    <tr><th style="width:36%">Documento</th><th>Contenido</th></tr>
+    <tr><td><code>documentacion.html</code></td><td>Estado general y, desde hoy, la sección «5-nov-2026: auditoría contra el documento v2.2 y correcciones».</td></tr>
+    <tr><td><code>docs/HITOS-PANEL-TIENDA.md</code></td><td>Hitos 1–9 del panel de tienda (6: lentes stock/digital; 7: reglas lente×receta en el servidor; 8: total acumulado, plantillas, cliente repetido; 9: entregar+cobrar, aviso de anulación, resumen diario, reconciliador, meta).</td></tr>
+    <tr><td><code>docs/ADMIN-PANEL.md</code></td><td>Equipo: desactivar sin borrar y cierre de sesiones; recuperar la contraseña uno mismo; un modelo en todas las tiendas; historial de precios.</td></tr>
+    <tr><td><code>docs/CONTABILIDAD.md</code></td><td>Modelo contable, 10 preguntas abiertas, «Meta mensual», notas del 5-nov.</td></tr>
+    <tr><td><code>docs/ENTORNOS-Y-RAMAS.md</code></td><td>Staging vs producción, ramas, lista de comprobación de despliegue.</td></tr>
+    <tr><td>Proyecto Claude · <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code></td><td>Tabla completa historia por historia con evidencia y fallos detectados.</td></tr>
+  </table>
+  <h3>Verificación realizada</h3>
+  <ul>
+    <li>Backend: <code>tsc --noEmit</code> limpio; <code>eslint</code> 0 errores; <code>jest --runInBand</code> 64 suites / 1.157 pruebas.</li>
+    <li>Panel: <code>vite build</code> correcto; <code>check-i18n</code> 5.457 claves × 2 idiomas sin huecos.</li>
+    <li>Arnés del POS con <i>fetch</i> simulado: flujo completo sin errores de página, capturas a 1280 px y 390 px de cada paso (franja de total, plantillas, aviso de cliente repetido, descuento, pago).</li>
+    <li>Repo local del dueño: 21 commits aplicados con <code>git am --3way</code>, árbol <code>0c8ae5a…</code> idéntico al del entorno de trabajo antes del último commit de documentación.</li>
+  </ul>
+  <h3>Commits de hoy</h3>
+  <table>
+    <tr><th style="width:12%">Commit</th><th>Asunto</th></tr>
+    <tr><td><code>226e97a</code></td><td>fix(roles): los privilegios de costos alcanzan costos de montura y banda</td></tr>
+    <tr><td><code>a3fd890</code></td><td>fix(team): un usuario borrado o desactivado pierde el acceso en su siguiente petición</td></tr>
+    <tr><td><code>23e3d00</code></td><td>fix(pos): una aprobación, un uso; un saldo, sin cobros perdidos</td></tr>
+    <tr><td><code>34ff37b</code></td><td>fix(orders): importes por etapa cerrados por defecto, filtro de atrasados, SKU y precio en costos</td></tr>
+    <tr><td><code>069e1b8</code></td><td>feat(lenses): celdas stock vs tallado digital con precio y costo de laboratorio</td></tr>
+    <tr><td><code>803a641</code></td><td>feat(pos): total acumulado, plantillas, cliente repetido, reglas lente×receta en el servidor</td></tr>
+    <tr><td><code>27ebe66</code></td><td>feat(admin): recuperar contraseña, modelo en todas las tiendas, historial de precios, entregar+cobrar, avisos de anulación, reconciliador</td></tr>
+    <tr><td><code>1e08fcf</code></td><td>feat(admin): <code>?tab=possales&amp;number=…</code> abre esa venta</td></tr>
+    <tr><td><code>1d1a332</code></td><td>docs: documentacion.html — auditoría del 5-nov</td></tr>
+  </table>
+</section>
+
+
+</body>
+</html>
