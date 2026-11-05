@@ -213,8 +213,9 @@ const toForm = (p) => {
 };
 
 /**
- * mode "self": la persona edita contacto y preferencias; el resto se ve en
- * solo lectura. mode "admin": todo editable (dueño o superadmin).
+ * mode "self": la persona edita contacto, preferencias y su nombre para mostrar
+ * y foto; el resto se ve en solo lectura. mode "admin": todo editable (dueño o
+ * superadmin). El código de vendedor no lo escribe nadie.
  */
 export default function StaffProfile({ mode = "self", userId = null, onSaved }) {
   const { t } = useLang();
@@ -242,7 +243,10 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
     return () => { on = false; };
   }, [isAdmin, userId]);
 
-  const editable = (group) => isAdmin || group === "contact" || group === "prefs";
+  // La persona edita contacto, preferencias y su identidad (nombre para mostrar
+  // y foto); las condiciones de trabajo y la emergencia, solo el dueño.
+  // Misma lista que SELF_EDITABLE_FIELDS en lib/staff-profile.ts (backend).
+  const editable = (group) => isAdmin || group === "contact" || group === "prefs" || group === "identity";
   // El código de recibos lo genera el sistema (lib/staff-code.ts): nadie lo escribe.
   const readOnly = (k) => k === "seller_code";
   const set = (k, typed = (v) => v) => (e) => { setBadField(null); setForm((f) => ({ ...f, [k]: typed(e.target.value) })); };

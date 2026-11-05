@@ -234,6 +234,7 @@ const saleRow = (over: Partial<SaleRow> = {}): SaleRow => ({
   delivered_at: null,
   voided_at: null,
   void_reason: null,
+  void_note: null,
   void_requested_at: null,
   created_at: "2026-11-01T12:00:00.000Z",
   payments: [],
@@ -388,11 +389,16 @@ describe("voidClaimPlan", () => {
   it("marks a live sale voided with who, when and why, and refuses one already voided", () => {
     const { sql, bindings } = voidClaimPlan("poss_1", "u_mgr", "duplicate", "typed twice");
     expect(sql).toMatch(/UPDATE pos_sale/);
-    expect(sql).toMatch(/SET status = 'voided', voided_at = now\(\), voided_by = \?, void_reason = \?, void_note = \?/);
+    expect(sql).toMatch(/SET status = 'voided', voided_at = now\(\), voided_by = \?, void_reason = \?, void_note = COALESCE\(NULLIF\(\?, ''\), void_note\)/);
     expect(sql).toMatch(/WHERE id = \? AND deleted_at IS NULL AND status <> 'voided'/);
     expect(sql).toMatch(/RETURNING voided_at/);
     expect((sql.match(/\?/g) ?? []).length).toBe(bindings.length);
     expect(bindings).toEqual(["u_mgr", "duplicate", "typed twice", "poss_1"]);
+  });
+
+  it("a confirmation without a note binds '' so the request's note survives (COALESCE)", () => {
+    const { bindings } = voidClaimPlan("poss_1", "u_mgr", "customer_changed_mind", null);
+    expect(bindings).toEqual(["u_mgr", "customer_changed_mind", "", "poss_1"]);
   });
 });
 
@@ -424,7 +430,7 @@ describe("voidSale", () => {
 
     const out = await voidSale(c.scope, saleRow({ order_id: null, paid: 50, balance: 150 }), "u_mgr", "wrong_entry", null);
 
-    expect(calls[0].bindings).toEqual(["u_mgr", "wrong_entry", null, "poss_1"]);
+    expect(calls[0].bindings).toEqual(["u_mgr", "wrong_entry", "", "poss_1"]);
     // The card deposit comes back by the same method, as a negative ledger row.
     expect(s.svc.createPosSalePayments).toHaveBeenCalledWith([
       expect.objectContaining({ sale_id: "poss_1", method_code: "card", amount_cents: -5000, kind: "refund", received_by: "u_mgr", counts_as_cash: false, cash_session_id: null }),

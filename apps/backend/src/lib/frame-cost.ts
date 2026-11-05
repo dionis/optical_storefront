@@ -3,9 +3,8 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { CAPRI_BY_KEY, capriKeyOf } from "../modules/store-pricing/capri-price-list-2026";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import type StorePricingModuleService from "../modules/store-pricing/service";
-import { applyPriceBandUsd, priceBandFor } from "./pricing";
 import { brandOf } from "./store-assortment";
-import { globalPrice, hasGlobalPrice, storeLinePrice, type PriceRuleLike } from "./store-pricing";
+import { masterLinePrice, storeLinePrice, type MasterLinePrice, type PriceRuleLike } from "./store-pricing";
 
 /**
  * What the shop PAYS for a frame or case model — the supplier's figure, the one
@@ -742,11 +741,20 @@ export function frameCostStoreRows(
 
 // ── Cost next to price: the selling price per model, by the cost list's key ──
 
+/** Where a catalogue selling price came from: a store cell's reasons, or the master's. */
+export type CatalogPriceSource = "exact" | "band" | "adjusted" | "base" | MasterLinePrice["frame_source"];
+
 /** Selling price of a catalogue model for the scope asked about, by cost-list key. */
 export interface CatalogSellingPrice {
   product_id: string;
   /** What the store (or, with no store, the chain) sells the model for, in cents. */
   price_cents: number;
+  /**
+   * What produced it. A store: `exact` / `band` / `adjusted` / `base`. The
+   * master: `owner` (his price for the model), `band`, `rule` (the chain's
+   * general rule, POST /pricing/frames/rule with no store) or `base`.
+   */
+  source: CatalogPriceSource;
 }
 
 /**
@@ -755,9 +763,12 @@ export interface CatalogSellingPrice {
  * catalogue card shows (store-assortment-data.ts storeCatalogProduct) and the
  * till charges: with a store, `storeLinePrice` for the frame alone (its exact
  * price, else base + adjustment, then the band); with no store, the chain's —
- * the owner's global price for the model, else the Medusa base, then the chain
- * band unless he typed the price himself. Models without a Medusa price are
- * left out, so a missing price reads as unknown, never as 0. Pure.
+ * `masterLinePrice`: the owner's global price for the model, else the Medusa
+ * base through the CHAIN's general rule, then the chain band. That is the
+ * price every store starts from, so the master column agrees with a store
+ * that inherits (until 5-nov-2026 the master skipped the chain rule). Models
+ * without a Medusa price are left out, so a missing price reads as unknown,
+ * never as 0. Pure.
  */
 export function catalogSellingPrices(
   catalog: readonly CatalogModel[],
@@ -771,33 +782,38 @@ export function catalogSellingPrices(
     const scope = m.is_case ? "case" : "frame";
     const base = m.price_cents / 100;
     let usd: number;
+    let source: CatalogPriceSource;
     if (storeId) {
-      usd = storeLinePrice(rules, { establishmentId: storeId, scope, target: m.product_id, base, lenses: 0 }, now).frame;
+      const line = storeLinePrice(rules, { establishmentId: storeId, scope, target: m.product_id, base, lenses: 0 }, now);
+      usd = line.frame;
+      source = line.frame_source === "store_exact" ? "exact" : line.band ? "band" : line.adjustment ? "adjusted" : "base";
     } else {
-      usd = globalPrice(rules, scope, m.product_id, base, now);
-      if (!hasGlobalPrice(rules, scope, m.product_id, now)) usd = applyPriceBandUsd(usd, priceBandFor(null), scope);
+      const line = masterLinePrice(rules, { scope, target: m.product_id, base }, now);
+      usd = line.frame;
+      source = line.frame_source;
     }
     const key = frameCostKeyOf(m.sku);
     // Two models normalising to one key (it happens in the supplier list): the
     // first wins, same as the cost side, so both halves name the same model.
-    if (!out.has(key)) out.set(key, { product_id: m.product_id, price_cents: Math.round(usd * 100) });
+    if (!out.has(key)) out.set(key, { product_id: m.product_id, price_cents: Math.round(usd * 100), source });
   }
   return out;
 }
 
 /**
- * Puts `price_cents` (and the model's `product_id`) on each cost row of
- * `GET /admin/pricing/frames/costs`, null when the catalogue has no price for
- * that key, so the costs tab can read cost → price → margin per row. Appends
- * only: the nine fields of `frameCostStoreView` stay as they are. Pure.
+ * Puts `price_cents` (and the model's `product_id` and the price's `price_source`)
+ * on each cost row of `GET /admin/pricing/frames/costs`, null when the
+ * catalogue has no price for that key, so the costs tab can read cost → price
+ * → margin per row and say where the price came from. Appends only: the nine
+ * fields of `frameCostStoreView` stay as they are. Pure.
  */
 export function withCatalogPrice<T extends Record<string, unknown>>(
   rows: T[],
   prices: ReadonlyMap<string, CatalogSellingPrice>
-): Array<T & { price_cents: number | null; product_id: string | null }> {
+): Array<T & { price_cents: number | null; product_id: string | null; price_source: CatalogPriceSource | null }> {
   return rows.map((r) => {
     const hit = prices.get(String(r["sku"] ?? ""));
-    return { ...r, price_cents: hit ? hit.price_cents : null, product_id: hit ? hit.product_id : null };
+    return { ...r, price_cents: hit ? hit.price_cents : null, product_id: hit ? hit.product_id : null, price_source: hit ? hit.source : null };
   });
 }
 

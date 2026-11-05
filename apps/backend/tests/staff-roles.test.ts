@@ -1,4 +1,4 @@
-import { assignmentRowsFor, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
+import { assignmentRowsFor, isAllowedForInactiveUser, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
 
 const row = (over: Partial<AssignmentLike>): AssignmentLike => ({
   role: "seller",
@@ -156,9 +156,10 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/me/scope/extra")).toBe(false);
   });
 
-  it("lets the board's GET through (the route scopes it by role) but none of its writes", () => {
+  it("lets the board's GETs through (the routes scope them by role) but none of its writes", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/order-board?view=stages")).toBe(true);
-    expect(isAllowedForRestrictedRole("GET", "/admin/order-board/order_1")).toBe(false);
+    // The single order: the sale sheet's stage block for a manager (slim, scoped in the route).
+    expect(isAllowedForRestrictedRole("GET", "/admin/order-board/order_1")).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/stage")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/note")).toBe(false);
   });
@@ -183,5 +184,17 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods", ["payments.manage"])).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods/pospm_cash", ["payments.manage"])).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/pos/payment-methods", ["costs.manage"])).toBe(false);
+  });
+});
+
+describe("isAllowedForInactiveUser", () => {
+  it("lets a person without an active role ask who they are and sign out, nothing else", () => {
+    expect(isAllowedForInactiveUser("GET", "/admin/team/me")).toBe(true);
+    expect(isAllowedForInactiveUser("GET", "/admin/users/me")).toBe(true);
+    expect(isAllowedForInactiveUser("DELETE", "/admin/team/me/sessions")).toBe(true);
+    expect(isAllowedForInactiveUser("GET", "/admin/pos/context")).toBe(false);
+    expect(isAllowedForInactiveUser("POST", "/admin/pos/sales")).toBe(false);
+    expect(isAllowedForInactiveUser("GET", "/admin/team/me/profile")).toBe(false);
+    expect(isAllowedForInactiveUser("POST", "/admin/team/password")).toBe(false);
   });
 });

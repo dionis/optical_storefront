@@ -173,7 +173,10 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // Order board (the stage of each sale in «Pedidos»): the route lets in
   // supervisors and managers for their stores, slim rows only and without
   // money (boardAccessFor, lib/order-board.ts); a seller gets forbidden_role.
+  // The single order (the sale sheet's stage block) follows the same rule in
+  // its own route; its writes (stage, tracking, note) stay admin-only.
   { method: "GET", path: /^\/admin\/order-board$/ },
+  { method: "GET", path: /^\/admin\/order-board\/[^/]+$/ },
   // The panel's single search bar: every role, each scoped by lib/omni-search.ts
   // (a seller finds only their own sales and no colleague or store).
   { method: "GET", path: /^\/admin\/search$/ },
@@ -201,6 +204,26 @@ const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privileg
   { method: "GET", path: /^\/admin\/pricing\/frames\/(costs|band)$/, privilege: "costs.manage" },
   { method: "POST", path: /^\/admin\/pricing\/frames\/(cost|band)$/, privilege: "costs.manage" },
 ];
+
+/**
+ * The only /admin routes a person WITHOUT an active role (deactivated, or every
+ * assignment switched off) may still call: who they are — so the panel can show
+ * the «access deactivated» card instead of a dashboard — and signing out their
+ * own sessions. Everything else, the till routes included, is 403 `inactive`:
+ * the allowlist above is for people who work in a store, not for someone shown
+ * the door whose token has not expired yet (QA roles 5-nov-2026).
+ */
+const INACTIVE_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: "GET", path: /^\/admin\/team\/me$/ },
+  { method: "GET", path: /^\/admin\/users\/me$/ },
+  { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
+];
+
+export function isAllowedForInactiveUser(method: string, url: string): boolean {
+  const path = url.split("?")[0].replace(/\/+$/, "") || "/";
+  const m = method.toUpperCase();
+  return INACTIVE_ALLOWED.some((r) => r.method === m && r.path.test(path));
+}
 
 export function isAllowedForRestrictedRole(method: string, url: string, privileges: readonly string[] = []): boolean {
   const path = url.split("?")[0].replace(/\/+$/, "") || "/";

@@ -92,6 +92,22 @@ describe("staffGuard and revoked sessions", () => {
     expect(c.next).toHaveBeenCalled();
   });
 
+  it("a deactivated person (role null) is 403 inactive on the till routes too; only who-am-I and sign-out pass", async () => {
+    (getStaffScope as jest.Mock).mockResolvedValue(scopeOf({ role: null, establishment_ids: [], is_owner: false, is_admin: false, disabled_at: "2026-11-05T18:00:00.000Z" }));
+    for (const [method, url] of [["GET", "/admin/pos/context"], ["POST", "/admin/pos/sales"], ["GET", "/admin/pos/sales"], ["GET", "/admin/team/me/profile"], ["POST", "/admin/team/me/profile"], ["GET", "/admin/search?q=x"], ["GET", "/admin/products"]]) {
+      const r = request({ method, url });
+      await staffGuard(r.req as never, r.res as never, r.next);
+      expect(r.next).not.toHaveBeenCalled();
+      expect(r.res.status).toHaveBeenCalledWith(403);
+      expect(r.res.json).toHaveBeenCalledWith(expect.objectContaining({ reason: "inactive" }));
+    }
+    for (const [method, url] of [["GET", "/admin/team/me"], ["GET", "/admin/users/me"], ["DELETE", "/admin/team/me/sessions"]]) {
+      const r = request({ method, url });
+      await staffGuard(r.req as never, r.res as never, r.next);
+      expect(r.next).toHaveBeenCalled();
+    }
+  });
+
   it("requests without a user are left to Medusa", async () => {
     const { req, res, next } = request({ actor: null });
     await staffGuard(req as never, res as never, next);

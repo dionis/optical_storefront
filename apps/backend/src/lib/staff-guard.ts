@@ -2,7 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaNextFunction, MedusaResponse } f
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { sessionRevoked, tokenIssuedAtMs } from "./session-control";
-import { isAllowedForRestrictedRole } from "./staff-roles";
+import { isAllowedForInactiveUser, isAllowedForRestrictedRole } from "./staff-roles";
 import { getStaffScope } from "./staff-scope";
 
 /**
@@ -23,7 +23,10 @@ import { getStaffScope } from "./staff-scope";
  * A token older than the person's last "log out everywhere" (a password
  * change, a remote sign-out — lib/session-control.ts) is refused first, admins
  * included, with 401 `session_revoked`: the panel drops its session and shows
- * the login. A deactivated person is still 403 `inactive` through role null.
+ * the login. A deactivated person (role null) is 403 `inactive` everywhere but
+ * on the two routes that tell the panel who they are and let them sign out
+ * (isAllowedForInactiveUser) — the role allowlist is not consulted for them,
+ * or a deactivated seller could keep quoting and listing from the till routes.
  *
  * Three arguments on purpose — see tests/middleware-arity.test.ts.
  */
@@ -52,11 +55,17 @@ export async function staffGuard(
   }
 
   if (scope.is_admin) return next();
-  if (isAllowedForRestrictedRole(req.method, req.originalUrl ?? req.url, scope.privileges)) return next();
+  const url = req.originalUrl ?? req.url;
+  if (!scope.role) {
+    if (isAllowedForInactiveUser(req.method, url)) return next();
+    res.status(403).json({ type: "not_allowed", reason: "inactive", message: "This account is deactivated." });
+    return;
+  }
+  if (isAllowedForRestrictedRole(req.method, url, scope.privileges)) return next();
 
   res.status(403).json({
     type: "not_allowed",
-    reason: scope.role ? "forbidden_role" : "inactive",
+    reason: "forbidden_role",
     message: "This role cannot use this admin route.",
   });
 }

@@ -11,11 +11,14 @@ import { getStaffScope } from "../../../../lib/staff-scope";
 import { tenant } from "../../../../lib/tenant";
 
 /**
- * GET /admin/sellers/stats?from&to&store — sales and commission per seller over the
- * board window (`store` = establishment id or "web" narrows it to one store) (the `MAX_BOARD_SCAN` most recent orders in the range; the
- * response says `truncated` when the window was full). Terminal orders
- * (canceled / refunded / payment pending) earn nobody anything. Sellers with
- * no sales are listed with zeros; orders without a code go to `unattributed`.
+ * GET /admin/sellers/stats?from&to&store — sales and commission per seller
+ * over `sale_fact` (lib/sellers.ts sellerStats: the Executive's rows and
+ * local-day filter; `store` = establishment id or "web" narrows it to one
+ * store; `truncated` only past `MAX_SELLER_STAT_ORDERS` sales). A till sale
+ * belongs to the user who rang it up (`seller.user_id`), a web order to its
+ * referral code — so counter sellers and referral sellers both count, once.
+ * Voided / canceled sales earn nobody anything. Sellers with no sales are
+ * listed with zeros; sales of nobody's go to `unattributed`.
  * Each row also carries `units`, `avg_ticket`, `share_pct` (the quota: their
  * part of every sale in the window) and, only for whoever may see costs
  * (lib/sales-insights.ts insightAccess, `access.profit`), `profit` and

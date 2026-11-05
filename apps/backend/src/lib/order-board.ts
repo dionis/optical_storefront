@@ -701,6 +701,19 @@ export function redactBoardMoney<T extends { total?: unknown }>(rows: T[]): Arra
 }
 
 /**
+ * A slim row as a supervisor or manager receives it: the money redacted AND
+ * no `next_stages`. Moving a stage (POST …/stage) is admin-only (the guard's
+ * allowlist, tests/staff-roles.test.ts), and the panel only offers the moves
+ * the server lists — so a non-admin row must list none, or «Pedidos» would
+ * paint an «Avanzar» that answers 403 (QA roles 5-nov-2026). Pure.
+ */
+export function restrictBoardRows<T extends { total?: unknown; next_stages?: unknown }>(
+  rows: T[]
+): Array<Omit<T, "total" | "next_stages"> & { total: null; next_stages: [] }> {
+  return rows.map((o) => ({ ...o, total: null, next_stages: [] as [] }));
+}
+
+/**
  * What the board hands a caller by role. Admins (owner, superadmin) read it
  * whole. A supervisor or manager reads the SLIM view only (no items, no
  * customer, no addresses: the stage of each order of their stores, which is

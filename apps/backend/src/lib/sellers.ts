@@ -3,8 +3,8 @@ import type { MedusaContainer } from "@medusajs/framework/types";
 import { SELLER_MODULE } from "../modules/seller/index";
 import type SellerModuleService from "../modules/seller/service";
 import { storefrontOrigin } from "./order-access";
-import { matchesStore, normalizeSellerCodeLoose, normalizeSellerSourceLoose, scanBoardWindow, type BoardOrder } from "./order-board";
-import type { AnalyticsFilter } from "./sales-analytics";
+import { normalizeSellerCodeLoose, normalizeSellerSourceLoose } from "./order-board";
+import { referralSourcesByOrder, sellerFactOrders, type AnalyticsFilter } from "./sales-analytics";
 
 /**
  * Sellers (vendedores): referral codes, dashboard links and sales stats.
@@ -49,6 +49,13 @@ export function isValidSellerCode(value: unknown): value is string {
 export const SELLER_SOURCES = ["instagram", "facebook", "tiktok", "whatsapp", "telegram", "x", "email", "link", "other"] as const;
 export type SellerSource = (typeof SELLER_SOURCES)[number];
 export const DEFAULT_SELLER_SOURCE: SellerSource = "link";
+/**
+ * Source of a sale rung up at the till (`sale_fact.channel = "pos"`): not a
+ * network, so not in `SELLER_SOURCES` (no referral link is built for it), but
+ * a row of `by_source` like the others so the panel shows where every sale
+ * of a seller came from — counter or web.
+ */
+export const COUNTER_SOURCE = "counter";
 
 /**
  * Source token as the cart carried it: lowercase a-z only, at most 20 chars,
@@ -386,8 +393,8 @@ export async function findSellerById(container: MedusaContainer, id: string): Pr
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 
-/** Terminal states that earn nobody anything. */
-export function countsForRevenue(order: Pick<BoardOrder, "terminal">): boolean {
+/** Terminal states (canceled / refunded / payment pending / voided) earn nobody anything. */
+export function countsForRevenue(order: { terminal?: string | null }): boolean {
   return !order.terminal;
 }
 
@@ -465,8 +472,12 @@ export interface SellerStats {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Source of an order for the stats: the stored token, or "link" when none. */
-export function sellerSourceOf(order: { seller_source?: string | null }): string {
+/**
+ * Source of an order for the stats: "counter" for a till sale, else the
+ * stored referral token, or "link" when none.
+ */
+export function sellerSourceOf(order: { seller_source?: string | null; channel?: string | null }): string {
+  if (order.channel === "pos") return COUNTER_SOURCE;
   return normalizeSellerSource(order.seller_source) ?? DEFAULT_SELLER_SOURCE;
 }
 
@@ -490,15 +501,50 @@ export function isoAt(value: unknown): string {
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
-/** A board-like order as the stats read it. */
-export type StatOrder = Pick<BoardOrder, "seller_code" | "total" | "terminal" | "created_at"> & {
+/**
+ * One sale as the stats read it. Built from `sale_fact` (one row per order,
+ * `sellerFactOrders`); board rows fit the same shape, which is what the pure
+ * tests use.
+ */
+export type StatOrder = {
   id?: string;
+  /** Referral code of a web order, or the till seller's receipt code. */
+  seller_code?: string | null;
+  /** Panel user who rang the sale up at the till (`sale_fact.seller_id`); null on a web order. */
+  seller_id?: string | null;
+  /** "pos" for a till sale, "web" for the online store; absent = web. */
+  channel?: string | null;
+  total: unknown;
+  /** Set on a terminal / voided sale: earns nobody anything. */
+  terminal?: string | null;
+  created_at: unknown;
   seller_source?: string | null;
   items?: Array<{ quantity?: number | null }>;
+  /** Items sold, when already summed (sale_fact `qty`); else counted from `items`. */
+  units?: number | null;
   /** Sales tax and shipping the customer paid: out of the commission base (see `netRevenueOf`). */
   tax_total?: unknown;
   shipping_total?: unknown;
 };
+
+/** Sellers as the grouping needs them: the record's code, and the panel user who sells at the till as it. */
+export type StatSeller = Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active"> & { user_id?: string | null };
+
+/**
+ * Which seller a sale belongs to. The person who rang it up at the till wins
+ * (`seller_id` = the record's `user_id`): that is who earns the commission,
+ * whatever code the receipt printed. Otherwise the code on the sale (a web
+ * referral, or a till sale of a user with no record). One sale, one seller:
+ * a sale that matches the same record both ways is still counted once, and
+ * a sale whose user is one record and whose code is another goes to the
+ * user. Pure.
+ */
+export function attributeSale(sale: Pick<StatOrder, "seller_id" | "seller_code">, byUser: Map<string, string>, byCode: Map<string, unknown>): string | null {
+  const viaUser = sale.seller_id ? byUser.get(sale.seller_id) : undefined;
+  if (viaUser) return viaUser;
+  const code = normalizeSellerCodeLoose(sale.seller_code);
+  return code && byCode.has(code) ? code : null;
+}
 
 /**
  * Commission base of an order: what the customer paid LESS the sales tax and
@@ -517,13 +563,15 @@ export function netRevenueOf(order: Pick<StatOrder, "total" | "tax_total" | "shi
 }
 
 /**
- * Pure grouping: board-like rows × sellers → per-seller totals. Orders in a
- * terminal state (canceled / refunded / payment pending) count for nobody.
- * Every seller is listed, with zeros when they sold nothing, biggest revenue
- * first. `profitByOrder` (dollars per order id, lib/sales-insights.ts) fills
- * `profit`/`avg_profit`; without it they stay null (the caller may not see
- * them). `share_pct` is the seller's part of EVERY sale in the window,
- * attributed or not: the quota.
+ * Pure grouping: sales × sellers → per-seller totals. Each sale goes to ONE
+ * seller (`attributeSale`: the till user first, then the code), so a counter
+ * seller's till sales and a referral seller's web orders both count and
+ * nothing is counted twice. Sales in a terminal state (canceled / refunded /
+ * payment pending / voided) count for nobody. Every seller is listed, with
+ * zeros when they sold nothing, biggest revenue first. `profitByOrder`
+ * (dollars per order id, lib/sales-insights.ts) fills `profit`/`avg_profit`;
+ * without it they stay null (the caller may not see them). `share_pct` is the
+ * seller's part of EVERY sale in the window, attributed or not: the quota.
  *
  * `revenue` is what the customers paid; `commission` is the percentage of
  * `net_revenue` (revenue less sales tax and shipping, `netRevenueOf`) — the
@@ -531,13 +579,15 @@ export function netRevenueOf(order: Pick<StatOrder, "total" | "tax_total" | "shi
  */
 export function groupSellerStats(
   orders: StatOrder[],
-  sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active"> & { user_id?: string | null }>,
+  sellers: StatSeller[],
   profitByOrder: Map<string, number> | null = null
 ): { sellers: SellerStatRow[]; unattributed: { orders: number; revenue: number }; sources: SourceStatRow[] } {
   const byCode = new Map<string, SellerStatRow>();
+  const byUser = new Map<string, string>();
   const sourcesByCode = new Map<string, Map<string, SourceStatRow>>();
   const profitOf = new Map<string, number>();
   for (const s of sellers) {
+    if (s.user_id && !byUser.has(s.user_id)) byUser.set(s.user_id, s.code.toUpperCase());
     byCode.set(s.code.toUpperCase(), {
       id: s.id,
       code: s.code.toUpperCase(),
@@ -564,7 +614,7 @@ export function groupSellerStats(
   const allSources = new Map<string, SourceStatRow>();
   for (const o of orders) {
     if (!countsForRevenue(o)) continue;
-    const code = normalizeSellerCodeLoose(o.seller_code);
+    const code = attributeSale(o, byUser, byCode);
     const row = code ? byCode.get(code) : undefined;
     const total = Number(o.total ?? 0) || 0;
     if (!row) {
@@ -575,7 +625,7 @@ export function groupSellerStats(
     row.orders++;
     row.revenue = round2(row.revenue + total);
     row.net_revenue = round2(row.net_revenue + netRevenueOf(o));
-    row.units += (o.items ?? []).reduce((n, it) => n + (Number(it?.quantity ?? 1) || 0), 0);
+    row.units += o.units != null ? Number(o.units) || 0 : (o.items ?? []).reduce((n, it) => n + (Number(it?.quantity ?? 1) || 0), 0);
     if (profitByOrder && o.id !== undefined) profitOf.set(row.code, round2((profitOf.get(row.code) ?? 0) + (profitByOrder.get(o.id) ?? 0)));
     const at = isoAt(o.created_at) || null;
     if (at && (!row.last_order_at || at > row.last_order_at)) row.last_order_at = at;
@@ -603,9 +653,11 @@ export function groupSellerStats(
 }
 
 /**
- * The local-day analytics filter that covers the board window (`from`/`to`
- * ISO instants or null): what lib/sales-insights.ts orderEconomics takes.
- * Without `to`, tomorrow (UTC) so no local day is cut off. Pure.
+ * The local-day analytics filter of a stats period (`from`/`to` ISO instants
+ * or null, as the route and start-map pass them): what `sellerFactOrders`
+ * and lib/sales-insights.ts orderEconomics take — the Executive's own filter,
+ * so both screens read the same sales. Without `to`, tomorrow (UTC) so no
+ * local day is cut off. Pure.
  */
 export function statsDayFilter(range: { from?: string | null; to?: string | null; store?: string | null }, now = new Date()): AnalyticsFilter {
   const day = (v: string | null | undefined, fallback: string) => (v && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback);
@@ -618,26 +670,49 @@ export function statsDayFilter(range: { from?: string | null; to?: string | null
 export type ProfitLoader = (filter: AnalyticsFilter, orderIds: string[]) => Promise<Map<string, { profit: number }>>;
 
 /**
- * Stats over the board window (`MAX_BOARD_SCAN` most recent orders in range).
- * With `profitLoader` (only when the caller may see profit, insightAccess)
- * each seller gets the gross profit of their orders, from the same rules as
- * the Executive.
+ * Stats over `sale_fact` — the source of truth every other sales screen reads
+ * (Executive, store result, statements), with the same local-day and store
+ * filter (`statsDayFilter` → `applyFilter`). Till sales are attributed by the
+ * user who rang them up (`seller.user_id`), web orders by the referral code
+ * (`attributeSale`); until 5-nov-2026 this read the order board's
+ * `metadata.seller_code` only, so a counter seller showed $0 while the
+ * Executive attributed their sales. `store`: one establishment's till sales,
+ * or "web" for the online store; empty = everything. With `profitLoader`
+ * (only when the caller may see profit, insightAccess) each seller gets the
+ * gross profit of their orders, from the same rules as the Executive.
+ * `truncated` only past `MAX_SELLER_STAT_ORDERS` sales in the period.
  */
 export async function sellerStats(
   container: MedusaContainer,
   range: { from?: string | null; to?: string | null; store?: string | null },
   profitLoader: ProfitLoader | null = null
 ): Promise<SellerStats> {
-  const [sellers, window] = await Promise.all([
-    listSellers(container),
-    scanBoardWindow(container, { from: range.from ?? undefined, to: range.to ?? undefined }),
-  ]);
-  // `store`: one establishment's till sales, or "web" for the online store; empty = everything.
-  const orders = range.store ? window.orders.filter((o) => matchesStore(o, range.store)) : window.orders;
+  const filter = statsDayFilter(range);
+  const [sellers, facts] = await Promise.all([listSellers(container), sellerFactOrders(container, filter)]);
+  // The network behind a web referral lives on the order, not in sale_fact.
+  const sources = await referralSourcesByOrder(
+    container,
+    facts.orders.filter((o) => o.channel === "web" && o.seller_code).map((o) => o.order_id)
+  );
+  const orders: StatOrder[] = facts.orders.map((o) => ({
+    id: o.order_id,
+    seller_code: o.seller_code,
+    seller_id: o.seller_id,
+    channel: o.channel,
+    total: o.total,
+    tax_total: o.tax,
+    shipping_total: 0,
+    terminal: null,
+    created_at: o.sold_at,
+    seller_source: sources.get(o.order_id) ?? null,
+    units: o.units,
+  }));
   let profitByOrder: Map<string, number> | null = null;
   if (profitLoader) {
-    const ids = orders.filter((o) => countsForRevenue(o) && normalizeSellerCodeLoose(o.seller_code)).map((o) => o.id);
-    const econ = await profitLoader(statsDayFilter(range), ids);
+    const byUser = new Map(sellers.filter((s) => s.user_id).map((s) => [s.user_id as string, s.code]));
+    const byCode = new Map(sellers.map((s) => [s.code, true]));
+    const ids = orders.filter((o) => attributeSale(o, byUser, byCode)).map((o) => o.id as string);
+    const econ = await profitLoader(filter, ids);
     profitByOrder = new Map([...econ].map(([id, e]) => [id, e.profit / 100]));
   }
   const grouped = groupSellerStats(orders, sellers, profitByOrder);
@@ -646,7 +721,7 @@ export async function sellerStats(
     to: range.to ?? null,
     ...grouped,
     access: { profit: profitLoader !== null },
-    truncated: window.truncated,
+    truncated: facts.truncated,
   };
 }
 

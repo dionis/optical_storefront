@@ -13,6 +13,10 @@
  *     - exact price of a product in that store (scope "frame"/"case"): the
  *       final price of that component, never adjusted. A fixed amount then
  *       goes on the lenses instead, if there are any.
+ *     A general adjustment with NO store (establishment_id null) is the
+ *     CHAIN's rule: every store without one of its own applies it, and so
+ *     does the master price itself (`masterLinePrice`) — the master is what
+ *     a store that inherits charges, not the bare Medusa base.
  *
  * Rules are immutable rows: changing one closes the current row (valid_to) and
  * creates another, so the history and scheduled changes come from one model.
@@ -148,7 +152,7 @@ export interface StoreLinePrice {
  */
 function generalAdjustment(
   rules: PriceRuleLike[],
-  est: string,
+  est: string | null,
   scope: "frame" | "case",
   now: Date
 ): PriceRuleLike | null {
@@ -156,7 +160,63 @@ function generalAdjustment(
     pick(rules, now, (r) =>
       r.establishment_id === establishment && r.scope === which && r.target == null && (r.mode === "percent" || r.mode === "delta")
     );
-  return of(est, scope) ?? of(est, "all") ?? of(null, scope) ?? of(null, "all");
+  // `est` null = the master itself: only the chain's rules.
+  return (est ? of(est, scope) ?? of(est, "all") : null) ?? of(null, scope) ?? of(null, "all");
+}
+
+export interface MasterLinePrice {
+  /** The chain's price of the frame (or case) component, in dollars. */
+  frame: number;
+  /**
+   * What produced it: the owner's own price for the model (`owner`), the band
+   * moving a computed price (`band`), the chain's general rule (`rule`), or
+   * the bare base (`base`). Same precedence as a store cell's source.
+   */
+  frame_source: "owner" | "band" | "rule" | "base";
+  adjustment: { mode: "percent" | "delta"; value: number } | null;
+  band: { from: number; to: number } | null;
+}
+
+/**
+ * THE MASTER price of a frame or case: what every store starts from before
+ * its own rules, and what "Todas las tiendas" shows in Precios → Monturas.
+ *
+ *   owner's global price for the model      (his decision; no rule, no band)
+ *   → Medusa base × the CHAIN's general rule (POST /pricing/frames/rule with
+ *     no store: scope "frame"/"case", else the older "all")
+ *   → the chain's floor and ceiling.
+ *
+ * It is `storeLinePrice` with no store: the same `generalAdjustment` a store
+ * falls back to when it has no rule of its own, so a store that inherits and
+ * the master column always show the same figure. Until 5-nov-2026 the master
+ * was the bare base (+ band) while every store applied the chain rule, so the
+ * master column disagreed with every store that simply inherited (QA note).
+ * Pure.
+ */
+export function masterLinePrice(
+  rules: PriceRuleLike[],
+  input: { scope: "frame" | "case"; target: string; base: number },
+  now = new Date(),
+  band: PriceBand | null = priceBandFor(null)
+): MasterLinePrice {
+  if (hasGlobalPrice(rules, input.scope, input.target, now)) {
+    return { frame: globalPrice(rules, input.scope, input.target, input.base, now), frame_source: "owner", adjustment: null, band: null };
+  }
+  const general = generalAdjustment(rules, null, input.scope, now);
+  const adjustment = general ? { mode: general.mode as "percent" | "delta", value: Number(general.value) } : null;
+  let frame = input.base;
+  if (adjustment?.mode === "percent") frame = frame * (1 + adjustment.value / 100);
+  if (adjustment?.mode === "delta") frame += adjustment.value;
+  frame = cents(frame);
+  const before = frame;
+  frame = cents(applyPriceBandUsd(frame, band, input.scope));
+  const moved = frame !== before;
+  return {
+    frame,
+    frame_source: moved ? "band" : adjustment ? "rule" : "base",
+    adjustment,
+    band: moved ? { from: before, to: frame } : null,
+  };
 }
 
 export function storeLinePrice(

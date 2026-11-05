@@ -16,7 +16,7 @@ import {
   type FrameCostVariationIndex,
 } from "./frame-cost";
 import { brandOf, isExposed, type AssortmentRuleLike } from "./store-assortment";
-import { hasGlobalPrice, storeLinePrice, type PriceRuleLike } from "./store-pricing";
+import { storeLinePrice, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
 
 /**
@@ -62,7 +62,8 @@ export interface AcrossCosts {
 }
 
 export type AcrossSource = "exact" | "band" | "adjusted" | "base";
-export type AcrossMasterSource = "owner" | "band" | "base";
+/** The master cell's reason: the owner's price, the band, the CHAIN's general rule, or the bare base (`masterLinePrice`). */
+export type AcrossMasterSource = "owner" | "band" | "rule" | "base";
 
 export interface AcrossStoreCell {
   establishment_id: string;
@@ -90,7 +91,7 @@ export interface AcrossRow {
   is_case: boolean;
   /** Medusa price before any rule, in cents; null when the model has none. */
   base_cents: number | null;
-  /** The chain's price (the owner's global price, else base through the band), in cents. */
+  /** The chain's price (the owner's global price, else base through the chain rule and the band), in cents. */
   master_price_cents: number | null;
   master_source: AcrossMasterSource;
   /** The chain's cost; only for cost viewers (`redactAcrossCosts`). */
@@ -133,7 +134,6 @@ export function buildAcrossRows(
     // model at a time, so two models normalising to one SKU key never shadow
     // each other here (there, the first wins on purpose).
     const masterHit = catalogSellingPrices([m], rules, null, now).get(frameCostKeyOf(m.sku));
-    const owner = hasGlobalPrice(rules, scope, m.product_id, now);
     const masterPrice = masterHit ? masterHit.price_cents : null;
     const row: AcrossRow = {
       product_id: m.product_id,
@@ -145,7 +145,7 @@ export function buildAcrossRows(
       is_case: m.is_case,
       base_cents: m.price_cents,
       master_price_cents: masterPrice,
-      master_source: owner ? "owner" : masterPrice != null && masterPrice !== m.price_cents ? "band" : "base",
+      master_source: (masterHit?.source as AcrossMasterSource | undefined) ?? "base",
       stores: stores.map((s) => {
         const line =
           m.price_cents == null

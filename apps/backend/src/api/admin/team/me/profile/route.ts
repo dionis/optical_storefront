@@ -8,9 +8,11 @@ import { getStaffScope, invalidateStaffScope } from "../../../../../lib/staff-sc
 
 /**
  * MI PERFIL (HU-98): cualquier persona del equipo ve su perfil y edita sus
- * datos de contacto y preferencias (teléfonos, email para avisos, idioma).
- * El resto (código de vendedor, privilegios, comisión, emergencia, notas) solo
- * lo cambian el dueño o un superadmin, en /admin/team/:id/profile.
+ * datos de contacto y preferencias (teléfonos, email para avisos, idioma),
+ * además de su nombre para mostrar y su foto (QA D-15, 5-nov-2026). El resto
+ * (código de vendedor, privilegios, comisión, emergencia, notas) solo lo
+ * cambian el dueño o un superadmin, en /admin/team/:id/profile. La lista es
+ * `SELF_EDITABLE_FIELDS` en lib/staff-profile.ts (con prueba).
  *
  * Abierta a todos los roles (lib/staff-roles.ts). Errores con `reason`; el
  * panel traduce con adm.err.profile.<reason>.

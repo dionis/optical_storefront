@@ -436,23 +436,43 @@ prueba) y `GET /admin/sales-analytics/me` (`goal`).
 
 ## 7. Vendedores (`lib/sellers.ts`)
 
-Fuente distinta a las demás pantallas: la **ventana del tablero de pedidos**
-(`scanBoardWindow`, los `MAX_BOARD_SCAN` pedidos más recientes del rango), no
-`sale_fact`.
+Desde el 5-nov-2026 la fuente es **`sale_fact`**, como el Ejecutivo
+(`sellerFactOrders` en `lib/sales-analytics.ts`: una fila por pedido, el
+mismo `applyFilter` de días locales y tienda). Antes leía la ventana del
+tablero de pedidos (`scanBoardWindow`, `MAX_BOARD_SCAN`) y solo el
+`metadata.seller_code` de referidos web, así que una vendedora de mostrador
+(venta con `staff_code` / `seller_id`) salía con $0 mientras Ejecutivo →
+Vendedores sí le atribuía la venta (QA D-13). Ya no hay ventana del tablero:
+`truncated` solo pasa de `MAX_SELLER_STAT_ORDERS` (20 000) ventas en el período.
+
+**Atribución (`attributeSale`, una venta → un vendedor, con prueba):**
+1. la venta de caja es de **quien la registró** (`sale_fact.seller_id` =
+   `seller.user_id`), sea cual sea el código que imprimió el recibo;
+2. si no, el **código** de la venta (`sale_fact.seller_code`: el referido de
+   un pedido web, o el código de recibo de un usuario sin ficha de vendedor);
+3. si no, «sin vendedor» (`unattributed`).
+
+Una venta que coincide con la misma ficha por usuario y por código cuenta una
+vez; si el usuario es una ficha y el código otra, gana el usuario.
 
 | Campo | Fórmula |
 |---|---|
-| `revenue` | Σ `order.total` de los pedidos atribuidos (lo que pagó el cliente) |
-| `net_revenue` | Σ (`total` − `tax_total` − `shipping_total`) — la base de la comisión |
+| `revenue` | Σ `total_cents` de las ventas atribuidas (lo cobrado, con impuesto; `sale_fact` no tiene línea de envío) |
+| `net_revenue` | Σ (`total_cents` − `tax_cents`) — la base de la comisión, la misma del estado de cuenta y del Ejecutivo |
 | `commission` | `net_revenue × commission_pct / 100` |
-| `units` | Σ cantidades de las líneas |
+| `units` | Σ `qty` |
 | `avg_ticket` | `revenue / orders` |
 | `profit` | ganancia bruta de esos pedidos, vía `orderEconomics` (las mismas reglas del Ejecutivo) |
-| `share_pct` | `revenue / (todo lo vendido en la ventana, atribuido o no)` |
-| `by_source` | por red de origen del referido (`link` cuando no hay) |
+| `share_pct` | `revenue / (todo lo vendido en el período, atribuido o no)` |
+| `by_source` | `counter` para una venta de caja; para un pedido web la red del enlace (`order.metadata.seller_source`, `referralSourcesByOrder`), `link` cuando no hay |
 
-Un pedido en estado terminal (cancelado, reembolsado, pago pendiente) **no
-genera nada para nadie** (`countsForRevenue`).
+Una venta anulada o un pedido cancelado (`sale_fact.status = voided`) **no
+genera nada para nadie**. Identidad nueva: `Σ revenue de Vendedores +
+unattributed.revenue` = `Ejecutivo.sales` del mismo período y tienda.
+
+El panel público del vendedor (`/store/seller-dashboard`) sigue leyendo la
+ventana del tablero por código de referido: pendiente de pasar a la misma
+fuente.
 
 ---
 

@@ -1553,6 +1553,8 @@ export interface SaleRow {
   delivered_at: string | null;
   voided_at: string | null;
   void_reason: string | null;
+  /** Free text written with the void (or the void request): what the approver reads before confirming. */
+  void_note: string | null;
   void_requested_at: string | null;
   created_at: string;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
@@ -1602,6 +1604,7 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
     delivered_at: iso(s.delivered_at),
     voided_at: iso(s.voided_at),
     void_reason: (s.void_reason as string | null) ?? null,
+    void_note: typeof s.void_note === "string" && s.void_note.trim() ? s.void_note.trim() : null,
     void_requested_at: iso(s.void_requested_at),
     created_at: new Date(s.created_at as string).toISOString(),
     payments: payments
@@ -1928,12 +1931,15 @@ export async function requestVoid(container: MedusaContainer, sale: SaleRow, act
  * winner. Same style as `deliveryClaimPlan`.
  */
 export function voidClaimPlan(saleId: string, actorId: string, reason: VoidReason, note: string | null): SqlPlan {
+  // `void_note = COALESCE(NULLIF(?, ''), void_note)`: a confirmation without a
+  // note of its own keeps what the seller wrote when asking (the reason the
+  // approver read); a new note replaces it.
   return {
     sql: `UPDATE pos_sale
-             SET status = 'voided', voided_at = now(), voided_by = ?, void_reason = ?, void_note = ?, updated_at = now()
+             SET status = 'voided', voided_at = now(), voided_by = ?, void_reason = ?, void_note = COALESCE(NULLIF(?, ''), void_note), updated_at = now()
            WHERE id = ? AND deleted_at IS NULL AND status <> 'voided'
        RETURNING voided_at`,
-    bindings: [actorId, reason, note, saleId],
+    bindings: [actorId, reason, note ?? "", saleId],
   };
 }
 

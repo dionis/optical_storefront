@@ -129,6 +129,86 @@ export async function netByUser(container: MedusaContainer, f: Pick<AnalyticsFil
   return new Map(rows.map((r) => [String(r.seller_id), Number(r.net) || 0]));
 }
 
+/** One sale (order) of `sale_fact` as the seller stats read it: who sold it and what it took. */
+export interface SellerFactOrder {
+  order_id: string;
+  channel: "pos" | "web";
+  /** Panel user who sold at the till (`sale_fact.seller_id`); null on a web order. */
+  seller_id: string | null;
+  /** Referral code of a web order, or the till seller's receipt code (`staff_code`). */
+  seller_code: string | null;
+  /** ISO instant. */
+  sold_at: string;
+  /** Dollars: Σ `total_cents` (tax included, no shipping line exists in sale_fact). */
+  total: number;
+  /** Dollars: Σ `tax_cents`. */
+  tax: number;
+  /** Σ `qty`. */
+  units: number;
+}
+
+/** Most sales one seller-stats read aggregates; beyond it the response says `truncated`. */
+export const MAX_SELLER_STAT_ORDERS = 20000;
+
+/**
+ * Every live sale in the filter, one row per order (lines summed), for
+ * `lib/sellers.ts sellerStats`: the same rows and the same local-day filter as
+ * the Executive (`applyFilter`), so Vendedores and Ejecutivo → Vendedores
+ * agree. Till sales carry `seller_id`; web referrals only `seller_code`.
+ */
+export async function sellerFactOrders(container: MedusaContainer, f: Pick<AnalyticsFilter, "from" | "to" | "stores">): Promise<{ orders: SellerFactOrder[]; truncated: boolean }> {
+  const pg = pgOf(container);
+  const rows = (await applyFilter(pg("sale_fact"), { ...f, includeVoided: false })
+    .select(
+      "sale_fact.order_id",
+      pg.raw("MAX(sale_fact.channel) AS channel"),
+      pg.raw("MAX(sale_fact.seller_id) AS seller_id"),
+      pg.raw("MAX(sale_fact.seller_code) AS seller_code"),
+      pg.raw("MIN(sale_fact.sold_at) AS sold_at"),
+      pg.raw("COALESCE(SUM(sale_fact.total_cents), 0)::bigint AS total"),
+      pg.raw("COALESCE(SUM(sale_fact.tax_cents), 0)::bigint AS tax"),
+      pg.raw("COALESCE(SUM(sale_fact.qty), 0)::int AS units")
+    )
+    .groupBy("sale_fact.order_id")
+    .orderBy("sold_at", "desc")
+    .limit(MAX_SELLER_STAT_ORDERS + 1)) as Array<{ order_id: string; channel: string | null; seller_id: string | null; seller_code: string | null; sold_at: string | Date; total: string | number; tax: string | number; units: string | number }>;
+  const truncated = rows.length > MAX_SELLER_STAT_ORDERS;
+  const kept = truncated ? rows.slice(0, MAX_SELLER_STAT_ORDERS) : rows;
+  return {
+    orders: kept.map((r) => ({
+      order_id: String(r.order_id),
+      channel: r.channel === "pos" ? "pos" : "web",
+      seller_id: r.seller_id ? String(r.seller_id) : null,
+      seller_code: r.seller_code ? String(r.seller_code) : null,
+      sold_at: new Date(r.sold_at as string).toISOString(),
+      total: Number(r.total) / 100,
+      tax: Number(r.tax) / 100,
+      units: Number(r.units) || 0,
+    })),
+    truncated,
+  };
+}
+
+/**
+ * The network a web referral came from (`order.metadata.seller_source`, set
+ * by the storefront from `?src=`), per order id. sale_fact does not carry it,
+ * so the seller stats look it up only for the web orders that have a code.
+ * Orders without a tag get no entry (the stats fall back to "link").
+ */
+export async function referralSourcesByOrder(container: MedusaContainer, orderIds: string[]): Promise<Map<string, string>> {
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const pg = pgOf(container);
+  for (let i = 0; i < ids.length; i += 500) {
+    const rows = (await pg("order")
+      .whereIn("id", ids.slice(i, i + 500))
+      .select("id", pg.raw("metadata->>'seller_source' AS seller_source"))) as Array<{ id: string; seller_source: string | null }>;
+    for (const r of rows) if (r.seller_source) out.set(String(r.id), String(r.seller_source));
+  }
+  return out;
+}
+
 const COLUMN: Record<Exclude<Breakdown, "payment_method" | "establishment">, string> = {
   seller: "seller_code",
   product: "product_id",

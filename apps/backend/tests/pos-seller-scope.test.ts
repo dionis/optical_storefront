@@ -62,6 +62,7 @@ const sale = (over: Partial<SaleRow> = {}): SaleRow => ({
   delivered_at: null,
   voided_at: null,
   void_reason: null,
+  void_note: null,
   void_requested_at: null,
   created_at: "2026-10-10T12:00:00.000Z",
   payments: [{ method_code: "cash", amount: 80, kind: "deposit", reference: null, created_at: "2026-10-10T12:00:00.000Z" }],
