@@ -435,6 +435,29 @@ const TOPICS_ES = {
     ],
     why: "Es la fuente de verdad: si un KPI parece raro, aquí se ve qué venta lo explica.",
   },
+  "exec.ordersPlain": {
+    title: "Pedidos de la tienda",
+    short: "La lista de ventas del período: total, cobrado y pendiente de cada una. Es de donde salen los KPI de arriba.",
+    what: "Cada fila es una venta: número, fecha, cliente, vendedor, total, cobrado y pendiente. Las anuladas aparecen tachadas y no suman. El costo y la ganancia solo los ve quien tiene el permiso «Ver costos»; por eso no aparecen aquí.",
+    how: [
+      "Abre el acordeón y usa la búsqueda o el orden de columnas.",
+      "Haz clic en una venta para abrirla: desde ahí se cobra el saldo, se reenvía el recibo o se imprime la hoja del laboratorio.",
+      "Exporta a Excel para conciliar con el banco o con el laboratorio.",
+    ],
+    why: "Es la fuente de verdad: si un KPI parece raro, aquí se ve qué venta lo explica.",
+  },
+  "exec.overviewPlain": {
+    title: "Panel ejecutivo",
+    short: "La foto del negocio en un período: cuánto se vendió, cuánto entró y cuánto queda por cobrar. Toca cualquier cifra para ir al detalle.",
+    what: "Arriba eliges tienda y período; en medio ves los indicadores (KPI) de ventas y cobros; abajo, acordeones con los pedidos, la caja y los vendedores del mismo período. El costo, la ganancia y el margen solo los ve quien tiene el permiso «Ver costos». Cada tarjeta se puede exportar a Excel, CSV o PDF.",
+    how: [
+      "Elige la tienda (o todas) y el período (hoy, semana, mes o un rango).",
+      "Lee los KPI de izquierda a derecha: ventas → cobrado → por cobrar.",
+      "Abre los acordeones para ver de dónde salen los números; haz clic en un KPI para ir a la pantalla que lo explica.",
+      "Para una reunión, usa «Excel» o «PDF» en la barra: incluye los filtros aplicados.",
+    ],
+    why: "Mirar esto cada semana con el mismo período permite ver tendencias (el «vs. período anterior») y detectar a tiempo una tienda que vende pero no cobra.",
+  },
   "exec.cash": {
     title: "Caja del período",
     short: "Los cobros agrupados por método de pago (efectivo, tarjeta, Zelle…) más las entradas y salidas manuales de efectivo.",
@@ -1165,6 +1188,29 @@ const TOPICS_EN = {
       "Export to Excel to reconcile with the bank or the lab.",
     ],
     why: "It is the source of truth: if a KPI looks odd, here you see which sale explains it.",
+  },
+  "exec.ordersPlain": {
+    title: "Store orders",
+    short: "The list of sales in the period: each one's total, collected and pending. This is where the KPIs above come from.",
+    what: "Each row is a sale: number, date, customer, seller, total, collected and pending. Voided ones appear struck through and do not add up. Cost and profit are shown only to those with the «View costs» permission, which is why they are not here.",
+    how: [
+      "Open the accordion and use the search or the column sorting.",
+      "Click a sale to open it: from there you collect the balance, resend the receipt or print the lab sheet.",
+      "Export to Excel to reconcile with the bank or the lab.",
+    ],
+    why: "It is the source of truth: if a KPI looks odd, here you see which sale explains it.",
+  },
+  "exec.overviewPlain": {
+    title: "Executive panel",
+    short: "The business snapshot for a period: how much was sold, how much came in and how much is still owed. Tap any figure to drill down.",
+    what: "At the top you choose store and period; in the middle the sales and collection indicators (KPIs); below, accordions with the orders, the till and the sellers for the same period. Cost, profit and margin are shown only to those with the «View costs» permission. Every card can be exported to Excel, CSV or PDF.",
+    how: [
+      "Pick the store (or all) and the period (today, week, month or a range).",
+      "Read the KPIs left to right: sales → collected → balance due.",
+      "Open the accordions to see where the numbers come from; click a KPI to go to the screen that explains it.",
+      "For a meeting, use «Excel» or «PDF» in the bar: it includes the filters applied.",
+    ],
+    why: "Looking at this every week with the same period shows trends (the «vs. previous period») and catches early a store that sells but does not collect.",
   },
   "exec.cash": {
     title: "Till for the period",

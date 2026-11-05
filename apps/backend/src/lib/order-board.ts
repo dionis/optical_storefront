@@ -842,6 +842,28 @@ export async function fetchBoardOrder(
   return order;
 }
 
+/**
+ * The board rows of given orders, by id, in no particular order: what a
+ * report that already knows WHICH sales it is about (the seller's dashboard,
+ * fed by `sale_fact`) needs for the parts the facts do not carry — display
+ * number, stage, the customer's name. Bounded by the caller (it passes a
+ * page, never a period); an empty list reads nothing.
+ */
+export async function fetchBoardOrdersByIds(scope: MedusaContainer, ids: readonly string[]): Promise<BoardOrder[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const { result } = await getOrdersListWorkflow(scope).run({
+    input: {
+      fields: ORDER_BOARD_FIELDS,
+      variables: { filters: { id: unique }, skip: 0, take: unique.length },
+    },
+  });
+  const rows = (Array.isArray(result) ? result : result.rows) as unknown as Record<string, unknown>[];
+  const projected = rows.map(projectBoardOrder);
+  await Promise.all([markTryon(scope, projected), markPosDelivered(scope, projected)]);
+  return projected;
+}
+
 /** Type guard so a hand-typed query string can't smuggle in an unknown stage. */
 export function isOrderStage(value: unknown): value is OrderStage {
   return typeof value === "string" && (ORDER_STAGES as readonly string[]).includes(value);

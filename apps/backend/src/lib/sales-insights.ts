@@ -3,7 +3,9 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
 import { computeCostSheet, isPaymentFeeRule, loadCostingContext, type CostRule } from "./costing";
 import { listEstablishments } from "./establishments";
+import { frameCostsLoaded } from "./frame-cost";
 import { loadProductMetadata } from "./frame-specs";
+import { lensCellCostsKnown } from "./lens-cost";
 import { parseLensFinish } from "./lens-finish";
 import { applyFilter, previousPeriod, type AnalyticsFilter, type Breakdown, type SaleListRow } from "./sales-analytics";
 import { hasPrivilege } from "./staff-profile";
@@ -112,6 +114,23 @@ export interface LineEconomics {
 }
 
 const MATERIAL_KINDS = new Set(["frame_brand", "frame_sku", "lens_design", "lens_material", "lens_photo", "lens_ar"]);
+
+/**
+ * "No cost of goods is defined anywhere yet": the panel's banner that says the
+ * cost reads as zero. It is true only when NONE of the three sources a sheet
+ * draws from can answer — no material rule with an amount, no supplier list
+ * (`store_frame_cost`, lib/frame-cost.ts) read by this process, and no lens
+ * cell cost known (lib/lens-cost.ts). Measuring the rules alone (what this
+ * did until 5-nov-2026) printed «el costo de mercancía sale en cero» next to a
+ * cost of $129.15 the moment the owner priced frames from the supplier's list
+ * instead of by brand rule: a banner that contradicts the figure beside it.
+ * Lines that still lack a cost are the other banner (`missing_cost_lines`).
+ * Pure.
+ */
+export function costSourcesMissing(rules: readonly Pick<CostRule, "kind" | "amount" | "active">[], frameCostsKnown: boolean, lensCostsKnown: boolean): boolean {
+  if (frameCostsKnown || lensCostsKnown) return false;
+  return rules.filter((r) => r.active && MATERIAL_KINDS.has(r.kind)).every((r) => !r.amount);
+}
 
 /**
  * Splits `amount` cents among `weights` so the parts add up to `amount`
@@ -820,7 +839,8 @@ export async function salesInsights(container: MedusaContainer, f: AnalyticsFilt
       },
       sellerName: (code) => costing.sellerByCode.get(code)?.name ?? null,
     },
-    costRulesMissing: costing.rules.filter((r) => MATERIAL_KINDS.has(r.kind)).every((r) => !r.amount),
+    // loadCostRules (inside loadCostingContext) has just warmed both caches.
+    costRulesMissing: costSourcesMissing(costing.rules, frameCostsLoaded(), lensCellCostsKnown()),
     truncated: cur.truncated || old.truncated,
   });
 }

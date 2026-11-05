@@ -167,8 +167,10 @@ export default function Home() {
             {HERO_SLIDES.map((s, i) => (
               <Link key={i} to={s.to} aria-label={t(s.tk)} data-model={lookbookTag(s.ref)}
                     className={`hero-zee-photo${i === slide ? " is-active" : ""}`}>
+                {/* `fetchpriority` en minúsculas: React 18 no conoce `fetchPriority`
+                    (avisaba en consola y lo descartaba); en minúsculas lo pasa al DOM. */}
                 <img src={LOOKBOOK_BY_ID[s.ref].src} alt="" loading={i === 0 ? "eager" : "lazy"}
-                     fetchPriority={i === 0 ? "high" : "auto"} decoding="async"
+                     fetchpriority={i === 0 ? "high" : "auto"} decoding="async"
                      onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
               </Link>
             ))}

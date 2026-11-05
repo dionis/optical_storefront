@@ -129,6 +129,23 @@ export async function netByUser(container: MedusaContainer, f: Pick<AnalyticsFil
   return new Map(rows.map((r) => [String(r.seller_id), Number(r.net) || 0]));
 }
 
+/**
+ * Commission in integer cents over a filter: `pct` % of the net of EACH line,
+ * rounded per line in SQL (`ROUND(numeric)`, half away from zero — the same
+ * answer as `Math.round` for a positive amount), then added. It is what
+ * lib/sales-insights.ts lineEconomics gives for the same lines, so the
+ * seller's own panel and the Executive print the same cents; rounding once
+ * over the month's net can differ by a cent. Pure over the connection.
+ */
+export async function lineCommissionCents(container: MedusaContainer, f: AnalyticsFilter, pct: number): Promise<number> {
+  if (!pct || !Number.isFinite(pct)) return 0;
+  const pg = pgOf(container);
+  const [row] = (await applyFilter(pg("sale_fact"), f).select(
+    pg.raw("COALESCE(SUM(ROUND(GREATEST(sale_fact.total_cents - sale_fact.tax_cents, 0) * ?::numeric / 100)), 0)::bigint AS cents", [pct])
+  )) as Array<{ cents: string | number }>;
+  return Number(row?.cents ?? 0) || 0;
+}
+
 /** One sale (order) of `sale_fact` as the seller stats read it: who sold it and what it took. */
 export interface SellerFactOrder {
   order_id: string;
@@ -139,12 +156,26 @@ export interface SellerFactOrder {
   seller_code: string | null;
   /** ISO instant. */
   sold_at: string;
+  /** Local calendar day of the sale (`sale_fact.sold_date_local`), the day every dashboard buckets on. */
+  sold_date_local: string;
   /** Dollars: Σ `total_cents` (tax included, no shipping line exists in sale_fact). */
   total: number;
   /** Dollars: Σ `tax_cents`. */
   tax: number;
   /** Σ `qty`. */
   units: number;
+  /**
+   * Net of each line in cents (`total_cents − tax_cents`), so a commission can
+   * be rounded per line exactly as lib/sales-insights.ts lineEconomics does;
+   * rounding once over the order's net can differ from it by a cent.
+   */
+  net_cents_lines: number[];
+}
+
+/** `ARRAY_AGG` of integers as the driver hands it (an array, or "{1,2}" text on some paths), as cents. Pure. */
+export function netLinesOf(value: unknown): number[] {
+  const list = Array.isArray(value) ? value : typeof value === "string" ? value.replace(/^\{|\}$/g, "").split(",").filter(Boolean) : [];
+  return list.map((v) => Math.round(Number(v)) || 0);
 }
 
 /** Most sales one seller-stats read aggregates; beyond it the response says `truncated`. */
@@ -165,13 +196,15 @@ export async function sellerFactOrders(container: MedusaContainer, f: Pick<Analy
       pg.raw("MAX(sale_fact.seller_id) AS seller_id"),
       pg.raw("MAX(sale_fact.seller_code) AS seller_code"),
       pg.raw("MIN(sale_fact.sold_at) AS sold_at"),
+      pg.raw("MIN(sale_fact.sold_date_local) AS sold_date_local"),
       pg.raw("COALESCE(SUM(sale_fact.total_cents), 0)::bigint AS total"),
       pg.raw("COALESCE(SUM(sale_fact.tax_cents), 0)::bigint AS tax"),
-      pg.raw("COALESCE(SUM(sale_fact.qty), 0)::int AS units")
+      pg.raw("COALESCE(SUM(sale_fact.qty), 0)::int AS units"),
+      pg.raw("ARRAY_AGG(sale_fact.total_cents - sale_fact.tax_cents) AS net_lines")
     )
     .groupBy("sale_fact.order_id")
     .orderBy("sold_at", "desc")
-    .limit(MAX_SELLER_STAT_ORDERS + 1)) as Array<{ order_id: string; channel: string | null; seller_id: string | null; seller_code: string | null; sold_at: string | Date; total: string | number; tax: string | number; units: string | number }>;
+    .limit(MAX_SELLER_STAT_ORDERS + 1)) as Array<{ order_id: string; channel: string | null; seller_id: string | null; seller_code: string | null; sold_at: string | Date; sold_date_local: string | null; total: string | number; tax: string | number; units: string | number; net_lines: unknown }>;
   const truncated = rows.length > MAX_SELLER_STAT_ORDERS;
   const kept = truncated ? rows.slice(0, MAX_SELLER_STAT_ORDERS) : rows;
   return {
@@ -181,9 +214,11 @@ export async function sellerFactOrders(container: MedusaContainer, f: Pick<Analy
       seller_id: r.seller_id ? String(r.seller_id) : null,
       seller_code: r.seller_code ? String(r.seller_code) : null,
       sold_at: new Date(r.sold_at as string).toISOString(),
+      sold_date_local: String(r.sold_date_local ?? ""),
       total: Number(r.total) / 100,
       tax: Number(r.tax) / 100,
       units: Number(r.units) || 0,
+      net_cents_lines: netLinesOf(r.net_lines),
     })),
     truncated,
   };

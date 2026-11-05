@@ -3025,6 +3025,10 @@ export const T = {
     "checkout.payLoadErrBody": "Suele ser un bloqueador de anuncios, el ahorro de datos del móvil o una conexión inestable. Desactívalos para este sitio y reintenta, o abre la tienda en otro navegador. No se ha cobrado nada.",
     "checkout.payRetry": "Reintentar",
     "checkout.payNotReady": "El formulario de pago todavía no está listo. Espera unos segundos o pulsa «Reintentar».",
+    // Errores del servidor en el checkout, traducidos (antes salía el mensaje crudo en inglés).
+    "checkout.shipUnavailable": "No pudimos calcular el envío a esa dirección. Revísala o inténtalo de nuevo en un momento.",
+    "checkout.payStartFailed": "No pudimos iniciar el pago. No se ha cobrado nada; inténtalo de nuevo en un momento o escríbenos.",
+    "checkout.offline": "Sin conexión con la tienda. Revisa tu internet e inténtalo de nuevo.",
     "checkout.pendingTitle": "Pago recibido — confirmando tu pedido",
     "checkout.pendingBody": "Tu pago se procesó correctamente. Estamos confirmando el pedido; esto puede tardar unos segundos. No cierres ni recargues repetidamente: si sales, al volver a esta página retomamos la confirmación automáticamente y te enviaremos el correo en cuanto esté listo.",
     "checkout.pendingRetry": "Reintentar confirmación",
@@ -6036,6 +6040,10 @@ export const T = {
     "checkout.payLoadErrBody": "This is usually an ad blocker, your phone's data saver, or an unstable connection. Turn them off for this site and retry, or open the store in another browser. Nothing has been charged.",
     "checkout.payRetry": "Retry",
     "checkout.payNotReady": "The payment form isn't ready yet. Wait a few seconds or tap \"Retry\".",
+    // Server errors at checkout, translated (the raw English message used to show as-is).
+    "checkout.shipUnavailable": "We couldn't calculate shipping for that address. Check it or try again in a moment.",
+    "checkout.payStartFailed": "We couldn't start the payment. Nothing has been charged; try again in a moment or contact us.",
+    "checkout.offline": "No connection to the store. Check your internet and try again.",
     "checkout.pendingTitle": "Payment received — confirming your order",
     "checkout.pendingBody": "Your payment went through. We're confirming your order now; this can take a few seconds. Don't close or reload repeatedly: if you leave, returning to this page resumes confirmation automatically, and we'll email you as soon as it's ready.",
     "checkout.pendingRetry": "Retry confirmation",

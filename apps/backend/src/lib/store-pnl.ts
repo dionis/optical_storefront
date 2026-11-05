@@ -6,8 +6,11 @@ import type StoreCostModuleService from "../modules/store-cost/service";
 import { localParts } from "./alerts";
 import { computeCostSheet, listCostRules, lineGroup, type CostOrderLike } from "./costing";
 import { listEstablishments } from "./establishments";
+import { frameCostsLoaded } from "./frame-cost";
 import { loadProductMetadata } from "./frame-specs";
+import { lensCellCostsKnown } from "./lens-cost";
 import { parseLensFinish } from "./lens-finish";
+import { costSourcesMissing } from "./sales-insights";
 import { listSellers } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
 import { allocateShared, computePnl, monthlyCharge, type CostItemLike, type Pnl } from "./store-costs";
@@ -28,9 +31,6 @@ import { tenant } from "./tenant";
  */
 
 const pgOf = (c: MedusaContainer) => c.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
-
-/** Material cost rules: the only ones that are cost of goods (the rest are deductions, percentages or the profit target). */
-const MATERIAL_KINDS = new Set(["frame_brand", "frame_sku", "lens_design", "lens_material", "lens_photo", "lens_ar"]);
 
 /** A recorded payment as the fee total reads it. */
 export interface FeeRowLike {
@@ -319,11 +319,11 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
       shared: sum("shared"),
     })
   );
-  // "No cost of goods defined yet": only the MATERIAL rules decide it. Measuring
-  // every rule hid the warning as soon as the owner set the gateway's % or the
-  // profit target — exactly the same predicate lib/sales-insights.ts uses.
-  const materialRules = rules.filter((r) => MATERIAL_KINDS.has(r.kind));
-  return { month, stores, total, sellers, cost_rules_missing: materialRules.every((r) => !r.amount) };
+  // "No cost of goods defined yet": the same predicate as the Executive
+  // (lib/sales-insights.ts costSourcesMissing) — no material rule with an
+  // amount AND no supplier list AND no lens cell cost. `listCostRules` above
+  // warmed both caches, so the two screens answer the same banner.
+  return { month, stores, total, sellers, cost_rules_missing: costSourcesMissing(rules, frameCostsLoaded(), lensCellCostsKnown()) };
 }
 
 function toDollars(p: Pnl): Pnl {

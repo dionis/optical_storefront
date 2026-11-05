@@ -5,6 +5,7 @@ export default {
   es: {
     "adm.ex.title": "Ejecutivo",
     "adm.ex.sub": "Ventas, cobros, caja y margen de la tienda elegida, en el período elegido. Cada acordeón resume antes de abrirse.",
+    "adm.ex.subPlain": "Ventas, cobros y caja de la tienda elegida, en el período elegido. Cada acordeón resume antes de abrirse.",
     "adm.ex.period.today": "Hoy",
     "adm.ex.period.yesterday": "Ayer",
     "adm.ex.period.week": "Esta semana",
@@ -220,6 +221,7 @@ export default {
   en: {
     "adm.ex.title": "Executive",
     "adm.ex.sub": "Sales, collections, cash and margin of the chosen store over the chosen period. Each section sums itself up before opening.",
+    "adm.ex.subPlain": "Sales, collections and cash of the chosen store over the chosen period. Each section sums itself up before opening.",
     "adm.ex.period.today": "Today",
     "adm.ex.period.yesterday": "Yesterday",
     "adm.ex.period.week": "This week",

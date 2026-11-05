@@ -8,7 +8,9 @@ Auditoría de contabilidad del 1-nov-2026. Lo que aquí se afirma está fijado p
 pruebas: `apps/backend/tests/accounting-audit.test.ts` (una prueba por fórmula y
 por defecto corregido) y `apps/backend/tests/accounting-reconciliation.test.ts`
 (un mes de una tienda leído por las cinco pantallas, con las identidades que
-deben cumplirse). Si alguien cambia una fórmula, esas pruebas fallan.
+deben cumplirse) y `apps/backend/tests/accounting-coherence.test.ts` (los
+defectos de la verificación del 5-nov-2026 sobre base real, abajo). Si alguien
+cambia una fórmula, esas pruebas fallan.
 
 ---
 
@@ -52,6 +54,13 @@ centavo es un estado de cuenta que nadie vuelve a creer.
 - `sale_fact.sold_date_local` guarda **ya calculado** el día calendario local
   de la venta. Todo filtro de fechas de los tableros compara contra esa columna,
   nunca contra un instante UTC: así no hay corrimiento de un día.
+- **El instante de una venta de caja es `pos_sale.created_at`** (`saleInstantOf`
+  en `sale-facts.ts`, desde el 5-nov-2026): es la columna por la que cortan el
+  estado de cuenta y el informe de caja, así que `sale_fact.sold_at` y
+  `sold_date_local` salen del mismo reloj. Antes se usaba `order.created_at`,
+  que se escribe unos 200 ms antes: a las 23:59:59.9 locales la misma venta
+  podía caer en dos días —y dos meses— distintos entre el Ejecutivo y el
+  estado de cuenta. Un pedido web solo tiene su `created_at`.
 - Donde se parte de un instante (`pos_sale.created_at`,
   `pos_sale_payment.created_at`, `cash_movement.created_at`) se convierte con
   `AT TIME ZONE` en SQL o con `localParts()` en TypeScript, nunca con
@@ -459,7 +468,7 @@ vez; si el usuario es una ficha y el código otra, gana el usuario.
 |---|---|
 | `revenue` | Σ `total_cents` de las ventas atribuidas (lo cobrado, con impuesto; `sale_fact` no tiene línea de envío) |
 | `net_revenue` | Σ (`total_cents` − `tax_cents`) — la base de la comisión, la misma del estado de cuenta y del Ejecutivo |
-| `commission` | `net_revenue × commission_pct / 100` |
+| `commission` | Σ por venta de `saleCommission`: el % del neto de **cada línea**, redondeado por línea (`Math.round(neto × % / 100)`), la misma aritmética de `lineEconomics` |
 | `units` | Σ `qty` |
 | `avg_ticket` | `revenue / orders` |
 | `profit` | ganancia bruta de esos pedidos, vía `orderEconomics` (las mismas reglas del Ejecutivo) |
@@ -470,9 +479,24 @@ Una venta anulada o un pedido cancelado (`sale_fact.status = voided`) **no
 genera nada para nadie**. Identidad nueva: `Σ revenue de Vendedores +
 unattributed.revenue` = `Ejecutivo.sales` del mismo período y tienda.
 
-El panel público del vendedor (`/store/seller-dashboard`) sigue leyendo la
-ventana del tablero por código de referido: pendiente de pasar a la misma
-fuente.
+**Redondeo (5-nov-2026).** La comisión se redondea **por línea**, en las
+cuatro pantallas: Ejecutivo (`lineEconomics`), Resultado (`commissionsOf`),
+Vendedores (`saleCommission` sobre `net_cents_lines`, que `sellerFactOrders`
+devuelve por pedido) y el panel propio (`/admin/sales-analytics/me`,
+`lineCommissionCents`: `SUM(ROUND(...))` en SQL). Redondear una vez sobre el
+neto del período daba otro centavo: dos ventas de $71.33 al 8 % son
+$5.71 + $5.71 = $11.42 por línea y $11.41 de una sola vez.
+
+**El panel público del vendedor** (`/store/seller-dashboard`, enlace
+`/vendedor?t=`) lee desde el 5-nov-2026 la **misma fuente**: `sellerFactOrders`
++ `attributeSale` con los mismos mapas que Vendedores (usuario de caja primero,
+luego código), período por `sold_date_local`, comisión por línea sobre el neto
+(`dashboardFigures`, pura). Identidad fijada por prueba: la fila del vendedor
+en Vendedores = `totals` de su panel para el mismo período. Antes leía la
+ventana del tablero (300 pedidos) por código de referido, con la comisión
+sobre el bruto con impuesto. El número de pedido, la etapa y las iniciales del
+cliente se leen del pedido solo para las filas mostradas
+(`fetchBoardOrdersByIds`).
 
 ---
 
@@ -491,9 +515,9 @@ venta **anulada** de $200.00 cobrada en efectivo y devuelta el mismo día.
 | `Estado de cuenta.total_cents` = `Ejecutivo.sales` = Σ `total` de Pedidos de la tienda | las tres son "lo cobrado" sobre las mismas ventas vivas |
 | `Estado de cuenta.total − tax` = `Ejecutivo.net` = `Resultado por tienda.net_sales` = `settlement.base_cents` | el neto es una sola definición: lo cobrado menos el impuesto |
 | `Ejecutivo.cost` = `Resultado por tienda.cogs` | las dos usan `computeCostSheet` y solo las líneas "material" (con `order_fixed` dentro) |
-| `Ejecutivo.fee` = `Resultado por tienda.payment_fees` = `Caja.totals.fees_cents` | es el mismo `pos_sale_payment.fee_cents`, con las anuladas fuera en los tres |
+| `Ejecutivo.fee` = `Resultado por tienda.payment_fees` = `Caja.totals.fees_cents` | es el mismo `pos_sale_payment.fee_cents`, con las anuladas fuera en los tres (Caja las excluye desde el 5-nov-2026: `PaymentRow.sale_status`; antes sumaba el fee del anticipo con tarjeta de una venta anulada, porque el reembolso lleva fee 0) |
 | `Ejecutivo.commission` = `Resultado por tienda.commissions` | misma base (neto) y misma precedencia de % (perfil, luego ficha de vendedor) |
-| **`Ejecutivo.profit` = `Resultado por tienda.contribution`** | la ganancia bruta del Ejecutivo *es* la contribución del resultado |
+| **`Ejecutivo.profit` = `Resultado por tienda.contribution` + `variable_manual`** | la ganancia bruta del Ejecutivo es la contribución del resultado **antes** de las partidas variables a mano del mes (luz, consumibles…), que no tienen hora ni producto al que pegarse. Sin partidas variables las dos cifras son iguales; con ellas, la contribución es menor exactamente en esa suma (base QA: Op2 sin ventas y $540 de luz → contribución −$540, Ejecutivo $0) |
 | `Estado de cuenta.paid_cents` = `Caja.totals.payments_cents` | lo que el cliente pagó, por método, neto de reembolsos |
 | `Estado de cuenta.insurance_cents` = `Caja.totals.receivable_cents` | la parte del seguro, por cobrar en las dos |
 | `Estado de cuenta.balance_cents` = Σ `balance` de Pedidos de la tienda | el saldo es de la venta, no de la línea |
@@ -519,12 +543,12 @@ venta **anulada** de $200.00 cobrada en efectivo y devuelta el mismo día.
    mes, al resultado de la tienda.
 4. **`Σ by_method` del estado de cuenta = `paid + insurance`, no `paid`.** El
    seguro es un método en el mostrador y dinero por cobrar en la contabilidad.
-5. **Vendedores lee el tablero de pedidos, no `sale_fact`.** Su `revenue` es el
-   total del pedido de Medusa (lleva envío) y su exclusión es "estado terminal
-   del pedido", no "venta anulada". Para un mes con envíos o con una anulación,
-   `Vendedores.revenue` **no** es `Ejecutivo.sales`. Lo que sí coincide es la
-   base de la comisión (`net_revenue`) y la ganancia (`profit`, que viene de
-   `orderEconomics`).
+5. **Ejecutivo → «vendedor» agrupa por código; Vendedores atribuye por usuario.**
+   La dimensión `seller` del Ejecutivo usa `sale_fact.seller_code` (el código
+   que imprimió el recibo, fijado al vender); Vendedores usa `attributeSale`
+   (el usuario de caja primero). Una venta hecha antes de que el perfil tuviera
+   código sale «sin vendedor» en el Ejecutivo aunque la persona exista. Las
+   sumas totales coinciden siempre (`Σ sellers + unattributed = Ejecutivo.sales`).
 6. **La dimensión "método de pago" suma más que el total.** Una venta pagada con
    dos métodos cuenta en los dos.
 7. **Las reglas de costo son las de hoy.** Cambiar el costo de una marca cambia
@@ -637,6 +661,65 @@ venta **anulada** de $200.00 cobrada en efectivo y devuelta el mismo día.
   `pos_sale.order_id`, de modo que no aparece como venta web sin tienda.
 - **Entrega**: `pos_sale.delivered_at` se escribe con un UPDATE guardado (sin
   saldo, no anulada, no entregada) y la auditoría lleva `sale.deliver`.
+
+## Verificación del 5-nov-2026 sobre base real local
+
+Base `medusa_qa` del QA (4 tiendas, 9 ventas de caja —6 anuladas, 3 vivas por
+$597.10—, 5 sesiones de caja, 6 aprobaciones, 17 pagos, 20 líneas del libro).
+Script `qa/coherencia.cjs`: cada cifra se calcula **dos veces** (SQL sobre las
+tablas y la API del panel con la sesión del dueño) y se imprime esperado / real
+/ diferencia. Informe completo: `qa/COHERENCIA.md`. Primera pasada: 241
+comprobaciones, 10 diferencias; tras corregir: **253 comprobaciones, 0
+diferencias**.
+
+Qué cuadró a la primera: Σ `pos_sale` = Σ `sale_fact` = Ejecutivo (global, por
+tienda, por día, por hora local); libro de pagos = `paid + insurance`; los 9
+pedidos con `sale_fact`; las 5 cajas (`apertura + entradas − salidas =
+expected_cents`, la diferencia de −$3.00 una sola vez, Σ diff = informe);
+`EST-Op1-202611` / `EST-Op2-202611` / `EST-ALL-202611` con sus cuatro
+identidades; el resultado de Op1 recalculado a mano partida por partida,
+**punto de equilibrio al centavo** (8 100 ÷ (466.49 / 597.10) = $10 367.87);
+la economía de cada venta (montura de `store_frame_cost`, celda del lente,
+fee `round(4000 × 2.9 %) + 30 = 146`); las 6 anuladas fuera de toda suma, con
+número conservado, `paid`/`balance` a cero, pedido cancelado, una auditoría
+`sale.void` cada una y aprobación `used`.
+
+Defectos encontrados y corregidos (cada uno con prueba en
+`tests/accounting-coherence.test.ts`):
+
+1. **`cost_rules_missing` mentía.** Ejecutivo y Resultado mostraban «Aún no hay
+   costos de monturas y lentes…: el costo de mercancía sale en cero» junto a un
+   costo de $129.15: la bandera medía solo las reglas por marca (todas en 0) e
+   ignoraba la lista del proveedor y el costo de la celda del lente. Ahora
+   `costSourcesMissing(rules, frameCostsLoaded(), lensCellCostsKnown())`, la
+   misma en las dos pantallas.
+2. **Panel público del vendedor** portado a `sale_fact` (ver §7).
+3. **Comisión redondeada por línea** en Vendedores y en el panel propio (§7).
+4. **Un solo reloj para la venta de caja** (`saleInstantOf`, §0).
+5. **Caja sumaba el fee de una venta anulada** (ver Conciliación).
+6. **El documento afirmaba `Ejecutivo.profit = contribution`**: solo sin
+   partidas variables a mano. Corregido arriba.
+
+Sin cambio, para decidir: la «Comisión por defecto» de Precios (7 %) no se
+aplica en ningún cálculo ni al crear una ficha (el formulario arranca en 10 %);
+el rango «Todo» del panel público manda el mes en curso (página, no ruta);
+partidas de costo duplicadas en la base QA (dato); 4 aprobaciones `approved`
+sin usar que caducan a las 24 h.
+
+### Las preguntas abiertas, tal como está el código hoy
+
+| # | Pregunta | Lo que hace el código hoy (comprobado) |
+|---|---|---|
+| 1 | Comisión sobre neto o bruto | **Neto** (`total − impuesto`, sin envío) en las cinco pantallas, redondeado por línea. Base QA: Op2-000001 $151.72 con $11.56 de impuesto → base $140.16. |
+| 2 | Fee de una venta anulada | **Se quita** en Ejecutivo, Resultado y, desde hoy, Caja. Si el procesador se lo queda, hoy el resultado sale alto en ese fee. |
+| 3 | Envío de una venta web | **No es ingreso**: no existe en `sale_fact`; en la ficha de costo es deducción. El % de pasarela se calcula sobre lo cobrado sin envío. |
+| 4 | Reembolso parcial | **No existe**: solo `voidSale` (venta entera, `UPDATE … WHERE status <> 'voided'`, un reembolso por pago). `pos_sale.paid_cents` y `balance_cents` quedan en 0 y el total se conserva para el listado. |
+| 5 | «Este mes» vs mes pasado | Mapa de inicio: **mes/semana pasados completos**. Ejecutivo (`previousPeriod`): **el mismo número de días** justo antes de `from`. Son dos reglas distintas en dos pantallas; conviene unificar o decir cuál. |
+| 6 | Impuesto en el precio | Solo en montura **sin lentes** (`frame-only`), tasa `store_setting.frame_tax_rate` (8.25 % en QA: $65.89 → $5.44), calculado **después** del descuento. Lentes con receta: 0. |
+| 7 | Seguro como venta | **Sí**: el total completo es venta del período; `insurance_cents` es por cobrar, fuera de caja (`receivable_cents`) y dentro de `Σ by_method` del estado de cuenta. |
+| 8 | Partida que arranca el día 28 | **Mes completo** (`monthlyCharge` compara `YYYY-MM`). |
+| 9 | Estado de cuenta > 2 000 ventas | **Un solo documento recortado** con `truncated: true` y totales parciales; no se parte. |
+| 10 | Liquidación | Sobre el **neto facturado** (`total − impuesto` de ventas no anuladas), con saldos pendientes dentro; `settlementFor` en el estado de cuenta y `store-pnl.ts` con la misma base. |
 
 ## Preguntas abiertas para el dueño
 

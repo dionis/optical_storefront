@@ -46,6 +46,23 @@ export default function MedusaCheckout() {
   const navigate = useNavigate();
   const L = (k) => t(`checkout.${k}`);
   const money = (n) => "$" + Number(n || 0).toFixed(2);
+  // Error del servidor → texto en el idioma del cliente. El SDK de Medusa lanza el
+  // `message` crudo del backend ("An unknown error occurred.", "The store has no
+  // shipping option configured."…) y antes salía tal cual, en inglés, en la
+  // pantalla en español (QA 5-nov-2026: Stripe sin configurar → texto crudo).
+  // El SDK no conserva el `reason`, así que se reconoce por estado/mensaje y, si
+  // no es ninguno conocido, se muestra el aviso genérico del paso (`fallbackKey`).
+  // El detalle crudo queda en la consola para diagnosticar.
+  const describeError = (e, fallbackKey) => {
+    const msg = String((e && e.message) || e || "");
+    try { console.warn("[checkout]", e); } catch { /* noop */ }
+    if ((e && e.reason === "us_only") || /only ship to united states/i.test(msg)) return t("ship.usOnly");
+    if (/no shipping option/i.test(msg)) return L("shipUnavailable");
+    if (/already completed/i.test(msg)) return L("failed");
+    // Sin red (fetch falla antes de llegar al servidor): aviso de conexión.
+    if (e && e.name === "TypeError" && /fetch|network/i.test(msg)) return L("offline");
+    return L(fallbackKey);
+  };
   // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
   // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
   const labDays = Number(shippingConfig().labDays) || 0;
@@ -298,8 +315,7 @@ export default function MedusaCheckout() {
         if (opts[0]) setShipId(opts[0].id);
       }
     } catch (e) {
-      if (e && e.reason === "us_only") setErr(t("ship.usOnly"));
-      else setErr(e.message || String(e));
+      setErr(describeError(e, "shipUnavailable"));
     }
     setBusy(false);
   };
@@ -314,7 +330,7 @@ export default function MedusaCheckout() {
       const c = await removeItem(lineId);
       if (c) setCart(c);
       setShip([]); setShipId(""); setCarriers(null); setCarrierSel("");
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "failed")); }
     setBusy(false);
   };
 
@@ -335,9 +351,11 @@ export default function MedusaCheckout() {
         try { clearCart(); } catch {}
         setStep("done");
       } else {
-        setErr(r.error?.message || L("failed"));
+        // Detalle crudo a la consola; al cliente, el aviso traducido.
+        try { console.warn("[checkout] complete (manual)", r.error); } catch { /* noop */ }
+        setErr(L("failed"));
       }
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "payStartFailed")); }
     setBusy(false);
   };
 
@@ -380,7 +398,7 @@ export default function MedusaCheckout() {
       });
       elementsRef.current = elements;
       setStep("pay"); // el Payment Element se monta en el useEffect de abajo
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "payStartFailed")); }
     setBusy(false);
   };
 
@@ -500,7 +518,7 @@ export default function MedusaCheckout() {
       } else {
         setErr(L("failed"));
       }
-    } catch (e) { setErr(e.message || String(e)); }
+    } catch (e) { setErr(describeError(e, "failed")); }
     setBusy(false);
   };
 

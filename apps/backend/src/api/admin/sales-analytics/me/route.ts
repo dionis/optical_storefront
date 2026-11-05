@@ -6,7 +6,7 @@ import { listEstablishments } from "../../../../lib/establishments";
 import { openSessionFor } from "../../../../lib/cash";
 import { sellerOfUser } from "../../../../lib/seller-link";
 import { posHandler } from "../../../../lib/pos-route";
-import { salesSummary } from "../../../../lib/sales-analytics";
+import { lineCommissionCents, salesSummary } from "../../../../lib/sales-analytics";
 import { profileOf } from "../../../../lib/staff-profile-data";
 import { getStaffScope } from "../../../../lib/staff-scope";
 import { tenant } from "../../../../lib/tenant";
@@ -66,6 +66,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     // Goal and commission share one base: the month's NET (total − tax), never the gross.
     const monthNet = Math.round((m.current.total - m.current.tax) * 100) / 100;
     const goal = profile.monthly_goal ?? null;
+    // Per line, as the Executive and Vendedores add it: one rounding per sold line, not one over the month.
+    const commissionCents = commissionPct === null ? 0 : await lineCommissionCents(req.scope, { ...base, from: monthStart }, commissionPct);
 
     // Ready to hand over: their open sales whose order is back from the lab.
     const ready = (await readyToHand(req.scope, await listSales(req.scope, { establishmentIds: null, sellerId: userId, status: "completed" }, 200)))
@@ -78,7 +80,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       week: w.current,
       month: m.current,
       balance_due: m.balance_due,
-      commission: commissionPct === null ? null : { pct: commissionPct, amount: Math.round((m.current.total - m.current.tax) * commissionPct) / 100 },
+      commission: commissionPct === null ? null : { pct: commissionPct, amount: commissionCents / 100 },
       goal: goal === null ? null : { amount: goal, done: monthNet, left: Math.max(0, Math.round((goal - monthNet) * 100) / 100) },
       ready,
       workplace: store

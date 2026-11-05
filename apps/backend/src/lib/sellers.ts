@@ -440,7 +440,7 @@ export interface SellerStatRow {
   revenue: number;
   /** Commission base: revenue less sales tax and shipping (`netRevenueOf`). */
   net_revenue: number;
-  /** net_revenue × commission_pct / 100. */
+  /** Σ per sale of `saleCommission` (the % of each line's net, rounded per line). */
   commission: number;
   /** Items sold (line quantities). */
   units: number;
@@ -490,8 +490,8 @@ function tallySource(map: Map<string, SourceStatRow>, source: string, total: num
 }
 
 /** Map → array, biggest revenue first (then alphabetically, so ties are stable). */
-export function sortedSources(map: Map<string, SourceStatRow>): SourceStatRow[] {
-  return [...map.values()].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders || a.source.localeCompare(b.source));
+export function sortedSources(map: Map<string, SourceStatRow> | SourceStatRow[]): SourceStatRow[] {
+  return [...(Array.isArray(map) ? map : map.values())].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders || a.source.localeCompare(b.source));
 }
 
 /** ISO string of a board `created_at` (which may arrive as a Date); "" when absent. */
@@ -525,6 +525,8 @@ export type StatOrder = {
   /** Sales tax and shipping the customer paid: out of the commission base (see `netRevenueOf`). */
   tax_total?: unknown;
   shipping_total?: unknown;
+  /** Net of each line in cents (sale_fact): the commission is rounded per line, as the Executive does. */
+  net_cents_lines?: number[] | null;
 };
 
 /** Sellers as the grouping needs them: the record's code, and the panel user who sells at the till as it. */
@@ -560,6 +562,24 @@ export function attributeSale(sale: Pick<StatOrder, "seller_id" | "seller_code">
 export function netRevenueOf(order: Pick<StatOrder, "total" | "tax_total" | "shipping_total">): number {
   const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   return round2(Math.max(0, num(order.total) - num(order.tax_total) - num(order.shipping_total)));
+}
+
+/**
+ * Commission of ONE sale in dollars: the % of the net of each of its lines,
+ * each rounded to the cent (`Math.round(net × pct / 100)`), then added — the
+ * very arithmetic of lib/sales-insights.ts lineEconomics, so Vendedores and
+ * Ejecutivo → Vendedores print the same cents for the same seller. Without the
+ * line nets (a board row, an old caller) the order's net is rounded once.
+ * Rounding once over a MONTH instead (what this did until 5-nov-2026) drifted
+ * a cent from the Executive as soon as two sales had half-cent fractions:
+ * two nets of $71.33 at 8 % are $5.71 + $5.71 = $11.42 per line, $11.41 in
+ * one go. Pure.
+ */
+export function saleCommission(order: Pick<StatOrder, "total" | "tax_total" | "shipping_total" | "net_cents_lines">, pct: number): number {
+  if (!pct) return 0;
+  const lines = order.net_cents_lines;
+  if (Array.isArray(lines) && lines.length) return lines.reduce((s, net) => s + Math.round((Math.max(0, net) * pct) / 100), 0) / 100;
+  return round2((netRevenueOf(order) * pct) / 100);
 }
 
 /**
@@ -625,6 +645,7 @@ export function groupSellerStats(
     row.orders++;
     row.revenue = round2(row.revenue + total);
     row.net_revenue = round2(row.net_revenue + netRevenueOf(o));
+    row.commission = round2(row.commission + saleCommission(o, row.commission_pct));
     row.units += o.units != null ? Number(o.units) || 0 : (o.items ?? []).reduce((n, it) => n + (Number(it?.quantity ?? 1) || 0), 0);
     if (profitByOrder && o.id !== undefined) profitOf.set(row.code, round2((profitOf.get(row.code) ?? 0) + (profitByOrder.get(o.id) ?? 0)));
     const at = isoAt(o.created_at) || null;
@@ -635,8 +656,8 @@ export function groupSellerStats(
   }
   const everything = round2([...byCode.values()].reduce((s, r) => s + r.revenue, 0) + unattributed.revenue);
   for (const row of byCode.values()) {
-    // Of the NET, never of the gross: the sales tax is the state's money.
-    row.commission = round2((row.net_revenue * row.commission_pct) / 100);
+    // `commission` was added sale by sale above (saleCommission): of the NET,
+    // never of the gross, and rounded per line like the Executive.
     row.avg_ticket = row.orders ? round2(row.revenue / row.orders) : 0;
     if (profitByOrder) {
       row.profit = profitOf.get(row.code) ?? 0;
@@ -702,6 +723,7 @@ export async function sellerStats(
     total: o.total,
     tax_total: o.tax,
     shipping_total: 0,
+    net_cents_lines: o.net_cents_lines,
     terminal: null,
     created_at: o.sold_at,
     seller_source: sources.get(o.order_id) ?? null,
@@ -722,6 +744,60 @@ export async function sellerStats(
     ...grouped,
     access: { profit: profitLoader !== null },
     truncated: facts.truncated,
+  };
+}
+
+// ── The seller's public dashboard (/store/seller-dashboard) ──────────────────
+
+/** A sale as the dashboard sums it: `sale_fact` per order, with its local day. */
+export type DashboardOrder = StatOrder & { id: string; sold_date_local: string };
+
+export interface DashboardTotals {
+  orders: number;
+  /** What the customers paid, tax included (dollars). */
+  revenue: number;
+  /** The commission base: revenue less sales tax (dollars). */
+  net_revenue: number;
+  /** Σ `saleCommission` — per line, like the Executive and Vendedores (dollars). */
+  commission: number;
+}
+
+/**
+ * The dashboard's figures from the seller's sales, pure: `period` is the
+ * sales whose LOCAL day falls in [from, to] (the same `sold_date_local` every
+ * dashboard buckets on), `all_time` every sale given, `by_source` the period
+ * by network (counter / instagram / link…), each with its commission. The
+ * caller passes only sales already attributed to this seller (`attributeSale`
+ * with the same maps `groupSellerStats` builds), so what the seller reads here
+ * is exactly their row of Vendedores: same sales, same base, same rounding.
+ */
+export function dashboardFigures(orders: readonly DashboardOrder[], pct: number, range: { from: string; to: string }): { period: DashboardTotals; all_time: DashboardTotals; by_source: Array<SourceStatRow & { commission: number }>; in_period: DashboardOrder[] } {
+  const sum = (rows: readonly DashboardOrder[]): DashboardTotals => {
+    let revenue = 0;
+    let net = 0;
+    let commission = 0;
+    for (const o of rows) {
+      revenue += Number(o.total ?? 0) || 0;
+      net += netRevenueOf(o);
+      commission += saleCommission(o, pct);
+    }
+    return { orders: rows.length, revenue: round2(revenue), net_revenue: round2(net), commission: round2(commission) };
+  };
+  const inPeriod = orders.filter((o) => o.sold_date_local >= range.from && o.sold_date_local <= range.to);
+  const bySource = new Map<string, SourceStatRow & { commission: number }>();
+  for (const o of inPeriod) {
+    const source = sellerSourceOf(o);
+    const row = bySource.get(source) ?? { source, orders: 0, revenue: 0, commission: 0 };
+    row.orders++;
+    row.revenue = round2(row.revenue + (Number(o.total ?? 0) || 0));
+    row.commission = round2(row.commission + saleCommission(o, pct));
+    bySource.set(source, row);
+  }
+  return {
+    period: sum(inPeriod),
+    all_time: sum(orders),
+    by_source: sortedSources([...bySource.values()]).map((r) => bySource.get(r.source)!),
+    in_period: [...inPeriod].sort((a, b) => (a.sold_date_local < b.sold_date_local ? 1 : a.sold_date_local > b.sold_date_local ? -1 : String(b.created_at).localeCompare(String(a.created_at)))),
   };
 }
 
