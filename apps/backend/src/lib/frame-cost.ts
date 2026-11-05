@@ -3,7 +3,9 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { CAPRI_BY_KEY, capriKeyOf } from "../modules/store-pricing/capri-price-list-2026";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import type StorePricingModuleService from "../modules/store-pricing/service";
+import { applyPriceBandUsd, priceBandFor } from "./pricing";
 import { brandOf } from "./store-assortment";
+import { globalPrice, hasGlobalPrice, storeLinePrice, type PriceRuleLike } from "./store-pricing";
 
 /**
  * What the shop PAYS for a frame or case model — the supplier's figure, the one
@@ -736,6 +738,67 @@ export function frameCostStoreRows(
     if (resolved) out.push(resolved);
   }
   return out.sort((a, b) => a.model.localeCompare(b.model) || a.sku.localeCompare(b.sku));
+}
+
+// ── Cost next to price: the selling price per model, by the cost list's key ──
+
+/** Selling price of a catalogue model for the scope asked about, by cost-list key. */
+export interface CatalogSellingPrice {
+  product_id: string;
+  /** What the store (or, with no store, the chain) sells the model for, in cents. */
+  price_cents: number;
+}
+
+/**
+ * Each catalogue model's CURRENT selling price, keyed the way the cost rows are
+ * (`frameCostKeyOf`), so a cost row can be joined to it. The same figure the
+ * catalogue card shows (store-assortment-data.ts storeCatalogProduct) and the
+ * till charges: with a store, `storeLinePrice` for the frame alone (its exact
+ * price, else base + adjustment, then the band); with no store, the chain's —
+ * the owner's global price for the model, else the Medusa base, then the chain
+ * band unless he typed the price himself. Models without a Medusa price are
+ * left out, so a missing price reads as unknown, never as 0. Pure.
+ */
+export function catalogSellingPrices(
+  catalog: readonly CatalogModel[],
+  rules: PriceRuleLike[],
+  storeId: string | null,
+  now = new Date()
+): Map<string, CatalogSellingPrice> {
+  const out = new Map<string, CatalogSellingPrice>();
+  for (const m of catalog) {
+    if (m.price_cents == null || !m.sku) continue;
+    const scope = m.is_case ? "case" : "frame";
+    const base = m.price_cents / 100;
+    let usd: number;
+    if (storeId) {
+      usd = storeLinePrice(rules, { establishmentId: storeId, scope, target: m.product_id, base, lenses: 0 }, now).frame;
+    } else {
+      usd = globalPrice(rules, scope, m.product_id, base, now);
+      if (!hasGlobalPrice(rules, scope, m.product_id, now)) usd = applyPriceBandUsd(usd, priceBandFor(null), scope);
+    }
+    const key = frameCostKeyOf(m.sku);
+    // Two models normalising to one key (it happens in the supplier list): the
+    // first wins, same as the cost side, so both halves name the same model.
+    if (!out.has(key)) out.set(key, { product_id: m.product_id, price_cents: Math.round(usd * 100) });
+  }
+  return out;
+}
+
+/**
+ * Puts `price_cents` (and the model's `product_id`) on each cost row of
+ * `GET /admin/pricing/frames/costs`, null when the catalogue has no price for
+ * that key, so the costs tab can read cost → price → margin per row. Appends
+ * only: the nine fields of `frameCostStoreView` stay as they are. Pure.
+ */
+export function withCatalogPrice<T extends Record<string, unknown>>(
+  rows: T[],
+  prices: ReadonlyMap<string, CatalogSellingPrice>
+): Array<T & { price_cents: number | null; product_id: string | null }> {
+  return rows.map((r) => {
+    const hit = prices.get(String(r["sku"] ?? ""));
+    return { ...r, price_cents: hit ? hit.price_cents : null, product_id: hit ? hit.product_id : null };
+  });
 }
 
 /** Audit payload of a master edit — the figures only, never a whole row. */

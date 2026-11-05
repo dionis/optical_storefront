@@ -190,6 +190,12 @@ export interface BoardQuery {
   seller?: string;
   /** Establishment id of a till sale, or "web" = the online store (orders not placed at a till). */
   store?: string;
+  /**
+   * The stores a non-admin caller may look at (lib/pos.ts sellableStores):
+   * only till sales of these establishments pass. An empty list keeps nothing.
+   * Set by the route from the caller's scope, never from the query string.
+   */
+  stores?: string[];
   limit?: number;
   offset?: number;
   /**
@@ -476,12 +482,18 @@ export function slimBoardOrder(o: BoardOrder) {
     pos_sale_id: o.pos_sale_id,
     pos_sale_number: o.pos_sale_number,
     pos_delivered_at: o.pos_delivered_at,
+    promised_on: o.promised_on,
     fulfillments: o.fulfillments,
     has_prescription: o.has_prescription,
   };
 }
 
 export type SlimBoardOrder = ReturnType<typeof slimBoardOrder>;
+
+/** A promised date as the till writes it (YYYY-MM-DD); anything else is "no promise". Pure. */
+export function promisedOnOf(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
 
 /** One row of the board. */
 export function projectBoardOrder(order: Record<string, unknown>) {
@@ -596,6 +608,10 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     pos_sale_number: typeof metadata["pos_sale_number"] === "string" && metadata["pos_sale_number"] ? String(metadata["pos_sale_number"]) : null,
     // When the till handed the glasses over (applyPosDelivery); null until then.
     pos_delivered_at: null as string | null,
+    // The day the customer was promised the glasses (YYYY-MM-DD, stamped by the
+    // till from pos_sale.promised_on). The list flags the order as late when
+    // that day has passed and it is not delivered — whatever the balance.
+    promised_on: promisedOnOf(metadata["promised_on"]),
 
     fulfillments: fulfillments.map((f) => ({
       id: f.id,
@@ -665,9 +681,41 @@ export function filterBoardRows(
     if (seller === "none" && row.seller_code) return false;
     if (seller && seller !== "none" && row.seller_code !== seller) return false;
     if (!matchesStore(row, params.store)) return false;
+    if (params.stores && !(row.channel === "pos" && row.establishment_id && params.stores.includes(row.establishment_id))) return false;
     if (q && !haystack(row).includes(q)) return false;
     return true;
   });
+}
+
+/**
+ * The slim rows as a non-admin may read them: the stage, the moves and the
+ * ids, never the money. Owner's rule for the executive list's stage strip
+ * («Pedidos por etapa»): everyone but the administrator sees how MANY sales
+ * sit in each stage, only the administrator what they add up to. Redacted
+ * here, not in the panel — hiding the figure in the browser would still have
+ * sent it (same reasoning as redactInsights / redactCashReport). `null`, never
+ * 0: a zero would read as "nothing was sold". Pure.
+ */
+export function redactBoardMoney<T extends { total?: unknown }>(rows: T[]): Array<Omit<T, "total"> & { total: null }> {
+  return rows.map((o) => ({ ...o, total: null }));
+}
+
+/**
+ * What the board hands a caller by role. Admins (owner, superadmin) read it
+ * whole. A supervisor or manager reads the SLIM view only (no items, no
+ * customer, no addresses: the stage of each order of their stores, which is
+ * what their «Pedidos» tab joins to the sales list), limited to the stores
+ * they are assigned to and with the money redacted. A seller, or someone
+ * without a role, is refused: their sales list already carries their own
+ * stage per sale through the till. Pure.
+ */
+export function boardAccessFor(
+  scope: { is_admin: boolean; role: string | null },
+  storeIds: string[] | null
+): { allowed: true; slim_only: boolean; money: boolean; stores: string[] | null } | { allowed: false; reason: "forbidden_role" } {
+  if (scope.is_admin) return { allowed: true, slim_only: false, money: true, stores: null };
+  if (scope.role !== "supervisor" && scope.role !== "manager") return { allowed: false, reason: "forbidden_role" };
+  return { allowed: true, slim_only: true, money: false, stores: storeIds ?? [] };
 }
 
 export interface BoardResult {

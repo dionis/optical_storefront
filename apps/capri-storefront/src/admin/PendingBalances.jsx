@@ -36,15 +36,12 @@ import { useColumns } from "./useColumns.js";
 import { mergeSaleDetails } from "./PosSales.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { ExportMenu } from "./ui.jsx";
+import { daysOverdue } from "./lateness.js";
 import "./screens.css";
 import "./roles.css";
 
-const DAY = 86400000;
-/** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); nunca negativo. */
-export const daysOverdue = (sale, now = Date.now()) => {
-  const since = sale.promised_on ? Date.parse(`${sale.promised_on}T00:00:00`) : Date.parse(sale.created_at);
-  return Number.isFinite(since) ? Math.max(0, Math.floor((now - since) / DAY)) : 0;
-};
+/** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); vive en lateness.js (también la usa Pedidos y etapas). */
+export { daysOverdue };
 const OVERDUE_DAYS = 7;
 const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 

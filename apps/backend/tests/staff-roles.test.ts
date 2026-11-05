@@ -156,6 +156,13 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/me/scope/extra")).toBe(false);
   });
 
+  it("lets the board's GET through (the route scopes it by role) but none of its writes", () => {
+    expect(isAllowedForRestrictedRole("GET", "/admin/order-board?view=stages")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/order-board/order_1")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/stage")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/note")).toBe(false);
+  });
+
   it("opens the till but not its settings", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/context")).toBe(true);
     expect(isAllowedForRestrictedRole("GET", "/admin/pos/products?store=est_1&q=ray")).toBe(true);

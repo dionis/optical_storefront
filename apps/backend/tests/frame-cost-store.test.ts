@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { computeCostSheet, type CostOrderLike } from "../src/lib/costing";
 import {
+  catalogSellingPrices,
   clearFrameCostCache,
   frameCostCents,
   frameCostCentsFor,
@@ -13,10 +14,12 @@ import {
   resolveFrameCost,
   setFrameCostCache,
   summarizeFrameCosts,
+  withCatalogPrice,
   type CatalogModel,
   type FrameCostRow,
   type FrameCostVariationRow,
 } from "../src/lib/frame-cost";
+import type { PriceRuleLike } from "../src/lib/store-pricing";
 import { frameCostsSheetHeaders, frameCostsSheetRows } from "../src/lib/gsheet-sync";
 import type { EstablishmentRow } from "../src/lib/establishments";
 import { capriCostCents } from "../src/modules/store-pricing/capri-price-list-2026";
@@ -324,6 +327,42 @@ describe("the panel's per-store payload", () => {
     const chain = summarizeFrameCosts([master()], catalog, vars2, null);
     expect(chain).toMatchObject({ store_variations: 0, with_cost: 1, without_cost: 1 });
     expect(chain.missing).toEqual([{ sku: "GRANDE CASE", title: "Grande case", brand_slug: "grande" }]);
+  });
+});
+
+// ── Cost next to price (price_cents on each cost row) ────────────────────────
+
+describe("catalogSellingPrices / withCatalogPrice", () => {
+  const catalog: CatalogModel[] = [
+    { product_id: "p1", sku: "DC 406", title: "DC406", brand_slug: "di-caprio", is_case: false, price_cents: 9900 },
+    { product_id: "p2", sku: "GRANDE CASE", title: "Grande case", brand_slug: "grande", is_case: true, price_cents: 500 },
+    { product_id: "p3", sku: "ML 8", title: "ML 8", brand_slug: "mileniall", is_case: false, price_cents: null },
+  ];
+  const rule = (over: Partial<PriceRuleLike>): PriceRuleLike => ({ establishment_id: null, scope: "frame", target: null, mode: "override", value: 0, valid_from: "2026-01-01T00:00:00Z", valid_to: null, ...over });
+
+  it("with no store, is the Medusa base unless the owner typed a global price; a model without price is left out", () => {
+    const prices = catalogSellingPrices(catalog, [], null);
+    expect(prices.get("DC406")).toEqual({ product_id: "p1", price_cents: 9900 });
+    expect(prices.get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500 });
+    expect(prices.has("ML8")).toBe(false);
+    const own = catalogSellingPrices(catalog, [rule({ target: "p1", value: 120 })], null);
+    expect(own.get("DC406")).toEqual({ product_id: "p1", price_cents: 12000 });
+  });
+
+  it("with a store, is that store's price: its exact price, else base + its adjustment", () => {
+    const rules = [rule({ establishment_id: A, scope: "frame", target: null, mode: "percent", value: 10 }), rule({ establishment_id: B, scope: "frame", target: "p1", value: 80 })];
+    expect(catalogSellingPrices(catalog, rules, A).get("DC406")).toEqual({ product_id: "p1", price_cents: 10890 });
+    expect(catalogSellingPrices(catalog, rules, B).get("DC406")).toEqual({ product_id: "p1", price_cents: 8000 });
+    // A rule for all frames leaves the case alone.
+    expect(catalogSellingPrices(catalog, rules, A).get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500 });
+  });
+
+  it("withCatalogPrice appends price_cents and product_id after the existing fields, null when the catalogue has no price", () => {
+    const rows = frameCostStoreRows([master({ cost_cents: 2099 }), master({ sku: "ML8", model: "ML 8", cost_cents: 1500 })], indexFrameCostVariations([]), null).map(frameCostStoreView);
+    const out = withCatalogPrice(rows, catalogSellingPrices(catalog, [], null));
+    expect(Object.keys(out[0]).slice(0, 9)).toEqual(Object.keys(rows[0]));
+    expect(out.find((r) => r.sku === "DC406")).toMatchObject({ cost_cents: 2099, price_cents: 9900, product_id: "p1" });
+    expect(out.find((r) => r.sku === "ML8")).toMatchObject({ cost_cents: 1500, price_cents: null, product_id: null });
   });
 });
 

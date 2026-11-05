@@ -202,6 +202,13 @@
 .so-adv:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
 .so-table tr.so-stuck td:first-child { box-shadow: inset 3px 0 0 var(--adm-red); }
 
+/* ── Atrasados frente a la fecha prometida (HU-33): chip «Atrasados» + pastilla «N d» en la fila ── */
+.so-chip.late:not(.on) { color: var(--adm-red-dark); border-color: var(--adm-red-line); }
+.so-chip.late.on { background: var(--adm-red); border-color: var(--adm-red-dark); color: #fff; }
+.so-late { display: inline-flex; align-items: center; gap: 3px; min-height: 20px; padding: 1px 7px; border-radius: 999px; background: var(--adm-red-soft); color: var(--adm-red-dark); border: 1px solid var(--adm-red-line); font: 700 11px var(--adm-font); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.so-table tr.so-late-row td:first-child { box-shadow: inset 3px 0 0 var(--adm-red-line); }
+.so-table tr.so-stuck.so-late-row td:first-child { box-shadow: inset 3px 0 0 var(--adm-red); }
+
 /* ── Tendencias ── */
 .ex-trends { gap: 8px; }
 .ex-trends .adm-fit-row.cols-1 { grid-template-columns: minmax(0, 1fr); }

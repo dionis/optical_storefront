@@ -501,10 +501,9 @@ function OverrideForm({ store, storeId, costs, onCostSaved, onSaved, onError, t 
   // mismos; lo que cambia es dónde se guarda el precio (`store`).
   const searchIn = storeId;
 
-  // El costo se guarda por SKU, pero esa respuesta del catálogo NO trae el SKU
-  // (solo id, título y marca), así que se busca por SKU si viene y, si no, por
-  // el nombre del modelo contra el `model` de la lista de costos. Queda pedido
-  // en el informe: con `sku` en esa respuesta deja de ser una heurística.
+  // El costo se guarda por SKU y la respuesta del catálogo ya lo trae (`sku`,
+  // el del primer color del modelo). Por el nombre del modelo solo si un modelo
+  // no tuviera SKU, contra el `model` de la lista de costos.
   const pickedSku = picked ? picked.sku || picked.title : null;
   const pickedCost = picked && costs ? costOf(costs, { sku: picked.sku, name: picked.title }) : null;
   const pickedCostUsd = pickedCost?.cents != null ? pickedCost.cents / 100 : null;
@@ -564,7 +563,7 @@ function OverrideForm({ store, storeId, costs, onCostSaved, onSaved, onError, t 
           {matches.map((p) => (
             <li key={p.id}>
               <button type="button" className="btn-xs" onClick={() => { setPicked(p); setQ(p.title); }}>
-                {p.title}{p.brand ? ` · ${p.brand}` : ""}
+                {p.title}{p.brand ? ` · ${p.brand}` : ""}{p.sku ? <> <code className="pp-sku">{p.sku}</code></> : null}
               </button>
             </li>
           ))}
@@ -611,11 +610,12 @@ function OverrideForm({ store, storeId, costs, onCostSaved, onSaved, onError, t 
  * solo con los que faltan — así los dos estuches sin costo se encuentran de un
  * clic en vez de mirándolos uno a uno.
  *
- * El precio de venta de cada fila se cruza por SKU (y por nombre de modelo) con
- * los modelos de precio propio: son los únicos cuyo precio conoce esta
- * pantalla. Para los que siguen la regla, el precio lo calcula el servidor y
- * aquí se dice que sigue la regla en vez de inventarlo (en el informe queda
- * pedido `price_cents` en las filas de costos, que lo resuelve de raíz).
+ * El precio de venta de cada fila lo manda el servidor en la propia fila
+ * (`price_cents`: el precio actual del alcance leído, el mismo que cobra la
+ * caja — catalogSellingPrices en lib/frame-cost.ts). Si una versión del
+ * servidor aún no lo trae, se cruza por SKU (y por nombre de modelo) con los
+ * modelos de precio propio, los únicos cuyo precio conoce esta pantalla; para
+ * el resto se dice que sigue la regla en vez de inventarlo.
  */
 function CostsBlock({ costs, overrides, store = "all", onCostSaved, onError }) {
   const { t, lang } = useLang();
@@ -638,7 +638,7 @@ function CostsBlock({ costs, overrides, store = "all", onCostSaved, onError }) {
   const rows = useMemo(() => (costs?.rows || []).map((r) => {
     const cost = r.cost_cents == null ? null : r.cost_cents / 100;
     const masterCents = r.master_cost_cents ?? r.cost_cents;
-    const price = priceOf.get(skuKey(r.sku)) ?? priceOf.get(skuKey(r.model)) ?? null;
+    const price = r.price_cents != null ? r.price_cents / 100 : priceOf.get(skuKey(r.sku)) ?? priceOf.get(skuKey(r.model)) ?? null;
     return {
       ...r,
       cost,

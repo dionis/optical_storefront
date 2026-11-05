@@ -167,6 +167,10 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/pos\/cash-sessions\/[^/]+\/email$/ },
   // Store status: the route lets in admins, supervisors and managers, for their stores.
   { method: "GET", path: /^\/admin\/store-status$/ },
+  // Order board (the stage of each sale in «Pedidos»): the route lets in
+  // supervisors and managers for their stores, slim rows only and without
+  // money (boardAccessFor, lib/order-board.ts); a seller gets forbidden_role.
+  { method: "GET", path: /^\/admin\/order-board$/ },
   // The panel's single search bar: every role, each scoped by lib/omni-search.ts
   // (a seller finds only their own sales and no colleague or store).
   { method: "GET", path: /^\/admin\/search$/ },

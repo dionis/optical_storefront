@@ -1,4 +1,5 @@
 import { assortmentRuleDenied, brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike } from "../src/lib/store-assortment";
+import { toProduct } from "../src/lib/store-assortment-data";
 
 const brandRule = (target: string, exposed: boolean): AssortmentRuleLike => ({ scope: "brand", target, exposed });
 const modelRule = (target: string, exposed: boolean): AssortmentRuleLike => ({ scope: "product", target, exposed });
@@ -62,5 +63,17 @@ describe("exposureSource", () => {
     expect(exposureSource([brandRule("di-caprio", false)], dc)).toBe("brand");
     expect(exposureSource([brandRule("di-caprio", false), modelRule("prod_1", true)], dc)).toBe("product");
     expect(exposureSource([brandRule("flexure", false)], dc)).toBe("default");
+  });
+});
+
+describe("toProduct (GET /admin/store-assortment/:id/products rows)", () => {
+  it("carries the model's SKU so the «precio exacto» search can join it to the cost list", () => {
+    const row = toProduct({ id: "prod_1", title: "DC 204", thumbnail: null, metadata: { brand_slug: "di-caprio" }, sku: " DC204-BLK " });
+    expect(row).toEqual({ id: "prod_1", title: "DC 204", thumbnail: null, brand: "di-caprio", is_case: false, sku: "DC204-BLK" });
+  });
+
+  it("says null, not an empty string, when no variant has a SKU", () => {
+    expect(toProduct({ id: "prod_2", title: "Case", metadata: { brand_slug: "case" } }).sku).toBeNull();
+    expect(toProduct({ id: "prod_2", title: "Case", metadata: { brand_slug: "case" }, sku: "" }).is_case).toBe(true);
   });
 });

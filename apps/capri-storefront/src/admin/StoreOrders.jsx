@@ -13,8 +13,15 @@
 //     delante de quien no le corresponde.
 //   · Comisión: `access.commission` (un vendedor ve la suya).
 //   · Importe de las tarjetas por etapa (StageStrip): solo el administrador
-//     (`me.is_admin !== false`) — por regla del dueño, al resto solo la
-//     cantidad y el porcentaje.
+//     (`me.is_admin === true`, y hasta que `me` cargue, NADIE) — por regla del
+//     dueño, al resto solo la cantidad y el porcentaje. El servidor además
+//     manda `total: null` en las filas del tablero a quien no administra
+//     (boardAccessFor, lib/order-board.ts): el importe no viaja, no solo no
+//     se pinta.
+//   · Atrasados (HU-33): pedidos sin entregar ni anular cuya fecha prometida
+//     (`promised_on` del tablero, la del recibo) ya pasó, deban o no saldo.
+//     Chip «Atrasados» en la tira y pastilla «N d» en la fila. Se calcula
+//     aquí con fechas locales (lateness.js), igual que Cobros pendientes.
 //
 // Datos — dos fuentes, UNA lista:
 //   GET /admin/sales-analytics/sales   el dinero y la descripción de cada venta
@@ -30,6 +37,7 @@
 //   seller  código de vendedor (seller_code, p. ej. "DAN")   → chip «Vendedor: DAN ×»
 //   stage   "pending" (confirmado + laboratorio) | confirmed | in_lab | shipped
 //           | in_transit | delivered | voided                 → chip «Etapa: … ×»
+//   late    "1" → solo los atrasados frente a la fecha prometida → chip «Atrasados ×»
 //   q       texto libre: nº de venta, nº de pedido, cliente o teléfono → chip «Buscar: … ×»
 //   period  uno de PERIODS (today…year) — o from/to (YYYY-MM-DD) para «Rango»
 //   store   "all" | "web" | id de establecimiento → fija el filtro GLOBAL de tienda
@@ -53,6 +61,7 @@ import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import { StageBar, StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import { InfoTip } from "./ui.jsx";
+import { daysLate } from "./lateness.js";
 import "./exec.css";
 
 /** Los períodos del panel (periodStore.js); se re-exportan por compatibilidad (SellerPanel). */
@@ -76,7 +85,7 @@ const PAGE_BATCH = 4;
 /** Chips de filtro por etapa, las pendientes primero. */
 export const STAGE_FILTERS = ["pending", "shipped", "in_transit", "delivered", "voided"];
 /** Claves de `params` que esta lista entiende (ver el contrato de arriba). */
-export const PARAM_KEYS = ["seller", "stage", "q", "period", "from", "to", "store", "order"];
+export const PARAM_KEYS = ["seller", "stage", "q", "late", "period", "from", "to", "store", "order"];
 export const paramsKey = (p) => JSON.stringify([...PARAM_KEYS, "_n"].map((k) => (p && p[k] != null ? String(p[k]) : "")));
 const STUCK_DAYS = 7;
 
@@ -263,6 +272,17 @@ const isPendingStage = (s) => s === "confirmed" || s === "in_lab" || s === "paym
 /** Lleva más de STUCK_DAYS días sin salir: pendiente y vendida hace más de una semana. */
 export const isStuck = (r, stage, now = Date.now()) => isPendingStage(stage) && now - new Date(r.sold_at).getTime() > STUCK_DAYS * DAY_MS;
 
+/**
+ * Días de atraso de la fila frente a lo prometido (HU-33): el pedido sigue sin
+ * entregar (ni anular, ni fuera de la ventana del tablero) y su `promised_on`
+ * ya pasó. `null` = no está atrasado. Pure.
+ */
+export function lateDaysOf(r, board, stage, now = Date.now()) {
+  if (!board || !stage || stage === "delivered" || stage === "voided" || r.status === "voided") return null;
+  return daysLate(board.promised_on, now);
+}
+export const isLate = (r, board, stage, now = Date.now()) => lateDaysOf(r, board, stage, now) != null;
+
 const costOf = (r) => (r.cost == null ? null : (Number(r.cost) || 0) + (Number(r.fee) || 0));
 
 /** Nº de la venta como se imprime: el número de caja o «Web» + cola del id. */
@@ -436,12 +456,12 @@ const matchesQuery = (r, q, t) => {
  */
 export function useListFilters(params) {
   const key = paramsKey(params);
-  const fromParams = (p) => ({ seller: p?.seller ? String(p.seller).toUpperCase() : "", stage: p?.stage && (STAGE_FILTERS.includes(p.stage) || STAGE_BY_KEY[p.stage]) ? p.stage : "", q: p?.q ? String(p.q) : "" });
+  const fromParams = (p) => ({ seller: p?.seller ? String(p.seller).toUpperCase() : "", stage: p?.stage && (STAGE_FILTERS.includes(p.stage) || STAGE_BY_KEY[p.stage]) ? p.stage : "", q: p?.q ? String(p.q) : "", late: p?.late === true || p?.late === "1" || p?.late === 1 });
   const [f, setF] = useState(() => fromParams(params));
   useEffect(() => { setF(fromParams(params)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = useCallback((k, v) => setF((x) => ({ ...x, [k]: v })), []);
-  const clear = useCallback(() => setF({ seller: "", stage: "", q: "" }), []);
-  return { ...f, set, clear, active: Boolean(f.seller || f.stage || f.q) };
+  const clear = useCallback(() => setF({ seller: "", stage: "", q: "", late: false }), []);
+  return { ...f, set, clear, active: Boolean(f.seller || f.stage || f.q || f.late) };
 }
 
 /**
@@ -455,23 +475,28 @@ export function useListFilters(params) {
  * solo concierne a super admin». Por eso para quien no administra la tarjeta se
  * pinta sin importes y SIN el menú de exportación, que se llevaría el dinero
  * (StageBar.jsx: la hoja de StageBarCard siempre trae la columna «Importe»).
+ * «Administrador» es `me.is_admin === true`, nada más: mientras `me` carga (o
+ * si nunca llega) se pinta la versión sin dinero — cerrada por defecto, no
+ * abierta hasta que alguien diga lo contrario.
  */
 export function StageStrip({ rows, byOrder, stages, filters, compact = false, me = null }) {
   const { t, lang } = useLang();
   const m = (v) => fmtMoney(v, "usd", lang);
-  const isAdmin = !me || me.is_admin !== false;
+  const isAdmin = me?.is_admin === true;
   const stats = useMemo(() => {
     const by = Object.fromEntries([...STAGES.map((s) => s.key), "payment_pending", "voided", "none"].map((k) => [k, { n: 0, v: 0 }]));
     let stuck = 0;
+    let late = 0;
     const now = Date.now();
     for (const r of rows) {
       const st = stageOfRow(r, byOrder) || "none";
       by[st].n += 1;
       by[st].v += Number(r.total) || 0;
       if (isStuck(r, st, now)) stuck += 1;
+      if (isLate(r, byOrder?.get(r.order_id), st, now)) late += 1;
     }
     const group = (keys) => keys.reduce((acc, k) => ({ n: acc.n + by[k].n, v: acc.v + by[k].v }), { n: 0, v: 0 });
-    return { by, stuck, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
+    return { by, stuck, late, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
   }, [rows, byOrder]);
   // Sin `amount` para quien no administra: así no hay importe que pintar ni que
   // exportar, en vez de mandar un 0 que se leería como «no se vendió nada».
@@ -486,6 +511,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false, me
   if (filters.seller) el.push({ k: "seller", label: t("adm.ex.flt.seller"), value: filters.seller });
   if (filters.stage) el.push({ k: "stage", label: t("adm.ex.flt.stage"), value: stageLabel(filters.stage, t) });
   if (filters.q) el.push({ k: "q", label: t("adm.ex.flt.q"), value: filters.q });
+  if (filters.late) el.push({ k: "late", label: t("adm.so.late"), value: t("adm.so.flt.lateOn"), off: false });
   return (
     <div className={`so-strip ${compact ? "compact" : ""}`}>
       {isAdmin ? (
@@ -498,7 +524,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false, me
         <div className="adm-card so-stagebar">
           <div className="adm-card-head">
             <h3><Icon name="layers" size={16} />{t("adm.ex.stg.title")}</h3>
-            <span className="adm-card-tools"><InfoTip text={t("adm.ex.stg.hint")} title={t("adm.ex.stg.title")} /></span>
+            <span className="adm-card-tools"><InfoTip text={t("adm.so.stgCountsOnly")} title={t("adm.ex.stg.title")} /></span>
           </div>
           <StageBar stages={tiles} showAmount={false} lang={lang} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
         </div>
@@ -510,6 +536,11 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false, me
         {chip("in_transit", t(STAGE_BY_KEY.in_transit.label), stats.groups.in_transit.n, stats.groups.in_transit.v)}
         {chip("delivered", t(STAGE_BY_KEY.delivered.label), stats.groups.delivered.n, stats.groups.delivered.v)}
         {chip("voided", t("adm.ex.stg.voided"), stats.groups.voided.n, stats.groups.voided.v)}
+        {/* Atrasados (HU-33): un interruptor aparte de la etapa — se combina con
+            ella («Pendientes» + «Atrasados» = los que urgen). Mismo chip. */}
+        <button type="button" className={`so-chip late ${filters.late ? "on" : ""}`} aria-pressed={filters.late} onClick={() => filters.set("late", !filters.late)} title={t("adm.so.lateHint")}>
+          <Icon name="alert" size={12} />{t("adm.so.late")}<b>{stats.late}</b>
+        </button>
         <span className="so-search">
           <Icon name="search" size={13} />
           <input value={filters.q} onChange={(e) => filters.set("q", e.target.value)} placeholder={t("adm.ex.flt.search")} aria-label={t("adm.ex.flt.q")} />
@@ -519,6 +550,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false, me
         {stats.stuck > 0
           ? <button type="button" className="so-alert crit" onClick={() => filters.set("stage", "pending")}><Icon name="alert" size={13} />{t("adm.ex.stg.stuck", { n: stats.stuck })}<Icon name="arrowRight" size={12} /></button>
           : rows.length > 0 && stages.state === "ok" && <span className="so-alert ok"><Icon name="checkCircle" size={13} />{t("adm.ex.stg.allClear")}</span>}
+        {stats.late > 0 && !filters.late && <button type="button" className="so-alert warn" onClick={() => filters.set("late", true)}><Icon name="calendar" size={13} />{t("adm.so.lateAlert", { n: stats.late })}<Icon name="arrowRight" size={12} /></button>}
         {stages.state === "ok" && stages.truncated && <span className="so-alert info"><Icon name="info" size={13} />{t("adm.ex.stg.boardTruncated", { n: stages.scanLimit })}</span>}
         {stages.state === "error" && <span className="so-alert warn"><Icon name="alert" size={13} />{t("adm.ex.stg.boardFailed")}</span>}
         {el.length > 0 && (
@@ -526,7 +558,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false, me
             {el.map((x) => (
               <span key={x.k} className="so-flt">
                 <small>{x.label}:</small> <b>{x.value}</b>
-                <button type="button" onClick={() => filters.set(x.k, "")} title={t("adm.ex.flt.clear")} aria-label={`${t("adm.ex.flt.clear")}: ${x.label} ${x.value}`}><Icon name="close" size={11} /></button>
+                <button type="button" onClick={() => filters.set(x.k, x.off === undefined ? "" : x.off)} title={t("adm.ex.flt.clear")} aria-label={`${t("adm.ex.flt.clear")}: ${x.label} ${x.value}`}><Icon name="close" size={11} /></button>
               </span>
             ))}
             {el.length > 1 && <button type="button" className="so-flt-clear" onClick={filters.clear}>{t("adm.ex.flt.clearAll")}</button>}
@@ -616,14 +648,16 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               const stage = stageOf(r);
               const board = byOrder?.get(r.order_id) || null;
               const next = stage && stage !== "voided" ? nextForward(board) : null;
+              const late = lateDaysOf(r, board, stage);
               const current = sp.saleId && sp.saleId === r.sale_id || (sp.orderId && sp.orderId === r.order_id);
               return (
-                <tr key={r.order_id || r.sale_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${current ? "sd-current" : ""} ${voided ? "so-voided" : ""} ${isStuck(r, stage) ? "so-stuck" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? (r.sale_id ? t("adm.sd.openHint") : t("adm.ex.so.openOrder")) : undefined}>
+                <tr key={r.order_id || r.sale_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${current ? "sd-current" : ""} ${voided ? "so-voided" : ""} ${isStuck(r, stage) ? "so-stuck" : ""} ${late != null ? "so-late-row" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? (r.sale_id ? t("adm.sd.openHint") : t("adm.ex.so.openOrder")) : undefined}>
                   <td data-label={t("adm.ex.so.number")}><b>{saleNumber(r, t)}</b>{storeLabel && <small className="muted so-store"> · {storeLabel(r)}</small>}</td>
                   <td data-label={t("adm.ex.so.date")}>{when(r.sold_at)}</td>
                   <td data-label={t("adm.ex.stg.col")} className="so-stage-cell">
                     <span className="so-stage-wrap">
                       <StageChip stage={stage} t={t} small title={board?.pos_delivered_at ? t("adm.sd.stage.posDelivered") : undefined} />
+                      {late != null && <span className="so-late" title={t("adm.so.lateDaysHint", { date: board.promised_on, n: late })} aria-label={t("adm.so.lateDaysHint", { date: board.promised_on, n: late })}><Icon name="calendar" size={10} />{t("adm.so.lateDays", { n: late })}</span>}
                       {next && onAdvance && (
                         <button type="button" className="so-adv adm-noprint" disabled={busyId === r.order_id} title={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })} aria-label={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })}
                           onClick={(e) => { e.stopPropagation(); onAdvance(r, next); }}>
@@ -697,7 +731,11 @@ export function OrdersStagesView({ data, stages, storeLabel, params, me, compact
   const [busyId, setBusyId] = useState(null);
   // Vendedor y texto acotan la base (la tira cuenta sobre ella); la etapa acota la lista.
   const base = useMemo(() => data.rows.filter((r) => (!filters.seller || String(r.seller_code || "").toUpperCase() === filters.seller) && matchesQuery(r, filters.q, t)), [data.rows, filters.seller, filters.q, t]);
-  const rows = useMemo(() => base.filter((r) => matchesStageFilter(stageOfRow(r, stages.byOrder), filters.stage)), [base, stages.byOrder, filters.stage]);
+  const rows = useMemo(() => base.filter((r) => {
+    const stage = stageOfRow(r, stages.byOrder);
+    if (!matchesStageFilter(stage, filters.stage)) return false;
+    return !filters.late || isLate(r, stages.byOrder?.get(r.order_id), stage);
+  }), [base, stages.byOrder, filters.stage, filters.late]);
   const changed = () => { stages.reload(); data.reload?.(); onChanged?.(); };
   const advance = async (r, stage) => {
     const st = STAGE_BY_KEY[stage];
