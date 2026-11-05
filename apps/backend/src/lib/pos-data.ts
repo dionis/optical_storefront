@@ -21,11 +21,13 @@ import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { fetchBoardOrder } from "./order-board";
 import { StageError, transitionOrderStage } from "./order-stage-transition";
-import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
+import { LAB_BUSINESS_DAYS } from "./order-status";
 import {
   discountLine,
+  localYear,
   lowestFreeTray,
   nextTerminalCode,
+  promisedDate,
   rxNumber,
   saleNumber,
   type CleanedPayments,
@@ -48,6 +50,7 @@ import { openRules, productPrices } from "./store-pricing-data";
 import { brandOf, isExposed } from "./store-assortment";
 import { listAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
+import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
 
 /**
@@ -383,6 +386,9 @@ export interface StoredRx {
 }
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+// `rx_date` is a DATE column: pg hands it back as midnight in the server's
+// zone (UTC), so the UTC slice IS the stored day. Do not shift it to the
+// store's zone — that would move every prescription one day back.
 const isoDay = (v: unknown): string | null => (v ? new Date(v as string).toISOString().slice(0, 10) : null);
 
 function toStoredRx(r: Record<string, unknown>): StoredRx {
@@ -492,7 +498,9 @@ export function checkPrescriptions(
 }
 
 async function nextRxNumber(container: MedusaContainer, now = new Date()): Promise<string> {
-  const year = now.getUTCFullYear();
+  // The store's year, not the server's: on New Year's Eve the till is still in
+  // the old year while the UTC clock already turned (lib/pos.ts localYear).
+  const year = localYear(now, tenant().timezone);
   const res = await pgOf(container).raw(
     `INSERT INTO rx_sequence (year, last_value) VALUES (?, 1)
      ON CONFLICT (year) DO UPDATE SET last_value = rx_sequence.last_value + 1
@@ -1410,7 +1418,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   const seq = await nextSaleSeq(container, store.id);
   const number = saleNumber(store.code, seq);
   const withLenses = quote.lines.some((l) => l.lens_category);
-  const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
+  // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
+  // there although the UTC date has already moved on (lib/pos.ts promisedDate).
+  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const p = input.payments;
   const sale = await pos(container).createPosSales({
     number,
@@ -1908,10 +1918,34 @@ export async function requestVoid(container: MedusaContainer, sale: SaleRow, act
 }
 
 /**
+ * The void as one guarded UPDATE. Two confirmations of the same sale (a
+ * double click, two managers at once) both passed the `status !== "voided"`
+ * check on what each had read and both wrote the refund rows: the customer
+ * was "given back" twice what they paid once. The WHERE makes the database
+ * decide who voids: one UPDATE matches, the other finds 0 rows and is told
+ * `sale_voided`. The refunds, the order and the tray follow only for the
+ * winner. Same style as `deliveryClaimPlan`.
+ */
+export function voidClaimPlan(saleId: string, actorId: string, reason: VoidReason, note: string | null): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET status = 'voided', voided_at = now(), voided_by = ?, void_reason = ?, void_note = ?, updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided'
+       RETURNING voided_at`,
+    bindings: [actorId, reason, note, saleId],
+  };
+}
+
+/**
  * Voids a sale: the sale is never deleted and keeps its number (HU-84); it is
  * marked voided with who, when and why. The Medusa order is canceled when no
  * fulfillment has shipped; what the customer paid is recorded as refunds in
  * the ledger, so the cash count and the reports stay true.
+ *
+ * The mark is taken FIRST, atomically (`voidClaimPlan`); everything that
+ * follows (order, refunds, claims, tray, facts) runs once, for whoever took
+ * it. A failure after the claim leaves a voided sale whose follow-ups are
+ * logged for the owner to finish by hand — never two refunds.
  */
 export async function voidSale(
   container: MedusaContainer,
@@ -1921,8 +1955,38 @@ export async function voidSale(
   note: string | null
 ): Promise<{ sale: SaleRow; order_canceled: boolean }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  // Cheap early exit on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  const plan = voidClaimPlan(sale.id, actorId, reason, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ voided_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    throw new PosError("sale_voided", 409);
+  }
+  try {
+    return await voidFollowUps(container, sale, actorId, reason, note);
+  } catch (e) {
+    // The mark stands (never a second refund); what did not get written is in the log.
+    logger.error(`[pos] void ${sale.number}: marked voided but a follow-up failed: ${(e as Error).message}`);
+    throw e;
+  }
+}
+
+/** Everything a void does once the sale is marked: order, refunds, claims, tray, facts, audit. */
+async function voidFollowUps(
+  container: MedusaContainer,
+  sale: SaleRow,
+  actorId: string,
+  reason: VoidReason,
+  note: string | null
+): Promise<{ sale: SaleRow; order_canceled: boolean }> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const svc = pos(container);
+  // The payments as they are NOW (a balance collected between the screen and
+  // the click is refunded too), not as the caller's screen had them.
+  const held = (await getSale(container, sale.id)) ?? sale;
   let orderCanceled = false;
   if (sale.order_id) {
     try {
@@ -1937,7 +2001,7 @@ export async function voidSale(
   }
   // Net paid per method (refunds are negative rows), returned by the same method.
   const byMethod = new Map<string, number>();
-  for (const p of sale.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
+  for (const p of held.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
   const methods = new Map((await listPaymentMethods(container)).map((m) => [m.code, m]));
   const refundable = [...byMethod.entries()].filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable));
   // A cash refund leaves the store's register (opening it if nobody has yet); other methods never touch it.
@@ -1961,17 +2025,9 @@ export async function voidSale(
   const claims = await svc.listInsuranceClaims({ sale_id: sale.id, status: ["pending", "submitted"] } as never, { take: 20 });
   if (claims.length) await svc.updateInsuranceClaims(claims.map((c) => ({ id: c.id, status: "rejected", note: "sale voided" })) as never);
 
-  await svc.updatePosSales({
-    id: sale.id,
-    status: "voided",
-    voided_at: new Date(),
-    voided_by: actorId,
-    void_reason: reason,
-    void_note: note,
-    paid_cents: 0,
-    insurance_cents: 0,
-    balance_cents: 0,
-  });
+  // Status, who, when and why were written by the claim; only the figures
+  // move now that the refunds exist.
+  await svc.updatePosSales({ id: sale.id, paid_cents: 0, insurance_cents: 0, balance_cents: 0 });
   await releaseTray(container, sale.id);
   await voidFacts(container, sale.id);
   if (sale.order_id) await stampOrder(container, sale.order_id, { pos_voided: true, balance_due_cents: 0 }).catch(() => null);
@@ -1981,7 +2037,7 @@ export async function voidSale(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { status: sale.status, total: sale.total, paid: sale.paid },
+    before: { status: sale.status, total: sale.total, paid: held.paid },
     after: { status: "voided", reason, note, order_canceled: orderCanceled },
   });
   return { sale: (await getSale(container, sale.id)) as SaleRow, order_canceled: orderCanceled };

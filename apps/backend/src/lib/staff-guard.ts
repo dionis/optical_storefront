@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaNextFunction, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { sessionRevoked, tokenIssuedAtMs } from "./session-control";
 import { isAllowedForRestrictedRole } from "./staff-roles";
 import { getStaffScope } from "./staff-scope";
 
@@ -18,6 +19,11 @@ import { getStaffScope } from "./staff-scope";
  * API keys — which only admins can mint) are left to Medusa's own handling.
  * If the role cannot be loaded the request is refused: failing open would hand
  * the full admin API to every role.
+ *
+ * A token older than the person's last "log out everywhere" (a password
+ * change, a remote sign-out — lib/session-control.ts) is refused first, admins
+ * included, with 401 `session_revoked`: the panel drops its session and shows
+ * the login. A deactivated person is still 403 `inactive` through role null.
  *
  * Three arguments on purpose — see tests/middleware-arity.test.ts.
  */
@@ -37,6 +43,11 @@ export async function staffGuard(
       .resolve<Logger>(ContainerRegistrationKeys.LOGGER)
       .error(`[staff-guard] could not resolve role for ${ctx.actor_id}: ${(error as Error).message}`);
     res.status(503).json({ type: "unexpected_state", reason: "scope_unavailable", message: "Could not resolve the user's role." });
+    return;
+  }
+
+  if (sessionRevoked(scope.sessions_revoked_at, tokenIssuedAtMs(ctx as { iat?: unknown }, req.get("authorization")))) {
+    res.status(401).json({ type: "unauthorized", reason: "session_revoked", message: "This session was signed out; sign in again." });
     return;
   }
 

@@ -32,6 +32,12 @@ const read = (p) => readFileSync(p, "utf8");
 for (const name of ["vercel.ts", "vercel.js", "vercel.mjs", "vercel.cjs", "vercel.mts", "vercel.toml"]) {
   if (existsSync(join(STOREFRONT, name))) fail(`apps/capri-storefront/${name} exists — the storefront uses vercel.json only`);
 }
+// A second vercel.json at the repo root was a hand-maintained copy that Vercel
+// never read (Root Directory = apps/capri-storefront) and that drifted: no
+// staging rewrite, another buildCommand, other headers. One source of truth, or
+// none (removed 2026-11-04, together with the root scripts/vercel-build.sh).
+if (existsSync(join(ROOT, "vercel.json"))) fail("vercel.json at the repo root — Vercel reads apps/capri-storefront/vercel.json only; delete the root copy");
+if (existsSync(join(ROOT, "scripts", "vercel-build.sh"))) fail("scripts/vercel-build.sh at the repo root — the build script is apps/capri-storefront/scripts/vercel-build.sh; delete the root copy");
 const configPath = join(STOREFRONT, "vercel.json");
 let config = null;
 try {
@@ -101,7 +107,6 @@ function walk(dir, out = []) {
   return out;
 }
 const scanned = [
-  join(ROOT, "vercel.json"),
   join(STOREFRONT, "backend-target.mjs"),
   ...walk(join(STOREFRONT, "src")),
   ...walk(join(STOREFRONT, "scripts")),

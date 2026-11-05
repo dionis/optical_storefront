@@ -207,9 +207,14 @@ export default function MedusaCheckout() {
   const problems = checkoutProblems(f, { smsRequested: notify.sms });
   const hasProblems = Object.keys(problems).length > 0;
   // Un error se enseña al salir del campo, o de golpe al intentar pagar.
+  // The fields are labelled by placeholder only (design decision: a compact
+  // form); `aria-label` gives screen readers and password managers the same
+  // text, since a placeholder disappears as soon as the person types. The
+  // e-mail placeholder is an example address, so its label is the real word.
+  const ARIA_LABEL = { email: "auth.email", first_name: "checkout.first", last_name: "checkout.last", phone: "checkout.phone", address_1: "checkout.address", city: "checkout.city", state: "checkout.state", postal_code: "checkout.zip" };
   const fieldOf = (k) => {
     const problem = showErrors || touched[k] ? problems[k] : null;
-    return { problem, props: { name: k, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
+    return { problem, props: { name: k, "aria-label": ARIA_LABEL[k] ? t(ARIA_LABEL[k]) : undefined, "aria-invalid": problem ? true : undefined, onBlur: () => setTouched((x) => ({ ...x, [k]: true })) } };
   };
   const tryPay = () => {
     if (hasProblems) {

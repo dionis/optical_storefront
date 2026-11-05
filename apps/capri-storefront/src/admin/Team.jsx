@@ -6,7 +6,7 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, signOutEverywhere } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -254,6 +254,20 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
+  // Cierre de sesión remoto: sus pestañas abiertas quedan fuera en la siguiente
+  // petición; la cuenta sigue activa y vuelve a entrar con su contraseña.
+  const kickSessions = async (m) => {
+    const ok = await confirm({ title: t("adm.team.sessions.confirm", { email: m.email }), message: t("adm.team.sessions.body"), confirmLabel: t("adm.team.sessions.kick") });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await signOutEverywhere(m.id);
+      toast({ tone: "success", title: t("adm.team.sessions.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
   const changeStores = async (m, ids) => {
     setBusy(true);
     try {
@@ -384,6 +398,11 @@ export default function Team() {
               {!demo && m.id !== meId && (
                 <button className="btn-xs" aria-expanded={pwFor === m.id} onClick={() => { setPwValue(""); setPwFor((o) => (o === m.id ? null : m.id)); }}>
                   <Icon name="lock" size={12} /> {t("adm.team.pw.open")}
+                </button>
+              )}
+              {!demo && m.id !== meId && !m.is_disabled && (
+                <button className="btn-xs" disabled={busy} onClick={() => kickSessions(m)} title={t("adm.team.sessions.help")}>
+                  <Icon name="logout" size={12} /> {t("adm.team.sessions.kick")}
                 </button>
               )}
               {!demo && (

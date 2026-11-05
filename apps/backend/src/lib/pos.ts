@@ -13,6 +13,52 @@ export function saleNumber(storeCode: string, seq: number): string {
   return `${storeCode}-${String(seq).padStart(6, "0")}`;
 }
 
+/**
+ * Calendar date (`YYYY-MM-DD`) of an instant *in the store's timezone*.
+ *
+ * The server runs in UTC, so `date.toISOString().slice(0, 10)` is already
+ * "tomorrow" from 6–7 pm in Texas: a sale made on the evening of the 4th got
+ * promised and numbered as if it were the 5th. Every date the customer or the
+ * lab reads must go through here with the tenant's timezone.
+ */
+export function localDateISO(at: Date, timeZone: string): string {
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch {
+    // A misspelt GSHEET_TIMEZONE must not stop every sale: UTC, as before.
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" });
+  }
+  const parts = fmt.formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/** Calendar year of an instant in the store's timezone (sequence numbers that reset yearly). */
+export function localYear(at: Date, timeZone: string): number {
+  return Number(localDateISO(at, timeZone).slice(0, 4));
+}
+
+/**
+ * Date the lab promises, `businessDays` business days after the sale, counted
+ * on the store's calendar (not the server's). Weekends are skipped; holidays
+ * are not (no calendar is configured — same rule as the web's
+ * `addBusinessDays` in order-status.ts). Zero days = the store's date of the sale.
+ */
+export function promisedDate(saleAt: Date, timeZone: string, businessDays: number): string {
+  // Anchor at noon UTC of the store's local date so adding whole days can
+  // never slip across midnight into another calendar day.
+  const [y, m, d] = localDateISO(saleAt, timeZone).split("-").map(Number);
+  const out = new Date(Date.UTC(y, m - 1, d, 12));
+  let left = businessDays;
+  while (left > 0) {
+    out.setUTCDate(out.getUTCDate() + 1);
+    const dow = out.getUTCDay();
+    if (dow !== 0 && dow !== 6) left -= 1;
+  }
+  return out.toISOString().slice(0, 10);
+}
+
 /** Codes of the seeded methods; anything else was added by the owner. */
 export const BUILTIN_METHOD_CODES = ["debit", "credit", "zelle", "cash", "insurance"] as const;
 

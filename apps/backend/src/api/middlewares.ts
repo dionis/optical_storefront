@@ -14,6 +14,7 @@ import {
   securityHeaders,
 } from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
+import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
 
 /**
@@ -246,10 +247,11 @@ export default defineMiddlewares({
       middlewares: [passwordResetRequestRateLimit],
     },
     {
-      // Consumes the single-use reset token. Per IP.
+      // Consumes the single-use reset token. Per IP. On success the person's
+      // previous sessions are signed out (lib/session-control.ts).
       matcher: "/auth/user/emailpass/update",
       method: ["POST"],
-      middlewares: [passwordResetUpdateRateLimit],
+      middlewares: [passwordResetUpdateRateLimit, revokeSessionsAfterPasswordRecovery],
     },
     {
       // CORS for every vision-measure route (see visionMeasureCors above) —

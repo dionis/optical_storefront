@@ -56,6 +56,9 @@ function qrSvg(url) {
   return qr.createSvgTag({ cellSize: 3, margin: 0, scalable: true });
 }
 
+// Lines are printed at LIST price so they add up to the subtotal; the discount
+// and the tax appear once, below (same rule as the e-mailed receipt,
+// backend lib/email/pos-emails.ts). The total does not change.
 const fmtDate = (v, lang) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const fmtRx = (v, digits = 2, sign = true) => (v === null || v === undefined ? "—" : `${sign && Number(v) > 0 ? "+" : ""}${Number(v).toFixed(digits)}`);
 const bi = (o, lang) => (o ? o[lang] || o.es || "" : "");
@@ -233,10 +236,11 @@ export function receiptHtml(doc) {
         const qty = l.quantity > 1 ? ` ×${l.quantity}` : "";
         return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
           <td>${esc(lineName(l, t))}${qty}${l.sku ? `<br/><span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<br/><span class="muted">${esc(lens)}</span>` : ""}</td>
-          <td class="r">${m(l.unit_price)}</td></tr>`;
+          <td class="r">${m(l.list)}</td></tr>`;
       }).join("")}
     </tbody></table>
     <table><tbody>
+      ${tot.discount > 0 || tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.subtotal"))}</td><td class="r">${m(tot.list)}</td></tr>` : ""}
       ${tot.discount > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.discount", { n: tot.discount_pct }))}</td><td class="r">−${m(tot.discount)}</td></tr>` : ""}
       ${tot.tax > 0 ? `<tr><td>${esc(t("adm.doc.rcpt.tax"))}</td><td class="r">${m(tot.tax)}</td></tr>` : ""}
       <tr class="tot"><td>${esc(t("adm.doc.rcpt.total"))}</td><td class="r">${m(tot.total)}</td></tr>
@@ -283,7 +287,7 @@ function duoCopyHtml(doc, t, lang, copyKey) {
         const lens = lineLens(l, t, lang);
         return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
           <td><b>${esc(l.kind === "own_frame" ? lineName(l, t) : specs || lineName(l, t))}</b>${l.sku ? ` <span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<div class="muted">${esc(lens)}</div>` : ""}</td>
-          <td class="c">${l.quantity}</td><td class="r">${m(l.unit_price)}</td></tr>`;
+          <td class="c">${l.quantity}</td><td class="r">${m(l.list)}</td></tr>`;
       }).join("")}
     </tbody></table>
     <div class="sum">

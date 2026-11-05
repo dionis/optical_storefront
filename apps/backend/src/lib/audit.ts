@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = [
   "password.change",
   "password.reset",
   "password.reset_requested",
+  "session.revoke",
   "stores.change",
   "privileges.change",
   "profile.change",

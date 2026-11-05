@@ -147,6 +147,8 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/users\/me$/ },
   { method: "GET", path: /^\/admin\/team\/me\/profile$/ },
   { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
+  // "Cerrar sesión en todos mis equipos": any role, only on oneself.
+  { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
   { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals|prescriptions\/ocr)$/ },
   { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },

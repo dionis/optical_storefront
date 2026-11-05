@@ -46,6 +46,19 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="RUBI LENS — Óptica y Salud Visual" />
     <meta name="twitter:image" content="/og-image.jpg" />
+    <!-- Organization schema for the site as a whole; product pages add their own
+         Product JSON-LD from src/lib/seo.js. Keep names in sync with src/config/tenant.js. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "RUBI LENS",
+      "alternateName": "Óptica El Rancho",
+      "url": "https://www.rubilens.com/",
+      "logo": "https://www.rubilens.com/logo-oficial.png",
+      "sameAs": ["https://opticaelrancho.com/"]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

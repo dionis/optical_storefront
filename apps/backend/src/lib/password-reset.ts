@@ -39,10 +39,25 @@ export interface ResetUser {
   email: string;
 }
 
-/** The panel's "new password" form reads `reset` and `email` from the query. */
-export function buildResetLink(origin: string, token: string, email: string): string {
-  const base = origin.trim().replace(/\/+$/, "");
-  return `${base}/admin?reset=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+/**
+ * Where the panel's login lives. `ADMIN_PANEL_URL` wins when set (the panel
+ * served under the optician's own domain, e.g. https://opticaelrancho.com/admin);
+ * otherwise the storefront's `/admin`.
+ */
+export function adminPanelUrl(storefrontUrl: string, env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = (env.ADMIN_PANEL_URL ?? "").trim().replace(/\/+$/, "");
+  return explicit || `${storefrontUrl.trim().replace(/\/+$/, "")}/admin`;
+}
+
+/**
+ * The panel's "new password" form reads `reset` and `email` from the query.
+ * `panel` is the panel's URL (`adminPanelUrl`), with or without a trailing
+ * slash; a bare origin is accepted too and gets `/admin` appended.
+ */
+export function buildResetLink(panel: string, token: string, email: string): string {
+  const base = panel.trim().replace(/\/+$/, "");
+  const path = /^https?:\/\/[^/]+$/.test(base) ? `${base}/admin` : base;
+  return `${path}?reset=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 }
 
 export type ResetDecision =
@@ -76,7 +91,7 @@ export interface PasswordResetDeps {
   /** Audit `password.reset_requested` — never with the token. */
   audit(user: ResetUser, delivered: boolean): Promise<void>;
   log: Pick<Logger, "info" | "warn" | "error">;
-  /** Public storefront origin the link is built on. */
+  /** The panel's URL the link is built on (`adminPanelUrl`); a bare storefront origin also works. */
   origin: string;
   locale: EmailLocale;
 }
@@ -179,7 +194,7 @@ export function containerDeps(container: MedusaContainer): PasswordResetDeps {
       });
     },
     log: logger,
-    origin: t.storefrontUrl,
+    origin: adminPanelUrl(t.storefrontUrl),
     locale: resolveEmailLocale(t.locale),
   };
 }

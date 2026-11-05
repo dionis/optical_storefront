@@ -78,6 +78,23 @@ vacía para la persona afectada). Antes, un usuario eliminado con un token aún
 válido quedaba sin filas de rol y la regla «sin filas = admin anterior a los
 roles» lo convertía en superadmin fantasma hasta que el token caducara.
 
+**Cerrar sesión en todos los equipos** (quien conserva su cuenta,
+`src/lib/session-control.ts`). `staff_profile.sessions_revoked_at` marca el
+instante; el guard compara el `iat` del JWT con esa marca y rechaza con **401
+`session_revoked`** todo token anterior (el panel suelta la sesión y vuelve al
+login). La escriben: `DELETE /admin/team/me/sessions` («Cerrar sesión en todos
+mis equipos», en Mi perfil → Contraseña, cualquier rol, la propia sesión
+incluida), `DELETE /admin/team/:id/sessions` («Cerrar sus sesiones» en Equipo;
+dueño y superadmin, nunca sobre uno mismo: mismos vetos que restablecer
+contraseña) y **todo cambio de contraseña** — la propia (`POST
+/admin/team/password`; el panel vuelve a iniciar sesión con la nueva en el acto,
+`adminTeam.js changeOwnPassword`), la temporal puesta por un admin
+(`POST /admin/team/:id/password`) y la recuperación por correo (al 200 de
+`POST /auth/user/emailpass/update`). Un token emitido en el mismo segundo que la
+marca sobrevive (es el que se acaba de emitir). Auditoría: `session.revoke` con
+el motivo (`password_changed`, `password_reset`, `password_recovered`,
+`remote_logout`, `self_logout`). Migración `StaffProfileSessions5`.
+
 ## Recuperar la contraseña uno mismo (HU-03)
 
 En el login hay «¿Olvidaste tu contraseña?». El flujo es el de Medusa, sin
@@ -94,7 +111,9 @@ tabla ni ruta propia:
    desactivada (`staff_profile.disabled_at`: quien fue dado de baja no se
    readmite solo). Si procede, manda el correo
    (`src/lib/email/password-reset-email.ts`, es/en, misma plantilla que los
-   demás) con el enlace `${STOREFRONT_URL}/admin?reset=<token>&email=…`. El
+   demás) con el enlace `${ADMIN_PANEL_URL}?reset=<token>&email=…` (por
+   defecto `${STOREFRONT_URL}/admin`; pon `ADMIN_PANEL_URL=https://opticaelrancho.com/admin`
+   cuando el panel se sirva bajo el dominio de la óptica). El
    token nunca se escribe en el log. Queda en Auditoría como
    `password.reset_requested` (sin actor; `after.delivered` dice si salió el
    correo).

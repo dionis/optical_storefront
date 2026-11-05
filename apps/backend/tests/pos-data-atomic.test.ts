@@ -1,8 +1,9 @@
 /**
- * The three places where the POS used to read a row and then write what it
+ * The four places where the POS used to read a row and then write what it
  * had computed from that read — a discount approval consumed by a sale, the
- * owner's decision on an approval, and a balance collected on a sale — are
- * now single guarded UPDATEs (lib/pos-data.ts). Pure and stubbed: the SQL
+ * owner's decision on an approval, a balance collected on a sale, and the
+ * void of a sale (two confirmations = two refunds) — are now single guarded
+ * UPDATEs (lib/pos-data.ts). Pure and stubbed: the SQL
  * plans are checked as text, the connection is a recorder, and the services
  * are the few methods each path touches. The database itself is exercised
  * against a real backend.
@@ -18,10 +19,12 @@ import {
   paymentClaimPlan,
   PosError,
   requestVoid,
+  voidClaimPlan,
+  voidSale,
   type SaleRow,
 } from "../src/lib/pos-data";
 import { recordAudit } from "../src/lib/audit";
-import { projectOrder } from "../src/lib/sale-facts";
+import { projectOrder, voidFacts } from "../src/lib/sale-facts";
 
 jest.mock("../src/lib/audit", () => ({ recordAudit: jest.fn(async () => undefined) }));
 jest.mock("../src/lib/sale-facts", () => ({ projectOrder: jest.fn(async () => 1), voidFacts: jest.fn(async () => undefined) }));
@@ -376,5 +379,96 @@ describe("requestVoid", () => {
       c.scope,
       expect.objectContaining({ action: "sale.void_request", actorId: "u_other", before: { reason: "wrong_entry", note: null }, after: { reason: "other", note: "customer called back" } })
     );
+  });
+});
+
+// ── voidSale: one void, one set of refunds ──────────────────────────────────
+
+describe("voidClaimPlan", () => {
+  it("marks a live sale voided with who, when and why, and refuses one already voided", () => {
+    const { sql, bindings } = voidClaimPlan("poss_1", "u_mgr", "duplicate", "typed twice");
+    expect(sql).toMatch(/UPDATE pos_sale/);
+    expect(sql).toMatch(/SET status = 'voided', voided_at = now\(\), voided_by = \?, void_reason = \?, void_note = \?/);
+    expect(sql).toMatch(/WHERE id = \? AND deleted_at IS NULL AND status <> 'voided'/);
+    expect(sql).toMatch(/RETURNING voided_at/);
+    expect((sql.match(/\?/g) ?? []).length).toBe(bindings.length);
+    expect(bindings).toEqual(["u_mgr", "duplicate", "typed twice", "poss_1"]);
+  });
+});
+
+describe("voidSale", () => {
+  const cardRow = { sale_id: "poss_1", method_code: "card", amount_cents: 5000, kind: "deposit", reference: null, created_at: "2026-11-01T12:00:00.000Z" };
+  function voidServices(rowNow: Record<string, unknown> | null, payments: Array<Record<string, unknown>> = [cardRow]) {
+    const svc = {
+      listPosSales: jest.fn(async () => (rowNow ? [rowNow] : [])),
+      listPosSalePayments: jest.fn(async () => payments),
+      listPosPaymentMethods: jest.fn(async () => [
+        { id: "pm_card", code: "card", kind: "card", receivable: false, counts_as_cash: false, is_active: true },
+        { id: "pm_cash", code: "cash", kind: "cash", receivable: false, counts_as_cash: true, is_active: true },
+        { id: "pm_ins", code: "insurance", kind: "insurance", receivable: true, counts_as_cash: false, is_active: true },
+      ]),
+      createPosSalePayments: jest.fn(async (rows: unknown[]) => (rows as Array<Record<string, unknown>>).map((r, i) => ({ ...r, id: `ref_${i}` }))),
+      listInsuranceClaims: jest.fn(async () => []),
+      updateInsuranceClaims: jest.fn(),
+      updatePosSales: jest.fn(),
+      listPosTrays: jest.fn(async () => [{ id: "tray_1" }]),
+      updatePosTrays: jest.fn(),
+    };
+    return { svc, services: { pos: svc } };
+  }
+
+  it("claims first; only the winner writes the refunds, releases the tray and audits", async () => {
+    const s = voidServices(stored({ status: "voided", paid_cents: 5000, balance_cents: 15000 }));
+    const { pg, calls } = fakePg([[{ voided_at: "2026-11-05T12:00:00.000Z" }]]);
+    const c = container(pg, s.services);
+
+    const out = await voidSale(c.scope, saleRow({ order_id: null, paid: 50, balance: 150 }), "u_mgr", "wrong_entry", null);
+
+    expect(calls[0].bindings).toEqual(["u_mgr", "wrong_entry", null, "poss_1"]);
+    // The card deposit comes back by the same method, as a negative ledger row.
+    expect(s.svc.createPosSalePayments).toHaveBeenCalledWith([
+      expect.objectContaining({ sale_id: "poss_1", method_code: "card", amount_cents: -5000, kind: "refund", received_by: "u_mgr", counts_as_cash: false, cash_session_id: null }),
+    ]);
+    // The claim wrote status/who/when/why; here only the figures are zeroed.
+    expect(s.svc.updatePosSales).toHaveBeenCalledWith({ id: "poss_1", paid_cents: 0, insurance_cents: 0, balance_cents: 0 });
+    expect(s.svc.updatePosSales).not.toHaveBeenCalledWith(expect.objectContaining({ status: "voided" }));
+    expect(s.svc.updatePosTrays).toHaveBeenCalledWith([expect.objectContaining({ id: "tray_1" })]);
+    expect(voidFacts).toHaveBeenCalledWith(c.scope, "poss_1");
+    expect(recordAudit).toHaveBeenCalledWith(
+      c.scope,
+      expect.objectContaining({ action: "sale.void", entityId: "poss_1", after: { status: "voided", reason: "wrong_entry", note: null, order_canceled: false } })
+    );
+    expect(out.order_canceled).toBe(false);
+    expect(out.sale.status).toBe("voided");
+  });
+
+  it("the second confirmation gets sale_voided and writes nothing", async () => {
+    const s = voidServices(stored({ status: "voided", paid_cents: 0, balance_cents: 0 }));
+    const c = container(fakePg([[]]).pg, s.services);
+    await failsWith(voidSale(c.scope, saleRow({ order_id: null }), "u_mgr", "duplicate", "again"), "sale_voided", 409);
+    expect(s.svc.createPosSalePayments).not.toHaveBeenCalled();
+    expect(s.svc.updatePosSales).not.toHaveBeenCalled();
+    expect(s.svc.updatePosTrays).not.toHaveBeenCalled();
+    expect(voidFacts).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it("a sale that vanished is 404; what the caller already saw short-circuits before any UPDATE", async () => {
+    const gone = container(fakePg([[]]).pg, voidServices(null).services);
+    await failsWith(voidSale(gone.scope, saleRow({ order_id: null }), "u_mgr", "other", null), "sale_not_found", 404);
+    const { pg } = fakePg([]);
+    const c = container(pg, voidServices(stored()).services);
+    await failsWith(voidSale(c.scope, saleRow({ status: "voided" }), "u_mgr", "other", null), "sale_voided", 409);
+    expect(pg.raw).not.toHaveBeenCalled();
+  });
+
+  it("insurance and receivable methods are never refunded; a follow-up failure is logged and rethrown, the mark stands", async () => {
+    const insRow = { ...cardRow, method_code: "insurance", amount_cents: 3000 };
+    const s = voidServices(stored({ status: "voided" }), [cardRow, insRow]);
+    s.svc.listPosTrays.mockRejectedValueOnce(new Error("trays down"));
+    const c = container(fakePg([[{ voided_at: "x" }]]).pg, s.services);
+    await expect(voidSale(c.scope, saleRow({ order_id: null }), "u_mgr", "other", null)).rejects.toThrow("trays down");
+    expect(s.svc.createPosSalePayments).toHaveBeenCalledWith([expect.objectContaining({ method_code: "card", amount_cents: -5000 })]);
+    expect(c.logger.error).toHaveBeenCalledWith(expect.stringContaining("marked voided but a follow-up failed"));
   });
 });

@@ -37,6 +37,11 @@ export interface StaffScope extends ResolvedRole {
   seller?: CounterSeller | null;
   /** When the person was deactivated (HU-04); null = active. Set ⇒ role null. */
   disabled_at: string | null;
+  /**
+   * Last "log out everywhere" (lib/session-control.ts); the guard refuses a
+   * token issued before it with 401 `session_revoked`. null = never revoked.
+   */
+  sessions_revoked_at: string | null;
 }
 
 /**
@@ -68,7 +73,7 @@ export function statusChangeDenied(args: {
  * token has not expired yet, or a deactivated person. The guard answers 403
  * `inactive` to it (role null), and every role-scoped route sees no stores.
  */
-function noAccessScope(userId: string, disabledAt: string | null): StaffScope {
+function noAccessScope(userId: string, disabledAt: string | null, sessionsRevokedAt: string | null = null): StaffScope {
   return {
     role: null,
     establishment_ids: [],
@@ -82,6 +87,7 @@ function noAccessScope(userId: string, disabledAt: string | null): StaffScope {
     seller_code: null,
     seller: null,
     disabled_at: disabledAt,
+    sessions_revoked_at: sessionsRevokedAt,
   };
 }
 
@@ -200,7 +206,9 @@ async function userExists(container: MedusaContainer, userId: string): Promise<b
  * on every /admin request, ARE what closes a person's open sessions — within the
  * TTL_MS cache window (invalidateStaffScope() shortens it to zero on a change
  * made from this process). A no-access result is cached for the same 30 s and
- * no longer: a reactivation must take effect just as fast.
+ * no longer: a reactivation must take effect just as fast. For someone who
+ * keeps their account, `sessions_revoked_at` travels in the scope and the guard
+ * compares it with the token's `iat` (lib/session-control.ts).
  */
 export async function getStaffScope(container: MedusaContainer, userId: string): Promise<StaffScope> {
   const hit = cache.get(userId);
@@ -214,11 +222,13 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
     accessStatusByUser(container, [userId]),
   ]);
   const isOwner = ownerId === userId;
-  const disabledAt = access.get(userId)?.disabled_at ?? null;
+  const status = access.get(userId);
+  const disabledAt = status?.disabled_at ?? null;
+  const sessionsRevokedAt = status?.sessions_revoked_at ?? null;
   // The owner can never be deactivated (statusChangeDenied), so a stray flag on
   // their row is ignored rather than locking the store out of its root admin.
   if (!exists || (disabledAt && !isOwner)) {
-    const scope = noAccessScope(userId, exists ? disabledAt : null);
+    const scope = noAccessScope(userId, exists ? disabledAt : null, exists ? sessionsRevokedAt : null);
     cache.set(userId, { at: Date.now(), scope });
     return scope;
   }
@@ -236,6 +246,7 @@ export async function getStaffScope(container: MedusaContainer, userId: string):
     seller_code: profile?.seller_code ?? seller?.code ?? null,
     seller,
     disabled_at: null,
+    sessions_revoked_at: sessionsRevokedAt,
   };
   cache.set(userId, { at: Date.now(), scope });
   return scope;
