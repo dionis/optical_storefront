@@ -6,7 +6,9 @@ on:
     # both must be checked before they deploy, not only main.
     branches: [main, develop, develop_optical_storepos]
   pull_request:
-    branches: [main, develop]
+    # Also PRs into staging: a branch opened against develop_optical_storepos
+    # must show its checks before it is merged, not after.
+    branches: [main, develop, develop_optical_storepos]
 
 jobs:
   check-config:
