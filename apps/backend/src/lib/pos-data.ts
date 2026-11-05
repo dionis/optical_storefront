@@ -19,6 +19,8 @@ import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } fr
 import { LensFinishError } from "./lens-finish";
 import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
+import { fetchBoardOrder } from "./order-board";
+import { StageError, transitionOrderStage } from "./order-stage-transition";
 import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
 import {
   discountLine,
@@ -1742,13 +1744,135 @@ export async function collectPayment(
   return (await getSale(container, sale.id)) as SaleRow;
 }
 
-/** Hands the glasses over: releases the tray (HU-29). The lab stage is moved on the order board. */
-export async function markDelivered(container: MedusaContainer, sale: SaleRow): Promise<SaleRow> {
+/**
+ * The hand-over as one guarded UPDATE. Two clerks delivering the same sale
+ * (or one double tap) used to both write `delivered_at`; and a sale whose
+ * balance was still owed, or that was voided between the screen and the
+ * click, relied on figures the caller had read earlier. The WHERE makes the
+ * database decide: only a live sale with nothing owed and not yet delivered
+ * takes the stamp. 0 rows = already delivered (idempotent), voided, or owed.
+ */
+export function deliveryClaimPlan(saleId: string): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET delivered_at = now(), updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents <= 0 AND delivered_at IS NULL
+       RETURNING delivered_at`,
+    bindings: [saleId],
+  };
+}
+
+/** The steps the order board still needs to show a sale as delivered: the real events, in order. */
+const DELIVERY_STAGES = ["shipped", "in_transit", "delivered"] as const;
+
+/**
+ * Moves the Medusa order of a delivered sale to `delivered` through the one
+ * stage machine (lib/order-stage-transition.ts), so the order board, the
+ * customer's tracking page and the Sheet agree with the till. A pickup sale
+ * has no fulfillment, and the machine only reaches `delivered` through
+ * `shipped → in_transit → delivered`, so the missing steps are walked in
+ * order: the intermediate ones silently (nothing is "packed" or "on its way"
+ * when the customer is at the counter), the last one with the customer's
+ * usual "delivered" email — the only email the hand-over sends, and only if
+ * they did not opt out (`metadata.notify_email`).
+ *
+ * Must run BEFORE `delivered_at` is written: the board reads that column
+ * (order-board.ts applyPosDelivery) and, once set, answers `next_stages: []`
+ * to every move. Best-effort: a step the machine refuses or that fails is
+ * logged and the delivery stands — the sale is delivered in our records and
+ * the board shows it so from `delivered_at` anyway.
+ */
+async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null): Promise<boolean> {
+  if (!sale.order_id) return false;
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const board = await fetchBoardOrder(container, sale.order_id);
+    if (!board) return false;
+    if (board.terminal === "canceled" || board.terminal === "refunded") return false;
+    if (board.stage === "delivered") return true;
+    const first = DELIVERY_STAGES.findIndex((s) => board.next_stages.includes(s));
+    if (first < 0) {
+      logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} at '${board.stage}' offers none of ${DELIVERY_STAGES.join("/")}; stage left as is.`);
+      return false;
+    }
+    const steps = DELIVERY_STAGES.slice(first);
+    for (const stage of steps) {
+      try {
+        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: stage !== "delivered" });
+      } catch (e) {
+        const why = e instanceof StageError ? `${e.reason}: ${e.message}` : (e as Error).message;
+        logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} not moved to '${stage}': ${why}`);
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    logger.warn(`[pos] sale ${sale.number}: order stage not moved: ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Hands the glasses over (HU-29): stamps `delivered_at` (guarded, see
+ * `deliveryClaimPlan`), releases the tray, moves the order to `delivered` and
+ * audits who handed them. Idempotent: a sale already delivered comes back as
+ * it is, nothing is rewritten. `balance_due` while money is owed — collect it
+ * first, or in the same step with `collectAndDeliver` (HU-32).
+ */
+export async function markDelivered(container: MedusaContainer, sale: SaleRow, opts: { actorId?: string | null } = {}): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
-  await pos(container).updatePosSales({ id: sale.id, delivered_at: new Date() });
+  if (sale.delivered_at) return sale;
+  const actorId = opts.actorId ?? null;
+  // The order first: once delivered_at exists the board refuses every move.
+  const stageMoved = await advanceOrderToDelivered(container, sale, actorId);
+  const plan = deliveryClaimPlan(sale.id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ delivered_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance > 0) throw new PosError("balance_due", 409, { balance: now.balance });
+    return now; // delivered meanwhile: the other hand-over counts
+  }
   await releaseTray(container, sale.id);
+  await recordAudit(container, {
+    actorId,
+    action: "sale.deliver",
+    entity: "pos_sale",
+    entityId: sale.id,
+    establishmentId: sale.establishment_id,
+    after: { delivery: sale.delivery, order_stage_moved: stageMoved },
+  });
   return (await getSale(container, sale.id)) as SaleRow;
+}
+
+/**
+ * Collect the balance and hand over in one step (HU-32): the customer pays
+ * what is left at the counter and leaves with the glasses. `payments` (as
+ * cleaned by the route) is collected first when something is owed —
+ * `collectPayment` is atomic and writes the ledger — then `markDelivered`
+ * runs on the sale as the collection left it. With nothing owed the payments
+ * are ignored and it is a plain delivery. A refused collection stops before
+ * the delivery, so a sale is never delivered with money still due.
+ */
+export async function collectAndDeliver(
+  container: MedusaContainer,
+  sale: SaleRow,
+  payments: CleanedPayments | null,
+  actorId: string | null
+): Promise<{ sale: SaleRow; collected: boolean }> {
+  if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  let current = sale;
+  let collected = false;
+  if (current.balance > 0) {
+    if (!payments || !payments.payments.length) throw new PosError("balance_due", 409, { balance: current.balance });
+    current = await collectPayment(container, current, payments, actorId);
+    collected = true;
+  }
+  return { sale: await markDelivered(container, current, { actorId }), collected };
 }
 
 export const VOID_REASONS = ["customer_changed_mind", "wrong_entry", "price_error", "duplicate", "lab_cannot_make", "other"] as const;

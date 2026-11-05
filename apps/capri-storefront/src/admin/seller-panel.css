@@ -122,3 +122,9 @@
   .sp-foot .sp-err, .sp-foot .sp-note { flex-basis: 100%; }
 }
 @media print { .sp-overlay { display: none !important; } }
+
+/* Meta del mes (HU-40): barra de progreso dentro de la tesela. */
+.sp-goal { gap: 5px; }
+.sp-goal-bar { display: block; height: 6px; border-radius: 999px; background: var(--adm-line); overflow: hidden; }
+.sp-goal-bar i { display: block; height: 100%; border-radius: inherit; background: var(--adm-accent); transition: width .3s ease; }
+.sp-goal.good .sp-goal-bar i { background: var(--adm-green); }

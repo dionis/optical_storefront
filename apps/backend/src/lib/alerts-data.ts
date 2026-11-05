@@ -1,5 +1,6 @@
 import type { INotificationModuleService, Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { SALES_ALERT_MODULE } from "../modules/sales-alert";
 import type SalesAlertModuleService from "../modules/sales-alert/service";
 import { POS_MODULE } from "../modules/pos";
@@ -32,6 +33,12 @@ import { tenant } from "./tenant";
 
 const svc = (c: MedusaContainer) => c.resolve<SalesAlertModuleService>(SALES_ALERT_MODULE);
 const panelUrl = () => `${storefrontOrigin()}/admin?tab=possales`;
+/** Where an immediate alert sends the reader: the sale it is about when it names one, else the sales list. */
+export function alertPanelUrl(ev: Pick<AlertEvent, "event" | "data">, origin = storefrontOrigin()): string {
+  const number = ev.data.number;
+  if (ev.event === "sale.void_requested" && number) return `${origin}/admin?tab=possales&number=${encodeURIComponent(String(number))}`;
+  return `${origin}/admin?tab=possales`;
+}
 
 export interface RuleRow extends RuleLike {
   name: string;
@@ -72,13 +79,17 @@ export async function listRules(container: MedusaContainer): Promise<RuleRow[]> 
  */
 export async function ensureDefaultRules(container: MedusaContainer): Promise<void> {
   const s = svc(container);
-  const any = await s.listAlertRules({}, { take: 1, withDeleted: true });
-  if (any.length) return;
+  const existing = (await s.listAlertRules({}, { take: 1000, withDeleted: true })) as unknown as Array<{ event: string }>;
   const settings = await resolveStoreSettings(container);
   const recipients = settings.admin_notification_emails;
   if (!recipients.length) return;
   const locale = tenant().locale === "en" ? "en" : "es";
-  await s.createAlertRules(defaultRules(recipients, locale).map((r) => ({ ...r, created_by: "system" })) as never);
+  const defaults = defaultRules(recipients, locale);
+  // A default added later (void requested, HU-28) is seeded once on an
+  // existing installation too; a rule the owner deleted is not brought back.
+  const missing = existing.length ? defaults.filter((d) => d.event === "sale.void_requested" && !existing.some((r) => r.event === d.event)) : defaults;
+  if (!missing.length) return;
+  await s.createAlertRules(missing.map((r) => ({ ...r, created_by: "system" })) as never);
 }
 
 export async function createRule(container: MedusaContainer, rule: CleanRule, actorId: string): Promise<RuleRow> {
@@ -140,7 +151,7 @@ export async function emitAlert(container: MedusaContainer, ev: AlertEvent): Pro
         }
         if (rule.mode !== "immediate") continue;
         const locale = resolveEmailLocale(rule.locale);
-        const error = await send(container, email, renderAlertEmail(rule, await withStoreColors(container, [{ event: ev.event, data: { ...ev.data, is_web: ev.is_web } }]), locale, panelUrl()), rule.id);
+        const error = await send(container, email, renderAlertEmail(rule, await withStoreColors(container, [{ event: ev.event, data: { ...ev.data, is_web: ev.is_web } }]), locale, alertPanelUrl(ev)), rule.id);
         await s.updateAlertDeliveries({ id: row.id, status: error ? "failed" : "sent", error, sent_at: error ? null : new Date() } as never);
       }
     }
@@ -149,38 +160,92 @@ export async function emitAlert(container: MedusaContainer, ev: AlertEvent): Pro
   }
 }
 
-/** Sales of the period, by store and seller, for the digest (HU-43). */
-async function digestData(container: MedusaContainer, rule: RuleRow, since: Date, now: Date, tz: string): Promise<DigestData> {
-  const pos = container.resolve<PosModuleService>(POS_MODULE);
-  const where: Record<string, unknown> = { created_at: { $gte: since, $lte: now } };
-  if (rule.establishment_ids?.length) where.establishment_id = rule.establishment_ids;
-  if (rule.seller_ids?.length) where.seller_id = rule.seller_ids;
-  const sales = await pos.listPosSales(where as never, { take: 10000 });
-  const all = await listEstablishments(container);
-  const stores = new Map(all.map((s) => [s.id, `${s.code} · ${s.name}`]));
-  const colors = new Map(all.map((s) => [s.id, s.color]));
-  const byStore = new Map<string, { label: string; color: string | null; count: number; total: number; voided: number }>();
-  const bySeller = new Map<string, { label: string; count: number; total: number }>();
-  let count = 0;
-  let total = 0;
-  for (const s of sales) {
-    const st = byStore.get(s.establishment_id) ?? { label: stores.get(s.establishment_id) ?? s.establishment_id, color: colors.get(s.establishment_id) ?? null, count: 0, total: 0, voided: 0 };
-    if (s.status === "voided") { st.voided++; byStore.set(s.establishment_id, st); continue; }
-    const amount = Number(s.total_cents) / 100;
-    st.count++; st.total += amount; byStore.set(s.establishment_id, st);
-    const key = s.seller_code || s.seller_id || "—";
-    const se = bySeller.get(key) ?? { label: key, count: 0, total: 0 };
-    se.count++; se.total += amount; bySeller.set(key, se);
-    count++; total += amount;
+/** One order of the digest period, as `sale_fact` aggregates it (one row per order). */
+export interface DigestOrderRow {
+  order_id: string;
+  channel: string;
+  establishment_id: string | null;
+  seller_id: string | null;
+  seller_code: string | null;
+  status: string;
+  total_cents: string | number;
+}
+
+/**
+ * The orders of a digest period from `sale_fact` (one row per order, lines
+ * summed in SQL): till sales always; web orders only when the rule asks for
+ * them (`include_web`), the same opt-in `sale.created` applies. Stores and
+ * sellers narrow it like every other rule. Capped: a digest is a summary.
+ */
+export function digestOrdersQuery(pg: Knex, rule: Pick<RuleRow, "establishment_ids" | "seller_ids" | "conditions">, since: Date, now: Date): Knex.QueryBuilder {
+  const q = pg("sale_fact")
+    .whereNull("deleted_at")
+    .where("sold_at", ">=", since)
+    .where("sold_at", "<=", now);
+  if (!rule.conditions?.include_web) q.where("channel", "pos");
+  if (rule.establishment_ids?.length) {
+    // A store filter keeps the web orders the rule asked for: they belong to no store.
+    const ids = rule.establishment_ids;
+    if (rule.conditions?.include_web) q.where((w) => { w.whereIn("establishment_id", ids).orWhere("channel", "web"); });
+    else q.whereIn("establishment_id", ids);
   }
-  const round = (v: number) => Math.round(v * 100) / 100;
+  if (rule.seller_ids?.length) q.whereIn("seller_id", rule.seller_ids);
+  return q
+    .select("order_id", "channel", "establishment_id", "seller_id", "seller_code", "status")
+    .sum({ total_cents: "total_cents" })
+    .groupBy("order_id", "channel", "establishment_id", "seller_id", "seller_code", "status")
+    .limit(DIGEST_MAX_ORDERS);
+}
+
+/** More orders than this in one period and the digest is partial (a summary, not a statement). */
+export const DIGEST_MAX_ORDERS = 20000;
+
+/**
+ * Pure: the digest figures from the period's orders. Sums are integer cents
+ * until the end; a voided order counts in its store's `voided` and nowhere
+ * else; web orders fall under one "online store" row (`web: true`, the email
+ * names it in its language). Sellers are keyed by code, else by id.
+ */
+export function digestFigures(
+  rows: DigestOrderRow[],
+  stores: Map<string, { label: string; color: string | null }>
+): Pick<DigestData, "stores" | "sellers" | "count" | "total"> {
+  const byStore = new Map<string, { label: string; color: string | null; web: boolean; count: number; cents: number; voided: number }>();
+  const bySeller = new Map<string, { label: string; count: number; cents: number }>();
+  let count = 0;
+  let cents = 0;
+  for (const r of rows) {
+    const web = r.channel === "web" || !r.establishment_id;
+    const key = web ? "web" : String(r.establishment_id);
+    const known = web ? null : stores.get(key);
+    const st = byStore.get(key) ?? { label: web ? "" : known?.label ?? key, color: web ? null : known?.color ?? null, web, count: 0, cents: 0, voided: 0 };
+    byStore.set(key, st);
+    if (r.status === "voided") { st.voided++; continue; }
+    const amount = Math.round(Number(r.total_cents) || 0);
+    st.count++; st.cents += amount;
+    const sk = r.seller_code || r.seller_id || "—";
+    const se = bySeller.get(sk) ?? { label: sk, count: 0, cents: 0 };
+    se.count++; se.cents += amount; bySeller.set(sk, se);
+    count++; cents += amount;
+  }
+  const dollars = (c: number) => c / 100;
+  return {
+    stores: [...byStore.values()].map(({ cents: c, ...s }) => ({ ...s, total: dollars(c) })),
+    sellers: [...bySeller.values()].sort((a, b) => b.cents - a.cents).map(({ cents: c, ...s }) => ({ ...s, total: dollars(c) })),
+    count,
+    total: dollars(cents),
+  };
+}
+
+/** Sales of the period, by store and seller, for the digest (HU-43). Exported for the tests. */
+export async function digestData(container: MedusaContainer, rule: RuleRow, since: Date, now: Date, tz: string): Promise<DigestData> {
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const [rows, all] = await Promise.all([digestOrdersQuery(pg, rule, since, now) as Promise<DigestOrderRow[]>, listEstablishments(container)]);
+  const stores = new Map(all.map((s) => [s.id, { label: `${s.code} · ${s.name}`, color: s.color }]));
   return {
     since: since.toLocaleString(rule.locale === "en" ? "en-US" : "es-US", { timeZone: tz, dateStyle: "medium", timeStyle: "short" }),
     date: localParts(now, tz).date,
-    stores: [...byStore.values()].map((s) => ({ ...s, total: round(s.total) })),
-    sellers: [...bySeller.values()].sort((a, b) => b.total - a.total).map((s) => ({ ...s, total: round(s.total) })),
-    count,
-    total: round(total),
+    ...digestFigures(rows, stores),
   };
 }
 
@@ -205,7 +270,8 @@ export async function runAlertsJob(container: MedusaContainer, now = new Date())
         const stores = (await listEstablishments(container)).filter((st) => st.is_active && (!rule.establishment_ids?.length || rule.establishment_ids.includes(st.id)));
         const pos = container.resolve<PosModuleService>(POS_MODULE);
         for (const st of stores) {
-          const [last] = await pos.listPosSales({ establishment_id: st.id } as never, { take: 1, order: { created_at: "DESC" } });
+          // The latest LIVE sale: a voided one is not a sale the store made today.
+          const [last] = await pos.listPosSales({ establishment_id: st.id, status: { $ne: "voided" } } as never, { take: 1, order: { created_at: "DESC" } });
           const lastAt = last ? new Date(last.created_at as unknown as string) : null;
           if (storeIdle({ now, tz, idleAfter: after, lastSaleAt: lastAt })) {
             await emitAlert(container, {

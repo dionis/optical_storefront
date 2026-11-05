@@ -21,6 +21,23 @@ import AdminFrameCard from "./AdminFrameCard.jsx";
 /** Lentes de ejemplo para la vista previa: un monofocal típico. */
 const SAMPLE_LENSES = 100;
 
+/** Qué toca una regla del historial: el modelo, o todas las monturas / estuches / todo. */
+function histWhat(h, t) {
+  if (h.target) return h.product_title || h.target;
+  if (h.scope === "frame") return t("adm.pricing.hist.allFrames");
+  if (h.scope === "case") return t("adm.pricing.hist.allCases");
+  return t("adm.pricing.hist.everything");
+}
+
+/** El valor de una regla, escrito según su modo (porcentaje, monto por venta, precio, mínimo). */
+function histValue(h, t, fmt) {
+  const v = Number(h.value);
+  if (h.mode === "percent") return t("adm.pricing.hist.percent", { v: v > 0 ? `+${v}` : v });
+  if (h.mode === "delta") return t("adm.pricing.hist.delta", { v: fmt(v) });
+  if (h.mode === "min" && h.scope === "all") return t("adm.pricing.hist.pctOfList", { v });
+  return fmt(v);
+}
+
 /**
  * Las reglas y el cálculo viven en el servidor; esta pantalla solo los muestra
  * y los edita. Lo que se ve en "Vista previa" sale de la misma función que
@@ -249,18 +266,59 @@ export default function StorePricing({ store, onClose }) {
             )}
           </form>
 
-          {/* Historial */}
+          {/* Historial (HU-15): cuándo · quién · qué · antes → después · tipo.
+              Todo viene resuelto del servidor (nombres, modelo, valor anterior);
+              aquí solo se pinta. Las reglas de la cadena que esta tienda hereda
+              llegan con `chain: true` y se marcan. */}
           <details className="adm-pricing-block">
             <summary><h4 style={{ display: "inline" }}>{t("adm.pricing.historyTitle", { n: data.history.length })}</h4></summary>
-            <ul className="adm-pricing-history">
-              {data.history.map((h) => (
-                <li key={h.id} className={h.valid_to ? "closed" : ""}>
-                  <span>{shortDate(h.valid_from, lang)}</span>
-                  <span>{h.mode === "min" ? (h.scope === "all" ? t("adm.pricing.histFloor", { v: h.value }) : t("adm.pricing.histMin", { v: fmt(h.value) })) : h.scope === "all" ? adjText({ mode: h.mode, value: h.value }) : t("adm.pricing.histExact", { v: fmt(h.value) })}</span>
-                  <span className="muted">{h.valid_to ? t("adm.pricing.histUntil", { d: shortDate(h.valid_to, lang) }) : t("adm.pricing.histCurrent")}</span>
-                </li>
-              ))}
-            </ul>
+            {!data.history.length && <p className="adm-sub">{t("adm.pricing.hist.empty")}</p>}
+            {data.history.length > 0 && (
+              <table className="adm-table responsive" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>{t("adm.pricing.hist.when")}</th>
+                    <th>{t("adm.pricing.hist.who")}</th>
+                    <th>{t("adm.pricing.hist.what")}</th>
+                    <th>{t("adm.pricing.hist.change")}</th>
+                    <th>{t("adm.pricing.hist.kind")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.history.map((h) => {
+                    const who = h.created_by_name || (h.created_by ? String(h.created_by).slice(-6) : t("adm.pricing.hist.unknownUser"));
+                    const closer = h.closed_by_name || (h.closed_by ? String(h.closed_by).slice(-6) : t("adm.pricing.hist.unknownUser"));
+                    return (
+                      <tr key={h.id} className={h.valid_to ? "closed" : ""}>
+                        <td data-label={t("adm.pricing.hist.when")}>{shortDate(h.valid_from, lang)}</td>
+                        <td data-label={t("adm.pricing.hist.who")}>{who}</td>
+                        <td data-label={t("adm.pricing.hist.what")}>
+                          {h.chain && <span className="adm-chip" title={t("adm.pricing.hist.chainHint")}>{t("adm.pricing.hist.chain")} </span>}
+                          {histWhat(h, t)}
+                          {h.product_sku && <> <code className="muted">{h.product_sku}</code></>}
+                        </td>
+                        <td data-label={t("adm.pricing.hist.change")}>
+                          <span className="muted">{h.previous_value == null ? t("adm.pricing.hist.none") : histValue({ ...h, mode: h.previous_mode || h.mode, value: h.previous_value }, t, fmt)}</span>
+                          {" → "}
+                          <b>{histValue(h, t, fmt)}</b>
+                          {h.valid_to && (
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              {h.replaced_by
+                                ? t("adm.pricing.hist.replacedOn", { d: shortDate(h.valid_to, lang) })
+                                : t("adm.pricing.hist.removedBy", { d: shortDate(h.valid_to, lang), who: closer })}
+                            </div>
+                          )}
+                        </td>
+                        <td data-label={t("adm.pricing.hist.kind")}>
+                          {t(h.family === "adjustment" ? "adm.pricing.hist.family.adjustment" : h.family === "price" ? "adm.pricing.hist.family.price" : h.family === "minimum" ? "adm.pricing.hist.family.minimum" : "adm.pricing.hist.family.other")}
+                          {!h.valid_to && <> · <span className="muted">{t("adm.pricing.hist.current")}</span></>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </details>
         </>
       )}

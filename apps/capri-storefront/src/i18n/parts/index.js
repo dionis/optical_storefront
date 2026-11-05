@@ -29,5 +29,8 @@ import storeOrders from "./store-orders.js";
 import lensFinish from "./lens-finish.js";
 import posFlow from "./pos-flow.js";
 import posRules from "./pos-rules.js";
+import posOps from "./pos-ops.js";
+import pricingAcross from "./pricing-across.js";
+import auth from "./auth.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps];

@@ -78,6 +78,42 @@ vacía para la persona afectada). Antes, un usuario eliminado con un token aún
 válido quedaba sin filas de rol y la regla «sin filas = admin anterior a los
 roles» lo convertía en superadmin fantasma hasta que el token caducara.
 
+## Recuperar la contraseña uno mismo (HU-03)
+
+En el login hay «¿Olvidaste tu contraseña?». El flujo es el de Medusa, sin
+tabla ni ruta propia:
+
+1. El panel manda `POST /auth/user/emailpass/reset-password { identifier }`
+   (por el proxy `/medusa`). Medusa responde **201 siempre** y solo emite
+   `auth.password_reset` si la identidad existe; el panel muestra «Si el correo
+   existe, te enviamos un enlace» en todos los casos (no se filtra qué cuentas
+   hay).
+2. El subscriber `src/subscribers/auth-password-reset.ts`
+   (`src/lib/password-reset.ts`) busca el usuario por el correo, y **no envía
+   nada** si no hay usuario del panel con esa dirección o si la persona está
+   desactivada (`staff_profile.disabled_at`: quien fue dado de baja no se
+   readmite solo). Si procede, manda el correo
+   (`src/lib/email/password-reset-email.ts`, es/en, misma plantilla que los
+   demás) con el enlace `${STOREFRONT_URL}/admin?reset=<token>&email=…`. El
+   token nunca se escribe en el log. Queda en Auditoría como
+   `password.reset_requested` (sin actor; `after.delivered` dice si salió el
+   correo).
+3. El enlace abre el formulario «Nueva contraseña» (mín. 8, dos veces). El
+   panel manda `POST /auth/user/emailpass/update { email, password }` con
+   `Authorization: Bearer <token>`. El token vale **15 minutos y un solo uso**
+   (constante de Medusa, `RESET_TOKEN_TTL_MINUTES` en `password-reset.ts`), y
+   pedir uno nuevo invalida el anterior; un 401 es «el enlace caducó o ya se
+   usó». Al guardar, el panel limpia la URL y vuelve al login con la nota de
+   éxito.
+
+Límites (`src/lib/security.ts`, `src/api/middlewares.ts`): 5 peticiones de
+enlace por IP y por correo cada 15 min (`PASSWORD_RESET_RATE_LIMIT`), 10 envíos
+de contraseña nueva por IP cada 15 min (`PASSWORD_RESET_UPDATE_RATE_LIMIT`).
+`/auth/user/emailpass/register` sigue cerrado. Si la persona tenía una
+contraseña temporal (`must_change_password`), la marca no se borra por este
+camino: al entrar, el candado de primer acceso le pedirá cambiarla otra vez.
+Claves de texto en `src/i18n/parts/auth.js`.
+
 ## QA
 
 Playwright (`chromium` del sistema) con `VITE_ADMIN_DEMO_LOGIN=true` para la
@@ -125,3 +161,8 @@ Pestaña **Panel de ventas** (`SalesBoard.jsx`). Cada usuario ve lo suyo: dueño
 **Ganancia** = ventas sin impuestos − costo de monturas, lentes y fijos por pedido (reglas de Costos) − comisión del cobro − comisión del vendedor. No resta la renta ni otros gastos del mes: esos siguen en el resultado de cada tienda. Si a una montura o lente le falta su costo, el panel avisa, porque la ganancia mostrada sería mayor que la real.
 
 Tras desplegar, correr una vez `npx medusa exec ./src/scripts/backfill-sale-fact.ts` para que las ventas web anteriores hechas con enlace de vendedor aparezcan bajo ese vendedor.
+
+## Precios: un modelo en todas las tiendas (HU-13) e historial con quién y antes → después (HU-15), 5-nov-2026
+
+- **HU-13 — `GET /admin/pricing/frames/across?q=<texto o SKU>`** (`src/lib/pricing-across.ts`, bloque «Un modelo en todas las tiendas» en Precios y costos → Monturas, `FramesSection.jsx` → `AcrossBlock`). Hasta 20 modelos publicados cuyo título o el SKU de cualquier color contiene `q`; cada fila trae `base_cents`, el precio del maestro (`master_price_cents`, `master_source` `owner|band|base`) y una celda por tienda **activa** `{ establishment_id, code, name, color, price_cents, source, exposed }`. Las celdas salen de `storeLinePrice` (la función de la caja) y el maestro de `catalogSellingPrices` (la del panel de costos): nunca una segunda fórmula. `source` = `exact` (precio exacto de la tienda) · `band` (lo movió el suelo/techo) · `adjusted` (ajuste general) · `base`; `exposed` viene del surtido por tienda (`isExposed`) y el panel pinta «oculto» sin esconder el precio. El costo (`cost_cents` en la fila = la cadena; en la celda = lo que paga esa tienda, variación incluida) solo viaja con «Ver costos»/«Gestionar costos» (`frameCostsDenied`, el mismo filtro de `frames/costs`); sin permiso se quita en el servidor (`redactAcrossCosts`) y la columna no aparece. Solo dueño/superadmin (sin entrada en la lista de roles restringidos). Clic en una celda = elegir esa tienda en el selector global (`setActiveStore`), con lo que el panel entero pasa a sus precios. Tests puros: `tests/pricing-across.test.ts`.
+- **HU-15 — historial de precios con quién, cuándo, antes y después.** `GET /admin/store-pricing/:id` → `history[]` enriquecido en `lib/store-pricing-data.ts` (`pairPreviousValues` puro + `enrichRuleHistory` en lotes: una consulta de usuarios, una de perfiles y una de productos para toda la lista, nunca por fila): `created_by_name` / `closed_by_name` (nombre de perfil, si no nombre y apellido, si no la parte local del correo), `product_title` / `product_sku` en reglas de un modelo, `family` (`adjustment|price|minimum`), `previous_rule_id/value/mode` (la regla de la misma tienda+alcance+modelo+familia cerrada en el instante en que se abrió esta, ±2 s, que es como escribe `replaceRule`) y `replaced_by` (null en una cerrada = se quitó, no se sustituyó). **Incluye las reglas de la cadena** (`establishment_id` null: `/admin/pricing/frames/rule` y los precios globales del dueño) marcadas `chain: true`, porque la tienda las hereda; es una consulta más. Tiendas → Precios (`StorePricing.jsx`) pinta la tabla Cuándo · Quién · Qué (modelo + SKU, o «Todas las monturas/estuches», con chip «Cadena») · Antes → Después (y «Quitado el … por …» cuando se retiró) · Tipo. Textos en `src/i18n/parts/pricing-across.js`. Tests: `tests/store-pricing.test.ts` (bloque `pairPreviousValues`).

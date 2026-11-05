@@ -342,3 +342,29 @@ export async function saveFrameCost({ sku, costUsd, store = "all" }) {
   invalidateCache(COSTS_PATH);
   return data;
 }
+
+/* ──────────── Un modelo en todas las tiendas (HU-13) ────────────
+   «Como dueño, quiero ver un producto con su precio en todas las tiendas.»
+   Todo lo demás del panel se lee tienda a tienda; esto se lee MODELO a modelo:
+     GET /admin/pricing/frames/across?q=<texto o SKU>
+       → { q, limit, truncated, cost_access,
+           stores:[{ id, code, name, color }],
+           rows:[{ product_id, title, brand, thumbnail, sku, skus, is_case,
+                   base_cents, master_price_cents, master_source, cost_cents?,
+                   stores:[{ establishment_id, code, name, color,
+                             price_cents, source, exposed, cost_cents? }] }] }
+   Cada celda es lo que cobra la caja de ESA tienda (la misma función del
+   POS), con `source` = por qué ("exact" | "band" | "adjusted" | "base") y
+   `exposed` = si la tienda vende el modelo. `cost_cents` solo viene con
+   permiso de costos; sin él la clave no existe (se quita en el servidor).    */
+
+const ACROSS_PATH = "/admin/pricing/frames/across";
+
+/** Sin caché: es una búsqueda, y el precio que se enseña tiene que ser el de ahora. */
+export async function fetchPricingAcross(q) {
+  try {
+    return await adminFetch(ACROSS_PATH, { query: { q: String(q || "").trim() } });
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}

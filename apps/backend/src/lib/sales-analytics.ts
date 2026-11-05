@@ -113,6 +113,22 @@ export async function salesSummary(container: MedusaContainer, f: AnalyticsFilte
   return { current, previous, balance_due: Number(b?.v ?? 0) / 100, insurance_due: Number(i?.v ?? 0) / 100 };
 }
 
+/**
+ * Net (`total − tax`, integer cents) per panel user over a range of local
+ * days — the base of the commission and of the monthly goal (HU-40), in one
+ * query for every user asked. Users with no line get no entry.
+ */
+export async function netByUser(container: MedusaContainer, f: Pick<AnalyticsFilter, "from" | "to" | "stores">, userIds: string[]): Promise<Map<string, number>> {
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+  const pg = pgOf(container);
+  const rows = (await applyFilter(pg("sale_fact"), { ...f, sellers: ids })
+    .select("sale_fact.seller_id")
+    .select(pg.raw("COALESCE(SUM(total_cents - tax_cents), 0)::bigint AS net"))
+    .groupBy("sale_fact.seller_id")) as Array<{ seller_id: string; net: string | number }>;
+  return new Map(rows.map((r) => [String(r.seller_id), Number(r.net) || 0]));
+}
+
 const COLUMN: Record<Exclude<Breakdown, "payment_method" | "establishment">, string> = {
   seller: "seller_code",
   product: "product_id",

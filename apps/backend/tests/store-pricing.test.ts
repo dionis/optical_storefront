@@ -6,6 +6,7 @@ import {
   storeLinePrice,
   type PriceRuleLike,
 } from "../src/lib/store-pricing";
+import { familyOfMode, pairPreviousValues, type PriceRuleRow } from "../src/lib/store-pricing-data";
 
 const NOW = new Date("2026-10-27T12:00:00Z");
 const rule = (over: Partial<PriceRuleLike>): PriceRuleLike => ({
@@ -116,5 +117,98 @@ describe("validation", () => {
     expect(exactPriceDenied("lens", "SKU-1", 80)).toBe("bad_scope");
     expect(exactPriceDenied("frame", " ", 80)).toBe("bad_target");
     expect(exactPriceDenied("frame", "SKU-1", -1)).toBe("bad_value");
+  });
+});
+
+// ── HU-15: the history's "before → after" ────────────────────────────────────
+
+
+const hist = (over: Partial<PriceRuleRow>): PriceRuleRow => ({
+  id: "r0",
+  establishment_id: "est_2",
+  scope: "frame",
+  target: "prod_1",
+  mode: "override",
+  value: 90,
+  valid_from: "2026-10-01T00:00:00Z",
+  valid_to: null,
+  source: "panel",
+  created_by: "usr_a",
+  closed_by: null,
+  ...over,
+});
+
+describe("pairPreviousValues (who changed what, before → after)", () => {
+  it("pairs a rule with the one closed at the instant it opened", () => {
+    const rows = [
+      hist({ id: "r2", value: 80, valid_from: "2026-10-20T10:00:00Z" }),
+      hist({ id: "r1", value: 90, valid_from: "2026-10-01T00:00:00Z", valid_to: "2026-10-20T10:00:00Z", closed_by: "usr_b" }),
+    ];
+    const [after, before] = pairPreviousValues(rows);
+    expect(after).toMatchObject({ id: "r2", previous_rule_id: "r1", previous_value: 90, previous_mode: "override", replaced_by: null, family: "price" });
+    expect(before).toMatchObject({ id: "r1", previous_rule_id: null, previous_value: null, replaced_by: "r2" });
+  });
+
+  it("tolerates a few milliseconds between close and open, not more", () => {
+    const close = [
+      hist({ id: "n", valid_from: "2026-10-20T10:00:00.900Z" }),
+      hist({ id: "o", valid_to: "2026-10-20T10:00:00.000Z" }),
+    ];
+    expect(pairPreviousValues(close)[0].previous_rule_id).toBe("o");
+    const apart = [
+      hist({ id: "n", valid_from: "2026-10-20T10:00:10Z" }),
+      hist({ id: "o", valid_to: "2026-10-20T10:00:00Z" }),
+    ];
+    expect(pairPreviousValues(apart)[0].previous_rule_id).toBeNull();
+  });
+
+  it("a rule removed (closed, nothing opened) has no successor", () => {
+    const rows = [hist({ id: "r1", valid_to: "2026-10-20T10:00:00Z", closed_by: "usr_b" })];
+    expect(pairPreviousValues(rows)[0]).toMatchObject({ replaced_by: null, previous_rule_id: null });
+  });
+
+  it("never pairs across stores, scopes, targets or families", () => {
+    const at = "2026-10-20T10:00:00Z";
+    const rows = [
+      hist({ id: "new", valid_from: at }),
+      hist({ id: "other_store", establishment_id: "est_3", valid_to: at }),
+      hist({ id: "other_target", target: "prod_2", valid_to: at }),
+      hist({ id: "case", scope: "case", valid_to: at }),
+      hist({ id: "minimum", mode: "min", valid_to: at }),
+      hist({ id: "chain", establishment_id: null, valid_to: at }),
+    ];
+    const out = pairPreviousValues(rows);
+    expect(out[0].previous_rule_id).toBeNull();
+    expect(out.slice(1).every((r) => r.replaced_by === null)).toBe(true);
+  });
+
+  it("an adjustment switching from percent to a fixed amount is one family", () => {
+    const at = "2026-10-20T10:00:00Z";
+    const rows = [
+      hist({ id: "d", target: null, mode: "delta", value: 20, valid_from: at }),
+      hist({ id: "p", target: null, mode: "percent", value: 10, valid_to: at }),
+    ];
+    expect(pairPreviousValues(rows)[0]).toMatchObject({ previous_rule_id: "p", previous_mode: "percent", previous_value: 10, family: "adjustment" });
+  });
+
+  it("keeps the input order and each closed rule is claimed once", () => {
+    const at = "2026-10-20T10:00:00Z";
+    const rows = [
+      hist({ id: "n1", valid_from: at }),
+      hist({ id: "n2", valid_from: at, value: 70 }),
+      hist({ id: "o", valid_to: at }),
+    ];
+    const out = pairPreviousValues(rows);
+    expect(out.map((r) => r.id)).toEqual(["n1", "n2", "o"]);
+    expect(out.filter((r) => r.previous_rule_id === "o")).toHaveLength(1);
+    expect(out[2].replaced_by).toBe("n1");
+  });
+
+  it("knows the three families and nothing else", () => {
+    expect(familyOfMode("percent")).toBe("adjustment");
+    expect(familyOfMode("delta")).toBe("adjustment");
+    expect(familyOfMode("override")).toBe("price");
+    expect(familyOfMode("min")).toBe("minimum");
+    expect(familyOfMode("weird")).toBeNull();
   });
 });

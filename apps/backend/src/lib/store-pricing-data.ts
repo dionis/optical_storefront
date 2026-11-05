@@ -1,8 +1,9 @@
-import type { MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { IUserModuleService, MedusaContainer } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { upsertVariantPricesWorkflow } from "@medusajs/medusa/core-flows";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import { recordAudit } from "./audit";
+import { profilesByUser } from "./staff-profile-data";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import { globalPriceOverrides, type PriceRuleLike, type RuleMode, type RuleScope } from "./store-pricing";
 import {
@@ -68,13 +69,205 @@ export async function openRules(container: MedusaContainer, establishmentIds: st
   return rows.map((r) => toRow(r as unknown as Record<string, unknown>));
 }
 
-/** Every rule of one store, newest first: the store's price history. */
-export async function ruleHistory(container: MedusaContainer, establishmentId: string, take = 200): Promise<PriceRuleRow[]> {
+/**
+ * Every rule of one store, newest first: the store's price history. With
+ * `establishmentId` null, the CHAIN's rules (the master every store inherits:
+ * `/admin/pricing/frames/rule` and the owner's global prices).
+ */
+export async function ruleHistory(container: MedusaContainer, establishmentId: string | null, take = 200): Promise<PriceRuleRow[]> {
   const rows = await svc(container).listStorePriceRules(
     { establishment_id: establishmentId },
     { take, order: { created_at: "DESC" } }
   );
   return rows.map((r) => toRow(r as unknown as Record<string, unknown>));
+}
+
+// ── History with "who, what, before → after" (HU-15) ─────────────────────────
+
+/** Which family a stored mode belongs to; null for a mode this code does not know. */
+export function familyOfMode(mode: string): ModeFamily | null {
+  for (const [family, modes] of Object.entries(MODE_FAMILIES) as Array<[ModeFamily, readonly string[]]>) {
+    if (modes.includes(mode)) return family;
+  }
+  return null;
+}
+
+export interface PriceRuleHistoryEntry extends PriceRuleRow {
+  family: ModeFamily | null;
+  /** The rule this one replaced (same store, scope, target and family, closed when this one opened); null = first of its kind. */
+  previous_rule_id: string | null;
+  previous_value: number | null;
+  previous_mode: string | null;
+  /** The rule that replaced this one; null while it is open, or when it was simply removed. */
+  replaced_by: string | null;
+}
+
+/**
+ * `replaceRule` closes the open rule and opens the next one with the SAME
+ * instant, so "closed at the new rule's valid_from" is the pairing. A small
+ * tolerance absorbs a clock that rounds to the millisecond on one side.
+ */
+export const PAIRING_TOLERANCE_MS = 2000;
+
+const histKey = (r: PriceRuleLike) => `${r.establishment_id ?? ""}|${r.scope}|${r.target ?? ""}|${familyOfMode(r.mode) ?? r.mode}`;
+const ms = (v: string | Date | null | undefined): number | null => {
+  if (v == null) return null;
+  const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * For every rule, the one it replaced — the "before" of "before → after". PURE.
+ *
+ * Within one key (store, scope, target, family) a rule's predecessor is the
+ * closed rule whose `valid_to` falls at its `valid_from` (±tolerance); the
+ * closest one when a race left two. A closed rule with no successor was
+ * removed, not replaced: `replaced_by` stays null and its `closed_by` /
+ * `valid_to` say who removed it and when. Order of the input is kept.
+ */
+export function pairPreviousValues<T extends PriceRuleRow>(rows: readonly T[]): Array<T & PriceRuleHistoryEntry> {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = histKey(r);
+    const g = groups.get(k);
+    if (g) g.push(r);
+    else groups.set(k, [r]);
+  }
+  const previousOf = new Map<string, T>();
+  const successorOf = new Map<string, T>();
+  for (const group of groups.values()) {
+    for (const r of group) {
+      const from = ms(r.valid_from);
+      if (from == null) continue;
+      let best: T | null = null;
+      let bestGap = Infinity;
+      for (const c of group) {
+        if (c.id === r.id) continue;
+        const to = ms(c.valid_to);
+        if (to == null) continue;
+        const gap = Math.abs(to - from);
+        if (gap <= PAIRING_TOLERANCE_MS && gap < bestGap && !successorOf.has(c.id)) {
+          best = c;
+          bestGap = gap;
+        }
+      }
+      if (best) {
+        previousOf.set(r.id, best);
+        successorOf.set(best.id, r);
+      }
+    }
+  }
+  return rows.map((r) => {
+    const prev = previousOf.get(r.id) ?? null;
+    return {
+      ...r,
+      family: familyOfMode(r.mode),
+      previous_rule_id: prev ? prev.id : null,
+      previous_value: prev ? Number(prev.value) : null,
+      previous_mode: prev ? prev.mode : null,
+      replaced_by: successorOf.get(r.id)?.id ?? null,
+    };
+  });
+}
+
+export interface PriceRuleHistoryView extends PriceRuleHistoryEntry {
+  /** Who opened / closed the rule, by name (display name, else first + last, else the email's local part). */
+  created_by_name: string | null;
+  closed_by_name: string | null;
+  /** The model a product-scoped rule is about; null for a rule on every frame / case. */
+  product_title: string | null;
+  product_sku: string | null;
+  /** True for a chain rule (no store): the master this store inherits. */
+  chain: boolean;
+}
+
+/** Display names of panel users, one query for the users and one for their profiles. */
+async function peopleNames(container: MedusaContainer, ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out = new Map<string, string>();
+  if (!unique.length) return out;
+  const users = container.resolve<IUserModuleService>(Modules.USER);
+  const [rows, profiles] = await Promise.all([
+    users.listUsers({ id: unique }, { take: unique.length }).catch(() => []),
+    profilesByUser(container, unique).catch(() => new Map<string, { display_name?: string | null }>()),
+  ]);
+  const byId = new Map(rows.map((u) => [u.id, u]));
+  for (const id of unique) {
+    const u = byId.get(id);
+    const display = profiles.get(id)?.display_name;
+    const name =
+      (display && String(display).trim()) ||
+      (u ? [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || String(u.email ?? "").split("@")[0] : "");
+    if (name) out.set(id, name);
+  }
+  return out;
+}
+
+/** Title and SKU (the first colour's) of the given products, one query; empty on failure. */
+async function productLabels(container: MedusaContainer, ids: string[]): Promise<Map<string, { title: string; sku: string | null }>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out = new Map<string, { title: string; sku: string | null }>();
+  if (!unique.length) return out;
+  try {
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const { data } = await query.graph({
+      entity: "product",
+      fields: ["id", "title", "variants.sku"],
+      filters: { id: unique },
+    });
+    for (const p of (data ?? []) as Array<Record<string, any>>) {
+      const sku = ((p.variants ?? []) as Array<{ sku?: string | null }>).find((v) => v.sku)?.sku ?? null;
+      out.set(String(p.id), { title: String(p.title ?? ""), sku });
+    }
+  } catch {
+    return out;
+  }
+  return out;
+}
+
+/**
+ * The history as the panel shows it: who, what and before → after, resolved
+ * in THREE queries for the whole list (users, profiles, products), never one
+ * per row. A name or a product that cannot be resolved stays null and the
+ * panel falls back to the id.
+ */
+export async function enrichRuleHistory(
+  container: MedusaContainer,
+  rows: readonly PriceRuleRow[]
+): Promise<PriceRuleHistoryView[]> {
+  const paired = pairPreviousValues(rows);
+  const [names, products] = await Promise.all([
+    peopleNames(container, paired.flatMap((r) => [r.created_by ?? "", r.closed_by ?? ""])),
+    productLabels(container, paired.map((r) => r.target ?? "")),
+  ]);
+  return paired.map((r) => {
+    const product = r.target ? products.get(r.target) ?? null : null;
+    return {
+      ...r,
+      created_by_name: r.created_by ? names.get(r.created_by) ?? null : null,
+      closed_by_name: r.closed_by ? names.get(r.closed_by) ?? null : null,
+      product_title: product ? product.title : null,
+      product_sku: product ? product.sku : null,
+      chain: r.establishment_id == null,
+    };
+  });
+}
+
+/**
+ * One store's history WITH the chain's (the rules it inherits), newest first,
+ * enriched. Two list queries plus the three of `enrichRuleHistory`.
+ */
+export async function storeRuleHistoryView(
+  container: MedusaContainer,
+  establishmentId: string,
+  take = 200
+): Promise<PriceRuleHistoryView[]> {
+  const [own, chain] = await Promise.all([
+    ruleHistory(container, establishmentId, take),
+    ruleHistory(container, null, take).catch(() => [] as PriceRuleRow[]),
+  ]);
+  const all = [...own, ...chain].sort((a, b) => (ms(b.valid_from) ?? 0) - (ms(a.valid_from) ?? 0));
+  return enrichRuleHistory(container, all);
 }
 
 /**

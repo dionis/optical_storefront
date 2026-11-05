@@ -23,6 +23,11 @@
 // /admin/pricing/frames/band): lo que el dueño pone una vez para toda la cadena
 // y luego dobla tienda por tienda, con la vista previa de a cuántos modelos le
 // mueve el precio ANTES de guardar. Ver `BandBlock`.
+//
+// Y desde el 5-nov-2026, «Un modelo en todas las tiendas» (HU-13, GET
+// /admin/pricing/frames/across): se busca un modelo o un SKU y se ve lo que
+// cobra CADA tienda hoy en una sola fila, con el mismo cálculo de la caja. Ver
+// `AcrossBlock`.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import { money } from "../adminOrders.js";
@@ -30,10 +35,12 @@ import { searchStoreCatalog } from "../adminStores.js";
 import DataTable from "../DataTable.jsx";
 import HelpTip from "../HelpTip.jsx";
 import Icon from "../icons.jsx";
+import { setActiveStore } from "../useStoreTheme.js";
 import {
-  centsToUsd, costOf, isOwnCost, loadFrameCosts, loadPriceBand, marginPct,
+  centsToUsd, costOf, fetchPricingAcross, isOwnCost, loadFrameCosts, loadPriceBand, marginPct,
   previewPriceBand, savePriceBand, savePricingOverride, savePricingRule, saveFrameCost, skuKey,
 } from "./api.js";
+import "./pricing-across.css";
 
 /** La regla en UNA fila editable: modo, valor y guardar. */
 function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
@@ -800,6 +807,150 @@ function CostsBlock({ costs, overrides, store = "all", onCostSaved, onError }) {
   );
 }
 
+/**
+ * UN MODELO EN TODAS LAS TIENDAS (HU-13). «Como dueño, quiero ver un producto
+ * con su precio en todas las tiendas.» Todo lo demás del panel se lee tienda a
+ * tienda; aquí se busca un modelo (o un SKU) y sale UNA fila por modelo con una
+ * columna por tienda activa: lo que cobra esa caja hoy, con la etiqueta de por
+ * qué (exacto / banda / ajuste / base) y «oculto» cuando la tienda no vende el
+ * modelo. Las cifras vienen del servidor con la MISMA función del POS (nunca se
+ * calcula nada aquí). El costo solo llega con permiso de costos — sin él, la
+ * clave ni existe en la respuesta — y la columna aparece solo entonces.
+ *
+ * Mismo buscador que el precio exacto (freno de 300 ms, secuencia que descarta
+ * respuestas viejas). Clic en una celda = elegir esa tienda en el selector
+ * global (`setActiveStore`), que es como el panel entero salta a sus precios.
+ */
+function AcrossBlock({ onError }) {
+  const { t, lang } = useLang();
+  const [q, setQ] = useState("");
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const usd = (c) => money(c / 100, "usd", lang);
+
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2) { setData(null); setBusy(false); return undefined; }
+    let on = true;
+    setBusy(true);
+    const timer = setTimeout(() => {
+      fetchPricingAcross(s)
+        .then((r) => { if (on) { setData(r); setBusy(false); } })
+        .catch((err) => { if (on) { setData(null); setBusy(false); onError(err.message); } });
+    }, 300);
+    return () => { on = false; clearTimeout(timer); };
+  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stores = data?.stores || [];
+  const rows = data?.rows || [];
+  const costAccess = Boolean(data?.cost_access);
+
+  /** Precio + etiqueta de origen; `onPick` lo vuelve botón (abre esa tienda). */
+  const cell = (priceCents, source, { hidden = false, storeCode = null, onPick = null, extraTitle = "" } = {}) => {
+    const src = source ? t(`adm.price.across.src.${source}`) : "";
+    const why = source ? t(`adm.price.across.srcHint.${source}`) : "";
+    const title = [onPick ? t("adm.price.across.cellHint", { code: storeCode }) : "", why, hidden ? t("adm.price.across.hiddenHint") : "", extraTitle].filter(Boolean).join(" · ");
+    const body = (
+      <>
+        {priceCents == null ? <span className="pp-now">{t("adm.price.across.noPrice")}</span> : <b>{usd(priceCents)}</b>}
+        <span>
+          {source && <span className={`pp-across-src ${source}`}>{src}</span>}
+          {hidden && <> <span className="pp-across-hidden">{t("adm.price.across.hidden")}</span></>}
+        </span>
+      </>
+    );
+    return onPick
+      ? <button type="button" className={`pp-across-cell ${hidden ? "off" : ""}`} title={title} onClick={onPick}>{body}</button>
+      : <span className={`pp-across-cell static ${hidden ? "off" : ""}`} title={title}>{body}</span>;
+  };
+
+  return (
+    <div className="pp-block">
+      <h4>
+        {t("adm.price.across.title")}
+        <small>{t("adm.price.across.sub")}</small>
+      </h4>
+      <label className="pp-search">
+        <Icon name="search" size={14} />
+        <input
+          aria-label={t("adm.price.across.search")}
+          placeholder={t("adm.price.across.search")}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </label>
+
+      {q.trim().length < 2 && <p className="pp-hint">{t("adm.price.across.hint")}</p>}
+      {busy && <p className="pp-hint">{t("adm.price.across.searching")}</p>}
+      {!busy && data && !rows.length && <p className="pp-hint">{t("adm.price.across.empty")}</p>}
+      {!busy && data && rows.length > 0 && !stores.length && <p className="pp-hint">{t("adm.price.across.noStores")}</p>}
+      {!busy && data?.truncated && <p className="pp-hint">{t("adm.price.across.truncated", { n: data.limit })}</p>}
+
+      {!busy && rows.length > 0 && (
+        <div className="pp-across-wrap">
+          <table className="pp-across">
+            <thead>
+              <tr>
+                <th>{t("adm.price.across.col.model")}</th>
+                {costAccess && <th className="num" title={t("adm.price.across.costHint")}>{t("adm.price.across.col.cost")}</th>}
+                <th className="num" title={t("adm.price.across.masterHint")}>{t("adm.price.across.col.master")}</th>
+                {stores.map((s) => (
+                  <th key={s.id} className="num" title={t("adm.price.across.storeHint", { code: s.code, name: s.name })}>
+                    <span className="pp-across-store">
+                      <span className="pp-across-dot" style={{ background: s.color || "var(--adm-line)" }} />
+                      {s.code}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.product_id}>
+                  <td className="pp-across-model-td" data-label={t("adm.price.across.col.model")}>
+                    <span className="pp-across-model">
+                      {r.thumbnail && <img className="pp-across-thumb" src={r.thumbnail} alt="" loading="lazy" />}
+                      <span className="pp-across-name">
+                        <b>{r.title}{r.is_case && <> <span className="pp-badge">{t("adm.price.across.case")}</span></>}</b>
+                        <span>
+                          <code className="pp-sku">{r.sku}</code>
+                          {r.skus?.length > 1 && <span className="pp-now"> · {t("adm.price.across.colors", { n: r.skus.length })}</span>}
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  {costAccess && (
+                    <td className="num" data-label={t("adm.price.across.col.cost")}>
+                      {r.cost_cents == null
+                        ? <span className="pp-nocost" title={t("adm.price.frames.cost.missingHint")}><Icon name="alert" size={11} /> {t("adm.price.frames.cost.missing")}</span>
+                        : <span className="pp-cost-v" title={t("adm.price.across.costHint")}>{usd(r.cost_cents)}</span>}
+                    </td>
+                  )}
+                  <td className="num" data-label={t("adm.price.across.col.master")}>
+                    {cell(r.master_price_cents, r.master_source === "owner" ? "owner" : r.master_source === "band" ? "band" : "base")}
+                  </td>
+                  {stores.map((s) => {
+                    const c = (r.stores || []).find((x) => x.establishment_id === s.id);
+                    if (!c) return <td key={s.id} className="num" data-label={s.code} />;
+                    const ownCost = costAccess && c.cost_cents != null && c.cost_cents !== r.cost_cents
+                      ? t("adm.price.across.costStore", { v: usd(c.cost_cents) })
+                      : "";
+                    return (
+                      <td key={s.id} className="num" data-label={s.code}>
+                        {cell(c.price_cents, c.source, { hidden: !c.exposed, storeCode: s.code, onPick: () => setActiveStore(s.id), extraTitle: ownCost })}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FramesSection({ frames, store, storeId, onSaved, onError }) {
   const { t, lang } = useLang();
   const [busy, setBusy] = useState("");
@@ -883,6 +1034,7 @@ export default function FramesSection({ frames, store, storeId, onSaved, onError
         t={t}
       />
       <CostsBlock costs={costs} overrides={frames.overrides} store={store} onCostSaved={onCostSaved} onError={onError} />
+      <AcrossBlock onError={onError} />
       <div className="pp-block">
         <h4>
           {t("adm.price.frames.modified")}
