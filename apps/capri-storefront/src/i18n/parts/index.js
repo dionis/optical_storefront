@@ -27,5 +27,7 @@ import catalog from "./catalog.js";
 import team from "./team.js";
 import storeOrders from "./store-orders.js";
 import lensFinish from "./lens-finish.js";
+import posFlow from "./pos-flow.js";
+import posRules from "./pos-rules.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules];

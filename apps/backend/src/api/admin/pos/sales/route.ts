@@ -20,6 +20,7 @@ import {
   PosError,
   quoteSale,
   rxContexts,
+  rxDesigns,
   type RxInput,
   type RxMeta,
 } from "../../../../lib/pos-data";
@@ -164,7 +165,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       getPosSettings(req.scope),
       listPaymentMethods(req.scope),
     ]);
-    checkPrescriptions(req.scope, prescriptions, needsPrescription(lines.lines), rxContexts(quote));
+    checkPrescriptions(req.scope, prescriptions, needsPrescription(lines.lines), rxContexts(quote), rxDesigns(quote));
 
     const limitPct = discountLimitFor(scope, settings.discount_limits);
     const needsApproval = discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum });

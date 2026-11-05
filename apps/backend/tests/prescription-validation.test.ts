@@ -106,4 +106,20 @@ describe("validatePrescription", () => {
     expect(result.fulfillable).toBe(false);
     expect(result.warnings.some((w) => w.code === "pd_single_out_of_range")).toBe(true);
   });
+
+  it("leaves the ADD-versus-lens-design rules to the POS (lib/pos-lens-rules.ts): the lab ranges alone decide here", () => {
+    // Single vision with an ADD is a data error at the counter, not a lab limit:
+    // this validator only checks the ADD's range, so the POS rule is the one
+    // place that refuses it (design_no_add) — and a bifocal context, which the
+    // validator does not know, gets its missing ADD refused there too.
+    const withAdd = buildRx({
+      od: { sph: -1, cyl: 0, axis: null, add: 2, prism: null, base: null },
+      os: { sph: -1, cyl: 0, axis: null, add: 2, prism: null, base: null },
+    });
+    expect(validatePrescription(withAdd).fulfillable).toBe(true);
+    expect(validatePrescription(buildRx(), DEFAULT_RX_RANGES, { usage_type: "bifocal" }).fulfillable).toBe(true);
+    // An ADD out of the lab's range still fails here, whatever the design.
+    const tooHigh = buildRx({ od: { sph: -1, cyl: 0, axis: null, add: 4.5, prism: null, base: null }, os: { sph: -1, cyl: 0, axis: null, add: 4.5, prism: null, base: null } });
+    expect(validatePrescription(tooHigh).warnings.some((w) => w.code === "add_out_of_range")).toBe(true);
+  });
 });

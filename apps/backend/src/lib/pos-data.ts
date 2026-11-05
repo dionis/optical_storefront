@@ -17,7 +17,7 @@ import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
 import { LensFinishError } from "./lens-finish";
-import { computeLensBreakdown } from "./lens-quote";
+import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
 import {
@@ -37,6 +37,7 @@ import {
   type TerminalUsage,
   type VariantCodes,
 } from "./pos";
+import { lensRxProblems, rxConfirmationProblem, storedVerifiedByUser, type LensRxDesign } from "./pos-lens-rules";
 import { EMPTY_SALE_DETAIL, loadSaleDetails, type LensCodes } from "./pos-sale-detail";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
@@ -460,7 +461,8 @@ export function checkPrescriptions(
   container: MedusaContainer,
   input: { new: RxInput | null; worn: RxInput | null },
   required: boolean,
-  contexts: Array<{ usage_type?: string; eye_size?: number }> = []
+  contexts: Array<{ usage_type?: string; eye_size?: number }> = [],
+  designs: LensRxDesign[] = []
 ): { warnings: unknown[] } {
   if (input.worn && !hasEyes(input.worn)) throw new PosError("bad_worn_prescription");
   if (!input.new) {
@@ -468,6 +470,12 @@ export function checkPrescriptions(
     return { warnings: [] };
   }
   if (!hasEyes(input.new)) throw new PosError("prescription_required");
+  // Read from a photo: a person must have confirmed it on screen.
+  const unconfirmed = rxConfirmationProblem(input.new.rx);
+  if (unconfirmed) throw new PosError(unconfirmed, 422, { field: "verified_by_user" });
+  // The ADD must fit the lens design (single vision without, multifocal with the same in both eyes).
+  const problem = lensRxProblems(designs, input.new.rx);
+  if (problem) throw new PosError(problem.reason, 422, problem.details);
   const svc = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
   const warnings: unknown[] = [];
   for (const ctx of contexts.length ? contexts : [{}]) {
@@ -502,7 +510,7 @@ async function insertPrescriptions(
   const row = (r: RxInput, m: RxMeta, kind: "worn" | "new", previous: string | null, number: string | null) => ({
     ...prescriptionColumns(r.rx),
     source: r.rx.source === "ocr" ? "ocr" : "manual",
-    verified_by_user: true,
+    verified_by_user: storedVerifiedByUser(r.rx),
     file_url: typeof r.rx.file_url === "string" && /^rx\/[A-Za-z0-9._-]{1,200}$/.test(r.rx.file_url) ? r.rx.file_url : null,
     customer_id: customerId,
     kind,
@@ -672,6 +680,8 @@ export interface QuotedLine {
   description: string | null;
   /** Lens design category (sv | bifocal | prog), null for a bare frame. */
   lens_category: string | null;
+  /** The design needs an ADD in the prescription (bifocal, progressive). */
+  lens_requires_add: boolean;
   /** Frame size from the catalog, for the prescription check and the lab ticket. */
   eye_size: number | null;
   /** Store list price of the line, before discount and tax. */
@@ -734,14 +744,18 @@ export async function quoteSale(
   for (const line of lines) {
     let lensCents: number;
     let category: string | null;
+    let requiresAdd: boolean;
     try {
       const b = await computeLensBreakdown(pg, line.selection, establishmentId);
       lensCents = b.total_cents;
       category = b.category;
+      requiresAdd = b.requires_add;
     } catch (e) {
       // The finish the seller picked has no priced cell (a digital single
       // vision the owner has not priced yet, or "stock" on a progressive).
       if (e instanceof LensFinishError) throw new PosError(e.reason, 422, { design_code: e.design_code, material_code: e.material_code, finish: e.finish });
+      // A photochromic or AR the list does not offer for that design (lib/pos-lens-rules.ts).
+      if (e instanceof LensOptionError) throw new PosError(e.reason, 422, { code: e.code, design_code: e.design_code, category: e.category });
       throw new PosError("bad_lens");
     }
 
@@ -799,6 +813,7 @@ export async function quoteSale(
       selection: line.selection,
       description: line.description,
       lens_category: line.selection.design_code === "frame-only" ? null : category,
+      lens_requires_add: line.selection.design_code === "frame-only" ? false : requiresAdd,
       eye_size: Number.isFinite(eye) && eye > 0 ? eye : null,
       list,
       frame: d.frame,
@@ -834,6 +849,13 @@ export function rxContexts(quote: Quote): Array<{ usage_type?: string; eye_size?
       ...(l.lens_category === "prog" ? { usage_type: "progressive" } : {}),
       ...(l.eye_size ? { eye_size: l.eye_size } : {}),
     }));
+}
+
+/** The lens designs of a quote, for the ADD rules (lib/pos-lens-rules.ts). */
+export function rxDesigns(quote: Quote): LensRxDesign[] {
+  return quote.lines
+    .filter((l) => l.lens_category)
+    .map((l) => ({ code: l.selection.design_code, category: l.lens_category, requires_add: l.lens_requires_add }));
 }
 
 // ---------------------------------------------------------------------------

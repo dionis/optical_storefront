@@ -1,6 +1,25 @@
 import type { Knex } from "@mikro-orm/knex";
 import { cellForFinish, LensFinishError, resolveLensFinish, type LensFinish } from "./lens-finish";
+import { arGroupServes } from "./pos-lens-rules";
 import { applyStoreLensBreakdown, loadStoreLensPricesPg } from "./pricing-overview";
+
+/**
+ * Thrown by the quote when a photochromic or an AR is not offered for the
+ * design's category (no price for it, or the AR belongs to the other group),
+ * instead of quoting the option at $0. The POS answers `photo_unavailable` /
+ * `ar_unavailable`; the store routes answer 400, as for an unknown design.
+ */
+export class LensOptionError extends Error {
+  constructor(
+    public readonly reason: "photo_unavailable" | "ar_unavailable",
+    /** The option code the client sent. */
+    public readonly code: string,
+    public readonly design_code: string,
+    public readonly category: string
+  ) {
+    super(`${reason}: ${code} is not offered for ${design_code} (${category})`);
+  }
+}
 
 /** Lens selection sent from the storefront wizard. */
 export interface LensSelection {
@@ -21,6 +40,8 @@ export interface LensBreakdown {
   total_cents: number;
   /** The design's category ("sv" | "bifocal" | "prog"), which prices photochromics. */
   category: string | null;
+  /** lens_design.requires_add: the prescription must carry an ADD (bifocal, progressive). */
+  requires_add: boolean;
   /** The finish the base cell was read for; null for a bare frame. */
   finish: LensFinish | null;
   /** The lab's cost of that cell when the owner typed one (never sent to a client). */
@@ -38,6 +59,7 @@ const EMPTY: LensBreakdown = {
   ar_cents: 0,
   total_cents: 0,
   category: null,
+  requires_add: false,
   finish: null,
   cost_cents: null,
 };
@@ -91,6 +113,7 @@ export async function computeLensBreakdown(
   const design = (designRows as unknown[])[0];
   if (!design) throw new Error(`Unknown lens design: ${selection.design_code}`);
   const category = String((design as { category: string }).category);
+  const requires_add = (design as { requires_add?: unknown }).requires_add === true;
   // The cell of the requested finish (or the design's default). A material
   // with no cell for that finish is not quoted at 0: the seller asked for a
   // lens the list does not price, and the POS must say so (`finish_unavailable`).
@@ -111,36 +134,49 @@ export async function computeLensBreakdown(
       : Promise.resolve([] as unknown[]),
   ]);
 
+  // An option the list does not offer for this design is refused, never
+  // quoted at $0: a photochromic with no price in the design's category (N/A
+  // in the 2026 list), an AR of the other group, or a code the list does not
+  // have. The browser hides those already; this is what a stale screen or a
+  // hand-made request meets.
   let photo_cents = 0;
   if (selection.photo_code) {
     if (photoTreat != null) {
       photo_cents = photoTreat;
     } else {
       const photo = (photoRows as unknown[])[0];
-      if (photo) {
-        const p = photo as {
-          price_sv_cents: number | null;
-          price_bifocal_cents: number | null;
-          price_prog_cents: number | null;
-        };
-        const byCat: Record<string, number | null | undefined> = {
-          sv: p.price_sv_cents,
-          bifocal: p.price_bifocal_cents,
-          prog: p.price_prog_cents,
-        };
-        const v = byCat[category];
-        photo_cents = v == null ? 0 : n(v); // null (N/A for this design) → not charged
-      }
+      if (!photo) throw new LensOptionError("photo_unavailable", selection.photo_code, selection.design_code, category);
+      const p = photo as {
+        price_sv_cents: number | null;
+        price_bifocal_cents: number | null;
+        price_prog_cents: number | null;
+      };
+      const byCat: Record<string, number | null | undefined> = {
+        sv: p.price_sv_cents,
+        bifocal: p.price_bifocal_cents,
+        prog: p.price_prog_cents,
+      };
+      const v = byCat[category];
+      if (v == null) throw new LensOptionError("photo_unavailable", selection.photo_code, selection.design_code, category);
+      photo_cents = n(v);
     }
   }
 
   let ar_cents = 0;
   if (selection.ar_code) {
-    ar_cents = arTreat != null ? arTreat : n(((arRows as { price_cents?: number }[])[0] ?? {}).price_cents);
+    if (arTreat != null) {
+      ar_cents = arTreat;
+    } else {
+      const ar = (arRows as Array<{ ar_group?: string | null; price_cents?: number }>)[0];
+      if (!ar || !arGroupServes(ar.ar_group, category)) {
+        throw new LensOptionError("ar_unavailable", selection.ar_code, selection.design_code, category);
+      }
+      ar_cents = n(ar.price_cents);
+    }
   }
 
   return applyStoreLensBreakdown(
-    { lens_base_cents, photo_cents, ar_cents, total_cents: lens_base_cents + photo_cents + ar_cents, category, finish, cost_cents },
+    { lens_base_cents, photo_cents, ar_cents, total_cents: lens_base_cents + photo_cents + ar_cents, category, requires_add, finish, cost_cents },
     await loadStoreLensPricesPg(pg, establishmentId),
     selection
   );

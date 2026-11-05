@@ -32,8 +32,9 @@ import { setActiveStore } from "./useStoreTheme.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
-import PosSaleSummary from "./PosSaleSummary.jsx";
-import { customerProblems, LIMITS, paymentProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
+import { customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import "./pos.css";
 import RxForm from "./PosRx.jsx";
 import HelpTip from "./HelpTip.jsx";
 import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, validateRx } from "./rxRules.js";
@@ -82,14 +83,26 @@ function withSuggestedAmounts(payments, total) {
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */ } };
 const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+/** Solo los dígitos de un teléfono; los últimos 10 identifican el número con o sin «+1» (misma regla que el servidor). */
+const phoneKey = (v) => String(v ?? "").replace(/\D/g, "").slice(-10);
+const emailKey = (v) => String(v ?? "").trim().toLowerCase();
+/** Un teléfono se busca cuando ya tiene forma de número completo: 10 dígitos o más y pasa la validación del campo. */
+const phoneComplete = (v) => phoneProblem(v) === null && String(v ?? "").replace(/\D/g, "").length >= 10;
+/** La cotización se vuelve a pedir desde el paso Montura; la receta se manda desde Lentes, cuando ya está cerrada. */
+const QUOTE_FROM = STEPS.indexOf("frame");
+const RX_FROM = STEPS.indexOf("lenses");
 
 /** Receta del formulario → forma que espera el servidor (números o null). El tipo
- *  (monofocal/multifocal) no viaja: el servidor lo deduce de la adición. */
-function toRx(form, source = "manual") {
+ *  (monofocal/multifocal) no viaja: el servidor lo deduce de la adición.
+ *  `verified` es si una persona revisó los valores: una receta tecleada a mano
+ *  siempre lo está; una leída de la foto solo cuando el vendedor pulsó
+ *  «Confirmar» (antes se mandaba `true` siempre y el servidor no podía
+ *  distinguirlas; ahora rechaza una lectura OCR sin confirmar: `rx_unconfirmed`). */
+function toRx(form, source = "manual", verified = true) {
   const eye = (e) => ({ sph: num(e.sph), cyl: num(e.cyl), axis: num(e.axis), add: num(e.add), prism: num(e.prism), base: e.base || null });
   const pd_od = num(form.pd_od); const pd_os = num(form.pd_os);
   const pd = binocularPd(form) ?? (pd_od == null && pd_os == null ? num(form.pd) : null);
-  return { od: eye(form.od), os: eye(form.os), pd, pd_od, pd_os, seg_height: num(form.seg_height), source, verified_by_user: true, file_url: form.file_url || null };
+  return { od: eye(form.od), os: eye(form.os), pd, pd_od, pd_os, seg_height: num(form.seg_height), source, verified_by_user: verified === true, file_url: form.file_url || null };
 }
 /** Receta guardada (o leída de la foto) → formulario, ya con el formato de la hoja. */
 const fromRx = (rx) => {
@@ -132,6 +145,58 @@ function OpticalChange({ change }) {
 
 /** Acabado con el que arranca una línea: stock salvo en progresivos, que son siempre digitales (lib/lens-finish.ts en el servidor). */
 const finishFor = (catalog, designId) => (designId === "frame-only" ? null : defaultFinishFor(catalog.DESIGNS.find((d) => d.id === designId)?.cat));
+
+/**
+ * Combinaciones de un toque para la montura que trae el cliente (línea
+ * `own_frame`): se derivan del catálogo cargado y solo se ofrecen las que
+ * encajan con el tipo de receta (misma regla que el selector: monofocal →
+ * visión sencilla; multifocal → bifocal o progresivo) y tienen precio en su
+ * acabado por defecto. Rellenan `selection`; el selector de abajo sigue
+ * editable. No calculan importes: el total lo da el servidor.
+ */
+export function lensPresets(catalog, rxForm) {
+  const { DESIGNS, MATERIALS, PHOTO, AR, FINISHES } = catalog;
+  const multi = isMulti(rxForm);
+  const power = maxPower(rxForm);
+  const recommended = MATERIALS.find((m) => power <= m.maxAbs) || MATERIALS[MATERIALS.length - 1];
+  const firstOf = (cat) => DESIGNS.find((d) => d.cat === cat) || null;
+  const priced = (design, material) => Boolean(design && material && FINISHES?.[design.id]?.[material.id]?.[defaultFinishFor(design.cat)] != null);
+  // El material recomendado; si ese diseño no lo tiene con precio, el primero que sí (de más fino a más grueso no: en orden de lista).
+  const materialFor = (design) => (priced(design, recommended) ? recommended : MATERIALS.find((m) => priced(design, m)) || null);
+  const build = (id, design, extra = {}) => {
+    const material = materialFor(design);
+    if (!design || !material) return null;
+    return { id, selection: { design_code: design.id, material_code: material.id, photo_code: null, ar_code: null, finish: defaultFinishFor(design.cat), ...extra } };
+  };
+  const sv = firstOf("sv"); const bif = firstOf("bifocal"); const prog = firstOf("prog");
+  const arSv = (AR[arGroupFor(sv)] || [])[0]; const arProg = (AR[arGroupFor(prog)] || [])[0];
+  const photoSv = PHOTO.find((p) => p.price && p.price.sv != null);
+  const list = multi
+    ? [build("bifocal", bif), build("prog", prog), arProg && build("prog_ar", prog, { ar_code: arProg.id })]
+    : [build("sv_basic", sv), arSv && build("sv_ar", sv, { ar_code: arSv.id }), photoSv && build("sv_photo", sv, { photo_code: photoSv.id })];
+  return list.filter(Boolean);
+}
+
+function LensPresets({ line, onChange, catalog, rxForm }) {
+  const { t } = useLang();
+  const presets = lensPresets(catalog, rxForm);
+  if (!presets.length) return null;
+  const sel = line.selection;
+  const active = (p) => ["design_code", "material_code", "photo_code", "ar_code"].every((k) => (sel[k] || null) === (p.selection[k] || null)) && (sel.finish || finishFor(catalog, sel.design_code)) === p.selection.finish;
+  return (
+    <div className="pos-presets" role="group" aria-label={t("adm.pos.preset.title")}>
+      <span className="pos-presets-ttl"><Icon name="sparkles" size={14} /> {t("adm.pos.preset.title")}</span>
+      <div className="pos-presets-row">
+        {presets.map((p) => (
+          <button key={p.id} type="button" className={active(p) ? "on" : ""} aria-pressed={active(p)} onClick={() => onChange({ ...line, touched: true, selection: { ...sel, ...p.selection } })}>
+            {t(`adm.pos.preset.${p.id}`)}
+          </button>
+        ))}
+      </div>
+      <small className="muted">{t("adm.pos.preset.hint")}</small>
+    </div>
+  );
+}
 
 /** Diseño, material y tratamientos de una línea, con las mismas reglas que el asistente web. */
 function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
@@ -249,6 +314,10 @@ export default function PosSale({ me }) {
   const [customerId, setCustomerId] = useState(null);
   const [custInfo, setCustInfo] = useState(null);
   const [wears, setWears] = useState(null);
+  // HU-18: cliente ya registrado con ese teléfono o correo, y lo que se descartó («es otra persona») por valor.
+  const [dup, setDup] = useState({ phone: null, email: null });
+  const dupDismissed = useRef({ phone: new Set(), email: new Set() });
+  const dupSeq = useRef({ phone: 0, email: 0 });
   // 2 · monturas
   const [lines, setLines] = useState([]);
   const [frameListOpen, setFrameListOpen] = useState(false);
@@ -268,6 +337,10 @@ export default function PosSale({ me }) {
   // 5 · precio
   const [discount, setDiscount] = useState("");
   const [q, setQ] = useState(null);
+  // "idle" | "loading" | "ok" | "error": estado de la última cotización; en error se conserva `q` para la franja.
+  const [qStatus, setQStatus] = useState("idle");
+  const quoteSeq = useRef(0);
+  const quoteErr = useRef(null);
   const [approval, setApproval] = useState(null);
   const [reason, setReason] = useState("");
   // 6 · pago
@@ -308,7 +381,35 @@ export default function PosSale({ me }) {
     return () => clearTimeout(h);
   }, [custQ]);
 
+  // HU-18: al escribir un teléfono completo (o un correo válido) de un cliente
+  // NUEVO se consulta la misma búsqueda del buscador; si hay un registrado con
+  // ese número (últimos 10 dígitos) o ese correo, se avisa sin bloquear.
+  const lookupDup = (kind, value, key, matches) => {
+    const seq = ++dupSeq.current[kind];
+    if (customerId || !key || dupDismissed.current[kind].has(key)) { setDup((d) => (d[kind] ? { ...d, [kind]: null } : d)); return undefined; }
+    const h = setTimeout(() => {
+      searchCustomers(value)
+        .then((r) => {
+          if (seq !== dupSeq.current[kind]) return; // llegó tarde: ya se escribió otra cosa
+          const hit = (r.customers || []).find(matches) || null;
+          setDup((d) => ({ ...d, [kind]: hit ? { key, hit } : null }));
+        })
+        .catch(() => { if (seq === dupSeq.current[kind]) setDup((d) => ({ ...d, [kind]: null })); });
+    }, 400);
+    return () => clearTimeout(h);
+  };
+  useEffect(() => lookupDup("phone", customer.phone.trim(), phoneComplete(customer.phone) ? phoneKey(customer.phone) : "", (c) => phoneKey(c.phone) === phoneKey(customer.phone)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customer.phone, customerId]);
+  useEffect(() => lookupDup("email", customer.email.trim(), emailProblem(customer.email, true) === null ? emailKey(customer.email) : "", (c) => emailKey(c.email) === emailKey(customer.email)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customer.email, customerId]);
+  const dismissDup = (kind) => { if (dup[kind]) dupDismissed.current[kind].add(dup[kind].key); setDup((d) => ({ ...d, [kind]: null })); };
+  // Un mismo cliente que coincide por teléfono y por correo se avisa una vez.
+  const dupNotices = ["phone", "email"].filter((k, i, all) => dup[k] && !(i > 0 && dup[all[0]]?.hit?.id === dup[k].hit.id));
+
   const pickCustomer = async (c) => {
+    setDup({ phone: null, email: null });
     setCustomerId(c.id);
     setCustomer({ ...EMPTY_CUSTOMER, first_name: c.first_name || "", last_name: c.last_name || "", email: c.email || "", phone: c.phone || "", birth_date: c.birth_date || "" });
     setCustHits([]); setCustQ("");
@@ -384,21 +485,42 @@ export default function PosSale({ me }) {
       total_width: num(wornFrame.total_width), condition: wornFrame.condition,
     } : null,
   } : null);
-  const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual"), rx_date: rxNew.rx_date || null });
+  // Leída de la foto → `ocr` y verificada solo si el vendedor confirmó la lectura.
+  const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual", ocr.status !== "done" || ocr.confirmed === true), rx_date: rxNew.rx_date || null });
 
-  const refreshQuote = async () => {
-    if (!store || !lines.length) return;
-    try {
-      const r = await fetchQuote({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: newBody(), worn: wornBody() });
-      setQ(r);
-    } catch (err) { setQ(null); toast({ tone: "error", title: t(err.message) }); }
-  };
+  // Cotización en curso: se pide al servidor desde que hay montura (paso
+  // Montura) y cada vez que cambia algo que afecta al precio, con una espera
+  // corta. La receta viaja desde Lentes (ya cerrada), que es lo que decide
+  // `rx_check` y el cambio óptico en Precio. El cuerpo serializado es la
+  // dependencia: dos renders con la misma venta no vuelven a preguntar.
+  const withRx = step >= RX_FROM && !noRx && rxFilled(rxNew);
+  // Una línea con lente pero sin material (la montura del cliente antes de
+  // Lentes, o el material quitado) no tiene precio posible: no se pregunta.
+  const quotable = lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code);
+  const quoteBody = useMemo(() => (store && lines.length && quotable && step >= QUOTE_FROM && STEPS[step] !== "done"
+    ? JSON.stringify({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: withRx ? newBody() : null, worn: withRx ? wornBody() : null })
+    : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store?.id, lines, discount, quotable && step >= QUOTE_FROM && STEPS[step] !== "done", withRx, withRx && rxNew, withRx && rxWorn, withRx && worn, withRx && wornFrame, withRx && wears, withRx && ocr.status]);
   useEffect(() => {
-    if (!["price", "payment"].includes(STEPS[step])) return undefined;
-    const h = setTimeout(refreshQuote, 350);
+    if (!quoteBody) { quoteSeq.current += 1; setQ(null); setQStatus("idle"); return undefined; }
+    const seq = ++quoteSeq.current;
+    setQStatus("loading");
+    const h = setTimeout(() => {
+      fetchQuote(JSON.parse(quoteBody))
+        .then((r) => { if (seq !== quoteSeq.current) return; setQ(r); setQStatus("ok"); quoteErr.current = null; })
+        .catch((err) => {
+          if (seq !== quoteSeq.current) return; // respuesta vieja: ya hay otra en camino
+          setQStatus("error");
+          // Se avisa donde el precio es lo que se mira (Lentes en adelante) y una sola vez por motivo:
+          // en Montura una línea a medio elegir todavía no es un error de nadie.
+          if (step >= RX_FROM && quoteErr.current !== err.message) toast({ tone: "error", title: t(err.message) });
+          quoteErr.current = err.message;
+        });
+    }, 400);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, discount, lines]);
+  }, [quoteBody]);
   // Un descuento distinto invalida la aprobación pedida para el anterior.
   useEffect(() => { setApproval(null); }, [discount, lines]);
 
@@ -467,7 +589,7 @@ export default function PosSale({ me }) {
         return true;
       case "lenses": return lines.every((l) => l.selection.design_code === "frame-only" || l.selection.material_code)
         && (!lines.some((l) => { const d = catalog.DESIGNS.find((x) => x.id === l.selection.design_code); return d && d.cat !== "sv"; }) || num(rxNew.seg_height) !== null);
-      case "price": return Boolean(q) && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
+      case "price": return Boolean(q) && qStatus !== "error" && (!q.needs_approval || approval?.status === "approved") && q.rx_check?.fulfillable !== false;
       case "payment": return payState.balance >= 0
         && (total <= 0 || payState.paid + payState.ins > 0)
         && !payRows.some(rowProblem)
@@ -521,7 +643,8 @@ export default function PosSale({ me }) {
     setStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
     setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
-    setDiscount(""); setQ(null); setApproval(null); setReason("");
+    setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
+    setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
     setPayments([EMPTY_PAYMENT]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
   };
 
@@ -569,6 +692,10 @@ export default function PosSale({ me }) {
         </ol>
       )}
 
+      {stepName !== "done" && step >= QUOTE_FROM && (
+        <PosRunningTotal quote={q?.quote || null} status={qStatus} lines={lines} catalog={catalog} money={m} beforeLenses={step < RX_FROM} />
+      )}
+
       <div className={`adm-card pos-card ${frameListOpen ? "ac-open" : ""}`}>
         {stepName === "customer" && (
           <>
@@ -586,6 +713,20 @@ export default function PosSale({ me }) {
                 ))}
               </ul>
             )}
+            {!customerId && dupNotices.map((k) => {
+              const c = dup[k].hit;
+              const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || c.phone || "";
+              return (
+                <div key={k} className="pos-dup" role="status">
+                  <Icon name="info" size={15} />
+                  <span>{t(`adm.pos.dup.${k}`, { name })}<small className="muted">{[k === "phone" ? c.email : c.phone].filter(Boolean).join("")}</small></span>
+                  <span className="pos-dup-actions">
+                    <button type="button" className="btn-xs primary" onClick={() => pickCustomer(c)}><Icon name="user" size={12} /> {t("adm.pos.dup.use")}</button>
+                    <button type="button" className="btn-xs" onClick={() => dismissDup(k)}>{t("adm.pos.dup.other")}</button>
+                  </span>
+                </div>
+              );
+            })}
             {customerId && (
               <div className="pos-picked">
                 <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
@@ -742,6 +883,7 @@ export default function PosSale({ me }) {
                   <PosFramePhoto line={l} size="md" />
                   <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
                 </div>
+                {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
             ))}
@@ -753,7 +895,8 @@ export default function PosSale({ me }) {
         {stepName === "price" && (
           <>
             {frameCards}
-            {!q && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
+            {!q && <div className={`adm-src-note ${qStatus === "error" ? "" : "loading"}`}>{t(qStatus === "error" ? "adm.pos.flow.pending" : "adm.ord.loading")}</div>}
+            {q && qStatus === "error" && <div className="adm-demo-banner"><Icon name="alert" size={14} /> {t("adm.pos.flow.stale")}</div>}
             {q && (
               <>
                 <table className="adm-table responsive pos-quote">

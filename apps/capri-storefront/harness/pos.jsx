@@ -34,11 +34,51 @@ const CTX = {
     payment_methods: ["cash", "card", "zelle"], terminals: [{ id: "t1", name: "Caja 1" }] }],
   payment_methods: [{ code: "cash", label: "Efectivo" }, { code: "card", label: "Tarjeta" }, { code: "zelle", label: "Zelle" }],
 };
-window.fetch = async (input) => {
+// Cliente ya registrado (HU-18): se encuentra por los últimos 10 dígitos del
+// teléfono o por el correo, como hace el servidor.
+const KNOWN = { id: "cus_ana", first_name: "Ana", last_name: "Pérez", email: "ana@example.com", phone: "+1 (305) 555-0123", birth_date: "1980-05-02" };
+const digits = (v) => String(v || "").replace(/\D/g, "");
+// Cotización simulada con la MISMA forma que /admin/pos/quote (lib/pos-data.ts):
+// montura a precio de tienda, lente base por diseño + foto + AR. Solo para
+// pintar la franja del total en curso; el servidor real es la única verdad.
+const LENS_BASE = { sv: 60, bifocal: 130 };
+const PHOTO_PRICE = 85; const AR_PRICE = 60;
+const QUOTE_DELAY = Number(new URLSearchParams(location.search).get("delay") || 350);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function mockQuote(body) {
+  const pct = Number(body.discount_pct) || 0;
+  const lines = (body.lines || []).map((l) => {
+    const sel = l.selection || {};
+    const own = l.kind === "own_frame";
+    if (!own && sel.design_code !== "frame-only" && !sel.material_code) throw Object.assign(new Error("bad_lens"), { reason: "bad_lens" });
+    if (own && !sel.material_code) throw Object.assign(new Error("bad_lens"), { reason: "bad_lens" });
+    const frameList = own ? 0 : 50.97;
+    const lensList = sel.design_code === "frame-only" ? 0 : (LENS_BASE[sel.design_code] ?? 180) + (sel.photo_code ? PHOTO_PRICE : 0) + (sel.ar_code ? AR_PRICE : 0);
+    const frame = +(frameList * (1 - pct / 100)).toFixed(2); const lenses = +(lensList * (1 - pct / 100)).toFixed(2);
+    const tax_amount = !own && sel.design_code === "frame-only" ? +(frame * 0.07).toFixed(2) : 0;
+    const v = own ? null : PRODUCTS.flatMap((p) => p.variants.map((x) => ({ p, x }))).find(({ x }) => x.id === l.variant_id);
+    return { kind: l.kind, variant_id: l.variant_id, product_id: v?.p.product_id ?? null, title: own ? l.description : v?.p.title ?? "", variant_title: v?.x.title ?? null, sku: v?.x.sku ?? null, selection: sel, description: l.description,
+      lens_category: sel.design_code === "frame-only" ? null : sel.design_code, eye_size: 51, list: +(frameList + lensList).toFixed(2), frame, lenses, tax_amount, tax_rate: tax_amount ? 0.07 : 0, unit_price: +(frame + lenses + tax_amount).toFixed(2), frame_source: own ? "own_frame" : "store_exact", below_minimum: false };
+  });
+  const list_cents = lines.reduce((s, l) => s + Math.round(l.list * 100), 0);
+  const tax_cents = lines.reduce((s, l) => s + Math.round(l.tax_amount * 100), 0);
+  const total_cents = lines.reduce((s, l) => s + Math.round(l.unit_price * 100), 0);
+  return { quote: { lines, discount_pct: pct, list_cents, discount_cents: list_cents - (total_cents - tax_cents), tax_cents, total: total_cents / 100, total_cents, below_minimum: false }, optical_change: null, limit_pct: 15, needs_approval: pct > 15, rx_check: body.prescription ? { fulfillable: true, warnings: [] } : null };
+}
+window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input.url;
   if (url.includes("/admin/pos/context")) return json(CTX);
-  if (url.includes("/admin/pos/customers")) return json({ customers: [] });
-  if (url.includes("/admin/pos/quote")) return json({ lines: [], totals: { subtotal: 50.97, tax: 0, total: 50.97 } });
+  if (/\/admin\/pos\/customers\/[^?]+/.test(url)) return json({ ...KNOWN, sales: [{ id: "s1" }], history: [], last_prescription: null });
+  if (url.includes("/admin/pos/customers")) {
+    const q = decodeURIComponent((url.match(/[?&]q=([^&]*)/) || [])[1] || "");
+    const hit = (digits(q).length >= 7 && digits(KNOWN.phone).endsWith(digits(q).slice(-10))) || q.toLowerCase() === KNOWN.email || /ana/i.test(q);
+    return json({ customers: hit ? [KNOWN] : [] });
+  }
+  if (url.includes("/admin/pos/quote")) {
+    await sleep(QUOTE_DELAY);
+    try { return json(mockQuote(JSON.parse(init?.body || "{}"))); }
+    catch (e) { return new Response(JSON.stringify({ reason: e.reason || "generic", message: e.message }), { status: 422, headers: { "Content-Type": "application/json" } }); }
+  }
   if (url.includes("/admin/pos/products")) {
     const q = decodeURIComponent((url.match(/[?&]q=([^&]*)/) || [])[1] || "").toLowerCase();
     return json({ products: PRODUCTS.filter((p) => !q || p.title.toLowerCase().includes(q)) });
