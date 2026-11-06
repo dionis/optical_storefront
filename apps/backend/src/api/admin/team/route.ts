@@ -3,7 +3,7 @@ import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/f
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
 import { accessStatusByUser, profilesByUser } from "../../../lib/staff-profile-data";
-import { assignmentsByUser, getStaffScope, writeStaffAssignment } from "../../../lib/staff-scope";
+import { assignmentsByUser, getStaffScope, ownerUserId, writeStaffAssignment } from "../../../lib/staff-scope";
 import { listSellers } from "../../../lib/sellers";
 import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
 import { ensureStaffCode } from "../../../lib/staff-code";
@@ -16,8 +16,10 @@ import { ensureStaffCode } from "../../../lib/staff-code";
  *                           queda marcado must_change_password y el panel le
  *                           exige cambiarla en su primera entrada.
  *
- * DUEÑO = el usuario más antiguo (creado con `npx medusa user` al montar la
- * tienda; la API lo sigue llamando `is_super`). No se puede borrar ni cambiar
+ * DUEÑO = el que nombra el perfil de la óptica tras un traspaso (POST
+ * /admin/tenant/transfer-owner) o, mientras no haya ninguno, el usuario más
+ * antiguo (creado con `npx medusa user` al montar la tienda); lo decide
+ * ownerUserId en lib/staff-scope.ts. La API lo sigue llamando `is_super`. No se puede borrar ni cambiar
  * de rol — ver [id]/route.ts y [id]/role/route.ts — así la tienda nunca se
  * queda sin su administrador raíz por un clic de más. Los roles y quién puede
  * darlos viven en lib/staff-roles.ts.
@@ -68,25 +70,27 @@ export function sellerLinkRefusal(res: MedusaResponse, error: unknown): boolean 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  const [byUser, profiles, access, sellers] = await Promise.all([
+  const [byUser, profiles, access, sellers, ownerId] = await Promise.all([
     assignmentsByUser(req.scope, all.map((u) => u.id)),
     profilesByUser(req.scope, all.map((u) => u.id)),
     accessStatusByUser(req.scope, all.map((u) => u.id)),
     listSellers(req.scope),
+    ownerUserId(req.scope),
   ]);
   const sellerByUser = new Map(sellers.filter((s) => s.user_id).map((s) => [s.user_id as string, s]));
-  return all.map((u, i) => {
-    // El más antiguo es el dueño (super admin) del sistema.
-    const resolved = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] });
+  return all.map((u) => {
+    // El dueño lo decide ownerUserId (el nombrado al transferir, o el más antiguo).
+    const isOwner = u.id === ownerId;
+    const resolved = resolveRole({ isOwner, assignments: byUser.get(u.id) ?? [] });
     // The owner is never deactivated (lib/staff-scope.ts ignores the flag for them too).
-    const disabledAt = i === 0 ? null : (access.get(u.id)?.disabled_at ?? null);
+    const disabledAt = isOwner ? null : (access.get(u.id)?.disabled_at ?? null);
     return {
       id: u.id,
       email: u.email,
       first_name: u.first_name ?? null,
       last_name: u.last_name ?? null,
       created_at: String(u.created_at),
-      is_super: i === 0,
+      is_super: isOwner,
       must_change_password: Boolean((u.metadata as Record<string, unknown> | null)?.["must_change_password"]),
       role: resolved.role,
       role_legacy: resolved.legacy,

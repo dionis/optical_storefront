@@ -4,6 +4,7 @@ import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import Header from "../components/Header.jsx";
+import { TENANT } from "../config/tenant.js";
 import Footer from "../components/Footer.jsx";
 import { useCatalog, matchProduct } from "../data/catalogStore.js";
 import { loadCache, saveCache } from "../lib/appCache.js";
@@ -1236,7 +1237,7 @@ export default function LensProcess() {
             {fsTime}
           </span>
         </div>
-        <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
+        <img src={TENANT.logo} alt={TENANT.name} className="fs-foot-logo" />
       </div>
     </aside>
   );

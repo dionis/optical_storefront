@@ -7,6 +7,7 @@ import type SellerModuleService from "../modules/seller/service";
 import type { CounterSeller } from "./pos";
 import { recordAudit } from "./audit";
 import { accessStatusByUser, profilesByUser } from "./staff-profile-data";
+import { explicitOwnerId } from "./tenant-profile";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
@@ -110,13 +111,29 @@ export function invalidateStaffScope(userId?: string): void {
   ownerCache = null;
 }
 
-/** The owner = the oldest admin user, the same rule /admin/team uses. */
+/**
+ * The owner: the user the tenant profile names (set by an ownership transfer),
+ * or — while none is named, or the named user no longer exists — the oldest
+ * admin user, the rule the panel has always used. The ONE place this is
+ * decided: /admin/team and the discount approvers ask here too.
+ */
 export async function ownerUserId(container: MedusaContainer): Promise<string | null> {
   if (ownerCache && Date.now() - ownerCache.at < TTL_MS) return ownerCache.id;
   const users = container.resolve<IUserModuleService>(Modules.USER);
-  const [oldest] = await users.listUsers({}, { take: 1, order: { created_at: "ASC" } });
-  ownerCache = { at: Date.now(), id: oldest?.id ?? null };
-  return ownerCache.id;
+  // A profile that cannot be read (module not migrated yet, database hiccup)
+  // must not lock anyone out: the rule falls back to the oldest admin.
+  const named = await explicitOwnerId(container).catch(() => null);
+  let id: string | null = null;
+  if (named) {
+    const [found] = await users.listUsers({ id: named }, { take: 1 });
+    id = found?.id ?? null;
+  }
+  if (!id) {
+    const [oldest] = await users.listUsers({}, { take: 1, order: { created_at: "ASC" } });
+    id = oldest?.id ?? null;
+  }
+  ownerCache = { at: Date.now(), id };
+  return id;
 }
 
 export async function assignmentsByUser(

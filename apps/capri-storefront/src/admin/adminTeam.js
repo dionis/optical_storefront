@@ -16,7 +16,8 @@ export async function fetchMe() {
 }
 
 // Roles que se pueden asignar desde el panel, de más a menos permisos. "owner"
-// no está: el dueño es siempre el usuario más antiguo (lo decide el backend).
+// no está: el dueño lo decide el backend (el nombrado en un traspaso o, si no
+// hay ninguno, el usuario más antiguo) y solo cambia con transferOwnership.
 export const ASSIGNABLE_ROLES = ["superadmin", "supervisor", "manager", "seller"];
 
 /** Clave de traducción del rol; null = sin acceso. */
@@ -79,6 +80,16 @@ export async function setActive(id, active) {
     });
   } catch (e) {
     throw new Error(reasonKey(e, "adm.err.team.statusFailed"));
+  }
+}
+
+/** Solo el dueño: entrega la propiedad del panel a `userId`, confirmando con su contraseña. */
+export async function transferOwnership(userId, password) {
+  try {
+    return await adminFetch("/admin/tenant/transfer-owner", { method: "POST", body: { user_id: userId, password } });
+  } catch (e) {
+    const r = (e && e.reason) || (e && e.payload && e.payload.reason);
+    throw new Error(r ? `adm.err.owner.${r}` : "adm.err.owner.transfer_failed");
   }
 }
 

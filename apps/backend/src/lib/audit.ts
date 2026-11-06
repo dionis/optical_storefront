@@ -42,6 +42,8 @@ export const AUDIT_ACTIONS = [
   "catalog.sync",
   "ai_credit.change",
   "ai_alert.change",
+  "tenant.profile",
+  "owner.transfer",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

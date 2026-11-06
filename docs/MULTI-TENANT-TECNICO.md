@@ -8,6 +8,27 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 
 ---
 
+## 0. Estado de la implementación (06/11/2026, rama `multi-tenant-modulo-develop`)
+
+**Fases 1 y 2 hechas.** Lo que hay y en qué se aparta de lo escrito más abajo:
+
+| Pieza | Dónde | Notas |
+|---|---|---|
+| Ficha y validador | `packages/shared/src/tenant.ts` (`validateTenantManifest`, `contrastRatio`) | La ficha lleva además `seo.*` (título, descripción y textos para redes por idioma) e `identity.compactName` (cabecera del probador). |
+| Fichas | `tenants/rubi-lens`, `tenants/el-rancho`, `tenants/demo-optica` | **Hay dos ópticas reales**: RUBI LENS (tienda web, `develop`/`main`) y Óptica El Rancho (POS y tiendas físicas, `develop_optical_storepos`). Decisión del dueño, 06/11/2026. El dominio de El Rancho (`www.opticaelrancho.example`) es provisional: hay que poner el real. |
+| Ficha por defecto | `scripts/tenant/load.mjs` (`tenantFileFor`) | `TENANT_FILE` manda; si no está, **decide la rama** como en `backend-target.mjs`: `develop`/`main` → RUBI LENS, el resto → El Rancho. Una fusión a `develop` no puede cambiar el nombre de la tienda en vivo. |
+| Build del storefront | plugin `tenant` en `vite.config.js` | Rellena `%TENANT_*%` de `index.html`, los `VITE_TENANT_*` que no estén puestos, el `site.webmanifest` y copia `tenants/<slug>/public/` encima de `dist/`. Con la ficha de RUBI LENS el HTML sale **idéntico** al anterior (comprobado). La paleta solo se inyecta si difiere de la de siempre (`html:root{--primary-blue…}`). |
+| Probador | `apps/vto-web/vite.config.ts`, `i18n.ts` | `BRAND` = `VITE_TENANT_COMPACT_NAME`. Las claves `rubilens.*` de `localStorage` se mantienen a propósito. |
+| Textos con marca | `t()` en `LanguageContext.jsx` | Marcadores **`{brand}` y `{site}`**, no `{store}`: el panel ya usa `{store}` para el nombre de una sucursal. |
+| Backend, capa B | `lib/tenant.ts` | Paleta de los correos con `TENANT_BRAND_PRIMARY`/`TENANT_BRAND_ACCENT`; ids de imágenes del correo con el dominio de la tienda. **Corregido el SMS de pedido**, que tenía "Óptica El Rancho" fijo desde el 02/08/2026 en todas las ramas: ahora usa `tenant().smsPrefix`. `vision-measure` usa `STORE_NAME`. |
+| Vigilancia | `scripts/check-tenant.mjs` (`pnpm check:tenant`, dentro de `pnpm test`) | Falla con un nombre de óptica o del proveedor escrito en el código. Las excepciones (valores por defecto, enlaces del proveedor hasta la fase 4, claves de `localStorage`) están listadas con su motivo. |
+| Herramienta | `scripts/tenant.mjs` (`pnpm tenant list`, `validate`, `env`) | El resto de comandos (`new`, `checklist`, `bootstrap`, `vercel`) llega en la fase 3. |
+| Perfil (capa C) | módulo `tenantProfile`, `lib/tenant-profile.ts` | Rutas `GET/POST /admin/tenant` y `GET /store/tenant`. **El correo de soporte se queda en `store_setting`** (ya lo edita el dueño en Ajustes): no se migra. Las zonas de envío y la marca editable llegan en las fases 4 y 5. Un middleware refresca el perfil en memoria sin hacer esperar a la petición. |
+| Dueño explícito | `ownerUserId` en `lib/staff-scope.ts` | Una sola regla para el panel, Equipo y los aprobadores de descuentos (antes estaba copiada en tres sitios). Si el perfil no se puede leer, vuelve a la regla del usuario más antiguo. |
+| Traspaso | `POST /admin/tenant/transfer-owner`, `lib/tenant-owner.ts`, Equipo → «Propiedad del panel» | Solo el dueño, con su contraseña; el anterior queda como superadmin, se audita y se avisa por correo a los dos. La invitación al dueño en el alta va con la fase 3. |
+
+**Para desplegar esta línea:** en el backend de staging (Coolify) poner `STORE_NAME=Óptica El Rancho`; si no, correos y SMS dicen "RUBI LENS" (valor por defecto del backend). En producción (RUBI LENS) no hay que tocar nada.
+
 ## 1. Objetivo y criterio de "terminado"
 
 **Objetivo.** Un módulo "kit de inquilino" con tres partes:

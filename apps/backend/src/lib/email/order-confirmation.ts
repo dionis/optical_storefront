@@ -10,7 +10,7 @@
  * these templates are a read-only view of what the order module settled on.
  */
 
-import { tenantName } from "../tenant";
+import { DEFAULT_EMAIL_BRAND, tenant, tenantName } from "../tenant";
 import { normalizeColor, storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
@@ -106,15 +106,26 @@ export interface RenderedEmail {
   text: string;
 }
 
-/** Paleta de la tienda (azul marino + dorado), la misma de rubilens.com. */
-export const BRAND = "#0b2f66";
+/** `hex` mixed with white (`amount` of white, 0–1): the soft tint of a brand colour. */
+function tint(hex: string, amount: number): string {
+  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `#${ch.map((c) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Paleta de los correos: la de la óptica (TENANT_BRAND_PRIMARY/ACCENT), con el
+ * azul marino y el dorado de siempre por defecto. Los tonos suaves conservan sus
+ * valores afinados a mano cuando la marca es la de por defecto.
+ */
+const EMAIL_BRAND = tenant().brand;
+export const BRAND = EMAIL_BRAND.emailPrimary;
 export const MUTED = "#5b6472";
 export const BORDER = "#e7eaf0";
-export const GOLD = "#b8921e";
-export const GOLD_LIGHT = "#f6efd9";
+export const GOLD = EMAIL_BRAND.emailAccent;
+export const GOLD_LIGHT = GOLD === DEFAULT_EMAIL_BRAND.emailAccent ? "#f6efd9" : tint(GOLD, 0.85);
 export const BONE = "#f5f2ec";
 export const INK = "#1e2733";
-export const NAVY_SOFT = "#eef2f8";
+export const NAVY_SOFT = BRAND === DEFAULT_EMAIL_BRAND.emailPrimary ? "#eef2f8" : tint(BRAND, 0.92);
 export const GREEN = "#1e6b3a";
 export const GREEN_LIGHT = "#e3f5e9";
 

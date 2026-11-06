@@ -1,5 +1,11 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import { T, tv } from "./translations.js";
+import { TENANT } from "../config/tenant.js";
+
+// `{brand}` and `{site}` name the optician in copy without hardcoding it: the
+// dictionary is shared by every store built from this repo. (`{store}` is taken:
+// the panel uses it for a branch's name.) Explicit params win over these.
+const TENANT_PARAMS = { brand: TENANT.name, site: TENANT.site };
 
 const LangContext = createContext(null);
 
@@ -27,8 +33,9 @@ export function LanguageProvider({ children }) {
   const t = useCallback(
     (key, params) => {
       const s = T[lang][key] ?? T.es[key] ?? key;
-      if (!params) return s;
-      return s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
+      if (!params && !s.includes("{")) return s;
+      const all = params ? { ...TENANT_PARAMS, ...params } : TENANT_PARAMS;
+      return s.replace(/\{(\w+)\}/g, (m, k) => (k in all ? String(all[k]) : m));
     },
     [lang]
   );

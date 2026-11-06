@@ -8,8 +8,10 @@
 
 import type { EmailLocale } from "../email/copy";
 import type { OrderEmailData } from "../email/order-confirmation";
+import { tenant } from "../tenant";
 
-const STORE_NAME = "Óptica El Rancho";
+/** Same prefix as the stage SMS (order-stage-transition.ts): the optician configured for this deployment. */
+const storeName = (): string => tenant().smsPrefix;
 
 /** Currency format with a bare-amount fallback for unknown codes. */
 function money(amount: number | null | undefined, currency: string | null | undefined, locale: EmailLocale): string {
@@ -30,9 +32,9 @@ export function renderCustomerOrderSms(order: OrderEmailData, locale: EmailLocal
   const id = `#${order.display_id ?? order.id}`;
   const total = money(order.total, order.currency_code, locale);
   if (locale === "en") {
-    return `${STORE_NAME}: we received your order ${id} for ${total}. We'll text you when it's ready. Thank you!`;
+    return `${storeName()}: we received your order ${id} for ${total}. We'll text you when it's ready. Thank you!`;
   }
-  return `${STORE_NAME}: recibimos tu pedido ${id} por ${total}. Te avisamos cuando esté listo. ¡Gracias!`;
+  return `${storeName()}: recibimos tu pedido ${id} por ${total}. Te avisamos cuando esté listo. ¡Gracias!`;
 }
 
 /** Heads-up the store owner receives for each new order. */
@@ -41,7 +43,7 @@ export function renderAdminOrderSms(order: OrderEmailData, locale: EmailLocale):
   const total = money(order.total, order.currency_code, locale);
   const who = order.email ? ` — ${order.email}` : "";
   if (locale === "en") {
-    return `${STORE_NAME}: new order ${id} for ${total}${who}.`;
+    return `${storeName()}: new order ${id} for ${total}${who}.`;
   }
-  return `${STORE_NAME}: nuevo pedido ${id} por ${total}${who}.`;
+  return `${storeName()}: nuevo pedido ${id} por ${total}${who}.`;
 }

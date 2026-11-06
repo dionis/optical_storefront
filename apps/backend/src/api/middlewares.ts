@@ -15,6 +15,7 @@ import {
 } from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { staffGuard } from "../lib/staff-guard";
+import { warmTenantProfile } from "../lib/tenant-profile";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -210,13 +211,23 @@ function visionMeasureCors(
   next();
 }
 
+/**
+ * Keeps the owner-edited tenant profile (name, legal name…) loaded so the
+ * synchronous `tenant()` used by emails, SMS and the sheet reflects it. Fire and
+ * forget: the request never waits for the database here.
+ */
+function tenantProfileWarm(req: MedusaRequest, _res: MedusaResponse, next: MedusaNextFunction): void {
+  warmTenantProfile(req.scope);
+  next();
+}
+
 export default defineMiddlewares({
   routes: [
     {
       // Security headers on every response (HSTS, nosniff, no framing…). See
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
-      middlewares: [securityHeaders],
+      middlewares: [securityHeaders, tenantProfileWarm],
     },
     {
       // Role gate for every admin route, Medusa's own included: owner and

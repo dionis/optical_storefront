@@ -1,7 +1,8 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { loadTenant, applyTenantEnv, tenantPlugin } from "../../scripts/tenant/load.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -35,13 +36,17 @@ export default defineConfig(({ mode }) => {
   // loadEnv lee los .env; process.env cubre las variables del CI.
   const env = { ...loadEnv(mode, HERE, ""), ...process.env };
   const id = buildId(env);
+  // Qué óptica es este build (TENANT_FILE; RUBI LENS si no se indica). Rellena
+  // los VITE_TENANT_* que no estén puestos antes de que Vite lea el entorno.
+  const tenant = loadTenant(join(HERE, "..", ".."), env);
+  applyTenantEnv(tenant.manifest);
 
   return {
     define: {
       // En dev queda "dev" y el chequeo de versión no hace nada.
       __BUILD_ID__: JSON.stringify(mode === "production" ? id : "dev"),
     },
-    plugins: [react(), emitBuildId(id)],
+    plugins: [react(), emitBuildId(id), tenantPlugin(tenant)],
     build: {
       rollupOptions: {
         output: {

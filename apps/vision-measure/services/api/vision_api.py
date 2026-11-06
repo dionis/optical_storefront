@@ -61,8 +61,12 @@ from services.vision_measure.version import banner, describe_build  # noqa: E402
 
 load_env_files()
 
+# The optician this deployment serves. Same variable as the backend (they share a
+# container in production); the default keeps the name this service always had.
+STORE_NAME = os.environ.get("STORE_NAME", "").strip() or "RUBILENS"
+
 app = FastAPI(
-    title="RUBILENS · Medición óptica multimodal",
+    title=f"{STORE_NAME} · Medición óptica multimodal",
     version="1.0.0",
     description=(
         "Combina una foto frontal del paciente con la foto de una montura y devuelve "
@@ -478,7 +482,7 @@ def _summarize_for_notification(
     subject = "Tu medición ya está lista" if is_es else "Your measurement is ready"
     body = "\n".join(
         [
-            "Tu medición de RUBILENS ya está lista:" if is_es else "Your RUBILENS measurement is ready:",
+            f"Tu medición de {STORE_NAME} ya está lista:" if is_es else f"Your {STORE_NAME} measurement is ready:",
             "",
             *(lines or (["(sin valores numéricos en esta propuesta)"] if is_es else ["(no numeric values in this proposal)"])),
             "",

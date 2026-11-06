@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { tenantName } from "../../../lib/tenant";
 import type { INotificationModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { notificationHealth, undeliverableReason } from "../../../lib/notification-health";
@@ -72,7 +73,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<voi
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const notificationService = req.scope.resolve<INotificationModuleService>(Modules.NOTIFICATION);
   const health = notificationHealth();
-  const subject = (body.subject || "").trim() || "RUBILENS";
+  const subject = (body.subject || "").trim() || tenantName();
   const requestId = body.requestId || "sin-id";
 
   const delivered: { email?: boolean; whatsapp?: boolean } = {};

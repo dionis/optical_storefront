@@ -6,7 +6,7 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, transferOwnership } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -151,6 +151,68 @@ function StorePicker({ member, stores, disabled, onSave }) {
  *    de entrar al instante (también con sesiones abiertas) y conserva rol y
  *    perfil hasta que se le reactive. Mismos vetos que Eliminar.
  */
+/**
+ * «Propiedad del panel»: solo lo ve el dueño. Entrega la propiedad a otra
+ * persona activa del equipo tras confirmar con su contraseña; él queda como
+ * superadmin. El servidor revalida todo (lib/tenant-owner.ts).
+ */
+function OwnerTransfer({ team, meId, onDone }) {
+  const { t } = useLang();
+  const { toast, confirm } = useFeedback();
+  const [target, setTarget] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const candidates = team.filter((m) => m.id !== meId && !m.is_disabled);
+  const me = team.find((m) => m.id === meId);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const to = candidates.find((m) => m.id === target);
+    if (!to || !password) return;
+    const ok = await confirm({
+      tone: "danger",
+      title: t("adm.own.confirmTitle", { email: to.email }),
+      message: t("adm.own.confirmBody", { email: to.email }),
+      confirmLabel: t("adm.own.submit"),
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await transferOwnership(to.id, password);
+      setPassword("");
+      setTarget("");
+      toast({ tone: "success", title: t("adm.own.done", { email: to.email }) });
+      onDone();
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="adm-card">
+      <h3>{t("adm.own.title")}</h3>
+      <p className="adm-sub">{t("adm.own.sub")}</p>
+      {me && <p className="adm-sub">{t("adm.own.current", { email: me.email })}</p>}
+      {candidates.length === 0 ? (
+        <div className="adm-nodata">{t("adm.own.none")}</div>
+      ) : (
+        <form className="adm-team-form" onSubmit={submit}>
+          <select aria-label={t("adm.own.target")} title={t("adm.own.target")} value={target} onChange={(e) => setTarget(e.target.value)} required>
+            <option value="">{t("adm.own.pick")}</option>
+            {candidates.map((m) => (
+              <option key={m.id} value={m.id}>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email} · {m.email}</option>
+            ))}
+          </select>
+          <input type="password" required autoComplete="current-password" aria-label={t("adm.own.password")} placeholder={t("adm.own.password")} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <button className="btn-sm danger" disabled={busy || !target || !password}>{busy ? "…" : t("adm.own.submit")}</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function Team() {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
@@ -423,6 +485,8 @@ export default function Team() {
         <p className="adm-sub adm-team-note">{t("adm.team.superNote")}</p>
         <p className="adm-sub">{t("adm.team.roleNote")}</p>
       </div>
+
+      {iAmOwner && !demo && <OwnerTransfer team={team} meId={meId} onDone={load} />}
     </div>
   );
 }
