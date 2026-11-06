@@ -104,7 +104,7 @@ export default function MeasureReport({
       );
     }
     if (phase === "error") {
-      const msg = errorCode === "missing-api-key" ? t("vm.noKey") : (error || t("vm.failed"));
+      const msg = errorCode === "missing-api-key" ? t("vm.noKey") : errorCode === "server_busy" ? t("vm.busy") : (error || t("vm.failed"));
       return (
         <div className="vm-state">
           <div className="vm-err-ic" aria-hidden="true">⚠️</div>

@@ -70,7 +70,7 @@ const money = (v: unknown, l: EmailLocale) =>
   new Intl.NumberFormat(l === "en" ? "en-US" : "es-US", { style: "currency", currency: "USD" }).format(Number(v ?? 0));
 
 const VOID_REASONS: Record<string, { es: string; en: string }> = {
-  customer_changed_mind: { es: "el cliente cambió de opinión", en: "customer changed their mind" },
+  customer_changed_mind: { es: "el paciente cambió de opinión", en: "patient changed their mind" },
   wrong_entry: { es: "error al registrar", en: "entry error" },
   price_error: { es: "error de precio", en: "price error" },
   duplicate: { es: "venta duplicada", en: "duplicate sale" },

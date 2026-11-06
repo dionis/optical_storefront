@@ -22,6 +22,8 @@ export const AUDIT_ACTIONS = [
   "stores.change",
   "privileges.change",
   "profile.change",
+  /** Datos de pago del trabajador: se registra QUÉ cambió y los últimos 4, nunca el número. */
+  "payroll.change",
   "discount.request",
   "discount.approve",
   "discount.reject",

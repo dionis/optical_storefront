@@ -76,7 +76,8 @@ export function photoBox(line, px, alt = "") {
 }
 
 export const PRINT_CSS = `
-  *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
   .job{width:100%;max-width:7.6in;margin:0 auto;padding:.25in;page-break-after:always}
   .job:last-child{page-break-after:auto}
   .jh{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:6px}
@@ -124,6 +125,28 @@ export const PRINT_CSS = `
   .duo .foot .qr svg{width:16mm;height:16mm} .duo .foot .bc svg{height:9mm;width:auto}
   .duo .copy{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:4px}
   .duo .note{font-size:9px;color:#444;margin-top:3px}
+  /* Color de la óptica que vendió (doc.store.color → --sc en <body>): banda de
+     cabecera y filetes. print-color-adjust para que la banda salga impresa. */
+  .band{background:var(--sc,#111);color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:3px 8px;font-weight:800;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:8px;border-radius:3px;margin-bottom:4px}
+  .band small{font-weight:600;opacity:.92}
+  .jh,.duo .dh{border-bottom-color:var(--sc,#111)}
+  .rcpt .tot td,.duo .tot td,.fold{border-top-color:var(--sc,#111)}
+  .rcpt h2,.duo .dh .no,.jh b{color:var(--sc,#111)}
+  .rcpt .band{margin:0 0 4px;font-size:11px;justify-content:center}
+  /* Ficha de laboratorio DOBLE: dos copias iguales (laboratorio / archivo de la
+     tienda) en una hoja carta apaisada, una línea de corte en medio. */
+  .jobduo{page-break-after:always} .jobduo:last-child{page-break-after:auto}
+  .jobduo .half{font-size:11.5px}
+  .jobduo .band{font-size:14px;padding:5px 10px}
+  .jobduo .jh{padding-bottom:4px} .jobduo .jh b{font-size:15px} .jobduo .jh small{font-size:11px}
+  .jobduo .pt{font-size:20px;margin:8px 0 6px} .jobduo .ids{font-size:12px;margin:4px 0}
+  .jobduo table{font-size:11.5px} .jobduo th,.jobduo td{padding:4px 6px;border:1px solid #bbb}
+  .jobduo h4{margin:10px 0 4px;font-size:12px} .jobduo .grid2{gap:10px}
+  .jobduo .ph{width:42mm;height:22mm;margin:3px 0 6px}
+  .jobduo .fold{margin-top:auto;padding-top:8px} .jobduo .fold .big{font-size:30px}
+  .jobduo .fold svg{height:12mm;width:auto}
+  .jobduo .copy{font-size:11px;margin-top:6px}
+  .jobduo .copy{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:3px}
   @page{margin:8mm}
   @media print{.noprint{display:none}}
 `;
@@ -131,11 +154,17 @@ export const PRINT_CSS = `
 /** Hoja carta apaisada para el recibo doble; se añade después del CSS común, así que su @page gana. */
 export const DUO_PAGE_CSS = `@page{size:letter landscape;margin:6mm} html,body{width:100%;height:100%} body{overflow:hidden}`;
 
+/** Banda con el color de la óptica que registró la venta: código · nombre, y a la derecha lo que se pase. */
+const storeBand = (doc, right = "") => `<div class="band"><span>${esc(doc.store.code)} · ${esc(doc.store.name)}</span>${right ? `<small>${right}</small>` : ""}</div>`;
+/** Estilo del <body> del documento: el color de la tienda como variable CSS (todo el CSS lo lee de --sc). */
+const docBodyStyle = (doc) => (/^#[0-9a-f]{6}$/i.test(doc.store.color || "") ? `--sc:${doc.store.color}` : "");
+
 /** Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos. */
 export function jobHtml(doc) {
   const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
   const t = tIn(lang);
   const head = (tk) => `
+    ${storeBand(doc, esc(t("adm.doc.job.invoice")) + " " + esc(doc.sale.number))}
     <div class="jh">
       <div><b>${esc(doc.business.name)} · ${esc(doc.store.name)}</b>
         <small>${esc([doc.store.address, doc.store.phone].filter(Boolean).join(" · "))}</small></div>
@@ -160,11 +189,10 @@ export function jobHtml(doc) {
           <td>${fmtRx(tk.rx?.seg_height, 2, false)}</td><td>${fmtRx(tk.rx?.[`pd_${eye}`], 2, false)}</td></tr>`;
       }).join("")}
     </tbody></table>`;
-  return doc.tickets.map((tk) => {
+  const ticketBody = (tk) => {
     const l = tk.line;
     const handling = l.handling === "patient_own_frame" ? t("adm.doc.job.handling.own") : t("adm.doc.job.handling.supplied");
-    return `<section class="job">
-      ${head(tk)}
+    return `${head(tk)}
       <div class="grid2">
         <div><h4>${esc(t("adm.doc.job.overview"))}</h4><table class="kv"><tbody>
           <tr><td>${esc(t("adm.doc.job.jobType"))}</td><td>${esc(t(`adm.doc.job.type.${tk.job_type}`))}</td></tr>
@@ -196,9 +224,31 @@ export function jobHtml(doc) {
         <div><div class="big">${esc(doc.store.code)} · ${esc(String(doc.sale.tray || "").split("-").pop() || "—")}</div>
           <div class="muted">${esc(t("adm.doc.job.fold"))} · ${esc(doc.sale.number)}</div></div>
         <div>${code128Svg(doc.sale.number)}</div>
-      </div>
-    </section>`;
-  }).join("");
+      </div>`;
+  };
+  return { ticketBody, t };
+}
+
+/** Ficha de laboratorio en hoja suelta (una por línea con lentes). Se conserva para la vista previa; la caja imprime la doble. */
+export function jobSheetHtml(doc) {
+  const { ticketBody } = jobHtml(doc);
+  return doc.tickets.map((tk) => `<section class="job">${ticketBody(tk)}</section>`).join("");
+}
+
+/**
+ * Ficha de laboratorio DOBLE (regla del dueño: siempre se imprime doble): por
+ * cada línea con lentes, UNA hoja carta apaisada con dos copias iguales —
+ * laboratorio a la izquierda, archivo de la tienda a la derecha — y una línea de
+ * corte entre las dos. Misma plantilla que el recibo doble (.duo).
+ */
+export function jobDuoHtml(doc) {
+  const { ticketBody, t } = jobHtml(doc);
+  const half = (tk, copyKey) => `<div class="half">${ticketBody(tk)}<div class="copy">${esc(t(copyKey))}</div></div>`;
+  return doc.tickets.map((tk) => `<section class="duo jobduo">
+    ${half(tk, "adm.doc.duo.labCopy")}
+    <div class="cut"><span>✂</span><small>${esc(t("adm.doc.duo.cut"))}</small></div>
+    ${half(tk, "adm.doc.duo.storeCopy")}
+  </section>`).join("");
 }
 
 /** Lo que se lee de una línea en los recibos: nombre, resumen de lentes (o «solo montura») y forma de pago. */
@@ -217,6 +267,7 @@ export function receiptHtml(doc) {
   const method = (p) => payMethod(p, t, lang);
   const kindKey = payKindKey;
   return `<section class="rcpt">
+    ${storeBand(doc)}
     <div class="c"><h2>${esc(doc.business.name)} · ${esc(doc.store.name)}</h2>
       <div>${esc([doc.store.address, doc.store.phone, doc.terminal.code].filter(Boolean).join(" · "))}</div></div>
     ${doc.print.reprint ? `<div class="c reprint">${esc(t("adm.doc.reprint", { date: fmtDate(new Date().toISOString(), lang) }))}</div>` : ""}
@@ -265,6 +316,7 @@ function duoCopyHtml(doc, t, lang, copyKey) {
   const method = (p) => payMethod(p, t, lang);
   const kv = (k, v) => (v ? `<tr><td>${esc(k)}</td><td class="r">${v}</td></tr>` : "");
   return `<div class="half">
+    ${storeBand(doc, esc(fmtDate(doc.sale.created_at, lang)))}
     <div class="dh">
       <div><b>${esc(doc.business.name)} · ${esc(doc.store.name)}</b>
         <small>${esc([doc.store.address, doc.store.phone].filter(Boolean).join(" · "))}</small></div>
@@ -346,14 +398,14 @@ function imagesSettled(doc, timeoutMs = 4000) {
  * cargadas (o pasan 4 s). `extraCss` va después del CSS común (p. ej. el @page
  * apaisado del recibo doble).
  */
-async function printHtml(title, body, extraCss = "") {
+async function printHtml(title, body, extraCss = "", bodyStyle = "") {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
   document.body.appendChild(frame);
   const d = frame.contentDocument;
   d.open();
-  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}${extraCss}</style></head><body>${body}</body></html>`);
+  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PRINT_CSS}${extraCss}</style></head><body style="${esc(bodyStyle)}">${body}</body></html>`);
   d.close();
   await imagesSettled(d);
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -384,11 +436,12 @@ export default function SaleDocuments({ saleId, compact = false, printer = null 
         if (!doc.tickets?.length) { toast({ tone: "info", title: t("adm.doc.noLenses") }); return; }
         const own = doc.tickets.find((tk) => tk.line.own_frame?.photo_url);
         setPhoto(own ? own.line.own_frame.photo_url : null);
-        await printHtml(`${doc.sale.number} · job`, jobHtml(doc));
+        // La ficha de laboratorio se imprime SIEMPRE doble (laboratorio + archivo) en una hoja.
+        await printHtml(`${doc.sale.number} · job`, jobDuoHtml(doc), DUO_PAGE_CSS, docBodyStyle(doc));
       } else if (kind === "receipt_duo") {
-        await printHtml(`${doc.sale.number} · receipt`, receiptDuoHtml(doc), DUO_PAGE_CSS);
+        await printHtml(`${doc.sale.number} · receipt`, receiptDuoHtml(doc), DUO_PAGE_CSS, docBodyStyle(doc));
       } else {
-        await printHtml(`${doc.sale.number} · receipt`, receiptHtml(doc));
+        await printHtml(`${doc.sale.number} · receipt`, receiptHtml(doc), "", docBodyStyle(doc));
       }
     } catch (e) {
       toast({ tone: "error", title: t(e.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic") });

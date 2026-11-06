@@ -8,6 +8,7 @@ import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile, signMeOutEverywhere } from "./adminTeam.js";
+import StaffPayroll from "./StaffPayroll.jsx";
 import { logout } from "./adminAuth.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
@@ -388,6 +389,9 @@ export default function StaffProfile({ mode = "self", userId = null, onSaved }) 
         {!isAdmin && <small className="muted">{t("adm.profile.selfHint")}</small>}
       </div>
     </form>
+    {/* Datos de pago: formulario aparte porque va por su propia ruta y sus
+        propias reglas (se guarda cifrado y nunca vuelve completo). */}
+    <StaffPayroll userId={isAdmin ? userId : null} />
     {!isAdmin && <OwnPassword />}
     </>
   );

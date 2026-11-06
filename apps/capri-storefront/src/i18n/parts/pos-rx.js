@@ -4,7 +4,7 @@ export default {
   es: {
     "adm.pos.rx.type": "Tipo de receta",
     "adm.pos.rx.type.sv": "Monofocal (visión sencilla)",
-    "adm.pos.rx.type.multifocal": "Multifocal (bifocal / progresivo)",
+    "adm.pos.rx.type.multifocal": "Multifocal (tallado · de stock · progresivo)",
     "adm.pos.rx.h.sph": "ESF",
     "adm.pos.rx.h.cyl": "CIL",
     "adm.pos.rx.h.axis": "EJE",
@@ -61,7 +61,7 @@ export default {
   en: {
     "adm.pos.rx.type": "Prescription type",
     "adm.pos.rx.type.sv": "Single vision",
-    "adm.pos.rx.type.multifocal": "Multifocal (bifocal / progressive)",
+    "adm.pos.rx.type.multifocal": "Multifocal (surfaced · stock · progressive)",
     "adm.pos.rx.h.sph": "SPH",
     "adm.pos.rx.h.cyl": "CYL",
     "adm.pos.rx.h.axis": "AXIS",

@@ -53,7 +53,7 @@ Acciones nuevas en `audit_event`: `password.recover` (reservada), `session.revok
 
 - `pnpm --filter @eyewear/backend typecheck`, `lint`; `pnpm --filter capri-storefront lint`; `node scripts/check-i18n.mjs` (5.036 claves × 2); `node scripts/check-vercel-config.mjs`.
 - Tests nuevos: `pos-dates.test.ts`, `session-control.test.ts`, `password-reset-email.test.ts`; ampliados `pos-receipt-email.test.ts` (zona horaria, subtotal) y `security.test.ts` (migraciones).
-- Suite completa del backend: 804 → 833 tests en verde (Windows, Node 24).
+- Suite completa del backend: 804 → 831 tests en verde (Windows, Node 24).
 
 ## 5. Lo que sigue pendiente (decisiones del dueño o trabajo mayor)
 

@@ -292,11 +292,11 @@ export async function startMeasurementJob({
     });
     startBody = await r.json().catch(() => null);
     if (!r.ok || !startBody?.jobId) {
-      throw new Error(startBody?.error || `No se pudo iniciar la medición (HTTP ${r.status}).`);
+      throw Object.assign(new Error(startBody?.error || `No se pudo iniciar la medición (HTTP ${r.status}).`), { code: startBody?.errorCode || null });
     }
   } catch (e) {
     if (e?.name === "AbortError") throw Object.assign(new Error("cancelado"), { code: "aborted" });
-    throw new Error(e?.message || "No se pudo conectar con el servicio de medición.");
+    throw Object.assign(new Error(e?.message || "No se pudo conectar con el servicio de medición."), { code: e?.code || null });
   }
   return startBody.jobId;
 }
@@ -342,7 +342,11 @@ export async function pollMeasurementJob(jobId, { onProgress = null, signal } = 
       });
     }
     if (poll.status === "done") return poll.result;
-    if (poll.status === "error") throw new Error(poll.error || "La generación de la imagen falló.");
+    if (poll.status === "error") {
+      // `errorCode` (p. ej. "server_busy") deja que la UI muestre un texto en el
+      // idioma del cliente en vez del mensaje técnico del servicio.
+      throw Object.assign(new Error(poll.error || "La generación de la imagen falló."), { code: poll.errorCode || null, messageEn: poll.errorEn || null });
+    }
     // status === "pending" → seguir preguntando.
   }
 }

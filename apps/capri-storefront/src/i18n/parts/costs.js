@@ -25,14 +25,14 @@ const UI = {
     "adm.ecost.gl.sub": "Cada concepto en una línea, en el orden en que se descuenta del dinero pagado.",
     "adm.ecost.gl.step": "Paso {n}",
     "adm.ecost.gl.deduction.name": "Deducciones",
-    "adm.ecost.gl.deduction.def": "Dinero que el cliente pagó pero nunca fue tuyo: se va antes de contar nada.",
+    "adm.ecost.gl.deduction.def": "Dinero que el paciente pagó pero nunca fue tuyo: se va antes de contar nada.",
     "adm.ecost.gl.deduction.items": "Envío · Impuestos · Comisión de Stripe (tarjeta)",
     "adm.ecost.gl.material.name": "Materiales",
     "adm.ecost.gl.material.def": "Lo que compras para fabricar ese pedido, a precio de proveedor (importe fijo por pieza).",
     "adm.ecost.gl.material.items": "Montura · Lentes · Tratamientos (antirreflejo, fotocromático) · Estuche",
     "adm.ecost.gl.percent.name": "Partidas %",
     "adm.ecost.gl.percent.def": "Gastos del negocio repartidos como un porcentaje del neto de cada venta.",
-    "adm.ecost.gl.percent.items": "Laboratorio · Empaque · Mantenimiento · Atención al cliente · Renta · Reserva",
+    "adm.ecost.gl.percent.items": "Laboratorio · Empaque · Mantenimiento · Atención al paciente · Renta · Reserva",
     "adm.ecost.gl.seller.name": "Vendedor",
     "adm.ecost.gl.seller.def": "La comisión de quien trajo la venta: su % sobre el neto del pedido.",
     "adm.ecost.gl.seller.items": "Comisión del vendedor (según su ficha)",
@@ -89,14 +89,14 @@ const UI = {
     "adm.ecost.gl.sub": "Every concept in one line, in the order it is taken out of the money paid.",
     "adm.ecost.gl.step": "Step {n}",
     "adm.ecost.gl.deduction.name": "Deductions",
-    "adm.ecost.gl.deduction.def": "Money the customer paid that was never yours: it leaves before anything is counted.",
+    "adm.ecost.gl.deduction.def": "Money the patient paid that was never yours: it leaves before anything is counted.",
     "adm.ecost.gl.deduction.items": "Shipping · Taxes · Stripe (card) fee",
     "adm.ecost.gl.material.name": "Materials",
     "adm.ecost.gl.material.def": "What you buy to make that order, at supplier price (a fixed amount per piece).",
     "adm.ecost.gl.material.items": "Frame · Lenses · Treatments (anti-reflective, photochromic) · Case",
     "adm.ecost.gl.percent.name": "% items",
     "adm.ecost.gl.percent.def": "Business expenses spread as a percentage of each sale's net.",
-    "adm.ecost.gl.percent.items": "Lab · Packaging · Maintenance · Customer service · Rent · Reserve",
+    "adm.ecost.gl.percent.items": "Lab · Packaging · Maintenance · Patient service · Rent · Reserve",
     "adm.ecost.gl.seller.name": "Seller",
     "adm.ecost.gl.seller.def": "The commission of whoever brought the sale: their % of the order's net.",
     "adm.ecost.gl.seller.items": "Seller commission (from their profile)",
@@ -140,15 +140,15 @@ const UI = {
 const HELP_ES = {
   "cost.paid": {
     title: "Pagado",
-    short: "Todo el dinero que los clientes pagaron en el período, tal cual entró: con envío, impuestos y comisión de tarjeta incluidos.",
-    what: "Es la suma de lo que pagó cada cliente por sus pedidos del período (solo pedidos pagados; los cancelados o reembolsados no cuentan). Es el número más grande de la pantalla porque todavía no se ha descontado nada: incluye el envío que cobraste, los impuestos y lo que la tarjeta se queda.",
+    short: "Todo el dinero que los pacientes pagaron en el período, tal cual entró: con envío, impuestos y comisión de tarjeta incluidos.",
+    what: "Es la suma de lo que pagó cada paciente por sus pedidos del período (solo pedidos pagados; los cancelados o reembolsados no cuentan). Es el número más grande de la pantalla porque todavía no se ha descontado nada: incluye el envío que cobraste, los impuestos y lo que la tarjeta se queda.",
     how: [
       "Se toma cada pedido pagado del período y la tienda elegida.",
-      "Se suma el total que pagó el cliente (producto + envío + impuestos).",
+      "Se suma el total que pagó el paciente (producto + envío + impuestos).",
       "Fórmula: Pagado = Σ total pagado de cada pedido.",
     ],
     why: "Es el punto de partida de todo el reparto: cada otra cifra de esta pantalla es «Pagado menos algo». Si sube pero la ganancia no, el problema está en los costos, no en las ventas.",
-    example: "Un cliente paga $300 por unas gafas: $260 de producto, $25 de envío y $15 de impuestos. Pagado = $300. Si en el mes hubo 10 pedidos así, Pagado = $3,000.",
+    example: "Un paciente paga $300 por unas gafas: $260 de producto, $25 de envío y $15 de impuestos. Pagado = $300. Si en el mes hubo 10 pedidos así, Pagado = $3,000.",
     pitfalls: [
       "Pensar que es «lo que gané»: el envío, los impuestos y Stripe van dentro y no son tuyos.",
       "Compararlo con el costo directamente: el costo se calcula sobre el Neto, no sobre el Pagado.",
@@ -256,9 +256,9 @@ const HELP_ES = {
   "cost.deductions": {
     title: "Deducciones",
     short: "Envío, impuestos y comisión de Stripe: dinero que pasó por tu cuenta pero no es tuyo. Se restan antes que cualquier costo.",
-    what: "Son tres conceptos que el cliente paga dentro del total y que tú simplemente entregas a otro: el envío a la mensajería, los impuestos al estado y la comisión de la tarjeta a Stripe. No son costos del negocio (no dependen de cómo trabajes) y por eso van aparte y se descuentan primero, para llegar al Neto.",
+    what: "Son tres conceptos que el paciente paga dentro del total y que tú simplemente entregas a otro: el envío a la mensajería, los impuestos al estado y la comisión de la tarjeta a Stripe. No son costos del negocio (no dependen de cómo trabajes) y por eso van aparte y se descuentan primero, para llegar al Neto.",
     how: [
-      "Envío e impuestos: se toman tal cual del pedido (lo que se le cobró al cliente).",
+      "Envío e impuestos: se toman tal cual del pedido (lo que se le cobró al paciente).",
       "Stripe: la regla «Comisiones de pago» (p. ej. 2.9 % + $0.30 por cobro) aplicada al total pagado.",
       "Fórmula: Deducciones = envío + impuestos + Stripe.",
     ],
@@ -288,7 +288,7 @@ const HELP_ES = {
   "cost.percent": {
     title: "Partidas %",
     short: "Gastos fijos del negocio (laboratorio, empaque, renta, atención…) repartidos como un % del neto de cada venta.",
-    what: "La renta, el laboratorio, el empaque, la atención al cliente o una reserva para imprevistos no se pagan «por pedido», pero cada pedido debe cubrir su parte. Las partidas % hacen justo eso: cada una es un porcentaje del neto que se aparta como costo. Se definen en Distribución %.",
+    what: "La renta, el laboratorio, el empaque, la atención al paciente o una reserva para imprevistos no se pagan «por pedido», pero cada pedido debe cubrir su parte. Las partidas % hacen justo eso: cada una es un porcentaje del neto que se aparta como costo. Se definen en Distribución %.",
     how: [
       "Costos → Distribución %: añade una partida por concepto con su %.",
       "Cada pedido aplica cada % a su Neto.",
@@ -339,15 +339,15 @@ const HELP_ES = {
 const HELP_EN = {
   "cost.paid": {
     title: "Paid",
-    short: "All the money customers paid in the period, as it came in: shipping, taxes and card fee included.",
-    what: "The sum of what each customer paid for their orders in the period (paid orders only; canceled or refunded ones do not count). It is the biggest number on the screen because nothing has been taken out yet: it includes the shipping you charged, the taxes and what the card keeps.",
+    short: "All the money patients paid in the period, as it came in: shipping, taxes and card fee included.",
+    what: "The sum of what each patient paid for their orders in the period (paid orders only; canceled or refunded ones do not count). It is the biggest number on the screen because nothing has been taken out yet: it includes the shipping you charged, the taxes and what the card keeps.",
     how: [
       "Every paid order of the period and the chosen store is taken.",
-      "The total the customer paid is added (product + shipping + taxes).",
+      "The total the patient paid is added (product + shipping + taxes).",
       "Formula: Paid = Σ total paid of each order.",
     ],
     why: "It is the starting point of the whole split: every other figure on this screen is \"Paid minus something\". If it rises and the profit does not, the problem is in the costs, not in the sales.",
-    example: "A customer pays $300 for glasses: $260 product, $25 shipping and $15 taxes. Paid = $300. With 10 such orders in the month, Paid = $3,000.",
+    example: "A patient pays $300 for glasses: $260 product, $25 shipping and $15 taxes. Paid = $300. With 10 such orders in the month, Paid = $3,000.",
     pitfalls: [
       "Reading it as \"what I earned\": shipping, taxes and Stripe are inside and are not yours.",
       "Comparing it directly with the cost: the cost is computed over the Net, not over Paid.",
@@ -455,9 +455,9 @@ const HELP_EN = {
   "cost.deductions": {
     title: "Deductions",
     short: "Shipping, taxes and the Stripe fee: money that went through your account but is not yours. Subtracted before any cost.",
-    what: "Three concepts the customer pays inside the total and that you simply hand over to someone else: shipping to the courier, taxes to the state and the card fee to Stripe. They are not business costs (they do not depend on how you work), so they sit apart and are taken out first, to reach the Net.",
+    what: "Three concepts the patient pays inside the total and that you simply hand over to someone else: shipping to the courier, taxes to the state and the card fee to Stripe. They are not business costs (they do not depend on how you work), so they sit apart and are taken out first, to reach the Net.",
     how: [
-      "Shipping and taxes: taken as they are from the order (what the customer was charged).",
+      "Shipping and taxes: taken as they are from the order (what the patient was charged).",
       "Stripe: the \"Payment fees\" rule (e.g. 2.9% + $0.30 per charge) applied to the total paid.",
       "Formula: Deductions = shipping + taxes + Stripe.",
     ],
@@ -487,7 +487,7 @@ const HELP_EN = {
   "cost.percent": {
     title: "% items",
     short: "Fixed business expenses (lab, packaging, rent, service…) spread as a % of the net of each sale.",
-    what: "Rent, the lab, packaging, customer service or a reserve for surprises are not paid \"per order\", but each order must cover its share. The % items do exactly that: each is a percentage of the net set aside as a cost. They are defined in Allocation %.",
+    what: "Rent, the lab, packaging, patient service or a reserve for surprises are not paid \"per order\", but each order must cover its share. The % items do exactly that: each is a percentage of the net set aside as a cost. They are defined in Allocation %.",
     how: [
       "Costs → Allocation %: add one item per concept with its %.",
       "Each order applies every % to its Net.",

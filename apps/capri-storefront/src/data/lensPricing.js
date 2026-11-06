@@ -9,7 +9,11 @@
 // Diseños (filas). cat = categoría usada para fotocromáticos/AR.
 export const DESIGNS = [
   { id: "sv",        cat: "sv",      rx: true,  add: false, label: { es: "Visión Sencilla",        en: "Single Vision" } },
-  { id: "bifocal",   cat: "bifocal", rx: true,  add: true,  label: { es: "Bifocal FT-28",          en: "Bifocal FT-28" } },
+  // Donde la lista decía "Bifocal FT-28" la tienda vende "Tallado" (tallado en
+  // laboratorio) y "De stock" (lente terminado de inventario). Misma categoría
+  // (fotocromáticos y AR se cobran igual); el precio lo fija el dueño por tienda.
+  { id: "tallado",   cat: "bifocal", rx: true,  add: true,  label: { es: "Tallado",                en: "Surfaced" } },
+  { id: "stock",     cat: "bifocal", rx: true,  add: true,  label: { es: "De stock",               en: "Stock" } },
   { id: "prog-mid",  cat: "prog",    rx: true,  add: true,  label: { es: "Progresivo Gama Media",  en: "Progressive · Mid" } },
   { id: "prog-high", cat: "prog",    rx: true,  add: true,  label: { es: "Progresivo Gama Alta",   en: "Progressive · Premium" } },
   // Progresivos digitales con nombre (mapa de potencias 2026). `tier` y `use` son
@@ -40,7 +44,8 @@ export const MATERIALS = [
 // Matriz base: BASE[designId][materialId] = precio del lente (USD).
 export const BASE = {
   "sv":        { cr39: 60,  poly: 90,  "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150 },
-  "bifocal":   { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 },
+  "tallado":   { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 },
+  "stock":     { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 },
   "prog-mid":  { cr39: 180, poly: 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230 },
   "prog-high": { cr39: 240, poly: 240, "1.56": 240, "1.61": 240, "1.67": 280, "1.74": 300 },
   "purity-basic":  { cr39: 160, poly: 160, "1.56": 160, "1.61": 160, "1.67": 180, "1.74": 210 },

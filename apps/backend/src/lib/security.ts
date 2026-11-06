@@ -1,6 +1,7 @@
 import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { clientIp } from "./client-ip";
 import { createRateLimit } from "./rate-limit";
+import { canStoreSecrets } from "./secret-box";
 
 /**
  * Security hardening shared by `src/api/middlewares.ts` and the admin
@@ -153,6 +154,9 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   }
   checks.push({ key: "secret.VISION_INTERNAL_SECRET", ok: Boolean((env.VISION_INTERNAL_SECRET || "").trim()) });
   checks.push({ key: "storage.prescription_bucket", ok: Boolean(env.R2_PRESCRIPTION_BUCKET) });
+  // Sin esta clave no se pueden guardar el número fiscal ni la cuenta del
+  // equipo (y no se guardan: el panel lo dice en vez de escribirlos en claro).
+  checks.push({ key: "secret.PAYROLL_ENCRYPTION_KEY", ok: canStoreSecrets(env) });
   checks.push({ key: "node_env.production", ok: production, detail: env.NODE_ENV || "" });
   checks.push({ key: "security.strict_mode", ok: env.SECURITY_STRICT === "1" });
   checks.push({ key: "auth.self_register_blocked", ok: env.ADMIN_SELF_REGISTER !== "1" });

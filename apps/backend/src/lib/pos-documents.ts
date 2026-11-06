@@ -83,7 +83,8 @@ export interface SaleDocument {
   kind: DocumentKind;
   /** `timezone`: the store's IANA zone; every date on a document is shown in it, never in the server's (UTC). */
   business: { name: string; legal_name: string; url: string; support_email: string | null; timezone: string };
-  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null };
+  /** `color`: the store's brand colour (Tiendas → Editar) — every printed document carries it so the counter knows at a glance which optician sold. */
+  store: { code: string; name: string; address: string | null; phone: string | null; receipt_note: string | null; color: string | null };
   /** `printer`: the till's printer as configured (free text such as "thermal 80mm" or "HP LaserJet"); null when unknown. */
   terminal: { code: string | null; receipt_locale: string; ticket_locale: string; printer: string | null };
   sale: {
@@ -272,7 +273,7 @@ export async function buildSaleDocument(
   const base: SaleDocument = {
     kind,
     business: { name: t.name, legal_name: t.legalName, url: t.storefrontUrl, support_email: t.supportEmail, timezone: t.timezone },
-    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note },
+    store: { code: store.code, name: store.name, address: store.address, phone: store.phone, receipt_note: store.receipt_note, color: store.color ?? null },
     terminal: { code: terminal?.code ?? null, receipt_locale: terminal?.receipt_locale ?? "es", ticket_locale: terminal?.ticket_locale ?? "en", printer },
     sale: {
       id: sale.id,

@@ -159,12 +159,20 @@ describe("securityAudit", () => {
     STRIPE_SECRET_KEY: "sk_live_abc", STRIPE_WEBHOOK_SECRET: "whsec_abc",
     RESEND_API_KEY: "re_x", TWILIO_ACCOUNT_SID: "AC", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1",
     GSHEET_FILE_URL: "u", GSHEET_SERVICE_ACCOUNT_EMAIL: "e", GSHEET_SERVICE_ACCOUNT_KEY: "k", ANTHROPIC_API_KEY: "a",
+    // 32 bytes: sin ella no se pueden guardar los datos de pago del equipo.
+    PAYROLL_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString("base64"),
   };
 
   it("passes a fully hardened environment", () => {
     const audit = securityAudit(good, () => new Date("2026-10-22T00:00:00Z"));
     expect(audit.failing).toBe(0);
     expect(audit.checks.find((c) => c.key === "payments.stripe_mode")?.detail).toBe("live");
+  });
+
+  it("flags a missing payroll encryption key: the team's bank details cannot be stored", () => {
+    const audit = securityAudit({ ...good, PAYROLL_ENCRYPTION_KEY: "" });
+    expect(audit.checks.find((c) => c.key === "secret.PAYROLL_ENCRYPTION_KEY")?.ok).toBe(false);
+    expect(audit.failing).toBe(1);
   });
 
   it("flags default secrets, test Stripe, http origins and missing providers — without leaking values", () => {

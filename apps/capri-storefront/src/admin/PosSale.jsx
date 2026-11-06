@@ -32,6 +32,7 @@ import { setActiveStore } from "./useStoreTheme.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
+import { LensMaterialGlass } from "../components/LensGraphics.jsx";
 import PosSaleSummary from "./PosSaleSummary.jsx";
 import { customerProblems, LIMITS, paymentProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import RxForm from "./PosRx.jsx";
@@ -54,6 +55,17 @@ const centsText = (c) => (c > 0 ? (c / 100).toFixed(2) : "");
  * `amount: null` = nadie lo ha tocado: la primera fila así propone lo que falta
  * por cobrar del total del servidor. Lo que se escribe a mano se respeta.
  */
+/** Precio de una línea de la cotización del servidor (montura + lentes), o "…" mientras llega. */
+function LinePrice({ quoted, m, t }) {
+  if (!quoted) return <span className="pos-line-price muted">…</span>;
+  return (
+    <span className="pos-line-price" title={t("adm.pos.price.total")}>
+      {quoted.lenses > 0 && <small>{t("adm.pos.price.frame")} {m(quoted.frame)} + {t("adm.pos.price.lenses")} {m(quoted.lenses)}</small>}
+      <b>{m(quoted.unit_price)}</b>
+    </span>
+  );
+}
+
 function withSuggestedAmounts(payments, total) {
   let rest = toCents(total) - payments.reduce((sum, p) => sum + (p.amount === null ? 0 : toCents(p.amount)), 0);
   return payments.map((p) => {
@@ -140,13 +152,22 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
       </label>
       {sel.design_code !== "frame-only" && (
         <>
-          <label>
+          {/* Material: fichas con el disco de cristal de cada uno (color y grosor
+              propios) en vez de un desplegable; ★ marca el recomendado por la graduación. */}
+          <div className="pos-lens-mats" role="radiogroup" aria-label={t("adm.pos.lens.material")}>
             <span>{t("adm.pos.lens.material")}<HelpTip topic="pos.step.lenses" /></span>
-            <select value={sel.material_code || ""} onChange={(e) => set({ material_code: e.target.value || null })}>
-              <option value="">—</option>
-              {MATERIALS.map((m) => <option key={m.id} value={m.id}>{L(m.label)}{m.id === recommended?.id ? " ★" : ""}</option>)}
-            </select>
-          </label>
+            <div className="pos-lens-mats-list">
+              {MATERIALS.map((m) => {
+                const on = sel.material_code === m.id;
+                return (
+                  <button key={m.id} type="button" role="radio" aria-checked={on} className={`pos-mat${on ? " on" : ""}`} title={L(m.desc)} onClick={() => set({ material_code: m.id })}>
+                    <LensMaterialGlass id={m.id} size={26} selected={on} />
+                    <span className="pos-mat-name">{L(m.label)}{m.id === recommended?.id ? <b className="pos-mat-reco" title={t("adm.pos.lens.recommended")}> ★</b> : null}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label>
             <span>{t("adm.pos.lens.photo")}<HelpTip topic="pos.step.lenses" /></span>
             <select value={sel.photo_code || ""} onChange={(e) => set({ photo_code: e.target.value || null })}>
@@ -223,12 +244,28 @@ export default function PosSale({ me }) {
     posContext()
       .then((c) => {
         setCtx(c);
-        const saved = read("pos_store");
-        const s = c.stores.find((x) => x.id === saved) || c.stores[0];
+        // Arranca en la tienda elegida en el panel (filtro global), si puede vender en
+        // ella; si no, en la última usada en caja; si no, la primera suya.
+        const saved = read("adm_active_store") || read("pos_store");
+        const s = c.stores.find((x) => x.id === saved) || c.stores.find((x) => x.id === read("pos_store")) || c.stores[0];
         if (s) setStoreId(s.id);
       })
       .catch((e) => setCtxError(e.message));
   }, []);
+  // Cambiar de tienda en el filtro global del panel cambia también la caja, sin
+  // tener que buscar el desplegable del POS — mientras no haya una venta a medias
+  // (con una venta empezada la tienda queda fija hasta terminarla o cancelarla).
+  const stepRef = useRef(0);
+  stepRef.current = step;
+  useEffect(() => {
+    const onStore = (e) => {
+      const id = e.detail;
+      if (!id || !ctx || stepRef.current > 0) return;
+      if (ctx.stores.some((x) => x.id === id)) setStoreId(id);
+    };
+    window.addEventListener("adm:active-store", onStore);
+    return () => window.removeEventListener("adm:active-store", onStore);
+  }, [ctx]);
   const store = ctx?.stores.find((s) => s.id === storeId) || null;
   useEffect(() => {
     if (!store) return;
@@ -326,19 +363,28 @@ export default function PosSale({ me }) {
   } : null);
   const newBody = () => (noRx ? null : { rx: toRx(rxNew, ocr.status === "done" ? "ocr" : "manual"), rx_date: rxNew.rx_date || null });
 
-  const refreshQuote = async () => {
+  const refreshQuote = async ({ silent = false } = {}) => {
     if (!store || !lines.length) return;
     try {
       const r = await fetchQuote({ store: store.id, lines: apiLines().map((l) => ({ ...l, photo: null })), discount_pct: discount || 0, prescription: newBody(), worn: wornBody() });
       setQ(r);
-    } catch (err) { setQ(null); toast({ tone: "error", title: t(err.message) }); }
+    } catch (err) {
+      setQ(null);
+      // En los pasos previos al precio la venta aún está a medias: no se molesta con avisos.
+      if (!silent) toast({ tone: "error", title: t(err.message) });
+    }
   };
+  // El precio se va viendo desde que hay una montura: cada cambio (línea, lente,
+  // material, descuento, tienda) vuelve a pedir la cotización al servidor, que la
+  // calcula con los precios de la tienda donde se registra la venta. Sin material
+  // el lente aún vale 0; en cuanto se elige, el importe aparece.
+  const LIVE_STEPS = ["frame", "rx", "lenses", "price", "payment"];
   useEffect(() => {
-    if (!["price", "payment"].includes(STEPS[step])) return undefined;
-    const h = setTimeout(refreshQuote, 350);
+    if (!LIVE_STEPS.includes(STEPS[step])) return undefined;
+    const h = setTimeout(() => refreshQuote({ silent: !["price", "payment"].includes(STEPS[step]) }), 350);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, discount, lines]);
+  }, [step, discount, lines, store?.id]);
   // Un descuento distinto invalida la aprobación pedida para el anterior.
   useEffect(() => { setApproval(null); }, [discount, lines]);
 
@@ -407,7 +453,8 @@ export default function PosSale({ me }) {
       case "payment": return payState.balance >= 0
         && (total <= 0 || payState.paid + payState.ins > 0)
         && !payRows.some(rowProblem)
-        && (delivery === "pickup" || Object.keys(custProblems).length === 0);
+        // A domicilio solo con el saldo pagado (regla del dueño; el servidor la repite).
+        && (delivery === "pickup" || (Object.keys(custProblems).length === 0 && payState.balance === 0));
       default: return false;
     }
   };
@@ -669,6 +716,8 @@ export default function PosSale({ me }) {
                 <div className="pos-lens-head">
                   <PosFramePhoto line={l} size="md" />
                   <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
+                  {/* Precio de la línea en esta tienda (montura + lentes elegidos hasta ahora). */}
+                  <LinePrice quoted={q?.quote?.lines?.[lines.indexOf(l)]} m={m} t={t} />
                 </div>
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
               </li>
@@ -772,8 +821,12 @@ export default function PosSale({ me }) {
             <fieldset className="pos-wears">
               <legend>{t("adm.pos.pay.delivery")}</legend>
               <label><input type="radio" checked={delivery === "pickup"} onChange={() => setDelivery("pickup")} /> {t("adm.pos.pay.pickup")}</label>
-              <label><input type="radio" checked={delivery === "ship"} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}</label>
+              <label title={payState.balance > 0 ? t("adm.err.pos.ship_requires_full_payment") : undefined}>
+                <input type="radio" checked={delivery === "ship"} disabled={payState.balance > 0} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}
+                {payState.balance > 0 && <small className="muted"> · {t("adm.pos.pay.shipNeedsFull")}</small>}
+              </label>
             </fieldset>
+            {delivery === "ship" && payState.balance > 0 && <div className="adm-demo-banner">{t("adm.err.pos.ship_requires_full_payment")}</div>}
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
             <label className="pos-check"><input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} /> {t("adm.pos.pay.notify")}</label>
             {notifyEmail && (
@@ -805,6 +858,18 @@ export default function PosSale({ me }) {
         )}
       </div>
 
+      {/* Ticket en vivo: lo que va costando la venta en ESTA tienda, visible desde la montura. */}
+      {["frame", "rx", "lenses"].includes(stepName) && lines.length > 0 && store && (
+        <div className="pos-live" aria-live="polite" title={t("adm.pos.price.liveHint")}>
+          <span className="pos-live-store"><Icon name="store" size={12} /> {store.code} · {store.name}</span>
+          <span className="pos-live-lines">
+            {(q?.quote?.lines || []).map((l, i) => (
+              <span key={i} className="pos-live-line">{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""} <b>{m(l.unit_price)}</b></span>
+            ))}
+          </span>
+          <span className="pos-live-total">{t("adm.pos.price.total")} <b>{q?.quote ? m(q.quote.total) : "…"}</b></span>
+        </div>
+      )}
       {stepName !== "done" && (
         <div className="pos-nav">
           <button type="button" className="btn-sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}><Icon name="chevronLeft" size={14} /> {t("adm.pos.back")}</button>

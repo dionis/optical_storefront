@@ -90,7 +90,9 @@ export function setEyeField(rx, eye, field, value) {
   let e = { ...rx[eye], [field]: value };
   const out = { ...rx };
   if (field === "cyl" && (num(value) || 0) === 0) e = { ...e, axis: "" };
-  if (field === "prism" && (num(value) || 0) === 0) e = { ...e, base: "" };
+  // Prisma en 0 explícito → sin base. Si solo se vació la casilla (se está
+  // reescribiendo) la base se conserva; validateRx avisa si al final sobra.
+  if (field === "prism" && value !== "" && (num(value) || 0) === 0) e = { ...e, base: "" };
   out[eye] = e;
   if (field === "add") out[other] = { ...rx[other], add: value };
   return out;

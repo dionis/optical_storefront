@@ -152,7 +152,7 @@ describe("order confirmation emails", () => {
         // A value read by a model from a photo is not the same claim as one the
         // customer typed — both the lab and the buyer need to know which it was.
         const ocr = locale === "es" ? "OCR" : "OCR";
-        const confirmed = locale === "es" ? "confirmada por el cliente" : "confirmed by the customer";
+        const confirmed = locale === "es" ? "confirmada por el paciente" : "confirmed by the patient";
         for (const mail of [customer, admin]) {
           for (const part of [mail.html, mail.text]) {
             expect(part).toContain(ocr);

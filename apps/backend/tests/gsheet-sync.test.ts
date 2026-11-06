@@ -348,7 +348,7 @@ describe("history row", () => {
 
   it("names the event for the owner", () => {
     expect(eventLabel("etapa: in_lab")).toBe("Etapa: En laboratorio");
-    expect(eventLabel("cancelado (canceled)")).toBe("Cancelado por el cliente");
+    expect(eventLabel("cancelado (canceled)")).toBe("Cancelado por el paciente");
     expect(eventLabel("resincronizado")).toContain("resincronización");
   });
 

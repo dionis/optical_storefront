@@ -116,7 +116,7 @@ export const ORDER_COLUMNS: ColumnSpec[] = [
   { name: "Pedido", type: "TEXT", width: 110 },
   { name: "Tipo", type: "DROPDOWN", options: Object.values(ORDER_TYPE), width: 150 },
   { name: "Detalles", type: "TEXT", width: 400, wrap: true },
-  { name: "Cliente", type: "TEXT", width: 300, wrap: true },
+  { name: "Paciente", type: "TEXT", width: 300, wrap: true },
   {
     name: "Estado",
     type: "DROPDOWN",
@@ -209,7 +209,7 @@ export const HISTORY_COLUMNS: HistoryColumn[] = [
   { key: "event", name: "Evento", width: 170 },
   { key: "status", name: "Estado", width: 130 },
   { key: "type", name: "Tipo de pedido", width: 130 },
-  { key: "customer", name: "Cliente", width: 170 },
+  { key: "customer", name: "Paciente", width: 170 },
   { key: "email", name: "Correo", width: 200 },
   { key: "phone", name: "Teléfono", width: 120 },
   { key: "address", name: "Dirección de entrega", width: 220, wrap: true },
@@ -268,7 +268,7 @@ export function eventLabel(event: string): string {
   if (EVENT_LABEL[event]) return EVENT_LABEL[event];
   const stage = /^etapa:\s*(\w+)/.exec(event)?.[1] as OrderStage | undefined;
   if (stage && STAGE_LABEL[stage]) return `Etapa: ${STAGE_LABEL[stage]}`;
-  if (/^cancelado/.test(event)) return "Cancelado por el cliente";
+  if (/^cancelado/.test(event)) return "Cancelado por el paciente";
   return event.charAt(0).toUpperCase() + event.slice(1);
 }
 
@@ -1248,7 +1248,7 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   const orderIdx = HISTORY_COLUMNS.findIndex((c) => c.key === "order") + 1;
   const formula = `=IFERROR(CHOOSECOLS(IF($I$5="${SHOW_ALL}",${sorted},SORT(SORTN(${sorted},9^9,2,${orderIdx},TRUE),1,FALSE)),${cols}),"Sin resultados")`;
 
-  const labels = ["Pedido #", "Cliente", "Teléfono", "Marca", "Estado", "Desde (fecha)", "Hasta (fecha)", "Mostrar"];
+  const labels = ["Pedido #", "Paciente", "Teléfono", "Marca", "Estado", "Desde (fecha)", "Hasta (fecha)", "Mostrar"];
   const headers = RESULT_KEYS.map((k) => HISTORY_COLUMNS.find((c) => c.key === k)!.name);
   // Se conservan los valores que el dueño tenga escritos en los campos.
   const current = await sheetsFetch(cfg, `/values/${encodeURIComponent(`${SEARCH_SHEET}!B5:I5`)}`);
@@ -1279,7 +1279,7 @@ async function ensureSearchSheet(cfg: GsheetConfig, sheets: SheetMeta[]): Promis
   const brandList = `=IFERROR(LET(b,TRIM(FLATTEN(SPLIT(FILTER(${hc("brand")},${hc("brand")}<>""),"|"))),SORT(UNIQUE(FILTER(b,b<>"")))),"")`;
   const lists: Array<[string, string, number]> = [
     ["Pedidos", orderList, 1],
-    ["Clientes", listOf("customer"), 2],
+    ["Pacientes", listOf("customer"), 2],
     ["Teléfonos", listOf("phone"), 3],
     ["Marcas", brandList, 4],
   ];
@@ -1824,8 +1824,8 @@ export function rxValuesText(rx: RxSheetInfo): string | null {
         ? `OD ${plain(rx.pd_od)} / OS ${plain(rx.pd_os)} mm`
         : "—";
   const origin =
-    rx.source === "ocr" ? "leída por OCR de la foto" : "ingresada por el cliente";
-  const confirmed = rx.verified_by_user ? ", confirmada por el cliente" : "";
+    rx.source === "ocr" ? "leída por OCR de la foto" : "ingresada por el paciente";
+  const confirmed = rx.verified_by_user ? ", confirmada por el paciente" : "";
   const measures = [`DIP ${pd}`];
   if (rx.seg_height != null) measures.push(`Altura ${plain(rx.seg_height)} mm`);
   return [
@@ -1951,7 +1951,7 @@ export function buildRows(
       }));
   fileParts.push(...lineRefs);
   if (hasFile) fileParts.push({ text: "Receta: ver documento original", uri: panelUrl || undefined });
-  if (hasTryon) fileParts.push({ text: "Foto: prueba virtual del cliente", uri: panelUrl || undefined });
+  if (hasTryon) fileParts.push({ text: "Foto: prueba virtual del paciente", uri: panelUrl || undefined });
   const fileCell = fileParts.map((p) => p.text).join("\n");
   const fileLinks: CellLink[] = [];
   {
@@ -2039,8 +2039,8 @@ export function buildRows(
     : "";
   const rxSource = rx0
     ? [
-        rx0.source === "ocr" ? "Leída por OCR de la foto" : "Ingresada por el cliente",
-        rx0.verified_by_user ? "confirmada por el cliente" : "",
+        rx0.source === "ocr" ? "Leída por OCR de la foto" : "Ingresada por el paciente",
+        rx0.verified_by_user ? "confirmada por el paciente" : "",
         rx0.measurement_source === "ai" ? `medidas por IA${rx0.measurement_quality ? ` (${rx0.measurement_quality})` : ""}` : "",
         rx0.patient_for === "other" ? `para ${rx0.patient_name || "otra persona"}` : rx0.patient_for === "me" ? "para el comprador" : "",
       ].filter(Boolean).join(", ")

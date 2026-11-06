@@ -1297,6 +1297,15 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .pos-lens-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .pos-lens-lines > li { border: 1px solid var(--adm-line-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
 .pos-lens { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
+/* Material del lente: fichas con el disco de cristal (LensMaterialGlass). Ocupa la fila entera. */
+.pos-lens-mats { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--adm-muted); }
+.pos-lens-mats-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-mat { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 4px 12px 4px 8px; border: 1.5px solid var(--adm-line-2); border-radius: 999px; background: #fff; color: var(--adm-ink); font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+.pos-mat:hover { border-color: var(--adm-navy); }
+.pos-mat.on { border-color: var(--adm-navy); background: var(--adm-navy); color: #fff; box-shadow: 0 2px 8px rgba(11, 47, 102, .25); }
+.pos-mat:focus-visible { outline: 2px solid var(--adm-navy); outline-offset: 2px; }
+.pos-mat-reco { color: #c9a227; }
+.pos-mat.on .pos-mat-reco { color: #f3e3b3; }
 .pos-quote tr.warn td { background: var(--adm-red-soft); }
 .pos-flag { color: var(--adm-red); font-weight: 800; }
 .pos-discount { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
@@ -1327,6 +1336,16 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .pos-sum-item b, .pos-sum-price, .pos-lines li b { font-size: 18px; }
 .pos-sum-item small, .pos-lines li small { font-size: 14px; }
 .pos-lens-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pos-lens-head .pos-line-price { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.pos-line-price small { font-size: 11px; color: var(--adm-muted); font-weight: 600; }
+.pos-line-price b { font-size: 16px; color: var(--adm-navy); font-variant-numeric: tabular-nums; }
+/* Ticket en vivo (pasos montura / receta / lentes): precio en la tienda activa. */
+.pos-live { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 12px; padding: 10px 14px; border: 1px solid var(--adm-line-2); border-left: 4px solid var(--adm-navy); border-radius: 10px; background: #f6f8fc; font-size: 13px; }
+.pos-live-store { display: inline-flex; align-items: center; gap: 5px; font-weight: 800; color: var(--adm-navy); }
+.pos-live-lines { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--adm-muted); font-weight: 600; }
+.pos-live-line b { color: var(--adm-ink); font-variant-numeric: tabular-nums; }
+.pos-live-total { margin-left: auto; font-weight: 700; color: var(--adm-muted); }
+.pos-live-total b { font-size: 18px; color: var(--adm-navy); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .pos-pay-note { flex-basis: 100%; }
 @media (max-width: 640px) {
   .pos-sum-items li, .pos-lines li { flex-wrap: wrap; }
@@ -1792,3 +1811,10 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 }
 .board-kpis .cx-kpi { container-type: inline-size; }
 .ins-body .adm-subtabs { flex-wrap: wrap; }
+
+/* Datos de pago del equipo (StaffPayroll.jsx): bloque aparte y marcado como
+   confidencial, para que nadie lo confunda con los datos de contacto. */
+.adm-payroll .adm-profile-group { border-color: var(--adm-navy); }
+.adm-payroll legend { display: inline-flex; align-items: center; gap: 6px; color: var(--adm-navy); }
+.adm-pay-note { margin: 0 0 10px; font-size: 12.5px; line-height: 1.45; color: var(--adm-muted); background: var(--adm-surface-2, #f6f8fc); border-left: 3px solid var(--adm-navy); border-radius: 0 6px 6px 0; padding: 8px 10px; }
+.adm-payroll input[type="password"] { font-variant-numeric: tabular-nums; letter-spacing: .06em; }

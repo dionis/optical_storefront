@@ -60,10 +60,10 @@ const TOPICS_ES = {
       "Si la receta trae DNP/DIP o altura, cópialas; si no, se miden aquí en la tienda.",
       "Cuando una casilla del papel diga «Plano», «PL», «Sph» o «—», significa cero: deja la casilla en 0.00 o vacía.",
     ],
-    why: "Un número cambiado de fila o de signo produce unos lentes que el cliente no puede usar: hay que rehacerlos y la tienda pierde el dinero del laboratorio. Copiar con calma vale más que ir rápido.",
+    why: "Un número cambiado de fila o de signo produce unos lentes que el paciente no puede usar: hay que rehacerlos y la tienda pierde el dinero del laboratorio. Copiar con calma vale más que ir rápido.",
     example: "Receta: OD −2.25 −0.50 × 180 · OI −2.00 −0.75 × 175 · ADD +2.00 · DIP 63. Es multifocal (tiene ADD). Esfera −2.25 y −2.00, cilindro −0.50 y −0.75, ejes 180 y 175, adición +2.00 en los dos ojos y 31.5 mm de DNP por ojo.",
     pitfalls: [
-      "Confundir OD con OI: el ojo derecho del cliente es el que queda a TU izquierda cuando lo miras de frente.",
+      "Confundir OD con OI: el ojo derecho del paciente es el que queda a TU izquierda cuando lo miras de frente.",
       "Leer «×» o «x» como una multiplicación: solo separa el cilindro del eje.",
       "Olvidar el signo del cilindro: casi siempre es negativo en recetas de optometrista.",
     ],
@@ -75,7 +75,7 @@ const TOPICS_ES = {
     how: [
       "Mira la receta: si tiene un valor en ADD (por ejemplo +1.50), elige «Multifocal».",
       "Si no hay ADD, elige «Monofocal».",
-      "Si el cliente te dice que quiere «unos de leer» y la receta trae ADD, también puede llevar un monofocal de cerca: pregúntale al oculista o al encargado antes de decidir.",
+      "Si el paciente te dice que quiere «unos de leer» y la receta trae ADD, también puede llevar un monofocal de cerca: pregúntale al oculista o al encargado antes de decidir.",
       "Al cambiar el tipo aparecen o desaparecen las columnas ADD y ALT; no se pierde lo ya escrito.",
     ],
     why: "El tipo decide qué lentes se pueden vender (en el paso «Lentes» solo salen los compatibles) y qué medidas son obligatorias: un progresivo sin altura de montaje llega mal del laboratorio.",
@@ -94,7 +94,7 @@ const TOPICS_ES = {
       "Al salir de la casilla el valor se ajusta solo al formato de la hoja (−2 → −2.00).",
       "Valores admitidos: de −20.00 a +12.00. Fuera de eso el sistema te pide revisar.",
     ],
-    why: "Es el número que más afecta a la vista del cliente y al precio: a partir de ±4.00 conviene un material más fino (ver «Lentes»). Un signo equivocado da unos lentes inservibles.",
+    why: "Es el número que más afecta a la vista del paciente y al precio: a partir de ±4.00 conviene un material más fino (ver «Lentes»). Un signo equivocado da unos lentes inservibles.",
     example: "OD −3.25 significa: ojo derecho, miopía de 3 dioptrías y cuarto.",
     pitfalls: [
       "Olvidar el signo: «2.00» sin nada se guarda como +2.00 y puede no ser lo que decía la receta.",
@@ -143,7 +143,7 @@ const TOPICS_ES = {
       "Si el papel trae un valor por ojo y son distintos, escribe cada uno.",
       "Si la receta no tiene ADD, el tipo correcto es «Monofocal».",
     ],
-    why: "Sin adición no se puede fabricar un bifocal ni un progresivo, y con una adición mal copiada el cliente no podrá leer con sus lentes nuevos.",
+    why: "Sin adición no se puede fabricar un bifocal ni un progresivo, y con una adición mal copiada el paciente no podrá leer con sus lentes nuevos.",
     example: "ADD +2.25 en una persona de 55 años es lo habitual; +0.75 suele verse en quien empieza (40–45 años).",
     pitfalls: [
       "Escribirla negativa: la adición siempre suma.",
@@ -182,16 +182,16 @@ const TOPICS_ES = {
     what: "La DIP (distancia interpupilar) es la distancia entre las dos pupilas; la DNP (naso-pupilar) es la mitad de eso medida desde el centro de la nariz a cada pupila, porque muchas caras no son simétricas. Aquí se escribe una por ojo; abajo se muestra la suma (DIP binocular). Sirve para que el centro óptico del lente quede justo delante de la pupila.",
     how: [
       "Si la receta ya trae DIP (por ejemplo «63»), divide entre 2 y escribe 31.5 en cada ojo; si trae dos números (32/31), escribe cada uno en su ojo.",
-      "Para medirla: ponte de frente al cliente a la misma altura, a unos 40 cm. Apoya una regla milimetrada sobre su nariz.",
-      "Cierra tu ojo derecho y pide al cliente que mire tu ojo izquierdo abierto; alinea el 0 de la regla con el centro de su pupila derecha.",
+      "Para medirla: ponte de frente al paciente a la misma altura, a unos 40 cm. Apoya una regla milimetrada sobre su nariz.",
+      "Cierra tu ojo derecho y pide al paciente que mire tu ojo izquierdo abierto; alinea el 0 de la regla con el centro de su pupila derecha.",
       "Sin mover la regla, cierra tu ojo izquierdo, abre el derecho y lee el milímetro que cae en el centro de su pupila izquierda: esa es la DIP total.",
       "Para la DNP por ojo, mide desde el centro del puente de la nariz hasta cada pupila. Repite y, si los dos ojos difieren más de 4 mm, mide otra vez.",
     ],
-    why: "Si el centro del lente no coincide con la pupila, el cliente ve borroso o con efecto prisma y se marea, aunque la graduación sea correcta. Con progresivos es aún más importante.",
+    why: "Si el centro del lente no coincide con la pupila, el paciente ve borroso o con efecto prisma y se marea, aunque la graduación sea correcta. Con progresivos es aún más importante.",
     example: "Adulto típico: 31 + 32 = 63 mm. Niño: 27 + 27 = 54 mm.",
     pitfalls: [
       "Escribir la DIP total (63) en un solo ojo: el sistema rechaza más de 40 mm por ojo.",
-      "Medir con el cliente mirando a lo lejos para unos lentes de cerca (la DIP de cerca es unos 3 mm menor).",
+      "Medir con el paciente mirando a lo lejos para unos lentes de cerca (la DIP de cerca es unos 3 mm menor).",
     ],
   },
   "pos.rx.seg": {
@@ -199,12 +199,12 @@ const TOPICS_ES = {
     short: "Milímetros desde el borde inferior del lente hasta la pupila, con la montura puesta. Obligatoria en multifocales (10–35 mm).",
     what: "En un bifocal o progresivo la zona de cerca está en la parte baja del lente, y hay que decirle al laboratorio exactamente dónde empieza. La altura de montaje (o «altura de segmento») es la distancia vertical, en milímetros, desde el borde más bajo del aro hasta el centro de la pupila, medida con la montura elegida ya puesta y bien ajustada. Es una sola medida para los dos ojos.",
     how: [
-      "Pon al cliente la montura que va a comprar, bien centrada y ajustada en la nariz.",
+      "Pon al paciente la montura que va a comprar, bien centrada y ajustada en la nariz.",
       "Pídele que mire al frente, relajado, a tu ojo a su misma altura (tú sentado o de pie como él).",
       "Con un marcador fino, marca en el lente de muestra el centro de su pupila; o mide directo con la regla desde el borde inferior del aro hasta el centro de la pupila.",
       "Escribe los milímetros en ALT. Si sale menos de 14 mm, el sistema avisa: el progresivo tendría un pasillo muy corto y conviene confirmar el diseño o la montura.",
     ],
-    why: "Una altura equivocada por 2 mm hace que el cliente tenga que levantar o bajar la cabeza para leer y que se queje de que «no ve bien»: es la reclamación número uno en progresivos, y el laboratorio no la repone gratis.",
+    why: "Una altura equivocada por 2 mm hace que el paciente tenga que levantar o bajar la cabeza para leer y que se queje de que «no ve bien»: es la reclamación número uno en progresivos, y el laboratorio no la repone gratis.",
     example: "Montura con aro de 36 mm de alto, pupila un poco por encima del centro: altura ≈ 20 mm.",
     pitfalls: [
       "Medir sin la montura elegida puesta o con ella caída sobre la nariz.",
@@ -229,15 +229,15 @@ const TOPICS_ES = {
   },
   "pos.rx.worn": {
     title: "Lo que usa hoy",
-    short: "Anotamos la graduación de los lentes que el cliente trae puestos para compararla con la receta nueva y ver si su vista cambió.",
-    what: "Si el cliente ya usa lentes, en el paso «Cliente» se registra su graduación actual (leída de su receta anterior, medida con el lensómetro de la tienda o tomada de una venta previa) y, si quiere, las medidas de su montura actual. No es obligatoria para fabricar los lentes nuevos: es información para aconsejar mejor.",
+    short: "Anotamos la graduación de los lentes que el paciente trae puestos para compararla con la receta nueva y ver si su vista cambió.",
+    what: "Si el paciente ya usa lentes, en el paso «Paciente» se registra su graduación actual (leída de su receta anterior, medida con el lensómetro de la tienda o tomada de una venta previa) y, si quiere, las medidas de su montura actual. No es obligatoria para fabricar los lentes nuevos: es información para aconsejar mejor.",
     how: [
       "Marca «Sí» en «¿Usa espejuelos?».",
       "Elige de dónde sale la graduación: receta anterior, lensómetro o una compra anterior en la tienda (si existe, se propone sola).",
       "Escribe la graduación y, si puedes, cuándo es (fecha exacta o «hace X meses»).",
       "Opcional: mide la montura actual (ancho del lente, puente, varilla) para orientar la elección de la nueva.",
     ],
-    why: "Al comparar las dos graduaciones el sistema avisa si hubo un cambio óptico importante: sirve para explicarle al cliente por qué necesita lentes nuevos, para detectar empeoramientos que deben consultarse con el oculista y para que el recibo deje constancia.",
+    why: "Al comparar las dos graduaciones el sistema avisa si hubo un cambio óptico importante: sirve para explicarle al paciente por qué necesita lentes nuevos, para detectar empeoramientos que deben consultarse con el oculista y para que el recibo deje constancia.",
     pitfalls: [
       "Copiar la receta nueva aquí por error: esta cuadrícula es para lo antiguo.",
       "Inventar la altura: en lo que usa hoy no es obligatoria porque el lensómetro no la da.",
@@ -246,8 +246,8 @@ const TOPICS_ES = {
 
   /* ─────────────── Hacer una venta ─────────────── */
   "pos.step.customer": {
-    title: "Paso 1 · Cliente",
-    short: "Busca si el cliente ya existe (teléfono, correo o nombre) antes de crearlo. Aquí también anotas si usa lentes hoy.",
+    title: "Paso 1 · Paciente",
+    short: "Busca si el paciente ya existe (teléfono, correo o nombre) antes de crearlo. Aquí también anotas si usa lentes hoy.",
     what: "Toda venta pertenece a una persona. En este paso la buscas o la das de alta con nombre, teléfono, correo y fecha de nacimiento; la dirección solo hace falta si el pedido se enviará a casa. Si ya usa espejuelos, se registra su graduación actual (ver «Lo que usa hoy»).",
     how: [
       "Escribe en el buscador parte del nombre, el teléfono o el correo. Si aparece, tócalo: se cargan sus datos y su historial.",
@@ -255,7 +255,7 @@ const TOPICS_ES = {
       "Responde «¿Usa espejuelos?» y, si es que sí, completa su graduación actual.",
       "Pulsa «Siguiente».",
     ],
-    why: "Un cliente duplicado reparte su historial en dos fichas y la tienda pierde el seguimiento (saldos, recetas anteriores, garantías). El teléfono es la mejor llave para encontrarlo.",
+    why: "Un paciente duplicado reparte su historial en dos fichas y la tienda pierde el seguimiento (saldos, recetas anteriores, garantías). El teléfono es la mejor llave para encontrarlo.",
     pitfalls: [
       "Crear una ficha nueva sin buscar antes.",
       "Escribir el correo con errores: el recibo no llegará y no habrá aviso.",
@@ -263,31 +263,31 @@ const TOPICS_ES = {
   },
   "pos.step.frame": {
     title: "Paso 2 · Montura",
-    short: "Elige una montura del inventario de la tienda o registra la que trae el cliente. Solo una por venta.",
-    what: "La montura es el armazón. Puede salir del catálogo de la tienda (búsqueda por nombre, marca o código de barras; se elige el color) o ser la propia del cliente, que solo quiere cambiar los lentes. Cada venta lleva exactamente una montura; para dos pares se hacen dos ventas.",
+    short: "Elige una montura del inventario de la tienda o registra la que trae el paciente. Solo una por venta.",
+    what: "La montura es el armazón. Puede salir del catálogo de la tienda (búsqueda por nombre, marca o código de barras; se elige el color) o ser la propia del paciente, que solo quiere cambiar los lentes. Cada venta lleva exactamente una montura; para dos pares se hacen dos ventas.",
     how: [
       "Para una del inventario: busca por nombre o escanea el código; elige el color y pulsa «Añadir».",
-      "Para la del cliente: pulsa «Montura del cliente», descríbela (marca, color) y, si puedes, hazle una foto.",
+      "Para la del paciente: pulsa «Montura del paciente», descríbela (marca, color) y, si puedes, hazle una foto.",
       "Revisa la tarjeta de la montura y, si te equivocaste, quítala con la papelera y elige otra.",
     ],
-    why: "La montura decide el precio base y, en multifocales, la altura de montaje. Registrar la del cliente con foto protege a la tienda si después hay dudas sobre su estado.",
+    why: "La montura decide el precio base y, en multifocales, la altura de montaje. Registrar la del paciente con foto protege a la tienda si después hay dudas sobre su estado.",
     pitfalls: [
       "Intentar añadir dos monturas: el sistema solo admite una.",
       "Elegir un color que no está en stock en la tienda: fíjate en la disponibilidad de la tarjeta.",
     ],
   },
   "pos.ownFrame": {
-    title: "Montura del cliente",
-    short: "El cliente trae su propio armazón y solo compra los lentes. Descríbelo y hazle una foto para dejar constancia de cómo llegó.",
-    what: "Muchos clientes quieren aprovechar una montura que ya tienen. Se registra como «montura del cliente» con una descripción y una foto; la venta solo cobra los lentes y el trabajo. Esa montura ocupa el único hueco de montura de la venta.",
+    title: "Montura del paciente",
+    short: "El paciente trae su propio armazón y solo compra los lentes. Descríbelo y hazle una foto para dejar constancia de cómo llegó.",
+    what: "Muchos pacientes quieren aprovechar una montura que ya tienen. Se registra como «montura del paciente» con una descripción y una foto; la venta solo cobra los lentes y el trabajo. Esa montura ocupa el único hueco de montura de la venta.",
     how: [
-      "En el paso Montura pulsa «Montura del cliente».",
+      "En el paso Montura pulsa «Montura del paciente».",
       "Escribe marca, color y cualquier detalle (patilla floja, rayas…).",
       "Toma una foto (en pantallas táctiles) o súbela desde un archivo. Se verá en el recibo detallado y en la hoja del laboratorio.",
       "Pulsa «Guardar». En el paso Receta será obligatorio poner graduación: una montura ajena sin lentes no es una venta.",
     ],
     why: "Las monturas usadas pueden romperse al montar lentes nuevos. La foto y la descripción al recibirla evitan discusiones después.",
-    pitfalls: ["Marcar «Sin receta» con una montura del cliente: no hay nada que vender."],
+    pitfalls: ["Marcar «Sin receta» con una montura del paciente: no hay nada que vender."],
   },
   "pos.step.lenses": {
     title: "Paso 4 · Lentes",
@@ -296,14 +296,14 @@ const TOPICS_ES = {
     how: [
       "El tipo ya viene filtrado por la receta: si es monofocal solo verás visión sencilla; si es multifocal, bifocal o progresivo.",
       "Elige el material. El sistema marca con ★ el recomendado según la graduación más alta de la receta: hasta ±2.00 vale CR-39; de ±2.00 a ±4.00, policarbonato; de ±4.00 a ±6.00, 1.67; más de ±6.00, 1.74.",
-      "Fotocromático: pregúntale al cliente si pasa tiempo al aire libre o conduce de día.",
+      "Fotocromático: pregúntale al paciente si pasa tiempo al aire libre o conduce de día.",
       "Antirreflejo: recomiéndalo siempre con ordenador, conducción nocturna o graduaciones altas.",
       "Si es «solo montura» (sin lentes), elige esa opción en el tipo.",
     ],
     why: "Material y tratamientos son la mayor parte del precio y de la satisfacción: un lente grueso en una montura fina se ve mal, y un progresivo sin antirreflejo decepciona de noche. Explicar las opciones vende mejor que imponerlas.",
     example: "Receta −5.50 en un ojo: el recomendado es 1.67; con policarbonato el borde quedaría muy grueso.",
     pitfalls: [
-      "Vender policarbonato con graduaciones altas para abaratar: el cliente volverá por el grosor.",
+      "Vender policarbonato con graduaciones altas para abaratar: el paciente volverá por el grosor.",
       "Olvidar la altura de montaje en progresivos: el paso no deja avanzar sin ella.",
     ],
   },
@@ -315,25 +315,25 @@ const TOPICS_ES = {
       "Revisa los artículos y precios. Si algo no cuadra, vuelve al paso correspondiente.",
       "Escribe el descuento (por ejemplo 10) si procede. El total se recalcula solo.",
       "Si aparece «Necesita aprobación», escribe el motivo y pulsa «Pedir aprobación». Espera a que cambie a «Aprobada» (el encargado la ve en Aprobaciones).",
-      "Si la receta nueva difiere mucho de lo que usa hoy, verás un aviso de cambio óptico: coméntaselo al cliente.",
+      "Si la receta nueva difiere mucho de lo que usa hoy, verás un aviso de cambio óptico: coméntaselo al paciente.",
     ],
     why: "Los descuentos sin control se comen la ganancia; la aprobación deja rastro de quién autorizó cada uno y por qué. El precio mínimo protege el costo del laboratorio.",
     pitfalls: [
       "Escribir el descuento en dinero: la casilla es en porcentaje.",
-      "Prometer un precio al cliente antes de ver si necesita aprobación.",
+      "Prometer un precio al paciente antes de ver si necesita aprobación.",
     ],
   },
   "pos.step.payment": {
     title: "Paso 6 · Pago",
-    short: "Registra cómo paga el cliente (efectivo, tarjeta, Zelle, seguro…). Puede dejar un anticipo y pagar el resto al recoger. El recibo va por correo si lo pides.",
-    what: "La venta puede cobrarse completa o en parte. Cada línea de pago tiene un método, un importe y, según el método, una referencia (últimos 4 dígitos, número de confirmación…). Lo que falte queda como «Por cobrar» y se cobra después desde la venta. Al terminar se imprime el recibo (dos copias en una hoja carta: cliente y tienda) y, si hay correo, se envía uno simple; el detallado (con receta y fotos) solo si lo marcas.",
+    short: "Registra cómo paga el paciente (efectivo, tarjeta, Zelle, seguro…). Puede dejar un anticipo y pagar el resto al recoger. El recibo va por correo si lo pides.",
+    what: "La venta puede cobrarse completa o en parte. Cada línea de pago tiene un método, un importe y, según el método, una referencia (últimos 4 dígitos, número de confirmación…). Lo que falte queda como «Por cobrar» y se cobra después desde la venta. Al terminar se imprime el recibo (dos copias en una hoja carta: paciente y tienda) y, si hay correo, se envía uno simple; el detallado (con receta y fotos) solo si lo marcas.",
     how: [
       "Comprueba el resumen de la venta. Puedes editar cualquier paso desde ahí.",
-      "Elige el método de pago y escribe el importe; «Resto» rellena lo que falta. Con efectivo, escribe lo que entrega el cliente para ver el cambio.",
+      "Elige el método de pago y escribe el importe; «Resto» rellena lo que falta. Con efectivo, escribe lo que entrega el paciente para ver el cambio.",
       "Para un anticipo, escribe solo esa cantidad: el saldo queda pendiente y aparece en el recibo.",
       "Si pagan con dos métodos, pulsa «Otro pago».",
-      "Elige recogida en tienda o envío (el envío necesita la dirección del cliente).",
-      "Marca «Enviar recibo por correo» si el cliente lo quiere, y «con detalles» solo si pidió ver receta y fotos.",
+      "Elige recogida en tienda o envío (el envío necesita la dirección del paciente).",
+      "Marca «Enviar recibo por correo» si el paciente lo quiere, y «con detalles» solo si pidió ver receta y fotos.",
       "Pulsa «Cobrar y registrar». Se abre la hoja de recibos para imprimir.",
     ],
     why: "El dinero que entra aquí es el que luego cuadra la caja: un método mal elegido (tarjeta anotada como efectivo) descuadra el cierre del día. El saldo pendiente avisa a la tienda de lo que falta por cobrar al entregar.",
@@ -394,8 +394,8 @@ const TOPICS_ES = {
   },
   "exec.kpi.balance": {
     title: "Por cobrar",
-    short: "Lo que los clientes de la tienda deben hoy, vengan de cuando vengan las ventas. No depende del período.",
-    what: "Suma de los saldos pendientes de todas las ventas no anuladas de la(s) tienda(s) elegida(s). Un anticipo pagado deja el resto aquí hasta que el cliente recoge y paga.",
+    short: "Lo que los pacientes de la tienda deben hoy, vengan de cuando vengan las ventas. No depende del período.",
+    what: "Suma de los saldos pendientes de todas las ventas no anuladas de la(s) tienda(s) elegida(s). Un anticipo pagado deja el resto aquí hasta que el paciente recoge y paga.",
     how: ["Haz clic para ver la lista de ventas con saldo y cobrar desde cada una."],
     why: "Dinero que la tienda ya gastó en laboratorio y todavía no ha recibido. Si crece mes a mes, hay que revisar la política de anticipos.",
   },
@@ -427,7 +427,7 @@ const TOPICS_ES = {
   "exec.orders": {
     title: "Pedidos de la tienda",
     short: "La lista de ventas del período con su costo, ganancia y lo cobrado. Es de donde salen los KPI de arriba.",
-    what: "Cada fila es una venta: número, fecha, cliente, vendedor, total, cobrado, pendiente y, para quien puede verlo, costo y ganancia. Las anuladas aparecen tachadas y no suman.",
+    what: "Cada fila es una venta: número, fecha, paciente, vendedor, total, cobrado, pendiente y, para quien puede verlo, costo y ganancia. Las anuladas aparecen tachadas y no suman.",
     how: [
       "Abre el acordeón y usa la búsqueda o el orden de columnas.",
       "Haz clic en una venta para abrirla: desde ahí se cobra el saldo, se reenvía el recibo o se imprime la hoja del laboratorio.",
@@ -467,7 +467,7 @@ const TOPICS_ES = {
   "cash.movement": {
     title: "Movimientos de caja",
     short: "Dinero que entra o sale del cajón sin ser una venta: pagar a un proveedor, llevar un depósito al banco, un retiro del dueño… Siempre con motivo y nota.",
-    what: "Un movimiento es una entrada o salida de efectivo que no viene de cobrar a un cliente. Lleva tipo (entrada/salida), importe, un motivo de la lista y una nota libre. Motivos: pago a proveedor, gasto (p. ej. limpieza), retiro del dueño, depósito al banco, fondo de cambio, devolución a un cliente, corrección de un error y otro.",
+    what: "Un movimiento es una entrada o salida de efectivo que no viene de cobrar a un paciente. Lleva tipo (entrada/salida), importe, un motivo de la lista y una nota libre. Motivos: pago a proveedor, gasto (p. ej. limpieza), retiro del dueño, depósito al banco, fondo de cambio, devolución a un paciente, corrección de un error y otro.",
     how: [
       "Con la caja abierta, elige Entrada o Salida.",
       "Escribe el importe, elige el motivo y escribe una nota concreta («factura 1234 de Óptica Proveedor»).",
@@ -528,7 +528,7 @@ const TOPICS_ES = {
   "stores.color": {
     title: "Color de la tienda",
     short: "Cada tienda tiene un color propio. Aparece en los correos internos, en la cabecera del panel y en los informes para saber de qué tienda es cada cosa de un vistazo.",
-    what: "Al crear una tienda se le asigna automáticamente un color que ninguna otra tiene; puedes cambiarlo por uno de la paleta o cualquier otro. Se usa como franja en los correos de ventas y alertas, como círculo junto al asunto (la bandeja de entrada no muestra colores), en el panel cuando filtras por esa tienda y en el estado de cuenta. El recibo del cliente no lo lleva.",
+    what: "Al crear una tienda se le asigna automáticamente un color que ninguna otra tiene; puedes cambiarlo por uno de la paleta o cualquier otro. Se usa como franja en los correos de ventas y alertas, como círculo junto al asunto (la bandeja de entrada no muestra colores), en el panel cuando filtras por esa tienda y en el estado de cuenta. El recibo del paciente no lo lleva.",
     how: [
       "Al crear: acepta el color propuesto o elige otro de las muestras.",
       "Para cambiarlo: Tiendas → Editar → elige una muestra o usa el selector de color.",
@@ -621,7 +621,7 @@ const TOPICS_ES = {
   "price.rule": {
     title: "La regla de precio de todas las monturas",
     short: "Una sola instrucción fija el precio de VENTA de todas las monturas a partir del precio base: «+35 % sobre el base». No hay que tocar monturas una por una.",
-    what: "El precio base de una montura es lo que ya tiene cargado el catálogo. La regla dice qué se le hace a ese número para llegar al precio que paga el cliente: un porcentaje encima («+35 %») o un monto fijo por venta («+20»). Se aplica a TODAS las monturas a la vez, y hay otra regla igual para los estuches. Con «Todas las tiendas» arriba estás fijando la regla del maestro, que es la que usan todas; si eliges una tienda, esa tienda tiene su propia regla y la del maestro deja de valer para ella.",
+    what: "El precio base de una montura es lo que ya tiene cargado el catálogo. La regla dice qué se le hace a ese número para llegar al precio que paga el paciente: un porcentaje encima («+35 %») o un monto fijo por venta («+20»). Se aplica a TODAS las monturas a la vez, y hay otra regla igual para los estuches. Con «Todas las tiendas» arriba estás fijando la regla del maestro, que es la que usan todas; si eliges una tienda, esa tienda tiene su propia regla y la del maestro deja de valer para ella.",
     how: [
       "Arriba, en el selector de tienda, elige «Todas las tiendas» para la regla general, o una tienda para ponerle una distinta.",
       "En «Monturas y estuches», en la fila «Regla para todas las monturas», elige «Porcentaje sobre el base» o «Monto fijo por venta».",
@@ -705,12 +705,12 @@ const TOPICS_ES = {
     short: "Purity Basic, DVG Distinct, DVG Camber… son diseños de progresivo con nombre propio. La pastilla dorada dice su gama y debajo para quién es.",
     what: "Además de «progresivo gama media» y «gama alta», la lista 2026 tiene nueve progresivos digitales con nombre. Cada uno lleva su gama (Básico, Intermedio, Avanzado, Premium, Premium superior, Elite) y una nota de uso («conducción frecuente», «oficina y computadora»). El precio «desde» es el de CR-39, policarbonato, 1.56 y 1.61; el 1.67 y el 1.74 suben un escalón según la gama.",
     how: [
-      "Lee la gama en la pastilla de la fila y el uso debajo del nombre: es lo que se le dice al cliente en el mostrador.",
+      "Lee la gama en la pastilla de la fila y el uso debajo del nombre: es lo que se le dice al paciente en el mostrador.",
       "Cambia el precio de cada material en su columna, como en el resto de la matriz.",
     ],
-    why: "Recomendar por gama y por uso es lo que sube el ticket sin presionar: el cliente que conduce de noche entiende por qué le conviene el DVG Drive.",
+    why: "Recomendar por gama y por uso es lo que sube el ticket sin presionar: el paciente que conduce de noche entiende por qué le conviene el DVG Drive.",
     example: "DVG Camber es gama Elite, «máxima tecnología»: desde $300, y en 1.74 son $390.",
-    pitfalls: ["Vender un progresivo de oficina para la calle: el campo lejano es corto y el cliente lo devuelve."],
+    pitfalls: ["Vender un progresivo de oficina para la calle: el campo lejano es corto y el paciente lo devuelve."],
   },
   "price.storeVariation": {
     title: "El precio de lentes de UNA tienda (% sobre el maestro)",
@@ -768,7 +768,7 @@ const TOPICS_ES = {
       "Escribe el porcentaje (7.25 para 7.25 %) y pulsa Guardar.",
       "Si la pastilla dice «Valor del entorno», es que todavía viene de la configuración del servidor: al guardar aquí pasa a mandar este número.",
     ],
-    why: "Cobrar impuesto a un lente recetado es cobrarle de más al cliente; no cobrarlo a una montura sola es pagarlo tú al declarar.",
+    why: "Cobrar impuesto a un lente recetado es cobrarle de más al paciente; no cobrarlo a una montura sola es pagarlo tú al declarar.",
     example: "Impuesto 8.25 %: unas gafas de sol de $40 se cobran a $43.30; los mismos $40 con receta se cobran $40.",
     pitfalls: [
       "Escribir 0.0825 en vez de 8.25.",
@@ -791,10 +791,10 @@ const TOPICS_EN = {
       "If the prescription includes PD or a height, copy them; if not, they are measured here in the store.",
       "When a box on the paper says \"Plano\", \"PL\", \"Sph\" or \"—\", it means zero: leave the box at 0.00 or empty.",
     ],
-    why: "A number in the wrong row or with the wrong sign makes lenses the customer cannot wear: they must be remade and the store loses the lab money. Copying calmly is worth more than going fast.",
+    why: "A number in the wrong row or with the wrong sign makes lenses the patient cannot wear: they must be remade and the store loses the lab money. Copying calmly is worth more than going fast.",
     example: "Prescription: OD −2.25 −0.50 × 180 · OS −2.00 −0.75 × 175 · ADD +2.00 · PD 63. It is multifocal (it has ADD). Sphere −2.25 and −2.00, cylinder −0.50 and −0.75, axes 180 and 175, add +2.00 in both eyes and 31.5 mm PD per eye.",
     pitfalls: [
-      "Mixing up OD and OS: the customer's right eye is the one on YOUR left when you face them.",
+      "Mixing up OD and OS: the patient's right eye is the one on YOUR left when you face them.",
       "Reading \"×\" or \"x\" as a multiplication: it only separates the cylinder from the axis.",
       "Forgetting the cylinder sign: it is almost always negative on optometrist prescriptions.",
     ],
@@ -806,7 +806,7 @@ const TOPICS_EN = {
     how: [
       "Look at the prescription: if there is a value under ADD (for example +1.50), choose \"Multifocal\".",
       "If there is no ADD, choose \"Single vision\".",
-      "If the customer says they want \"reading glasses\" and the prescription has an ADD, a near single-vision lens is also possible: ask the doctor or the manager before deciding.",
+      "If the patient says they want \"reading glasses\" and the prescription has an ADD, a near single-vision lens is also possible: ask the doctor or the manager before deciding.",
       "Switching the type shows or hides the ADD and SH columns; nothing already typed is lost.",
     ],
     why: "The type decides which lenses can be sold (the \"Lenses\" step only shows compatible ones) and which measurements are required: a progressive without a fitting height comes back wrong from the lab.",
@@ -825,7 +825,7 @@ const TOPICS_EN = {
       "When you leave the box the value is formatted like the lab sheet (−2 → −2.00).",
       "Accepted values: from −20.00 to +12.00. Beyond that the system asks you to check.",
     ],
-    why: "It is the number that most affects the customer's sight and the price: from ±4.00 up a thinner material is advisable (see \"Lenses\"). A wrong sign makes useless lenses.",
+    why: "It is the number that most affects the patient's sight and the price: from ±4.00 up a thinner material is advisable (see \"Lenses\"). A wrong sign makes useless lenses.",
     example: "OD −3.25 means: right eye, nearsighted by three and a quarter diopters.",
     pitfalls: [
       "Forgetting the sign: \"2.00\" on its own is saved as +2.00, which may not be what the paper said.",
@@ -874,7 +874,7 @@ const TOPICS_EN = {
       "If the paper has one value per eye and they differ, type each one.",
       "If the prescription has no ADD, the right type is \"Single vision\".",
     ],
-    why: "Without an add a bifocal or progressive cannot be made, and with a miscopied add the customer will not be able to read with the new glasses.",
+    why: "Without an add a bifocal or progressive cannot be made, and with a miscopied add the patient will not be able to read with the new glasses.",
     example: "ADD +2.25 in a 55-year-old is typical; +0.75 is usual for someone just starting (40–45).",
     pitfalls: [
       "Typing it negative: the add always adds.",
@@ -913,16 +913,16 @@ const TOPICS_EN = {
     what: "The binocular PD is the distance between the two pupils; the monocular PD is each half, measured from the center of the nose to each pupil, because many faces are not symmetrical. Here you type one per eye; the sum (binocular PD) shows below. It makes sure the optical center of the lens sits right in front of the pupil.",
     how: [
       "If the prescription already has a PD (for example \"63\"), divide by 2 and type 31.5 in each eye; if it has two numbers (32/31), type each in its eye.",
-      "To measure: face the customer at the same height, about 40 cm away. Rest a millimeter ruler on their nose.",
-      "Close your right eye and ask the customer to look at your open left eye; line up the ruler's 0 with the center of their right pupil.",
+      "To measure: face the patient at the same height, about 40 cm away. Rest a millimeter ruler on their nose.",
+      "Close your right eye and ask the patient to look at your open left eye; line up the ruler's 0 with the center of their right pupil.",
       "Without moving the ruler, close your left eye, open your right and read the millimeter at the center of their left pupil: that is the total PD.",
       "For the per-eye PD, measure from the center of the bridge of the nose to each pupil. Repeat, and if the two eyes differ by more than 4 mm, measure again.",
     ],
-    why: "If the lens center does not match the pupil the customer sees blurry or with a prism effect and feels dizzy, even with the right power. With progressives it matters even more.",
+    why: "If the lens center does not match the pupil the patient sees blurry or with a prism effect and feels dizzy, even with the right power. With progressives it matters even more.",
     example: "Typical adult: 31 + 32 = 63 mm. Child: 27 + 27 = 54 mm.",
     pitfalls: [
       "Typing the total PD (63) in one eye: the system rejects more than 40 mm per eye.",
-      "Measuring with the customer looking far away for reading glasses (near PD is about 3 mm smaller).",
+      "Measuring with the patient looking far away for reading glasses (near PD is about 3 mm smaller).",
     ],
   },
   "pos.rx.seg": {
@@ -930,12 +930,12 @@ const TOPICS_EN = {
     short: "Millimeters from the bottom edge of the lens to the pupil, with the frame on. Required for multifocals (10–35 mm).",
     what: "In a bifocal or progressive the near zone sits in the lower part of the lens, and the lab must be told exactly where it starts. The fitting height (or \"segment height\") is the vertical distance, in millimeters, from the lowest edge of the rim to the center of the pupil, measured with the chosen frame on and properly adjusted. It is one measurement for both eyes.",
     how: [
-      "Put the frame the customer is buying on them, centered and sitting well on the nose.",
+      "Put the frame the patient is buying on them, centered and sitting well on the nose.",
       "Ask them to look straight ahead, relaxed, at your eye at their same height (sit or stand as they do).",
       "With a fine marker, mark the center of the pupil on the demo lens; or measure directly with the ruler from the bottom edge of the rim to the pupil center.",
       "Type the millimeters in SH. Below 14 mm the system warns: the progressive corridor would be very short and the design or frame should be confirmed.",
     ],
-    why: "A height off by 2 mm makes the customer raise or lower their head to read and complain that they \"can't see well\": it is the number-one complaint on progressives, and the lab does not replace it for free.",
+    why: "A height off by 2 mm makes the patient raise or lower their head to read and complain that they \"can't see well\": it is the number-one complaint on progressives, and the lab does not replace it for free.",
     example: "Frame with a 36 mm tall rim, pupil slightly above center: height ≈ 20 mm.",
     pitfalls: [
       "Measuring without the chosen frame on, or with it slid down the nose.",
@@ -960,15 +960,15 @@ const TOPICS_EN = {
   },
   "pos.rx.worn": {
     title: "What they wear today",
-    short: "We record the power of the glasses the customer is wearing to compare it with the new prescription and see whether their sight changed.",
-    what: "If the customer already wears glasses, in the \"Customer\" step their current power is recorded (read from their previous prescription, measured with the store's lensmeter or taken from a previous sale) and, optionally, the measurements of their current frame. It is not required to make the new lenses: it is information to advise better.",
+    short: "We record the power of the glasses the patient is wearing to compare it with the new prescription and see whether their sight changed.",
+    what: "If the patient already wears glasses, in the \"Patient\" step their current power is recorded (read from their previous prescription, measured with the store's lensmeter or taken from a previous sale) and, optionally, the measurements of their current frame. It is not required to make the new lenses: it is information to advise better.",
     how: [
       "Tick \"Yes\" under \"Wears glasses?\".",
       "Choose where the power comes from: previous prescription, lensmeter or a previous purchase at the store (if one exists, it is proposed automatically).",
       "Type the power and, if you can, when it is from (exact date or \"X months ago\").",
       "Optional: measure the current frame (lens width, bridge, temple) to guide the choice of the new one.",
     ],
-    why: "By comparing both powers the system warns of a significant optical change: it helps explain to the customer why they need new lenses, flags worsening that should be checked by the doctor, and leaves a record on the receipt.",
+    why: "By comparing both powers the system warns of a significant optical change: it helps explain to the patient why they need new lenses, flags worsening that should be checked by the doctor, and leaves a record on the receipt.",
     pitfalls: [
       "Typing the new prescription here by mistake: this grid is for the old one.",
       "Making up the height: it is not required for what they wear today because the lensmeter does not give it.",
@@ -977,8 +977,8 @@ const TOPICS_EN = {
 
   /* ─────────────── Making a sale ─────────────── */
   "pos.step.customer": {
-    title: "Step 1 · Customer",
-    short: "Search whether the customer already exists (phone, email or name) before creating them. Here you also note whether they wear glasses today.",
+    title: "Step 1 · Patient",
+    short: "Search whether the patient already exists (phone, email or name) before creating them. Here you also note whether they wear glasses today.",
     what: "Every sale belongs to a person. In this step you find them or create them with name, phone, email and date of birth; the address is only needed if the order will be shipped home. If they already wear glasses, their current power is recorded (see \"What they wear today\").",
     how: [
       "Type part of the name, the phone or the email in the search box. If they appear, tap them: their data and history load.",
@@ -986,7 +986,7 @@ const TOPICS_EN = {
       "Answer \"Wears glasses?\" and, if yes, fill in their current power.",
       "Press \"Next\".",
     ],
-    why: "A duplicate customer splits their history across two records and the store loses track (balances, previous prescriptions, warranties). The phone number is the best key to find them.",
+    why: "A duplicate patient splits their history across two records and the store loses track (balances, previous prescriptions, warranties). The phone number is the best key to find them.",
     pitfalls: [
       "Creating a new record without searching first.",
       "Mistyping the email: the receipt will not arrive and there will be no warning.",
@@ -994,31 +994,31 @@ const TOPICS_EN = {
   },
   "pos.step.frame": {
     title: "Step 2 · Frame",
-    short: "Pick a frame from the store's inventory or register the one the customer brings. Only one per sale.",
-    what: "The frame is the rim and temples. It can come from the store's catalog (search by name, brand or barcode; pick the color) or be the customer's own, when they only want new lenses. Each sale carries exactly one frame; for two pairs, make two sales.",
+    short: "Pick a frame from the store's inventory or register the one the patient brings. Only one per sale.",
+    what: "The frame is the rim and temples. It can come from the store's catalog (search by name, brand or barcode; pick the color) or be the patient's own, when they only want new lenses. Each sale carries exactly one frame; for two pairs, make two sales.",
     how: [
       "From inventory: search by name or scan the barcode; pick the color and press \"Add\".",
-      "The customer's own: press \"Customer's frame\", describe it (brand, color) and take a photo if you can.",
+      "The patient's own: press \"Patient's frame\", describe it (brand, color) and take a photo if you can.",
       "Check the frame card and, if you got it wrong, remove it with the trash icon and pick another.",
     ],
-    why: "The frame sets the base price and, for multifocals, the fitting height. Registering the customer's own frame with a photo protects the store if there are doubts later about its condition.",
+    why: "The frame sets the base price and, for multifocals, the fitting height. Registering the patient's own frame with a photo protects the store if there are doubts later about its condition.",
     pitfalls: [
       "Trying to add two frames: the system only allows one.",
       "Picking a color the store does not have in stock: check the availability on the card.",
     ],
   },
   "pos.ownFrame": {
-    title: "Customer's frame",
-    short: "The customer brings their own frame and only buys the lenses. Describe it and take a photo to record how it arrived.",
-    what: "Many customers want to reuse a frame they already own. It is registered as \"customer's frame\" with a description and a photo; the sale only charges the lenses and the work. That frame takes the sale's single frame slot.",
+    title: "Patient's frame",
+    short: "The patient brings their own frame and only buys the lenses. Describe it and take a photo to record how it arrived.",
+    what: "Many patients want to reuse a frame they already own. It is registered as \"patient's frame\" with a description and a photo; the sale only charges the lenses and the work. That frame takes the sale's single frame slot.",
     how: [
-      "In the Frame step press \"Customer's frame\".",
+      "In the Frame step press \"Patient's frame\".",
       "Type the brand, color and any detail (loose temple, scratches…).",
       "Take a photo (on touch screens) or upload one from a file. It shows on the detailed receipt and the lab sheet.",
       "Press \"Save\". In the Prescription step a power will be required: someone else's frame without lenses is not a sale.",
     ],
     why: "Used frames can break when new lenses are fitted. The photo and description at intake avoid arguments later.",
-    pitfalls: ["Ticking \"No prescription\" with a customer's frame: there is nothing to sell."],
+    pitfalls: ["Ticking \"No prescription\" with a patient's frame: there is nothing to sell."],
   },
   "pos.step.lenses": {
     title: "Step 4 · Lenses",
@@ -1027,14 +1027,14 @@ const TOPICS_EN = {
     how: [
       "The type is already filtered by the prescription: single vision only for a single-vision Rx; bifocal or progressive for a multifocal one.",
       "Pick the material. The system marks the recommended one with ★ based on the highest power in the prescription: up to ±2.00 CR-39 is fine; ±2.00 to ±4.00 polycarbonate; ±4.00 to ±6.00 1.67; above ±6.00 1.74.",
-      "Photochromic: ask whether the customer spends time outdoors or drives by day.",
+      "Photochromic: ask whether the patient spends time outdoors or drives by day.",
       "Anti-reflective: always recommend it with computer use, night driving or high powers.",
       "If it is \"frame only\" (no lenses), pick that option under type.",
     ],
     why: "Material and coatings are most of the price and of the satisfaction: a thick lens in a thin frame looks bad, and a progressive without AR disappoints at night. Explaining the options sells better than imposing them.",
     example: "Prescription −5.50 in one eye: the recommendation is 1.67; with polycarbonate the edge would be very thick.",
     pitfalls: [
-      "Selling polycarbonate at high powers to make it cheaper: the customer will come back because of the thickness.",
+      "Selling polycarbonate at high powers to make it cheaper: the patient will come back because of the thickness.",
       "Forgetting the fitting height on progressives: the step will not let you go on without it.",
     ],
   },
@@ -1046,25 +1046,25 @@ const TOPICS_EN = {
       "Check the items and prices. If something is off, go back to the matching step.",
       "Type the discount (for example 10) if applicable. The total recalculates by itself.",
       "If \"Needs approval\" appears, write the reason and press \"Request approval\". Wait until it changes to \"Approved\" (the manager sees it under Approvals).",
-      "If the new prescription differs a lot from what they wear today, an optical-change notice appears: mention it to the customer.",
+      "If the new prescription differs a lot from what they wear today, an optical-change notice appears: mention it to the patient.",
     ],
     why: "Uncontrolled discounts eat the profit; approval leaves a record of who authorized each one and why. The minimum price protects the lab cost.",
     pitfalls: [
       "Typing the discount in money: the box is a percentage.",
-      "Promising a price to the customer before checking whether it needs approval.",
+      "Promising a price to the patient before checking whether it needs approval.",
     ],
   },
   "pos.step.payment": {
     title: "Step 6 · Payment",
-    short: "Record how the customer pays (cash, card, Zelle, insurance…). They can leave a deposit and pay the rest at pickup. The receipt goes by email if you ask.",
-    what: "The sale can be paid in full or in part. Each payment line has a method, an amount and, depending on the method, a reference (last 4 digits, confirmation number…). Whatever is missing stays as \"Balance due\" and is collected later from the sale. At the end the receipt prints (two copies on one letter sheet: customer and store) and, if there is an email, a simple one is sent; the detailed one (with prescription and photos) only if you tick it.",
+    short: "Record how the patient pays (cash, card, Zelle, insurance…). They can leave a deposit and pay the rest at pickup. The receipt goes by email if you ask.",
+    what: "The sale can be paid in full or in part. Each payment line has a method, an amount and, depending on the method, a reference (last 4 digits, confirmation number…). Whatever is missing stays as \"Balance due\" and is collected later from the sale. At the end the receipt prints (two copies on one letter sheet: patient and store) and, if there is an email, a simple one is sent; the detailed one (with prescription and photos) only if you tick it.",
     how: [
       "Check the sale summary. You can edit any step from there.",
-      "Pick the payment method and type the amount; \"Rest\" fills in what is missing. With cash, type what the customer hands over to see the change.",
+      "Pick the payment method and type the amount; \"Rest\" fills in what is missing. With cash, type what the patient hands over to see the change.",
       "For a deposit, type only that amount: the balance stays pending and shows on the receipt.",
       "If they pay with two methods, press \"Another payment\".",
-      "Choose store pickup or shipping (shipping needs the customer's address).",
-      "Tick \"Email the receipt\" if the customer wants it, and \"with details\" only if they asked to see the prescription and photos.",
+      "Choose store pickup or shipping (shipping needs the patient's address).",
+      "Tick \"Email the receipt\" if the patient wants it, and \"with details\" only if they asked to see the prescription and photos.",
       "Press \"Charge and record\". The receipt sheet opens for printing.",
     ],
     why: "The money that comes in here is what balances the till later: a wrong method (a card recorded as cash) throws off the day's closing. The pending balance tells the store what is left to collect at delivery.",
@@ -1125,8 +1125,8 @@ const TOPICS_EN = {
   },
   "exec.kpi.balance": {
     title: "Balance due",
-    short: "What the store's customers owe today, whenever the sales are from. It does not depend on the period.",
-    what: "Sum of the pending balances of all non-voided sales of the chosen store(s). A deposit leaves the rest here until the customer picks up and pays.",
+    short: "What the store's patients owe today, whenever the sales are from. It does not depend on the period.",
+    what: "Sum of the pending balances of all non-voided sales of the chosen store(s). A deposit leaves the rest here until the patient picks up and pays.",
     how: ["Click to see the list of sales with a balance and collect from each one."],
     why: "Money the store already spent at the lab and has not received yet. If it grows month after month, the deposit policy needs a look.",
   },
@@ -1158,7 +1158,7 @@ const TOPICS_EN = {
   "exec.orders": {
     title: "Store orders",
     short: "The list of sales in the period with their cost, profit and what was collected. This is where the KPIs above come from.",
-    what: "Each row is a sale: number, date, customer, seller, total, collected, pending and, for those allowed, cost and profit. Voided ones appear struck through and do not add up.",
+    what: "Each row is a sale: number, date, patient, seller, total, collected, pending and, for those allowed, cost and profit. Voided ones appear struck through and do not add up.",
     how: [
       "Open the accordion and use the search or the column sorting.",
       "Click a sale to open it: from there you collect the balance, resend the receipt or print the lab sheet.",
@@ -1198,7 +1198,7 @@ const TOPICS_EN = {
   "cash.movement": {
     title: "Cash movements",
     short: "Money that goes into or out of the drawer without being a sale: paying a supplier, taking a deposit to the bank, an owner withdrawal… Always with a reason and a note.",
-    what: "A movement is cash in or out that does not come from charging a customer. It has a kind (in/out), an amount, a reason from the list and a free note. Reasons: supplier payment, expense (e.g. cleaning), owner withdrawal, bank deposit, change fund, customer refund, correction of a mistake and other.",
+    what: "A movement is cash in or out that does not come from charging a patient. It has a kind (in/out), an amount, a reason from the list and a free note. Reasons: supplier payment, expense (e.g. cleaning), owner withdrawal, bank deposit, change fund, patient refund, correction of a mistake and other.",
     how: [
       "With the till open, pick In or Out.",
       "Type the amount, pick the reason and write a specific note (\"invoice 1234 from Supplier Optics\").",
@@ -1259,7 +1259,7 @@ const TOPICS_EN = {
   "stores.color": {
     title: "Store color",
     short: "Each store has its own color. It shows in internal emails, in the panel header and in reports so you can tell at a glance which store something belongs to.",
-    what: "When a store is created it is automatically given a color no other store has; you can change it to one from the palette or any other. It is used as a stripe in sales and alert emails, as a circle next to the subject (inboxes do not show colors), in the panel when you filter by that store and in the statement. The customer's receipt does not carry it.",
+    what: "When a store is created it is automatically given a color no other store has; you can change it to one from the palette or any other. It is used as a stripe in sales and alert emails, as a circle next to the subject (inboxes do not show colors), in the panel when you filter by that store and in the statement. The patient's receipt does not carry it.",
     how: [
       "On creation: accept the proposed color or pick another swatch.",
       "To change it: Stores → Edit → pick a swatch or use the color picker.",
@@ -1352,7 +1352,7 @@ const TOPICS_EN = {
   "price.rule": {
     title: "The price rule for every frame",
     short: "One instruction sets the SELLING price of every frame from its base price: \"+35 % over the base\". No need to touch frames one by one.",
-    what: "A frame's base price is what the catalog already carries. The rule says what is done to that number to reach what the customer pays: a percentage on top (\"+35 %\") or a fixed amount per sale (\"+20\"). It applies to EVERY frame at once, and there is a twin rule for cases. With \"All stores\" selected above you are setting the master's rule, the one every store uses; pick a store and that store gets its own rule and the master's stops applying to it.",
+    what: "A frame's base price is what the catalog already carries. The rule says what is done to that number to reach what the patient pays: a percentage on top (\"+35 %\") or a fixed amount per sale (\"+20\"). It applies to EVERY frame at once, and there is a twin rule for cases. With \"All stores\" selected above you are setting the master's rule, the one every store uses; pick a store and that store gets its own rule and the master's stops applying to it.",
     how: [
       "In the store selector above, pick \"All stores\" for the general rule, or a store to give it a different one.",
       "In \"Frames and cases\", on the \"Rule for every frame\" row, choose \"Percentage over the base\" or \"Fixed amount per sale\".",
@@ -1436,12 +1436,12 @@ const TOPICS_EN = {
     short: "Purity Basic, DVG Distinct, DVG Camber… are progressive designs with names of their own. The gold pill says the tier and the line below who it is for.",
     what: "Besides \"progressive mid\" and \"premium\", the 2026 list has nine named digital progressives. Each carries its tier (Basic, Intermediate, Advanced, Premium, Upper premium, Elite) and a use note (\"frequent driving\", \"office and computer\"). The \"from\" price covers CR-39, polycarbonate, 1.56 and 1.61; 1.67 and 1.74 add a step depending on the tier.",
     how: [
-      "Read the tier on the row's pill and the use under the name: that is what you tell the customer at the counter.",
+      "Read the tier on the row's pill and the use under the name: that is what you tell the patient at the counter.",
       "Change each material's price in its column, as in the rest of the matrix.",
     ],
-    why: "Recommending by tier and by use is what raises the ticket without pressure: the customer who drives at night understands why DVG Drive suits them.",
+    why: "Recommending by tier and by use is what raises the ticket without pressure: the patient who drives at night understands why DVG Drive suits them.",
     example: "DVG Camber is Elite, \"top technology\": from $300, and $390 in 1.74.",
-    pitfalls: ["Selling an office progressive for the street: the distance field is short and the customer brings it back."],
+    pitfalls: ["Selling an office progressive for the street: the distance field is short and the patient brings it back."],
   },
   "price.storeVariation": {
     title: "ONE store's lens prices (% over the master)",
@@ -1499,7 +1499,7 @@ const TOPICS_EN = {
       "Type the percentage (7.25 for 7.25 %) and press Save.",
       "If the pill says \"Value from the environment\", it still comes from the server's configuration: saving here makes this number the one in force.",
     ],
-    why: "Charging tax on a prescription lens over-charges the customer; not charging it on a loose frame means you pay it yourself when you file.",
+    why: "Charging tax on a prescription lens over-charges the patient; not charging it on a loose frame means you pay it yourself when you file.",
     example: "Tax 8.25 %: $40 sunglasses are charged $43.30; the same $40 with a prescription are charged $40.",
     pitfalls: [
       "Typing 0.0825 instead of 8.25.",

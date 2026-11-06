@@ -20,7 +20,9 @@ import {
 const BASE_LIST: Record<string, [number, number, number, number, number, number]> = {
   //                 cr39  poly  1.56  1.61  1.67  1.74
   sv: /*         */ [60, 90, 100, 100, 120, 150],
-  bifocal: /*    */ [130, 140, 140, 140, 160, 160],
+  // "Bifocal FT-28" became "Tallado" + "De stock" (Nov 2026); both start at its price.
+  tallado: /*    */ [130, 140, 140, 140, 160, 160],
+  stock: /*      */ [130, 140, 140, 140, 160, 160],
   "prog-mid": /* */ [180, 180, 180, 180, 200, 230],
   "prog-high": /**/ [240, 240, 240, 240, 280, 300],
 };
@@ -166,5 +168,7 @@ describe("storefront fallback (capri-storefront src/data/lensPricing.js)", () =>
 
   it("lists the same designs as the backend", () => {
     for (const d of DESIGNS) expect(file).toContain(`id: "${d.code}"`);
+    // The retired bifocal row must not come back through the bundled fallback.
+    expect(file).not.toContain('id: "bifocal"');
   });
 });

@@ -27,7 +27,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { medusa, USE_MEDUSA } from "../data/medusa.js";
 import { createPrescription, ocrPrescription } from "../data/medusaCart.js";
 import { materialEdu, arEdu, photoEdu, frameMatEdu } from "../data/lensEducation.js";
-import {
+import { LensMaterialGlass,
   IconReceta, IconMaterial, IconTratamiento, IconMontura,
   IconSencilla, IconBifocal, IconProgresivo,
   IconFotocromatico, IconAr, IconAzul,
@@ -46,13 +46,10 @@ import { getMeasureResult } from "../data/tryOnState.js";
 // diagram(s) that explain it. Codes are the canonical lens-config codes shared
 // with the backend (see lensPricing.js), so this mapping is stable whether the
 // catalog came from Medusa or the bundled fallback.
-const DESIGN_ICON = {
-  sv: IconSencilla,
-  bifocal: IconBifocal,
-  "prog-mid": IconProgresivo,
-  "prog-high": IconProgresivo,
-};
-const designIcon = (id) => (id === "frame-only" ? IconMontura : DESIGN_ICON[id] || IconSencilla);
+// Keyed by CATEGORY (sv | bifocal | prog) so new designs in a family (e.g. the
+// "tallado" / "stock" split of the bifocal family) get the right art without edits.
+const CAT_ICON = { sv: IconSencilla, bifocal: IconBifocal, prog: IconProgresivo };
+const designIcon = (id, cat) => (id === "frame-only" ? IconMontura : CAT_ICON[cat] || IconSencilla);
 // Progresivo se muestra como UN solo botón; la gama (Media/Alta) se elige dentro.
 const PROG_GROUP = { id: "prog", group: true, cat: "prog", label: { es: "Lentes Progresivos", en: "Progressive lenses" } };
 // Iconos realistas e info por tipo de lente en el popup de receta (maqueta).
@@ -62,7 +59,8 @@ const RX_TYPE_ICON = {
   bifocal: "/rx/bifocal.png",
   prog: "/rx/progresivo.png",
 };
-const rxTypeIcon = (d) => (d.group || d.cat === "prog") ? RX_TYPE_ICON.prog : (RX_TYPE_ICON[d.id] || RX_TYPE_ICON.sv);
+const rxTypeIcon = (d) => (d.group || d.cat === "prog") ? RX_TYPE_ICON.prog : (RX_TYPE_ICON[d.id] || RX_TYPE_ICON[d.cat] || RX_TYPE_ICON.sv);
+// Copy per design id when it exists (tallado / stock explain themselves), else per family.
 const rxTypeDescKey = (d) => d.id === "frame-only" ? "frame" : (d.group || d.cat === "prog") ? "prog" : d.id;
 // Transitions: ocultos por ahora; se podrán configurar a futuro (poner en true).
 const SHOW_TRANSITIONS = false;
@@ -704,7 +702,7 @@ export default function LensProcess() {
     if (add > 0 && designId === "sv") {
       setDesignId("prog-mid"); setMatId(null);
       setRxNote({ kind: "toMulti" });
-    } else if (add <= 0 && (designId === "bifocal" || designId === "prog-mid" || designId === "prog-high")) {
+    } else if (add <= 0 && designId !== "sv" && (DESIGNS.find((d) => d.id === designId)?.cat || "sv") !== "sv") {
       setDesignId("sv"); setMatId(null);
       setRxNote({ kind: "toSingle" });
     }
@@ -1824,12 +1822,9 @@ export default function LensProcess() {
                 <div key={m.id} className={`zlx-choice-row ${matId === m.id ? "sel" : ""}`}>
                   <button type="button" className={`zlx-choice ${matId === m.id ? "sel" : ""}`} onClick={() => { setMatId(m.id); setPop("treat"); }}>
                     <span className="zlx-choice-main">
-                      {/* Icono 3D por material (lámina del dueño): menos aros = lente
-                          más delgado (1.74 un aro fino ... CR-39 las capas clásicas).
-                          Blanco/oro en la fila elegida (navy); el svg queda de respaldo. */}
-                      <img className="i3d i3d-mat" src={`/ui/icons3d/lm-${matId === m.id ? "whiteg" : "navyg"}-${({ cr39: "stack", poly: "t3", "1.67": "t2", "1.74": "t1" })[m.id] || "stack"}.png`} alt="" aria-hidden="true"
-                           onError={(e) => { e.currentTarget.parentElement.classList.add("no-i3d"); e.currentTarget.remove(); }} />
-                      <IconMaterial className="zlx-choice-ic" active={matId === m.id} />
+                      {/* Disco de cristal por material: cada uno con su color y con el
+                          grosor real de su índice (CR-39 el más grueso, 1.74 el más fino). */}
+                      <LensMaterialGlass id={m.id} size={30} selected={matId === m.id} className="zlx-mat-glass" />
                       <span className="zlx-choice-title">
                         {L(m.label, lang)}
                         {isReco && <span className="reco-badge">★</span>}

@@ -17,6 +17,7 @@ import {
   needsPrescription,
   saleNumber,
   sellableStores,
+  shipRequiresFullPayment,
   rankCodeMatches,
 } from "../src/lib/pos";
 
@@ -290,5 +291,16 @@ describe("rankCodeMatches (frame search by the code on the tag)", () => {
   it("ignores case and finds nothing for an unrelated term", () => {
     expect(rankCodeMatches(variants, "DC406").productIds).toEqual(["p2"]);
     expect(rankCodeMatches(variants, "zzz").productIds).toEqual([]);
+  });
+});
+
+describe("home delivery needs the sale paid in full", () => {
+  it("blocks shipping while money is owed and allows it once settled or for pickup", () => {
+    expect(shipRequiresFullPayment("ship", 1)).toBe(true);
+    expect(shipRequiresFullPayment("ship", 12_500)).toBe(true);
+    expect(shipRequiresFullPayment("ship", 0)).toBe(false);
+    expect(shipRequiresFullPayment("ship", -50)).toBe(false); // overpaid is caught elsewhere
+    expect(shipRequiresFullPayment("pickup", 12_500)).toBe(false);
+    expect(shipRequiresFullPayment(undefined, 12_500)).toBe(false);
   });
 });

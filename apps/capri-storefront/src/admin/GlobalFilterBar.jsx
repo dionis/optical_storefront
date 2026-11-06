@@ -33,6 +33,9 @@ import "./filter-bar.css";
  * y rango; `export`: PDF · Excel · CSV. Pestañas ausentes → sin barra.
  */
 export const BAR_TABS = {
+  // Vender: el mismo selector de tienda del panel cambia la caja (PosSale.jsx lo
+  // escucha) — así ir de una óptica a otra es un clic, no buscar otro desplegable.
+  pos: { store: true, period: false, export: false },
   // Precios y costos: la tienda decide qué variación se edita; no hay período.
   pricing: { store: true, period: false, export: true },
   exec: { store: true, period: true, export: true },

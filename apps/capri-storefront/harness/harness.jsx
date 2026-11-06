@@ -13,7 +13,7 @@ import PosFrameCard from "/src/admin/PosFrameCard.jsx";
 import AdminShell from "/src/admin/AdminShell.jsx";
 import { KpiCard, kpiDelta } from "/src/admin/charts.jsx";
 import Icon from "/src/admin/icons.jsx";
-import { receiptDuoHtml, receiptHtml, jobHtml, PRINT_CSS, DUO_PAGE_CSS } from "/src/admin/SaleDocuments.jsx";
+import { receiptDuoHtml, receiptHtml, jobDuoHtml, PRINT_CSS, DUO_PAGE_CSS } from "/src/admin/SaleDocuments.jsx";
 
 // ?mode=light|dark fija el modo del panel (data-mode); ?store=web|neutral|<#hex> el tema de tienda
 // en la vista `shell` (AdminShell real, con me=null → "web" o neutro; un hex se pinta a mano).
@@ -36,6 +36,10 @@ const doc = {
   payments: [{ method_code: "zelle", method: { es: "Zelle", en: "Zelle" }, amount: 270, kind: "deposit", reference: "ZL-88213", created_at: new Date().toISOString() }],
   tickets: [],
 };
+// Color de la óptica (como lo manda el servidor en doc.store.color) y una ficha de laboratorio de muestra.
+doc.store.color = "#B5651D";
+doc.tickets = [{ line: doc.lines[0], job_type: "uncuts", rx: { rx_number: "RX-2026-00812", od: { sph: 2.25, cyl: null, axis: null, add: 2.5, prism: 1, base: "in" }, os: { sph: 3, cyl: -0.75, axis: 110, add: 2.5, prism: null, base: null }, seg_height: 25, pd_od: 30, pd_os: 30 } }];
+const docStyle = `--sc:${doc.store.color}`;
 function App() {
   const [rx, setRx] = useState({ ...EMPTY_RX, type: "multifocal", od: { ...EMPTY_RX.od, sph: "+2.25", add: "2.50" }, os: { ...EMPTY_RX.os, sph: "+3.00", cyl: "-0.75", axis: "110", add: "2.50" }, pd_od: "30", pd_os: "30", seg_height: "25", rx_date: "2026-10-31" });
   const [worn, setWorn] = useState({ ...EMPTY_RX });
@@ -43,8 +47,9 @@ function App() {
   const [wf, setWf] = useState({ lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" });
   const which = Q.get("v") || "rx";
   if (which === "shell") return <MemoryRouter><ShellSink /></MemoryRouter>;
-  if (which === "duo") return <iframe id="duo" style={{ width: "11in", height: "8.5in", border: 0 }} srcDoc={`<!doctype html><html><head><style>${PRINT_CSS}${DUO_PAGE_CSS}</style></head><body>${receiptDuoHtml(doc)}</body></html>`} />;
-  if (which === "rcpt") return <iframe id="duo" style={{ width: "80mm", height: "900px", border: 0 }} srcDoc={`<!doctype html><html><head><style>${PRINT_CSS}</style></head><body>${receiptHtml(doc)}</body></html>`} />;
+  if (which === "duo") return <iframe id="duo" style={{ width: "11in", height: "8.5in", border: 0 }} srcDoc={`<!doctype html><html><head><style>${PRINT_CSS}${DUO_PAGE_CSS}</style></head><body style="${docStyle}">${receiptDuoHtml(doc)}</body></html>`} />;
+  if (which === "job") return <iframe id="duo" style={{ width: "11in", height: "8.5in", border: 0 }} srcDoc={`<!doctype html><html><head><style>${PRINT_CSS}${DUO_PAGE_CSS}</style></head><body style="${docStyle}">${jobDuoHtml(doc)}</body></html>`} />;
+  if (which === "rcpt") return <iframe id="duo" style={{ width: "80mm", height: "900px", border: 0 }} srcDoc={`<!doctype html><html><head><style>${PRINT_CSS}</style></head><body style="${docStyle}">${receiptHtml(doc)}</body></html>`} />;
   return (
     <div className="adm-shell" data-store-theme="store" data-mode={MODE} style={{ display: "block" }}><div className="adm-main" style={{ marginLeft: 0, minHeight: 0 }}><div className="adm-section pos" style={{ padding: 16, maxWidth: 1100 }}>
       <div className="adm-card pos-card" style={{ marginBottom: 16 }}>

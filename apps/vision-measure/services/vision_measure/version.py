@@ -54,6 +54,7 @@ FEATURES: List[str] = [
     "capri-page-layout",  # the prompt describes how the supplier page is laid out
     "retry-progress",  # background jobs report live attempt/backoff progress
     "slow-run-notify",  # past SLOW_NOTICE_AFTER_ATTEMPT, arm an email/WhatsApp delivery
+    "async-job-endpoints",  # job start/poll on the event loop; thread exhaustion → server_busy, not a traceback
 ]
 
 

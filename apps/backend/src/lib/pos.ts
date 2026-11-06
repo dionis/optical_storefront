@@ -394,6 +394,14 @@ export const paymentFee = (m: PaymentMethodLike, amountCents: number): number =>
  * `dueCents` is what is still to be paid: the total at a sale, the balance
  * when collecting later.
  */
+/**
+ * Owner's rule: a sale only goes out by courier when nothing is owed; with a
+ * balance it is picked up (and settled) at the counter. Shared by the till
+ * (to disable the option) and by POST /admin/pos/sales (which never trusts it).
+ */
+export const shipRequiresFullPayment = (delivery: unknown, balanceCents: number): boolean =>
+  delivery === "ship" && balanceCents > 0;
+
 export function cleanPayments(
   input: unknown,
   dueCents: number,

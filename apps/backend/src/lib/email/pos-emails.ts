@@ -30,14 +30,14 @@ const COPY = {
     approval_none: "—",
     approval_cta: "Aprobar o rechazar",
     approval_expires: "La solicitud caduca a las 24 horas.",
-    own_frame: "Montura propia del cliente",
+    own_frame: "Montura propia del paciente",
     receipt_subject: "Tu recibo {number} · {store}",
     receipt_title: "Recibo de tu compra",
     receipt_intro: "Gracias por tu compra en {store}. Este es tu recibo.",
     receipt_sale: "Venta",
     receipt_date: "Fecha",
     receipt_served: "Le atendió",
-    receipt_customer: "Cliente",
+    receipt_customer: "Paciente",
     receipt_discount: "Descuento {pct} %",
     receipt_tax: "Impuesto de venta",
     receipt_total: "Total",
@@ -95,7 +95,7 @@ const COPY = {
     receipt_sale: "Sale",
     receipt_date: "Date",
     receipt_served: "Served by",
-    receipt_customer: "Customer",
+    receipt_customer: "Patient",
     receipt_discount: "Discount {pct}%",
     receipt_tax: "Sales tax",
     receipt_total: "Total",
@@ -269,6 +269,7 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
   const sum = (label: string, value: string, strong = false) =>
     `<tr><td style="padding:5px 0;font-size:${strong ? 16 : 14}px;${strong ? "font-weight:800" : "color:#5b6472"}">${esc(label)}</td><td style="padding:5px 0;text-align:right;font-size:${strong ? 16 : 14}px;${strong ? "font-weight:800" : ""}">${esc(value)}</td></tr>`;
   const inner = `
+    ${doc.store.color ? storeBanner({ code: doc.store.code, name: doc.store.name, color: doc.store.color }) : ""}
     ${doc.sale.status === "voided" ? `<div style="padding:10px 14px;background:#fef2f2;color:#991b1b;font-weight:800;border-radius:6px;margin-bottom:12px">${esc(posT(locale, "receipt_voided"))}</div>` : ""}
     <div style="font-size:15px;line-height:1.7;color:#374151">${esc(intro)}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">
@@ -302,7 +303,9 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
     ${showRx ? `<div style="margin-top:12px;font-size:12px;color:#5b6472">${esc(posT(locale, "receipt_keep_rx"))}</div>` : ""}`;
   return {
     subject,
-    html: shell(posT(locale, "receipt_title"), intro, inner, locale),
+    // El acento del correo es el color de la óptica que hizo la venta (igual que
+    // la cabecera del ticket impreso): se reconoce la tienda de un vistazo.
+    html: shell(posT(locale, "receipt_title"), intro, inner, locale, { accent: doc.store.color }),
     text: [
       intro,
       "",

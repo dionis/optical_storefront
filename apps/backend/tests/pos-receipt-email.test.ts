@@ -11,7 +11,7 @@ const rx: PrescriptionForEmail = {
 const doc = {
   kind: "receipt",
   business: { name: "RUBI LENS", legal_name: "RUBI", url: "https://x", support_email: null, timezone: "America/Chicago" },
-  store: { code: "Op1", name: "Tienda Norte", address: "1 Main St", phone: "+1 713 555 0100", receipt_note: null },
+  store: { code: "Op1", name: "Tienda Norte", address: "1 Main St", phone: "+1 713 555 0100", receipt_note: null, color: "#1B7F4C" },
   terminal: { code: "Op1-POS1", receipt_locale: "es", ticket_locale: "en" },
   sale: { id: "s1", number: "Op1-000001", created_at: "2026-10-01T15:00:00Z", updated_at: "2026-10-01T15:00:00Z", promised_on: "2026-10-15", seller_code: "ANA", tray: "Op1-3", status: "completed", voided_at: null, delivery: "pickup" },
   customer: { name: "Dionis Nota" },

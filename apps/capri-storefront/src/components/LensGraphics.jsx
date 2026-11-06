@@ -266,6 +266,73 @@ export function IconMontura(p) {
   );
 }
 
+/* ===========================================================================
+ * LENS MATERIAL — "glass" swatch
+ * ---------------------------------------------------------------------------
+ * The owner wants each lens material to be told apart at a glance: its own
+ * colour, and a look of real glass rather than a flat icon. One lens disc per
+ * material, seen in three-quarter view, with the thickness that the index
+ * actually gives (CR-39 the thickest edge, 1.74 the thinnest) and a tint per
+ * material. Used by the public lens configurator (LensProcess) and the POS
+ * (PosSale) so the two speak the same visual language.
+ * ======================================================================== */
+
+/** Tint, edge thickness (px of the 48x48 grid) and a short name per material code. */
+export const MATERIAL_LOOK = {
+  cr39:   { tint: "#8fd0ff", deep: "#2d7fc4", edge: 9,   name: "CR-39" },
+  poly:   { tint: "#5fe0c5", deep: "#0f9d82", edge: 7.5, name: "Poly" },
+  "1.56": { tint: "#f3d26b", deep: "#c58a12", edge: 6,   name: "1.56" },
+  "1.61": { tint: "#c3a6ff", deep: "#6f3fe0", edge: 5,   name: "1.61" },
+  "1.67": { tint: "#ff9fb4", deep: "#d1365e", edge: 4,   name: "1.67" },
+  "1.74": { tint: "#6c8cff", deep: "#1f3fd1", edge: 3,   name: "1.74" },
+};
+const DEFAULT_LOOK = { tint: "#bcd3ea", deep: "#5a7ca3", edge: 7, name: "" };
+
+/**
+ * <LensMaterialGlass id="1.67" size={28} /> — glass-looking lens disc tinted per material.
+ * `selected` brightens the rim (for the chosen row). Decorative: aria-hidden.
+ */
+export function LensMaterialGlass({ id, size = 28, selected = false, className = "", title, ...rest }) {
+  const look = MATERIAL_LOOK[id] || DEFAULT_LOOK;
+  // Gradient ids must be unique per instance (several discs share one page).
+  const uid = `lmg-${String(id).replace(/[^a-z0-9]/gi, "")}-${selected ? "s" : "n"}`;
+  const e = look.edge;
+  return (
+    <svg viewBox="0 0 48 48" width={size} height={size} className={`lens-glass ${className}`} aria-hidden={title ? undefined : "true"} role={title ? "img" : undefined} {...rest}>
+      {title && <title>{title}</title>}
+      <defs>
+        {/* Edge of the lens: darker glass, lit from the top-left. */}
+        <linearGradient id={`${uid}-edge`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={look.deep} stopOpacity=".95" />
+          <stop offset="1" stopColor={look.deep} stopOpacity=".55" />
+        </linearGradient>
+        {/* Face of the lens: translucent tint with a cool core, like real glass. */}
+        <radialGradient id={`${uid}-face`} cx="38%" cy="32%" r="75%">
+          <stop offset="0" stopColor="#ffffff" stopOpacity=".95" />
+          <stop offset=".28" stopColor={look.tint} stopOpacity=".55" />
+          <stop offset=".78" stopColor={look.deep} stopOpacity=".55" />
+          <stop offset="1" stopColor={look.deep} stopOpacity=".85" />
+        </radialGradient>
+        {/* Specular sweep across the face. */}
+        <linearGradient id={`${uid}-shine`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity=".85" />
+          <stop offset=".45" stopColor="#fff" stopOpacity=".12" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Thickness: the lens edge drawn as the gap between two ellipses. */}
+      <ellipse cx="24" cy={26 + e / 2} rx="17" ry="12" fill={`url(#${uid}-edge)`} />
+      <rect x="7" y={26 - e / 2} width="34" height={e} fill={`url(#${uid}-edge)`} />
+      {/* Face. */}
+      <ellipse cx="24" cy={26 - e / 2} rx="17" ry="12" fill={`url(#${uid}-face)`} stroke={selected ? "#ffffff" : look.deep} strokeOpacity={selected ? ".95" : ".65"} strokeWidth={selected ? 1.4 : 1} />
+      {/* Highlights: a soft sweep and a sharp glint. */}
+      <ellipse cx="24" cy={26 - e / 2} rx="17" ry="12" fill={`url(#${uid}-shine)`} />
+      <ellipse cx="17.5" cy={20 - e / 2} rx="5" ry="2.4" fill="#fff" fillOpacity=".8" transform={`rotate(-18 17.5 ${20 - e / 2})`} />
+      <circle cx="32.5" cy={30 - e / 2} r="1.4" fill="#fff" fillOpacity=".7" />
+    </svg>
+  );
+}
+
 // Registry: name -> icon component, for data-driven rendering.
 export const ICONS = {
   receta: IconReceta,

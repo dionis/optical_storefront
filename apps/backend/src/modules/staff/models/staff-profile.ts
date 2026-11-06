@@ -38,4 +38,29 @@ export const StaffProfile = model.define("staff_profile", {
   privileges: model.json().nullable(),
   internal_notes: model.text().nullable(),
   updated_by: model.text().nullable(),
+
+  /*
+   * Datos de pago (nómina / comisión). Los números delicados se guardan
+   * CIFRADOS (`*_enc`, AES-256-GCM, src/lib/secret-box.ts) y, al lado, solo los
+   * últimos 4 dígitos para que el panel pueda enseñar «•••• 1234» sin
+   * descifrar nada. Quien vea un volcado de la base no ve ni un SSN ni una
+   * cuenta. Reglas de acceso y validación: src/lib/staff-payroll.ts.
+   */
+  /** "direct_deposit" | "check" | "cash" | "zelle". */
+  pay_method: model.text().nullable(),
+  /** "ssn" | "itin" | "ein". */
+  tax_id_kind: model.text().nullable(),
+  tax_id_enc: model.text().nullable(),
+  tax_id_last4: model.text().nullable(),
+  bank_name: model.text().nullable(),
+  /** Titular de la cuenta, cuando no coincide con el nombre de la persona. */
+  account_holder: model.text().nullable(),
+  /** "checking" | "savings". */
+  account_type: model.text().nullable(),
+  routing_enc: model.text().nullable(),
+  routing_last4: model.text().nullable(),
+  account_enc: model.text().nullable(),
+  account_last4: model.text().nullable(),
+  payroll_updated_at: model.text().nullable(),
+  payroll_updated_by: model.text().nullable(),
 });

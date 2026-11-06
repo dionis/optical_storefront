@@ -38,6 +38,7 @@ jest.mock("../src/lib/pos", () => ({
   discountNeedsApproval: jest.fn(() => false),
   needsPrescription: jest.fn(() => false),
   sellerTillProblem: jest.fn(() => null),
+  shipRequiresFullPayment: jest.fn(() => false),
 }));
 
 const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };

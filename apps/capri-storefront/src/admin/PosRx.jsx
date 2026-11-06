@@ -17,6 +17,10 @@ const WORN_SOURCES = ["previous_rx", "lensometer", "prior_sale"];
 const FRAME_FIELDS = ["lens_width", "bridge", "temple", "lens_height", "total_width"];
 const FRAME_LABEL = { lens_width: "lensWidth", bridge: "bridge", temple: "temple", lens_height: "lensHeight", total_width: "totalWidth" };
 const FRAME_PH = { lens_width: "50", bridge: "18", temple: "140", lens_height: "35", total_width: "136" };
+/** Hoy en la zona horaria del navegador, AAAA-MM-DD (toISOString daría el día UTC). */
+export const localToday = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Fecha más antigua admitida para una receta (el servidor acepta cualquier día pasado). */
+const RX_DATE_MIN = "1990-01-01";
 // Tema de ayuda (HelpTip) de cada columna de la cuadrícula.
 const HELP = { sph: "pos.rx.sph", cyl: "pos.rx.cyl", axis: "pos.rx.axis", add: "pos.rx.add", prism: "pos.rx.prism", base: "pos.rx.base", pd: "pos.rx.pd", seg: "pos.rx.seg" };
 
@@ -48,10 +52,12 @@ export default function RxForm({
     const id = `${idp}-${eye}-${k}`;
     const label = `${t(`adm.pos.rx.${eye}`)} ${t(`adm.pos.rx.${k}`)}`;
     if (k === "base") {
-      const off = disabled || !(Number(value[eye].prism) > 0);
+      // La base se puede elegir siempre (antes se bloqueaba hasta teclear el
+      // prisma y el personal no entendía por qué no podía ponerla). Las reglas de
+      // rxRules.js avisan si falta prisma o falta base; no hace falta bloquear.
       return (
         <td key={k} className={err ? "err" : ""}>
-          <select id={id} value={value[eye].base} disabled={off} aria-label={label} aria-invalid={err ? true : undefined} title={err ? t(err) : t("adm.pos.rx.base")}
+          <select id={id} value={value[eye].base} disabled={disabled} aria-label={label} aria-invalid={err ? true : undefined} title={err ? t(err) : t("adm.pos.rx.base")}
             onChange={(e) => onChange(setEyeField(value, eye, "base", e.target.value))} onBlur={() => touch(`${eye}-base`)}>
             <option value="">—</option>
             {PRISM_BASES.map((b) => <option key={b} value={b}>{t(`adm.pos.rx.base.${b}`)}</option>)}
@@ -124,7 +130,10 @@ export default function RxForm({
       <div className="pos-rx-meta">
         {mode === "new" ? (
           <>
-            <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={value.rx_date || ""} disabled={disabled} onChange={(e) => onChange({ ...value, rx_date: e.target.value })} /></label>
+            {/* Fecha de la receta: cualquier día hasta hoy (recetas antiguas se registran con
+                su fecha real). `max` es el día LOCAL: con la hora UTC, por la tarde en Texas
+                "hoy" ya era mañana y el servidor rechazaba la fecha. */}
+            <label>{t("adm.pos.rx.date")}<input type="date" min={RX_DATE_MIN} max={localToday()} value={value.rx_date || ""} disabled={disabled} title={t("adm.pos.rx.dateHint")} onChange={(e) => onChange({ ...value, rx_date: e.target.value })} /></label>
             <span className="pos-rx-tag" title={t("adm.pos.rx.origin")}>{t("adm.pos.rx.origin")}: <b>{t(`adm.pos.rx.origin.${source === "ocr" ? "ocr" : "manual"}`)}</b></span>
           </>
         ) : (
@@ -142,7 +151,7 @@ export default function RxForm({
             </label>
             {worn?.dateMode === "approx"
               ? <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" maxLength={3} value={worn?.months || ""} disabled={disabled} onChange={(e) => onWornChange?.({ ...worn, months: e.target.value.replace(/\D/g, "") })} /></label>
-              : <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={worn?.date || ""} disabled={disabled} onChange={(e) => onWornChange?.({ ...worn, date: e.target.value })} /></label>}
+              : <label>{t("adm.pos.rx.date")}<input type="date" min={RX_DATE_MIN} max={localToday()} value={worn?.date || ""} disabled={disabled} title={t("adm.pos.rx.dateHint")} onChange={(e) => onWornChange?.({ ...worn, date: e.target.value })} /></label>}
           </>
         )}
         <span className="pos-rx-tag pd">{bin == null ? t("adm.pos.rx.pdBinMissing") : t("adm.pos.rx.pdBin", { v: bin.toFixed(1) })}</span>

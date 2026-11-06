@@ -8,6 +8,7 @@ import {
   discountNeedsApproval,
   needsPrescription,
   sellerTillProblem,
+  shipRequiresFullPayment,
   type PosCustomerInput,
   type PosLineInput,
 } from "../../../../lib/pos";
@@ -159,6 +160,9 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
 
     const payments = cleanPayments(body.payments, quote.total_cents, methods, { establishmentId: store.id });
     if ("reason" in payments) throw new PosError(payments.reason, 422, payments.method ? { method: payments.method } : {});
+    // Owner's rule: nothing leaves the store by courier with money still owed.
+    // A sale with a balance is picked up (and paid) at the counter.
+    if (shipRequiresFullPayment(body.delivery, payments.balance_cents)) throw new PosError("ship_requires_full_payment");
 
     const key = typeof body.idempotency_key === "string" && /^[A-Za-z0-9_-]{8,80}$/.test(body.idempotency_key) ? body.idempotency_key : null;
     const sale = await createPosSale(req.scope, {

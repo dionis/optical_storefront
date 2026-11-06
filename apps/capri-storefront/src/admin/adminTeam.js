@@ -161,3 +161,20 @@ export async function saveMyProfile(patch) {
     throw profileErr(e, "adm.err.profile.saveFailed");
   }
 }
+
+// ── Datos de pago (confidencial) ────────────────────────────────────────────
+// Número fiscal y cuenta bancaria de quien cobra. El servidor NUNCA los
+// devuelve completos: lo que llega es el método de cobro, el banco y «•••• 1234».
+// Por eso aquí tampoco hay nada que "ver" ni "copiar": si se perdió el número,
+// se vuelve a escribir.
+export async function fetchPayroll(id) {
+  return adminFetch(id ? `/admin/team/${encodeURIComponent(id)}/payroll` : "/admin/team/me/payroll");
+}
+
+export async function savePayroll(id, patch) {
+  try {
+    return await adminFetch(id ? `/admin/team/${encodeURIComponent(id)}/payroll` : "/admin/team/me/payroll", { method: "POST", body: patch });
+  } catch (e) {
+    throw profileErr(e, "adm.err.profile.saveFailed");
+  }
+}

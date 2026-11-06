@@ -4,8 +4,9 @@ export default {
   es: {
     "adm.doc.printReceiptDuo": "Imprimir recibo (2 copias, carta)",
     "adm.doc.printReceiptRoll": "Recibo (rollo)",
-    "adm.doc.duo.customerCopy": "Copia del cliente",
+    "adm.doc.duo.customerCopy": "Copia del paciente",
     "adm.doc.duo.storeCopy": "Copia de la tienda (archivo)",
+    "adm.doc.duo.labCopy": "Copia para el laboratorio",
     "adm.doc.duo.cut": "Cortar por la línea",
     "adm.doc.rcpt.phone": "Tel.",
     "adm.doc.rcpt.item": "Artículo",
@@ -22,8 +23,9 @@ export default {
   en: {
     "adm.doc.printReceiptDuo": "Print receipt (2 copies, letter)",
     "adm.doc.printReceiptRoll": "Receipt (roll)",
-    "adm.doc.duo.customerCopy": "Customer copy",
+    "adm.doc.duo.customerCopy": "Patient copy",
     "adm.doc.duo.storeCopy": "Store copy (file)",
+    "adm.doc.duo.labCopy": "Lab copy",
     "adm.doc.duo.cut": "Cut along the line",
     "adm.doc.rcpt.phone": "Phone",
     "adm.doc.rcpt.item": "Item",

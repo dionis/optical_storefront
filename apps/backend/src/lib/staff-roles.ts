@@ -149,6 +149,10 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
   // "Cerrar sesión en todos mis equipos": cualquier rol, solo sobre sí mismo.
   { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
+  // "Mis datos de pago": cada quien escribe su número fiscal y su cuenta, para
+  // que no tengan que pasar por las manos de nadie más. Siempre sobre sí mismo.
+  { method: "GET", path: /^\/admin\/team\/me\/payroll$/ },
+  { method: "POST", path: /^\/admin\/team\/me\/payroll$/ },
   { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals|prescriptions\/ocr)$/ },
   { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },

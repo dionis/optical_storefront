@@ -55,7 +55,14 @@ const progressive = (from: number, cls: "mid" | "high"): Record<MaterialCode, nu
 export const DESIGNS: DesignRow[] = [
   { code: "sv", category: "sv", label_es: "Visión Sencilla", label_en: "Single Vision", requires_rx: true, requires_add: false, sort: 0, tier: null, use_es: null, use_en: null,
     prices: { cr39: 60, poly: 90, "1.56": 100, "1.61": 100, "1.67": 120, "1.74": 150 } },
-  { code: "bifocal", category: "bifocal", label_es: "Bifocal FT-28", label_en: "Bifocal FT-28", requires_rx: true, requires_add: true, sort: 1, tier: null, use_es: null, use_en: null,
+  // The owner's lab sheet splits the FT-28 bifocal family into "tallado"
+  // (surfaced in the lab) and "de stock" (finished lens from inventory); the old
+  // single "bifocal" row is retired (RETIRED_DESIGN_CODES) and these two take its
+  // category, so photochromic/AR pricing per category is unchanged. Both start
+  // at the old bifocal price — the owner sets each store's price in the panel.
+  { code: "tallado", category: "bifocal", label_es: "Tallado", label_en: "Surfaced", requires_rx: true, requires_add: true, sort: 1, tier: null, use_es: null, use_en: null,
+    prices: { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 } },
+  { code: "stock", category: "bifocal", label_es: "De stock", label_en: "Stock", requires_rx: true, requires_add: true, sort: 2, tier: null, use_es: null, use_en: null,
     prices: { cr39: 130, poly: 140, "1.56": 140, "1.61": 140, "1.67": 160, "1.74": 160 } },
   { code: "prog-mid", category: "prog", label_es: "Progresivo Gama Media", label_en: "Progressive · Mid", requires_rx: true, requires_add: true, sort: 2, tier: null, use_es: null, use_en: null,
     prices: { cr39: 180, poly: 180, "1.56": 180, "1.61": 180, "1.67": 200, "1.74": 230 } },
@@ -127,6 +134,8 @@ export const AR_OPTIONS: ArRow[] = [
 
 /** AR options the RUBILENT interlude introduced; the 2026 list replaces them. */
 export const RETIRED_AR_CODES = ["ar-green", "ar-blue"] as const;
+/** Designs no longer offered (kept in the DB, inactive, so old sales keep their breakdown). */
+export const RETIRED_DESIGN_CODES = ["bifocal"] as const;
 
 export const cents = (usd: number | null): number | null => (usd == null ? null : Math.round(usd * 100));
 

@@ -125,11 +125,19 @@ class ModelsRequest(BaseModel):
 
 
 @app.get("/api/health")
-def health() -> Dict[str, Any]:
+async def health() -> Dict[str, Any]:
     providers = describe_providers()
     return {
         "ok": True,
         "service": "vision-measure",
+        # Threads and queued jobs of THIS process: "RuntimeError: can't start new
+        # thread" (5-nov-2026, production) was only diagnosable from a traceback;
+        # now the numbers are one GET away, before it fails.
+        "threads": threading.active_count(),
+        "jobs": {
+            "total": len(_JOBS),
+            "running": sum(1 for j in list(_JOBS.values()) if j.get("status") == "pending"),
+        },
         "build": describe_build(),
         "providers": len(providers),
         "providersWithServerKey": [p["id"] for p in providers if p["hasServerKey"]],
@@ -209,7 +217,7 @@ def image_proxy(url: str) -> JSONResponse:
 
 
 @app.get("/api/vision-measure/providers")
-def providers(lang: str = "es") -> Dict[str, Any]:
+async def providers(lang: str = "es") -> Dict[str, Any]:
     """Catalogue for the panel: vendors, default models, and which keys are configured."""
     return {
         "providers": describe_providers(),
@@ -398,11 +406,16 @@ def _run_job(job_id: str, request: MeasureRequest) -> None:
                 job["progress"] = None
                 job["finishedAt"] = time.time()
     except Exception as exc:  # noqa: BLE001 - reportamos cualquier fallo al cliente
+        busy = _is_thread_exhaustion(exc)
+        if busy:
+            print(f"[VISION] job {job_id}: sin hilos del sistema (threads={threading.active_count()}); revisar límite de pids/memoria del contenedor", flush=True)
         with _JOBS_LOCK:
             job = _JOBS.get(job_id)
             if job is not None:
                 job["status"] = "error"
-                job["error"] = f"{type(exc).__name__}: {exc}"
+                job["errorCode"] = SERVER_BUSY["code"] if busy else None
+                job["error"] = SERVER_BUSY["es"] if busy else f"{type(exc).__name__}: {exc}"
+                job["errorEn"] = SERVER_BUSY["en"] if busy else None
                 job["progress"] = None
                 job["finishedAt"] = time.time()
 
@@ -547,8 +560,25 @@ def _maybe_deliver_notification(job_id: str) -> None:
             job["notifyDelivered"] = delivered
 
 
+# Why the job endpoints are `async def`: FastAPI runs a plain `def` endpoint on an
+# anyio worker thread. Starting a job and, above all, POLLING it every 3 s from every
+# open browser therefore consumed a thread per request; on 5-nov-2026 the production
+# container ran out of OS threads ("RuntimeError: can't start new thread") and every
+# measurement died with that raw message. These handlers only touch in-memory dicts,
+# so they run on the event loop and need no thread at all.
+SERVER_BUSY = {
+    "code": "server_busy",
+    "es": "El servicio de medición está saturado en este momento. Inténtalo de nuevo en un minuto.",
+    "en": "The measurement service is overloaded right now. Please try again in a minute.",
+}
+
+
+def _is_thread_exhaustion(exc: BaseException) -> bool:
+    return isinstance(exc, RuntimeError) and "can't start new thread" in str(exc)
+
+
 @app.post("/api/vision-measure/job")
-def start_measure_job(request: MeasureRequest) -> JSONResponse:
+async def start_measure_job(request: MeasureRequest) -> JSONResponse:
     """
     Arranca un trabajo de medición+render y responde AL INSTANTE con su id. El cliente
     consulta el estado en GET /api/vision-measure/job/{id}. Pensado para el render por
@@ -574,7 +604,16 @@ def start_measure_job(request: MeasureRequest) -> JSONResponse:
             "notifySent": None,
         }
 
-    _JOB_POOL.submit(_run_job, job_id, request)
+    try:
+        _JOB_POOL.submit(_run_job, job_id, request)
+    except RuntimeError as exc:
+        # The pool itself could not spawn its worker: same exhaustion, reported
+        # cleanly instead of as a 500 with a traceback.
+        if not _is_thread_exhaustion(exc):
+            raise
+        with _JOBS_LOCK:
+            _JOBS.pop(job_id, None)
+        return JSONResponse(status_code=503, content={"ok": False, "errorCode": SERVER_BUSY["code"], "error": SERVER_BUSY["es"], "errorEn": SERVER_BUSY["en"]})
     return JSONResponse(
         status_code=200, content={"ok": True, "jobId": job_id, "status": "pending"}
     )
@@ -589,7 +628,7 @@ class JobNotifyRequest(BaseModel):
 
 
 @app.post("/api/vision-measure/job/{job_id}/notify")
-def set_job_notify(job_id: str, request: JobNotifyRequest) -> JSONResponse:
+async def set_job_notify(job_id: str, request: JobNotifyRequest) -> JSONResponse:
     """
     Arma el aviso por correo/WhatsApp para un trabajo que se está alargando.
 
@@ -638,7 +677,7 @@ def set_job_notify(job_id: str, request: JobNotifyRequest) -> JSONResponse:
 
 
 @app.get("/api/vision-measure/job/{job_id}")
-def get_measure_job(job_id: str) -> JSONResponse:
+async def get_measure_job(job_id: str) -> JSONResponse:
     """Estado de un trabajo. Cuando termina, trae el sobre completo en `result`."""
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
@@ -664,7 +703,7 @@ def get_measure_job(job_id: str) -> JSONResponse:
         if status == "error":
             return JSONResponse(
                 status_code=200,
-                content={"ok": False, "status": "error", "error": job.get("error"), **notify_common},
+                content={"ok": False, "status": "error", "error": job.get("error"), "errorCode": job.get("errorCode"), "errorEn": job.get("errorEn"), **notify_common},
             )
         return JSONResponse(
             status_code=200,
