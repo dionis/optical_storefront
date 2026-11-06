@@ -10,7 +10,8 @@
  * these templates are a read-only view of what the order module settled on.
  */
 
-import { DEFAULT_EMAIL_BRAND, tenant, tenantName } from "../tenant";
+import { DEFAULT_EMAIL_BRAND, ownerBrand, tenant, tenantName } from "../tenant";
+import { recolorHtml, type EmailPalette } from "../tenant-brand";
 import { normalizeColor, storeBanner, storeSubjectTag, type StoreLabel } from "../store-color";
 import { t, type EmailLocale } from "./copy";
 import type { EnrichedItem, FrameSpecs, PaymentInfo, TrackingInfo } from "./order-enrich";
@@ -160,7 +161,24 @@ export function emailStoreName(): string {
  * clients, and the header has to look the same in every message.
  */
 export function emailLogoUrl(): string {
+  // A logo the owner uploaded in the panel wins; mail clients need an absolute URL.
+  const owner = ownerBrand()?.logo_url;
+  if (owner) return owner.startsWith("/") ? `${storefrontOrigin()}${owner}` : owner;
   return process.env.EMAIL_LOGO_URL?.trim() || `${storefrontOrigin()}/logo-oficial.png`;
+}
+
+/** The palette every template is written with (deployment colours, fixed at boot). */
+const DEPLOY_PALETTE: EmailPalette = { primary: BRAND, accent: GOLD, primarySoft: NAVY_SOFT, accentSoft: GOLD_LIGHT };
+
+/**
+ * The owner's brand from the panel, applied to an already rendered email: the
+ * templates keep using the boot-time constants and this swaps them, so a brand
+ * change reaches every email without a restart. Unchanged when no brand is saved.
+ */
+export function recolorEmail(html: string): string {
+  const b = ownerBrand();
+  if (!b) return html;
+  return recolorHtml(html, DEPLOY_PALETTE, { primary: b.primary, accent: b.accent, primarySoft: tint(b.primary, 0.92), accentSoft: tint(b.accent, 0.85) });
 }
 
 /**
@@ -409,6 +427,10 @@ function renderAddress(order: OrderEmailData, locale: EmailLocale): string {
 }
 
 export function shell(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean; accent?: string | null }): string {
+  return recolorEmail(shellHtml(title, preheader, inner, locale, opts));
+}
+
+function shellHtml(title: string, preheader: string, inner: string, locale: EmailLocale, opts?: { printTicket?: boolean; accent?: string | null }): string {
   // A store's email wears its color: a stripe on top, the title's edge and the footer's line.
   const accent = normalizeColor(opts?.accent);
   const site = storefrontOrigin().replace(/^https?:\/\//, "");

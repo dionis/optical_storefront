@@ -19,6 +19,7 @@ import { TENANT_PROFILE_MODULE } from "../modules/tenant-profile/index";
 import type TenantProfileModuleService from "../modules/tenant-profile/service";
 import { FIELD_LIMITS, isValidPhone } from "./field-rules";
 import { setTenantOverlay, tenant } from "./tenant";
+import { publicBrand, readBrand, type TenantBrandProfile } from "./tenant-brand";
 
 export const TENANT_PROFILE_ID = "default";
 
@@ -41,6 +42,9 @@ export interface TenantProfileView {
   whatsapp: string | null;
   social: Partial<Record<SocialNetwork, string>>;
   pickup: PickupInfo | null;
+  /** Saved from the panel; null = the deployment's colours and logos. */
+  brand: TenantBrandProfile | null;
+  brand_previous: TenantBrandProfile | null;
   owner_user_id: string | null;
   setup_completed_at: string | null;
   updated_by: string | null;
@@ -165,6 +169,8 @@ export function toView(row: Row | null | undefined): TenantProfileView {
     whatsapp: (r.whatsapp as string | null) ?? null,
     social: obj<TenantProfileView["social"]>(r.social) ?? {},
     pickup: obj<PickupInfo>(r.pickup),
+    brand: readBrand(r.brand),
+    brand_previous: readBrand(r.brand_previous),
     owner_user_id: (r.owner_user_id as string | null) ?? null,
     setup_completed_at: iso(r.setup_completed_at),
     updated_by: (r.updated_by as string | null) ?? null,
@@ -179,7 +185,11 @@ const service = (c: MedusaContainer) => c.resolve<TenantProfileModuleService>(TE
 
 function remember(view: TenantProfileView): TenantProfileView {
   cache = { at: Date.now(), view };
-  setTenantOverlay({ display_name: view.display_name, legal_name: view.legal_name });
+  setTenantOverlay({
+    display_name: view.display_name,
+    legal_name: view.legal_name,
+    brand: view.brand ? { primary: view.brand.primary, accent: view.brand.accent, logo_url: view.brand.logo_url } : null,
+  });
   return view;
 }
 
@@ -213,7 +223,11 @@ export function warmTenantProfile(container: MedusaContainer): void {
 /** Saves the cleaned patch on the single row, creating it on first use. */
 export async function saveTenantProfile(
   container: MedusaContainer,
-  patch: TenantProfilePatch & { owner_user_id?: string | null },
+  patch: TenantProfilePatch & {
+    owner_user_id?: string | null;
+    brand?: TenantBrandProfile | null;
+    brand_previous?: TenantBrandProfile | null;
+  },
   actorId: string | null
 ): Promise<TenantProfileView> {
   const svc = service(container);
@@ -242,6 +256,7 @@ export function publicTenantProfile(view: TenantProfileView) {
     whatsapp: view.whatsapp,
     social: view.social,
     pickup: view.pickup?.enabled ? view.pickup : null,
+    brand: publicBrand(view.brand),
     currency: t.currency,
     country: t.country,
     timezone: t.timezone,

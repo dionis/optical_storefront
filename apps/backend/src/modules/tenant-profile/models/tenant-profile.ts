@@ -17,6 +17,10 @@ export const TenantProfile = model.define("tenant_profile", {
   whatsapp: model.text().nullable(),
   social: model.json().nullable(),
   pickup: model.json().nullable(),
+  /** Colours and logos chosen in the panel (src/lib/tenant-brand.ts); null = the deployment's. */
+  brand: model.json().nullable(),
+  /** The brand before the last change, for "back to the previous brand". */
+  brand_previous: model.json().nullable(),
   owner_user_id: model.text().nullable(),
   setup_completed_at: model.dateTime().nullable(),
   updated_by: model.text().nullable(),

@@ -14,6 +14,11 @@ const pick = (key, fallback) => {
   return v && String(v).trim() ? String(v).trim() : fallback;
 };
 
+import { runtimeLogo } from "./brandRuntime.js";
+
+const BUILD_LOGO = pick("VITE_TENANT_LOGO", "/logo-oficial.png");
+const BUILD_LOGO_MARK = pick("VITE_TENANT_LOGO_MARK", "/logo-oficial-mark.png");
+
 export const TENANT = Object.freeze({
   /** Manifest slug ("el-rancho"), for file names and keys. */
   slug: pick("VITE_TENANT_SLUG", "el-rancho"),
@@ -25,9 +30,13 @@ export const TENANT = Object.freeze({
   site: pick("VITE_TENANT_SITE", ""),
   /** Tagline appended to the brand in document titles. */
   tagline: pick("VITE_TENANT_TAGLINE", "Óptica y Salud Visual"),
-  /** Logo paths (served from /public). */
-  logo: pick("VITE_TENANT_LOGO", "/logo-oficial.png"),
-  logoMark: pick("VITE_TENANT_LOGO_MARK", "/logo-oficial-mark.png"),
+  /** Logos: the one the owner uploaded in the panel (brandRuntime.js) or the build's (/public). */
+  get logo() {
+    return runtimeLogo("full") || BUILD_LOGO;
+  },
+  get logoMark() {
+    return runtimeLogo("mark") || BUILD_LOGO_MARK;
+  },
   /** Supplier credit shown in the footer; empty hides it. */
   imageCredit: pick("VITE_TENANT_IMAGE_CREDIT", "caprioptics.com"),
 });

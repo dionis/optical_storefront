@@ -45,6 +45,7 @@ export const AUDIT_ACTIONS = [
   "tenant.profile",
   "owner.transfer",
   "tenant.bootstrap",
+  "tenant.brand",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -306,6 +306,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "2mb" },
     },
     {
+      // A brand logo (≤ 300 KB) travels as a base64 `data:` URL; the route
+      // checks the decoded size, this only lets the encoded body in.
+      matcher: "/admin/tenant/brand/logo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "1mb" },
+    },
+    {
       // A point-of-sale sale carries the photo of each frame the customer
       // brought as a base64 `data:` URL.
       matcher: "/admin/pos/sales",

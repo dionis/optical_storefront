@@ -9,6 +9,7 @@ import Icon from "./icons.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
 import { fetchSetup, fetchTenantProfile, saveTenantProfile, SOCIAL_NETWORKS } from "./adminTenant.js";
+import BrandEditor from "./BrandEditor.jsx";
 import "./setup.css";
 
 const PICKUP_LANGS = ["es", "en"];
@@ -221,6 +222,8 @@ export default function Setup({ go, onChanged }) {
           </div>
         </form>
       )}
+
+      {state === "ok" && <BrandEditor />}
     </div>
   );
 }

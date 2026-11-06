@@ -35,6 +35,8 @@ const view = (over: Partial<TenantProfileView> = {}): TenantProfileView => ({
   whatsapp: null,
   social: {},
   pickup: { enabled: false, name: null, address: null, hours: {}, maps_url: null },
+  brand: null,
+  brand_previous: null,
   owner_user_id: "user_owner",
   setup_completed_at: null,
   updated_by: null,

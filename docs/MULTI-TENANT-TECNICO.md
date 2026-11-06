@@ -10,7 +10,7 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 
 ## 0. Estado de la implementación (06/11/2026, rama `multi-tenant-modulo-develop`)
 
-**Fases 1, 2 y 3 hechas.** Lo que hay y en qué se aparta de lo escrito más abajo:
+**Fases 1, 2, 3 y 5 hechas; la 6 (francés) se retiró del plan por ahora** (decisión del dueño, 06/11/2026). Lo que hay y en qué se aparta de lo escrito más abajo:
 
 | Pieza | Dónde | Notas |
 |---|---|---|
@@ -30,6 +30,7 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 | «Primeros pasos» (fase 3) | `lib/tenant-setup.ts`, `GET /admin/tenant/setup`, pestaña Administración → «Configuración de la óptica» (`Setup.jsx`) | Nueve pasos calculados en el servidor (perfil, avisos, recogida, precios de lentes, tiendas, equipo ≥ 2, dueño nombrado, Seguridad sin fallos, primera venta), cada uno con la pestaña que lo arregla; una lectura que falla sale «sin comprobar», nunca como hecha. La misma pantalla edita el perfil (contacto, redes, recogida). Insignia con los pendientes y, para el dueño sin `?tab=`, el panel abre ahí hasta que lo da por terminado. Terminar con pendientes pide confirmación; no bloquea nada. |
 | Seguridad (fase 3) | `security-status/route.ts` | Grupo nuevo «Configuración de la óptica»: `tenant.profile`, `tenant.owner_explicit`, `tenant.setup_completed`. **En RUBI LENS saldrán en rojo** hasta que su dueño haga el traspaso y complete el perfil: es real, no un fallo del despliegue. |
 | Enrutado en Vercel (fase 3) | `scripts/tenant/routing.mjs`, `backend-target.mjs`, `vercel-build.sh`, `check-vercel-config.mjs` | **No por dominio (`has: host`)** como decía §9: las vistas previas de Vercel tienen otro host y habrían caído en el backend de RUBI LENS. Cada óptica nueva tiene un prefijo fijo `/medusa-t-<slug>` → su `domains.api`, y su proyecto de Vercel (con `TENANT_FILE`) usa ese prefijo en producción y en vistas previas. RUBI LENS y El Rancho siguen con `/medusa` y `/medusa-staging` por rama. Una ficha sin `domains.api` https hace fallar el build en vez de apuntar a otra tienda. Las fichas con dominios `.example`/`.test` (demo) no reciben ruta. |
+| Marca desde el panel (fase 5) | `lib/tenant-brand.ts`, rutas `/admin/tenant/brand` (+ `/revert`, `/logo`, `/publish`), migración `CreateTenantProfileBrand2`, `BrandEditor.jsx`, `src/config/brandRuntime.js` | Ver §7.5 → «Implementado». En resumen: colores y logos en `tenant_profile.brand` (la anterior en `brand_previous`); contraste AA (4.5:1) del texto blanco sobre **los dos** colores, comprobado en el servidor; logos al bucket público con revisión de bytes y SVG activo rechazado; la tienda la aplica al arrancar (última marca recordada en `localStorage`, sin parpadeo) y los correos se repintan al enviarse. |
 | Herramienta (fase 3) | `scripts/tenant.mjs` | `new` (genera la ficha desde nombre, dominio y correo del dueño), `env` (ahora con CORS, `BACKEND_URL`, buckets y la lista de claves propias por rellenar), `vercel [--check]`, `checklist` (§11 con los valores de esa óptica) y `bootstrap`. `pnpm test` falla si `vercel.json` y las fichas no coinciden. |
 
 **Para desplegar esta línea:** en el backend de staging (Coolify) poner `STORE_NAME=Óptica El Rancho`; si no, correos y SMS dicen "RUBI LENS" (valor por defecto del backend). En producción (RUBI LENS) no hay que tocar nada.
@@ -186,7 +187,7 @@ operador y se pegan en Coolify/Vercel; `tenants/*/.secrets*` va en `.gitignore`.
     "emailFrom": "pedidos@rubilens.com"
   },
   "locale": { "default": "es", "timezone": "America/Chicago", "currency": "usd", "country": "us",
-              "languages": ["es", "en", "fr"] },
+              "languages": ["es", "en"] },
   "brand": {
     "primary": "#0b2f66", "accent": "#b8921e", "info": "#0e5ad0", "danger": "#d6123e",
     "fonts": { "display": "Fraunces", "body": "Inter" },
@@ -344,6 +345,18 @@ El dueño cambia logo y paleta en **Ajustes → Marca**, sin pedírnoslo y sin r
   el modo claro/oscuro (`useStoreTheme.js`) se mantiene.
 - Solo `owner` y `superadmin`; cada cambio queda en Auditoría.
 
+**Implementado (06/11/2026, fase 5) y en qué se aparta de lo anterior:**
+
+- **Dónde**: Administración → «Configuración de la óptica» → tarjeta «Marca» (no hay pestaña Ajustes).
+- **Datos**: `brand` = `primary`, `accent`, `logo_url`, `logo_mark_url`, `updated_at`; el tono oscuro se **deriva** (`primary` con 35 % de negro). No hay `info`, `danger` ni favicon propio: el icono de la pestaña del navegador usa `logo_mark_url`.
+- **Contraste**: 4.5:1 del texto blanco sobre `primary` **y** sobre `accent` (el acento también hace de fondo de botones y etiquetas). 409 `low_contrast` con `ratio`.
+- **Logos**: `POST /admin/tenant/brand/logo` con el archivo como `data:` URL en JSON (límite 1 MB en `middlewares.ts`, 300 KB ya decodificado). Se comprueba que los bytes son de verdad PNG/JPEG/WebP; un SVG con scripts, eventos, enlaces externos u objetos incrustados **se rechaza** (`unsafe_svg`), no se limpia. Subir no cambia la marca: se guarda después.
+- **Anterior / quitar**: guardar mueve la actual a `brand_previous`; «Volver a la marca anterior» las intercambia (repetirlo lo deshace); «Quitar mi marca» vuelve a la del despliegue.
+- **Tienda**: `GET /store/tenant` devuelve `brand` (null = la del build). `applyCachedBrand()` antes del primer render y `refreshBrand()` después; los logos salen de los getters `TENANT.logo` / `TENANT.logoMark`, así que un componente ya pintado los recoge en su siguiente render.
+- **Build**: solo para ópticas con backend propio (`/medusa-t-<slug>`), el build pide la marca a `GET /store/tenant` y la hornea en `theme-color` y en el CSS en línea; si el backend no responde, se usa la ficha. RUBI LENS y El Rancho no hacen esa petición (su HTML sale igual que antes, comprobado).
+- **Correos**: `shell()` repinta el HTML ya generado (`recolorEmail`): cada color de la paleta del despliegue pasa al de la marca, y el logo del correo es el subido. Sin marca guardada el correo sale idéntico.
+- **No cubierto todavía**: los tokens `--adm-*` del panel (el panel conserva su paleta y los colores por tienda de `useStoreTheme.js`), la hoja de Google y los documentos impresos del POS.
+
 ## 8. Catálogo y proveedor
 
 El catálogo es lo menos genérico: el scraper y el prompt de medición asumen
@@ -408,7 +421,11 @@ nunca lo que es del negocio de cada una.
 - `vto-web`: `VITE_TENANT_NAME` en `index.html`/`report.html`/`i18n.ts` dentro de
   `scripts/vercel-build.sh`.
 
-### 9.1 Tres idiomas: español, inglés y francés
+### 9.1 Tres idiomas: español, inglés y francés — retirado del plan por ahora
+
+> **Decisión del dueño, 06/11/2026:** la fase 6 (francés) se elimina del plan por
+> ahora. La interfaz sigue en español e inglés. Lo que sigue queda como referencia
+> por si se retoma; el catálogo ya trae `fr` desde el scraper y no se toca.
 
 El catálogo ya se traduce a `fr` en el scraper (`metadata.i18n.fr`); la interfaz no.
 
@@ -476,7 +493,7 @@ Cloudflare (R2, DNS), Vercel, Stripe (`webhook_endpoints.create`) y Resend
 | Dueño explícito vs. más antiguo; transferencia; el dueño puede retirar al técnico | unidad (`staff-roles`) + integración |
 | `tenant-bootstrap` idempotente (dos ejecuciones = mismo estado) | integración |
 | `check:tenant`: sin literales de marca fuera de defaults | script en `pnpm test` |
-| `{store}` y cada clave en `es`, `en` y `fr` | `check:i18n` |
+| `{brand}`/`{site}` y cada clave en `es` y `en` | `check:i18n` |
 | Marca del panel: contraste rechazado, logo demasiado grande, vuelta a la marca anterior | unidad + integración |
 | Catálogo compartido: importar en dos ópticas no mezcla precios ni surtido | integración |
 | `vercel.json`: cada dominio de la ficha tiene su reescritura y apunta a su `domains.api` | `check:vercel` |
@@ -504,7 +521,7 @@ Cloudflare (R2, DNS), Vercel, Stripe (`webhook_endpoints.create`) y Resend
 | **3. Alta guiada** | `pnpm tenant new/validate/env/checklist`, `tenant-bootstrap.ts`, reescrituras por dominio en `vercel.json`, asistente "Primeros pasos", comprobaciones nuevas en Seguridad | 4–5 días |
 | **4. Proveedor compartido** | `SupplierAdapter` (woocommerce + csv), catálogo base compartido (§8.1), variables de `vision-measure`, `priceStore` al backend | 4–5 días |
 | **5. Marca desde el panel** | `tenant_profile.brand`, subida de logo, aplicación en ejecución, correos, vista previa y contraste (§7.5) | 3–4 días |
-| **6. Francés** | `fr` en `translations.js`, `parts/`, `vto-web`, correos y SMS; `check:i18n` a tres idiomas (§9.1) | 4–5 días |
+| ~~6. Francés~~ | **Retirada por ahora** (decisión del dueño, 06/11/2026). §9.1 queda como referencia. | — |
 | **7. Automatización y salida (opcional)** | `tenant provision`/`deploy-all`, plan de salida (`offboard`/`export`/`remind`/`decommission`, §16.1), claves editables desde el panel | 5+ días |
 
 Criterio de salida de cada fase: RUBI LENS se despliega idéntica (sin cambios
@@ -517,7 +534,7 @@ visibles) y `demo-optica` compila y arranca.
 | 1 | ¿Quién paga infra e IA? | **Claves propias del dueño** | Cada servicio de pago (IA, Stripe, Resend, Twilio, Google Maps) va con la cuenta y la clave del dueño. Ver §14 y §17. |
 | 2 | ¿Dos ópticas pueden compartir proveedor? | **Sí** | Catálogo base compartido por proveedor; precios, surtido y márgenes siempre por óptica. Ver §8.1. |
 | 3 | ¿El dueño cambia paleta y logo desde el panel? | **Sí** | La marca pasa a la capa C con vista previa y validación de contraste. Ver §7.5. |
-| 4 | ¿Idiomas? | **Español, inglés y francés** | Añadir `fr` a toda la interfaz (hoy solo `es`/`en`). Ver §9.1. |
+| 4 | ¿Idiomas? | **Español e inglés** (06/11/2026; el 04/11 se había pedido también francés) | El francés se retiró del plan por ahora. Ver §9.1. |
 | 5 | Plan de salida | **Entrega en 30 días, borrado a los 90, con notificación en cada paso** | Ver §16.1. |
 
 ### 16.1 Plan de salida (decisión del 04/11/2026)
@@ -567,6 +584,6 @@ plazos cuentan desde el **día del aviso** del dueño (día 0):
   que facturarle consumo.
 - **Seguridad**: la pestaña Seguridad añade "clave de IA presente" por servicio, sin
   mostrarla.
-- **Opcional (fase 6)**: que el dueño cambie sus claves desde el panel. Implica
+- **Opcional (fase 7)**: que el dueño cambie sus claves desde el panel. Implica
   guardarlas cifradas en la base (`TENANT_KEYS_SECRET` en Coolify como llave), nunca
   devolverlas al navegador y aplicarlas sin reiniciar. No hace falta para empezar.

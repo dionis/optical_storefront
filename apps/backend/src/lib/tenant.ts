@@ -49,6 +49,8 @@ export interface Tenant {
 export interface TenantOverlay {
   display_name?: string | null;
   legal_name?: string | null;
+  /** Brand saved from the panel (src/lib/tenant-brand.ts); null = the deployment's colours. */
+  brand?: { primary: string; accent: string; logo_url: string | null } | null;
 }
 
 export const DEFAULT_EMAIL_BRAND: Readonly<TenantBrand> = Object.freeze({ emailPrimary: "#0b2f66", emailAccent: "#b8921e" });
@@ -90,6 +92,11 @@ export function tenant(): Tenant {
       emailAccent: hex("TENANT_BRAND_ACCENT", DEFAULT_EMAIL_BRAND.emailAccent),
     },
   };
+}
+
+/** The brand the owner saved in the panel, or null while it is the deployment's. */
+export function ownerBrand(): { primary: string; accent: string; logo_url: string | null } | null {
+  return overlay.brand ?? null;
 }
 
 /** Brand name alone — the common case. */

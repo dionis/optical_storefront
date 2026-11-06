@@ -30,7 +30,7 @@ otra.
 | **Receta** | El cliente escribe sus valores o **sube una foto**; la IA la lee, rellena el formulario y el cliente confirma. La imagen se guarda en un almacenamiento privado (dato de salud). |
 | **Pago** | Resumen completo del pedido, teléfono del paciente, avisos por correo/SMS opcionales y pago con tarjeta (Stripe; PayPal y Square disponibles). |
 | **Mis pedidos** | Sin contraseña: el cliente recibe un enlace mágico en su correo y ve todos sus pedidos con su etapa (`confirmado → en laboratorio → enviado → en tránsito → entregado`). Puede escribir a soporte y, cuando la política lo permite, cancelar. |
-| **Idioma** | Español por defecto, inglés y francés con un clic (el francés está en preparación). Moneda y fechas siguen el idioma. |
+| **Idioma** | Español por defecto e inglés con un clic. Moneda y fechas siguen el idioma. (El francés se retiró del plan por ahora.) |
 
 ## 3. Qué ve el dueño: el panel `/admin`
 

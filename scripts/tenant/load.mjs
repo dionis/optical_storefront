@@ -16,6 +16,8 @@
  */
 import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
+import { brandVars } from "../../apps/capri-storefront/src/config/brandVars.js";
+import { routedApi } from "./routing.mjs";
 
 /** Same rule as PRODUCTION_BRANCHES in apps/capri-storefront/backend-target.mjs. */
 const LIVE_BRANCHES = new Set(["develop", "main"]);
@@ -104,11 +106,7 @@ export function fillHtml(html, values) {
 export function brandCss(m) {
   const b = m.brand;
   if (b.primary === DEFAULT_BRAND.primary && b.primaryDark === DEFAULT_BRAND.primaryDark && b.accent === DEFAULT_BRAND.accent) return "";
-  const vars = {
-    "--blue": b.primary, "--primary-blue": b.primary, "--rl-navy": b.primary,
-    "--blue-dark": b.primaryDark, "--primary-blue-dark": b.primaryDark,
-    "--red": b.accent, "--red-dark": b.accent, "--offer": b.accent,
-  };
+  const vars = brandVars(b);
   return `html:root{${Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";")}}`;
 }
 
@@ -147,6 +145,33 @@ export function copyTenantPublic(tenantDir, outDir) {
 }
 
 /** Vite plugin: index.html placeholders, brand CSS, app manifest and public overrides. */
+/**
+ * The brand the owner saved in the panel (GET /store/tenant), baked into this
+ * build instead of the manifest's: theme colour and the inline CSS, so a first
+ * visit paints the right colours before any JS runs ("Publicar marca" rebuilds
+ * through a deploy hook). Only for opticians with their own routed backend —
+ * RUBI LENS and El Rancho keep the manifest at build time and get the saved
+ * brand at runtime. Any failure keeps the manifest: a build never depends on
+ * the backend being up.
+ */
+export async function withPublishedBrand(tenant, env = process.env, fetchImpl = globalThis.fetch) {
+  const api = routedApi(tenant.manifest);
+  const key = env.VITE_MEDUSA_PUBLISHABLE_KEY;
+  if (!api || !key || typeof fetchImpl !== "function") return tenant;
+  try {
+    const r = await fetchImpl(`${api}/store/tenant`, { headers: { "x-publishable-api-key": key }, signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const b = (await r.json())?.tenant?.brand;
+    if (!b || !/^#[0-9a-f]{6}$/i.test(b.primary ?? "") || !/^#[0-9a-f]{6}$/i.test(b.accent ?? "")) return tenant;
+    const primaryDark = /^#[0-9a-f]{6}$/i.test(b.primary_dark ?? "") ? b.primary_dark : tenant.manifest.brand.primaryDark;
+    console.log(`tenant: using the brand saved in the panel (${b.primary} / ${b.accent})`);
+    return { ...tenant, manifest: { ...tenant.manifest, brand: { ...tenant.manifest.brand, primary: b.primary, primaryDark, accent: b.accent, themeColor: b.primary } } };
+  } catch (e) {
+    console.warn(`tenant: could not read the saved brand (${e.message}); building with the manifest's`);
+    return tenant;
+  }
+}
+
 export function tenantPlugin(tenant) {
   const m = tenant.manifest;
   let outDir = null;
