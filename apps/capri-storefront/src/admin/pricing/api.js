@@ -30,6 +30,15 @@ export function savePricingRule({ scope = "frame", mode, value, store }) {
   return post("/admin/pricing/frames/rule", { scope, mode, value: mode === "none" ? null : Number(value), store });
 }
 
+/**
+ * Regla de UNA marca en esta tienda: precio fijo para todas sus monturas
+ * (`mode: "override"`) o el mismo ajuste de siempre solo para ella.
+ * `mode: "none"` la quita y la marca vuelve a la regla general.
+ */
+export function savePricingBrandRule({ brand, mode, value, store }) {
+  return post("/admin/pricing/frames/rule", { scope: "brand", brand, mode, value: mode === "none" ? null : Number(value), store });
+}
+
 /** Precio propio de un modelo; price null lo devuelve a la regla. */
 export function savePricingOverride({ productId, variantId, price, kind = "frame", store }) {
   return post("/admin/pricing/frames/override", {

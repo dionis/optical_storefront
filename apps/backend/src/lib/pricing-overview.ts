@@ -305,6 +305,21 @@ function frameRuleView(
   };
 }
 
+/** Una regla de marca, como la ve el panel (precio fijo o ajuste). */
+export interface BrandRuleView {
+  /** Slug del catálogo (`metadata.brand_slug`), la clave de la regla. */
+  brand: string;
+  /** Nombre visible, cuando el catálogo lo trae. */
+  label: string;
+  mode: "percent" | "delta" | "override";
+  value: number;
+  since: string | null;
+  /** True cuando sale del maestro porque la tienda no tiene la suya. */
+  inherited: boolean;
+  /** Cuántos modelos del catálogo lleva esa marca (para dar contexto). */
+  models: number;
+}
+
 export interface FrameOverrideView {
   product_id: string;
   variant_id: string | null;
@@ -329,6 +344,8 @@ export interface PricingOverview {
   frames: {
     rule: FrameRuleView | null;
     case_rule: FrameRuleView | null;
+    /** Reglas por marca de la tienda abierta (o del maestro), con las marcas sin regla al final. */
+    brand_rules: BrandRuleView[];
     overrides: FrameOverrideView[];
     counts: { frames: number; cases: number };
   };
@@ -392,7 +409,10 @@ export async function loadPricingOverview(
   ]);
 
   // ── Frames and cases ──
-  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && isActiveAt(r, now));
+  // Un precio exacto es de un MODELO. Una regla de marca también lleva
+  // `target` y modo `override` (el precio fijo de la marca), pero no es un
+  // modelo: va en su propia lista (`brand_rules`).
+  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && r.scope !== "brand" && isActiveAt(r, now));
   const masterById = new Map<string, PriceRuleRow>();
   const storeById = new Map<string, PriceRuleRow>();
   for (const r of liveOverrides) {
@@ -404,7 +424,11 @@ export async function loadPricingOverview(
   // With a store open the panel shows ITS list; "Todas las tiendas" shows the master's.
   const shown = effectiveStore ? new Map([...masterById, ...storeById]) : masterById;
   const ids = [...shown.keys()];
-  const [prices, brands] = await Promise.all([productPrices(container, ids), loadBrands(container, ids)]);
+  const [prices, brands, brandCatalog] = await Promise.all([
+    productPrices(container, ids),
+    loadBrands(container, ids),
+    loadBrandCatalog(container),
+  ]);
   const products = new Map(prices.map((p) => [p.product_id, p]));
   const overrides: FrameOverrideView[] = [...shown.entries()].map(([productId, rule]) => {
     const own = storeById.get(productId);
@@ -499,6 +523,7 @@ export async function loadPricingOverview(
     frames: {
       rule: frameRuleView(rules, effectiveStore, "frame", now),
       case_rule: frameRuleView(rules, effectiveStore, "case", now),
+      brand_rules: brandRuleViews(rules, effectiveStore, brandCatalog, now),
       overrides,
       counts: {
         frames: overrides.filter((o) => o.kind === "frame").length,
@@ -554,6 +579,74 @@ async function loadBrands(container: MedusaContainer, productIds: string[]): Pro
     return out;
   }
   return out;
+}
+
+
+/**
+ * Reglas por marca para la tienda abierta: la suya si la tiene, si no la del
+ * maestro, y además las marcas del catálogo que todavía no tienen ninguna
+ * (value 0, para que el panel las ofrezca sin tener que buscarlas aparte).
+ */
+function brandRuleViews(
+  rules: PriceRuleRow[],
+  storeId: string | null,
+  catalog: Array<{ slug: string; label: string; models: number }>,
+  now: Date
+): BrandRuleView[] {
+  const latest = (establishment: string | null, slug: string) => {
+    let best: PriceRuleRow | null = null;
+    for (const r of rules) {
+      if (r.establishment_id !== establishment || r.scope !== "brand" || r.target !== slug) continue;
+      if (r.mode !== "percent" && r.mode !== "delta" && r.mode !== "override") continue;
+      if (!isActiveAt(r, now)) continue;
+      if (!best || toMs(r.valid_from) >= toMs(best.valid_from)) best = r;
+    }
+    return best;
+  };
+  // Marcas con regla aunque ya no tengan modelos (el catálogo cambia; la regla queda).
+  const slugs = new Set<string>(catalog.map((b) => b.slug));
+  for (const r of rules) if (r.scope === "brand" && r.target) slugs.add(String(r.target));
+  const bySlug = new Map(catalog.map((b) => [b.slug, b]));
+
+  return [...slugs]
+    .map((slug) => {
+      const own = storeId ? latest(storeId, slug) : null;
+      const pickOne = own ?? latest(null, slug);
+      const info = bySlug.get(slug);
+      return {
+        brand: slug,
+        label: info?.label ?? slug,
+        mode: (pickOne?.mode as "percent" | "delta" | "override") ?? "override",
+        value: pickOne ? money2(Number(pickOne.value)) : 0,
+        since: pickOne?.valid_from ? new Date(pickOne.valid_from).toISOString() : null,
+        inherited: Boolean(storeId) && !own && Boolean(pickOne),
+        models: info?.models ?? 0,
+        has_rule: Boolean(pickOne),
+      } as BrandRuleView & { has_rule: boolean };
+    })
+    // Primero las que tienen regla, luego por número de modelos: lo que el
+    // dueño mira primero queda arriba.
+    .sort((a, b) => Number(b.has_rule) - Number(a.has_rule) || b.models - a.models || a.label.localeCompare(b.label))
+    .map(({ has_rule, ...view }) => ({ ...view, value: has_rule ? view.value : 0, since: has_rule ? view.since : null }));
+}
+
+/** Marcas del catálogo con cuántos modelos tiene cada una; vacío si falla la consulta. */
+async function loadBrandCatalog(container: MedusaContainer): Promise<Array<{ slug: string; label: string; models: number }>> {
+  try {
+    const query = container.resolve(ContainerRegistrationKeys.QUERY);
+    const { data } = await query.graph({ entity: "product", fields: ["id", "metadata"] });
+    const counts = new Map<string, { label: string; models: number }>();
+    for (const p of (data ?? []) as Array<{ metadata?: Record<string, unknown> | null }>) {
+      const slug = brandOf(p.metadata ?? null);
+      if (!slug || slug === "case") continue;
+      const label = String((p.metadata ?? {})["brand"] ?? slug);
+      const prev = counts.get(slug);
+      counts.set(slug, { label: prev?.label || label, models: (prev?.models ?? 0) + 1 });
+    }
+    return [...counts].map(([slug, v]) => ({ slug, label: v.label, models: v.models }));
+  } catch {
+    return [];
+  }
 }
 
 /** The store's own cost items plus the shared ones; empty on any failure. */

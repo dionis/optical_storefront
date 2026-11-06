@@ -179,9 +179,58 @@ como el campo. Decisiones:
 y ponerla como `PAYROLL_ENCRYPTION_KEY` en Coolify. Si se pierde, los números
 guardados ya no se pueden descifrar y hay que volver a escribirlos.
 
-## 11. Cómo se probó
+## 11. Precio por marca y por establecimiento
 
-- `pnpm test` (backend, Windows/Node 24): 851 tests en verde tras la tanda
+**Petición.** «Se debe poder poner regla de formación de precio para marcas por
+separado y por establecimiento» y, acto seguido, los precios con los que vende
+hoy: Peachtree 45, For You 60, Trending 50, Flexure 75, Millennials 75,
+Grande 75 y Di Caprio 90.
+
+**Qué se añadió.** Un `scope` nuevo en `store_price_rule`: `brand`, con el
+*slug* de la marca en `target` — el mismo `metadata.brand_slug` que usa el
+surtido, así que **los modelos que entren después heredan el precio** sin tocar
+la regla. Dos formas de usarlo:
+
+- `mode: "override"` → **precio fijo** para todas las monturas de esa marca
+  («Peachtree a $45»), que es como vende la óptica;
+- `mode: "percent"/"delta"` → el ajuste de siempre, pero solo para esa marca.
+
+**Quién gana a quién** (`storeLinePrice`, `src/lib/store-pricing.ts`):
+
+```
+precio exacto del modelo en la tienda
+  > precio de su marca en la tienda > precio de su marca en el maestro
+  > regla de todas las monturas (tienda, luego maestro) > precio base
+```
+
+Un estuche no tiene marca: las reglas de marca solo tocan monturas.
+`frame_source` de la línea gana un valor, `brand_price`, para que el recibo y
+la auditoría digan de dónde salió el número.
+
+**Los precios del dueño, ya en la base.** Migración
+`CreateStorePriceBrandRules4` (store-pricing): escribe una regla por tienda
+activa y marca, **solo si esa tienda no tiene ya una regla abierta** para ella
+— si el dueño cambia un precio en el panel, un despliegue posterior no se lo
+pisa. La tienda online no es un establecimiento, así que no la toca. Slugs del
+catálogo: `peachtree` 45, `4u` (Four You) 60, `trendy` 50, `flexure` 75,
+`millennial` 75, `grande` 75, `di-caprio` 90. ProRx se dejó sin regla.
+El nombre del archivo empieza por «Create…» porque Medusa corre las migraciones
+por orden de NOMBRE: con `BrandPriceRules4` habría corrido antes de existir la
+tabla (lo detectó `tests/migration-order.test.ts`).
+
+**Panel.** «Precios y costos» → «Monturas y estuches» lista una fila por marca
+(precio fijo / % / monto / ninguna), con el número de modelos y la insignia
+«Heredado» cuando la tienda abierta aún usa la del maestro. Ruta:
+`POST /admin/pricing/frames/rule` con `scope: "brand"` y `brand`.
+
+**Pruebas** (`tests/store-pricing.test.ts`): precio fijo de marca, que no toca a
+otras marcas ni a los estuches, que el precio de un modelo le gana, que la
+tienda gana al maestro y hereda cuando no tiene la suya, el ajuste por marca
+frente a la regla general, la regla cerrada y la validación.
+
+## 12. Cómo se probó
+
+- `pnpm test` (backend, Windows/Node 24): 860 tests en verde tras la tanda
   (incluye `tests/staff-payroll.test.ts`, 20 casos: validación, máscara,
   auditoría sin valores y cifrado — ida y vuelta, IV distinto, valor alterado,
   clave ausente y clave equivocada).
@@ -191,7 +240,7 @@ guardados ya no se pueden descifrar y hay que volver a escribirlos.
   recibo doble, receta (base/fecha), paso de material del configurador.
 - `py_compile` de `vision_api.py`.
 
-## 12. Pendiente
+## 13. Pendiente
 
 1. **Reiniciar la app de producción en Coolify** y revisar límites de recursos
    (apartado 1). Hasta entonces la medición con IA puede seguir fallando.
@@ -202,3 +251,6 @@ guardados ya no se pueden descifrar y hay que volver a escribirlos.
    decidirlo aparte: hoy se dejó «cliente» en esa parte.
 5. Añadir `PAYROLL_ENCRYPTION_KEY` en Coolify (apartado 10) antes de que nadie
    intente guardar datos de pago.
+6. ProRx no lleva regla de marca: falta decir a cuánto se vende.
+7. Alta manual de marcas y monturas (precio, fotos, medidas) — pedido el 5-nov,
+   pendiente de decidir si esas monturas salen también en la tienda online.

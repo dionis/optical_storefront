@@ -3,6 +3,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { upsertVariantPricesWorkflow } from "@medusajs/medusa/core-flows";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import { recordAudit } from "./audit";
+import { brandOf } from "./store-assortment";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import type { PriceRuleLike, RuleMode, RuleScope } from "./store-pricing";
 
@@ -68,6 +69,13 @@ export const MODE_FAMILIES = {
   adjustment: ["percent", "delta"],
   price: ["override"],
   minimum: ["min"],
+  /**
+   * Regla de marca: una sola regla viva por (tienda, marca), sea un precio fijo
+   * para la marca o un ajuste. Cambiar de una a otra cierra la anterior — si no
+   * compartieran familia, quedarían las dos abiertas y la más reciente ganaría
+   * en silencio.
+   */
+  brand: ["percent", "delta", "override"],
 } as const satisfies Record<string, readonly RuleMode[]>;
 export type ModeFamily = keyof typeof MODE_FAMILIES;
 
@@ -124,6 +132,8 @@ export interface ProductPrice {
   product_id: string;
   title: string;
   handle: string;
+  /** Brand slug (`metadata.brand_slug`), for the per-brand price rules. */
+  brand?: string;
   /**
    * USD price of the model. Prices here are per MODEL, not per colour:
    * price-sync writes the same amount on every variant of a product, and the
@@ -167,7 +177,7 @@ export async function productPrices(container: MedusaContainer, productIds: stri
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const { data } = await query.graph({
     entity: "product",
-    fields: ["id", "title", "handle", "variants.prices.amount", "variants.prices.currency_code"],
+    fields: ["id", "title", "handle", "metadata", "variants.prices.amount", "variants.prices.currency_code"],
     filters: { id: ids },
   });
   return (data as Array<Record<string, any>>).map((p) => {
@@ -176,6 +186,7 @@ export async function productPrices(container: MedusaContainer, productIds: stri
       const usd = (v.prices || []).find((x: { currency_code?: string }) => x.currency_code === "usd");
       if (usd) { price = Number(usd.amount); break; }
     }
-    return { product_id: p.id, title: p.title ?? "", handle: p.handle ?? "", price };
+    // La marca viaja con el precio porque hay reglas por marca (store-pricing.ts).
+    return { product_id: p.id, title: p.title ?? "", handle: p.handle ?? "", price, brand: brandOf(p.metadata) };
   });
 }

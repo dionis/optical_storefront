@@ -1,5 +1,6 @@
 import {
   adjustmentDenied,
+  brandRuleDenied,
   exactPriceDenied,
   globalPrice,
   globalPriceOverrides,
@@ -116,5 +117,64 @@ describe("validation", () => {
     expect(exactPriceDenied("lens", "SKU-1", 80)).toBe("bad_scope");
     expect(exactPriceDenied("frame", " ", 80)).toBe("bad_target");
     expect(exactPriceDenied("frame", "SKU-1", -1)).toBe("bad_value");
+  });
+});
+
+describe("una regla por MARCA y por tienda (petición del dueño)", () => {
+  const peachtree = { ...line, brand: "peachtree" };
+  const brandRule = (over: Partial<PriceRuleLike>) =>
+    rule({ scope: "brand", target: "peachtree", mode: "override", value: 45, ...over });
+
+  it("un precio fijo de marca vale para todas sus monturas", () => {
+    expect(storeLinePrice([brandRule({})], peachtree, NOW)).toMatchObject({
+      frame: 45,
+      lenses: 50,
+      total: 95,
+      frame_source: "brand_price",
+    });
+  });
+
+  it("no toca a las monturas de otra marca ni a los estuches", () => {
+    const rules = [brandRule({})];
+    expect(storeLinePrice(rules, { ...line, brand: "di-caprio" }, NOW)).toMatchObject({ frame: 100, frame_source: "adjusted" });
+    expect(storeLinePrice(rules, { ...line, scope: "case", brand: "peachtree" }, NOW)).toMatchObject({ frame: 100 });
+  });
+
+  it("el precio que el dueño puso a UN modelo manda sobre el de su marca", () => {
+    const rules = [brandRule({}), rule({ scope: "frame", target: "SKU-1", mode: "override", value: 70 })];
+    expect(storeLinePrice(rules, peachtree, NOW)).toMatchObject({ frame: 70, frame_source: "store_exact" });
+  });
+
+  it("la regla de la tienda manda sobre la del maestro", () => {
+    const rules = [brandRule({ establishment_id: null, value: 90 }), brandRule({ value: 45 })];
+    expect(storeLinePrice(rules, peachtree, NOW)).toMatchObject({ frame: 45 });
+    // Sin regla propia, la tienda hereda la del maestro.
+    expect(storeLinePrice([brandRule({ establishment_id: null, value: 90 })], peachtree, NOW)).toMatchObject({ frame: 90 });
+  });
+
+  it("una marca también admite el ajuste de siempre, y gana a la regla general", () => {
+    const rules = [
+      rule({ scope: "frame", mode: "percent", value: 100 }), // todas las monturas: x2
+      brandRule({ mode: "percent", value: 10 }), // Peachtree: +10 %
+    ];
+    expect(storeLinePrice(rules, peachtree, NOW)).toMatchObject({ frame: 110, adjustment: { mode: "percent", value: 10 } });
+    expect(storeLinePrice(rules, { ...line, brand: "grande" }, NOW)).toMatchObject({ frame: 200 });
+  });
+
+  it("una regla de marca cerrada ya no se aplica", () => {
+    expect(storeLinePrice([brandRule({ valid_to: "2026-10-02T00:00:00Z" })], peachtree, NOW)).toMatchObject({ frame: 100 });
+  });
+
+  it("sin marca en la línea, las reglas de marca son invisibles", () => {
+    expect(storeLinePrice([brandRule({})], line, NOW)).toMatchObject({ frame: 100, frame_source: "adjusted" });
+  });
+
+  it("valida el precio fijo y el ajuste", () => {
+    expect(brandRuleDenied("override", 45)).toBeNull();
+    expect(brandRuleDenied("override", -1)).toBe("bad_value");
+    expect(brandRuleDenied("override", "x")).toBe("bad_value");
+    expect(brandRuleDenied("percent", 10)).toBeNull();
+    expect(brandRuleDenied("none", null)).toBeNull();
+    expect(brandRuleDenied("rebaja", 10)).toBe("bad_mode");
   });
 });

@@ -188,7 +188,7 @@ export async function storeCatalogProduct(container: MedusaContainer, establishm
   ]);
   const base = prices[0]?.price ?? null;
   const scope = brand === "case" || rules.some((r) => r.scope === "case" && r.target === p.id) ? "case" : "frame";
-  const store = base === null ? null : storeLinePrice(rules, { establishmentId, scope, target: p.id, base, lenses: 0 });
+  const store = base === null ? null : storeLinePrice(rules, { establishmentId, scope, target: p.id, base, lenses: 0, brand });
   const i18n = (md["i18n"] ?? {}) as Record<string, { title?: string; description?: string } | undefined>;
   const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : []);
 

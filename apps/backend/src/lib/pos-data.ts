@@ -653,7 +653,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       price:
         base === null
           ? null
-          : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
+          : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0, brand: brandOf(p.metadata) }).total,
       variants,
       matched_variant_ids: matched.get(p.id) ?? [],
       brand: frameBrand(p.metadata),
@@ -685,7 +685,7 @@ export interface QuotedLine {
   tax_amount: number;
   tax_rate: number;
   unit_price: number;
-  frame_source: "store_exact" | "adjusted" | "own_frame";
+  frame_source: "store_exact" | "brand_price" | "adjusted" | "own_frame";
   below_minimum: boolean;
 }
 
@@ -770,7 +770,9 @@ export async function quoteSale(
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
       const scope = caseIds.has(productId) ? "case" : "frame";
-      const sp = storeLinePrice(rules, { establishmentId, scope, target: productId, base, lenses: lensCents / 100 });
+      // La marca entra en el precio: el dueño puede fijar una regla por marca y
+      // por tienda (store-pricing.ts), y los modelos nuevos de esa marca la heredan.
+      const sp = storeLinePrice(rules, { establishmentId, scope, target: productId, base, lenses: lensCents / 100, brand: brandOf(metadata.get(productId)) });
       listFrame = sp.frame;
       listLenses = sp.lenses;
       frameSource = sp.frame_source;

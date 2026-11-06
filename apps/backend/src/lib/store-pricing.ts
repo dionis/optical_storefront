@@ -10,6 +10,12 @@
  *  3. Store rules (owner or superadmin only, owner's decision):
  *     - general adjustment (scope "all"): a percentage applied to frame and
  *       lenses, or a fixed amount added ONCE per sale line;
+ *     - rule for ONE BRAND (scope "brand", target = brand slug): either the
+ *       same adjustment but only for that brand's frames, or a FIXED price for
+ *       every frame of the brand (mode "override"), que es como vende la óptica
+ *       («Peachtree a $45»). Keyed by the slug the scraper writes
+ *       (`metadata.brand_slug`), so models added later inherit it without
+ *       touching the rule — the same key the assortment uses;
  *     - exact price of a product in that store (scope "frame"/"case"): the
  *       final price of that component, never adjusted. A fixed amount then
  *       goes on the lenses instead, if there are any.
@@ -19,7 +25,7 @@
  * Amounts are dollars; everything is rounded to cents and never below zero.
  */
 
-export const RULE_SCOPES = ["all", "frame", "case"] as const;
+export const RULE_SCOPES = ["all", "frame", "case", "brand"] as const;
 export type RuleScope = (typeof RULE_SCOPES)[number];
 export const RULE_MODES = ["percent", "delta", "override", "min"] as const;
 export type RuleMode = (typeof RULE_MODES)[number];
@@ -93,14 +99,22 @@ export interface StoreLineInput {
   base: number;
   /** Lens add-on from the matrix, before store rules; 0 for frame-only. */
   lenses: number;
+  /**
+   * Brand slug of the frame (`brandOf(product.metadata)`), when there is a rule
+   * for that brand. Absent = only the general rules apply.
+   */
+  brand?: string | null;
 }
 
 export interface StoreLinePrice {
   frame: number;
   lenses: number;
   total: number;
-  /** What produced the frame part: the store's exact price, or base + adjustment. */
-  frame_source: "store_exact" | "adjusted";
+  /**
+   * What produced the frame part: el precio exacto del modelo en la tienda, el
+   * precio fijo de su marca, o el precio base con el ajuste.
+   */
+  frame_source: "store_exact" | "brand_price" | "adjusted";
   adjustment: { mode: "percent" | "delta"; value: number } | null;
 }
 
@@ -117,23 +131,38 @@ function generalAdjustment(
   rules: PriceRuleLike[],
   est: string,
   scope: "frame" | "case",
+  brand: string | null,
   now: Date
 ): PriceRuleLike | null {
+  const adj = (r: PriceRuleLike) => r.mode === "percent" || r.mode === "delta";
   const of = (establishment: string | null, which: string) =>
-    pick(rules, now, (r) =>
-      r.establishment_id === establishment && r.scope === which && r.target == null && (r.mode === "percent" || r.mode === "delta")
-    );
-  return of(est, scope) ?? of(est, "all") ?? of(null, scope) ?? of(null, "all");
+    pick(rules, now, (r) => r.establishment_id === establishment && r.scope === which && r.target == null && adj(r));
+  // A brand rule only exists for frames: a case has no brand of its own.
+  const ofBrand = (establishment: string | null) =>
+    scope === "frame" && brand
+      ? pick(rules, now, (r) => r.establishment_id === establishment && r.scope === "brand" && r.target === brand && adj(r))
+      : null;
+  return ofBrand(est) ?? of(est, scope) ?? of(est, "all") ?? ofBrand(null) ?? of(null, scope) ?? of(null, "all");
 }
 
 export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, now = new Date()): StoreLinePrice {
   const est = input.establishmentId;
   const base = globalPrice(rules, input.scope, input.target, input.base, now);
-  const exact = pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override");
-  const general = generalAdjustment(rules, est, input.scope, now);
+  // Precio exacto del modelo en esta tienda: lo más específico que hay.
+  const exactProduct = pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override");
+  // Si no lo hay, un precio fijo para toda la marca (el de la tienda manda
+  // sobre el del maestro). Solo monturas: un estuche no tiene marca propia.
+  const brand = input.brand ?? null;
+  const brandPrice = (establishment: string | null) =>
+    input.scope === "frame" && brand
+      ? pick(rules, now, (r) => r.establishment_id === establishment && r.scope === "brand" && r.target === brand && r.mode === "override")
+      : null;
+  const exact = exactProduct ?? brandPrice(est) ?? brandPrice(null);
+  const general = generalAdjustment(rules, est, input.scope, brand, now);
   const adjustment = general ? { mode: general.mode as "percent" | "delta", value: Number(general.value) } : null;
 
-  // A rule written for ALL FRAMES (or all cases) is about that component only:
+  // A rule written for ALL FRAMES, for a BRAND or for all cases is about that
+  // component only:
   // the lens add-on has its own per-store percentage (the lens matrix' "% sobre
   // el maestro", lib/pricing-overview.ts). The legacy general adjustment
   // (scope "all") keeps covering frame AND lenses, as it always did.
@@ -152,7 +181,7 @@ export function storeLinePrice(rules: PriceRuleLike[], input: StoreLineInput, no
     frame,
     lenses,
     total: cents(frame + lenses),
-    frame_source: exact ? "store_exact" : "adjusted",
+    frame_source: exactProduct ? "store_exact" : exact ? "brand_price" : "adjusted",
     adjustment,
   };
 }
@@ -212,6 +241,18 @@ export function adjustmentDenied(mode: string, value: unknown): string | null {
   if (!Number.isFinite(n)) return "bad_value";
   if (mode === "percent" && (n < MIN_PERCENT || n > MAX_PERCENT)) return "bad_value";
   if (mode === "delta" && Math.abs(n) > 100000) return "bad_value";
+  return null;
+}
+
+/**
+ * Validación de una regla de MARCA: además del ajuste de siempre
+ * (`percent`/`delta`), admite `override` — el precio fijo al que la óptica
+ * vende esa marca («Peachtree a $45»).
+ */
+export function brandRuleDenied(mode: string, value: unknown): string | null {
+  if (mode !== "override") return adjustmentDenied(mode, value);
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100000) return "bad_value";
   return null;
 }
 

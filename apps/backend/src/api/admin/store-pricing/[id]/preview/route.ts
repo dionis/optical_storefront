@@ -27,7 +27,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     lenses,
     items: products.map((p) => {
       const medusa = p.price ?? 0;
-      const input = { establishmentId: id, scope: "frame" as const, target: p.product_id, base: medusa };
+      const input = { establishmentId: id, scope: "frame" as const, target: p.product_id, base: medusa, brand: p.brand ?? null };
       return {
         product_id: p.product_id,
         title: p.title,

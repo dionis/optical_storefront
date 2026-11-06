@@ -11,7 +11,7 @@ import { searchStoreCatalog } from "../adminStores.js";
 import DataTable from "../DataTable.jsx";
 import HelpTip from "../HelpTip.jsx";
 import Icon from "../icons.jsx";
-import { savePricingOverride, savePricingRule } from "./api.js";
+import { savePricingBrandRule, savePricingOverride, savePricingRule } from "./api.js";
 
 /** La regla en UNA fila editable: modo, valor y guardar. */
 function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
@@ -67,6 +67,68 @@ function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />
+          <span className="pp-unit">{mode === "percent" ? "%" : "USD"}</span>
+        </>
+      )}
+      <button className="btn-xs primary" disabled={busy}>{t("adm.price.save")}</button>
+    </form>
+  );
+}
+
+
+/**
+ * Reglas POR MARCA (petición del dueño): «Peachtree a $45, Di Caprio a $90…».
+ * Cada marca puede tener su precio fijo, o el mismo ajuste de la regla general
+ * aplicado solo a ella, y todo esto es POR TIENDA: con una tienda elegida
+ * arriba se edita la suya y las que caen al maestro salen marcadas «Heredado».
+ * Lo más específico manda: precio del modelo > regla de su marca > regla general.
+ */
+function BrandRuleRow({ rule, store, onSaved, onError, t, lang }) {
+  const [mode, setMode] = useState(rule.since ? rule.mode : "none");
+  const [value, setValue] = useState(rule.since ? String(rule.value) : "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setMode(rule.since ? rule.mode : "none");
+    setValue(rule.since ? String(rule.value) : "");
+  }, [rule.brand, rule.mode, rule.value, rule.since, store]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      onSaved(await savePricingBrandRule({ brand: rule.brand, mode, value, store }));
+    } catch (err) {
+      onError(err.message);
+    } finally { setBusy(false); }
+  };
+
+  const current = !rule.since
+    ? t("adm.price.frames.ruleNone")
+    : rule.mode === "override"
+      ? t("adm.price.brand.fixed", { v: money(rule.value, "usd", lang) })
+      : rule.mode === "percent"
+        ? t("adm.price.frames.rulePercent", { v: rule.value > 0 ? `+${rule.value}` : rule.value })
+        : t("adm.price.frames.ruleDelta", { v: money(rule.value, "usd", lang) });
+
+  return (
+    <form className="pp-rule pp-brand-rule" onSubmit={submit}>
+      <span className="pp-brand-name">
+        {rule.label}
+        {rule.models > 0 && <small className="muted"> · {t("adm.price.brand.models", { n: rule.models })}</small>}
+      </span>
+      <span className="pp-rule-now">{current}</span>
+      {rule.inherited && <span className="pp-badge inherit" title={t("adm.price.inheritedHint")}>{t("adm.price.inherited")}</span>}
+      <select className="pp-input" value={mode} aria-label={t("adm.price.brand.ruleFor", { b: rule.label })} onChange={(e) => setMode(e.target.value)}>
+        <option value="none">{t("adm.price.frames.mode.none")}</option>
+        <option value="override">{t("adm.price.brand.mode.fixed")}</option>
+        <option value="percent">{t("adm.price.frames.mode.percent")}</option>
+        <option value="delta">{t("adm.price.frames.mode.delta")}</option>
+      </select>
+      {mode !== "none" && (
+        <>
+          <input className="pp-input pp-num" type="number" step="0.01" required value={value}
+                 aria-label={t("adm.price.frames.value")} onChange={(e) => setValue(e.target.value)} />
           <span className="pp-unit">{mode === "percent" ? "%" : "USD"}</span>
         </>
       )}
@@ -226,6 +288,17 @@ export default function FramesSection({ frames, store, storeId, onSaved, onError
     <>
       <RuleRow scope="frame" rule={frames.rule} store={store} onSaved={onSaved} onError={onError} t={t} lang={lang} />
       <RuleRow scope="case" rule={frames.case_rule} store={store} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+      {(frames.brand_rules || []).length > 0 && (
+        <div className="pp-block pp-brands">
+          <h4>
+            {t("adm.price.brand.title")}
+            <small>{t("adm.price.brand.sub")}</small>
+          </h4>
+          {frames.brand_rules.map((b) => (
+            <BrandRuleRow key={b.brand} rule={b} store={store} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+          ))}
+        </div>
+      )}
       <OverrideForm store={store} storeId={storeId} onSaved={onSaved} onError={onError} t={t} />
       <div className="pp-block">
         <h4>
