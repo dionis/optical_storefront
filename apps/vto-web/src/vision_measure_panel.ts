@@ -1249,10 +1249,24 @@ export class VisionMeasurePanel {
   /** Polls a background job until it finishes, updating the live progress readout. */
   private async pollJobUntilDone(jobId: string, signal: AbortSignal): Promise<MeasureResponse> {
     const POLL_MS = 1500;
+    // A failed status read is not a failed job: tolerate a run of them (~1 min) before
+    // giving up, so one 500 from the service no longer throws away a measurement that
+    // was still running fine server-side.
+    const MAX_TRANSIENT_IN_A_ROW = 40;
+    let transientInARow = 0;
     for (;;) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
       const status = await pollMeasureJob(jobId, signal);
+      if (status.status === 'transient') {
+        transientInARow += 1;
+        if (transientInARow >= MAX_TRANSIENT_IN_A_ROW) {
+          throw new Error(status.error || 'El servicio de medición no responde.');
+        }
+        await this.sleep(POLL_MS, signal);
+        continue;
+      }
+      transientInARow = 0;
       if (status.status === 'done' && status.result) {
         return status.result;
       }

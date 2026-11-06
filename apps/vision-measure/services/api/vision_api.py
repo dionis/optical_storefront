@@ -637,8 +637,12 @@ def set_job_notify(job_id: str, request: JobNotifyRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content={"ok": True})
 
 
+# `async def` on purpose: a plain `def` route borrows a worker thread per call, and this
+# is the route every waiting panel hits every 1.5 s. It only reads a dict under a lock
+# held for microseconds, so it runs on the event loop and never needs a new thread —
+# when the container is short of PIDs, status reads keep working.
 @app.get("/api/vision-measure/job/{job_id}")
-def get_measure_job(job_id: str) -> JSONResponse:
+async def get_measure_job(job_id: str) -> JSONResponse:
     """Estado de un trabajo. Cuando termina, trae el sobre completo en `result`."""
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
