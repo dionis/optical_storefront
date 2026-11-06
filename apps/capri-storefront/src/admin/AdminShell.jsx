@@ -42,6 +42,8 @@ export const NAV_GROUPS = [
     { key: "sellers", icon: "sellers" },
   ] },
   { key: "admin", icon: "security", items: [
+    // Perfil de la óptica y «Primeros pasos» (multi-óptica, fase 3).
+    { key: "setup", icon: "checkCircle" },
     { key: "team", icon: "team" },
     // Sincronizar el catálogo es mantenimiento, no manejo de precios ni de
     // costos: por eso no está en Comercial, donde el dueño quiso que viviera

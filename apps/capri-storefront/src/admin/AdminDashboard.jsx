@@ -15,6 +15,8 @@ import CatalogSync from "./CatalogSync.jsx";
 import Team from "./Team.jsx";
 import Stores from "./Stores.jsx";
 import Security from "./Security.jsx";
+import Setup from "./Setup.jsx";
+import { fetchSetup } from "./adminTenant.js";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
 // tabs still use. `money` is aliased because this file already has its own,
@@ -982,6 +984,26 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
     const id = setInterval(read, 600000);
     return () => { alive = false; clearInterval(id); };
   }, [canSeeAi, nav.tab]);
+  // «Configuración de la óptica»: insignia con los pasos pendientes mientras el
+  // dueño no dé la puesta en marcha por terminada. Un dueño recién activado sin
+  // ?tab= en la URL entra directamente ahí.
+  const [setupPending, setSetupPending] = useState(0);
+  const canSeeSetup = !demo && tabs.includes("setup");
+  const onSetup = (s) => setSetupPending(s && !s.completed_at ? Number(s.pending) || 0 : 0);
+  useEffect(() => {
+    if (!canSeeSetup) return undefined;
+    let alive = true;
+    fetchSetup()
+      .then((s) => {
+        if (!alive) return;
+        onSetup(s);
+        const asked = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("tab");
+        if (s && !s.completed_at && !asked && me?.is_super) setNav((n) => ({ tab: "setup", params: {}, n: n.n + 1 }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [canSeeSetup]); // eslint-disable-line react-hooks/exhaustive-deps
+  const badges = { ...(aiAttention ? { aiusage: aiAttention } : {}), ...(setupPending ? { setup: setupPending } : {}) };
 
   /** Salto a cualquier pantalla con parámetros: la base de "todo es clicable". */
   // Ficha de una venta delante de cualquier pantalla (Mi panel, Cobros pendientes…).
@@ -1006,7 +1028,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} goTo={go} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={aiAttention ? { aiusage: aiAttention } : undefined}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} goTo={go} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={Object.keys(badges).length ? badges : undefined}>
       {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
@@ -1025,6 +1047,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
+      {tab === "setup" && <Setup go={go} onChanged={onSetup} />}
       {tab === "audit" && <AuditLog me={me} />}
       {tab === "pos" && <PosSale me={me} />}
       {tab === "possales" && <PosSales me={me} params={nav.params} />}

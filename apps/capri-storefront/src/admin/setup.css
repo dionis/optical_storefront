@@ -1,0 +1,9 @@
+/* «Configuración de la óptica» (Setup.jsx). Reutiliza la lista de Seguridad (.adm-sec-list). */
+.adm-setup .adm-sec-list li { align-items: center; }
+.adm-setup .adm-sec-list li .adm-sec-main { flex: 1; min-width: 0; }
+.adm-setup .adm-sec-list li.unknown .adm-sec-mark { color: var(--adm-muted); }
+.adm-setup-done { display: inline-flex; align-items: center; gap: 6px; color: var(--adm-green, #1e6b3a); font-weight: 600; font-size: 13px; }
+.adm-setup-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.adm-setup-h4 { margin: 16px 0 8px; font-size: 13px; color: var(--adm-ink); }
+.adm-setup-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; cursor: pointer; }
+.adm-setup .adm-field.is-bad .adm-input { border-color: var(--adm-red, #c0392b); }

@@ -15,7 +15,13 @@ if [ -n "$VERCEL" ]; then
     develop|main) LIVE=1 ;;
     *) LIVE=$([ "$VERCEL_ENV" = "production" ] && echo 1 || echo 0) ;;
   esac
-  if [ "$LIVE" = "1" ] && { [ "$VITE_BACKEND_TARGET" != "production" ] || [ "$VITE_BACKEND_PROXY" != "/medusa" ]; }; then
+  # Another optician (TENANT_FILE in its Vercel project): only its own prefix.
+  if [ "$VITE_BACKEND_TARGET" = "tenant" ]; then
+    case "$VITE_BACKEND_PROXY" in
+      /medusa-t-*) ;;
+      *) echo "vercel-build: tenant build got proxy '$VITE_BACKEND_PROXY'. Aborting." >&2; exit 1 ;;
+    esac
+  elif [ "$LIVE" = "1" ] && { [ "$VITE_BACKEND_TARGET" != "production" ] || [ "$VITE_BACKEND_PROXY" != "/medusa" ]; }; then
     echo "vercel-build: branch '$VERCEL_GIT_COMMIT_REF' ($VERCEL_ENV) serves customers but targets '$VITE_BACKEND_TARGET' ($VITE_BACKEND_PROXY). Aborting." >&2
     exit 1
   fi

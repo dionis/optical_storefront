@@ -26,11 +26,16 @@ function Login({ onOk }) {
   const [params, setParams] = useSearchParams();
   const resetToken = params.get("reset") || "";
   const resetEmail = params.get("email") || "";
-  const [user, setUser] = useState(resetEmail);
+  // The owner's activation mail (src/lib/tenant-bootstrap.ts) lands here as
+  // /admin?activate=<email>: the "forgot my password" screen, worded as a first
+  // sign-in. It carries no token — the 15-minute link comes by mail on request.
+  const activateEmail = params.get("activate") || "";
+  const [user, setUser] = useState(resetEmail || activateEmail);
   const [pass, setPass] = useState("");
   const [otp, setOtp] = useState("");
   // 'creds' | 'otp' | 'forgot' | 'sent' | 'reset'
-  const [stage, setStage] = useState(resetToken ? "reset" : "creds");
+  const [stage, setStage] = useState(resetToken ? "reset" : activateEmail ? "forgot" : "creds");
+  const [activating, setActivating] = useState(Boolean(activateEmail && !resetToken));
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,13 +43,14 @@ function Login({ onOk }) {
   const [again, setAgain] = useState("");
 
   const clearResetQuery = () => {
-    if (!params.has("reset") && !params.has("email")) return;
+    if (!params.has("reset") && !params.has("email") && !params.has("activate")) return;
     const next = new URLSearchParams(params);
     next.delete("reset");
     next.delete("email");
+    next.delete("activate");
     setParams(next, { replace: true });
   };
-  const goLogin = () => { clearResetQuery(); setStage("creds"); setErr(""); setPass(""); };
+  const goLogin = () => { clearResetQuery(); setActivating(false); setStage("creds"); setErr(""); setPass(""); };
 
   const submitCreds = async (e) => {
     e.preventDefault();
@@ -109,8 +115,8 @@ function Login({ onOk }) {
       ) : stage === "forgot" ? (
         <form className="adm-login-card" onSubmit={submitForgot}>
           {logo}
-          <h1>{t("adm.auth.forgotTitle")}</h1>
-          <p className="muted">{t("adm.auth.forgotSub")}</p>
+          <h1>{t(activating ? "adm.auth.activateTitle" : "adm.auth.forgotTitle")}</h1>
+          <p className="muted">{t(activating ? "adm.auth.activateSub" : "adm.auth.forgotSub")}</p>
           <label>{t("adm.login.email")}<input type="email" autoFocus required value={user} placeholder={t("adm.login.emailPh")} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
           {err && <div className="adm-login-err">{errText(err)}</div>}
           <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.auth.sending") : t("adm.auth.send")}</button>

@@ -11,6 +11,9 @@
 //     branch: develop/main → /medusa, always; any other branch → /medusa-staging.
 //   - the app takes the prefix from VITE_BACKEND_PROXY, which scripts/vercel-build.sh
 //     sets from backend-target.mjs (and refuses to build a live branch otherwise).
+//   - every other optician (multi-tenant) gets one more fixed rewrite,
+//     /medusa-t-<slug> → its manifest's domains.api, written by `pnpm tenant
+//     vercel` (scripts/tenant/routing.mjs); its builds use only that prefix.
 // This check fails whenever any of that stops being true.
 //
 // Run: node scripts/check-vercel-config.mjs (part of `pnpm test` and CI).
@@ -23,6 +26,9 @@ const STOREFRONT = join(ROOT, "apps", "capri-storefront");
 const PRODUCTION = "https://api.161-153-9-98.sslip.io";
 const STAGING = "https://api-staging.161-153-9-98.sslip.io";
 const STAGING_HOST = "api-staging.";
+const { readManifests, tenantVercelRules, tenantProxyPath } = await import(pathToFileURL(join(ROOT, "scripts", "tenant", "routing.mjs")).href);
+const MANIFESTS = readManifests(ROOT);
+const TENANT_RULES = tenantVercelRules(MANIFESTS);
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -47,8 +53,21 @@ if (config) {
   const spa = rewrites.findIndex((r) => r.source === "/(.*)");
   if (prod === -1 || rewrites[prod].destination !== `${PRODUCTION}/:path*`) fail("vercel.json: /medusa/:path* must rewrite to the production backend");
   if (stag === -1 || rewrites[stag].destination !== `${STAGING}/:path*`) fail("vercel.json: /medusa-staging/:path* must rewrite to the staging backend");
-  if (backendRules.length !== 2) fail(`vercel.json: expected exactly 2 backend rewrites, found ${backendRules.length}`);
+  const expected = 2 + TENANT_RULES.rewrites.length;
+  if (backendRules.length !== expected) fail(`vercel.json: expected exactly ${expected} backend rewrites (2 + one per optician), found ${backendRules.length} — run \`pnpm tenant vercel\``);
   if (spa !== -1 && (spa < prod || spa < stag)) fail("vercel.json: the SPA fallback /(.*) must come after the backend rewrites");
+  for (const want of TENANT_RULES.rewrites) {
+    const i = rewrites.findIndex((r) => r.source === want.source);
+    if (i === -1 || rewrites[i].destination !== want.destination) fail(`vercel.json: ${want.source} must rewrite to ${want.destination} — run \`pnpm tenant vercel\``);
+    else if (spa !== -1 && spa < i) fail(`vercel.json: ${want.source} must come before the SPA fallback`);
+  }
+  for (const r of backendRules) {
+    if (r.source.startsWith("/medusa-t-") && !TENANT_RULES.rewrites.some((w) => w.source === r.source)) fail(`vercel.json: ${r.source} has no manifest in tenants/ — run \`pnpm tenant vercel\``);
+  }
+  for (const h of TENANT_RULES.headers) {
+    const got = (config.headers ?? []).find((x) => x.source === h.source);
+    if (!got || !got.headers.some((x) => x.key === "Cache-Control" && x.value === "no-store")) fail(`vercel.json: ${h.source} must be served no-store`);
+  }
   for (const prefix of ["/medusa/(.*)", "/medusa-staging/(.*)"]) {
     const h = (config.headers ?? []).find((x) => x.source === prefix);
     if (!h || !h.headers.some((x) => x.key === "Cache-Control" && x.value === "no-store")) fail(`vercel.json: ${prefix} must be served no-store`);
@@ -73,6 +92,27 @@ for (const [env, want] of CASES) {
   const got = resolveBackend(env);
   if (got.target !== want || got.proxy !== PROXY_PATHS[want]) fail(`${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected ${want} ${PROXY_PATHS[want]}`);
 }
+// The two original stores keep the branch rule even with TENANT_FILE set.
+for (const [env, want] of [
+  [{ TENANT_FILE: "tenants/rubi-lens/tenant.json", VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "develop" }, "production"],
+  [{ TENANT_FILE: "tenants/el-rancho/tenant.json", VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop_optical_storepos" }, "staging"],
+]) {
+  const got = resolveBackend(env);
+  if (got.target !== want || got.proxy !== PROXY_PATHS[want]) fail(`${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected ${want}`);
+}
+// Any other optician: its own prefix on every branch, never /medusa.
+const NEW_TENANT = { slug: "optica-nueva", domains: { api: "https://api.optica-nueva.com" } };
+for (const env of [{ VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" }, { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop" }, {}]) {
+  const got = resolveBackend(env, NEW_TENANT);
+  if (got.target !== "tenant" || got.proxy !== tenantProxyPath("optica-nueva")) fail(`new optician on ${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected tenant ${tenantProxyPath("optica-nueva")}`);
+}
+let refused = false;
+try {
+  resolveBackend({}, { slug: "sin-api", domains: {} });
+} catch {
+  refused = true;
+}
+if (!refused) fail("backend-target.mjs: an optician without an https domains.api must fail the build, not fall back to another backend");
 
 // 3. The build script feeds the app from backend-target.mjs and guards live branches.
 const build = read(join(STOREFRONT, "scripts", "vercel-build.sh"));
@@ -81,6 +121,7 @@ for (const [needle, why] of [
   ["export VITE_BACKEND_TARGET VITE_BACKEND_PROXY", "must export both variables to the app build"],
   ['VITE_VISION_API_BASE="${VITE_BACKEND_PROXY:-/medusa}"', "must give the try-on the same prefix"],
   ['[ "$VITE_BACKEND_PROXY" != "/medusa" ]', "must refuse a live branch that does not use /medusa"],
+  ["/medusa-t-*) ;;", "must refuse a tenant build that does not use its own /medusa-t- prefix"],
 ]) if (!build.includes(needle)) fail(`scripts/vercel-build.sh ${why}`);
 
 // 4. The app builds every backend URL from VITE_BACKEND_PROXY.

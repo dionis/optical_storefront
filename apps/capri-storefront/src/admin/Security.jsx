@@ -98,6 +98,8 @@ const GROUPS = [
   ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.")],
   ["payments", (k) => k.startsWith("payments.")],
   ["services", (k) => k.startsWith("notifications.") || k.startsWith("sheet.") || k.startsWith("ocr.")],
+  // Perfil, dueño explícito y puesta en marcha (multi-óptica): salen de la base de datos.
+  ["tenant", (k) => k.startsWith("tenant.")],
 ];
 
 export default function Security() {

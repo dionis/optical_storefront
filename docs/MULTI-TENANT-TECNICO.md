@@ -10,7 +10,7 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 
 ## 0. Estado de la implementación (06/11/2026, rama `multi-tenant-modulo-develop`)
 
-**Fases 1 y 2 hechas.** Lo que hay y en qué se aparta de lo escrito más abajo:
+**Fases 1, 2 y 3 hechas.** Lo que hay y en qué se aparta de lo escrito más abajo:
 
 | Pieza | Dónde | Notas |
 |---|---|---|
@@ -25,7 +25,12 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 | Herramienta | `scripts/tenant.mjs` (`pnpm tenant list`, `validate`, `env`) | El resto de comandos (`new`, `checklist`, `bootstrap`, `vercel`) llega en la fase 3. |
 | Perfil (capa C) | módulo `tenantProfile`, `lib/tenant-profile.ts` | Rutas `GET/POST /admin/tenant` y `GET /store/tenant`. **El correo de soporte se queda en `store_setting`** (ya lo edita el dueño en Ajustes): no se migra. Las zonas de envío y la marca editable llegan en las fases 4 y 5. Un middleware refresca el perfil en memoria sin hacer esperar a la petición. |
 | Dueño explícito | `ownerUserId` en `lib/staff-scope.ts` | Una sola regla para el panel, Equipo y los aprobadores de descuentos (antes estaba copiada en tres sitios). Si el perfil no se puede leer, vuelve a la regla del usuario más antiguo. |
-| Traspaso | `POST /admin/tenant/transfer-owner`, `lib/tenant-owner.ts`, Equipo → «Propiedad del panel» | Solo el dueño, con su contraseña; el anterior queda como superadmin, se audita y se avisa por correo a los dos. La invitación al dueño en el alta va con la fase 3. |
+| Traspaso | `POST /admin/tenant/transfer-owner`, `lib/tenant-owner.ts`, Equipo → «Propiedad del panel» | Solo el dueño, con su contraseña; el anterior queda como superadmin, se audita y se avisa por correo a los dos. |
+| Entrega al dueño (fase 3) | `src/scripts/tenant-bootstrap.ts` → `lib/tenant-bootstrap.ts` | **No usa las invitaciones de Medusa** (el registro está cerrado por seguridad): crea el usuario con una contraseña aleatoria que nadie ve, lo nombra dueño, reabre «Primeros pasos», audita (`tenant.bootstrap`) y le manda un correo con `/admin?activate=<correo>`. Ese enlace **no lleva token**: abre la pantalla de «olvidé mi contraseña» con otro título y el dueño pide ahí el enlace de 15 minutos. Simulacro salvo `TENANT_BOOTSTRAP_CONFIRM=yes`; se niega si ya hay otro dueño vivo (entonces solo vale el traspaso). Región, canal y clave publicable siguen saliendo de `seed.ts`, que se corre antes. |
+| «Primeros pasos» (fase 3) | `lib/tenant-setup.ts`, `GET /admin/tenant/setup`, pestaña Administración → «Configuración de la óptica» (`Setup.jsx`) | Nueve pasos calculados en el servidor (perfil, avisos, recogida, precios de lentes, tiendas, equipo ≥ 2, dueño nombrado, Seguridad sin fallos, primera venta), cada uno con la pestaña que lo arregla; una lectura que falla sale «sin comprobar», nunca como hecha. La misma pantalla edita el perfil (contacto, redes, recogida). Insignia con los pendientes y, para el dueño sin `?tab=`, el panel abre ahí hasta que lo da por terminado. Terminar con pendientes pide confirmación; no bloquea nada. |
+| Seguridad (fase 3) | `security-status/route.ts` | Grupo nuevo «Configuración de la óptica»: `tenant.profile`, `tenant.owner_explicit`, `tenant.setup_completed`. **En RUBI LENS saldrán en rojo** hasta que su dueño haga el traspaso y complete el perfil: es real, no un fallo del despliegue. |
+| Enrutado en Vercel (fase 3) | `scripts/tenant/routing.mjs`, `backend-target.mjs`, `vercel-build.sh`, `check-vercel-config.mjs` | **No por dominio (`has: host`)** como decía §9: las vistas previas de Vercel tienen otro host y habrían caído en el backend de RUBI LENS. Cada óptica nueva tiene un prefijo fijo `/medusa-t-<slug>` → su `domains.api`, y su proyecto de Vercel (con `TENANT_FILE`) usa ese prefijo en producción y en vistas previas. RUBI LENS y El Rancho siguen con `/medusa` y `/medusa-staging` por rama. Una ficha sin `domains.api` https hace fallar el build en vez de apuntar a otra tienda. Las fichas con dominios `.example`/`.test` (demo) no reciben ruta. |
+| Herramienta (fase 3) | `scripts/tenant.mjs` | `new` (genera la ficha desde nombre, dominio y correo del dueño), `env` (ahora con CORS, `BACKEND_URL`, buckets y la lista de claves propias por rellenar), `vercel [--check]`, `checklist` (§11 con los valores de esa óptica) y `bootstrap`. `pnpm test` falla si `vercel.json` y las fichas no coinciden. |
 
 **Para desplegar esta línea:** en el backend de staging (Coolify) poner `STORE_NAME=Óptica El Rancho`; si no, correos y SMS dicen "RUBI LENS" (valor por defecto del backend). En producción (RUBI LENS) no hay que tocar nada.
 
@@ -429,7 +434,8 @@ El catálogo ya se traduce a `fr` en el scraper (`metadata.i18n.fr`); la interfa
 | `tenant env <slug> --target backend\|storefront` | imprime el bloque de variables para Coolify/Vercel; genera `JWT_SECRET`, `COOKIE_SECRET`, `ORDER_ACCESS_SECRET`, `SELLER_LINK_SECRET`, `VISION_INTERNAL_SECRET` (32 bytes aleatorios) solo si se pide `--with-secrets`; nunca los escribe en el repo |
 | `tenant checklist <slug>` | imprime el alta paso a paso (§11) con los valores ya sustituidos (URL del webhook de Stripe, buckets, registros DNS) |
 | `tenant bootstrap <slug>` | instrucciones para `medusa exec src/scripts/tenant-bootstrap.ts` en la terminal de Coolify |
-| `tenant list` | inquilinos, dominios y commit desplegado (lee `SOURCE_COMMIT` del health) |
+| `tenant list` | inquilinos, dominios y ruta del backend (`(rama)`, `/medusa-t-<slug>` o «sin ruta») |
+| `tenant vercel [--check]` | escribe en `apps/capri-storefront/vercel.json` una reescritura `/medusa-t-<slug>` por óptica nueva (§0); `--check` solo avisa |
 
 Fase 5 (opcional): `tenant provision` y `tenant deploy-all` con las APIs de Coolify,
 Cloudflare (R2, DNS), Vercel, Stripe (`webhook_endpoints.create`) y Resend
@@ -443,11 +449,13 @@ Cloudflare (R2, DNS), Vercel, Stripe (`webhook_endpoints.create`) y Resend
 4. R2: buckets `<slug>-assets` (público) y `<slug>-rx` (privado); Resend: dominio verificado.
 5. Stripe: webhook a `https://api.<dominio>/hooks/payment/stripe_stripe` → `STRIPE_WEBHOOK_SECRET`.
 6. Hoja: crear y compartir con la cuenta de servicio → `GSHEET_*`.
-7. `medusa exec src/scripts/tenant-bootstrap.ts` (región, canal, publishable key, semillas, invitación al dueño).
-8. Vercel: proyecto con Root Directory `apps/capri-storefront`, `TENANT_FILE`, `VITE_MEDUSA_PUBLISHABLE_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`; dominio `www.<dominio>`. `pnpm tenant vercel` añade su reescritura por dominio a `vercel.json` (commit en `develop`).
+7. `medusa exec ./src/scripts/seed.js` (región, canal, clave publicable) y `npx medusa user` para el usuario técnico.
+8. Vercel: proyecto con Root Directory `apps/capri-storefront`, `TENANT_FILE`, `VITE_MEDUSA_PUBLISHABLE_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`; dominio `www.<dominio>`. `pnpm tenant vercel` añade su reescritura `/medusa-t-<slug>` a `vercel.json` (commit y PR).
 9. Catálogo: si el proveedor ya está en uso, importar el catálogo base compartido (§8.1); si es nuevo, `python -m scraper sync --full` con su adaptador. Después `pnpm reindex`.
 10. Verificación: Seguridad en verde, compra real + reembolso, correo y SMS recibidos, fila en la hoja, cambio de estado desde la hoja.
-11. Traspaso: el dueño acepta la invitación → asistente "Primeros pasos" → `setup_completed_at`.
+11. Entrega: `pnpm tenant bootstrap <slug>` imprime el simulacro y la orden real para la terminal de Coolify → el dueño activa su cuenta desde el correo → «Primeros pasos» → `setup_completed_at`.
+
+`pnpm tenant checklist <slug>` imprime esta lista con los valores de la óptica.
 
 ## 12. Versiones y despliegues
 
