@@ -2,15 +2,23 @@
 // (catálogo, punto de venta, precios). Muestra los mismos datos que la ficha
 // de la tienda online (imágenes, colores, atributos, medidas, precio) sin las
 // acciones de compra. Recibe un objeto `product` del catálogo (catalogStore.js).
+//
+// Rediseño visual (pedido del dueño): las medidas se leen por ICONO + número,
+// la marca se reconoce por su LOGO y los colores se ven como MUESTRAS, no como
+// el texto "3 colores". Los datos, su origen, el cierre y la accesibilidad son
+// los mismos de antes: esto es solo cómo se ve.
 import { useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import FrameMeasureIcon from "./frameMeasureIcons.jsx";
 import { money } from "./adminOrders.js";
 import { resolveImageSized, imageSrcSet } from "../data/imageUrl.js";
+import { BRAND_BY_SLUG, brandByName } from "../data/brands.js";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
 
+// Ficha técnica compacta. La MARCA ya no va aquí: ahora se reconoce por su logo
+// en la cabecera, y repetirla como fila era justo el aire muerto que sobraba.
 const ATTRS = [
-  ["brand", "brand"],
   ["shape", "attributes.shape"],
   ["material", "attributes.material"],
   ["gender", "attributes.gender"],
@@ -18,10 +26,15 @@ const ATTRS = [
   ["rim", "attributes.rim"],
 ];
 
+// Medidas por orden de lectura del óptico: ojo □ puente – varilla, y el alto
+// del lente al final porque no todas las monturas lo traen. La clave de rótulo
+// es la MISMA que usa la tienda (spec.*), para que ficha pública y panel digan
+// lo mismo con las mismas palabras.
 const MEASURES = [
   ["eye_size", "spec.eye"],
   ["bridge_size", "spec.bridge"],
   ["temple_length", "spec.temple"],
+  ["lens_height", "adm.pos.frame.detail.lensHeight"],
 ];
 
 const get = (obj, path) => {
@@ -30,6 +43,44 @@ const get = (obj, path) => {
   for (const p of parts) { v = v?.[p]; if (v == null) return ""; }
   return v;
 };
+
+// El catálogo guarda la medida ya con su unidad ("51-53 mm") o sin ella (51).
+// La ficha pinta el "mm" una sola vez, aparte y en pequeño, así que aquí se le
+// quita al valor: antes salía "51-53 mm mm".
+function measureNumber(v) {
+  const raw = Array.isArray(v) ? v.join("–") : String(v ?? "");
+  return raw.replace(/\s*mm\s*$/i, "").trim();
+}
+
+/**
+ * Sello de marca: el MISMO logo que pinta la lista «Catálogo por marca» del
+ * panel (data/brands.js → public/brands/). Se prefiere el logo plano
+ * (`logoWide`) porque es el que se lee como marca; el medallón queda de
+ * respaldo. Si la marca no está en la lista, o el fichero no carga, se cae al
+ * NOMBRE de la marca — nunca a un hueco.
+ */
+function BrandSeal({ product, t }) {
+  const [broken, setBroken] = useState(false);
+  const name = product.brand;
+  if (!name) return null;
+
+  const info = BRAND_BY_SLUG[product.brand_slug] || brandByName(name);
+  const logo = info ? (info.logoWide || info.logo) : null;
+
+  // Sin logo (o roto): el nombre, con el mismo peso visual que tenía antes.
+  if (!logo || broken) return <span className="adm-frame-seal is-text">{name}</span>;
+
+  return (
+    // El `title`/`aria-label` llevan el nombre de la marca porque la imagen es
+    // un wordmark: quien use lector de pantalla oye "Marca Di Caprio", no un
+    // nombre de fichero.
+    <span className="adm-frame-seal has-logo" role="img"
+          aria-label={t("adm.pos.frame.detail.brandOf", { name })}
+          title={t("adm.pos.frame.detail.brandOf", { name })}>
+      <img src={logo} alt="" loading="lazy" onError={() => setBroken(true)} />
+    </span>
+  );
+}
 
 /**
  * Ficha de detalle de montura para el panel de administración.
@@ -40,12 +91,20 @@ export default function AdminFrameCard({ product, onClose }) {
   const [activeColor, setActiveColor] = useState(0);
   if (!product) return null;
 
-  const color = product.colors?.[activeColor] || product.colors?.[0];
-  const mainImage = color?.image || product.colors?.[0]?.image;
+  const colors = product.colors || [];
+  const color = colors[activeColor] || colors[0];
+  const mainImage = color?.image || colors[0]?.image;
   const m = (v) => (v == null ? "—" : money(v, "usd", lang));
+  // El catálogo nombra el color en `name`; `label` es la forma que traen otras
+  // fuentes. Se aceptan las dos para que la muestra nunca salga sin nombre.
+  const colorName = (c) => c?.name || c?.label || "";
 
   const hasSale = DISCOUNTS_ENABLED && typeof product.originalPrice === "number" && product.originalPrice > product.price;
   const discountPct = hasSale ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+
+  const measures = MEASURES
+    .map(([key, labelKey]) => ({ key, labelKey, value: measureNumber(product.attributes?.[key]) }))
+    .filter((x) => x.value);
 
   return (
     <div className="adm-frame-overlay" onClick={onClose}>
@@ -55,50 +114,70 @@ export default function AdminFrameCard({ product, onClose }) {
         </button>
 
         <div className="adm-frame-layout">
-          {/* Imagen principal */}
+          {/* Imagen principal + muestras de color */}
           <div className="adm-frame-img-area">
-            {mainImage ? (
-              <img
-                className="adm-frame-main-img"
-                src={resolveImageSized ? resolveImageSized(mainImage, 600) : mainImage}
-                srcSet={imageSrcSet ? imageSrcSet(mainImage, [400, 600, 800]) : undefined}
-                sizes="(max-width: 600px) 90vw, 400px"
-                alt={product.name}
-                loading="eager"
-              />
-            ) : (
-              <div className="adm-frame-no-img">
-                <Icon name="glasses" size={64} />
-              </div>
-            )}
+            <div className="adm-frame-stage">
+              {mainImage ? (
+                <img
+                  className="adm-frame-main-img"
+                  src={resolveImageSized ? resolveImageSized(mainImage, 600) : mainImage}
+                  srcSet={imageSrcSet ? imageSrcSet(mainImage, [400, 600, 800]) : undefined}
+                  sizes="(max-width: 700px) 90vw, 380px"
+                  alt={product.name}
+                  loading="eager"
+                />
+              ) : (
+                <div className="adm-frame-no-img">
+                  <Icon name="glasses" size={64} />
+                </div>
+              )}
+            </div>
 
-            {/* Color swatches */}
-            {product.colors?.length > 1 && (
-              <div className="adm-frame-colors">
-                {product.colors.map((c, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`adm-frame-swatch ${i === activeColor ? "on" : ""}`}
-                    onClick={() => setActiveColor(i)}
-                    title={c.label || `Color ${i + 1}`}
-                  >
-                    {c.image ? (
-                      <img src={resolveImageSized ? resolveImageSized(c.image, 60) : c.image} alt={c.label || ""} loading="lazy" />
-                    ) : (
-                      <span className="adm-frame-swatch-dot" style={c.hex ? { background: c.hex } : undefined} />
-                    )}
-                  </button>
-                ))}
+            {/* Colores: muestras de verdad (la foto del color, o su tono) en vez
+                del antiguo recuento "3 colores". Siguen siendo los botones que
+                cambian la foto, así que no hay dos controles para lo mismo. */}
+            {colors.length > 1 && (
+              <div className="adm-frame-colors" role="group" aria-label={t("adm.pos.frame.detail.colors")}>
+                {colors.map((c, i) => {
+                  const cname = colorName(c) || t("adm.pos.frame.detail.colorNo", { n: i + 1 });
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      className={`adm-frame-swatch ${i === activeColor ? "on" : ""}`}
+                      onClick={() => setActiveColor(i)}
+                      aria-pressed={i === activeColor}
+                      aria-label={t("adm.pos.frame.detail.colorPick", { name: cname })}
+                      title={cname}
+                    >
+                      {c.image ? (
+                        <img src={resolveImageSized ? resolveImageSized(c.image, 60) : c.image} alt="" loading="lazy" />
+                      ) : (
+                        <span className="adm-frame-swatch-dot" style={c.hex ? { background: c.hex } : undefined} />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
-            {color?.label && <small className="adm-frame-color-label">{color.label}</small>}
+            {colorName(color) && <small className="adm-frame-color-label">{tv(colorName(color))}</small>}
           </div>
 
           {/* Información */}
           <div className="adm-frame-info">
-            <h3 className="adm-frame-title">{product.name}</h3>
-            <p className="adm-frame-brand">{product.brand}</p>
+            {/* Cabecera: modelo + SKU a la izquierda, logo de la marca a la
+                derecha. Antes la marca era otra línea de texto bajo el modelo. */}
+            <header className="adm-frame-head">
+              <div className="adm-frame-ident">
+                <h3 className="adm-frame-title">{product.name}</h3>
+                {product.sku && (
+                  <span className="adm-frame-sku" title={t("adm.pos.frame.card.sku")}>
+                    <i aria-hidden="true">{t("adm.pos.frame.card.sku")}</i> {product.sku}
+                  </span>
+                )}
+              </div>
+              <BrandSeal product={product} t={t} />
+            </header>
 
             {/* Precio */}
             <div className="adm-frame-price-row">
@@ -111,56 +190,55 @@ export default function AdminFrameCard({ product, onClose }) {
               )}
             </div>
 
-            {/* SKU */}
-            {product.sku && <p className="adm-frame-sku">SKU: {product.sku}</p>}
-
-            {/* Atributos */}
+            {/* Atributos: datos compactos en dos columnas, no una tabla suelta */}
             <dl className="adm-frame-attrs">
               {ATTRS.map(([key, path]) => {
-                const val = key === "brand" ? product.brand : get(product, path);
+                const val = get(product, path);
                 if (!val) return null;
+                const text = Array.isArray(val) ? val.map((x) => tv(String(x))).join(" · ") : tv(String(val));
                 return (
                   <div key={key} className="adm-frame-attr">
                     <dt>{t(`adm.frame.${key}`)}</dt>
-                    <dd>{tv(String(val))}</dd>
+                    <dd>{text}</dd>
                   </div>
                 );
               })}
             </dl>
 
-            {/* Medidas */}
-            {product.attributes && (product.attributes.eye_size || product.attributes.bridge_size || product.attributes.temple_length) && (
+            {/* Medidas: icono + número + unidad. El rótulo entero ("Tamaño del
+                ojo") ya no ocupa una línea bajo cada número; vive en el
+                title/aria-label, que es donde hace falta de verdad. */}
+            {measures.length > 0 && (
               <div className="adm-frame-measures">
                 <h4>{t("adm.frame.measures")}</h4>
-                <div className="adm-frame-measure-row">
-                  {MEASURES.map(([attrKey, labelKey]) => {
-                    const val = product.attributes?.[attrKey];
-                    if (!val) return null;
-                    const display = Array.isArray(val) ? val.join("–") : val;
+                <ul className="adm-frame-measure-row">
+                  {measures.map(({ key, labelKey, value }) => {
+                    const label = t(labelKey);
+                    // Un solo texto accesible por medida: el lector de pantalla
+                    // dice "Tamaño del ojo: 51-53 milímetros" en vez de leer el
+                    // icono, el número y la unidad por separado.
+                    const spoken = t("adm.pos.frame.detail.measureOf", { label, value });
                     return (
-                      <div key={attrKey} className="adm-frame-measure">
-                        <span className="adm-frame-measure-val">{display}<small>mm</small></span>
-                        <span className="adm-frame-measure-label">{t(labelKey)}</span>
-                      </div>
+                      <li key={key} className="adm-frame-measure" title={`${label}: ${value} ${t("adm.pos.frame.detail.mm")}`}>
+                        <FrameMeasureIcon name={key} />
+                        <span className="adm-frame-measure-val" aria-label={spoken}>
+                          <b aria-hidden="true">{value}</b>
+                          <small aria-hidden="true">{t("adm.pos.frame.detail.mm")}</small>
+                        </span>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               </div>
             )}
 
-            {/* Variantes/Colores count */}
-            <div className="adm-frame-meta">
-              {product.colors?.length > 0 && (
-                <span className="adm-frame-meta-item">
-                  <Icon name="palette" size={14} /> {product.colors.length} {t("adm.frame.colors")}
-                </span>
-              )}
-              {product.medusaId && (
-                <span className="adm-frame-meta-item muted">
-                  ID: {product.medusaId}
-                </span>
-              )}
-            </div>
+            {/* Pie: solo el identificador técnico. El recuento de colores se fue
+                con las muestras, que ya dicen cuántos hay y cuáles son. */}
+            {product.medusaId && (
+              <div className="adm-frame-meta">
+                <span className="adm-frame-meta-item muted">ID: {product.medusaId}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

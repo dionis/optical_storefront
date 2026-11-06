@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { TENANT } from "../config/tenant.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import AdminErrorBoundary from "./AdminErrorBoundary.jsx";
 import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
 import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
@@ -29,18 +30,23 @@ export const NAV_GROUPS = [
     { key: "statement", icon: "clipboard" },
     { key: "posconfig", icon: "settings" },
   ] },
+  // Regla del dueño: «en Comercial va todo lo que tenga que ver con manejo de
+  // precios, costos, etc.». El catálogo (Productos) es precisamente eso —
+  // costo de proveedor, precio por regla y precio propio de cada modelo—, así
+  // que vive aquí, junto a Precios y costos, y ya no en un grupo propio.
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
     { key: "pricing", icon: "prices" },
+    { key: "products", icon: "products" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
-  { key: "catalog", icon: "products", items: [
-    { key: "products", icon: "products" },
-    { key: "catalogsync", icon: "refresh" },
-  ] },
   { key: "admin", icon: "security", items: [
     { key: "team", icon: "team" },
+    // Sincronizar el catálogo es mantenimiento, no manejo de precios ni de
+    // costos: por eso no está en Comercial, donde el dueño quiso que viviera
+    // todo lo de precios. Productos sí está allí.
+    { key: "catalogsync", icon: "refresh" },
     // Las alertas se configuran desde Administración (decisión del dueño), no
     // dentro de Tiendas: son reglas del negocio, no de una tienda. El
     // supervisor sigue configurando LAS SUYAS (navGroupsFor, más abajo).
@@ -120,7 +126,7 @@ const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"
  * El cajón móvil se cierra solo al elegir sección, al pulsar Escape o al tocar
  * el fondo; en escritorio la barra recuerda si estaba contraída.
  */
-export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
+export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
   const { t, lang, toggle } = useLang();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawer, setDrawer] = useState(false);
@@ -356,8 +362,13 @@ export default function AdminShell({ tab, onTab, user, onLogout, find, onFind, b
             a la pantalla abierta: ExportRegistry guarda lo que registra con
             useRegisterExport. */}
         <ExportRegistry>
-          <GlobalFilterBar tab={tab} me={me} barRef={barRef} />
-          <main className="adm-body" key={tab}>{children}</main>
+          {/* `go` baja hasta el buscador global de la barra: sin él navegaría
+              cambiando la URL, que recarga la página entera. */}
+          <GlobalFilterBar tab={tab} me={me} barRef={barRef} go={goTo} />
+          {/* Una pestaña que revienta al pintarse no puede llevarse el panel
+              entero por delante: la barrera la acota y `key={tab}` hace que
+              cambiar de pestaña reintente sin recargar. */}
+          <main className="adm-body" key={tab}><AdminErrorBoundary>{children}</AdminErrorBoundary></main>
         </ExportRegistry>
       </div>
 

@@ -113,6 +113,11 @@ export default function CashReport({ ctx, me }) {
     return () => { alive = false; };
   }, [range.from, range.to, storeId, personId]);
 
+  // La comisión del procesador es un costo: el servidor la redacta (manda
+  // `fee_cents: null` y `access.fees: false`) para quien no puede ver costos,
+  // así que aquí solo se decide si la columna y el total se pintan — nunca
+  // se decide quién puede verlos.
+  const showFees = data?.access?.fees !== false;
   const totals = data?.totals;
   const movements = useMemo(() => (data?.movements || []).filter((x) => (!cat || (x.category || "none") === cat) && (!till || (x.terminal_code || "—") === till)), [data, cat, till]);
   const catCounts = useMemo(() => {
@@ -163,7 +168,7 @@ export default function CashReport({ ctx, me }) {
           sumRow(t("adm.cash.rep.t.in"), d(totals.movements_in_cents)),
           sumRow(t("adm.cash.rep.t.out"), d(totals.movements_out_cents)),
           sumRow(t("adm.cash.rep.t.net"), d(totals.cash_net_cents)),
-          sumRow(t("adm.cash.rep.t.fees"), d(totals.fees_cents)),
+          ...(showFees ? [sumRow(t("adm.cash.rep.t.fees"), d(totals.fees_cents))] : []),
           sumRow(t("adm.cash.rep.t.diff"), d(totals.sessions_diff_cents)),
         ],
       },
@@ -174,7 +179,7 @@ export default function CashReport({ ctx, me }) {
           { header: t("adm.cash.rep.count"), key: "in_count", type: "int" },
           { header: t("adm.cash.rep.collected"), get: (r) => d(r.in_cents), type: "money" },
           { header: t("adm.cash.rep.refunds"), get: (r) => d(r.refund_cents), type: "money" },
-          { header: t("adm.cash.rep.fee"), get: (r) => d(r.fee_cents), type: "money" },
+          ...(showFees ? [{ header: t("adm.cash.rep.fee"), get: (r) => d(r.fee_cents), type: "money" }] : []),
           { header: t("adm.cash.rep.net"), get: (r) => d(r.net_cents), type: "money" },
         ],
         rows: data.by_method,
@@ -272,7 +277,7 @@ export default function CashReport({ ctx, me }) {
             {tot("adm.cash.rep.t.in", totals.movements_in_cents, totals.movements_in_cents ? "pos" : "")}
             {tot("adm.cash.rep.t.out", totals.movements_out_cents, totals.movements_out_cents ? "neg" : "")}
             {tot("adm.cash.rep.t.net", totals.cash_net_cents, `main ${tone(totals.cash_net_cents)}`, t("adm.cash.rep.t.netHint"))}
-            {tot("adm.cash.rep.t.fees", totals.fees_cents)}
+            {showFees && tot("adm.cash.rep.t.fees", totals.fees_cents)}
             {tot("adm.cash.rep.t.diff", totals.sessions_diff_cents, totals.sessions_diff_cents ? "warn" : "")}
             {totals.receivable_cents ? tot("adm.cash.rep.t.receivable", totals.receivable_cents) : null}
           </div>
@@ -281,7 +286,7 @@ export default function CashReport({ ctx, me }) {
             sum={<><span>{t("adm.cash.rep.net")}</span><b>{m(totals.payments_cents)}</b></>}>
             {data.by_method.length ? (
               <table className="adm-table responsive">
-                <thead><tr>{sth(methodsSorted, "method", t("adm.cash.rep.method"))}{sth(methodsSorted, "in_count", t("adm.cash.rep.count"), "r")}{sth(methodsSorted, "in_cents", t("adm.cash.rep.collected"), "r")}{sth(methodsSorted, "refund_cents", t("adm.cash.rep.refunds"), "r")}{sth(methodsSorted, "fee_cents", t("adm.cash.rep.fee"), "r")}{sth(methodsSorted, "net_cents", t("adm.cash.rep.net"), "r")}</tr></thead>
+                <thead><tr>{sth(methodsSorted, "method", t("adm.cash.rep.method"))}{sth(methodsSorted, "in_count", t("adm.cash.rep.count"), "r")}{sth(methodsSorted, "in_cents", t("adm.cash.rep.collected"), "r")}{sth(methodsSorted, "refund_cents", t("adm.cash.rep.refunds"), "r")}{showFees && sth(methodsSorted, "fee_cents", t("adm.cash.rep.fee"), "r")}{sth(methodsSorted, "net_cents", t("adm.cash.rep.net"), "r")}</tr></thead>
                 <tbody>
                   {methodsSorted.rows.map((r) => (
                     <tr key={r.code}>
@@ -289,12 +294,12 @@ export default function CashReport({ ctx, me }) {
                       <td className="r num" data-label={t("adm.cash.rep.count")}>{r.in_count}</td>
                       <td className="r num" data-label={t("adm.cash.rep.collected")}>{m(r.in_cents)}</td>
                       <td className={`r num ${r.refund_cents ? "cr-neg" : ""}`} data-label={t("adm.cash.rep.refunds")}>{r.refund_cents ? `−${m(r.refund_cents)}` : "—"}</td>
-                      <td className="r num" data-label={t("adm.cash.rep.fee")}>{r.fee_cents ? m(r.fee_cents) : "—"}</td>
+                      {showFees && <td className="r num" data-label={t("adm.cash.rep.fee")}>{r.fee_cents ? m(r.fee_cents) : "—"}</td>}
                       <td className="r num" data-label={t("adm.cash.rep.net")}><b>{m(r.net_cents)}</b></td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot><tr><td>{t("adm.cash.rep.total")}</td><td className="r num">{data.by_method.reduce((s, r) => s + r.in_count, 0)}</td><td className="r num">{m(data.by_method.reduce((s, r) => s + r.in_cents, 0))}</td><td className="r num">{m(data.by_method.reduce((s, r) => s + r.refund_cents, 0))}</td><td className="r num">{m(totals.fees_cents)}</td><td className="r num">{m(totals.payments_cents + totals.receivable_cents)}</td></tr></tfoot>
+                <tfoot><tr><td>{t("adm.cash.rep.total")}</td><td className="r num">{data.by_method.reduce((s, r) => s + r.in_count, 0)}</td><td className="r num">{m(data.by_method.reduce((s, r) => s + r.in_cents, 0))}</td><td className="r num">{m(data.by_method.reduce((s, r) => s + r.refund_cents, 0))}</td>{showFees && <td className="r num">{m(totals.fees_cents)}</td>}<td className="r num">{m(totals.payments_cents + totals.receivable_cents)}</td></tr></tfoot>
               </table>
             ) : <div className="cr-empty">{t("adm.cash.rep.empty")}</div>}
           </Acc>

@@ -7,6 +7,7 @@ import { localParts } from "./alerts";
 import { computeCostSheet, listCostRules, lineGroup, type CostOrderLike } from "./costing";
 import { listEstablishments } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish } from "./lens-finish";
 import { listSellers } from "./sellers";
 import { profilesByUser } from "./staff-profile-data";
 import { allocateShared, computePnl, monthlyCharge, type CostItemLike, type Pnl } from "./store-costs";
@@ -167,7 +168,7 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
     .where("channel", "pos")
     .whereIn("establishment_id", ids.length ? ids : ["-"])
     .where("sold_date_local", "like", `${month}-%`)
-    .select("order_id", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar")) as Array<Record<string, unknown>>;
+    .select("order_id", "establishment_id", "seller_id", "seller_code", "product_id", "sku", "qty", "total_cents", "tax_cents", "lens_design", "lens_material", "lens_photo", "lens_ar", "lens_finish")) as Array<Record<string, unknown>>;
 
   // Cost of goods with the owner's rules, one sheet per sale.
   const [rules, meta] = await Promise.all([
@@ -184,6 +185,10 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
   const cogsByStore = new Map<string, number>();
   for (const lines of byOrder.values()) {
     const order: CostOrderLike = {
+      // The store that sold it: a frame's cost is that store's own when it
+      // holds one, the chain's otherwise (lib/frame-cost.ts). Without this the
+      // store's own P&L would be built from the chain's cost.
+      establishment_id: lines[0] ? String(lines[0].establishment_id ?? "") || null : null,
       total: lines.reduce((s, l) => s + Number(l.total_cents), 0) / 100,
       tax_total: lines.reduce((s, l) => s + Number(l.tax_cents), 0) / 100,
       paid: true,
@@ -193,7 +198,7 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
           quantity: Number(l.qty),
           sku: (l.sku as string | null) ?? null,
           brand_slug: (m.brand_slug as string | undefined) ?? (m.collection_slug as string | undefined) ?? null,
-          lens: l.lens_design ? { design_code: l.lens_design as string, material_code: (l.lens_material as string | null) ?? null, photo_code: (l.lens_photo as string | null) ?? null, ar_code: (l.lens_ar as string | null) ?? null } : null,
+          lens: l.lens_design ? { design_code: l.lens_design as string, material_code: (l.lens_material as string | null) ?? null, photo_code: (l.lens_photo as string | null) ?? null, ar_code: (l.lens_ar as string | null) ?? null, finish: parseLensFinish(l.lens_finish) } : null,
         };
       }),
     };

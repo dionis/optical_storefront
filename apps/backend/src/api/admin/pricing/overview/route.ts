@@ -2,7 +2,9 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { listEstablishments } from "../../../../lib/establishments";
-import { loadPricingOverview } from "../../../../lib/pricing-overview";
+import { loadPricingOverview, redactLensCosts } from "../../../../lib/pricing-overview";
+import { hasPrivilege } from "../../../../lib/staff-profile";
+import { getStaffScope } from "../../../../lib/staff-scope";
 
 /**
  * GET /admin/pricing/overview?store=<id|all>
@@ -21,6 +23,10 @@ import { loadPricingOverview } from "../../../../lib/pricing-overview";
  * not list for a non-admin role — the same deny-by-default that already guards
  * /admin/store-pricing and /admin/costing. Errors carry a `reason`; the panel
  * turns it into adm.err.pricing.<reason>.
+ *
+ * The lens cells' lab cost (`lenses.base[].cost_cents`) leaves only for a
+ * reader with «Ver costos» / «Gestionar costos» (admins implicitly); for anyone
+ * else it is removed here, on the server (`redactLensCosts`).
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const logger = req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
@@ -31,7 +37,11 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       res.status(404).json({ type: "not_found", reason: "store_not_found", message: "Store not found." });
       return;
     }
-    res.json(await loadPricingOverview(req.scope, wanted));
+    const overview = await loadPricingOverview(req.scope, wanted);
+    const actorId = req.auth_context?.actor_id;
+    const scope = actorId ? await getStaffScope(req.scope, actorId) : null;
+    const canSeeCosts = Boolean(scope && (hasPrivilege(scope, "costs.view") || hasPrivilege(scope, "costs.manage")));
+    res.json({ ...overview, lenses: redactLensCosts(overview.lenses, canSeeCosts) });
   } catch (error) {
     logger.error(`[pricing] overview failed: ${(error as Error).message}`);
     res.status(500).json({ type: "error", reason: "load_failed", message: "Could not load the pricing overview." });

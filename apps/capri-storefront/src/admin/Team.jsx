@@ -6,7 +6,7 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -147,6 +147,9 @@ function StorePicker({ member, stores, disabled, onSave }) {
  *  · Solo el dueño nombra o quita superadmins; nadie cambia su propio rol ni se
  *    borra a sí mismo. El panel solo ofrece lo que el backend aceptaría, pero la
  *    regla vive allí (lib/staff-roles.ts) y es la que manda.
+ *  · DESACTIVAR (HU-04) es "eliminar sin perder el historial": la persona deja
+ *    de entrar al instante (también con sesiones abiertas) y conserva rol y
+ *    perfil hasta que se le reactive. Mismos vetos que Eliminar.
  */
 export default function Team() {
   const { t, lang } = useLang();
@@ -222,6 +225,30 @@ export default function Team() {
       const r = await deleteAdmin(m.id);
       setTeam(r.team || []);
       toast({ tone: "success", title: t("adm.team.deleted", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
+  // Quién puede eliminar o desactivar a una fila: nunca al dueño ni a uno mismo; a un superadmin solo el dueño.
+  const canRemove = (m) => !m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin");
+
+  const toggleActive = async (m) => {
+    const active = Boolean(m.is_disabled);
+    if (!active) {
+      const ok = await confirm({
+        tone: "danger",
+        title: t("adm.team.deactivateConfirm", { email: m.email }),
+        message: t("adm.team.deactivateBody"),
+        confirmLabel: t("adm.team.deactivate"),
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      const r = await setActive(m.id, active);
+      setTeam(r.team || []);
+      toast({ tone: "success", title: t(active ? "adm.team.reactivated" : "adm.team.deactivated", { email: m.email }) });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -307,7 +334,7 @@ export default function Team() {
         <div className="adm-team-rows">
           {team.map((m) => (
             <div key={m.id} className="adm-team-item">
-            <div className={`adm-team-row ${m.is_super ? "super" : ""}`}>
+            <div className={`adm-team-row ${m.is_super ? "super" : ""}`} style={m.is_disabled ? { opacity: 0.72 } : undefined}>
               <span className="adm-team-avatar">{(m.first_name || m.email)[0].toUpperCase()}</span>
               <span className="adm-team-main">
                 <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email}</b>
@@ -316,6 +343,11 @@ export default function Team() {
               {m.seller_code && <span className="adm-team-tag code" title={t("adm.profile.f.seller_code")}>{m.seller_code}</span>}
               {m.is_super && <span className="adm-team-tag super"><Icon name="sparkles" size={12} /> {t("adm.team.super")}</span>}
               {m.id === meId && <span className="adm-team-tag me">{t("adm.team.you")}</span>}
+              {m.is_disabled && (
+                <span className="adm-team-tag temp" title={t("adm.team.inactiveSince", { date: shortDate(m.disabled_at, lang) })}>
+                  <Icon name="power" size={12} /> {t("adm.team.inactiveTag")}
+                </span>
+              )}
               {m.must_change_password && <span className="adm-team-tag temp">{t("adm.team.tempTag")}</span>}
               {m.role_legacy && <span className="adm-team-tag legacy" title={t("adm.team.roleLegacy")}>{t("adm.team.roleLegacyTag")}</span>}
               {canEditRole(m) ? (
@@ -339,7 +371,12 @@ export default function Team() {
               ) : m.role && !isAdminRole(m.role) && stores.length > 0 && (
                 <StorePicker member={m} stores={stores} disabled={busy || demo} onSave={(ids) => changeStores(m, ids)} />
               )}
-              {!m.is_super && m.id !== meId && (iAmOwner || m.role !== "superadmin") && (
+              {canRemove(m) && (
+                <button className={`btn-xs ${m.is_disabled ? "" : "warn"}`} disabled={busy || demo} onClick={() => toggleActive(m)}>
+                  <Icon name="power" size={12} /> {m.is_disabled ? t("adm.team.reactivate") : t("adm.team.deactivate")}
+                </button>
+              )}
+              {canRemove(m) && (
                 <button className="btn-xs warn" disabled={busy || demo} onClick={() => remove(m)}>
                   {t("adm.team.delete")}
                 </button>

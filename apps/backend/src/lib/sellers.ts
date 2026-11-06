@@ -397,12 +397,37 @@ export interface SourceStatRow {
   revenue: number;
 }
 
+/** Monthly goal progress of a seller (HU-40), dollars; `done` is the NET of the current month, like the commission. */
+export interface SellerGoal {
+  amount: number;
+  done: number;
+  left: number;
+  /** 0–100, capped at 100, one decimal. */
+  pct: number;
+}
+
+/**
+ * Pure: a seller's progress towards their monthly goal from this month's net
+ * in cents (sale_fact `total − tax`, the commission base — never the gross,
+ * so the goal and the commission move together). Null without a goal.
+ */
+export function goalProgress(amount: number | null | undefined, doneCents: number): SellerGoal | null {
+  if (amount == null || !Number.isFinite(Number(amount)) || Number(amount) <= 0) return null;
+  const goal = round2(Number(amount));
+  const done = round2(Math.max(0, Math.round(doneCents)) / 100);
+  return { amount: goal, done, left: round2(Math.max(0, goal - done)), pct: Math.min(100, round1((done / goal) * 100)) };
+}
+
 export interface SellerStatRow {
   id: string;
   code: string;
   name: string;
   commission_pct: number;
   active: boolean;
+  /** Panel user linked to the record (their profile holds the monthly goal); null for a referral-only seller. */
+  user_id: string | null;
+  /** Progress towards the monthly goal (HU-40); null without a goal or a user. Filled by the route, not here. */
+  goal: SellerGoal | null;
   orders: number;
   /** What the customers paid (tax and shipping included) — the sales figure. */
   revenue: number;
@@ -506,7 +531,7 @@ export function netRevenueOf(order: Pick<StatOrder, "total" | "tax_total" | "shi
  */
 export function groupSellerStats(
   orders: StatOrder[],
-  sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active">>,
+  sellers: Array<Pick<Seller, "id" | "code" | "name" | "commission_pct" | "active"> & { user_id?: string | null }>,
   profitByOrder: Map<string, number> | null = null
 ): { sellers: SellerStatRow[]; unattributed: { orders: number; revenue: number }; sources: SourceStatRow[] } {
   const byCode = new Map<string, SellerStatRow>();
@@ -519,6 +544,8 @@ export function groupSellerStats(
       name: s.name,
       commission_pct: s.commission_pct,
       active: s.active,
+      user_id: s.user_id ?? null,
+      goal: null,
       orders: 0,
       revenue: 0,
       net_revenue: 0,

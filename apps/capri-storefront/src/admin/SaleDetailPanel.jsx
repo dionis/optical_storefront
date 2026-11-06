@@ -309,12 +309,28 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     finally { setBusy(false); }
   };
   const collect = () => run(
-    () => collectPayment(s.id, [{ method_code: pay.method_code, amount: pay.amount, details: pay.details }]),
+    () => collectPayment(s.id, payRow()),
     () => { setPay({ method_code: "", amount: "", details: {} }); return t("adm.pos.sales.collected"); },
   );
   const deliver = async () => {
-    if (!(await confirm({ title: t("adm.pos.sales.deliverConfirm", { n: s.number }), message: t("adm.pos.sales.deliverBody") }))) return;
+    if (!(await confirm({ title: t("adm.pos.sales.deliverConfirm", { n: s.number }), message: t("adm.ops.deliver.body") }))) return;
     run(() => deliverSale(s.id), () => t("adm.pos.sales.delivered"));
+  };
+  // HU-32: the whole balance and the hand-over in one call (POST …/deliver with payments).
+  const payRow = () => [{ method_code: pay.method_code, amount: pay.amount, details: pay.details }];
+  const collectAndDeliver = async () => {
+    if (!(await confirm({ title: t("adm.ops.collectDeliver.confirm", { v: m(s.balance), n: s.number }), message: t("adm.ops.collectDeliver.hint") }))) return;
+    run(
+      () => deliverSale(s.id, payRow()),
+      () => { setPay({ method_code: "", amount: "", details: {} }); return t("adm.ops.collectDeliver.done"); },
+    );
+  };
+  // The footer shortcut: the balance as the amount and the collection form in view.
+  const collectRef = useRef(null);
+  const startCollectDeliver = () => {
+    setPay((p) => ({ ...p, amount: String(s.balance) }));
+    collectRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    collectRef.current?.querySelector("select")?.focus();
   };
   const doVoid = () => run(
     () => voidSale(s.id, voiding.reason, voiding.note),
@@ -348,6 +364,9 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
 
   const canCollect = s && s.status !== "voided" && s.balance > 0;
   const canDeliver = s && s.status !== "voided" && !s.delivered_at;
+  // One step for both (HU-32), only when the amount typed is exactly the balance.
+  const canCollectDeliver = canCollect && canDeliver;
+  const fullAmount = s ? Math.round((Number(pay.amount) || 0) * 100) === Math.round(s.balance * 100) : false;
   const canVoidBtn = s && s.status !== "voided";
 
   // Pedido web (sin venta de caja): cabecera, cliente, artículos, importes y cobros salen del pedido.
@@ -612,7 +631,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   <p className="sd-hint">{t("adm.sd.claims")}: {data.insurance_claims.map((c) => `${c.payer_name}: ${m(c.covered)} · ${t(`adm.pos.claims.status.${c.status}`)}`).join(" — ")}</p>
                 )}
                 {canCollect && (
-                  <div className="sd-collect adm-noprint">
+                  <div className="sd-collect adm-noprint" ref={collectRef}>
                     <h4 className="sd-card-head"><Icon name="plus" size={13} /> {t("adm.sd.collect.title")}</h4>
                     <div className="sd-collect-row">
                       <select value={pay.method_code} onChange={(e) => setPay((p) => ({ ...p, method_code: e.target.value, details: {} }))} aria-label={t("adm.pos.pay.method")} title={t("adm.pos.pay.method")}>
@@ -632,8 +651,13 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                       </div>
                     )}
                     <div className="sd-collect-row">
-                      <button type="button" className="btn-sm primary" disabled={busy || !pay.method_code || !Number(pay.amount)} onClick={collect}><Icon name="check" size={14} /> {t("adm.sd.collect.btn")}</button>
-                      <p className="sd-hint">{t("adm.sd.collect.hint")}</p>
+                      <button type="button" className={`btn-sm ${canCollectDeliver ? "" : "primary"}`} disabled={busy || !pay.method_code || !Number(pay.amount)} onClick={collect}><Icon name="check" size={14} /> {t("adm.sd.collect.btn")}</button>
+                      {canCollectDeliver && (
+                        <button type="button" className="btn-sm primary" disabled={busy || !pay.method_code || !fullAmount} title={!fullAmount ? t("adm.ops.collectDeliver.full", { v: m(s.balance) }) : undefined} onClick={collectAndDeliver}>
+                          <Icon name="hand" size={14} /> {t("adm.ops.collectDeliver")}
+                        </button>
+                      )}
+                      <p className="sd-hint">{canCollectDeliver ? t("adm.ops.collectDeliver.hint") : t("adm.sd.collect.hint")}</p>
                     </div>
                   </div>
                 )}
@@ -659,8 +683,11 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
         </div>
 
         <footer className="sd-foot adm-noprint">
+          {canCollectDeliver && !orderMode && (
+            <button type="button" className="btn-sm primary" disabled={busy} onClick={startCollectDeliver}><Icon name="hand" size={14} /> {t("adm.ops.collectDeliver")}</button>
+          )}
           {canDeliver && (
-            <button type="button" className="btn-sm primary" disabled={busy || s.balance > 0} title={s.balance > 0 ? t("adm.err.pos.balance_due") : undefined} onClick={deliver}><Icon name="hand" size={14} /> {t("adm.sd.act.deliver")}</button>
+            <button type="button" className={`btn-sm ${canCollectDeliver ? "" : "primary"}`} disabled={busy || s.balance > 0} title={s.balance > 0 ? t("adm.err.pos.balance_due") : undefined} onClick={deliver}><Icon name="hand" size={14} /> {t("adm.sd.act.deliver")}</button>
           )}
           {canVoidBtn && (
             <button type="button" className="btn-sm danger" disabled={busy} onClick={() => setVoiding((v) => ({ ...v, open: !v.open, reason: v.reason || s.void_reason || "" }))}>

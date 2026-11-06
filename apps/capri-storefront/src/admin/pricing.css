@@ -2,17 +2,75 @@
    Minimalista por pedido del dueño: nada de aire que no sirva — filas de una
    línea, campos del ancho del número que llevan y la matriz de lentes como una
    tabla densa que se edita en la propia celda. Tokens --adm-* y --st-* (tema de
-   tienda); modo oscuro heredado del armazón, sin un solo color a mano. */
+   tienda); modo oscuro heredado del armazón, sin un solo color a mano.
+
+   El panel es de VISTAS EN PESTAÑAS (.adm-subtabs del armazón arriba, .pp-seg
+   para el segundo nivel de los lentes): cada vista tiene que caber de una sola
+   mirada, así que aquí no hay márgenes verticales grandes y las listas cortas
+   van en dos columnas (.pp-two) en vez de una tras otra. */
 
 .pp { display: flex; flex-direction: column; gap: 8px; }
 .pp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pp-head h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
 .pp-scope { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
   background: var(--adm-accent-soft, var(--adm-surface-2)); color: var(--adm-accent-ink, var(--adm-navy)); border: 1px solid var(--adm-accent-line, var(--adm-line)); }
-.pp-intro { margin: 0 0 2px; font-size: 12px; color: var(--adm-muted); max-width: 86ch; }
+.pp-intro { margin: 0; font-size: 12px; color: var(--adm-muted); max-width: 86ch; }
+
+/* La línea de contexto de la vista activa: la frase a la izquierda, las
+   pastillas de resumen a la derecha. Antes esas pastillas estaban en la
+   cabecera de cada acordeón; sin ellas, cambiar de pestaña sería a ciegas. */
+.pp-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -2px 0 6px; }
+.pp-meta .acc-pills { justify-content: flex-end; }
+
+/* Barra de la vista: el selector de tipo a la izquierda y, con una tienda
+   elegida, el «% sobre el maestro» a la derecha — en la misma línea, que es
+   una línea menos antes de la tabla. */
+.pp-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.pp-bar .pp-row { padding: 0; border-top: 0; }
+/* Con algo a su izquierda (el selector de tipo), el «%» de la tienda se va al
+   otro extremo; solo, se queda a la izquierda como cualquier otra fila. */
+.pp-bar > .pp-row:not(:first-child) { margin-left: auto; }
+
+/* Segundo nivel: el tipo de diseño del lente. Control segmentado (no otra fila
+   de pestañas) para que se lea como subordinado a las pestañas de arriba. */
+.pp-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--adm-surface-2); border: 1px solid var(--adm-line); }
+.pp-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; cursor: pointer;
+  padding: 4px 11px; border-radius: 999px; font: 700 12px var(--adm-font); color: var(--adm-muted);
+  transition: background .15s var(--adm-ease), color .15s var(--adm-ease); }
+.pp-seg button:hover { color: var(--adm-ink); }
+.pp-seg button.on { background: var(--adm-surface); color: var(--adm-ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .14); }
+.pp-seg button:focus-visible { outline: 2px solid var(--adm-accent, var(--adm-blue)); outline-offset: 1px; }
+.pp-seg-n { font-size: 10.5px; font-weight: 800; color: var(--adm-muted); font-variant-numeric: tabular-nums; }
+.pp-seg button.on .pp-seg-n { color: var(--adm-accent-ink, var(--adm-navy)); }
+
+/* Tercer nivel: la gama del progresivo (texto del dueño, no copy). Solo sale
+   cuando hay más de una gama que elegir. */
+.pp-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 0 0 6px; }
+.pp-chips button { border: 1px solid var(--adm-line); background: var(--adm-surface); cursor: pointer;
+  padding: 2px 9px; border-radius: 999px; font: 700 11px var(--adm-font); color: var(--adm-muted); }
+.pp-chips button:hover { color: var(--adm-ink); border-color: var(--adm-accent, var(--adm-blue)); }
+.pp-chips button.on { background: var(--adm-accent-soft, var(--adm-surface-2)); color: var(--adm-accent-ink, var(--adm-navy)); border-color: transparent; }
+.pp-chips button:focus-visible { outline: 2px solid var(--adm-accent, var(--adm-blue)); outline-offset: 1px; }
+
+/* Dos columnas cuando las dos listas son estrechas (comisiones + costos,
+   fotocromáticos + antirreflejos): caben enteras sin bajar. */
+.pp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; align-items: start; }
+.pp-pane { min-width: 0; }
+/* Columna con más de un bloque: separación igual que entre columnas. */
+.pp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pp-pane > h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--adm-line); font-size: 12.5px; font-weight: 800; color: var(--adm-ink); }
+.pp-pane > h3 svg { color: var(--adm-muted); flex: 0 0 auto; }
+.pp-pane-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-pane .pp-block:first-child { padding-top: 0; }
+/* Subgrupo dentro de una columna (los antirreflejos por grupo de diseño). */
+.pp-sub + .pp-sub { margin-top: 6px; }
+.pp-sub > h4 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-muted); }
 
 /* Una fila de edición: etiqueta, control(es) y el botón. Nunca ocupa dos líneas en escritorio. */
 .pp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.pp-row.tight { padding: 0; }
 .pp-row + .pp-row { border-top: 1px dashed var(--adm-line-2); }
 .pp-row > label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--adm-ink); min-width: 0; }
 .pp-row .pp-now { font-size: 11.5px; color: var(--adm-muted); font-variant-numeric: tabular-nums; }
@@ -36,27 +94,92 @@
 .pp-badge.inherit { background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); border-color: transparent; }
 .pp-badge.off { background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); border-color: transparent; }
 
+/* ── Costo del proveedor (vista Monturas) ────────────────────────────────
+   El costo va SIEMPRE junto a su precio y al margen que sale de los dos, y lo
+   que falta se ve antes de buscarlo: la línea de cobertura arriba y la fila
+   marcada abajo. Nada de esto inventa espacio: todo cabe en una línea. */
+
+/* Rótulo corto delante de un campo en una fila (costo / precio exacto). */
+.pp-lbl { font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; }
+
+/* El costo editable: valor, pastilla «Propio» y los dos gestos, en una línea. */
+.pp-cost { display: inline-flex; align-items: center; gap: 5px; }
+.pp-cost-v { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pp-cost-v.own { color: var(--adm-accent-ink, var(--adm-navy)); }
+.pp-cost .pp-num { width: 8ch; }
+
+/* Margen: el mismo criterio de tonos que las pastillas del acordeón por marca. */
+.pp-mg { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pp-mg.good { color: var(--adm-green-dark, #14663f); }
+.pp-mg.warn { color: var(--adm-amber-dark, #92400e); }
+.pp-mg.bad { color: var(--adm-red-dark, #991b1b); }
+
+/* «Sin costo»: no es un dato neutro, es la tarea pendiente. */
+.pp-nocost { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  background: var(--adm-red-soft, var(--adm-surface-2)); color: var(--adm-red-dark, #991b1b); }
+
+/* Cobertura de costos: una línea, con el atajo para filtrar los que faltan. */
+.pp-cover { margin: 0 0 6px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: var(--adm-radius-sm, 8px);
+  border: 1px solid var(--adm-line); background: var(--adm-surface-2); color: var(--adm-muted); }
+.pp-cover.ok { color: var(--adm-green-dark, #14663f); border-color: transparent; background: var(--adm-green-soft, var(--adm-surface-2)); }
+.pp-cover.bad { color: var(--adm-red-dark, #991b1b); border-color: transparent; background: var(--adm-red-soft, var(--adm-surface-2)); }
+
+/* La fila de un modelo sin costo, marcada en la tabla. */
+tr.pp-missing > td:first-child { box-shadow: inset 3px 0 0 var(--adm-red-dark, #991b1b); }
+.pp-sku { font: 600 10.5px var(--adm-mono, ui-monospace, monospace); color: var(--adm-muted); }
+
 /* Buscador de modelo + resultados como pastillas en una sola tira. */
 .pp-search { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); max-width: 420px; }
+/* El de dentro de la barra de una tabla no se come la fila entera. */
+.pp-search.compact { max-width: 220px; padding: 1px 8px; }
+.pp-search.compact input { font-size: 11.5px; }
 .pp-search input { border: 0; background: none; outline: none; font-size: 12.5px; color: var(--adm-ink); width: 100%; }
 .pp-matches { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 0; padding: 0; list-style: none; }
 .pp-matches li { display: inline-flex; }
 
 /* Matriz de lentes: cabecera fija, celdas editables, cero relleno inútil. */
 .pp-grid-wrap { overflow: auto; max-height: 56vh; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 8px); }
+/* La matriz de lentes, ya partida por tipo de diseño, es la tabla alta de la
+   pantalla: se le da todo el hueco que queda bajo las pestañas para que el
+   scroll (si queda) sea de la tabla y nunca de la página. */
+.pp-grid-wrap.tall { max-height: calc(100vh - 290px); }
+/* Título de la vista dentro de la barra, al lado del selector de tipo. */
+.pp-bar-t { display: inline-flex; align-items: center; gap: 5px; margin: 0; white-space: nowrap;
+  font-size: 11px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-muted); }
 table.pp-grid { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12px; }
 table.pp-grid th, table.pp-grid td { padding: 3px 6px; border-bottom: 1px solid var(--adm-line-2); white-space: nowrap; }
 table.pp-grid thead th { position: sticky; top: 0; z-index: 2; background: var(--adm-surface-2); font-size: 11px; font-weight: 800; color: var(--adm-muted); text-align: right; }
 table.pp-grid thead th:first-child { text-align: left; left: 0; z-index: 3; }
 table.pp-grid tbody th { position: sticky; left: 0; z-index: 1; background: var(--adm-surface); text-align: left; font-weight: 700; font-size: 11.5px; }
+/* La columna del nombre se queda en lo que ocupa su texto y el hueco sobrante
+   se reparte entre las de precio: así no queda un agujero entre el nombre y la
+   primera columna de números. */
+table.pp-grid thead th:first-child, table.pp-grid tbody th { width: 1%; }
 table.pp-grid td { text-align: right; }
 table.pp-grid tbody tr:hover td { background: var(--adm-surface-2); }
-.pp-cell { width: 8ch; text-align: right; font-variant-numeric: tabular-nums; padding: 2px 5px; font-size: 12px;
-  border: 1px solid transparent; border-radius: 5px; background: none; color: var(--adm-ink); }
+/* Sin las flechas del campo numérico: se comen el ancho y recortan el precio,
+   y en una matriz que se repasa a teclado no las usa nadie. */
+.pp-cell { width: 9ch; text-align: right; font-variant-numeric: tabular-nums; padding: 2px 5px; font-size: 12px;
+  border: 1px solid transparent; border-radius: 5px; background: none; color: var(--adm-ink);
+  appearance: textfield; -moz-appearance: textfield; }
+.pp-cell::-webkit-outer-spin-button, .pp-cell::-webkit-inner-spin-button { appearance: none; -webkit-appearance: none; margin: 0; }
 .pp-cell:hover { border-color: var(--adm-line); }
 .pp-cell:focus-visible { outline: none; border-color: var(--adm-accent, var(--adm-blue)); background: var(--adm-surface); }
 .pp-cell.own { font-weight: 800; color: var(--adm-accent-ink, var(--adm-navy)); background: var(--adm-accent-soft, transparent); border-color: transparent; }
 .pp-cell.na { color: var(--adm-muted); }
+/* Acabado (stock / tallado digital): dos columnas por material en visión
+   sencilla y bifocal. La primera de cada par lleva una raya a la izquierda
+   para que se lea el par; debajo del precio, para quien ve costos, el costo
+   del laboratorio en una casilla más chica y apagada. */
+table.pp-grid th.pp-finish.stock, table.pp-grid td.pp-finish-td.stock { border-left: 1px solid var(--adm-line); }
+.pp-finish-tag { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--adm-muted); }
+th.pp-finish.digital .pp-finish-tag { color: var(--adm-accent-ink, var(--adm-navy)); }
+.pp-cost { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 1px; font-size: 9.5px; font-weight: 700; color: var(--adm-muted); text-transform: uppercase; letter-spacing: .02em; }
+.pp-cell.cost { width: 7.5ch; font-size: 11px; color: var(--adm-muted); background: var(--adm-surface-2); border-color: transparent; }
+.pp-cell.cost:focus-visible { color: var(--adm-ink); }
+.pp-cell:disabled { opacity: .55; cursor: not-allowed; }
 .pp-tier { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 800;
   background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); }
 .pp-use { display: block; font-size: 10.5px; font-weight: 500; color: var(--adm-muted); }
@@ -77,12 +200,24 @@ table.pp-grid tbody tr:hover td { background: var(--adm-surface-2); }
 .pp-empty { font-size: 12px; color: var(--adm-muted); padding: 8px 0; }
 .pp-err { font-size: 12px; color: var(--adm-red-dark, #991b1b); }
 
+@media (max-width: 1100px) {
+  /* Dos columnas solo cuando de verdad caben: por debajo, una encima de otra. */
+  .pp-two { grid-template-columns: 1fr; }
+}
 @media (max-width: 720px) {
   .pp-row { align-items: stretch; }
   .pp-search { max-width: none; }
   .pp-grid-wrap { max-height: 50vh; }
+  .pp-grid-wrap.tall { max-height: 56vh; }
+  .pp-bar { align-items: flex-start; }
+  .pp-seg { overflow-x: auto; max-width: 100%; }
+  .pp-meta .acc-pills { justify-content: flex-start; }
 }
 @media print {
-  .pp-search, .pp-matches, .pp-switch, .pp-row button { display: none; }
-  .pp-grid-wrap { max-height: none; overflow: visible; }
+  .pp-search, .pp-matches, .pp-switch, .pp-row button, .pp-seg, .pp-chips { display: none; }
+  /* En papel el costo es un número, no un campo: lo que se imprime es la
+     hoja que repasa la contabilidad, no los gestos para cambiarla. */
+  .pp-cost input, .pp-cost button, .pp-cover button { display: none; }
+  .pp-grid-wrap, .pp-grid-wrap.tall { max-height: none; overflow: visible; }
+  .pp-two { grid-template-columns: 1fr; }
 }

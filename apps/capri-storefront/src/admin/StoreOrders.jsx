@@ -6,6 +6,23 @@
 // ETAPA del pedido (confirmado → laboratorio → preparado → en camino →
 // entregado), con «Avanzar» en la fila y la ficha (SaleDetailPanel) al pulsar.
 //
+// QUIÉN VE EL DINERO (privacidad, no estética):
+//   · Costo, ganancia y margen: solo si el servidor los manda (`access.profit`
+//     de /admin/sales-analytics/sales). Si no, la columna NO existe — ni
+//     cabecera ni celda: un «Costo: oculto» sigue siendo un dato de costo
+//     delante de quien no le corresponde.
+//   · Comisión: `access.commission` (un vendedor ve la suya).
+//   · Importe de las tarjetas por etapa (StageStrip): solo el administrador
+//     (`me.is_admin === true`, y hasta que `me` cargue, NADIE) — por regla del
+//     dueño, al resto solo la cantidad y el porcentaje. El servidor además
+//     manda `total: null` en las filas del tablero a quien no administra
+//     (boardAccessFor, lib/order-board.ts): el importe no viaja, no solo no
+//     se pinta.
+//   · Atrasados (HU-33): pedidos sin entregar ni anular cuya fecha prometida
+//     (`promised_on` del tablero, la del recibo) ya pasó, deban o no saldo.
+//     Chip «Atrasados» en la tira y pastilla «N d» en la fila. Se calcula
+//     aquí con fechas locales (lateness.js), igual que Cobros pendientes.
+//
 // Datos — dos fuentes, UNA lista:
 //   GET /admin/sales-analytics/sales   el dinero y la descripción de cada venta
 //                                      (cost/fee/profit null si no se pueden ver);
@@ -20,6 +37,7 @@
 //   seller  código de vendedor (seller_code, p. ej. "DAN")   → chip «Vendedor: DAN ×»
 //   stage   "pending" (confirmado + laboratorio) | confirmed | in_lab | shipped
 //           | in_transit | delivered | voided                 → chip «Etapa: … ×»
+//   late    "1" → solo los atrasados frente a la fecha prometida → chip «Atrasados ×»
 //   q       texto libre: nº de venta, nº de pedido, cliente o teléfono → chip «Buscar: … ×»
 //   period  uno de PERIODS (today…year) — o from/to (YYYY-MM-DD) para «Rango»
 //   store   "all" | "web" | id de establecimiento → fija el filtro GLOBAL de tienda
@@ -41,17 +59,33 @@ import SortTh from "./SortTh.jsx";
 import { PERIODS, applyPeriodParams, usePeriodFilter } from "./periodStore.js";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
-import { StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
+import { StageBar, StageBarCard, StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
+import { InfoTip } from "./ui.jsx";
+import { daysLate } from "./lateness.js";
 import "./exec.css";
 
 /** Los períodos del panel (periodStore.js); se re-exportan por compatibilidad (SellerPanel). */
 export { PERIODS };
-/** Pages of 100 sales read for one list: beyond it the panel says `truncated`. */
+/** Pages of sales read for one list: beyond it the panel says `truncated`. */
 const MAX_PAGES = 10;
+/**
+ * Filas por página que se piden. El backend acepta `limit` (hasta 200); una
+ * versión que todavía no lo entienda devuelve sus 100 de siempre, y el tamaño
+ * REAL de página se deduce de la primera respuesta, así que pedir 200 nunca
+ * rompe nada: solo parte en dos el número de viajes cuando ya esté desplegado.
+ */
+const PAGE_LIMIT = 200;
+/**
+ * Páginas que se piden a la vez cuando la respuesta no trae `total` y hay que
+ * descubrir el final a tientas. Antes se pedía una tras otra (hasta 10 viajes
+ * encadenados, ~0,5 s cada uno = varios segundos de espera en el Ejecutivo);
+ * ahora van en lotes paralelos y se corta en cuanto una dice `has_more: false`.
+ */
+const PAGE_BATCH = 4;
 /** Chips de filtro por etapa, las pendientes primero. */
 export const STAGE_FILTERS = ["pending", "shipped", "in_transit", "delivered", "voided"];
 /** Claves de `params` que esta lista entiende (ver el contrato de arriba). */
-export const PARAM_KEYS = ["seller", "stage", "q", "period", "from", "to", "store", "order"];
+export const PARAM_KEYS = ["seller", "stage", "q", "late", "period", "from", "to", "store", "order"];
 export const paramsKey = (p) => JSON.stringify([...PARAM_KEYS, "_n"].map((k) => (p && p[k] != null ? String(p[k]) : "")));
 const STUCK_DAYS = 7;
 
@@ -70,7 +104,9 @@ const DAY_MS = 86400_000;
 const LIST_TTL = 60_000;
 /** Lo que pide la lista para un rango y una tienda (también lo usa AdminShell.prefetchTab). */
 export function storeOrdersQueries({ from, to, storeId }) {
-  const q = { from, to, page: 0 };
+  // Mismo `limit` que useStoreSales: si no coincidiera, lo que se precarga
+  // quedaría en otra clave de caché y la lista lo pediría otra vez.
+  const q = { from, to, page: 0, limit: PAGE_LIMIT };
   if (storeId && storeId !== "all") q.stores = storeId;
   const b = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
   if (storeId && storeId !== "all") b.store = storeId;
@@ -105,6 +141,13 @@ export function salesTotals(rows) {
  * Las ventas del período para la(s) tienda(s): todas las páginas (hasta
  * MAX_PAGES). `storeId`: "all" | "web" | id de establecimiento. `reload()`
  * vuelve a leer (tras cobrar, entregar o anular desde la ficha).
+ *
+ * Las páginas se piden EN PARALELO, no una tras otra: la primera dice si hay
+ * más, cuánto mide una página y —cuando el backend lo manda— el `total`, y con
+ * eso el resto se lanza de una vez. Paginar en secuencia costaba un viaje por
+ * página (hasta diez encadenados), y el Ejecutivo monta este hook antes de
+ * poder pintar nada. El orden de las filas es el del servidor: cada respuesta
+ * se guarda en el hueco de SU número de página, no por orden de llegada.
  */
 export function useStoreSales({ from, to, storeId }, enabled = true) {
   const [data, setData] = useState({ rows: [], access: null, state: "idle", truncated: false });
@@ -114,20 +157,56 @@ export function useStoreSales({ from, to, storeId }, enabled = true) {
     if (!enabled || demo || !from || !to || from > to) { setData((d) => ({ ...d, state: demo ? "demo" : "idle" })); return undefined; }
     let on = true;
     setData((d) => ({ ...d, state: "loading" }));
+    const getPage = (page) => {
+      const q = { from, to, page, limit: PAGE_LIMIT };
+      if (storeId && storeId !== "all") q.stores = storeId;
+      return adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
+    };
     (async () => {
-      const rows = [];
-      let access = null;
+      const first = await getPage(0);
+      // `on` se comprueba antes de cada tanda y antes de escribir: una
+      // respuesta que llega tras desmontar no toca el estado ni pide más.
+      if (!on) return;
+      const pages = [first.sales || []];
+      let access = first.access || null;
       let truncated = false;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const q = { from, to, page };
-        if (storeId && storeId !== "all") q.stores = storeId;
-        const r = await adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
-        rows.push(...(r.sales || []));
-        access = r.access || access;
-        if (!r.has_more) break;
-        if (page === MAX_PAGES - 1) truncated = true;
+      const take = (r, page) => { pages[page] = r.sales || []; access = r.access || access; };
+      if (first.has_more) {
+        // Tamaño real de página: si el backend todavía ignora `limit`, esto son
+        // sus 100 y las cuentas siguen cuadrando.
+        const size = (first.sales || []).length || PAGE_LIMIT;
+        const total = Number(first.total);
+        if (Number.isFinite(total) && total > 0) {
+          // Con `total` se sabe cuántas páginas faltan: todas juntas, un viaje.
+          const want = Math.ceil(total / size);
+          const nums = [];
+          for (let page = 1; page < Math.min(want, MAX_PAGES); page++) nums.push(page);
+          const res = await Promise.all(nums.map(getPage));
+          if (!on) return;
+          nums.forEach((page, i) => take(res[i], page));
+          truncated = want > MAX_PAGES;
+        } else {
+          // Sin `total`: lotes de PAGE_BATCH en paralelo hasta que una página
+          // diga que ya no hay más. Lo pedido de más tras esa página se tira.
+          let next = 1;
+          let more = true;
+          while (more && next < MAX_PAGES) {
+            const nums = [];
+            for (let page = next; page < Math.min(next + PAGE_BATCH, MAX_PAGES); page++) nums.push(page);
+            const res = await Promise.all(nums.map(getPage));
+            if (!on) return;
+            for (let i = 0; i < nums.length; i++) {
+              take(res[i], nums[i]);
+              if (!res[i].has_more) { more = false; break; }
+            }
+            next += nums.length;
+            // Igual que antes: se avisa solo si tras la última página permitida
+            // el servidor seguía teniendo ventas.
+            if (more && next >= MAX_PAGES) truncated = true;
+          }
+        }
       }
-      if (on) setData({ rows, access, state: "ok", truncated });
+      if (on) setData({ rows: pages.flat(), access, state: "ok", truncated });
     })().catch(() => { if (on) setData({ rows: [], access: null, state: "error", truncated: false }); });
     return () => { on = false; };
   }, [from, to, storeId, enabled, demo, tick]);
@@ -192,6 +271,17 @@ export function matchesStageFilter(stage, f) {
 const isPendingStage = (s) => s === "confirmed" || s === "in_lab" || s === "payment_pending";
 /** Lleva más de STUCK_DAYS días sin salir: pendiente y vendida hace más de una semana. */
 export const isStuck = (r, stage, now = Date.now()) => isPendingStage(stage) && now - new Date(r.sold_at).getTime() > STUCK_DAYS * DAY_MS;
+
+/**
+ * Días de atraso de la fila frente a lo prometido (HU-33): el pedido sigue sin
+ * entregar (ni anular, ni fuera de la ventana del tablero) y su `promised_on`
+ * ya pasó. `null` = no está atrasado. Pure.
+ */
+export function lateDaysOf(r, board, stage, now = Date.now()) {
+  if (!board || !stage || stage === "delivered" || stage === "voided" || r.status === "voided") return null;
+  return daysLate(board.promised_on, now);
+}
+export const isLate = (r, board, stage, now = Date.now()) => lateDaysOf(r, board, stage, now) != null;
 
 const costOf = (r) => (r.cost == null ? null : (Number(r.cost) || 0) + (Number(r.fee) || 0));
 
@@ -307,15 +397,23 @@ export function salesReportSpec({ rows, totals, access, t, lang, storeLabel, sto
   const store = scope?.store && !scope.isAll && !scope.isWeb ? scope.store : null;
   const scopeName = store ? store.name || store.code : scope?.isWeb ? t("adm.rpt.web") : t("adm.rpt.allStores");
   const m = (v) => fmtMoney(v, "usd", lang);
+  // Manda `access` (lo que el servidor dijo), y solo a falta de él los totales
+  // calculados aquí: si alguna vez llegara una cifra de costo a quien no puede
+  // verla, el PDF tampoco la imprimiría — la pantalla y el papel enseñan lo mismo.
+  const showEcon = access ? access.profit === true : totals.hasEcon;
+  const showCommission = access ? access.commission === true : totals.hasCommission;
+  // `key` identifica el CONCEPTO de cada tarjeta (ReportDoc.specForAudience lo
+  // usa para decidir qué sale en la versión para compartir). Nunca por el
+  // rótulo traducido: cambiaría con el idioma y un costo se colaría en inglés.
   const baseKpis = kpis.length ? kpis : [
-    { label: t("adm.ex.so.price"), value: m(totals.total), raw: totals.total, sub: t("adm.ex.so.rows", { n: totals.count }) },
-    { label: t("adm.ex.so.paid"), value: m(totals.paid), raw: totals.paid },
-    { label: t("adm.ex.so.balance"), value: m(totals.balance), raw: totals.balance, neg: totals.balance > 0 },
-    totals.discount > 0 ? { label: t("adm.ex.so.discount"), value: m(totals.discount), raw: totals.discount } : null,
-    totals.hasEcon ? { label: t("adm.ex.so.cost"), value: m(totals.cost), raw: totals.cost } : null,
-    totals.hasEcon ? { label: t("adm.ex.so.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
-    totals.hasEcon && totals.margin_pct != null ? { label: t("adm.ex.so.margin"), value: pct(totals.margin_pct), raw: totals.margin_pct } : null,
-    totals.hasCommission ? { label: t("adm.ex.so.commission"), value: m(totals.commission), raw: totals.commission } : null,
+    { key: "sales", label: t("adm.ex.so.price"), value: m(totals.total), raw: totals.total, sub: t("adm.ex.so.rows", { n: totals.count }) },
+    { key: "paid", label: t("adm.ex.so.paid"), value: m(totals.paid), raw: totals.paid },
+    { key: "balance", label: t("adm.ex.so.balance"), value: m(totals.balance), raw: totals.balance, neg: totals.balance > 0 },
+    totals.discount > 0 ? { key: "discount", label: t("adm.ex.so.discount"), value: m(totals.discount), raw: totals.discount } : null,
+    showEcon && totals.hasEcon ? { key: "cost", label: t("adm.ex.so.cost"), value: m(totals.cost), raw: totals.cost } : null,
+    showEcon && totals.hasEcon ? { key: "profit", label: t("adm.ex.so.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
+    showEcon && totals.hasEcon && totals.margin_pct != null ? { key: "margin", label: t("adm.ex.so.margin"), value: pct(totals.margin_pct), raw: totals.margin_pct } : null,
+    showCommission && totals.hasCommission ? { key: "commission", label: t("adm.ex.so.commission"), value: m(totals.commission), raw: totals.commission } : null,
   ];
   return {
     title: title || t("adm.rpt.salesTitle", { store: scopeName }),
@@ -358,39 +456,54 @@ const matchesQuery = (r, q, t) => {
  */
 export function useListFilters(params) {
   const key = paramsKey(params);
-  const fromParams = (p) => ({ seller: p?.seller ? String(p.seller).toUpperCase() : "", stage: p?.stage && (STAGE_FILTERS.includes(p.stage) || STAGE_BY_KEY[p.stage]) ? p.stage : "", q: p?.q ? String(p.q) : "" });
+  const fromParams = (p) => ({ seller: p?.seller ? String(p.seller).toUpperCase() : "", stage: p?.stage && (STAGE_FILTERS.includes(p.stage) || STAGE_BY_KEY[p.stage]) ? p.stage : "", q: p?.q ? String(p.q) : "", late: p?.late === true || p?.late === "1" || p?.late === 1 });
   const [f, setF] = useState(() => fromParams(params));
   useEffect(() => { setF(fromParams(params)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = useCallback((k, v) => setF((x) => ({ ...x, [k]: v })), []);
-  const clear = useCallback(() => setF({ seller: "", stage: "", q: "" }), []);
-  return { ...f, set, clear, active: Boolean(f.seller || f.stage || f.q) };
+  const clear = useCallback(() => setF({ seller: "", stage: "", q: "", late: false }), []);
+  return { ...f, set, clear, active: Boolean(f.seller || f.stage || f.q || f.late) };
 }
 
 /**
- * La tira de etapas: StageBar con las cinco etapas (cuántas y cuánto suman,
- * pulsar filtra), chips por grupo (pendientes primero), la línea de alertas
- * («N llevan más de 7 días sin salir») y los filtros activos como chips quitables.
+ * La tira de etapas: StageBar con las cinco etapas (cuántas y, SOLO para el
+ * administrador, cuánto suman), chips por grupo (pendientes primero), la línea
+ * de alertas («N llevan más de 7 días sin salir») y los filtros activos como
+ * chips quitables.
+ *
+ * Regla del dueño: en los pedidos por etapa, a todo el mundo salvo el
+ * administrador solo le sale la CANTIDAD y el porcentaje — «ese valor monetario
+ * solo concierne a super admin». Por eso para quien no administra la tarjeta se
+ * pinta sin importes y SIN el menú de exportación, que se llevaría el dinero
+ * (StageBar.jsx: la hoja de StageBarCard siempre trae la columna «Importe»).
+ * «Administrador» es `me.is_admin === true`, nada más: mientras `me` carga (o
+ * si nunca llega) se pinta la versión sin dinero — cerrada por defecto, no
+ * abierta hasta que alguien diga lo contrario.
  */
-export function StageStrip({ rows, byOrder, stages, filters, compact = false }) {
+export function StageStrip({ rows, byOrder, stages, filters, compact = false, me = null }) {
   const { t, lang } = useLang();
   const m = (v) => fmtMoney(v, "usd", lang);
+  const isAdmin = me?.is_admin === true;
   const stats = useMemo(() => {
     const by = Object.fromEntries([...STAGES.map((s) => s.key), "payment_pending", "voided", "none"].map((k) => [k, { n: 0, v: 0 }]));
     let stuck = 0;
+    let late = 0;
     const now = Date.now();
     for (const r of rows) {
       const st = stageOfRow(r, byOrder) || "none";
       by[st].n += 1;
       by[st].v += Number(r.total) || 0;
       if (isStuck(r, st, now)) stuck += 1;
+      if (isLate(r, byOrder?.get(r.order_id), st, now)) late += 1;
     }
     const group = (keys) => keys.reduce((acc, k) => ({ n: acc.n + by[k].n, v: acc.v + by[k].v }), { n: 0, v: 0 });
-    return { by, stuck, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
+    return { by, stuck, late, groups: { pending: group(["confirmed", "in_lab", "payment_pending"]), shipped: by.shipped, in_transit: by.in_transit, delivered: by.delivered, voided: by.voided } };
   }, [rows, byOrder]);
-  const tiles = STAGES.map((s) => ({ key: s.key, label: t(s.label), icon: STAGE_ICON[s.key], count: stats.by[s.key].n, amount: stats.by[s.key].v }));
+  // Sin `amount` para quien no administra: así no hay importe que pintar ni que
+  // exportar, en vez de mandar un 0 que se leería como «no se vendió nada».
+  const tiles = STAGES.map((s) => ({ key: s.key, label: t(s.label), icon: STAGE_ICON[s.key], count: stats.by[s.key].n, ...(isAdmin ? { amount: stats.by[s.key].v } : {}) }));
   const pick = (key) => filters.set("stage", filters.stage === key ? "" : key);
   const chip = (key, label, n, v) => (
-    <button key={key} type="button" className={`so-chip ${filters.stage === key ? "on" : ""} ${key}`} aria-pressed={filters.stage === key} onClick={() => pick(key)} title={v != null ? m(v) : undefined}>
+    <button key={key} type="button" className={`so-chip ${filters.stage === key ? "on" : ""} ${key}`} aria-pressed={filters.stage === key} onClick={() => pick(key)} title={isAdmin && v != null ? m(v) : undefined}>
       <Icon name={STAGE_ICON[key] || "lab"} size={12} />{label}<b>{n}</b>
     </button>
   );
@@ -398,10 +511,24 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
   if (filters.seller) el.push({ k: "seller", label: t("adm.ex.flt.seller"), value: filters.seller });
   if (filters.stage) el.push({ k: "stage", label: t("adm.ex.flt.stage"), value: stageLabel(filters.stage, t) });
   if (filters.q) el.push({ k: "q", label: t("adm.ex.flt.q"), value: filters.q });
+  if (filters.late) el.push({ k: "late", label: t("adm.so.late"), value: t("adm.so.flt.lateOn"), off: false });
   return (
     <div className={`so-strip ${compact ? "compact" : ""}`}>
-      <StageBarCard icon="layers" title={t("adm.ex.stg.title")} hint={t("adm.ex.stg.hint")} name="etapas" className="so-stagebar"
-        stages={tiles} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+      {isAdmin ? (
+        <StageBarCard icon="layers" title={t("adm.ex.stg.title")} hint={t("adm.ex.stg.hint")} name="etapas" className="so-stagebar"
+          stages={tiles} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+      ) : (
+        /* La misma tarjeta, pero sin importes y sin ExportMenu: su hoja de
+           cálculo lleva la columna «Importe» y ese dinero solo lo ve el
+           administrador. Mismas clases para que se vea igual. */
+        <div className="adm-card so-stagebar">
+          <div className="adm-card-head">
+            <h3><Icon name="layers" size={16} />{t("adm.ex.stg.title")}</h3>
+            <span className="adm-card-tools"><InfoTip text={t("adm.so.stgCountsOnly")} title={t("adm.ex.stg.title")} /></span>
+          </div>
+          <StageBar stages={tiles} showAmount={false} lang={lang} active={filters.stage} onPick={(s) => pick(s.key)} emptyText={t("adm.ex.tr.empty")} />
+        </div>
+      )}
       <div className="so-chips adm-noprint" role="group" aria-label={t("adm.ex.flt.stage")}>
         <button type="button" className={`so-chip all ${!filters.stage ? "on" : ""}`} aria-pressed={!filters.stage} onClick={() => filters.set("stage", "")}>{t("adm.ex.stg.all")}<b>{rows.length}</b></button>
         {chip("pending", t("adm.ex.stg.pending"), stats.groups.pending.n, stats.groups.pending.v)}
@@ -409,6 +536,11 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
         {chip("in_transit", t(STAGE_BY_KEY.in_transit.label), stats.groups.in_transit.n, stats.groups.in_transit.v)}
         {chip("delivered", t(STAGE_BY_KEY.delivered.label), stats.groups.delivered.n, stats.groups.delivered.v)}
         {chip("voided", t("adm.ex.stg.voided"), stats.groups.voided.n, stats.groups.voided.v)}
+        {/* Atrasados (HU-33): un interruptor aparte de la etapa — se combina con
+            ella («Pendientes» + «Atrasados» = los que urgen). Mismo chip. */}
+        <button type="button" className={`so-chip late ${filters.late ? "on" : ""}`} aria-pressed={filters.late} onClick={() => filters.set("late", !filters.late)} title={t("adm.so.lateHint")}>
+          <Icon name="alert" size={12} />{t("adm.so.late")}<b>{stats.late}</b>
+        </button>
         <span className="so-search">
           <Icon name="search" size={13} />
           <input value={filters.q} onChange={(e) => filters.set("q", e.target.value)} placeholder={t("adm.ex.flt.search")} aria-label={t("adm.ex.flt.q")} />
@@ -418,6 +550,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
         {stats.stuck > 0
           ? <button type="button" className="so-alert crit" onClick={() => filters.set("stage", "pending")}><Icon name="alert" size={13} />{t("adm.ex.stg.stuck", { n: stats.stuck })}<Icon name="arrowRight" size={12} /></button>
           : rows.length > 0 && stages.state === "ok" && <span className="so-alert ok"><Icon name="checkCircle" size={13} />{t("adm.ex.stg.allClear")}</span>}
+        {stats.late > 0 && !filters.late && <button type="button" className="so-alert warn" onClick={() => filters.set("late", true)}><Icon name="calendar" size={13} />{t("adm.so.lateAlert", { n: stats.late })}<Icon name="arrowRight" size={12} /></button>}
         {stages.state === "ok" && stages.truncated && <span className="so-alert info"><Icon name="info" size={13} />{t("adm.ex.stg.boardTruncated", { n: stages.scanLimit })}</span>}
         {stages.state === "error" && <span className="so-alert warn"><Icon name="alert" size={13} />{t("adm.ex.stg.boardFailed")}</span>}
         {el.length > 0 && (
@@ -425,7 +558,7 @@ export function StageStrip({ rows, byOrder, stages, filters, compact = false }) 
             {el.map((x) => (
               <span key={x.k} className="so-flt">
                 <small>{x.label}:</small> <b>{x.value}</b>
-                <button type="button" onClick={() => filters.set(x.k, "")} title={t("adm.ex.flt.clear")} aria-label={`${t("adm.ex.flt.clear")}: ${x.label} ${x.value}`}><Icon name="close" size={11} /></button>
+                <button type="button" onClick={() => filters.set(x.k, x.off === undefined ? "" : x.off)} title={t("adm.ex.flt.clear")} aria-label={`${t("adm.ex.flt.clear")}: ${x.label} ${x.value}`}><Icon name="close" size={11} /></button>
               </span>
             ))}
             {el.length > 1 && <button type="button" className="so-flt-clear" onClick={filters.clear}>{t("adm.ex.flt.clearAll")}</button>}
@@ -500,10 +633,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               <SortTh col="lens" sort={sorted.sort} onSort={sorted.toggle} className="so-items">{t("adm.rpt.col.lens")}</SortTh>
               {th("total", t("adm.ex.so.price"), "r")}
               {th("discount", t("adm.ex.so.discount"), "r")}
-              {th("cost", t("adm.ex.so.cost"), "r")}
+              {showEcon && th("cost", t("adm.ex.so.cost"), "r")}
               {th("commission", t("adm.ex.so.commission"), "r")}
-              {th("profit", t("adm.ex.so.profit"), "r")}
-              {th("margin_pct", t("adm.ex.so.margin"), "r")}
+              {showEcon && th("profit", t("adm.ex.so.profit"), "r")}
+              {showEcon && th("margin_pct", t("adm.ex.so.margin"), "r")}
               {th("paid", t("adm.ex.so.paid"), "r")}
               {th("balance", t("adm.ex.so.balance"), "r")}
             </tr>
@@ -515,14 +648,16 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               const stage = stageOf(r);
               const board = byOrder?.get(r.order_id) || null;
               const next = stage && stage !== "voided" ? nextForward(board) : null;
+              const late = lateDaysOf(r, board, stage);
               const current = sp.saleId && sp.saleId === r.sale_id || (sp.orderId && sp.orderId === r.order_id);
               return (
-                <tr key={r.order_id || r.sale_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${current ? "sd-current" : ""} ${voided ? "so-voided" : ""} ${isStuck(r, stage) ? "so-stuck" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? (r.sale_id ? t("adm.sd.openHint") : t("adm.ex.so.openOrder")) : undefined}>
+                <tr key={r.order_id || r.sale_id} className={`${clickable(r) ? "ord-row sd-open-row" : ""} ${current ? "sd-current" : ""} ${voided ? "so-voided" : ""} ${isStuck(r, stage) ? "so-stuck" : ""} ${late != null ? "so-late-row" : ""}`} onClick={clickable(r) ? () => onRow(r) : undefined} title={clickable(r) ? (r.sale_id ? t("adm.sd.openHint") : t("adm.ex.so.openOrder")) : undefined}>
                   <td data-label={t("adm.ex.so.number")}><b>{saleNumber(r, t)}</b>{storeLabel && <small className="muted so-store"> · {storeLabel(r)}</small>}</td>
                   <td data-label={t("adm.ex.so.date")}>{when(r.sold_at)}</td>
                   <td data-label={t("adm.ex.stg.col")} className="so-stage-cell">
                     <span className="so-stage-wrap">
                       <StageChip stage={stage} t={t} small title={board?.pos_delivered_at ? t("adm.sd.stage.posDelivered") : undefined} />
+                      {late != null && <span className="so-late" title={t("adm.so.lateDaysHint", { date: board.promised_on, n: late })} aria-label={t("adm.so.lateDaysHint", { date: board.promised_on, n: late })}><Icon name="calendar" size={10} />{t("adm.so.lateDays", { n: late })}</span>}
                       {next && onAdvance && (
                         <button type="button" className="so-adv adm-noprint" disabled={busyId === r.order_id} title={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })} aria-label={t("adm.ex.stg.advanceTo", { stage: stageLabel(next, t) })}
                           onClick={(e) => { e.stopPropagation(); onAdvance(r, next); }}>
@@ -541,10 +676,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
                   <td data-label={t("adm.rpt.col.lens")} className="so-items muted" title={r.items}>{saleLens(r, { t, lang }) || "—"}</td>
                   <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(r.total)}</b></td>
                   <td data-label={t("adm.ex.so.discount")} className="r num muted">{Number(r.discount) > 0 ? `−${m(r.discount)}` : "—"}</td>
-                  <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon ? (costOf(r) == null ? "—" : m(costOf(r))) : hidden}{showEcon && r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>
+                  {showEcon && <td data-label={t("adm.ex.so.cost")} className="r num">{costOf(r) == null ? "—" : m(costOf(r))}{r.missing_cost && <span className="adm-chip warn so-warn" title={t("adm.ex.so.missingCost")}><Icon name="alert" size={10} /></span>}</td>}
                   <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission ? (r.commission == null ? "—" : m(r.commission)) : hidden}</td>
-                  <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon ? (profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>) : hidden}</td>
-                  <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon ? <span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span> : hidden}</td>
+                  {showEcon && <td data-label={t("adm.ex.so.profit")} className="r num">{profit == null ? "—" : <b className={profit < 0 ? "neg" : "pos"}>{m(profit)}</b>}</td>}
+                  {showEcon && <td data-label={t("adm.ex.so.margin")} className="r num"><span className={`margin-pct ${r.margin_pct == null ? "" : r.margin_pct >= 30 ? "good" : r.margin_pct >= 15 ? "mid" : "bad"}`}>{pct(r.margin_pct)}</span></td>}
                   <td data-label={t("adm.ex.so.paid")} className="r num">{m(r.paid)}</td>
                   <td data-label={t("adm.ex.so.balance")} className="r num">{Number(r.balance) > 0 ? <b className="neg">{m(r.balance)}</b> : <span className="muted">—</span>}</td>
                 </tr>
@@ -557,10 +692,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
               <td className="so-items muted">{totals.units}</td>
               <td data-label={t("adm.ex.so.price")} className="r num"><b>{m(totals.total)}</b></td>
               <td data-label={t("adm.ex.so.discount")} className="r num">{totals.discount > 0 ? `−${m(totals.discount)}` : "—"}</td>
-              <td data-label={t("adm.ex.so.cost")} className="r num">{showEcon && totals.hasEcon ? <b>{m(totals.cost)}</b> : hidden}</td>
+              {showEcon && <td data-label={t("adm.ex.so.cost")} className="r num">{totals.hasEcon ? <b>{m(totals.cost)}</b> : "—"}</td>}
               <td data-label={t("adm.ex.so.commission")} className="r num">{showCommission && totals.hasCommission ? <b>{m(totals.commission)}</b> : hidden}</td>
-              <td data-label={t("adm.ex.so.profit")} className="r num">{showEcon && totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : hidden}</td>
-              <td data-label={t("adm.ex.so.margin")} className="r num">{showEcon && totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : hidden}</td>
+              {showEcon && <td data-label={t("adm.ex.so.profit")} className="r num">{totals.hasEcon ? <b className={totals.profit < 0 ? "neg" : "pos"}>{m(totals.profit)}</b> : "—"}</td>}
+              {showEcon && <td data-label={t("adm.ex.so.margin")} className="r num">{totals.hasEcon ? <b>{pct(totals.margin_pct)}</b> : "—"}</td>}
               <td data-label={t("adm.ex.so.paid")} className="r num"><b>{m(totals.paid)}</b></td>
               <td data-label={t("adm.ex.so.balance")} className="r num"><b className={totals.balance > 0 ? "neg" : ""}>{m(totals.balance)}</b></td>
             </tr>
@@ -596,7 +731,11 @@ export function OrdersStagesView({ data, stages, storeLabel, params, me, compact
   const [busyId, setBusyId] = useState(null);
   // Vendedor y texto acotan la base (la tira cuenta sobre ella); la etapa acota la lista.
   const base = useMemo(() => data.rows.filter((r) => (!filters.seller || String(r.seller_code || "").toUpperCase() === filters.seller) && matchesQuery(r, filters.q, t)), [data.rows, filters.seller, filters.q, t]);
-  const rows = useMemo(() => base.filter((r) => matchesStageFilter(stageOfRow(r, stages.byOrder), filters.stage)), [base, stages.byOrder, filters.stage]);
+  const rows = useMemo(() => base.filter((r) => {
+    const stage = stageOfRow(r, stages.byOrder);
+    if (!matchesStageFilter(stage, filters.stage)) return false;
+    return !filters.late || isLate(r, stages.byOrder?.get(r.order_id), stage);
+  }), [base, stages.byOrder, filters.stage, filters.late]);
   const changed = () => { stages.reload(); data.reload?.(); onChanged?.(); };
   const advance = async (r, stage) => {
     const st = STAGE_BY_KEY[stage];
@@ -614,7 +753,7 @@ export function OrdersStagesView({ data, stages, storeLabel, params, me, compact
   };
   return (
     <div className="so-view">
-      <StageStrip rows={base} byOrder={stages.byOrder} stages={stages} filters={filters} compact={compact} />
+      <StageStrip rows={base} byOrder={stages.byOrder} stages={stages} filters={filters} compact={compact} me={me} />
       <StoreOrdersTable data={data} rows={rows} storeLabel={storeLabel} compact={compact} me={me} byOrder={stages.byOrder} onAdvance={advance} onChanged={changed} busyId={busyId}
         autoOpen={params?.order ? { id: String(params.order) } : null} />
     </div>

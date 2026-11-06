@@ -152,6 +152,7 @@ export default function StoreAssortment({ store, onClose }) {
                             ? <img className="adm-model-thumb" src={resolveImageSized(p.thumbnail, 120)} alt="" loading="lazy" />
                             : <span className="adm-model-thumb" aria-hidden="true" />}
                           <b>{p.title}</b>
+                          {p.sku && <small className="muted" title={t("adm.so.col.sku")}> · {p.sku}</small>}
                         </button>
                       </td>
                       <td data-label={t("adm.assort.colBrand")}>{brandName(p.brand)}</td>

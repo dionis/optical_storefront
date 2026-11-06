@@ -86,7 +86,10 @@ export function customerProblems(c, { requireAddress = false } = {}) {
     last_name: nameProblem(c.last_name, true),
     email: emailProblem(c.email, true),
     phone: phoneProblem(c.phone, true),
-    birth_date: birthProblem(c.birth_date, true),
+    // La fecha de nacimiento NO es obligatoria: en el mostrador solo se exigen
+    // los datos de contacto (decisión del dueño). Si se escribe, se valida
+    // igual — una fecha imposible sigue siendo un error.
+    birth_date: birthProblem(c.birth_date, false),
     ...addressProblems({ ...c, state: c.province }, { required: requireAddress }),
   });
 }

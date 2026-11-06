@@ -22,6 +22,16 @@
 //   };
 //   exportReport("pdf" | "xlsx" | "csv", spec);
 //
+// DOS AUDIENCIAS. El mismo `spec` se imprime de dos formas: "owner" (la de
+// siempre, completa) y "share" (el estado de la tienda que se socializa, sin
+// saldo, costo, ganancia, margen ni comisión y con el total vendido en lugar
+// de la fila de tarjetas). La elige la barra de filtros con
+// `withReportAudience(...)` y el filtrado es una función pura sobre la
+// especificación: `specForAudience(spec, "share")` — ver su bloque más abajo.
+// Para que una tarjeta, pastilla o gráfico PUEDA salir en la versión para
+// compartir tiene que decir qué es (`key` o `concept`: "revenue", "count",
+// "mix", "discount"); lo que no se identifica se queda fuera.
+//
 // `cols` sirve a los tres formatos: `get`/`key` da el valor crudo (Excel, CSV),
 // `text(row)` lo que se imprime (si falta, se formatea por `type`: money, int,
 // pct, date), `cls(row)` clases extra de la celda ("neg", "muted"…) y `tag`
@@ -64,6 +74,8 @@ import { downloadText, printHtml, rowsToCsv } from "./exportUtils.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { sortRows } from "./useSortable.js";
 import reportCss from "./report.css?inline";
+// Los retoques de la versión para compartir, en su propia hoja (ver más abajo).
+import reportShareCss from "./report-share.css?inline";
 
 const h = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const NEUTRAL = "#1f2a44";
@@ -170,6 +182,10 @@ export function summariesFromAccordions(root) {
     const titleEl = d.querySelector("summary .acc-title");
     const title = titleEl ? [...titleEl.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() || titleEl.textContent.trim() : "";
     const pills = [...d.querySelectorAll("summary .acc-pill")].map((p) => ({
+      // `data-concept` (si la pastilla lo trae) es lo ÚNICO que permite
+      // publicarla en la versión para compartir: su texto está traducido y no
+      // sirve para saber si lleva un costo. Ver specForAudience.
+      concept: p.dataset?.concept || undefined,
       label: p.querySelector("small")?.textContent?.trim() || "",
       value: p.querySelector("b")?.textContent?.trim() || p.textContent.trim(),
       strong: p.classList.contains("strong"),
@@ -203,6 +219,204 @@ export const shownCols = (cols) => (cols || []).filter((c) => c && !c.hidden);
 const colByKey = (cols, key) => cols.find((c) => c.key === key) || null;
 const valueOf = (cols, key, r) => { const c = colByKey(cols, key); return c ? rawOf(c, r) : r?.[key]; };
 const tr0 = (t) => (k, p) => (typeof t === "function" ? t(k, p) : k);
+
+/* ── Audiencia del reporte: el del dueño y el que se socializa ──────────────
+ *
+ * El mismo reporte se imprime para dos lectores muy distintos:
+ *
+ *   · "owner"  el de siempre, completo: la fila de tarjetas (ventas, cobrado,
+ *              por cobrar, costo real, ganancia, margen…), los resúmenes de
+ *              los acordeones, los gráficos y la lista con todas sus columnas.
+ *              Es la vista del dueño y NO se toca.
+ *   · "share"  el estado de resultados de la tienda que se le enseña a un
+ *              encargado, a un socio o al contable de la tienda. Se socializa,
+ *              así que va sin la fila de tarjetas (en su lugar, el total
+ *              vendido del período) y sin NADA de saldo, costo real, ganancia,
+ *              margen ni comisión: ni en tarjetas, ni en resúmenes, ni en
+ *              columnas, ni en los totales al pie.
+ *
+ * Por qué se filtra AQUÍ y no en cada pantalla: la especificación llega ya
+ * construida (salesReportSpec, sellersReportSpec…), así que una sola función
+ * pura sobre la especificación cubre los tres formatos (PDF, Excel y CSV) y
+ * toda pantalla, la de hoy y la que se añada mañana. Si el filtro viviera en
+ * cada pantalla bastaría con que una se olvidara para publicar un costo.
+ *
+ * Cómo se reconoce cada concepto: por la CLAVE (`key`) de la tarjeta, columna
+ * o total — nunca por la cabecera, que está traducida. El reporte sale en dos
+ * idiomas y el inglés no puede abrir un agujero que el español no tiene.
+ *
+ * Y se falla del lado seguro: una CIFRA (dinero o porcentaje) cuya clave el
+ * clasificador no sepa encasillar se queda FUERA de la versión para compartir.
+ * Publicar un costo por error no se deshace; que falte una columna se ve y se
+ * pide. El texto descriptivo (nº de venta, fecha, marca, modelo, paciente,
+ * etapa…) sí se queda: no puede delatar un costo y sin él no hay «lista de lo
+ * vendido» que enseñar.
+ */
+export const REPORT_AUDIENCES = ["owner", "share"];
+
+/**
+ * Clave → concepto. El orden MANDA: primero lo que no puede salir, para que
+ * `total_cost` sea costo y no «total», y `paid` sea cobrado y no ingreso.
+ * Las raíces van en los dos idiomas porque las claves del panel mezclan
+ * inglés (`balance`, `profit`) y español (`saldo`, `ganancia`).
+ */
+const CONCEPT_RULES = [
+  ["balance", /balance|saldo|due|owed|outstanding|receivable|por_cobrar|pendiente/],
+  ["collected", /paid|collected|cobrado|cash|efectivo|deposit|abono|anticipo|settle/],
+  ["cost", /cost|coste|costo|cogs|fee|expense|gasto|spend|supplier|proveedor/],
+  ["profit", /profit|ganancia|utilidad|gain|benefit|beneficio|earning|contribution|contribucion/],
+  ["margin", /margin|margen|markup/],
+  ["commission", /commission|comision|payout|incentive/],
+  ["revenue", /total|sales|ventas|revenue|ingreso|gross|amount|importe|price|precio|subtotal|ticket/],
+  ["count", /count|units|unidades|orders|pedidos|items|articulos|qty|quantity|cantidad|lines|lineas|rows/],
+  ["mix", /share|mix|participacion|weight|peso/],
+  ["discount", /discount|descuento|rebate/],
+];
+
+/** Lo que NO se publica en la versión para compartir, por decisión del dueño. */
+const BLOCKED = new Set(["balance", "cost", "profit", "margin", "commission",
+  // «Cobrado» se va con el saldo: total − cobrado ES el saldo, así que
+  // dejarlo sería publicar por resta justo lo que se pidió quitar.
+  "collected"]);
+/** Las únicas cifras que sobreviven: lo que se vendió y cuánto. */
+const FIGURE_OK = new Set(["revenue", "count", "mix", "discount"]);
+/** Conceptos que son dinero (o porcentaje de dinero) aunque la columna no declare `type`. */
+const MONEYISH = new Set([...BLOCKED, ...FIGURE_OK]);
+
+/** El concepto de una clave, o "" si no lo sabe (sin acentos y en minúsculas). */
+export function conceptOf(key) {
+  const k = String(key ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (!k) return "";
+  for (const [concept, re] of CONCEPT_RULES) if (re.test(k)) return concept;
+  return "";
+}
+
+/** ¿Es una cifra (lo que puede delatar un costo)? Por `type` o por la propia clave. */
+const isFigure = (c, concept) => c.type === "money" || c.type === "pct" || MONEYISH.has(concept);
+
+/** ¿Esta columna puede salir en la versión para compartir? */
+export function colForShare(c) {
+  if (!c) return false;
+  const concept = conceptOf(c.key);
+  if (BLOCKED.has(concept)) return false;
+  // Cifra: solo si se sabe que es ingreso, recuento, mezcla o descuento.
+  // Sin clasificar → fuera (regla de fallar del lado seguro).
+  if (isFigure(c, concept)) return FIGURE_OK.has(concept);
+  return true;
+}
+
+/** Igual para una tarjeta o pastilla: aquí TODO es cifra, así que hace falta saber qué es. */
+const markedForShare = (x) => {
+  const concept = conceptOf(x?.concept ?? x?.key);
+  return Boolean(concept) && FIGURE_OK.has(concept);
+};
+/** ¿Trae identificador propio (y entonces se puede clasificar)? */
+const hasMark = (x) => x && (x.concept != null || x.key != null);
+
+const pickKeys = (obj, keep) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => keep.has(k)));
+
+/** La tabla sin las columnas, subtotales ni totales que no se publican. */
+function tableForShare(tb) {
+  if (!tb) return tb;
+  const cols = (tb.cols || []).filter(colForShare);
+  const keep = new Set(cols.map((c) => c.key).filter((k) => k != null));
+  const out = { ...tb, cols };
+  if (tb.totals) out.totals = pickKeys(tb.totals, keep);
+  // Ordenar por una columna que no se publica delataría su ranking (quién deja
+  // más ganancia), así que ese orden también se cae.
+  if (tb.sortBy?.key && BLOCKED.has(conceptOf(tb.sortBy.key))) out.sortBy = undefined;
+  if (tb.groupBy) {
+    const g = tb.groupBy;
+    const subKeys = (g.subtotalKeys || Object.keys(tb.totals || {})).filter((k) => keep.has(k));
+    out.groupBy = {
+      ...g,
+      subtotalKeys: subKeys,
+      totalKey: g.totalKey && keep.has(g.totalKey) ? g.totalKey : subKeys[0],
+      ...(typeof g.subtotals === "function" ? { subtotals: (rows, key) => pickKeys(g.subtotals(rows, key), keep) } : {}),
+    };
+  }
+  return out;
+}
+
+/**
+ * El total vendido del período, leído de los TOTALES de la tabla principal —
+ * el mismo número que se imprime al pie, así la tarjeta y la tabla no pueden
+ * discrepar. Se prefiere la clave exacta conocida y se descartan los
+ * promedios (un ticket medio no es el total del período). Sin un total de
+ * ingreso reconocible no se inventa ninguna tarjeta: mejor sin fila que con
+ * una cifra adivinada.
+ */
+function totalSalesKpi(spec) {
+  const tr = tr0(spec.t);
+  const main = (spec.tables || []).find((tb) => tb.main) || (spec.tables || [])[0];
+  const totals = main?.totals;
+  if (!totals) return null;
+  const keys = Object.keys(totals);
+  const isAvg = (k) => /avg|average|ticket|promedio|medio|per_/i.test(k);
+  const revenue = ["total", "sales", "revenue", "net_sales", "gross"].find((k) => keys.includes(k) && totals[k] != null)
+    || keys.find((k) => conceptOf(k) === "revenue" && !isAvg(k) && totals[k] != null);
+  if (!revenue) return null;
+  const count = ["count", "sales_count", "orders", "n"].find((k) => keys.includes(k) && Number(totals[k]) > 0);
+  return {
+    key: "total",
+    label: tr("adm.rpt.share.totalSales"),
+    value: money(totals[revenue], "usd", spec.lang || "es"),
+    raw: totals[revenue],
+    sub: count ? tr("adm.rpt.share.salesCount", { n: Number(totals[count]).toLocaleString(locale(spec.lang)) }) : undefined,
+  };
+}
+
+/**
+ * La especificación tal como se imprime para `audience`. Pura: no toca la que
+ * recibe. Con "owner" devuelve la misma (el reporte de hoy, intacto).
+ *
+ * Qué pasa con lo que no trae identificador:
+ *   · tarjetas  hoy ninguna pantalla las identifica, así que la fila entera se
+ *               cae y en su lugar va el total vendido. Si una especificación
+ *               empieza a marcarlas (`key`/`concept`), se filtran una por una
+ *               y las que no digan qué son se quedan fuera.
+ *   · resúmenes las pastillas de los acordeones se leen de la pantalla
+ *               (summariesFromAccordions): son texto traducido sin clave, así
+ *               que no hay forma de garantizar que no lleven un costo → fuera.
+ *               Con `concept` (o `data-concept` en la pastilla) se publican.
+ *   · gráficos  una serie puede ser de ganancia y un SVG no se puede leer:
+ *               fuera, salvo que el gráfico se declare (`concept` o `share`).
+ */
+export function specForAudience(spec, audience = "owner") {
+  if (!spec || audience !== "share") return spec;
+  const tr = tr0(spec.t);
+  const kpis = (spec.kpis || []).filter(Boolean);
+  const marked = kpis.filter(hasMark);
+  const total = totalSalesKpi(spec);
+  return {
+    ...spec,
+    audience: "share",
+    kpis: marked.length ? marked.filter(markedForShare) : (total ? [total] : []),
+    summaries: (spec.summaries || [])
+      .map((s) => (s ? { ...s, pills: (s.pills || []).filter((p) => hasMark(p) && markedForShare(p)) } : null))
+      .filter((s) => s && s.pills.length),
+    charts: (spec.charts || []).filter((c) => c && (c.share === true || markedForShare(c))),
+    tables: (spec.tables || []).map(tableForShare),
+    // Que se lea en el papel cuál de las dos versiones es: un PDF suelto sobre
+    // una mesa no tiene quien explique de dónde salió.
+    subtitle: [spec.subtitle, tr("adm.rpt.share.subtitle")].filter(Boolean).join(" · "),
+    filename: `${fileBase(spec)}-${slug(tr("adm.rpt.share.fileTag"))}`,
+  };
+}
+
+/* La audiencia elegida en la barra (GlobalFilterBar). Es de módulo porque las
+   pantallas registran manejadores que llaman a `exportReport` por su cuenta
+   (menuHandlers → report(kind)) y la barra no puede meter un argumento por
+   medio sin tocar cada pantalla. `exportReport` la lee al entrar, y como todo
+   el documento se construye en la misma pulsación (printHtml recibe el HTML ya
+   hecho) no hay ventana para que se cuele otra. */
+let AUDIENCE = "owner";
+/** Corre `run()` con esa audiencia y la devuelve a su sitio, pase lo que pase. */
+export function withReportAudience(audience, run) {
+  const prev = AUDIENCE;
+  AUDIENCE = REPORT_AUDIENCES.includes(audience) ? audience : "owner";
+  try { return run(); } finally { AUDIENCE = prev; }
+}
 
 /**
  * Las filas de una tabla listas para pintar o exportar: sin las de valor cero
@@ -337,7 +551,8 @@ export function reportHtml(spec) {
   const tablesHtml = tables.map((tb) => tableHtml(tb, lang, t)).join("");
   const foot = `<div class="rp-foot"><span><i class="rp-foot-dot"></i><b>${h(tenant)}</b> · ${h(spec.title || "")}${spec.period ? ` · ${h(dayText(spec.period.from, lang))} – ${h(dayText(spec.period.to, lang))}` : ""}</span><span>${h(tr("adm.rpt.generatedBy", { name: tenant }))} · ${h(generated)}</span></div>`;
   const style = `--rp-accent:${h(accent)};--rp-accent-ink:${ink}`;
-  return `<div class="rp-doc ${spec.landscape === false ? "portrait" : ""}" style="${style}"><table class="rp-layout"><thead><tr><td></td></tr></thead><tbody><tr><td><div class="rp-body">${head}${kpiHtml}${sumHtml}${chartHtml}${tablesHtml}</div></td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table>${foot}</div>`;
+  // `share`: la versión que se socializa, con sus pocos retoques (report-share.css).
+  return `<div class="rp-doc ${spec.landscape === false ? "portrait" : ""} ${spec.audience === "share" ? "share" : ""}" style="${style}"><table class="rp-layout"><thead><tr><td></td></tr></thead><tbody><tr><td><div class="rp-body">${head}${kpiHtml}${sumHtml}${chartHtml}${tablesHtml}</div></td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table>${foot}</div>`;
 }
 
 /** El reporte como elemento (para previsualizar o montar en pantalla). */
@@ -347,8 +562,8 @@ export function buildReport(spec) {
   return wrap.firstElementChild;
 }
 
-/** La hoja del reporte, tal como se incrusta en el iframe. */
-export const REPORT_CSS = reportCss;
+/** La hoja del reporte, tal como se incrusta en el iframe (las dos versiones). */
+export const REPORT_CSS = `${reportCss}\n${reportShareCss}`;
 
 /** "Óptica El Rancho — Reporte de estado · Fry Family Clinic": lo que el navegador escribe en su encabezado y el nombre del PDF. */
 export const reportDocTitle = (spec) => `${spec.tenant || TENANT.name} — ${spec.title || ""}`.trim();
@@ -440,9 +655,16 @@ export function reportCsv(spec) {
   return `${head}\n\n${headerLine}\n${body}${foot}`;
 }
 
-/** Exporta el reporte: "pdf" (impresión aislada), "xlsx" o "csv". */
-export function exportReport(kind, spec) {
+/**
+ * Exporta el reporte: "pdf" (impresión aislada), "xlsx" o "csv".
+ *
+ * `audience` decide QUÉ versión se imprime (ver specForAudience): por defecto,
+ * la elegida en la barra de filtros — "owner" mientras nadie elija otra, así
+ * que un llamador antiguo sigue sacando el reporte completo de siempre.
+ */
+export function exportReport(kind, spec, audience = AUDIENCE) {
   if (!spec) return;
+  spec = specForAudience(spec, audience);
   const base = fileBase(spec);
   if (kind === "xlsx") return downloadXlsx(`${base}.xlsx`, reportSheets(spec));
   if (kind === "csv") return downloadText(`${base}.csv`, reportCsv(spec));

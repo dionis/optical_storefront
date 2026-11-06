@@ -55,10 +55,16 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       storeId ? listTerminals(req.scope, [storeId]) : Promise.resolve([]),
       storeId && scope.role !== "seller" ? salesSummary(req.scope, { from: today.date, to: today.date, stores: [storeId], sellers: null }) : Promise.resolve(null),
       listSales(req.scope, { establishmentIds: null, sellerId: userId }, 6),
-      terminalId ? openSessionFor(req.scope, terminalId) : Promise.resolve(null),
+      // Over the STORE, not the till: openSessionFor takes an establishment id,
+      // and a till id never matches one, so `cash_open` was always false — the
+      // seller's panel could not tell an open register from a closed one.
+      // Opening and closing are store-wide by the owner's decision anyway.
+      storeId ? openSessionFor(req.scope, storeId) : Promise.resolve(null),
     ]);
     const store = stores.find((x) => x.id === storeId) ?? null;
     const till = tills.find((x) => x.id === terminalId) ?? null;
+    // Goal and commission share one base: the month's NET (total − tax), never the gross.
+    const monthNet = Math.round((m.current.total - m.current.tax) * 100) / 100;
     const goal = profile.monthly_goal ?? null;
 
     // Ready to hand over: their open sales whose order is back from the lab.
@@ -73,7 +79,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       month: m.current,
       balance_due: m.balance_due,
       commission: commissionPct === null ? null : { pct: commissionPct, amount: Math.round((m.current.total - m.current.tax) * commissionPct) / 100 },
-      goal: goal === null ? null : { amount: goal, done: m.current.total, left: Math.max(0, Math.round((goal - m.current.total) * 100) / 100) },
+      goal: goal === null ? null : { amount: goal, done: monthNet, left: Math.max(0, Math.round((goal - monthNet) * 100) / 100) },
       ready,
       workplace: store
         ? { store: { id: store.id, code: store.code, name: store.name }, terminal: till ? { id: till.id, code: till.code, name: till.name } : null, cash_open: Boolean(cashOpen) }

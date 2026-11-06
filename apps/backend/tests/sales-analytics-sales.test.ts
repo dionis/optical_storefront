@@ -1,6 +1,6 @@
 import type { CostRule } from "../src/lib/costing";
 import { filterBoardRows, matchesStore, projectBoardOrder } from "../src/lib/order-board";
-import { lensSummaryOf, saleListRowOf, type SaleListRaw, type SaleListRow } from "../src/lib/sales-analytics";
+import { lensSummaryOf, saleListRowOf, salesPageSize, SALES_PAGE_DEFAULT, SALES_PAGE_MAX, type SaleListRaw, type SaleListRow } from "../src/lib/sales-analytics";
 import {
   attachSaleEconomics,
   insightAccess,
@@ -50,6 +50,7 @@ const ctx = (over: Partial<EconomicsContext> = {}): EconomicsContext => ({
   rules: RULES,
   orders: new Map([["o1", { gross: 21600, net: 20000, lines: 2 }], ["o2", { gross: 10800, net: 10000, lines: 1 }]]),
   saleFees: new Map([["s1", 250]]),
+  saleCash: new Map([["s1", { paid: 10000, balance: 11600 }]]),
   commissionPct: () => 10,
   ...over,
 });
@@ -190,6 +191,43 @@ describe("saleListRowOf (the report columns of a sale)", () => {
   it("the lens summary falls back to the code when the catalog has no label, and to the other language's label", () => {
     const s = lensSummaryOf({ design: "sv", material: "poly", photo: "trans", ar: null }, { ...labels, photos: new Map([["trans", { label_es: "Transitions", label_en: null }]]) });
     expect(s).toEqual({ es: "Monofocal · poly · Transitions", en: "Single vision · poly · Transitions" });
+  });
+});
+
+describe("salesPageSize (the client picks the window of a page)", () => {
+  it("defaults to a hundred sales and never goes past the cap", () => {
+    expect(salesPageSize(undefined)).toBe(SALES_PAGE_DEFAULT);
+    expect(salesPageSize("200")).toBe(SALES_PAGE_MAX);
+    expect(salesPageSize(1000)).toBe(SALES_PAGE_MAX);
+    expect(salesPageSize("25")).toBe(25);
+    expect(salesPageSize(1)).toBe(1);
+  });
+
+  it("falls back to the default rather than returning an empty or broken page", () => {
+    for (const bad of ["", "abc", "0", -5, 0.4, null, NaN, [], {}]) expect(salesPageSize(bad)).toBe(SALES_PAGE_DEFAULT);
+    expect(salesPageSize("25.9")).toBe(25);
+  });
+});
+
+describe("the collected and the owed of a sale (paid, balance)", () => {
+  it("come from the sale, so its lines never collect it twice", () => {
+    const lines = [line(), line({ product_id: "p2", sku: "FX2", category: "lens" })];
+    const econ = lineEconomics(lines, ctx());
+    // Every line of the sale carries the WHOLE sale's cash: whoever adds them up
+    // counts it once per order, as lib/sales-insights.ts `add` does.
+    expect(econ.map((e) => [e.paid, e.balance])).toEqual([[10000, 11600], [10000, 11600]]);
+    const row = saleListRowOf(
+      { order_id: "o1", sale_id: "s1", number: null, channel: "pos", establishment_id: "est_1", seller_code: "ANA", customer_id: null, sold_at: "2026-10-27T15:00:00.000Z", total: "21600", discount: "0", units: 2, status: "active", items: "", frame_brand: null, frame_model: null, frame_sku: null, frame_line_id: null, own_frame: false, has_rx: false, lens_design: null, lens_material: null, lens_photo: null, lens_ar: null },
+      { sale: { paid_cents: 10000, balance_cents: 11600 } }
+    );
+    // The same figures the list shows for that sale, in dollars.
+    expect([row.paid, row.balance]).toEqual([econ[0].paid / 100, econ[0].balance / 100]);
+  });
+
+  it("a web order is collected in full, like its row in the list", () => {
+    const web = line({ order_id: "o2", sale_id: null, channel: "web", seller_id: null, seller_code: null });
+    const [e] = lineEconomics([web], ctx());
+    expect([e.paid, e.balance]).toEqual([10800, 0]);
   });
 });
 

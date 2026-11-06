@@ -1,0 +1,56 @@
+
+/* Edad ya calculada junto a la fecha de nacimiento (PosSale.jsx, ageFrom). */
+.pos-birth-lbl { display: inline-flex; align-items: baseline; gap: 7px; }
+.pos-age { padding: 1px 7px; border-radius: var(--adm-radius-pill); background: var(--adm-accent-soft); color: var(--adm-accent-ink); font-size: 11.5px; font-weight: 700; }
+
+/* ── Total en curso (PosRunningTotal): franja pegajosa desde el paso Montura ──
+   Solo precios de lista y totales del servidor; nunca costos. Debajo de la
+   barra superior del armazón (--adm-top-real) para que no quede tapada. */
+.pos-run { position: sticky; top: calc(var(--adm-top-real, 0px) + 6px); z-index: 5; margin: 0 0 10px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); background: color-mix(in srgb, var(--adm-surface) 94%, transparent); backdrop-filter: blur(10px) saturate(1.4); box-shadow: var(--adm-shadow); overflow: hidden; }
+.pos-run-head { display: flex; align-items: center; gap: 10px 14px; width: 100%; padding: 8px 12px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.pos-run-ttl { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-muted); white-space: nowrap; }
+.pos-run-brief { display: flex; flex-wrap: wrap; gap: 4px 12px; flex: 1; min-width: 0; font-size: 12.5px; color: var(--adm-muted); }
+.pos-run-brief-line { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.pos-run-brief b { color: var(--adm-ink, inherit); font-variant-numeric: tabular-nums; }
+.pos-run-total { display: inline-flex; align-items: baseline; gap: 8px; margin-left: auto; white-space: nowrap; }
+.pos-run-total small { font-size: 11px; color: var(--adm-muted); }
+.pos-run-total b { font-size: 19px; font-weight: 600; font-family: var(--adm-display); font-optical-sizing: auto; color: var(--adm-accent-ink); font-variant-numeric: tabular-nums; }
+.pos-run.loading .pos-run-total b, .pos-run.loading .pos-run-brief b { opacity: .55; transition: opacity .2s; }
+.pos-run.error .pos-run-total b { color: var(--adm-gold-dark); }
+.pos-run-body { display: grid; gap: 6px 24px; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); padding: 0 12px 10px; border-top: 1px dashed var(--adm-line-2); padding-top: 8px; }
+.pos-run-rows { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; align-content: start; }
+.pos-run-rows dt { color: var(--adm-muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; align-self: baseline; padding-top: 2px; }
+.pos-run-rows dd { margin: 0; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; min-width: 0; }
+.pos-run-rows dd span { min-width: 0; overflow-wrap: anywhere; }
+.pos-run-rows dd b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-run-rows dd small { white-space: nowrap; font-size: 11px; }
+.pos-run-sum dd { justify-content: flex-end; }
+.pos-run-sum .big, .pos-run-sum .big b { font-size: 16px; color: var(--adm-accent-ink); }
+.pos-run-note { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.pos-run-note.warn { color: var(--adm-gold-dark); }
+@media (max-width: 760px) {
+  .pos-run { top: var(--adm-top-real, 0px); }
+  .pos-run-head { gap: 6px 10px; padding: 7px 12px; }
+  .pos-run-brief { display: none; }
+  .pos-run-body { grid-template-columns: 1fr; gap: 8px; }
+  .pos-run-total b { font-size: 17px; }
+}
+
+/* ── Opciones rápidas de lentes para la montura del cliente (LensPresets) ── */
+.pos-presets { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--adm-accent-line, var(--adm-line)); border-radius: var(--adm-radius-sm); background: var(--adm-accent-soft); }
+.pos-presets-ttl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--adm-accent-ink); }
+.pos-presets-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-presets-row button { border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: var(--adm-radius-pill); min-height: 36px; padding: 0 14px; font-size: 13px; font-weight: 700; color: var(--adm-ink, inherit); cursor: pointer; transition: all .2s var(--adm-ease); }
+.pos-presets-row button:hover { border-color: var(--adm-accent-line); color: var(--adm-accent-ink); }
+.pos-presets-row button.on { background: var(--adm-accent); color: var(--st-ink, #fff); border-color: var(--adm-accent-deep); }
+.pos-presets small { font-size: 11.5px; }
+@media (max-width: 640px) {
+  .pos-presets-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .pos-presets-row button { min-height: 42px; }
+}
+
+/* ── Teléfono o correo ya registrado (HU-18): aviso, nunca bloqueo ── */
+.pos-dup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 9px 12px; border: 1px solid var(--adm-gold-line); border-radius: var(--adm-radius-sm); background: var(--adm-amber-soft); color: var(--adm-gold-dark); font-size: 13px; }
+.pos-dup > span:first-of-type { display: flex; flex-direction: column; gap: 1px; flex: 1 1 220px; min-width: 0; font-weight: 700; }
+.pos-dup > span:first-of-type small { font-weight: 500; }
+.pos-dup-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; }

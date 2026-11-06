@@ -9,7 +9,9 @@
 //              heredados de la pantalla que lo abre y SIEMPRE aplicados;
 //   teselas    ventas · nº · ticket medio · ganancia que me genera (quien ve
 //              costos) · ganancia promedio por venta · comisión a pagar · cuota
-//              (su parte de las ventas de la tienda, con ayuda) · en laboratorio
+//              (su parte de las ventas de la tienda, con ayuda) · meta del mes
+//              (HU-40, barra: neto del mes natural contra `monthly_goal` del
+//              perfil, de GET /admin/sellers/stats `goal`) · en laboratorio
 //              · por entregar · dinero en la calle de sus ventas;
 //   canales    iconos de la red por la que vendió (whatsapp/instagram/tiktok/
 //              facebook/enlace) con nº y dinero;
@@ -204,13 +206,15 @@ export function sellersReportSpec({ rows, groups = null, zero = 0, t, lang, titl
   const totalsOf = (tt) => ({ sales: tt.sales, count: tt.count, units: tt.units, ticket: tt.ticket, profit: showProfit ? tt.profit : undefined, avg_profit: showProfit ? tt.avg_profit : undefined, commission: showCommission ? tt.commission : undefined, share: tt.share });
   const note = zero ? t("adm.sp.rpt.zero", { n: zero }) : undefined;
   const m = (v) => fmtMoney(v, "usd", lang);
+  // `key` nombra el concepto de cada tarjeta para que ReportDoc sepa qué puede
+  // salir en la versión para compartir (nunca por el rótulo, que es traducible).
   const baseKpis = kpis.length ? kpis : [
-    { label: t("adm.ex.sellers.sales"), value: m(totals.sales), raw: totals.sales, sub: t("adm.sp.k.sales.n", { n: int(totals.count, lang) }) },
-    { label: t("adm.sp.col.ticket"), value: m(totals.ticket), raw: totals.ticket },
-    showProfit ? { label: t("adm.ex.sellers.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
-    showProfit ? { label: t("adm.sp.col.avgProfit"), value: m(totals.avg_profit || 0), raw: totals.avg_profit } : null,
-    showCommission ? { label: t("adm.ex.sellers.commission"), value: m(totals.commission), raw: totals.commission } : null,
-    { label: t("adm.ex.sellers.name"), value: int(rows.length, lang), raw: rows.length, sub: note },
+    { key: "sales", label: t("adm.ex.sellers.sales"), value: m(totals.sales), raw: totals.sales, sub: t("adm.sp.k.sales.n", { n: int(totals.count, lang) }) },
+    { key: "ticket", label: t("adm.sp.col.ticket"), value: m(totals.ticket), raw: totals.ticket },
+    showProfit ? { key: "profit", label: t("adm.ex.sellers.profit"), value: m(totals.profit), raw: totals.profit, neg: totals.profit < 0 } : null,
+    showProfit ? { key: "avg_profit", label: t("adm.sp.col.avgProfit"), value: m(totals.avg_profit || 0), raw: totals.avg_profit } : null,
+    showCommission ? { key: "commission", label: t("adm.ex.sellers.commission"), value: m(totals.commission), raw: totals.commission } : null,
+    { key: "count", label: t("adm.ex.sellers.name"), value: int(rows.length, lang), raw: rows.length, sub: note },
   ];
   const tables = groups && groups.length > 1
     ? [
@@ -260,6 +264,30 @@ function Tile({ label, value, sub, tone = "", loading = false, failed = false, o
     <div className={`sp-tile static ${tone}`} title={title || undefined}>
       {body}
       {help && <HelpTip topic={help} size={12} className="sp-tile-help" />}
+    </div>
+  );
+}
+
+/**
+ * Meta del mes del vendedor (HU-40): `goal` = { amount, done, left, pct } de
+ * GET /admin/sellers/stats (neto del mes natural, la base de la comisión);
+ * null = sin meta en su perfil. Barra y cifras; nunca se calcula aquí.
+ */
+function GoalTile({ goal, loading = false, lang, t }) {
+  const m = (v) => fmtMoney(v, "usd", lang);
+  const pct = goal ? Math.max(0, Math.min(100, Number(goal.pct) || 0)) : 0;
+  const reached = goal && goal.left <= 0;
+  return (
+    <div className={`sp-tile static sp-goal ${reached ? "good" : ""}`} title={t("adm.ops.goal.base")}>
+      <small>{t("adm.ops.goal.title")}</small>
+      {loading ? <Skel /> : <b>{goal ? `${pct.toLocaleString(lang === "en" ? "en-US" : "es-US", { maximumFractionDigits: 1 })} %` : "—"}</b>}
+      {loading ? <Skel sm /> : goal ? (
+        <>
+          <span className="sp-goal-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={t("adm.ops.goal.title")}><i style={{ width: `${pct}%` }} /></span>
+          <span>{t("adm.ops.goal.progress", { done: m(goal.done), goal: m(goal.amount), pct: pct.toLocaleString(lang === "en" ? "en-US" : "es-US", { maximumFractionDigits: 1 }) })}</span>
+          <span>{reached ? t("adm.ops.goal.reached") : t("adm.ops.goal.left", { left: m(goal.left) })}</span>
+        </>
+      ) : <span>{t("adm.ops.goal.none")}</span>}
     </div>
   );
 }
@@ -380,6 +408,7 @@ export default function SellerPanel({ seller, filters = {}, onClose, go, openSal
         showProfit ? k(t("adm.sp.k.avgProfit"), m(avgProfit || 0), avgProfit || 0) : null,
         showCommission ? k(t("adm.sp.k.commission"), m(tot?.commission || 0), tot?.commission || 0) : null,
         k(t("adm.sp.k.quota"), pct(share), share, { sub: storeTot ? t("adm.sp.k.ofStore", { v: m(storeTot.sales) }) : undefined }),
+        fig?.statRow?.goal ? k(t("adm.ops.goal.title"), `${fig.statRow.goal.pct} %`, fig.statRow.goal.pct, { sub: t("adm.ops.goal.progress", { done: m(fig.statRow.goal.done), goal: m(fig.statRow.goal.amount), pct: fig.statRow.goal.pct }) }) : null,
         pend ? k(t("adm.sp.k.inLab"), int(pend.in_lab.count, lang), pend.in_lab.count, { sub: t("adm.sp.k.worth", { v: m(cents(pend.in_lab.cents)) }) }) : null,
         pend ? k(t("adm.sp.k.toDeliver"), int(pend.to_deliver.count, lang), pend.to_deliver.count, { sub: t("adm.sp.k.toCollect", { v: m(cents(pend.to_deliver.balance_cents)) }) }) : null,
         pend ? k(t("adm.sp.k.onStreet"), m(cents(pend.on_street.cents)), cents(pend.on_street.cents), { neg: pend.on_street.cents > 0, sub: t("adm.sp.k.balances", { n: pend.on_street.count }) }) : null,
@@ -457,6 +486,7 @@ export default function SellerPanel({ seller, filters = {}, onClose, go, openSal
             {showProfit && <Tile label={t("adm.sp.k.avgProfit")} loading={loading} failed={failed || !tot} value={avgProfit != null ? m(avgProfit) : "—"} sub="" help="exec.sellers.avgProfit" />}
             {showCommission && <Tile label={t("adm.sp.k.commission")} tone="gold" loading={loading} failed={failed || !tot} value={tot ? m(tot.commission) : "—"} sub={subject ? t("adm.sp.commissionPct", { pct: subject.commission_pct }) : ""} help="exec.sellers.commission" />}
             <Tile label={t("adm.sp.k.quota")} loading={loading} failed={failed || !tot} value={tot ? pct(share) : "—"} sub={storeTot ? t("adm.sp.k.ofStore", { v: m(storeTot.sales) }) : ""} help="exec.sellers.quota" />
+            {(loading || fig?.statRow) && <GoalTile goal={fig?.statRow?.goal ?? null} loading={loading} lang={lang} t={t} />}
           </div>
         </section>
 

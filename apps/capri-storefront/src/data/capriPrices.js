@@ -4,6 +4,21 @@
 //
 // Source: CAPRI_Prices.pdf (Brett Bowman, OD — Acct# BBOCA).
 // Maintained by hand when Capri sends an updated list.
+//
+// NO LONGER THE SOURCE OF TRUTH FOR THE ADMIN PANEL (since 2026-11-01).
+// Supplier costs now live on the server: GET /admin/pricing/frames/costs, with
+// POST /admin/pricing/frames/cost to set or reset one. The panel reads that
+// route through the admin read cache (see admin/pricing/api.js), so the owner,
+// the till and the reports all see the same number and the owner can edit it.
+//
+// This table is kept for two reasons only, and both are fallbacks, never input
+// to accounting:
+//   1. the storefront seed price (data/products.js) is computed at bundle load,
+//      with no admin session and nothing to await;
+//   2. if the costs route does not answer, the panel shows this list as a
+//      read-only last resort and says so on screen (`adm.cm.costsOffline`).
+// Deleting it would leave the storefront with no price at all on first paint
+// and the panel blank whenever the backend hiccups, so it stays.
 
 const CAPRI_PRICES = {
   // ── Di Caprio  DC198–DC256  ($79.99 book → $16.99 discount) ──────────

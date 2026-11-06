@@ -61,6 +61,18 @@ export function sanitizeTrackingUrl(value: unknown): string {
 }
 
 /** Thrown by the transition helpers; carries the code the panel translates. */
+/**
+ * Whether the customer asked for email about this order. The checkout and the
+ * till both write `metadata.notify_email`; only an explicit opt-out (false or
+ * "false") silences the stage emails — absent means yes, as the order-placed
+ * subscriber already reads it. Administrators get their copies regardless:
+ * this is the customer's preference, not the store's. Pure.
+ */
+export function wantsStageEmail(metadata: Record<string, unknown> | null | undefined): boolean {
+  const v = metadata?.["notify_email"];
+  return !(v === false || v === "false");
+}
+
 export class StageError extends Error {
   /** Código HTTP sugerido para la ruta. */
   status = 409;
@@ -114,6 +126,8 @@ async function sendStageEmail(
     frameOnly: boolean;
     trackingNumber: string | null;
     trackingUrl: string | null;
+    /** false = the customer opted out of email (metadata.notify_email); default true. */
+    notifyEmail?: boolean;
     notifySms?: boolean;
     phone?: string | null;
   }
@@ -122,7 +136,9 @@ async function sendStageEmail(
   const locale = resolveEmailLocale(input.locale);
   let sent = false;
 
-  if (input.email) {
+  if (input.email && input.notifyEmail === false) {
+    logger.info(`[order-board] order ${input.orderId} opted out of email — stage email skipped.`);
+  } else if (input.email) {
     try {
       const content = renderOrderStageUpdate(locale, {
         displayId: input.displayId,
@@ -481,6 +497,7 @@ export async function transitionOrderStage(
 
   let notified = false;
   if (!noNotification && after && before.stage !== after.stage) {
+    let notifyEmail = true;
     let notifySms = false;
     let phone: string | null = null;
     let locale: string | null = null;
@@ -493,13 +510,14 @@ export async function transitionOrderStage(
       });
       const raw = data?.[0] as { metadata?: Record<string, unknown> | null; locale?: string | null; shipping_address?: { phone?: string | null } | null } | undefined;
       const md = (raw?.metadata ?? {}) as Record<string, unknown>;
+      notifyEmail = wantsStageEmail(md);
       notifySms = md["notify_sms"] === true || md["notify_sms"] === "true";
       phone =
         (typeof md["phone"] === "string" && md["phone"].trim()) ||
         (raw?.shipping_address?.phone ? String(raw.shipping_address.phone).trim() : "") ||
         null;
       locale = raw?.locale ?? null;
-    } catch { /* sin metadata no hay SMS; el email sale igual */ }
+    } catch { /* sin metadata no hay SMS ni opt-out conocido; el email sale igual */ }
 
     notified = await sendStageEmail(container, logger, {
       email: after.email ? String(after.email) : null,
@@ -510,6 +528,7 @@ export async function transitionOrderStage(
       frameOnly: !after.items?.some((i) => i.lens && i.lens.design_code),
       trackingNumber: tracking || after.tracking_number || null,
       trackingUrl: trackingUrl || null,
+      notifyEmail,
       notifySms,
       phone,
     });

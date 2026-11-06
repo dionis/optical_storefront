@@ -17,6 +17,7 @@ jest.mock("../src/lib/pos-data", () => ({
   listTerminals: jest.fn(async () => [{ id: "t1", is_active: true }]),
   quoteSale: jest.fn(async () => ({ total_cents: 1000, discount_pct: 0, below_minimum: false, lines: [] })),
   rxContexts: jest.fn(() => []),
+  rxDesigns: jest.fn(() => []),
 }));
 jest.mock("../src/lib/pos-route", () => ({
   ownSalesOnly: jest.fn(),

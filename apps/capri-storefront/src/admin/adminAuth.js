@@ -21,7 +21,7 @@
 // as a disconnected showcase with no backend behind it. It is off by default and
 // must stay off anywhere real orders exist.
 
-import { getSession as getApiSession, login, logout as apiLogout, verifyMfa } from "./adminApi.js";
+import { ADMIN_API_URL, getSession as getApiSession, login, logout as apiLogout, verifyMfa } from "./adminApi.js";
 
 const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const DEMO_LOGIN = String(env.VITE_ADMIN_DEMO_LOGIN || "") === "true";
@@ -62,6 +62,55 @@ export async function authenticate(user, pass) {
 export async function verifyOtp(code) {
   if (DEMO_LOGIN) return { ok: false, error: "adm.err.relogin" };
   return verifyMfa(code);
+}
+
+/* ─────────────────────  password recovery (HU-03)  ───────────────────── */
+// Both routes are Medusa's own, reached through the same same-origin proxy the
+// login uses. Neither carries a session: the first is anonymous, the second is
+// authenticated by the single-use token from the email. As everywhere in this
+// module, results carry dictionary KEYS, never prose.
+
+async function postAuth(path, body, token) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let res;
+  try {
+    res = await fetch(`${ADMIN_API_URL}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  } catch {
+    return { ok: false, error: "adm.err.offline" };
+  }
+  if (res.ok) return { ok: true };
+  if (res.status === 429) return { ok: false, error: "adm.auth.tooMany", status: 429 };
+  return { ok: false, status: res.status };
+}
+
+/**
+ * Asks the backend to email a reset link. Medusa answers 201 whether or not
+ * the address exists (and so do we): the caller shows the same "if the email
+ * exists we sent a link" either way. Only "offline" and "too many" surface.
+ */
+export async function requestPasswordReset(email) {
+  const identifier = String(email || "").trim();
+  if (!identifier) return { ok: false, error: "adm.auth.needEmail" };
+  if (DEMO_LOGIN) return { ok: true };
+  const r = await postAuth("/auth/user/emailpass/reset-password", { identifier });
+  if (r.ok || r.error) return r;
+  // Any other failure reads as "sent" too — the response must not depend on
+  // whether the account exists.
+  return { ok: true };
+}
+
+/**
+ * Sets the new password with the token from the link. A 401 means the token
+ * expired, was already used, or a newer link superseded it.
+ */
+export async function completePasswordReset({ token, email, password }) {
+  if (!token || !email) return { ok: false, error: "adm.auth.badLink" };
+  if (DEMO_LOGIN) return { ok: false, error: "adm.auth.linkExpired" };
+  const r = await postAuth("/auth/user/emailpass/update", { email, password }, token);
+  if (r.ok || r.error) return r;
+  if (r.status === 401) return { ok: false, error: "adm.auth.linkExpired" };
+  return { ok: false, error: "adm.err.generic" };
 }
 
 export function getSession() {

@@ -16,8 +16,11 @@ import { recordAudit } from "./audit";
 import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
-import { computeLensBreakdown } from "./lens-quote";
+import { LensFinishError } from "./lens-finish";
+import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
+import { fetchBoardOrder } from "./order-board";
+import { StageError, transitionOrderStage } from "./order-stage-transition";
 import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
 import {
   discountLine,
@@ -36,6 +39,8 @@ import {
   type TerminalUsage,
   type VariantCodes,
 } from "./pos";
+import { lensRxProblems, rxConfirmationProblem, storedVerifiedByUser, type LensRxDesign } from "./pos-lens-rules";
+import { EMPTY_SALE_DETAIL, loadSaleDetails, type LensCodes } from "./pos-sale-detail";
 import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
@@ -458,7 +463,8 @@ export function checkPrescriptions(
   container: MedusaContainer,
   input: { new: RxInput | null; worn: RxInput | null },
   required: boolean,
-  contexts: Array<{ usage_type?: string; eye_size?: number }> = []
+  contexts: Array<{ usage_type?: string; eye_size?: number }> = [],
+  designs: LensRxDesign[] = []
 ): { warnings: unknown[] } {
   if (input.worn && !hasEyes(input.worn)) throw new PosError("bad_worn_prescription");
   if (!input.new) {
@@ -466,6 +472,12 @@ export function checkPrescriptions(
     return { warnings: [] };
   }
   if (!hasEyes(input.new)) throw new PosError("prescription_required");
+  // Read from a photo: a person must have confirmed it on screen.
+  const unconfirmed = rxConfirmationProblem(input.new.rx);
+  if (unconfirmed) throw new PosError(unconfirmed, 422, { field: "verified_by_user" });
+  // The ADD must fit the lens design (single vision without, multifocal with the same in both eyes).
+  const problem = lensRxProblems(designs, input.new.rx);
+  if (problem) throw new PosError(problem.reason, 422, problem.details);
   const svc = container.resolve<PrescriptionModuleService>(PRESCRIPTION_MODULE);
   const warnings: unknown[] = [];
   for (const ctx of contexts.length ? contexts : [{}]) {
@@ -500,7 +512,7 @@ async function insertPrescriptions(
   const row = (r: RxInput, m: RxMeta, kind: "worn" | "new", previous: string | null, number: string | null) => ({
     ...prescriptionColumns(r.rx),
     source: r.rx.source === "ocr" ? "ocr" : "manual",
-    verified_by_user: true,
+    verified_by_user: storedVerifiedByUser(r.rx),
     file_url: typeof r.rx.file_url === "string" && /^rx\/[A-Za-z0-9._-]{1,200}$/.test(r.rx.file_url) ? r.rx.file_url : null,
     customer_id: customerId,
     kind,
@@ -670,6 +682,8 @@ export interface QuotedLine {
   description: string | null;
   /** Lens design category (sv | bifocal | prog), null for a bare frame. */
   lens_category: string | null;
+  /** The design needs an ADD in the prescription (bifocal, progressive). */
+  lens_requires_add: boolean;
   /** Frame size from the catalog, for the prescription check and the lab ticket. */
   eye_size: number | null;
   /** Store list price of the line, before discount and tax. */
@@ -732,11 +746,18 @@ export async function quoteSale(
   for (const line of lines) {
     let lensCents: number;
     let category: string | null;
+    let requiresAdd: boolean;
     try {
       const b = await computeLensBreakdown(pg, line.selection, establishmentId);
       lensCents = b.total_cents;
       category = b.category;
-    } catch {
+      requiresAdd = b.requires_add;
+    } catch (e) {
+      // The finish the seller picked has no priced cell (a digital single
+      // vision the owner has not priced yet, or "stock" on a progressive).
+      if (e instanceof LensFinishError) throw new PosError(e.reason, 422, { design_code: e.design_code, material_code: e.material_code, finish: e.finish });
+      // A photochromic or AR the list does not offer for that design (lib/pos-lens-rules.ts).
+      if (e instanceof LensOptionError) throw new PosError(e.reason, 422, { code: e.code, design_code: e.design_code, category: e.category });
       throw new PosError("bad_lens");
     }
 
@@ -794,6 +815,7 @@ export async function quoteSale(
       selection: line.selection,
       description: line.description,
       lens_category: line.selection.design_code === "frame-only" ? null : category,
+      lens_requires_add: line.selection.design_code === "frame-only" ? false : requiresAdd,
       eye_size: Number.isFinite(eye) && eye > 0 ? eye : null,
       list,
       frame: d.frame,
@@ -829,6 +851,13 @@ export function rxContexts(quote: Quote): Array<{ usage_type?: string; eye_size?
       ...(l.lens_category === "prog" ? { usage_type: "progressive" } : {}),
       ...(l.eye_size ? { eye_size: l.eye_size } : {}),
     }));
+}
+
+/** The lens designs of a quote, for the ADD rules (lib/pos-lens-rules.ts). */
+export function rxDesigns(quote: Quote): LensRxDesign[] {
+  return quote.lines
+    .filter((l) => l.lens_category)
+    .map((l) => ({ code: l.selection.design_code, category: l.lens_category, requires_add: l.lens_requires_add }));
 }
 
 // ---------------------------------------------------------------------------
@@ -924,6 +953,34 @@ export async function createApproval(
   return toApproval(created as unknown as Record<string, unknown>);
 }
 
+/** A statement and its bindings, kept apart from the connection so the guards can be unit-tested. */
+export interface SqlPlan {
+  sql: string;
+  bindings: Array<string | number | null>;
+}
+
+/** Rows a `pg.raw` UPDATE … RETURNING gave back (the pg driver shape). */
+type RawRows<T> = { rows: T[] };
+
+/**
+ * The decision as one guarded UPDATE. Two owners deciding the same request
+ * at once (or one double-clicking) used to both read "pending" and both
+ * write: the second decision silently overwrote the first, and both were
+ * audited as if taken. With the status in the WHERE clause the database lets
+ * exactly one through; the loser gets 0 rows and is told the current state.
+ * An expired request is left alone for the same reason `toApproval` reports
+ * it as expired: nobody can approve what the till can no longer use.
+ */
+export function approvalDecisionPlan(id: string, decision: "approved" | "rejected", actorId: string, note: string | null): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = ?, decided_by = ?, decided_at = now(), decision_note = ?, updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'pending' AND expires_at > now()
+       RETURNING *`,
+    bindings: [decision, actorId, note, id],
+  };
+}
+
 /** Owner or superadmin decision; only a pending, unexpired request can be decided. */
 export async function decideApproval(
   container: MedusaContainer,
@@ -932,20 +989,86 @@ export async function decideApproval(
   actorId: string,
   note: string | null
 ): Promise<ApprovalRow> {
-  const current = await getApproval(container, id);
-  if (!current) throw new PosError("approval_not_found", 404);
-  if (current.status !== "pending") throw new PosError(`approval_${current.status}`, 409);
-  await pos(container).updateDiscountApprovals({ id, status: decision, decided_by: actorId, decided_at: new Date(), decision_note: note } as never);
+  const plan = approvalDecisionPlan(id, decision, actorId, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<Record<string, unknown>>;
+  const row = res.rows[0];
+  if (!row) {
+    // Lost the race, or there was nothing to decide: say which.
+    const current = await getApproval(container, id);
+    if (!current) throw new PosError("approval_not_found", 404);
+    throw new PosError(`approval_${current.status === "pending" ? "expired" : current.status}`, 409);
+  }
+  const decided = toApproval(row);
   await recordAudit(container, {
     actorId,
     action: decision === "approved" ? "discount.approve" : "discount.reject",
     entity: "discount_approval",
     entityId: id,
-    establishmentId: current.establishment_id,
+    establishmentId: decided.establishment_id,
     before: { status: "pending" },
-    after: { status: decision, pct: current.discount_pct, note },
+    after: { status: decision, pct: decided.discount_pct, note },
   });
-  return (await getApproval(container, id)) as ApprovalRow;
+  return decided;
+}
+
+/**
+ * Takes an approved discount for a sale about to be recorded. The approval is
+ * single-use, but `assertApprovalFits` only *reads* it: two tills recording
+ * two sales with the same approval id at the same moment both saw "approved"
+ * and both sold with the discount, and the second `status = 'used'` write
+ * hid the first. The status guard makes the database the arbiter — one
+ * UPDATE matches, the other finds 0 rows. The expiry is checked here too, by
+ * the database clock, so a request that lapsed between the read and the
+ * claim is not consumed.
+ */
+export function approvalClaimPlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'used', updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status = 'approved'
+             AND (expires_at IS NULL OR expires_at > now())
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/**
+ * Gives a claimed approval back when the sale it was taken for never got its
+ * row. Guarded on `sale_id IS NULL`: once the sale exists the approval is
+ * spent for good, whatever fails afterwards.
+ */
+export function approvalReleasePlan(id: string): SqlPlan {
+  return {
+    sql: `UPDATE discount_approval
+             SET status = 'approved', updated_at = now()
+           WHERE id = ? AND status = 'used' AND sale_id IS NULL
+       RETURNING id`,
+    bindings: [id],
+  };
+}
+
+/** Claims the approval or throws the reason it cannot be used (`approval_used`, `approval_expired`…). */
+export async function claimApproval(container: MedusaContainer, id: string): Promise<void> {
+  const plan = approvalClaimPlan(id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+  if (res.rows.length) return;
+  const current = await getApproval(container, id);
+  if (!current) throw new PosError("approval_not_found", 404);
+  // "approved" on re-read means the claim lost only to the clock: it expired
+  // between our read and the UPDATE and `toApproval` has not caught up yet.
+  throw new PosError(current.status === "approved" ? "approval_expired" : `approval_${current.status}`, 409);
+}
+
+/** Best-effort release (logged, never thrown): the caller is already failing and must rethrow its own error. */
+async function releaseApproval(container: MedusaContainer, id: string): Promise<void> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const plan = approvalReleasePlan(id);
+    const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ id: string }>;
+    if (res.rows.length) logger.warn(`[pos] approval ${id} released: the sale it was claimed for was not recorded.`);
+  } catch (e) {
+    logger.error(`[pos] approval ${id} could not be released after a failed sale: ${(e as Error).message}`);
+  }
 }
 
 /**
@@ -1064,26 +1187,124 @@ export async function createPosSale(container: MedusaContainer, input: CreateSal
 
 async function recordSale(container: MedusaContainer, input: CreateSaleInput): Promise<CreatedSale> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
-  const query = container.resolve(ContainerRegistrationKeys.QUERY);
-  const { store, customer, quote } = input;
+  const { store, quote } = input;
   if (!store.sales_channel_id) throw new PosError("store_without_channel", 409);
 
-  let approval: ApprovalRow | null = null;
-  if (input.needsApproval) {
-    approval = input.approvalId ? await getApproval(container, input.approvalId) : null;
-    assertApprovalFits(approval, store, quote);
+  // Every query here is a round trip to the database (~45 ms from the server
+  // in staging, see "db ping" in pos-after-sale.ts), so whatever does not
+  // depend on another step runs alongside it. Reads first: nothing is written
+  // until the approval is known to fit.
+  const [regionId, approval] = await Promise.all([
+    usdRegionId(container),
+    input.needsApproval && input.approvalId ? getApproval(container, input.approvalId) : Promise.resolve(null),
+  ]);
+  if (input.needsApproval) assertApprovalFits(approval, store, quote);
+
+  // From here on the approval is spent. Everything up to the sale row is a
+  // chain of writes (customer, prescriptions, cart, order) any of which can
+  // fail; if one does, the approval goes back so the till can retry with it.
+  if (approval) await claimApproval(container, approval.id);
+  let placed: PlacedSale;
+  try {
+    placed = await placeOrderAndSale(container, input, approval, regionId);
+  } catch (e) {
+    if (approval) await releaseApproval(container, approval.id);
+    throw e;
+  }
+  const { sale, orderId, number, promisedOn, withLenses, rx } = placed;
+  const svc = pos(container);
+  const p = input.payments;
+  // Tray, payments and the approval touch different rows of the new sale:
+  // none waits for the others. The order's stamp below needs the tray. The
+  // approval was already claimed (status "used") before the order was placed;
+  // only the link to the sale is written now that the sale exists.
+  const [tray] = await Promise.all([
+    withLenses
+      ? takeTray(container, store.id, sale.id).then(async (n) => {
+          await svc.updatePosSales({ id: sale.id, tray_number: n });
+          return n;
+        })
+      : Promise.resolve(null),
+    writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments }),
+    approval ? svc.updateDiscountApprovals({ id: approval.id, sale_id: sale.id } as never) : Promise.resolve(),
+  ]);
+
+  // The order board, the Sheet and the emails show the store's number and the
+  // balance. Best-effort: the sale row already links both ways.
+  let displayId: number | null = null;
+  try {
+    displayId = await stampOrder(container, orderId, {
+      pos_sale_number: number,
+      pos_sale_id: sale.id,
+      tray: tray === null ? null : `${store.code}-${tray}`,
+      balance_due_cents: p.balance_cents,
+      paid_cents: p.paid_cents + p.insurance_cents,
+      promised_on: promisedOn,
+    });
+  } catch (e) {
+    logger.warn(`[pos] sale ${number}: could not stamp the order ${orderId}: ${(e as Error).message}`);
   }
 
-  const regionId = await usdRegionId(container);
-  const customerId = await upsertCustomer(container, customer, input.customerId);
-  const rx = await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId);
+  // Dashboards (sale_fact), after the order carries the sale's id.
+  await projectOrder(container, orderId);
 
-  // Photos of frames the customer brought go to the private bucket: they travel
-  // with the lab ticket to the main store (HU-89).
-  const photoKeys: Array<string | null> = [];
-  for (const line of input.lines) {
-    photoKeys.push(line.kind === "own_frame" ? await uploadPrivateImage(line.photo, "posframe") : null);
-  }
+  logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
+
+  const pn = input.prescriptions;
+  const change =
+    pn.worn && pn.new
+      ? opticalChange(
+          { od: pn.worn.rx.od, os: pn.worn.rx.os, rx_date: input.rxMeta.worn?.rx_date ?? null },
+          { od: pn.new.rx.od, os: pn.new.rx.os },
+          { thresholds: input.thresholds }
+        )
+      : null;
+
+  return {
+    id: sale.id,
+    number,
+    order_id: orderId,
+    display_id: displayId,
+    total: quote.total,
+    paid: dollars(p.paid_cents),
+    insurance: dollars(p.insurance_cents),
+    balance: dollars(p.balance_cents),
+    tray: tray === null ? null : `${store.code}-${tray}`,
+    rx_number: rx.rxNumber,
+    promised_on: promisedOn,
+    optical_change: change,
+  };
+}
+
+/** What `placeOrderAndSale` hands back to the rest of `recordSale`. */
+interface PlacedSale {
+  sale: { id: string };
+  orderId: string;
+  number: string;
+  promisedOn: string;
+  withLenses: boolean;
+  rx: { newId: string | null; wornId: string | null; rxNumber: string | null };
+}
+
+/**
+ * Customer, prescriptions, cart, Medusa order and the pos_sale row — the part
+ * of a sale that must either finish or leave nothing behind that needs the
+ * discount approval (recordSale releases it when this throws).
+ */
+async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleInput, approval: ApprovalRow | null, regionId: string): Promise<PlacedSale> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  const query = container.resolve(ContainerRegistrationKeys.QUERY);
+  const { store, customer, quote } = input;
+  // The prescription needs the customer; the photos of frames the customer
+  // brought (private bucket, they travel with the lab ticket to the main
+  // store, HU-89) need neither.
+  const [{ customerId, rx }, photoKeys] = await Promise.all([
+    upsertCustomer(container, customer, input.customerId).then(async (customerId) => ({
+      customerId,
+      rx: await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId),
+    })),
+    Promise.all(input.lines.map((line) => (line.kind === "own_frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
+  ]);
 
   const address = {
     first_name: customer.first_name,
@@ -1165,13 +1386,18 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     throw new PosError("total_changed", 409);
   }
 
-  await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
-  const { data: withCollection } = await query.graph({
-    entity: "cart",
-    fields: ["id", "payment_collection.id"],
-    filters: { id: cartId },
-  });
-  const collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
+  // The workflow returns the collection it created; reading it back from the
+  // cart is only a fallback.
+  const { result: collection } = await createPaymentCollectionForCartWorkflow(container).run({ input: { cart_id: cartId } });
+  let collectionId = (collection as { id?: string } | undefined)?.id;
+  if (!collectionId) {
+    const { data: withCollection } = await query.graph({
+      entity: "cart",
+      fields: ["id", "payment_collection.id"],
+      filters: { id: cartId },
+    });
+    collectionId = (withCollection[0] as { payment_collection?: { id: string } } | undefined)?.payment_collection?.id;
+  }
   if (!collectionId) throw new PosError("payment_failed", 500);
   await createPaymentSessionsWorkflow(container).run({
     input: { payment_collection_id: collectionId, provider_id: MANUAL_PROVIDER_ID, customer_id: customerId },
@@ -1185,9 +1411,8 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
   const number = saleNumber(store.code, seq);
   const withLenses = quote.lines.some((l) => l.lens_category);
   const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
-  const svc = pos(container);
   const p = input.payments;
-  const sale = await svc.createPosSales({
+  const sale = await pos(container).createPosSales({
     number,
     establishment_id: store.id,
     seq,
@@ -1211,56 +1436,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     currency_code: "usd",
     own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
   });
-  const tray = withLenses ? await takeTray(container, store.id, sale.id) : null;
-  if (tray !== null) await svc.updatePosSales({ id: sale.id, tray_number: tray });
-  await writePayments(container, { saleId: sale.id, orderId, establishmentId: store.id, terminalId: input.terminal.id, actorId: input.sellerId, kind: "deposit", payments: p.payments });
-  if (approval) await svc.updateDiscountApprovals({ id: approval.id, status: "used", sale_id: sale.id } as never);
-
-  // The order board, the Sheet and the emails show the store's number and the
-  // balance. Best-effort: the sale row already links both ways.
-  let displayId: number | null = null;
-  try {
-    displayId = await stampOrder(container, orderId, {
-      pos_sale_number: number,
-      pos_sale_id: sale.id,
-      tray: tray === null ? null : `${store.code}-${tray}`,
-      balance_due_cents: p.balance_cents,
-      paid_cents: p.paid_cents + p.insurance_cents,
-      promised_on: promisedOn,
-    });
-  } catch (e) {
-    logger.warn(`[pos] sale ${number}: could not stamp the order ${orderId}: ${(e as Error).message}`);
-  }
-
-  // Dashboards (sale_fact), after the order carries the sale's id.
-  await projectOrder(container, orderId);
-
-  logger.info(`[pos] sale ${number} (order ${orderId}) by ${input.sellerCode ?? input.sellerId ?? "?"} at ${input.terminal.code}: ${quote.total_cents} cents, paid ${p.paid_cents}, balance ${p.balance_cents}`);
-
-  const pn = input.prescriptions;
-  const change =
-    pn.worn && pn.new
-      ? opticalChange(
-          { od: pn.worn.rx.od, os: pn.worn.rx.os, rx_date: input.rxMeta.worn?.rx_date ?? null },
-          { od: pn.new.rx.od, os: pn.new.rx.os },
-          { thresholds: input.thresholds }
-        )
-      : null;
-
-  return {
-    id: sale.id,
-    number,
-    order_id: orderId,
-    display_id: displayId,
-    total: quote.total,
-    paid: dollars(p.paid_cents),
-    insurance: dollars(p.insurance_cents),
-    balance: dollars(p.balance_cents),
-    tray: tray === null ? null : `${store.code}-${tray}`,
-    rx_number: rx.rxNumber,
-    promised_on: promisedOn,
-    optical_change: change,
-  };
+  return { sale, orderId, number, promisedOn, withLenses, rx };
 }
 
 async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
@@ -1369,6 +1545,24 @@ export interface SaleRow {
   void_requested_at: string | null;
   created_at: string;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
+  /**
+   * Who the sale was for and what was sold, when the caller asked for it
+   * (`listSales` with `withDetail`). Read from the source tables — the
+   * customer, the order's lines, the product — by lib/pos-sale-detail.ts, with
+   * the field names the analytics list uses, so a panel never has to tell
+   * where a value came from. Absent (not null) when it was not asked for.
+   */
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  frame_brand?: string | null;
+  frame_model?: string | null;
+  frame_color?: string | null;
+  frame_sku?: string | null;
+  own_frame?: boolean;
+  has_rx?: boolean;
+  lens?: LensCodes | null;
+  lens_summary?: { es: string; en: string } | null;
+  items?: string;
 }
 
 function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
@@ -1429,8 +1623,20 @@ export interface SalesFilter {
   to?: string;
 }
 
+/** What `listSales` may add to each row beyond the sale itself. */
+export interface ListSalesOptions {
+  /**
+   * Also read who the sale was for and what was sold (customer, frame, lenses,
+   * items) from the source tables — lib/pos-sale-detail.ts. Opt-in because it
+   * costs a handful of extra queries per page, and the callers that only need
+   * the money (the store's status, a seller's own panel) should not pay for
+   * them. Batched: the cost does not grow with the number of sales.
+   */
+  withDetail?: boolean;
+}
+
 /** Sales, newest first, within the caller's scope (the route sets it). */
-export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50): Promise<SaleRow[]> {
+export async function listSales(container: MedusaContainer, f: SalesFilter, take = 50, opts: ListSalesOptions = {}): Promise<SaleRow[]> {
   const svc = pos(container);
   const where: Record<string, unknown> = {};
   if (f.establishmentIds !== null) where.establishment_id = f.establishmentIds;
@@ -1444,7 +1650,11 @@ export async function listSales(container: MedusaContainer, f: SalesFilter, take
   if (f.from || f.to) where.created_at = { ...(f.from ? { $gte: new Date(f.from) } : {}), ...(f.to ? { $lte: new Date(f.to) } : {}) };
   const sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
   const payments = sales.length ? await svc.listPosSalePayments({ sale_id: sales.map((s) => s.id) }, { take: sales.length * 12 }) : [];
-  return sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  const rows = sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
+  if (!opts.withDetail || !rows.length) return rows;
+  // A sale with no order or no customer simply gets nulls: the list never fails over its description.
+  const details = await loadSaleDetails(container, rows);
+  return rows.map((r) => ({ ...r, ...(details.get(r.id) ?? EMPTY_SALE_DETAIL) }));
 }
 
 export async function getSale(container: MedusaContainer, id: string): Promise<SaleRow | null> {
@@ -1455,6 +1665,32 @@ export async function getSale(container: MedusaContainer, id: string): Promise<S
   return toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>);
 }
 
+/**
+ * The collection as one guarded UPDATE on the sale's own figures. The old
+ * code added the payment to the `paid`/`balance` the caller had read, so two
+ * clerks collecting the same balance at once (two tills, or a double tap)
+ * both started from the same stale numbers: the second write erased the
+ * first and the customer paid twice for one balance. Here the database adds
+ * to what is *currently* paid, and the WHERE refuses the update when the sale
+ * was voided meanwhile, when nothing is owed any more, or when this payment
+ * would take the sale over its total (the losing twin of a race, or a stale
+ * screen). In SET the right-hand columns are the row's values before the
+ * update, so `balance_cents` is computed from the same figures it adds to.
+ */
+export function paymentClaimPlan(saleId: string, paidCents: number, insuranceCents: number): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET paid_cents = paid_cents + ?,
+                 insurance_cents = insurance_cents + ?,
+                 balance_cents = total_cents - (paid_cents + ?) - (insurance_cents + ?),
+                 updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents > 0
+             AND (paid_cents + insurance_cents + ? + ?) <= total_cents
+       RETURNING paid_cents, insurance_cents, balance_cents`,
+    bindings: [paidCents, insuranceCents, paidCents, insuranceCents, saleId, paidCents, insuranceCents],
+  };
+}
+
 /** Collects (part of) the balance — usually when the glasses are picked up (HU-29). */
 export async function collectPayment(
   container: MedusaContainer,
@@ -1462,13 +1698,27 @@ export async function collectPayment(
   payments: CleanedPayments,
   actorId: string | null
 ): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
   if (sale.balance <= 0) throw new PosError("nothing_due", 409);
-  const paid = cents(sale.paid) + payments.paid_cents;
-  const insurance = cents(sale.insurance) + payments.insurance_cents;
-  const balance = cents(sale.total) - paid - insurance;
+  const plan = paymentClaimPlan(sale.id, payments.paid_cents, payments.insurance_cents);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ paid_cents: unknown; insurance_cents: unknown; balance_cents: unknown }>;
+  const claimed = res.rows[0];
+  if (!claimed) {
+    // Refused: nothing was written, so the ledger stays as it was. Say why,
+    // from the sale as it is now rather than as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance <= 0) throw new PosError("nothing_due", 409);
+    throw new PosError("overpaid", 409, { balance: now.balance });
+  }
+  const paid = Number(claimed.paid_cents);
+  const insurance = Number(claimed.insurance_cents);
+  const balance = Number(claimed.balance_cents);
+  // The ledger rows only once the sale has accepted the money: a refused
+  // collection must not leave payments that no balance accounts for.
   await writePayments(container, { saleId: sale.id, orderId: sale.order_id, establishmentId: sale.establishment_id, terminalId: sale.terminal_id, actorId, kind: "balance", payments: payments.payments });
-  await pos(container).updatePosSales({ id: sale.id, paid_cents: paid, insurance_cents: insurance, balance_cents: balance });
   if (sale.order_id) await stampOrder(container, sale.order_id, { balance_due_cents: balance, paid_cents: paid + insurance }).catch(() => null);
   await recordAudit(container, {
     actorId,
@@ -1476,19 +1726,153 @@ export async function collectPayment(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { balance_cents: cents(sale.balance) },
+    // From the figures the database returned, not from the caller's screen.
+    before: { balance_cents: balance + payments.paid_cents + payments.insurance_cents },
     after: { balance_cents: balance, collected_cents: payments.paid_cents + payments.insurance_cents },
+  });
+  // The dashboards' payment-method dimension (sale_fact.payment_methods) was
+  // projected when the sale was made; a balance paid later with another method
+  // would otherwise never show under that method's filter. Best-effort, like
+  // every projection: the money is already recorded.
+  if (sale.order_id) {
+    try {
+      await projectOrder(container, sale.order_id);
+    } catch (e) {
+      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[pos] sale ${sale.number}: facts not reprojected after the collection: ${(e as Error).message}`);
+    }
+  }
+  return (await getSale(container, sale.id)) as SaleRow;
+}
+
+/**
+ * The hand-over as one guarded UPDATE. Two clerks delivering the same sale
+ * (or one double tap) used to both write `delivered_at`; and a sale whose
+ * balance was still owed, or that was voided between the screen and the
+ * click, relied on figures the caller had read earlier. The WHERE makes the
+ * database decide: only a live sale with nothing owed and not yet delivered
+ * takes the stamp. 0 rows = already delivered (idempotent), voided, or owed.
+ */
+export function deliveryClaimPlan(saleId: string): SqlPlan {
+  return {
+    sql: `UPDATE pos_sale
+             SET delivered_at = now(), updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided' AND balance_cents <= 0 AND delivered_at IS NULL
+       RETURNING delivered_at`,
+    bindings: [saleId],
+  };
+}
+
+/** The steps the order board still needs to show a sale as delivered: the real events, in order. */
+const DELIVERY_STAGES = ["shipped", "in_transit", "delivered"] as const;
+
+/**
+ * Moves the Medusa order of a delivered sale to `delivered` through the one
+ * stage machine (lib/order-stage-transition.ts), so the order board, the
+ * customer's tracking page and the Sheet agree with the till. A pickup sale
+ * has no fulfillment, and the machine only reaches `delivered` through
+ * `shipped → in_transit → delivered`, so the missing steps are walked in
+ * order: the intermediate ones silently (nothing is "packed" or "on its way"
+ * when the customer is at the counter), the last one with the customer's
+ * usual "delivered" email — the only email the hand-over sends, and only if
+ * they did not opt out (`metadata.notify_email`).
+ *
+ * Must run BEFORE `delivered_at` is written: the board reads that column
+ * (order-board.ts applyPosDelivery) and, once set, answers `next_stages: []`
+ * to every move. Best-effort: a step the machine refuses or that fails is
+ * logged and the delivery stands — the sale is delivered in our records and
+ * the board shows it so from `delivered_at` anyway.
+ */
+async function advanceOrderToDelivered(container: MedusaContainer, sale: SaleRow, actorId: string | null): Promise<boolean> {
+  if (!sale.order_id) return false;
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const board = await fetchBoardOrder(container, sale.order_id);
+    if (!board) return false;
+    if (board.terminal === "canceled" || board.terminal === "refunded") return false;
+    if (board.stage === "delivered") return true;
+    const first = DELIVERY_STAGES.findIndex((s) => board.next_stages.includes(s));
+    if (first < 0) {
+      logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} at '${board.stage}' offers none of ${DELIVERY_STAGES.join("/")}; stage left as is.`);
+      return false;
+    }
+    const steps = DELIVERY_STAGES.slice(first);
+    for (const stage of steps) {
+      try {
+        await transitionOrderStage(container, sale.order_id, { stage, actorId: actorId ?? "pos", noNotification: stage !== "delivered" });
+      } catch (e) {
+        const why = e instanceof StageError ? `${e.reason}: ${e.message}` : (e as Error).message;
+        logger.warn(`[pos] sale ${sale.number}: order ${sale.order_id} not moved to '${stage}': ${why}`);
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    logger.warn(`[pos] sale ${sale.number}: order stage not moved: ${(e as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Hands the glasses over (HU-29): stamps `delivered_at` (guarded, see
+ * `deliveryClaimPlan`), releases the tray, moves the order to `delivered` and
+ * audits who handed them. Idempotent: a sale already delivered comes back as
+ * it is, nothing is rewritten. `balance_due` while money is owed — collect it
+ * first, or in the same step with `collectAndDeliver` (HU-32).
+ */
+export async function markDelivered(container: MedusaContainer, sale: SaleRow, opts: { actorId?: string | null } = {}): Promise<SaleRow> {
+  // Cheap early exits on what the caller saw; the UPDATE below is the real gate.
+  if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
+  if (sale.delivered_at) return sale;
+  const actorId = opts.actorId ?? null;
+  // The order first: once delivered_at exists the board refuses every move.
+  const stageMoved = await advanceOrderToDelivered(container, sale, actorId);
+  const plan = deliveryClaimPlan(sale.id);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ delivered_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    if (now.status === "voided") throw new PosError("sale_voided", 409);
+    if (now.balance > 0) throw new PosError("balance_due", 409, { balance: now.balance });
+    return now; // delivered meanwhile: the other hand-over counts
+  }
+  await releaseTray(container, sale.id);
+  await recordAudit(container, {
+    actorId,
+    action: "sale.deliver",
+    entity: "pos_sale",
+    entityId: sale.id,
+    establishmentId: sale.establishment_id,
+    after: { delivery: sale.delivery, order_stage_moved: stageMoved },
   });
   return (await getSale(container, sale.id)) as SaleRow;
 }
 
-/** Hands the glasses over: releases the tray (HU-29). The lab stage is moved on the order board. */
-export async function markDelivered(container: MedusaContainer, sale: SaleRow): Promise<SaleRow> {
+/**
+ * Collect the balance and hand over in one step (HU-32): the customer pays
+ * what is left at the counter and leaves with the glasses. `payments` (as
+ * cleaned by the route) is collected first when something is owed —
+ * `collectPayment` is atomic and writes the ledger — then `markDelivered`
+ * runs on the sale as the collection left it. With nothing owed the payments
+ * are ignored and it is a plain delivery. A refused collection stops before
+ * the delivery, so a sale is never delivered with money still due.
+ */
+export async function collectAndDeliver(
+  container: MedusaContainer,
+  sale: SaleRow,
+  payments: CleanedPayments | null,
+  actorId: string | null
+): Promise<{ sale: SaleRow; collected: boolean }> {
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
-  if (sale.balance > 0) throw new PosError("balance_due", 409, { balance: sale.balance });
-  await pos(container).updatePosSales({ id: sale.id, delivered_at: new Date() });
-  await releaseTray(container, sale.id);
-  return (await getSale(container, sale.id)) as SaleRow;
+  let current = sale;
+  let collected = false;
+  if (current.balance > 0) {
+    if (!payments || !payments.payments.length) throw new PosError("balance_due", 409, { balance: current.balance });
+    current = await collectPayment(container, current, payments, actorId);
+    collected = true;
+  }
+  return { sale: await markDelivered(container, current, { actorId }), collected };
 }
 
 export const VOID_REASONS = ["customer_changed_mind", "wrong_entry", "price_error", "duplicate", "lab_cannot_make", "other"] as const;
@@ -1497,13 +1881,27 @@ export type VoidReason = (typeof VOID_REASONS)[number];
 /** A seller asks; a manager of the store (or someone with sale.void) decides (HU-28). */
 export async function requestVoid(container: MedusaContainer, sale: SaleRow, actorId: string, reason: VoidReason, note: string | null): Promise<SaleRow> {
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
-  await pos(container).updatePosSales({ id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note });
+  const svc = pos(container);
+  // A repeated request (the seller comes back to add detail, or a colleague
+  // asks again) used to overwrite who asked first and when, which is what the
+  // manager's queue is ordered by and what the audit trail points to. The
+  // first request keeps its timestamp and requester; only the reason and the
+  // note move, and the audit shows what they moved from.
+  const [raw] = (await svc.listPosSales({ id: sale.id }, { take: 1 })) as unknown as Array<Record<string, unknown>>;
+  const pending = Boolean(raw?.void_requested_at);
+  const before = pending ? { reason: (raw.void_reason as string | null) ?? null, note: (raw.void_note as string | null) ?? null } : undefined;
+  await svc.updatePosSales(
+    pending
+      ? { id: sale.id, void_reason: reason, void_note: note }
+      : { id: sale.id, void_requested_by: actorId, void_requested_at: new Date(), void_reason: reason, void_note: note }
+  );
   await recordAudit(container, {
     actorId,
     action: "sale.void_request",
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
+    before,
     after: { reason, note },
   });
   return (await getSale(container, sale.id)) as SaleRow;

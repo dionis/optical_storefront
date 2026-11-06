@@ -11,26 +11,58 @@
 // maestro, con la pastilla «Heredado» donde no ha cambiado nada. No tiene filtro
 // de período: un precio no es un informe. Backend: /admin/pricing/* (una sola
 // lectura, `GET /admin/pricing/overview`).
+//
+// VISTAS EN PESTAÑAS, no una pila de acordeones: «vamos a hacerlo por vistas en
+// pestañas, para evitar hacer scroll lo menos posible. Primero el manejo de las
+// monturas, luego el manejo de los lentes … luego el tratamiento de los
+// lentes». Ese es el orden de TABS, y cada pestaña entra sola en la pantalla.
+// La pestaña abierta viaja en `?sub=` (ver pricing/useSub.js), así que recargar
+// no devuelve al principio y el enlace abre la vista exacta.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import Accordion, { AccordionGroup } from "./Accordion.jsx";
+import { SummaryPills } from "./Accordion.jsx";
 import { Profitability } from "./Costs.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Icon from "./icons.jsx";
+import { SubTabs } from "./ui.jsx";
 import { money } from "./adminOrders.js";
 import { fetchPricingOverview } from "./pricing/api.js";
 import FramesSection from "./pricing/FramesSection.jsx";
 import LensesSection from "./pricing/LensesSection.jsx";
+import TreatmentsSection from "./pricing/TreatmentsSection.jsx";
 import CommissionsSection from "./pricing/CommissionsSection.jsx";
 import CostsSection from "./pricing/CostsSection.jsx";
+import useSubTab from "./pricing/useSub.js";
 import "./pricing.css";
 
 const dollars = (cents) => (cents == null ? 0 : Math.round(Number(cents)) / 100);
 
-export default function PricingPanel({ me = null, sellers = [], go }) {
+/**
+ * Las vistas, en el orden que pidió el dueño: monturas → lentes →
+ * tratamientos → lo que queda (comisiones y costos) → las fichas por pedido.
+ */
+const TABS = ["frames", "lenses", "treatments", "costs", "sheets"];
+
+/**
+ * `?sub=` lleva DOS niveles con un solo parámetro: `lenses-prog` abre los
+ * lentes por el tipo «progresivo». Un solo parámetro porque es el que el
+ * armazón ya reparte (`params.sub`), y así un enlace apunta a la vista exacta
+ * sin inventar otro nombre de consulta.
+ */
+const headOf = (v) => String(v || "").split("-")[0];
+const tailOf = (v) => String(v || "").split("-").slice(1).join("-") || null;
+const normalizeSub = (v) => {
+  const raw = String(v || "");
+  const head = headOf(raw);
+  if (!TABS.includes(head)) return null;
+  // Solo los lentes tienen segundo nivel; el resto se queda en su nombre.
+  return head === "lenses" ? raw : head;
+};
+
+export default function PricingPanel({ me = null, sellers = [], go, params = null, onSub = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const { storeId, store, stores, isAll, isWeb } = useStoreFilter(me);
@@ -126,7 +158,11 @@ export default function PricingPanel({ me = null, sellers = [], go }) {
             rows: data.lenses.base.map((cell) => ({
               design: labelOf(designs.get(cell.design_code) || { code: cell.design_code }),
               tier: designs.get(cell.design_code)?.tier || "",
-              material: labelOf(materials.get(cell.material_code) || { code: cell.material_code }),
+              // El acabado se nombra donde el diseño admite los dos (stock / tallado digital).
+              material: [
+                labelOf(materials.get(cell.material_code) || { code: cell.material_code }),
+                designs.get(cell.design_code)?.category !== "prog" && cell.finish ? t(`adm.price.lens.finish.${cell.finish}`) : "",
+              ].filter(Boolean).join(" · "),
               price: priceOf(cell),
             })),
           },
@@ -199,6 +235,17 @@ export default function PricingPanel({ me = null, sellers = [], go }) {
     data ? menuHandlers({ targetRef: ref, title: t("adm.price.reportTitle"), name: "precios", report }) : null
   );
 
+  // Antes de los `return` de carga y error: un hook no puede quedar detrás de
+  // un return condicional.
+  const [sub, pickSub] = useSubTab({
+    normalize: normalizeSub,
+    fallback: TABS[0],
+    sub: params?.sub ?? null,
+    onSub,
+  });
+  const view = headOf(sub);
+  const lensCat = tailOf(sub);
+
   if (state === "loading") return <div className="adm-src-note loading">{t("adm.price.loading")}</div>;
   if (state !== "ok" || !data) {
     return (
@@ -212,113 +259,163 @@ export default function PricingPanel({ me = null, sellers = [], go }) {
   const offCount = data.costs.rules.filter((r) => !r.enabled).length;
   const changedCells = data.lenses.store?.cells.length ?? 0;
 
+  /**
+   * Lo esencial de cada vista como pastillas, al lado del título: es lo que
+   * antes se leía en la cabecera del acordeón sin abrirlo, y sin ellas cambiar
+   * de pestaña sería cambiar a ciegas.
+   */
+  const PILLS = {
+    frames: [
+      {
+        label: t("adm.price.frames.ruleFrames"),
+        value: data.frames.rule
+          ? data.frames.rule.mode === "percent"
+            ? `${data.frames.rule.value > 0 ? "+" : ""}${data.frames.rule.value} %`
+            : money(data.frames.rule.value, "usd", lang)
+          : t("adm.price.none"),
+        strong: true,
+      },
+      { label: t("adm.price.frames.pills.frames"), value: data.frames.counts.frames },
+      { label: t("adm.price.frames.pills.cases"), value: data.frames.counts.cases },
+    ],
+    lenses: [
+      { label: t("adm.price.lenses.pills.designs"), value: data.lenses.designs.length },
+      { label: t("adm.price.lenses.pills.materials"), value: data.lenses.materials.length },
+      ...(data.lenses.store
+        ? [
+            {
+              label: t("adm.price.lenses.adjust"),
+              value: data.lenses.store.adjust_pct == null ? t("adm.price.none") : `${data.lenses.store.adjust_pct} %`,
+              strong: true,
+            },
+            ...(changedCells ? [{ label: t("adm.price.lenses.cellsOwn"), value: changedCells }] : []),
+          ]
+        : []),
+    ],
+    treatments: [
+      { label: t("adm.price.treat.pills.photo"), value: data.lenses.photo.length },
+      { label: t("adm.price.treat.pills.ar"), value: data.lenses.ar.length },
+    ],
+    costs: [
+      {
+        label: t("adm.price.comm.default"),
+        value: data.commissions.default_pct == null ? t("adm.price.none") : `${data.commissions.default_pct} %`,
+        strong: true,
+      },
+      { label: t("adm.price.comm.pills.sellers"), value: data.commissions.sellers.length },
+      { label: t("adm.price.costs.pills.rules"), value: data.costs.rules.length },
+      ...(offCount ? [{ label: t("adm.price.costs.pills.off"), value: offCount, tone: "warn" }] : []),
+      { label: t("adm.price.costs.tax"), value: `${data.costs.taxes.rate_pct} %` },
+    ],
+    sheets: [],
+  };
+
+  // `sub` es la frase de la vista: una sola línea de prosa antes de los datos,
+  // y escrita como literal para que `check-i18n` pueda comprobar la clave.
+  const items = [
+    { key: "frames", icon: "glasses", label: t("adm.price.tab.frames"), sub: t("adm.price.frames.sub") },
+    { key: "lenses", icon: "eye", label: t("adm.price.tab.lenses"), sub: t("adm.price.lenses.sub") },
+    { key: "treatments", icon: "palette", label: t("adm.price.tab.treatments"), sub: t("adm.price.treat.sub") },
+    { key: "costs", icon: "costs", label: t("adm.price.tab.costs"), sub: t("adm.price.tab.costsSub") },
+    { key: "sheets", icon: "receipt", label: t("adm.price.tab.sheets"), sub: t("adm.price.sheets.sub") },
+  ];
+  const current = items.find((i) => i.key === view) || items[0];
+
   return (
     <div className="pp adm-section" ref={ref}>
       <div className="pp-head">
         <h2>{t("adm.tab.pricing")}<HelpTip topic="price.rule" /></h2>
-        <span className="pp-scope"><Icon name="store" size={12} />{scopeLabel}</span>
+        {/* El «maestro vs. variación de tienda» se explica en la pastilla de
+            ámbito en vez de en un párrafo: una línea menos antes de los datos. */}
+        <span className="pp-scope" title={t("adm.price.intro")}><Icon name="store" size={12} />{scopeLabel}</span>
       </div>
-      <p className="pp-intro">{t("adm.price.intro")}</p>
 
-      <AccordionGroup>
-        <Accordion
-          id="pricing-frames"
-          icon="prices"
-          title={t("adm.price.frames.title")}
-          subtitle={t("adm.price.frames.sub")}
-          defaultOpen
-          summary={[
-            {
-              label: t("adm.price.frames.ruleFrames"),
-              value: data.frames.rule
-                ? data.frames.rule.mode === "percent"
-                  ? `${data.frames.rule.value > 0 ? "+" : ""}${data.frames.rule.value} %`
-                  : money(data.frames.rule.value, "usd", lang)
-                : t("adm.price.none"),
-              strong: true,
-            },
-            { label: t("adm.price.frames.pills.frames"), value: data.frames.counts.frames },
-            { label: t("adm.price.frames.pills.cases"), value: data.frames.counts.cases },
-          ]}
-        >
-          <FramesSection
-            frames={data.frames}
-            store={scope}
-            storeId={data.store?.id || stores[0]?.id || null}
-            onSaved={onSaved}
-            onError={onError}
-          />
-        </Accordion>
+      <SubTabs items={items} value={view} onChange={(k) => pickSub(k)} />
 
-        <Accordion
-          id="pricing-lenses"
-          icon="eye"
-          title={t("adm.price.lenses.title")}
-          subtitle={t("adm.price.lenses.sub")}
-          summary={[
-            { label: t("adm.price.lenses.pills.designs"), value: data.lenses.designs.length },
-            { label: t("adm.price.lenses.pills.materials"), value: data.lenses.materials.length },
-            ...(data.lenses.store
-              ? [
-                  {
-                    label: t("adm.price.lenses.adjust"),
-                    value: data.lenses.store.adjust_pct == null ? t("adm.price.none") : `${data.lenses.store.adjust_pct} %`,
-                    strong: true,
-                  },
-                  ...(changedCells ? [{ label: t("adm.price.lenses.cellsOwn"), value: changedCells }] : []),
-                ]
-              : []),
-          ]}
-        >
-          <LensesSection lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} />
-        </Accordion>
+      <div className="pp-meta">
+        <p className="pp-intro">{current.sub}</p>
+        <SummaryPills items={PILLS[view] || []} />
+      </div>
 
-        <Accordion
-          id="pricing-commissions"
-          icon="sellers"
-          title={t("adm.price.comm.title")}
-          subtitle={t("adm.price.comm.sub")}
-          summary={[
-            {
-              label: t("adm.price.comm.default"),
-              value: data.commissions.default_pct == null ? t("adm.price.none") : `${data.commissions.default_pct} %`,
-              strong: true,
-            },
-            { label: t("adm.price.comm.pills.sellers"), value: data.commissions.sellers.length },
-          ]}
-        >
-          <CommissionsSection commissions={data.commissions} onSaved={onSaved} onError={onError} />
-        </Accordion>
+      {view === "frames" && (
+        <FramesSection
+          frames={data.frames}
+          store={scope}
+          storeId={data.store?.id || stores[0]?.id || null}
+          onSaved={onSaved}
+          onError={onError}
+        />
+      )}
 
-        <Accordion
-          id="pricing-costs"
-          icon="costs"
-          title={t("adm.price.costs.title")}
-          subtitle={t("adm.price.costs.sub")}
-          summary={[
-            { label: t("adm.price.costs.pills.rules"), value: data.costs.rules.length },
-            ...(offCount ? [{ label: t("adm.price.costs.pills.off"), value: offCount, tone: "warn" }] : []),
-            { label: t("adm.price.costs.tax"), value: `${data.costs.taxes.rate_pct} %`, strong: true },
-          ]}
-        >
-          <CostsSection
-            costs={data.costs}
-            store={scope}
-            isStore={Boolean(data.store)}
-            onSaved={onSaved}
-            onError={onError}
-          />
-        </Accordion>
+      {view === "lenses" && (
+        <LensesSection
+          lenses={data.lenses}
+          store={scope}
+          cat={lensCat}
+          onCat={(c) => pickSub(`lenses-${c}`)}
+          onSaved={onSaved}
+          onError={onError}
+        />
+      )}
 
-        <Accordion
-          id="pricing-sheets"
-          icon="receipt"
-          title={t("adm.price.sheets.title")}
-          subtitle={t("adm.price.sheets.sub")}
-        >
-          <Profitability sellers={sellers} go={go} />
-        </Accordion>
-      </AccordionGroup>
+      {view === "treatments" && (
+        <TreatmentsSection lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} />
+      )}
+
+      {/* UNA pestaña y DOS columnas, no dos pestañas: el dueño pidió
+          «comisiones, costos fijos, costos variables, impuestos … en el mismo
+          sitio, para saber dónde ir si quiere cambiar algo concreto», y las
+          comisiones son un costo más de la venta. Las dos listas son estrechas
+          (concepto + número), así que lado a lado caben enteras y se comparan
+          de un vistazo; partirlas en dos pestañas sería un clic más para ver
+          dos mitades de la misma cuenta. */}
+      {view === "costs" && (
+        <div className="pp-two">
+          {/* A la izquierda lo que se paga a la gente y lo que cuesta el mes;
+              a la derecha lo que se le descuenta a CADA venta. Repartido así
+              las dos columnas acaban a la misma altura y la pestaña entra
+              entera en la pantalla, que es de lo que iba el encargo. */}
+          <div className="pp-col">
+            <section className="pp-pane">
+              <h3>
+                <Icon name="sellers" size={14} />
+                <span className="pp-pane-t">{t("adm.price.comm.title")}</span>
+              </h3>
+              <CommissionsSection commissions={data.commissions} onSaved={onSaved} onError={onError} />
+            </section>
+            <section className="pp-pane">
+              <h3>
+                <Icon name="store" size={14} />
+                <span className="pp-pane-t">{t("adm.price.costs.perStore")}</span>
+              </h3>
+              <CostsSection
+                costs={data.costs}
+                store={scope}
+                isStore={Boolean(data.store)}
+                part="store"
+                onSaved={onSaved}
+                onError={onError}
+              />
+            </section>
+          </div>
+          <section className="pp-pane">
+            <h3>
+              <Icon name="costs" size={14} />
+              <span className="pp-pane-t">{t("adm.price.costs.perSale")}</span>
+            </h3>
+            <CostsSection
+              costs={data.costs}
+              store={scope}
+              isStore={Boolean(data.store)}
+              part="rules"
+              onSaved={onSaved}
+              onError={onError}
+            />
+          </section>
+        </div>
+      )}
+
+      {view === "sheets" && <Profitability sellers={sellers} go={go} />}
     </div>
   );
 }

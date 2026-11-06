@@ -6,7 +6,13 @@ import { ocrSettingsMiddlewares } from "./admin/ocr-settings/middlewares";
 import { frameMediaMiddlewares } from "./admin/frame-media/middlewares";
 import { orderAccessRateLimit } from "./store/order-access/rate-limit";
 import { visionNotifyRateLimit } from "./vision-measure/notify/rate-limit";
-import { adminLoginRateLimit, blockAdminSelfRegister, securityHeaders } from "../lib/security";
+import {
+  adminLoginRateLimit,
+  blockAdminSelfRegister,
+  passwordResetRequestRateLimit,
+  passwordResetUpdateRateLimit,
+  securityHeaders,
+} from "../lib/security";
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { staffGuard } from "../lib/staff-guard";
 
@@ -231,6 +237,19 @@ export default defineMiddlewares({
       matcher: "/auth/user/emailpass/register",
       method: ["POST"],
       middlewares: [blockAdminSelfRegister],
+    },
+    {
+      // "Forgot my password" (HU-03): each call mails a link, so per IP and per
+      // identifier. The subscriber in subscribers/auth-password-reset.ts sends.
+      matcher: "/auth/user/emailpass/reset-password",
+      method: ["POST"],
+      middlewares: [passwordResetRequestRateLimit],
+    },
+    {
+      // Consumes the single-use reset token. Per IP.
+      matcher: "/auth/user/emailpass/update",
+      method: ["POST"],
+      middlewares: [passwordResetUpdateRateLimit],
     },
     {
       // CORS for every vision-measure route (see visionMeasureCors above) —

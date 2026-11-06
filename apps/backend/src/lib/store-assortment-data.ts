@@ -68,18 +68,39 @@ export interface CatalogProduct {
   thumbnail: string | null;
   brand: string;
   is_case: boolean;
+  /**
+   * The model's SKU as the catalogue writes it: the first live variant's
+   * (prices and costs in this shop are per model, so every colour shares it,
+   * see frame-cost.ts loadCatalogModels). Null when no variant has one. The
+   * «precio exacto» search joins it to the cost list by this key.
+   */
+  sku: string | null;
 }
 
-function toProduct(r: Record<string, unknown>): CatalogProduct {
+/** One catalogue row → the shape the panel reads. Pure. */
+export function toProduct(r: Record<string, unknown>): CatalogProduct {
   const brand = brandOf(r["metadata"] as Record<string, unknown> | null);
+  const sku = typeof r["sku"] === "string" && r["sku"].trim() ? r["sku"].trim() : null;
   return {
     id: String(r["id"]),
     title: String(r["title"] ?? ""),
     thumbnail: (r["thumbnail"] as string | null) ?? null,
     brand,
     is_case: brand === "case",
+    sku,
   };
 }
+
+/**
+ * The model's SKU as a column of the product query: the first live variant's,
+ * lowest id first so the same colour always answers. A lateral `limit 1`, so a
+ * five-colour model is still one row.
+ */
+const SKU_LATERAL = `left join lateral (
+  select v.sku from product_variant v
+  where v.product_id = product.id and v.deleted_at is null and v.sku is not null
+  order by v.id limit 1
+) sku_of on true`;
 
 const published = (pg: Knex) => pg("product").whereNull("deleted_at").where("status", "published");
 
@@ -94,10 +115,10 @@ export async function searchStoreCatalog(
   const brand = (input.brand ?? "").trim().toLowerCase();
   if (q.length < 2 && !brand) return [];
   const limit = Math.min(Math.max(Number(input.limit) || 30, 1), 200);
-  let sql = published(pg).select("id", "title", "thumbnail", "metadata").orderBy("title").limit(limit);
-  if (q.length >= 2) sql = sql.whereILike("title", `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+  let sql = published(pg).joinRaw(SKU_LATERAL).select("product.id", "product.title", "product.thumbnail", "product.metadata", "sku_of.sku").orderBy("product.title").limit(limit);
+  if (q.length >= 2) sql = sql.whereILike("product.title", `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   if (brand) {
-    sql = sql.whereRaw("lower(coalesce(metadata->>'brand_slug', metadata->>'collection_slug', '')) = ?", [brand]);
+    sql = sql.whereRaw("lower(coalesce(product.metadata->>'brand_slug', product.metadata->>'collection_slug', '')) = ?", [brand]);
   }
   const [rows, rules] = await Promise.all([sql, listAssortmentRules(container, establishmentId)]);
   return (rows as Array<Record<string, unknown>>).map((r) => {

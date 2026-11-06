@@ -45,6 +45,18 @@ describe("ruleMatches", () => {
     expect(ruleMatches(rule({}), sale({ is_web: true, establishment_id: null }))).toBe(false);
     expect(ruleMatches(rule({ conditions: { include_web: true } }), sale({ is_web: true, establishment_id: null }))).toBe(true);
   });
+
+  it("a void request (HU-28) reaches its own rules, by store and seller like the rest", () => {
+    const ev = sale({ event: "sale.void_requested", key: "void_request:poss_1", data: { number: "Op2-000147", total: 202.5, reason: "wrong_entry", requested_by: "V1" } });
+    expect(ruleMatches(rule({ event: "sale.void_requested" }), ev)).toBe(true);
+    expect(ruleMatches(rule({ event: "sale.voided" }), ev)).toBe(false);
+    expect(ruleMatches(rule({ event: "sale.void_requested", establishment_ids: ["est_2"] }), ev)).toBe(true);
+    expect(ruleMatches(rule({ event: "sale.void_requested", establishment_ids: ["est_1"] }), ev)).toBe(false);
+    expect(ruleMatches(rule({ event: "sale.void_requested", seller_ids: ["user_9"] }), ev)).toBe(false);
+    // It expects an answer: always immediate, whatever the author asked.
+    const cleaned = cleanRule({ name: "Anulaciones", event: "sale.void_requested", recipients: "owner@example.com", mode: "daily", schedule: { at: "20:00" } }, { canSchedule: true, allowedStores: null, knownStores: [] });
+    expect("rule" in cleaned && cleaned.rule.mode).toBe("immediate");
+  });
 });
 
 describe("cleanRule", () => {
@@ -113,9 +125,10 @@ describe("defaultRules", () => {
       ["sale.created", "immediate"],
       ["discount.requested", "immediate"],
       ["sale.voided", "immediate"],
+      ["sale.void_requested", "immediate"],
       ["cash.diff", "immediate"],
       ["digest", "daily"],
     ]);
-    expect(rules[4].schedule).toEqual({ at: "20:00" });
+    expect(rules[5].schedule).toEqual({ at: "20:00" });
   });
 });

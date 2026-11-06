@@ -13,11 +13,13 @@
 // lleva exactamente las columnas visibles.
 //
 // Datos: la lista sale de GET /admin/pos/sales (filtros de caja: punto de venta,
-// estado, saldo, número, cliente) y se completa con GET /admin/sales-analytics/
-// sales (cliente, teléfono, montura, lentes, artículos y economía), unidas por
-// `sale_id` (useSaleDetails). Si el servidor añade esos campos a /admin/pos/sales
-// la segunda llamada sobra: ver el informe de DataTable.
-import { useEffect, useMemo, useState } from "react";
+// estado, saldo, número, cliente) y ya trae de quién fue y qué se vendió —
+// cliente, teléfono, marca, modelo, color, SKU, montura propia, receta, lentes
+// y artículos — leído de las tablas de origen, así que esas columnas se pintan
+// sin esperar a nada. La segunda llamada, GET /admin/sales-analytics/sales
+// (useSaleDetails), queda SOLO para la economía de la venta: costo, comisión,
+// ganancia y margen, que viven en la analítica y solo las ve quien puede.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { adminFetch } from "./adminApi.js";
@@ -36,12 +38,18 @@ const MAX_PAGES = 5;
 const ymd = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 /**
- * Completa las ventas del POS con lo que /admin/pos/sales no trae (cliente,
- * teléfono, montura, lentes, artículos, costo, comisión, ganancia) leyendo
- * /admin/sales-analytics/sales en la ventana de fechas de la lista y uniendo
- * por `sale_id`. Devuelve { map: Map<saleId, fila>, access, status:
- * "idle" | "loading" | "ok" | "partial" | "error" }. Las filas `limited` (de
- * un compañero, solo para cobrar) no se piden: el servidor no las daría.
+ * Añade a las ventas del POS la economía que solo existe en la analítica
+ * (costo, comisión, ganancia, margen) leyendo /admin/sales-analytics/sales en
+ * la ventana de fechas de la lista y uniendo por `sale_id`. Cliente, montura,
+ * lentes y artículos NO se piden aquí: los trae ya /admin/pos/sales desde las
+ * tablas de origen, y depender de la analítica para describir la venta era lo
+ * que dejaba las columnas en blanco cuando `sale_fact` no tenía fila.
+ *
+ * Devuelve { map: Map<saleId, fila>, access, status:
+ * "idle" | "loading" | "ok" | "partial" | "error" }. `access` dice si quien
+ * mira puede ver esas cifras (`profit`, `commission`): sin eso no hay nada que
+ * completar y no se avisa de nada. Las filas `limited` (de un compañero, solo
+ * para cobrar) no se piden: el servidor no las daría.
  */
 export function useSaleDetails(sales, { store = "", enabled = true } = {}) {
   const [state, setState] = useState({ map: new Map(), access: null, status: "idle" });
@@ -72,21 +80,30 @@ export function useSaleDetails(sales, { store = "", enabled = true } = {}) {
   return state;
 }
 
-/** La venta de la lista con lo que añade la fila de analítica (sin pisar lo que ya trae). */
+/**
+ * La venta de la lista, lista para pintar. Lo que ya trae la venta manda: de
+ * la fila de analítica (`d`, opcional) solo se toma la economía y, como
+ * respaldo, lo descriptivo que la venta no traiga — una venta de la web o
+ * cualquier fila sin esos campos.
+ */
 export function mergeSaleDetails(s, d) {
-  if (!d) return { ...s, customer: s.customer_name ?? s.customer ?? null };
-  return {
+  const pick = (mine, theirs) => (mine === undefined || mine === null ? theirs ?? null : mine);
+  const row = {
     ...s,
-    customer: s.customer_name || s.customer || d.customer || null,
-    customer_phone: s.customer_phone || d.customer_phone || null,
-    frame_brand: d.frame_brand ?? null,
-    frame_model: d.frame_model ?? null,
-    frame_color: d.frame_color ?? null,
-    frame_sku: d.frame_sku ?? null,
-    own_frame: Boolean(d.own_frame),
-    has_rx: Boolean(d.has_rx),
-    lens_summary: d.lens_summary ?? null,
-    items: d.items ?? null,
+    customer: pick(s.customer_name, pick(s.customer, d?.customer)),
+    customer_phone: pick(s.customer_phone, d?.customer_phone),
+    frame_brand: pick(s.frame_brand, d?.frame_brand),
+    frame_model: pick(s.frame_model, d?.frame_model),
+    frame_color: pick(s.frame_color, d?.frame_color),
+    frame_sku: pick(s.frame_sku, d?.frame_sku),
+    own_frame: Boolean(pick(s.own_frame, d?.own_frame)),
+    has_rx: Boolean(pick(s.has_rx, d?.has_rx)),
+    lens_summary: pick(s.lens_summary, d?.lens_summary),
+    items: pick(s.items, d?.items),
+  };
+  if (!d) return row;
+  return {
+    ...row,
     cost: d.cost == null ? null : (Number(d.cost) || 0) + (Number(d.fee) || 0),
     commission: d.commission ?? null,
     profit: d.profit ?? null,
@@ -94,13 +111,16 @@ export function mergeSaleDetails(s, d) {
   };
 }
 
-/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
-export default function PosSales({ me }) {
+/** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS.
+ *  `params.number` (de la URL, `?tab=possales&number=Op2-000147`) precarga el filtro por número y abre esa
+ *  venta: es el enlace que llevan los avisos por correo (p. ej. «anulación solicitada»). */
+export default function PosSales({ me, params }) {
   const { t, lang } = useLang();
   const [ctx, setCtx] = useState(null);
   const [sales, setSales] = useState([]);
   const [state, setState] = useState("loading");
-  const [f, setF] = useState({ terminal: "", with_balance: false, status: "", number: "" });
+  const linkedNumber = String(params?.number || "").trim();
+  const [f, setF] = useState({ terminal: "", with_balance: false, status: "", number: linkedNumber });
   // La tienda la decide el filtro global del panel (StoreFilter); la online no tiene ventas de mostrador.
   const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
   const { storeId, isAll, isWeb } = useStoreFilter(who);
@@ -111,6 +131,13 @@ export default function PosSales({ me }) {
   const [tick, setTick] = useState(0);
   // La ficha de la venta (cajón lateral): abrirla no cambia la lista; cobrar/entregar/anular la refresca.
   const sp = useSalePanel({ me: who, ctx, onChanged: () => setTick((n) => n + 1) });
+  // Llegó por enlace con número: en cuanto la lista trae esa venta, se abre su ficha (una sola vez).
+  const openedLink = useRef("");
+  useEffect(() => {
+    if (!linkedNumber || openedLink.current === linkedNumber) return;
+    const hit = sales.find((s) => String(s.number) === linkedNumber);
+    if (hit) { openedLink.current = linkedNumber; sp.open(hit.id); }
+  }, [linkedNumber, sales, sp]);
 
   useEffect(() => { posContext().then(setCtx).catch(() => setState("error")); }, []);
   useEffect(() => {
@@ -135,11 +162,13 @@ export default function PosSales({ me }) {
   const termById = useMemo(() => new Map((ctx?.stores || []).flatMap((s) => s.terminals.map((x) => [x.id, x]))), [ctx]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
-  // Lo que la lista del POS no trae (cliente, montura, lentes, economía) llega de la analítica y se une por venta.
+  // La economía de la venta (costo, comisión, ganancia, margen) es lo único que sigue llegando de la analítica.
   const details = useSaleDetails(sales, { store });
   const rows = useMemo(() => sales.map((s) => mergeSaleDetails(s, details.map.get(s.id))), [sales, details.map]);
   const hasEcon = rows.some((r) => r.cost != null || r.profit != null);
   const hasCommission = rows.some((r) => r.commission != null);
+  // Solo quien puede ver esas cifras necesita saber si se pudieron completar.
+  const econVisible = Boolean(details.access?.profit || details.access?.commission);
 
   // Resumen ejecutivo del acordeón: cuántas, cuánto y cuánto queda por cobrar (las anuladas aparte).
   const sums = useMemo(() => {
@@ -276,8 +305,8 @@ export default function PosSales({ me }) {
           maxHeight="62vh" dense
           right={<ExportMenu title={t("adm.tab.possales")} name="ventas-tienda" report={report} />}
         >
-          {details.status === "loading" && <span className="dt-loading">{t("adm.tbl.completing")}</span>}
-          {(details.status === "partial" || details.status === "error") && <span className="dt-loading" title={t("adm.tbl.partial")}>{t("adm.tbl.partial")}</span>}
+          {econVisible && details.status === "loading" && <span className="dt-loading">{t("adm.tbl.completing")}</span>}
+          {econVisible && (details.status === "partial" || details.status === "error") && <span className="dt-loading" title={t("adm.tbl.partial")}>{t("adm.tbl.partial")}</span>}
         </DataTable>
       </Accordion>
       {sp.panel}

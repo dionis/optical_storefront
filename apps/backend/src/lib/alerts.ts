@@ -9,7 +9,8 @@
  *  - frequency per rule (owner or superadmin): immediate, a summary every 1–12
  *    hours, daily at a chosen time, or weekly;
  *  - start with: immediate on every sale, on discounts waiting for approval, on
- *    voids and on cash differences, and a daily summary at 20:00 Katy time.
+ *    voids (done and requested, HU-28) and on cash differences, and a daily
+ *    summary at 20:00 Katy time.
  *
  * Alerts never carry prescription values or insurance member data.
  */
@@ -20,6 +21,7 @@ export const ALERT_EVENTS = [
   "discount.requested",
   "sale.below_min",
   "sale.voided",
+  "sale.void_requested",
   "cash.diff",
   "store.idle",
   "digest",
@@ -28,8 +30,8 @@ export type AlertEventName = (typeof ALERT_EVENTS)[number];
 export const ALERT_MODES = ["immediate", "every_n_hours", "daily", "weekly"] as const;
 export type AlertMode = (typeof ALERT_MODES)[number];
 
-/** "Discount waiting for approval" expects an answer: it is always immediate. */
-export const IMMEDIATE_ONLY: ReadonlySet<string> = new Set(["discount.requested"]);
+/** "Discount waiting for approval" and "void requested" expect an answer: always immediate. */
+export const IMMEDIATE_ONLY: ReadonlySet<string> = new Set(["discount.requested", "sale.void_requested"]);
 /** A digest and an idle store are summaries by nature: never immediate. */
 export const SCHEDULED_ONLY: ReadonlySet<string> = new Set(["digest", "store.idle"]);
 
@@ -263,6 +265,7 @@ export function defaultRules(recipients: string[], locale: "es" | "en"): CleanRu
     { ...base, name: locale === "en" ? "Every sale" : "Cada venta", event: "sale.created", mode: "immediate", schedule: null },
     { ...base, name: locale === "en" ? "Discount to approve" : "Descuento por aprobar", event: "discount.requested", mode: "immediate", schedule: null },
     { ...base, name: locale === "en" ? "Void" : "Anulación", event: "sale.voided", mode: "immediate", schedule: null },
+    { ...base, name: locale === "en" ? "Void requested" : "Anulación solicitada", event: "sale.void_requested", mode: "immediate", schedule: null },
     { ...base, name: locale === "en" ? "Cash difference" : "Diferencia de caja", event: "cash.diff", mode: "immediate", schedule: null },
     { ...base, name: locale === "en" ? "Daily summary" : "Resumen diario", event: "digest", mode: "daily", schedule: { at: "20:00" } },
   ];

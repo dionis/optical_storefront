@@ -66,6 +66,22 @@ export async function deleteAdmin(id) {
   }
 }
 
+/**
+ * Desactivar (active=false) o reactivar a una persona sin borrarla: conserva
+ * usuario, rol e historial; sus sesiones abiertas dejan de servir en la siguiente
+ * petición. Mismos vetos y códigos que deleteAdmin (super_admin, self, owner_only).
+ */
+export async function setActive(id, active) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: { active: Boolean(active) },
+    });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.statusFailed"));
+  }
+}
+
 export async function changeOwnPassword({ currentPassword, newPassword }) {
   try {
     return await adminFetch("/admin/team/password", {

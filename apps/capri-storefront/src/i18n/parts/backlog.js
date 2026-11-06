@@ -1,0 +1,113 @@
+// Franja de pendientes del Ejecutivo (admin/BacklogStrip.jsx): lo que hay VIVO
+// ahora mismo (laboratorio, por entregar, atrasados, dinero en la calle, por
+// aprobar, cajas abiertas) más las ventas de ayer y hoy como referencia.
+// Claves adm.bl.*; los dos conceptos que nadie entiende a la primera («dinero
+// en la calle» y «atrasados») llevan además su tema de ayuda completo, con las
+// mismas claves planas que usa help.js (adm.help.<tema>.<campo>) porque los
+// pinta el mismo HelpTip.jsx (los pasos y los errores frecuentes van en una
+// sola cadena separada por \n: HelpTip los lista). Español primero; inglés con
+// las MISMAS claves.
+export default {
+  es: {
+    // ── La franja ──────────────────────────────────────────────────────────
+    "adm.bl.aria": "Pendientes ahora mismo",
+    "adm.bl.tag": "Ahora mismo",
+    "adm.bl.tagHint": "Lo que hay pendiente hoy, venga de cuando venga: no cambia con el período elegido en la barra.",
+    // Cada cifra (etiqueta corta: tiene que caber en la franja)
+    "adm.bl.inLab": "En laboratorio",
+    "adm.bl.toDeliver": "Por entregar",
+    "adm.bl.overdue": "Atrasados",
+    "adm.bl.onStreet": "Dinero en la calle",
+    "adm.bl.toApprove": "Por aprobar",
+    "adm.bl.openTills": "Cajas abiertas",
+    "adm.bl.yesterday": "Ventas de ayer",
+    "adm.bl.today": "Ventas de hoy",
+    // Segunda línea de cada cifra
+    "adm.bl.worth": "{v} en juego",
+    "adm.bl.toCollect": "{v} por cobrar",
+    "adm.bl.balances": "{n} saldos",
+    "adm.bl.requests": "{n} solicitudes",
+    "adm.bl.tills": "{n} sin cerrar",
+    "adm.bl.sales": "{n} ventas",
+    "adm.bl.none": "Nada",
+    "adm.bl.cashClosed": "Todo cerrado",
+    // Qué significa cada cifra (title del botón, para quien pasa el ratón)
+    "adm.bl.h.inLab": "Ventas cobradas o con anticipo cuyos lentes siguen en el laboratorio. Es el trabajo a planificar hoy.",
+    "adm.bl.h.toDeliver": "Lentes que ya volvieron del laboratorio y el cliente todavía no ha recogido. Hay que llamarlo.",
+    "adm.bl.h.overdue": "Saldos cuya fecha prometida ya pasó. Lo primero del día.",
+    "adm.bl.h.onStreet": "Lo que los clientes deben hoy, vengan las ventas de cuando vengan.",
+    "adm.bl.h.toApprove": "Descuentos pedidos por un vendedor y pendientes de tu aprobación.",
+    "adm.bl.h.openTills": "Cajas de un día anterior que nadie cerró. Hasta cerrarlas el efectivo no cuadra.",
+    "adm.bl.h.yesterday": "Lo vendido ayer. Al pulsar, el Ejecutivo entero pasa a ese día.",
+    "adm.bl.h.today": "Lo vendido hoy hasta ahora. Al pulsar, el Ejecutivo entero pasa a hoy.",
+    // Estados de la franja
+    "adm.bl.clear": "No hay nada pendiente: el laboratorio está al día, no quedan saldos atrasados ni cajas sin cerrar.",
+    "adm.bl.error": "No se pudieron leer los pendientes ahora mismo. Los botones siguen llevando a su pantalla.",
+    "adm.bl.partial": "Hay más ventas abiertas de las que caben en una lectura: estas cifras son parciales.",
+    "adm.bl.cellAria": "{label}: {value}. Abrir",
+
+    // ── Ayuda completa de los dos conceptos difíciles (HelpTip.jsx) ────────
+    "adm.help.backlog.street.title": "Dinero en la calle",
+    "adm.help.backlog.street.short": "Lo que los clientes ya deben y todavía no han pagado, vengan las ventas de cuando vengan. No depende del período elegido.",
+    "adm.help.backlog.street.what": "Cuando un cliente deja un anticipo y paga el resto al recoger, ese resto queda pendiente: eso es el dinero en la calle. Suma los saldos de todas las ventas no anuladas de la(s) tienda(s) elegida(s), estén los lentes en el laboratorio, listos en el mostrador o ya entregados.",
+    "adm.help.backlog.street.how": "Haz clic para abrir la lista de saldos pendientes y cobrar desde cada venta.\nEmpieza por los importes mayores y por los que ya pasaron de fecha (esos salen aparte, en «Atrasados»).",
+    "adm.help.backlog.street.why": "Es dinero que la tienda ya gastó en el laboratorio y todavía no ha recibido. Si crece mes a mes, hay que subir el anticipo mínimo.",
+    "adm.help.backlog.street.example": "Una venta de $240 con $100 de anticipo deja $140 en la calle hasta que el cliente recoge y paga.",
+    "adm.help.backlog.street.pitfalls": "Confundirlo con las ventas del período: aquí sale lo que se debe HOY, aunque la venta sea de hace tres meses.\nTomarlo por ganancia: todavía no ha entrado en la caja.",
+    "adm.help.backlog.overdue.title": "Atrasados",
+    "adm.help.backlog.overdue.short": "Saldos cuya fecha prometida ya pasó: el cliente debía haber recogido y pagado, y no lo ha hecho.",
+    "adm.help.backlog.overdue.what": "Es la parte del dinero en la calle que ya pasó de la fecha que se le prometió al cliente cuando se hizo la venta. Se cuentan por la fecha prometida, no por la de la venta.",
+    "adm.help.backlog.overdue.how": "Haz clic para abrir la lista ya filtrada por atrasados.\nLlama al cliente el mismo día: si los lentes están listos, avísale de que puede recogerlos; si siguen en el laboratorio, explícale la demora antes de que llame él.",
+    "adm.help.backlog.overdue.why": "Un saldo atrasado es la señal más temprana de una venta que se puede perder y de un cliente que no vuelve. Por eso se mira antes que nada al empezar el día.",
+    "adm.help.backlog.overdue.example": "Lentes prometidos para el día 20 y hoy es 27: esa venta cuenta como atrasada aunque el cliente no haya reclamado.",
+    "adm.help.backlog.overdue.pitfalls": "Dejarlos para «cuando haya tiempo»: cada día que pasa baja la probabilidad de cobrar.\nSuponer que el cliente vendrá solo: casi siempre espera que la óptica lo llame.",
+  },
+  en: {
+    "adm.bl.aria": "Pending right now",
+    "adm.bl.tag": "Right now",
+    "adm.bl.tagHint": "What is still pending today, whenever it came from: it does not change with the period chosen in the bar.",
+    "adm.bl.inLab": "In the lab",
+    "adm.bl.toDeliver": "To hand over",
+    "adm.bl.overdue": "Overdue",
+    "adm.bl.onStreet": "Money on the street",
+    "adm.bl.toApprove": "To approve",
+    "adm.bl.openTills": "Open registers",
+    "adm.bl.yesterday": "Yesterday's sales",
+    "adm.bl.today": "Today's sales",
+    "adm.bl.worth": "{v} at stake",
+    "adm.bl.toCollect": "{v} to collect",
+    "adm.bl.balances": "{n} balances",
+    "adm.bl.requests": "{n} requests",
+    "adm.bl.tills": "{n} not closed",
+    "adm.bl.sales": "{n} sales",
+    "adm.bl.none": "Nothing",
+    "adm.bl.cashClosed": "All closed",
+    "adm.bl.h.inLab": "Sales paid or with a deposit whose lenses are still at the laboratory. This is the work to plan today.",
+    "adm.bl.h.toDeliver": "Lenses already back from the laboratory that the customer has not picked up. Someone has to call.",
+    "adm.bl.h.overdue": "Balances whose promised date has already passed. The first thing of the day.",
+    "adm.bl.h.onStreet": "What customers owe today, whenever the sales came from.",
+    "adm.bl.h.toApprove": "Discounts a seller asked for and that wait for your approval.",
+    "adm.bl.h.openTills": "Registers from an earlier day that nobody closed. Until they are closed the cash does not add up.",
+    "adm.bl.h.yesterday": "What was sold yesterday. Clicking switches the whole Executive to that day.",
+    "adm.bl.h.today": "What has been sold today so far. Clicking switches the whole Executive to today.",
+    "adm.bl.clear": "Nothing is pending: the laboratory is up to date, there are no overdue balances and no register is left open.",
+    "adm.bl.error": "The pending figures could not be read right now. The buttons still take you to their screen.",
+    "adm.bl.partial": "There are more open sales than fit in one read: these figures are partial.",
+    "adm.bl.cellAria": "{label}: {value}. Open",
+
+    "adm.help.backlog.street.title": "Money on the street",
+    "adm.help.backlog.street.short": "What customers already owe and have not paid yet, whenever the sales came from. It does not depend on the chosen period.",
+    "adm.help.backlog.street.what": "When a customer leaves a deposit and pays the rest on pick-up, that rest stays pending: that is the money on the street. It adds up the balances of every non-voided sale of the chosen store(s), whether the lenses are at the laboratory, ready on the counter or already handed over.",
+    "adm.help.backlog.street.how": "Click to open the list of pending balances and collect from each sale.\nStart with the largest amounts and with the ones past their date (those are listed apart, under \"Overdue\").",
+    "adm.help.backlog.street.why": "It is money the store already spent at the laboratory and has not received yet. If it grows month after month, the minimum deposit has to go up.",
+    "adm.help.backlog.street.example": "A $240 sale with a $100 deposit leaves $140 on the street until the customer picks up and pays.",
+    "adm.help.backlog.street.pitfalls": "Mistaking it for the period's sales: this is what is owed TODAY, even if the sale is three months old.\nTaking it for profit: it has not reached the register yet.",
+    "adm.help.backlog.overdue.title": "Overdue",
+    "adm.help.backlog.overdue.short": "Balances whose promised date has already passed: the customer should have picked up and paid, and has not.",
+    "adm.help.backlog.overdue.what": "It is the part of the money on the street that is past the date promised to the customer when the sale was made. They are counted by the promised date, not by the sale's date.",
+    "adm.help.backlog.overdue.how": "Click to open the list already filtered by overdue.\nCall the customer the same day: if the lenses are ready, tell them they can pick them up; if they are still at the laboratory, explain the delay before they call you.",
+    "adm.help.backlog.overdue.why": "An overdue balance is the earliest sign of a sale that can be lost and of a customer who does not come back. That is why it is looked at before anything else at the start of the day.",
+    "adm.help.backlog.overdue.example": "Lenses promised for the 20th and today is the 27th: that sale counts as overdue even if the customer has not complained.",
+    "adm.help.backlog.overdue.pitfalls": "Leaving them for \"when there is time\": every day that passes lowers the chance of collecting.\nAssuming the customer will show up alone: they almost always expect the store to call.",
+  },
+};

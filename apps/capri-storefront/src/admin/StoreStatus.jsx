@@ -106,7 +106,9 @@ export default function StoreStatus({ go, tabs = [], me }) {
   // se define más abajo (necesita los datos), así que se lee por ref al pulsar.
   const reportRef = useRef(null);
   const run = (kind) => () => { if (reportRef.current) exportReport(kind, reportRef.current()); };
-  useRegisterExport(s ? { pdf: run("pdf"), xlsx: run("xlsx"), csv: run("csv"), label: t("adm.tab.storestatus") } : null);
+  // `audiences`: este reporte sale de ReportDoc, así que la barra puede ofrecer
+  // las dos versiones (la del dueño y la de compartir, sin costos ni saldos).
+  useRegisterExport(s ? { pdf: run("pdf"), xlsx: run("xlsx"), csv: run("csv"), audiences: true, label: t("adm.tab.storestatus") } : null);
 
   if (state === "loading" && !data) return <div className="adm-section"><div className="adm-src-note loading">{t("adm.ord.loading")}</div></div>;
   if (state === "error" && !data) {

@@ -10,7 +10,9 @@ import { adminFetch } from "./adminApi.js";
 import { fetchTeam } from "./adminTeam.js";
 import { posContext } from "./posApi.js";
 
-const EVENTS = ["sale.created", "discount.applied", "discount.requested", "sale.below_min", "sale.voided", "cash.diff", "store.idle", "digest"];
+const EVENTS = ["sale.created", "discount.applied", "discount.requested", "sale.below_min", "sale.voided", "sale.void_requested", "cash.diff", "store.idle", "digest"];
+// Events that expect an answer: the server keeps them immediate whatever the author picks.
+const IMMEDIATE_ONLY = ["discount.requested", "sale.void_requested"];
 const MODES = ["immediate", "every_n_hours", "daily", "weekly"];
 const EMPTY = { name: "", event: "sale.created", recipients: "", establishment_ids: [], conditions: {}, mode: "immediate", schedule: {}, locale: "es", is_active: true };
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
@@ -61,7 +63,7 @@ function RuleForm({ initial, stores, canSchedule, suggestions, onSave, onCancel 
           <label><input type="checkbox" checked={Boolean(f.conditions.include_web)} onChange={(e) => cond("include_web", e.target.checked)} /> {t("adm.alerts.includeWeb")}</label>
         )}
       </fieldset>
-      {canSchedule && f.event !== "discount.requested" && (
+      {canSchedule && !IMMEDIATE_ONLY.includes(f.event) && (
         <div className="pos-form">
           <label>{t("adm.alerts.mode")}
             <select value={f.mode} onChange={(e) => set("mode", e.target.value)}>

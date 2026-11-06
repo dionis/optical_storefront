@@ -422,6 +422,18 @@ abiertas y las cifras de pendientes son parciales.
 
 ---
 
+### Meta mensual (`goal`, HU-40)
+
+`staff_profile.monthly_goal` (dólares) contra el **neto del mes natural local**
+de la persona: Σ (`total_cents` − `tax_cents`) de sus `sale_fact` activas con
+`sold_date_local` entre el día 1 y hoy (`netByUser`). Es la **misma base que la
+comisión** — nunca el bruto con impuesto, que es lo que `/sales-analytics/me`
+usaba hasta el 5-nov-2026 (corregido: `done = total − tax`). `pct` = `done /
+amount × 100`, un decimal, tope 100; `left = max(0, amount − done)`. La meta es
+mensual, así que no cambia con el período elegido en pantalla. Lo exponen
+`GET /admin/sellers/stats` (`sellers[].goal`, fijado por `goalProgress` con
+prueba) y `GET /admin/sales-analytics/me` (`goal`).
+
 ## 7. Vendedores (`lib/sellers.ts`)
 
 Fuente distinta a las demás pantallas: la **ventana del tablero de pedidos**
@@ -592,6 +604,20 @@ venta **anulada** de $200.00 cobrada en efectivo y devuelta el mismo día.
 
 ---
 
+## Notas del 5-nov-2026
+
+- **Resumen por correo (digest, `lib/alerts-data.ts`)**: ahora sale de
+  `sale_fact` (una fila por pedido), suma en **centavos enteros** y divide una
+  vez al final; incluye pedidos web si la regla marca `include_web`; una venta
+  anulada cuenta solo en «Anuladas». Antes sumaba `total_cents / 100` en punto
+  flotante y solo leía `pos_sale`. «Tienda sin ventas» ignora las anuladas.
+- **`sale_fact` se concilia solo**: el job `sale-fact-reconcile` (cada 6 h)
+  proyecta los pedidos de los últimos 90 días que no tengan filas; y un pedido
+  de mostrador que perdió `metadata.pos_sale_id`/`source` se recupera por
+  `pos_sale.order_id`, de modo que no aparece como venta web sin tienda.
+- **Entrega**: `pos_sale.delivered_at` se escribe con un UPDATE guardado (sin
+  saldo, no anulada, no entregada) y la auditoría lleva `sale.deliver`.
+
 ## Preguntas abiertas para el dueño
 
 Cada una cambia una cifra. Están en orden de cuánto dinero mueven.
@@ -659,4 +685,5 @@ Cada una cambia una cifra. Están en orden de cuánto dinero mueven.
 pero esa función filtra por `establishment_id` (las sesiones son de la tienda
 desde `CreatePos5`). Resultado: `workplace.cash_open` del panel del vendedor es
 **siempre `false`**, aunque la caja esté abierta. Es una línea; el archivo es de
-otra tanda de trabajo y se deja reportado en vez de tocarlo.
+otra tanda de trabajo y se deja reportado en vez de tocarlo. *(Corregido después:
+la ruta ya pasa el id de la tienda.)*

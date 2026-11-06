@@ -2,6 +2,12 @@
 // ficha técnica compacta que ve el vendedor al elegir y durante toda la venta.
 // Los valores (forma, material, aro…) los traduce frameSpecLabels.js; aquí solo
 // van los rótulos y los textos accesibles de la tarjeta.
+//
+// La familia `adm.pos.frame.detail.*` es de la FICHA completa (AdminFrameCard),
+// el modal que abre el ojo del buscador. Son casi todos textos accesibles: al
+// rediseñar la ficha, las medidas pasaron a icono + número y la marca a su
+// logo, así que el rótulo que antes se leía en pantalla ahora vive en el
+// `title`/`aria-label` — y por eso tiene que estar traducido igual que el resto.
 export default {
   es: {
     "adm.pos.frame.card.selling": "Montura en venta",
@@ -22,6 +28,13 @@ export default {
     "adm.pos.frame.card.remove": "Quitar montura",
     "adm.pos.frame.card.changeColor": "Cambiar color",
     "adm.pos.frame.card.photoOf": "Foto de {name}",
+    "adm.pos.frame.detail.colors": "Colores disponibles",
+    "adm.pos.frame.detail.colorPick": "Ver el color {name}",
+    "adm.pos.frame.detail.colorNo": "Color {n}",
+    "adm.pos.frame.detail.brandOf": "Marca {name}",
+    "adm.pos.frame.detail.lensHeight": "Alto del lente",
+    "adm.pos.frame.detail.measureOf": "{label}: {value} milímetros",
+    "adm.pos.frame.detail.mm": "mm",
   },
   en: {
     "adm.pos.frame.card.selling": "Frame being sold",
@@ -42,5 +55,12 @@ export default {
     "adm.pos.frame.card.remove": "Remove frame",
     "adm.pos.frame.card.changeColor": "Change colour",
     "adm.pos.frame.card.photoOf": "Photo of {name}",
+    "adm.pos.frame.detail.colors": "Available colours",
+    "adm.pos.frame.detail.colorPick": "Show the {name} colour",
+    "adm.pos.frame.detail.colorNo": "Colour {n}",
+    "adm.pos.frame.detail.brandOf": "{name} brand",
+    "adm.pos.frame.detail.lensHeight": "Lens height",
+    "adm.pos.frame.detail.measureOf": "{label}: {value} millimetres",
+    "adm.pos.frame.detail.mm": "mm",
   },
 };

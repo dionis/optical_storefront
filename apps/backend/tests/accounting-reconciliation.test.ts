@@ -101,18 +101,25 @@ const SALE_FEES = new Map([
   ["poss_4", 0], // the voided sale was cash
 ]);
 
+/** pos_sale: what each till sale has collected and what it still owes. */
+const SALE_CASH = new Map([
+  ["poss_1", { paid: 15000, balance: 0 }],
+  ["poss_2", { paid: 10700, balance: 0 }],
+  ["poss_3", { paid: 8000, balance: 2000 }], // $50 cash + $30 card + $20 insurer, $20 owed
+]);
+
 const ORDERS = new Map([
   ["order_1", { gross: 15000, net: 15000, lines: 1 }],
   ["order_2", { gross: 10700, net: 10000, lines: 1 }],
   ["order_3", { gross: 12000, net: 12000, lines: 1 }],
 ]);
 
-const ctx: EconomicsContext = { rules: RULES, orders: ORDERS, saleFees: SALE_FEES, commissionPct: () => COMMISSION_PCT };
+const ctx: EconomicsContext = { rules: RULES, orders: ORDERS, saleFees: SALE_FEES, saleCash: SALE_CASH, commissionPct: () => COMMISSION_PCT };
 
 // ── 1. Ejecutivo / Panel de ventas ───────────────────────────────────────────
 
 const ECON = lineEconomics(LINES, ctx);
-const ZERO: Figures = { sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, margin_pct: null, count: 0, units: 0, avg_ticket: 0 };
+const ZERO: Figures = { sales: 0, net: 0, tax: 0, cost: 0, fee: 0, commission: 0, profit: 0, margin_pct: null, paid: 0, balance: 0, count: 0, units: 0, avg_ticket: 0 };
 
 const INSIGHTS = buildInsights({
   from: "2026-10-01",
@@ -132,11 +139,11 @@ describe("Ejecutivo: the per-sale money", () => {
   it("is what was charged, less the tax, the materials, the fee of the collection and the commission", () => {
     expect(ECON).toEqual([
       // 150.00 − (frame 20 + lens 10 + lab 1) − 0 of fee − 10 % of 150.00
-      { net: 15000, cost: 3100, fee: 0, commission: 1500, profit: 10400, missing_cost: false },
+      { net: 15000, cost: 3100, fee: 0, commission: 1500, profit: 10400, paid: 15000, balance: 0, missing_cost: false },
       // 107.00 − 7.00 of tax = 100.00 net; frame 20 + lab 1; the card cost 3.40
-      { net: 10000, cost: 2100, fee: 340, commission: 1000, profit: 6560, missing_cost: false },
+      { net: 10000, cost: 2100, fee: 340, commission: 1000, profit: 6560, paid: 10700, balance: 0, missing_cost: false },
       // The customer's own frame: only the lens and the lab; the card part cost 1.17
-      { net: 12000, cost: 1100, fee: 117, commission: 1200, profit: 9583, missing_cost: false },
+      { net: 12000, cost: 1100, fee: 117, commission: 1200, profit: 9583, paid: 8000, balance: 2000, missing_cost: false },
     ]);
   });
 
@@ -150,6 +157,8 @@ describe("Ejecutivo: the per-sale money", () => {
       commission: 37,
       profit: 265.43, // 370 − 63 − 4.57 − 37
       margin_pct: 71.7, // 265.43 / 370
+      paid: 337, // 150.00 + 107.00 + 80.00 taken in
+      balance: 20, // only Op1-000003 still owes
       count: 3,
       units: 3,
       avg_ticket: 125.67, // 377.00 / 3
@@ -223,13 +232,16 @@ describe("Pedidos de la tienda", () => {
   });
 
   it("RECONCILES: the list adds up to the Executive KPIs of the same period", () => {
-    const sum = (k: "total" | "net" | "cost" | "fee" | "commission" | "profit") => Math.round(WITH_ECONOMICS.reduce((s, r) => s + Number(r[k] ?? 0) * 100, 0));
+    const sum = (k: "total" | "net" | "cost" | "fee" | "commission" | "profit" | "paid" | "balance") => Math.round(WITH_ECONOMICS.reduce((s, r) => s + Number(r[k] ?? 0) * 100, 0));
     expect(sum("total")).toBe(Math.round(INSIGHTS.totals.sales * 100));
     expect(sum("net")).toBe(Math.round(INSIGHTS.totals.net * 100));
     expect(sum("cost")).toBe(Math.round(INSIGHTS.totals.cost * 100));
     expect(sum("fee")).toBe(Math.round(INSIGHTS.totals.fee * 100));
     expect(sum("commission")).toBe(Math.round(INSIGHTS.totals.commission * 100));
     expect(sum("profit")).toBe(Math.round(INSIGHTS.totals.profit * 100));
+    // The till: the Executive KPIs must not need this list to know what came in.
+    expect(sum("paid")).toBe(Math.round(INSIGHTS.totals.paid * 100));
+    expect(sum("balance")).toBe(Math.round(INSIGHTS.totals.balance * 100));
     expect(WITH_ECONOMICS.length).toBe(INSIGHTS.totals.count);
   });
 });

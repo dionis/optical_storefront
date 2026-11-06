@@ -60,7 +60,8 @@ export const fetchSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)
 /** Datos de un documento de la venta SIN registrar impresión (líneas con foto, cliente, totales; `job` trae la receta). */
 export const fetchSaleDocument = (id, kind) => call(`/admin/pos/sales/${encodeURIComponent(id)}/documents${qs({ kind })}`);
 export const collectPayment = (id, payments) => call(`/admin/pos/sales/${encodeURIComponent(id)}/payments`, { method: "POST", body: { payments } }).then(after(SALE_READS));
-export const deliverSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: {} }).then(after(SALE_READS));
+/** Hand over; with `payments` (same rows as collectPayment) the balance is collected in the same call (HU-32). */
+export const deliverSale = (id, payments = null) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: payments?.length ? { payments } : {} }).then(after(SALE_READS));
 export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
 
 export const listTerminals = (store) => cached(`/admin/pos/terminals${qs({ store })}`, TTL.context);

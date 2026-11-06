@@ -67,12 +67,20 @@ export const LensMaterial = model.define("lens_material", {
   is_active: model.boolean().default(true),
 });
 
-/** Base lens price for a (design, material) cell of the matrix. */
+/**
+ * Base lens price for a (design, material, finish) cell of the matrix.
+ * `finish` "stock" | "digital" (lib/lens-finish.ts): single vision and bifocals
+ * may hold both; progressives only a digital cell. `cost_cents` is the lab's
+ * price to the shop for that cell (null = unknown → cost rules apply); it is
+ * read with cost privileges only and never leaves on the public matrix.
+ */
 export const LensBasePrice = model.define("lens_base_price", {
   id: model.id().primaryKey(),
   design_code: model.text(),
   material_code: model.text(),
+  finish: model.text().default("stock"),
   price_cents: model.number().default(0),
+  cost_cents: model.number().nullable(),
 });
 
 /** Photochromic / Transitions add-on, priced per design category (null = N/A). */

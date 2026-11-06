@@ -33,6 +33,39 @@ export const adminLoginRateLimit = createRateLimit({
   message: "Too many sign-in attempts. Wait a few minutes and try again.",
 });
 
+// ── Password recovery (HU-03) ───────────────────────────────────────────────
+// `/auth/user/emailpass/reset-password` sends a mail per call and always
+// answers 201, so without a ceiling it is a free mail cannon aimed at any
+// address. 5 per 15 minutes per IP and per identifier (the login email).
+// `/auth/user/emailpass/update` consumes the single-use token; 10 per IP is
+// plenty for a person retyping a password and nothing for a token guess.
+export const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000;
+export const PASSWORD_RESET_REQUEST_MAX = 5;
+export const PASSWORD_RESET_UPDATE_MAX = 10;
+
+export const passwordResetRequestRateLimit = createRateLimit({
+  name: "password-reset-request",
+  windowMs: PASSWORD_RESET_WINDOW_MS,
+  max: PASSWORD_RESET_REQUEST_MAX,
+  maxEnv: "PASSWORD_RESET_RATE_LIMIT",
+  keys: (req) => {
+    const keys = [`ip:${clientIp(req)}`];
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const identifier = typeof body["identifier"] === "string" ? body["identifier"].trim().toLowerCase() : "";
+    if (identifier) keys.push(`identifier:${identifier}`);
+    return keys;
+  },
+  message: "Too many password reset requests. Wait a few minutes and try again.",
+});
+
+export const passwordResetUpdateRateLimit = createRateLimit({
+  name: "password-reset-update",
+  windowMs: PASSWORD_RESET_WINDOW_MS,
+  max: PASSWORD_RESET_UPDATE_MAX,
+  maxEnv: "PASSWORD_RESET_UPDATE_RATE_LIMIT",
+  message: "Too many attempts. Wait a few minutes and try again.",
+});
+
 // ── Self-registration of admin identities ───────────────────────────────────
 // `POST /auth/user/emailpass/register` lets anyone create an auth identity for
 // the `user` actor. Alone it cannot open the panel (a `user` row is still

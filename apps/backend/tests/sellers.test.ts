@@ -8,6 +8,7 @@ import {
   SELLER_SOURCES,
   customerInitials,
   deriveSellerCode,
+  goalProgress,
   groupSellerStats,
   normalizeSellerCode,
   normalizeSellerSource,
@@ -358,5 +359,22 @@ describe("seller address", () => {
     const route = readFileSync(join(__dirname, "..", "src", "api", "store", "seller-dashboard", "route.ts"), "utf8");
     expect(route).not.toMatch(/\baddress\s*:/);
     expect(route).not.toMatch(/\.\.\.seller\b/);
+  });
+});
+
+describe("goalProgress (HU-40)", () => {
+  it("measures this month's NET against the goal: dollars out, capped at 100 %", () => {
+    expect(goalProgress(2000, 150000)).toEqual({ amount: 2000, done: 1500, left: 500, pct: 75 });
+    expect(goalProgress(2000, 250050)).toEqual({ amount: 2000, done: 2500.5, left: 0, pct: 100 });
+    expect(goalProgress(300, 10001)).toEqual({ amount: 300, done: 100.01, left: 199.99, pct: 33.3 });
+    expect(goalProgress(1000, 0)).toEqual({ amount: 1000, done: 0, left: 1000, pct: 0 });
+  });
+
+  it("no goal (null, 0 or garbage) → null; a seller row starts without one", () => {
+    expect(goalProgress(null, 5000)).toBeNull();
+    expect(goalProgress(0, 5000)).toBeNull();
+    expect(goalProgress(Number.NaN, 5000)).toBeNull();
+    const { sellers } = groupSellerStats([], [{ id: "sel_1", code: "V1", name: "Ana", commission_pct: 10, active: true, user_id: "user_1" }]);
+    expect(sellers[0]).toMatchObject({ user_id: "user_1", goal: null });
   });
 });

@@ -4,7 +4,12 @@
 // las pestañas; aquí no hay ninguna barra propia), tira de diez KPI (ventas,
 // nº, unidades, ticket, cobrado, por cobrar, costo real, ganancia, margen,
 // efectivo en caja — la ÚNICA tira: ningún acordeón la repite) y acordeones
-// con resumen ejecutivo en la cabecera, de modo que todo se lee sin abrir nada:
+// con resumen ejecutivo en la cabecera, de modo que todo se lee sin abrir nada.
+// ANTES de la tira de KPI va la franja de pendientes (BacklogStrip.jsx): lo que
+// hay vivo AHORA (laboratorio, por entregar, atrasados, dinero en la calle, por
+// aprobar, cajas abiertas) más las ventas de ayer y hoy. No sigue el período, a
+// propósito: es el saldo vivo que hay que planificar hoy, no el flujo del
+// período. Los acordeones:
 //   · Pedidos y etapas (StoreOrders.OrdersStagesView): todo lo vendido en el
 //     período con su etapa, StageBar + chips (pendientes primero), «Avanzar» en
 //     la fila y la ficha (SaleDetailPanel) al pulsar. Sigue el filtro global de
@@ -15,6 +20,15 @@
 //   · Tendencias (Executive.jsx Trends): las gráficas del período, cada una una
 //     sola vez, de las mismas ventas que la tira y la lista. Sustituye a «Resumen».
 //   · Catálogo.
+// Quien lo abre decide lo que ve (privacidad, no estética):
+//   · Costo, ganancia y margen SOLO cuando el servidor los manda
+//     (`access.profit`, lib/sales-insights.ts redactInsights): tarjetas,
+//     resúmenes de acordeón, tablas, gráficos y exportaciones cuelgan de ahí.
+//   · Caja (efectivo en caja y el acordeón de cobros) fuera para el VENDEDOR:
+//     es el estado general de la tienda, y por regla del dueño un vendedor no
+//     lo ve «ni siquiera de su propia tienda». Ve lo suyo: ventas, nº, unidades,
+//     ticket, cobrado, por cobrar y su comisión.
+//   · Importes de las tarjetas por etapa: solo administrador (StoreOrders.jsx).
 // Costo y ganancia solo se pintan cuando el servidor los manda (`access.profit`);
 // la tienda elegida es la global del panel (useStoreFilter) y el período el
 // global (periodStore.js → usePeriodFilter). Exportar se registra en la barra
@@ -34,10 +48,12 @@ import { useCatalog } from "../data/catalogStore.js";
 import { ExportMenu } from "./ui.jsx";
 import HelpTip from "./HelpTip.jsx";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
+import EmptyPeriod from "./EmptyPeriod.jsx";
+import BacklogStrip from "./BacklogStrip.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
-import { applyPeriodParams, usePeriodFilter } from "./periodStore.js";
+import { applyPeriodParams, autoSwitchPeriod, canAutoSwitchPeriod, usePeriodFilter } from "./periodStore.js";
 import Trends, { CatalogMini } from "./Executive.jsx";
 import ExecutiveCosts from "./ExecutiveCosts.jsx";
 import { OrdersStagesView, datesOf, isStuck, paramsKey, pct, salesReportSpec, salesSheets, stageOfRow, storeLabelFor, useOrderStages, useStoreSales } from "./StoreOrders.jsx";
@@ -110,6 +126,12 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const demo = isDemoLogin();
   const sf = useStoreFilter(me);
   const isAdmin = !me || me.is_admin !== false;
+  // Regla del dueño: «un vendedor no ve el estado general de nada, ni siquiera
+  // de su propia tienda». De ahí cuelga todo lo de caja (efectivo en caja y el
+  // acordeón de cobros): es el estado de la tienda, no sus ventas. Misma noción
+  // de vendedor que MySales.jsx (me.role === "seller"); el costo NO cuelga de
+  // aquí, sino de `showProfit` (lo decide el servidor en `access.profit`).
+  const isSeller = me?.role === "seller";
   // Período GLOBAL del panel (la barra de AdminShell): aquí solo se lee.
   const per = usePeriodFilter();
   const { from, to } = per;
@@ -150,14 +172,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const [cash, setCash] = useState(null);
   const [tick, setTick] = useState(0);
   // El período equivalente anterior (periodStore.previousRangeOf): sus cifras
-  // llegan en paralelo con las actuales y alimentan la variación de TODAS las tarjetas.
+  // llegan en paralelo con las actuales y alimentan la variación de TODAS las
+  // tarjetas. Todo sale de DOS lecturas (insights y caja): antes, cobrado y por
+  // cobrar venían de una segunda lista de ventas paginada (useStoreSales del
+  // período anterior), hasta diez peticiones encadenadas para dos números.
   const prevRange = per.prevRange;
   const [prevIns, setPrevIns] = useState(null);
   const [prevCash, setPrevCash] = useState(null);
   const [state, setState] = useState(demo ? "demo" : "loading");
   const sales = useStoreSales({ from, to, storeId });
   const stages = useOrderStages({ from, to, storeId });
-  const prevSales = useStoreSales({ from: prevRange?.from, to: prevRange?.to, storeId }, !!prevRange);
   const { products, cases } = useCatalog();
   const bodyRef = useRef(null);
   // Vendedores (solo el dueño/superadmin los ve): la lista de fichas da la tienda
@@ -202,7 +226,28 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       prev ? insightsOf(prev).catch(() => null) : Promise.resolve(null),
       prev ? cashOf(prev) : Promise.resolve(null),
     ])
-      .then(([a, c, pa, pc]) => { if (on) { setIns(a); setCash(c); setPrevIns(pa); setPrevCash(pc); setState("ok"); } })
+      .then(([a, c, pa, pc]) => {
+        if (!on) return;
+        setIns(a); setCash(c); setPrevIns(pa); setPrevCash(pc); setState("ok");
+        // Período por defecto que cae en una ventana vacía: el día 1 de mes
+        // «Mes» es 1→1 y el panel entero sale a ceros, que se lee como «está
+        // roto» (le pasó al dueño el 1-nov-2026). Si NADIE ha elegido período
+        // todavía, se sondea el primer alternativo con ventas y se salta a él;
+        // la barra de filtros avisa de que se cambió y por qué, nunca en
+        // silencio. `autoSwitchPeriod` marca el intento ANTES de sondear, así
+        // que esto ocurre una sola vez por sesión aunque el sondeo falle, y
+        // cambiar el período vuelve a disparar este efecto sin bucle.
+        if ((Number(a?.totals?.count) || 0) === 0 && canAutoSwitchPeriod()) {
+          autoSwitchPeriod(async (_p, r) => {
+            const q = { from: r.from, to: r.to };
+            if (!sf.isAll) q.stores = storeId;
+            // `summary` es el agregado más barato del backend (sin filas ni
+            // economía por línea): solo queremos saber si hubo alguna venta.
+            const sum = await adminGet("/admin/sales-analytics/summary", { query: q, ttl: INSIGHTS_TTL }).catch(() => null);
+            return (Number(sum?.current?.count) || 0) > 0;
+          }).catch(() => {});
+        }
+      })
       .catch(() => { if (on) setState("error"); });
     return () => { on = false; };
   }, [from, to, prevRange, storeId, sf.isAll, sf.isWeb, physical, demo, tick]);
@@ -221,7 +266,6 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   // (kpiDelta). `null` mientras no hay cifra anterior → la tarjeta pinta «—».
   const ptot = prevIns?.totals || null;
   const pCost = ptot && showProfit ? (Number(ptot.cost) || 0) + (Number(ptot.fee) || 0) : null;
-  const pSalesTot = prevSales.state === "ok" ? prevSales.totals : null;
   const pCashTot = prevCash?.totals || null;
   const dOpts = (kind, invert = false) => ({ kind, invert, lang, fmt: (v) => m(v) });
   const deltas = {
@@ -229,8 +273,12 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
     count: kpiDelta(tot.count, ptot?.count, dOpts("count")),
     units: kpiDelta(tot.units, ptot?.units, dOpts("count")),
     ticket: kpiDelta(tot.avg_ticket, ptot?.avg_ticket, dOpts("money")),
-    paid: kpiDelta(sales.totals.paid, pSalesTot?.paid, dOpts("money")),
-    balance: kpiDelta(sales.totals.balance, pSalesTot?.balance, dOpts("money", true)),
+    // Cobrado y por cobrar del período anterior salen de `prevIns.totals`
+    // (mismas unidades que el resto de `totals`, como tot.sales). Mientras el
+    // backend no las mande vienen `undefined` y kpiDelta devuelve null: la
+    // tarjeta pinta «—», nunca un $0.00 inventado.
+    paid: kpiDelta(sales.totals.paid, ptot?.paid, dOpts("money")),
+    balance: kpiDelta(sales.totals.balance, ptot?.balance, dOpts("money", true)),
     cost: kpiDelta(realCost, pCost, dOpts("money", true)),
     profit: kpiDelta(tot.profit, ptot?.profit, dOpts("money")),
     margin: kpiDelta(tot.margin_pct, ptot?.margin_pct, dOpts("pct")),
@@ -319,7 +367,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       [t("adm.ex.kpi.sales"), tot.sales], [t("adm.ex.kpi.count"), tot.count], [t("adm.ex.kpi.units"), tot.units], [t("adm.ex.kpi.ticket"), tot.avg_ticket],
       [t("adm.ex.kpi.paid"), sales.totals.paid], [t("adm.ex.kpi.balance"), sales.totals.balance],
       ...(showProfit ? [[t("adm.ex.kpi.cost"), realCost], [t("adm.ex.kpi.profit"), tot.profit], [t("adm.ex.kpi.margin"), tot.margin_pct]] : []),
-      ...(cashTot ? [[t("adm.ex.kpi.cashNet"), cents(cashTot.cash_net_cents)]] : []),
+      ...(cashTot && !isSeller ? [[t("adm.ex.kpi.cashNet"), cents(cashTot.cash_net_cents)]] : []),
     ];
     const sheets = [
       { name: t("adm.ex.export.kpis"), cols: [{ header: t("adm.ex.export.kpi"), key: "label", width: 30 }, { header: t("adm.ex.export.value"), key: "value", type: "money", width: 16 }], rows: [{ label: t("adm.ex.period"), value: meta }, ...kpis.map(([label, value]) => ({ label, value: value ?? "" }))] },
@@ -336,7 +384,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         ],
         rows: sellerRows.rows,
       }] : []),
-      ...(cash ? [{
+      ...(cash && !isSeller ? [{
         name: t("adm.ex.export.cash"),
         cols: [{ header: t("adm.ex.cash.method"), get: methodLabel, width: 22 }, { header: t("adm.ex.cash.count"), key: "in_count", type: "int" }, { header: t("adm.ex.cash.collected"), get: (r) => cents(r.in_cents), type: "money" }, { header: t("adm.ex.cash.refunds"), get: (r) => cents(r.refund_cents), type: "money" }, { header: t("adm.ex.cash.fee"), get: (r) => cents(r.fee_cents), type: "money" }, { header: t("adm.ex.cash.net"), get: (r) => cents(r.net_cents), type: "money" }],
         rows: cash.by_method,
@@ -344,6 +392,11 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
     ];
     return { filename: `${t("adm.ex.export.name")}-${from}-${to}.xlsx`, sheets };
   };
+
+  // Período sin NINGUNA venta: la pantalla de ceros parecía rota (le pasó al
+  // dueño el día 1 de mes). Solo cuando las dos lecturas ya cargaron — mientras
+  // `loading` todavía no se sabe si está vacío o si falta por llegar.
+  const noSales = state === "ok" && sales.state === "ok" && !sales.rows.length && (Number(tot.count) || 0) === 0;
 
   const missing = sales.totals.missing;
   const missingFlag = missing ? { text: int(missing, lang), title: t("adm.ex.kpi.missing", { n: missing }) } : null;
@@ -354,6 +407,8 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const report = () => {
     const restore = beforePrint();
     try {
+      // `extra.key` nombra el CONCEPTO de la tarjeta: ReportDoc decide con él
+      // qué sale en la versión para compartir, nunca por el rótulo traducido.
       const kpiOf = (label, value, raw, extra = {}) => ({ label, value, raw, ...extra });
       const d = (k) => (deltas[k] ? { sub: `${deltas[k].text} ${vs}`, tone: deltas[k].zero ? undefined : deltas[k].good ? "good" : "bad" } : {});
       return salesReportSpec({
@@ -361,16 +416,16 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from, to },
         title: t("adm.rpt.execTitle", { store: sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "" }),
         kpis: [
-          kpiOf(t("adm.ex.kpi.sales"), m(tot.sales), tot.sales, d("sales")),
-          kpiOf(t("adm.ex.kpi.count"), int(tot.count, lang), tot.count, d("count")),
-          kpiOf(t("adm.ex.kpi.units"), int(tot.units, lang), tot.units, d("units")),
-          kpiOf(t("adm.ex.kpi.ticket"), m(tot.avg_ticket), tot.avg_ticket, d("ticket")),
-          kpiOf(t("adm.ex.kpi.paid"), m(sales.totals.paid), sales.totals.paid),
-          kpiOf(t("adm.ex.kpi.balance"), m(sales.totals.balance), sales.totals.balance, { neg: sales.totals.balance > 0 }),
-          showProfit ? kpiOf(t("adm.ex.kpi.cost"), m(realCost), realCost, { sub: missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined, tone: missing ? "warn" : undefined }) : null,
-          showProfit ? kpiOf(t("adm.ex.kpi.profit"), m(tot.profit), tot.profit, { neg: Number(tot.profit) < 0, ...d("profit") }) : null,
-          showProfit ? kpiOf(t("adm.ex.kpi.margin"), pct(tot.margin_pct), tot.margin_pct) : null,
-          !sf.isWeb && cashTot ? kpiOf(t("adm.ex.kpi.cashNet"), m(cents(cashTot.cash_net_cents)), cents(cashTot.cash_net_cents), { neg: cashTot.cash_net_cents < 0 }) : null,
+          kpiOf(t("adm.ex.kpi.sales"), m(tot.sales), tot.sales, { key: "sales", ...d("sales") }),
+          kpiOf(t("adm.ex.kpi.count"), int(tot.count, lang), tot.count, { key: "count", ...d("count") }),
+          kpiOf(t("adm.ex.kpi.units"), int(tot.units, lang), tot.units, { key: "units", ...d("units") }),
+          kpiOf(t("adm.ex.kpi.ticket"), m(tot.avg_ticket), tot.avg_ticket, { key: "ticket", ...d("ticket") }),
+          kpiOf(t("adm.ex.kpi.paid"), m(sales.totals.paid), sales.totals.paid, { key: "paid" }),
+          kpiOf(t("adm.ex.kpi.balance"), m(sales.totals.balance), sales.totals.balance, { key: "balance", neg: sales.totals.balance > 0 }),
+          showProfit ? kpiOf(t("adm.ex.kpi.cost"), m(realCost), realCost, { key: "cost", sub: missing ? t("adm.ex.kpi.missing", { n: missing }) : undefined, tone: missing ? "warn" : undefined }) : null,
+          showProfit ? kpiOf(t("adm.ex.kpi.profit"), m(tot.profit), tot.profit, { key: "profit", neg: Number(tot.profit) < 0, ...d("profit") }) : null,
+          showProfit ? kpiOf(t("adm.ex.kpi.margin"), pct(tot.margin_pct), tot.margin_pct, { key: "margin" }) : null,
+          !sf.isWeb && !isSeller && cashTot ? kpiOf(t("adm.ex.kpi.cashNet"), m(cents(cashTot.cash_net_cents)), cents(cashTot.cash_net_cents), { key: "cash", neg: cashTot.cash_net_cents < 0 }) : null,
         ],
         summaries: summariesFromAccordions(bodyRef.current),
         charts: collectCharts(bodyRef.current, { max: 2 }),
@@ -391,6 +446,14 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         </span>
       </div>
 
+      {/* Primero qué hay que hacer HOY, después cómo fue el período: lo que hay
+          pendiente ahora mismo (laboratorio, por entregar, atrasados, dinero en
+          la calle…) no depende del período, así que el día 1 del mes la pantalla
+          sigue diciendo algo en vez de salir a ceros. Va FUERA de `bodyRef` a
+          propósito: el reporte en PDF/Excel es del período elegido y esta franja
+          es el estado de hoy. */}
+      <BacklogStrip me={me} go={go} />
+
       <div ref={bodyRef}>
         {demo && <div className="adm-demo-banner">{t("adm.ex.demo")}</div>}
 
@@ -404,8 +467,12 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
           {showProfit && <Kpi label={t("adm.ex.kpi.cost")} value={m(realCost)} flag={missingFlag} delta={deltas.cost} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cost")} help="exec.kpi.cost" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "rules" }) : undefined} />}
           {showProfit && <Kpi label={t("adm.ex.kpi.profit")} value={m(tot.profit)} neg={Number(tot.profit) < 0} delta={deltas.profit} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.profit")} help="exec.kpi.profit" loading={loading} onClick={isAdmin ? () => go("costs", { sub: "profit" }) : undefined} />}
           {showProfit && <Kpi label={t("adm.ex.kpi.margin")} value={pct(tot.margin_pct)} delta={deltas.margin} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.margin")} help="exec.kpi.margin" loading={loading} />}
-          {!sf.isWeb && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "—"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} delta={deltas.cashNet} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
+          {/* Sin cifra de caja la tarjeta NO se pinta: un «—» o un «$0.00» se lee
+              como «la caja está a cero», que es peor que no decir nada. */}
+          {!sf.isWeb && !isSeller && (cashTot || loading) && <Kpi label={t("adm.ex.kpi.cashNet")} value={cashTot ? m(cents(cashTot.cash_net_cents)) : "0"} neg={cashTot ? cashTot.cash_net_cents < 0 : false} delta={deltas.cashNet} vs={vs} prevHint={prevHint} hint={t("adm.ex.kpi.h.cashNet")} help="exec.cash" loading={loading} onClick={() => go("cash")} />}
         </div>
+
+        {noSales && <EmptyPeriod kind="sales" />}
 
         <AccordionGroup>
           <Accordion id="ex-stages" icon="receipt" title={t("adm.ex.acc.stages")} subtitle={t("adm.ex.acc.stagesSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}
@@ -420,7 +487,8 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
             <OrdersStagesView data={sales} stages={stages} storeLabel={sf.isAll ? storeLabel : null} params={listParams} me={me} compact onChanged={refresh} />
           </Accordion>
 
-          {!sf.isWeb && (
+          {/* Cobros y caja = estado de la tienda: el vendedor no lo ve. */}
+          {!sf.isWeb && !isSeller && (
             <Accordion id="ex-cash" icon="wallet" title={t("adm.ex.acc.cash")} subtitle={t("adm.ex.acc.cashSub")} right={<HelpTip topic="exec.cash" />}
               summary={cashTot ? [
                 { label: t("adm.ex.pill.cash"), value: m(cents(byMethod.cash)), strong: true },

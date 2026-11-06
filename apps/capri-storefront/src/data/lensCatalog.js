@@ -14,10 +14,13 @@
 // from POST /store/lens-config/quote, never from this data.
 import { useEffect, useState } from "react";
 import { medusa, USE_MEDUSA } from "./medusa.js";
-import { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT } from "./lensPricing.js";
+import { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT } from "./lensPricing.js";
 
 /** The bundled 2026 list — first paint, offline, and fallback. */
-export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, PHOTO, AR, TREAT };
+export const STATIC_CATALOG = { DESIGNS, MATERIALS, BASE, FINISHES, PHOTO, AR, TREAT };
+
+/** The finish a design is sold with unless the seller picks the other one (same rule as the backend's lib/lens-finish.ts). */
+export const defaultFinishFor = (category) => (category === "prog" ? "digital" : "stock");
 
 // The module stores integer USD cents; the storefront works in decimal dollars.
 const dollars = (v) => (v == null ? null : Number(v) / 100);
@@ -38,10 +41,24 @@ export function adaptLensMatrix(payload) {
   // failed load and keep the bundled list instead.
   if (!designs.length || !materials.length || !basePrices.length) return null;
 
+  // BASE keeps the DEFAULT finish of each design (stock; digital for a
+  // progressive), so the web wizard reads exactly what it always did.
+  // FINISHES carries both cells for the POS, null where the owner has not
+  // priced that finish. A row without `finish` (backend before the finish
+  // migration) is the design's only cell.
+  const categoryOf = Object.fromEntries(designs.map((d) => [d.code, d.category]));
   const base = {};
+  const finishes = {};
   for (const b of basePrices) {
-    if (!base[b.design_code]) base[b.design_code] = {};
-    base[b.design_code][b.material_code] = dollars(b.price_cents) ?? 0;
+    const fallback = defaultFinishFor(categoryOf[b.design_code]);
+    const finish = b.finish === "stock" || b.finish === "digital" ? b.finish : fallback;
+    if (!finishes[b.design_code]) finishes[b.design_code] = {};
+    if (!finishes[b.design_code][b.material_code]) finishes[b.design_code][b.material_code] = { stock: null, digital: null };
+    finishes[b.design_code][b.material_code][finish] = dollars(b.price_cents) ?? 0;
+    if (finish === fallback) {
+      if (!base[b.design_code]) base[b.design_code] = {};
+      base[b.design_code][b.material_code] = dollars(b.price_cents) ?? 0;
+    }
   }
 
   const ar = { sv: [], bifprog: [] };
@@ -84,6 +101,7 @@ export function adaptLensMatrix(payload) {
       desc: { es: m.desc_es || "", en: m.desc_en || "" },
     })),
     BASE: base,
+    FINISHES: finishes,
     PHOTO: photos.map((p) => ({
       id: p.code,
       colors: p.colors || [],

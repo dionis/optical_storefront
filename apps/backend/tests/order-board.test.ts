@@ -9,11 +9,14 @@
 import {
   applyPosDelivery,
   availableTransitions,
+  boardAccessFor,
   filterBoardRows,
   liveFulfillments,
   isOrderStage,
   projectBoardOrder,
   projectPayments,
+  promisedOnOf,
+  redactBoardMoney,
   slimBoardOrder,
 } from "../src/lib/order-board";
 import { deriveOrderProgress } from "../src/lib/order-status";
@@ -302,5 +305,48 @@ describe("projectBoardOrder — till sale, payments, slim view", () => {
     expect(slim).not.toHaveProperty("customer");
     expect(slim).not.toHaveProperty("shipping_address");
     expect(JSON.stringify(slim)).not.toContain("ana@example.com");
+  });
+});
+
+describe("order board by role — slim rows, own stores, no money", () => {
+  const pos = (id: string, est: string, total: number) =>
+    projectBoardOrder(order({ id, total, metadata: { source: "pos", establishment_id: est, promised_on: "2026-10-20" } }) as never);
+
+  it("boardAccessFor: admins read everything, supervisors and managers slim rows of their stores without money, sellers nothing", () => {
+    expect(boardAccessFor({ is_admin: true, role: "owner" }, null)).toEqual({ allowed: true, slim_only: false, money: true, stores: null });
+    expect(boardAccessFor({ is_admin: false, role: "manager" }, ["est_1"])).toEqual({ allowed: true, slim_only: true, money: false, stores: ["est_1"] });
+    expect(boardAccessFor({ is_admin: false, role: "supervisor" }, ["est_1", "est_2"])).toEqual({ allowed: true, slim_only: true, money: false, stores: ["est_1", "est_2"] });
+    // No store assigned keeps nothing, never everything.
+    expect(boardAccessFor({ is_admin: false, role: "manager" }, null)).toEqual({ allowed: true, slim_only: true, money: false, stores: [] });
+    expect(boardAccessFor({ is_admin: false, role: "seller" }, ["est_1"])).toEqual({ allowed: false, reason: "forbidden_role" });
+    expect(boardAccessFor({ is_admin: false, role: null }, ["est_1"])).toEqual({ allowed: false, reason: "forbidden_role" });
+  });
+
+  it("redactBoardMoney nulls the total (never 0) and leaves stage, moves and ids alone", () => {
+    const slim = slimBoardOrder(pos("order_1", "est_1", 270));
+    const [red] = redactBoardMoney([slim]);
+    expect(red.total).toBeNull();
+    expect(red).toEqual(expect.objectContaining({ id: "order_1", stage: slim.stage, next_stages: slim.next_stages, establishment_id: "est_1", promised_on: "2026-10-20" }));
+    expect(JSON.stringify(red)).not.toContain("270");
+  });
+
+  it("filterBoardRows with `stores` keeps only till sales of those stores (a web order is not theirs)", () => {
+    const rows = [pos("order_1", "est_1", 1), pos("order_2", "est_2", 1), projectBoardOrder(order({ id: "order_3", total: 1 }) as never)];
+    expect(filterBoardRows(rows, { stores: ["est_1"] }).map((r) => r.id)).toEqual(["order_1"]);
+    expect(filterBoardRows(rows, { stores: [] })).toEqual([]);
+    // The query's `store` still narrows inside the scope, never widens it.
+    expect(filterBoardRows(rows, { stores: ["est_1"], store: "est_2" })).toEqual([]);
+    expect(filterBoardRows(rows, { stores: ["est_1"], store: "web" })).toEqual([]);
+    expect(filterBoardRows(rows, {}).map((r) => r.id)).toEqual(["order_1", "order_2", "order_3"]);
+  });
+
+  it("carries the promised date of a till sale on the full and the slim row, only when it is a real day", () => {
+    expect(pos("order_1", "est_1", 1).promised_on).toBe("2026-10-20");
+    expect(slimBoardOrder(pos("order_1", "est_1", 1)).promised_on).toBe("2026-10-20");
+    expect(projectBoardOrder(order() as never).promised_on).toBeNull();
+    expect(promisedOnOf("2026-10-20")).toBe("2026-10-20");
+    expect(promisedOnOf("2026-10-20T00:00:00Z")).toBeNull();
+    expect(promisedOnOf(20261020)).toBeNull();
+    expect(promisedOnOf(null)).toBeNull();
   });
 });

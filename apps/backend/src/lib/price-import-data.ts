@@ -78,10 +78,15 @@ export async function applyImportPlan(container: MedusaContainer, plan: ImportPl
   const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
   let lensCells = 0;
   await pg.transaction(async (trx) => {
+    // The owner's file prices each (design, material) once: that is the
+    // design's DEFAULT finish (stock; a progressive's single digital cell).
+    // A digital single-vision / bifocal cell is typed in the panel, never here.
+    const progCodes = trx("lens_design").select("code").where({ category: "prog" }).whereNull("deleted_at");
     for (const b of plan.lens.base) {
       lensCells += await trx("lens_base_price")
         .where({ design_code: b.design_code, material_code: b.material_code })
         .whereNull("deleted_at")
+        .where((q) => q.where({ finish: "stock" }).orWhereIn("design_code", progCodes))
         .update({ price_cents: b.price_cents, updated_at: trx.fn.now() });
     }
     for (const p of plan.lens.photo) {

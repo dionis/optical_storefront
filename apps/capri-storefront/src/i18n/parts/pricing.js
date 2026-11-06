@@ -1,9 +1,10 @@
 // Diccionario de «Precios y costos» (admin/PricingPanel.jsx + admin/pricing/*).
-// UN solo panel para todo lo que el dueño cambia de precio, costo y ganancia:
-// la regla de monturas y estuches con sus excepciones, la matriz de lentes, los
-// fotocromáticos, los antirreflejos, las comisiones, los costos con su
-// interruptor por tienda y el impuesto. Español primero, inglés con las mismas
-// claves (scripts/check-i18n.mjs falla si una falta en el otro idioma).
+// UN solo panel para todo lo que el dueño cambia de precio, costo y ganancia,
+// repartido en VISTAS EN PESTAÑAS (adm.price.tab.*): monturas, lentes por tipo
+// de diseño, tratamientos (fotocromáticos y antirreflejos), comisiones y costos
+// con su interruptor por tienda, y las fichas por pedido. Español primero,
+// inglés con las mismas claves (scripts/check-i18n.mjs falla si una falta en el
+// otro idioma).
 
 const es = {
   "adm.tab.pricing": "Precios y costos",
@@ -22,6 +23,15 @@ const es = {
   "adm.price.remove": "Quitar",
   "adm.price.none": "Sin definir",
   "adm.price.reportTitle": "Lista de precios y costos",
+
+  // ── Las pestañas del panel ──
+  "adm.price.tab.frames": "Monturas",
+  "adm.price.tab.lenses": "Lentes",
+  "adm.price.tab.treatments": "Tratamientos",
+  "adm.price.tab.costs": "Comisiones y costos",
+  "adm.price.tab.sheets": "Fichas por pedido",
+  "adm.price.tab.costsSub":
+    "Lo que se lleva quien vende y lo que te cuesta la venta y el mes. Cada tienda puede apagar los costos que no paga.",
 
   // ── Monturas y estuches ──
   "adm.price.frames.title": "Monturas y estuches",
@@ -58,9 +68,106 @@ const es = {
   "adm.price.frames.pills.cases": "estuches",
   "adm.price.frames.needStore": "Elige una tienda arriba para ponerle a esta montura un precio solo de esa tienda.",
 
+  // ── Costo del proveedor (GET /admin/pricing/frames/costs) ──
+  // Va junto al precio y al margen: son las tres cifras de las que vive la
+  // contabilidad, y un modelo sin costo se enseña como lo que es, no como 0 %.
+  "adm.price.frames.cost.title": "Costo del proveedor",
+  "adm.price.frames.cost.sub": "Lo que te cuesta cada modelo. Si lo cambias a mano, ese modelo deja de seguir la lista del proveedor.",
+  "adm.price.frames.cost.coverage": "{withCost} modelos con costo · {without} SIN costo",
+  "adm.price.frames.cost.allCovered": "Los {withCost} modelos del catálogo tienen costo.",
+  "adm.price.frames.cost.onlyMissing": "Ver solo los que faltan",
+  "adm.price.frames.cost.showAll": "Ver todos",
+  "adm.price.frames.cost.filter": "Filtrar por modelo o SKU…",
+  "adm.price.frames.cost.offline": "El servidor no dio los costos: ahora no se pueden ver ni editar.",
+  "adm.price.frames.cost.empty": "Ningún modelo con ese texto.",
+  "adm.price.frames.cost.noneMissing": "Ningún modelo sin costo: la contabilidad de las monturas está completa.",
+  "adm.price.frames.cost.missing": "Sin costo",
+  "adm.price.frames.cost.missingHint":
+    "Sin el costo del proveedor no hay margen ni ganancia fiable para este modelo. Ponlo a mano en la columna «Costo».",
+  "adm.price.frames.cost.ownBadge": "Propio",
+  "adm.price.frames.cost.ownHint": "Costo puesto a mano: ya no sigue la lista del proveedor.",
+  "adm.price.frames.cost.listHint": "Costo de la lista del proveedor.",
+  "adm.price.frames.cost.placeholder": "Costo",
+  "adm.price.frames.cost.aria": "Costo del proveedor de {name} en dólares",
+  "adm.price.frames.cost.save": "Guardar el costo de {name}",
+  "adm.price.frames.cost.clear": "Devolver {name} al costo de la lista del proveedor",
+  "adm.price.frames.cost.marginPct": "{v} %",
+  "adm.price.frames.cost.marginHint": "Margen sobre el precio de venta: (precio − costo) ÷ precio.",
+  "adm.price.frames.cost.noMargin": "—",
+  "adm.price.frames.cost.noPrice": "Por la regla",
+  "adm.price.frames.cost.noPriceHint":
+    "Este modelo no tiene precio propio: su precio de venta lo calcula la regla y se ve en «Productos».",
+  "adm.price.frames.cost.col.model": "Modelo",
+  "adm.price.frames.cost.col.book": "Lista prov.",
+  "adm.price.frames.cost.col.cost": "Costo",
+  "adm.price.frames.cost.col.price": "Precio venta",
+  "adm.price.frames.cost.col.margin": "Margen",
+  "adm.price.frames.cost.col.since": "Cambiado",
+
+  // El costo por tienda: la segunda capa, la misma que ya tienen los precios.
+  // Con «Todas las tiendas» se edita el maestro; con una tienda elegida, lo que
+  // paga ELLA, y lo que no maneja se hereda del maestro.
+  "adm.price.frames.cost.titleStore": "Costo de esta tienda",
+  "adm.price.frames.cost.subStore":
+    "Lo que le cuesta cada modelo A ESTA TIENDA. Lo que no cambies aquí lo hereda del maestro (todas las tiendas).",
+  "adm.price.frames.cost.storeBadge": "Propio",
+  "adm.price.frames.cost.storeHint": "Costo propio de esta tienda: no sigue al maestro.",
+  "adm.price.frames.cost.inheritHint": "Esta tienda no maneja su propio costo: usa el del maestro.",
+  "adm.price.frames.cost.master": "Maestro {v}",
+  "adm.price.frames.cost.masterHint": "Lo que le cuesta a la cadena (maestro, todas las tiendas).",
+  "adm.price.frames.cost.ariaStore": "Costo de {name} en esta tienda, en dólares",
+  "adm.price.frames.cost.saveStore": "Guardar el costo de {name} en esta tienda",
+  "adm.price.frames.cost.clearStore": "Devolver {name} al costo del maestro",
+  "adm.price.frames.cost.variations": "{n} con costo propio",
+  "adm.price.frames.cost.variationsHint": "Modelos cuyo costo maneja esta tienda aparte del maestro.",
+  "adm.price.frames.cost.col.master": "Maestro",
+  "adm.price.frames.cost.col.costStore": "Costo de la tienda",
+
+  // ── Suelo y techo del precio (GET/POST /admin/pricing/frames/band) ──
+  // Lo que pidió el dueño con sus palabras: «si el precio después de conversión
+  // es menor que 30, podemos definir que se lleva hasta por ejemplo 60, un
+  // número fijo. Si el precio después de conversión es muy alto, también poder
+  // reducirlo hasta un monto que no sobrepase un umbral de, no sé, 100
+  // dólares». Dos números por lado, y la vista previa de a cuántos modelos les
+  // mueve el precio ANTES de guardar.
+  "adm.price.frames.band.title": "Suelo y techo del precio",
+  "adm.price.frames.band.titleStore": "Suelo y techo de esta tienda",
+  "adm.price.frames.band.sub":
+    "Se aplica al precio que sale de la conversión del costo. No toca los modelos a los que les pusiste precio propio.",
+  "adm.price.frames.band.enabled": "Aplicar suelo y techo",
+  "adm.price.frames.band.offHint": "Apagado: los números se guardan, pero ningún precio se mueve.",
+  "adm.price.frames.band.storeBadge": "Propio",
+  "adm.price.frames.band.storeHint": "Suelo y techo propios de esta tienda: no sigue al maestro.",
+  "adm.price.frames.band.inheritHint": "Esta tienda no maneja suelo y techo propios: usa los del maestro.",
+  "adm.price.frames.band.floorBelow": "Si queda por debajo de",
+  "adm.price.frames.band.floorTo": "llévalo a",
+  "adm.price.frames.band.floorBelowAria": "Precio por debajo del cual se aplica el suelo, en dólares",
+  "adm.price.frames.band.floorToAria": "Precio al que se lleva lo que queda por debajo del suelo, en dólares",
+  "adm.price.frames.band.cap": "Que ningún precio pase de",
+  "adm.price.frames.band.capAria": "Techo del precio de venta, en dólares",
+  "adm.price.frames.band.cases": "Aplicarlo también a los estuches",
+  "adm.price.frames.band.casesIn": "Los estuches también se ajustan.",
+  "adm.price.frames.band.casesOut":
+    "Los estuches se quedan fuera. Si lo enciendes, el suelo le subiría el precio a {n} estuches.",
+  "adm.price.frames.band.checking": "Calculando a cuántos modelos les cambia el precio…",
+  "adm.price.frames.band.noImpact": "Sin suelo ni techo: ningún precio se mueve.",
+  "adm.price.frames.band.impactDraft":
+    "Con esto: sube {raised} modelos · baja {lowered} · {unchanged} se quedan igual.",
+  "adm.price.frames.band.impactSaved":
+    "Ahora mismo: sube {raised} modelos · baja {lowered} · {unchanged} se quedan igual.",
+  "adm.price.frames.band.example": "{model}: {from} → {to}",
+  "adm.price.frames.band.ownPriced": "{n} con precio propio, sin tocar",
+  "adm.price.frames.band.ownPricedHint":
+    "Modelos a los que les pusiste precio a mano: tu decisión manda sobre el suelo y el techo.",
+  "adm.price.frames.band.saveStore": "Guardar en esta tienda",
+  "adm.price.frames.band.clear": "Quitar el suelo y el techo",
+  "adm.price.frames.band.clearStore": "Volver a heredar el maestro",
+  "adm.price.frames.band.discard": "Deshacer los cambios",
+  "adm.price.frames.band.offline": "El servidor no dio el suelo y el techo: ahora no se pueden ver ni editar.",
+
   // ── Lentes ──
   "adm.price.lenses.title": "Lentes",
-  "adm.price.lenses.sub": "La matriz diseño × material, los fotocromáticos y los antirreflejos.",
+  "adm.price.lenses.sub": "La matriz diseño × material, por tipo de diseño: elige el tipo y ves solo sus precios.",
   "adm.price.lenses.matrix": "Matriz: diseño × material",
   "adm.price.lenses.design": "Diseño",
   "adm.price.lenses.photo": "Fotocromáticos y Transitions",
@@ -83,6 +190,19 @@ const es = {
   "adm.price.lenses.pills.materials": "materiales",
   "adm.price.lenses.masterIs": "Maestro: {v}",
   "adm.price.lenses.editCell": "Precio de {design} en {material}",
+  "adm.price.lenses.catNav": "Tipo de diseño",
+  "adm.price.lenses.catCount": "{n} diseños",
+  "adm.price.lenses.catEmpty": "Ningún diseño de ese tipo con esa gama.",
+  "adm.price.lenses.tier": "Gama",
+  "adm.price.lenses.tierAll": "Todas las gamas",
+  "adm.price.lenses.tierNone": "Sin gama",
+
+  // ── Tratamientos (fotocromáticos y antirreflejos) ──
+  "adm.price.treat.sub": "Lo que se le añade al lente: fotocromáticos y antirreflejos, con su precio por tipo de diseño.",
+  "adm.price.treat.photoCol": "Tratamiento",
+  "adm.price.treat.empty": "Sin tratamientos en la lista.",
+  "adm.price.treat.pills.photo": "fotocromáticos",
+  "adm.price.treat.pills.ar": "antirreflejos",
 
   // ── Comisiones ──
   "adm.price.comm.title": "Comisiones",
@@ -120,6 +240,8 @@ const es = {
     "Solo se cobra cuando la compra no lleva receta: los lentes recetados están exentos. Es el mismo valor que usa el punto de venta y la tienda web.",
   "adm.price.costs.taxEnv": "Valor del entorno (todavía no guardado en la base)",
   "adm.price.costs.target": "Ganancia objetivo",
+  "adm.price.costs.perSale": "Costos de cada venta",
+  "adm.price.costs.perStore": "Costos e impuesto de la tienda",
   "adm.price.costs.pills.rules": "reglas",
   "adm.price.costs.pills.off": "apagados",
 
@@ -129,6 +251,11 @@ const es = {
 
   // ── Errores del servidor (adm.err.pricing.<reason>) ──
   "adm.err.pricing.bad_scope": "Ese ámbito no existe (monturas, estuches o todo).",
+  "adm.err.pricing.bad_band": "Revisa las cifras del suelo y del techo: tienen que ser importes mayores que cero.",
+  "adm.err.pricing.band_incomplete": "A ese lado le falta una cifra: hace falta el umbral Y el precio al que se lleva.",
+  "adm.err.pricing.floor_below_threshold": "El suelo baja el precio en vez de subirlo: el precio al que se lleva no puede ser menor que el umbral.",
+  "adm.err.pricing.cap_above_threshold": "El techo sube el precio en vez de bajarlo: el precio al que se baja no puede ser mayor que el umbral.",
+  "adm.err.pricing.band_crossed": "El suelo pasaría por encima del techo: baja el suelo o sube el techo.",
   "adm.err.pricing.bad_mode": "Elige porcentaje o monto fijo.",
   "adm.err.pricing.bad_value": "Ese valor no sirve: revisa el número.",
   "adm.err.pricing.bad_kind": "Ese tipo de precio no existe.",
@@ -166,6 +293,14 @@ const en = {
   "adm.price.none": "Not set",
   "adm.price.reportTitle": "Price and cost list",
 
+  "adm.price.tab.frames": "Frames",
+  "adm.price.tab.lenses": "Lenses",
+  "adm.price.tab.treatments": "Treatments",
+  "adm.price.tab.costs": "Commissions and costs",
+  "adm.price.tab.sheets": "Sheets per order",
+  "adm.price.tab.costsSub":
+    "What the person who sells takes and what the sale and the month cost you. Each store can switch off the costs it does not pay.",
+
   "adm.price.frames.title": "Frames and cases",
   "adm.price.frames.sub": "One rule for all of them, and the models you gave a price of their own.",
   "adm.price.frames.ruleFrames": "Rule for every frame",
@@ -200,8 +335,93 @@ const en = {
   "adm.price.frames.pills.cases": "cases",
   "adm.price.frames.needStore": "Pick a store above to give this frame a price for that store only.",
 
+  "adm.price.frames.cost.title": "Supplier cost",
+  "adm.price.frames.cost.sub": "What each model costs you. Change it by hand and that model stops following the supplier list.",
+  "adm.price.frames.cost.coverage": "{withCost} models with a cost · {without} with NO cost",
+  "adm.price.frames.cost.allCovered": "All {withCost} models in the catalog have a cost.",
+  "adm.price.frames.cost.onlyMissing": "Show only the missing ones",
+  "adm.price.frames.cost.showAll": "Show all",
+  "adm.price.frames.cost.filter": "Filter by model or SKU…",
+  "adm.price.frames.cost.offline": "The server did not return the costs: they cannot be seen or edited right now.",
+  "adm.price.frames.cost.empty": "No model matches that text.",
+  "adm.price.frames.cost.noneMissing": "No model without a cost: the frame accounting is complete.",
+  "adm.price.frames.cost.missing": "No cost",
+  "adm.price.frames.cost.missingHint":
+    "Without the supplier cost there is no reliable margin or profit for this model. Set it by hand in the “Cost” column.",
+  "adm.price.frames.cost.ownBadge": "Own",
+  "adm.price.frames.cost.ownHint": "Cost set by hand: it no longer follows the supplier list.",
+  "adm.price.frames.cost.listHint": "Cost from the supplier list.",
+  "adm.price.frames.cost.placeholder": "Cost",
+  "adm.price.frames.cost.aria": "Supplier cost for {name} in dollars",
+  "adm.price.frames.cost.save": "Save the cost for {name}",
+  "adm.price.frames.cost.clear": "Send {name} back to the supplier list cost",
+  "adm.price.frames.cost.marginPct": "{v} %",
+  "adm.price.frames.cost.marginHint": "Margin over the sale price: (price − cost) ÷ price.",
+  "adm.price.frames.cost.noMargin": "—",
+  "adm.price.frames.cost.noPrice": "From the rule",
+  "adm.price.frames.cost.noPriceHint":
+    "This model has no own price: its sale price comes from the rule and is shown in “Products”.",
+  "adm.price.frames.cost.col.model": "Model",
+  "adm.price.frames.cost.col.book": "Supplier list",
+  "adm.price.frames.cost.col.cost": "Cost",
+  "adm.price.frames.cost.col.price": "Sale price",
+  "adm.price.frames.cost.col.margin": "Margin",
+  "adm.price.frames.cost.col.since": "Changed",
+
+  "adm.price.frames.cost.titleStore": "This store's cost",
+  "adm.price.frames.cost.subStore":
+    "What each model costs THIS STORE. Anything you do not change here it inherits from the master (all stores).",
+  "adm.price.frames.cost.storeBadge": "Own",
+  "adm.price.frames.cost.storeHint": "This store's own cost: it does not follow the master.",
+  "adm.price.frames.cost.inheritHint": "This store does not manage its own cost: it uses the master's.",
+  "adm.price.frames.cost.master": "Master {v}",
+  "adm.price.frames.cost.masterHint": "What it costs the chain (master, all stores).",
+  "adm.price.frames.cost.ariaStore": "Cost of {name} at this store, in dollars",
+  "adm.price.frames.cost.saveStore": "Save the cost of {name} at this store",
+  "adm.price.frames.cost.clearStore": "Send {name} back to the master cost",
+  "adm.price.frames.cost.variations": "{n} with their own cost",
+  "adm.price.frames.cost.variationsHint": "Models whose cost this store manages apart from the master.",
+  "adm.price.frames.cost.col.master": "Master",
+  "adm.price.frames.cost.col.costStore": "Store cost",
+
+  // ── Price floor and ceiling (GET/POST /admin/pricing/frames/band) ──
+  "adm.price.frames.band.title": "Price floor and ceiling",
+  "adm.price.frames.band.titleStore": "This store's floor and ceiling",
+  "adm.price.frames.band.sub":
+    "Applied to the price that comes out of the cost conversion. It never touches a model you priced by hand.",
+  "adm.price.frames.band.enabled": "Apply the floor and the ceiling",
+  "adm.price.frames.band.offHint": "Switched off: the numbers are kept, but no price moves.",
+  "adm.price.frames.band.storeBadge": "Own",
+  "adm.price.frames.band.storeHint": "This store's own floor and ceiling: it does not follow the master.",
+  "adm.price.frames.band.inheritHint": "This store has no floor and ceiling of its own: it uses the master's.",
+  "adm.price.frames.band.floorBelow": "If it lands below",
+  "adm.price.frames.band.floorTo": "take it up to",
+  "adm.price.frames.band.floorBelowAria": "Price below which the floor applies, in dollars",
+  "adm.price.frames.band.floorToAria": "Price anything under the floor is taken up to, in dollars",
+  "adm.price.frames.band.cap": "No price goes above",
+  "adm.price.frames.band.capAria": "Ceiling for the selling price, in dollars",
+  "adm.price.frames.band.cases": "Apply it to cases too",
+  "adm.price.frames.band.casesIn": "Cases are adjusted too.",
+  "adm.price.frames.band.casesOut":
+    "Cases are left out. Turn this on and the floor would raise the price of {n} cases.",
+  "adm.price.frames.band.checking": "Working out how many models change price…",
+  "adm.price.frames.band.noImpact": "No floor and no ceiling: no price moves.",
+  "adm.price.frames.band.impactDraft":
+    "With this: {raised} models go up · {lowered} come down · {unchanged} stay as they are.",
+  "adm.price.frames.band.impactSaved":
+    "Right now: {raised} models go up · {lowered} come down · {unchanged} stay as they are.",
+  "adm.price.frames.band.example": "{model}: {from} → {to}",
+  "adm.price.frames.band.ownPriced": "{n} priced by hand, untouched",
+  "adm.price.frames.band.ownPricedHint":
+    "Models you priced by hand: your decision wins over the floor and the ceiling.",
+  "adm.price.frames.band.saveStore": "Save for this store",
+  "adm.price.frames.band.clear": "Remove the floor and the ceiling",
+  "adm.price.frames.band.clearStore": "Go back to inheriting the master",
+  "adm.price.frames.band.discard": "Discard the changes",
+  "adm.price.frames.band.offline": "The server did not return the floor and ceiling: they cannot be seen or edited now.",
+
   "adm.price.lenses.title": "Lenses",
-  "adm.price.lenses.sub": "The design × material matrix, the photochromics and the anti-reflective coatings.",
+  "adm.price.lenses.sub": "The design × material matrix, by design type: pick the type and you see only its prices.",
   "adm.price.lenses.matrix": "Matrix: design × material",
   "adm.price.lenses.design": "Design",
   "adm.price.lenses.photo": "Photochromic and Transitions",
@@ -224,6 +444,18 @@ const en = {
   "adm.price.lenses.pills.materials": "materials",
   "adm.price.lenses.masterIs": "Master: {v}",
   "adm.price.lenses.editCell": "Price of {design} in {material}",
+  "adm.price.lenses.catNav": "Design type",
+  "adm.price.lenses.catCount": "{n} designs",
+  "adm.price.lenses.catEmpty": "No design of that type in that tier.",
+  "adm.price.lenses.tier": "Tier",
+  "adm.price.lenses.tierAll": "Every tier",
+  "adm.price.lenses.tierNone": "No tier",
+
+  "adm.price.treat.sub": "What is added to the lens: photochromics and anti-reflective coatings, priced by design type.",
+  "adm.price.treat.photoCol": "Treatment",
+  "adm.price.treat.empty": "No treatments in the list.",
+  "adm.price.treat.pills.photo": "photochromics",
+  "adm.price.treat.pills.ar": "anti-reflective",
 
   "adm.price.comm.title": "Commissions",
   "adm.price.comm.sub": "What the person who sells takes. It is a real cost of every sale: changing it re-computes the past too.",
@@ -259,6 +491,8 @@ const en = {
     "Charged only when the purchase carries no prescription: prescription lenses are exempt. It is the same value the point of sale and the web store use.",
   "adm.price.costs.taxEnv": "Value from the environment (not saved in the database yet)",
   "adm.price.costs.target": "Target profit",
+  "adm.price.costs.perSale": "What every sale costs",
+  "adm.price.costs.perStore": "The store's costs and tax",
   "adm.price.costs.pills.rules": "rules",
   "adm.price.costs.pills.off": "switched off",
 
@@ -266,6 +500,11 @@ const en = {
   "adm.price.sheets.sub": "What each sale left, with its editable sheet.",
 
   "adm.err.pricing.bad_scope": "That scope does not exist (frames, cases or everything).",
+  "adm.err.pricing.bad_band": "Check the floor and ceiling figures: they have to be amounts above zero.",
+  "adm.err.pricing.band_incomplete": "That side is missing a figure: it needs the threshold AND the price it is taken to.",
+  "adm.err.pricing.floor_below_threshold": "That floor lowers the price instead of raising it: the price it takes to cannot be under the threshold.",
+  "adm.err.pricing.cap_above_threshold": "That ceiling raises the price instead of lowering it: the price it brings down to cannot be over the threshold.",
+  "adm.err.pricing.band_crossed": "The floor would push a price over the ceiling: lower the floor or raise the ceiling.",
   "adm.err.pricing.bad_mode": "Pick a percentage or a fixed amount.",
   "adm.err.pricing.bad_value": "That value will not do: check the number.",
   "adm.err.pricing.bad_kind": "That kind of price does not exist.",

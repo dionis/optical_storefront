@@ -1,10 +1,11 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { localParts } from "../../../../lib/alerts";
-import { cashReport } from "../../../../lib/cash-report";
+import { cashReport, redactCashReport } from "../../../../lib/cash-report";
 import { listEstablishments } from "../../../../lib/establishments";
 import { sellableStores } from "../../../../lib/pos";
 import { PosError } from "../../../../lib/pos-data";
 import { posHandler, posScope } from "../../../../lib/pos-route";
+import { insightAccess } from "../../../../lib/sales-insights";
 import { tenant } from "../../../../lib/tenant";
 
 /**
@@ -46,6 +47,11 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         if (scope.seller?.terminal_id) terminals = [scope.seller.terminal_id];
       }
     }
-    res.json(await cashReport(req.scope, { from, to, stores, sellers, terminals }));
+    // The processor's charge is a cost, and a seller reads this screen to
+    // reconcile their own till: it leaves only for a caller who may see costs
+    // (same rule as the analytics, insightAccess). Redacted on the server —
+    // hiding the column in the panel would still have sent the number.
+    const report = await cashReport(req.scope, { from, to, stores, sellers, terminals });
+    res.json(redactCashReport(report, insightAccess(scope).profit));
   });
 }

@@ -606,7 +606,7 @@ describe("statementTotals", () => {
 describe("aggregateSales", () => {
   const pr = periodRanges("2026-11-04", 3); // Wednesday
   const l = (over: Partial<InsightLine>) => line({ sold_date_local: "2026-11-04", tax_cents: 0, ...over });
-  const e = (over: Partial<LineEconomics>): LineEconomics => ({ net: 10000, cost: 3000, fee: 200, commission: 500, profit: 6300, missing_cost: false, ...over });
+  const e = (over: Partial<LineEconomics>): LineEconomics => ({ net: 10000, cost: 3000, fee: 200, commission: 500, profit: 6300, paid: 10800, balance: 0, missing_cost: false, ...over });
 
   it("carries the payment fee apart as well as inside the cost, so Ejecutivo can be reconciled", () => {
     const { periods } = aggregateSales([l({ order_id: "a" }), l({ order_id: "b", sku: "FX2" })], [e({}), e({ fee: 350 })], pr, { profit: true, commission: true });

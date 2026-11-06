@@ -20,6 +20,7 @@ import {
   PosError,
   quoteSale,
   rxContexts,
+  rxDesigns,
   type RxInput,
   type RxMeta,
 } from "../../../../lib/pos-data";
@@ -50,6 +51,13 @@ import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
  *        `pending=1`: solo ventas con saldo pendiente (cualquier rol, en su
  *        alcance), con nombre y teléfono del cliente para cobrar.
  *        `mine=1`: solo las ventas propias de quien pregunta (cualquier rol).
+ *        Cada venta trae además de quién fue y qué se vendió, leído de las
+ *        tablas de origen (lib/pos-sale-detail.ts): `customer_name`,
+ *        `customer_phone`, `frame_brand`, `frame_model`, `frame_color`,
+ *        `frame_sku`, `own_frame`, `has_rx`, `lens`, `lens_summary` e `items`,
+ *        con los mismos nombres que la lista de analítica. La analítica
+ *        (sale_fact) solo hace falta ya para la economía de la venta (costo,
+ *        comisión, ganancia, margen), que vive en otra ruta.
  *   POST /admin/pos/sales — registra una venta (ver Body). El servidor vuelve a
  *        calcular precio y descuento (nunca se fía de un total del cliente);
  *        un descuento fuera de límite exige una aprobación vigente.
@@ -82,7 +90,12 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
               from: q.from || undefined,
               to: q.to || undefined,
             },
-            Math.min(200, Number(q.limit) || 50)
+            Math.min(200, Number(q.limit) || 50),
+            // Cliente, montura, lentes y artículos salen de las tablas de
+            // origen (cliente, líneas del pedido, producto), no de la
+            // analítica: el panel no tiene que completar la lista con una
+            // segunda consulta a sale_fact, que no tiene fila para toda venta.
+            { withDetail: true }
           );
     // Collecting needs the customer's name and phone; the plain list does not carry them.
     const contacts = pending || seller ? await customerContacts(req.scope, sales.map((s) => s.customer_id)) : new Map();
@@ -152,7 +165,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
       getPosSettings(req.scope),
       listPaymentMethods(req.scope),
     ]);
-    checkPrescriptions(req.scope, prescriptions, needsPrescription(lines.lines), rxContexts(quote));
+    checkPrescriptions(req.scope, prescriptions, needsPrescription(lines.lines), rxContexts(quote), rxDesigns(quote));
 
     const limitPct = discountLimitFor(scope, settings.discount_limits);
     const needsApproval = discountNeedsApproval({ isAdmin: scope.is_admin, pct: quote.discount_pct, limitPct, belowMinimum: quote.below_minimum });

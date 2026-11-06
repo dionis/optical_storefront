@@ -24,6 +24,21 @@ describe("setting someone else's password", () => {
     expect(isAllowedForRestrictedRole("POST", "/admin/team/password")).toBe(true);
     expect(isAllowedForRestrictedRole("POST", "/admin/team/me/profile")).toBe(true);
   });
+
+  it("frame costs and the price band open only with the cost privileges", () => {
+    // Without a privilege the guard refuses, before lib/frame-cost-route.ts runs.
+    expect(isAllowedForRestrictedRole("GET", "/admin/pricing/frames/costs")).toBe(false);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pricing/frames/band")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pricing/frames/cost", ["costs.view"])).toBe(false);
+    // Reading with either privilege, writing only with costs.manage.
+    expect(isAllowedForRestrictedRole("GET", "/admin/pricing/frames/costs?store=est_1", ["costs.view"])).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pricing/frames/band", ["costs.manage"])).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pricing/frames/cost", ["costs.manage"])).toBe(true);
+    expect(isAllowedForRestrictedRole("POST", "/admin/pricing/frames/band", ["costs.manage"])).toBe(true);
+    // The rest of /admin/pricing stays owner/superadmin only.
+    expect(isAllowedForRestrictedRole("POST", "/admin/pricing/frames/override", ["costs.manage"])).toBe(false);
+    expect(isAllowedForRestrictedRole("GET", "/admin/pricing/overview", ["costs.manage"])).toBe(false);
+  });
 });
 
 describe("resolveRole", () => {
@@ -139,6 +154,13 @@ describe("isAllowedForRestrictedRole", () => {
     expect(isAllowedForRestrictedRole("GET", "/admin/team")).toBe(false);
     expect(isAllowedForRestrictedRole("POST", "/admin/team/me")).toBe(false);
     expect(isAllowedForRestrictedRole("GET", "/admin/me/scope/extra")).toBe(false);
+  });
+
+  it("lets the board's GET through (the route scopes it by role) but none of its writes", () => {
+    expect(isAllowedForRestrictedRole("GET", "/admin/order-board?view=stages")).toBe(true);
+    expect(isAllowedForRestrictedRole("GET", "/admin/order-board/order_1")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/stage")).toBe(false);
+    expect(isAllowedForRestrictedRole("POST", "/admin/order-board/order_1/note")).toBe(false);
   });
 
   it("opens the till but not its settings", () => {

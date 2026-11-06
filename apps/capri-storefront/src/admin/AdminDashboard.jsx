@@ -90,97 +90,9 @@ function ThumbBars({ data, imgByName, valuePrefix = "", emptyMsg }) {
 
 // Range keys only — the words come from the dictionary at render time, so the
 // picker follows the language switch instead of freezing at first paint.
-const RANGES = ["today", "7d", "30d", "90d", "ytd", "all"];
-
-function RangePicker({ value, onChange }) {
-  const { t } = useLang();
-  return (
-    <div className="adm-range">
-      {RANGES.map((k) => (
-        <button key={k} className={value === k ? "on" : ""} onClick={() => onChange(k)}>{t(`adm.range.${k}`)}</button>
-      ))}
-    </div>
-  );
-}
-
-// «Resumen» y «Ventas en detalle» vivían aquí como vistas del Ejecutivo; sus
-// gráficas están ahora, una sola vez, en Ejecutivo → «Tendencias»
-// (Executive.jsx) y su lista en «Pedidos y etapas» (StoreOrders.jsx), ambas
-// sobre las mismas ventas que la tira de KPI. go("exec", { sub: "overview" |
-// "detail" }) sigue abriendo el acordeón que corresponde.
-
-/* ---------------- Products (new / discontinued over time) ---------------- */
-function Products({ preset, setPreset }) {
-  const { t, lang } = useLang();
-  const { products, cases, meta } = useCatalog();
-  const [history, setHistory] = useState(null);
-  useEffect(() => {
-    fetch("/catalog-history.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then(setHistory).catch(() => setHistory(null));
-  }, []);
-
-  const { from, to } = rangeFor(preset);
-  const inRange = (d) => { const t = new Date(d).getTime(); return t >= from.getTime() && t <= to.getTime(); };
-
-  const added = [], removed = [];
-  if (Array.isArray(history)) {
-    for (const h of history) if (inRange(h.date)) {
-      for (const s of (h.added || [])) added.push({ sku: s, date: h.date });
-      for (const s of (h.removed || [])) removed.push({ sku: s, date: h.date });
-    }
-  } else if (meta) {
-    for (const s of (meta.added || [])) added.push({ sku: s, date: meta.lastSync });
-    for (const s of (meta.removed || [])) removed.push({ sku: s, date: meta.lastSync });
-  }
-
-  const perBrand = meta?.perBrand || products.reduce((m, p) => (m[p.brand_slug] = (m[p.brand_slug] || 0) + 1, m), {});
-  const brandRows = Object.entries(perBrand).sort((a, b) => b[1] - a[1]);
-  const prodByKey = useMemo(() => { const m = {}; for (const p of products) m[normKey(p.sku)] = p; return m; }, [products]);
-  const findP = (sku) => prodByKey[normKey(sku)];
-  const ProdList = ({ list, empty }) => (
-    <div className="adm-prodlist">
-      {list.length === 0 ? <div className="adm-nodata">{empty}</div> : list.slice(0, 100).map((x, i) => {
-        const p = findP(x.sku);
-        return (
-          <div className="adm-prodlist-row" key={i}>
-            <div className="adm-tb-thumb sm">{p?.colors?.[0]?.image ? <img src={p.colors[0].image} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-            <div className="adm-pl-main"><b>{p?.name || x.sku}</b>{p && <small className="muted">{p.brand}</small>}</div>
-            <small className="muted">{shortDate(x.date, lang)}</small>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  return (
-    <div className="adm-section">
-      <div className="adm-head-row"><h2>{t("adm.tab.products")}</h2><RangePicker value={preset} onChange={setPreset} /></div>
-      {!history && <div className="adm-demo-banner" dangerouslySetInnerHTML={{ __html: t("adm.prod.noHistory") }} />}
-      <div className="adm-kpis">
-        <KpiCard label={t("adm.prod.frames")} value={int(products.length)} icon={<Icon name="glasses" />} />
-        <KpiCard label={t("adm.prod.cases")} value={int(cases.length)} icon={<Icon name="box" />} />
-        <KpiCard label={t("adm.prod.added")} value={int(added.length)} icon={<Icon name="sparkles" />} deltaGood />
-        <KpiCard label={t("adm.prod.removed")} value={int(removed.length)} icon={<Icon name="alert" />} />
-      </div>
-      <div className="adm-grid-2">
-        <div className="adm-card">
-          <h3>{t("adm.prod.newTitle")}</h3>
-          <ProdList list={added} empty={t("adm.prod.noAdded")} />
-        </div>
-        <div className="adm-card">
-          <h3>{t("adm.prod.goneTitle")}</h3>
-          <ProdList list={removed} empty={t("adm.prod.noRemoved")} />
-        </div>
-      </div>
-      <div className="adm-card">
-        <h3>{t("adm.prod.byBrand")}</h3>
-        <ThumbBars
-          data={brandRows.map(([slug, value]) => ({ label: (BRAND_BY_SLUG[slug]?.name) || slug, value }))}
-          imgByName={Object.fromEntries(brandRows.map(([slug]) => { const b = BRAND_BY_SLUG[slug]; return [b?.name || slug, b?.logo]; }))}
-        />
-      </div>
-    </div>
-  );
-}
+// `RangePicker`, `RANGES` y la vieja `Products` vivían aquí; la pantalla de
+// Productos es ahora CatalogManager.jsx (acordeón por marca), que trae su
+// propio selector de rango. Se borran para que no queden dos versiones.
 
 /* ---------------- Prices ---------------- */
 // [storageKey, dictionaryKey, basePrice]. The middle entry is a key, not a
@@ -1037,7 +949,7 @@ function navFromUrl(tabs) {
   const want = q.get("tab") || "";
   if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q", "approval"]) if (q.get(k)) params[k] = q.get(k);
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number"]) if (q.get(k)) params[k] = q.get(k);
   // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
@@ -1094,28 +1006,28 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   const onSub = (sub) => setNav((n) => ({ ...n, params: { ...n.params, sub } }));
 
   return (
-    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={aiAttention ? { aiusage: aiAttention } : undefined}>
+    <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} goTo={go} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={aiAttention ? { aiusage: aiAttention } : undefined}>
       {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
       {tab === "exec" && (
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
-      {tab === "pricing" && <PricingPanel key={`pricing-${nav.n}`} me={me} sellers={sellers} go={go} />}
+      {tab === "pricing" && <PricingPanel key={`pricing-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
-      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} />}
-      {tab === "products" && (
-        <>
-          <div className="adm-section adm-section-top"><CatalogManager /></div>
-          <Products preset={preset} setPreset={setPreset} />
-        </>
-      )}
+      {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} params={nav.params} />}
+      {/* CatalogManager es ahora TODA la pantalla: cabecera con tarjetas y
+          acordeón por marca. La vieja <Products> repetía «Catálogo por marca»
+          debajo, que es justo lo que el acordeón sustituye. `me` hace falta:
+          sin él useStoreFilter no ve las tiendas y los interruptores de
+          surtido quedan bloqueados. */}
+      {tab === "products" && <CatalogManager me={me} params={nav.params} />}
       {tab === "catalogsync" && <CatalogSync />}
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
       {tab === "audit" && <AuditLog me={me} />}
       {tab === "pos" && <PosSale me={me} />}
-      {tab === "possales" && <PosSales me={me} />}
+      {tab === "possales" && <PosSales me={me} params={nav.params} />}
       {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
       {tab === "alerts" && <AlertRules />}

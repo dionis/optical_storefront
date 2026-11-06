@@ -9,8 +9,11 @@
 // La tabla es DataTable.jsx (regla del dueño: todas las columnas, y «Columnas»
 // para elegir cuáles ver): nº, fecha, tienda, cliente, teléfono, vendedor,
 // marca / modelo, total, cobrado, saldo, días de atraso y la acción Cobrar.
-// Marca y modelo llegan de /admin/sales-analytics/sales (useSaleDetails en
-// PosSales.jsx), unidos por venta; las filas `limited` no los traen.
+// Cliente, teléfono, marca y modelo vienen en la propia venta (el servidor los
+// lee de las tablas de origen), así que esta pantalla no hace una segunda
+// llamada a la analítica: no muestra costo ni ganancia y no los necesita. Las
+// filas `limited` (de un compañero, solo para cobrar) traen únicamente cliente
+// y teléfono, nunca la montura.
 //
 // Props:
 //   me          GET /admin/team/me (filtro de tienda y rol)
@@ -30,18 +33,15 @@ import { collectPayment, listSales, methodName, posContext } from "./posApi.js";
 import Accordion from "./Accordion.jsx";
 import DataTable, { tableSpecFrom } from "./DataTable.jsx";
 import { useColumns } from "./useColumns.js";
-import { mergeSaleDetails, useSaleDetails } from "./PosSales.jsx";
+import { mergeSaleDetails } from "./PosSales.jsx";
 import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
 import { ExportMenu } from "./ui.jsx";
+import { daysOverdue } from "./lateness.js";
 import "./screens.css";
 import "./roles.css";
 
-const DAY = 86400000;
-/** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); nunca negativo. */
-export const daysOverdue = (sale, now = Date.now()) => {
-  const since = sale.promised_on ? Date.parse(`${sale.promised_on}T00:00:00`) : Date.parse(sale.created_at);
-  return Number.isFinite(since) ? Math.max(0, Math.floor((now - since) / DAY)) : 0;
-};
+/** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); vive en lateness.js (también la usa Pedidos y etapas). */
+export { daysOverdue };
 const OVERDUE_DAYS = 7;
 const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -123,11 +123,10 @@ export default function PendingBalances({ me, openSale, embedded = false, params
   };
   useEffect(load, [store, filters.seller]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const details = useSaleDetails(sales, { store });
   const storeCode = (id) => ctx?.stores.find((x) => x.id === id)?.code || "";
   const rows = useMemo(() => sales
     .filter((s) => s.balance > 0)
-    .map((s) => ({ ...mergeSaleDetails(s, details.map.get(s.id)), days: daysOverdue(s), store_code: storeCode(s.establishment_id) }))
+    .map((s) => ({ ...mergeSaleDetails(s), days: daysOverdue(s), store_code: storeCode(s.establishment_id) }))
     .filter((r) => {
       if (filters.overdue != null && !(r.days > filters.overdue)) return false;
       if (filters.stage && !r.limited && (filters.stage === "delivered") !== Boolean(r.delivered_at)) return false;
@@ -136,7 +135,7 @@ export default function PendingBalances({ me, openSale, embedded = false, params
         if (!hay.includes(filters.q)) return false;
       }
       return true;
-    }), [sales, details.map, filters, ctx]); // eslint-disable-line react-hooks/exhaustive-deps
+    }), [sales, filters, ctx]); // eslint-disable-line react-hooks/exhaustive-deps
   const totals = useMemo(() => ({
     count: rows.length,
     total: Math.round(rows.reduce((a, r) => a + (Number(r.total) || 0), 0) * 100) / 100,
@@ -235,7 +234,6 @@ export default function PendingBalances({ me, openSale, embedded = false, params
           expanded={(r) => (ctx && openId === r.id ? <CollectRow key={`${r.id}-form`} sale={r} ctx={ctx} colSpan={columns.keys.length} onDone={onCollected} onCancel={() => setOpenId(null)} /> : null)}
         >
           {activeFilter && <span className="adm-chip warn" title={t("adm.pb.filtered", { what: activeFilter })}>{t("adm.pb.filtered", { what: activeFilter })}</span>}
-          {details.status === "loading" && <span className="dt-loading">{t("adm.tbl.completing")}</span>}
         </DataTable>
       </Accordion>
     </div>

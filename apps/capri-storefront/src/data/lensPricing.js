@@ -54,6 +54,19 @@ export const BASE = {
   "dvg-camber":    { cr39: 300, poly: 300, "1.56": 300, "1.61": 300, "1.67": 340, "1.74": 390 },
 };
 
+// Acabado del lente: FINISHES[designId][materialId] = { stock, digital } en USD
+// (null = ese acabado no tiene precio). La lista empaquetada solo conoce el
+// acabado por defecto de cada diseño — stock en visión sencilla y bifocal,
+// digital en progresivos — así que se deriva de BASE; los precios del tallado
+// digital de monofocales y bifocales los pone el dueño en el panel y llegan
+// con la matriz del backend (lensCatalog.js).
+export const FINISHES = Object.fromEntries(
+  Object.entries(BASE).map(([designId, row]) => {
+    const prog = DESIGNS.find((d) => d.id === designId)?.cat === "prog";
+    return [designId, Object.fromEntries(Object.entries(row).map(([m, usd]) => [m, prog ? { stock: null, digital: usd } : { stock: usd, digital: null }]))];
+  })
+);
+
 // Fotocromáticos y Transitions (adicional al lente). price por categoría
 // sv / bifocal / prog. null = no disponible para esa categoría.
 export const PHOTO = [

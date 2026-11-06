@@ -1,9 +1,14 @@
-// Dónde se usa: «Precios y costos» → acordeón «Costos».
+// Dónde se usa: «Precios y costos» → pestaña «Comisiones y costos».
 // Las reglas de costo agrupadas (monturas, lentes, por pedido, porcentajes),
 // cada una con su interruptor POR TIENDA — «cada tienda puede activar o
 // desactivar costos» —, los costos fijos y variables de la tienda y el
 // impuesto de las monturas sin receta. Los importes se editan en las fichas de
 // costo; aquí se decide qué se cobra y cuánto impuesto se aplica.
+//
+// `part` parte el bloque en dos para que la pestaña los coloque en columnas
+// distintas sin duplicar nada: "rules" es lo que cuesta CADA VENTA (las reglas
+// con su interruptor) y "store" lo que cuesta EL MES más el impuesto. Sin
+// `part` sale todo seguido, como antes.
 import { useEffect, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import { money } from "../adminOrders.js";
@@ -21,7 +26,7 @@ function Switch({ on, disabled, label, onChange }) {
   );
 }
 
-export default function CostsSection({ costs, store, isStore, onSaved, onError }) {
+export default function CostsSection({ costs, store, isStore, part = "all", onSaved, onError }) {
   const { t, lang } = useLang();
   const [tax, setTax] = useState(String(costs.taxes.rate_pct ?? 0));
   const [busy, setBusy] = useState("");
@@ -79,10 +84,13 @@ export default function CostsSection({ costs, store, isStore, onSaved, onError }
     </div>
   );
 
+  const showRules = part === "all" || part === "rules";
+  const showStore = part === "all" || part === "store";
+
   return (
     <>
-      {!isStore && <p className="pp-hint">{t("adm.price.costs.toggleHint")}</p>}
-      {GROUPS.map((g) => {
+      {showRules && !isStore && <p className="pp-hint">{t("adm.price.costs.toggleHint")}</p>}
+      {showRules && GROUPS.map((g) => {
         const list = costs.rules.filter((r) => r.group === g);
         if (!list.length) return null;
         return (
@@ -108,11 +116,12 @@ export default function CostsSection({ costs, store, isStore, onSaved, onError }
           </div>
         );
       })}
-      <p className="pp-hint">{t("adm.price.costs.editIn")}</p>
+      {showRules && <p className="pp-hint">{t("adm.price.costs.editIn")}</p>}
 
-      {items(costs.fixed, t("adm.price.costs.fixed"))}
-      {items(costs.variable, t("adm.price.costs.variable"))}
+      {showStore && items(costs.fixed, t("adm.price.costs.fixed"))}
+      {showStore && items(costs.variable, t("adm.price.costs.variable"))}
 
+      {showStore && (
       <form className="pp-row" onSubmit={saveTax}>
         <label htmlFor="pp-tax">
           {t("adm.price.costs.tax")}
@@ -132,8 +141,9 @@ export default function CostsSection({ costs, store, isStore, onSaved, onError }
         <button className="btn-xs primary" disabled={busy === "tax"}>{t("adm.price.save")}</button>
         {costs.taxes.source !== "database" && <span className="pp-badge">{t("adm.price.costs.taxEnv")}</span>}
       </form>
-      <p className="pp-hint">{t("adm.price.costs.taxHint")}</p>
-      {costs.profit_target_pct != null && (
+      )}
+      {showStore && <p className="pp-hint">{t("adm.price.costs.taxHint")}</p>}
+      {showStore && costs.profit_target_pct != null && (
         <div className="pp-row">
           <label>{t("adm.price.costs.target")}</label>
           <span className="pp-now">{costs.profit_target_pct} %</span>

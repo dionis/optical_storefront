@@ -7,6 +7,7 @@ import { SALES_ANALYTICS_MODULE } from "../modules/sales-analytics";
 import type SalesAnalyticsModuleService from "../modules/sales-analytics/service";
 import { localParts } from "./alerts";
 import { loadProductMetadata } from "./frame-specs";
+import { parseLensFinish } from "./lens-finish";
 import { normalizeSellerCodeLoose } from "./order-board";
 import { tenant } from "./tenant";
 
@@ -68,6 +69,7 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
     lens_material: withLenses ? sel.material_code ?? null : null,
     lens_photo: withLenses ? sel.photo_code ?? null : null,
     lens_ar: withLenses ? sel.ar_code ?? null : null,
+    lens_finish: withLenses ? parseLensFinish(sel.finish) : null,
     has_prescription: Boolean(md.prescription_id),
     qty,
     list_cents: list,
@@ -98,17 +100,20 @@ export async function projectOrder(container: MedusaContainer, orderId: string):
     const md = order.metadata ?? {};
     const pos = container.resolve<PosModuleService>(POS_MODULE);
     const saleId = (md.pos_sale_id as string | undefined) ?? null;
-    const [sale] = saleId ? await pos.listPosSales({ id: saleId }, { take: 1 }) : [];
+    // By the stamped id, else by the order itself: a sale whose stamp on the
+    // order failed (pos-data.ts stampOrder is best-effort) is still a till
+    // sale, and without this it was projected as a web order of no store.
+    const [sale] = saleId ? await pos.listPosSales({ id: saleId }, { take: 1 }) : await pos.listPosSales({ order_id: order.id } as never, { take: 1 });
     const payments = sale ? await pos.listPosSalePayments({ sale_id: sale.id }, { take: 100 }) : [];
-    const isPos = md.source === "pos";
+    const isPos = md.source === "pos" || Boolean(sale);
     const ctx: LineContext = {
       orderId: order.id,
       channel: isPos ? "pos" : "web",
       saleId: sale?.id ?? null,
       saleNumber: sale?.number ?? null,
-      establishmentId: isPos ? ((md.establishment_id as string | undefined) ?? null) : null,
-      terminalId: (md.terminal_id as string | undefined) ?? null,
-      sellerId: isPos ? ((md.seller_id as string | undefined) ?? null) : null,
+      establishmentId: isPos ? ((md.establishment_id as string | undefined) ?? sale?.establishment_id ?? null) : null,
+      terminalId: (md.terminal_id as string | undefined) ?? sale?.terminal_id ?? null,
+      sellerId: isPos ? ((md.seller_id as string | undefined) ?? sale?.seller_id ?? null) : null,
       // A web sale from a seller's referral link carries the code on the order.
       sellerCode: sale?.seller_code ?? normalizeSellerCodeLoose(md.seller_code),
       customerId: order.customer_id ?? null,
@@ -139,5 +144,55 @@ export async function voidFacts(container: MedusaContainer, saleId: string): Pro
     if (rows.length) await svc.updateSaleFacts(rows.map((r) => ({ id: r.id, status: "voided" })) as never);
   } catch (e) {
     container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[sale-fact] void ${saleId}: ${(e as Error).message}`);
+  }
+}
+
+/** How far back the reconciler looks for orders with no facts. */
+export const RECONCILE_DAYS = 90;
+/** Orders projected per run; the rest wait for the next one (the job runs every few hours). */
+export const RECONCILE_BATCH = 500;
+
+/**
+ * Ids of the orders placed since `since` that have no `sale_fact` row —
+ * projected at the time and lost to a failed write, a restart mid-way or an
+ * order placed while the projection was down. Oldest first. Drafts never
+ * count (not a sale yet); a canceled order is returned too, since
+ * `projectOrder` writes it as voided facts, which is what history expects.
+ * Pure over the connection: one LEFT JOIN, no service.
+ */
+export async function ordersMissingFacts(pg: Knex, since: Date, limit = RECONCILE_BATCH): Promise<string[]> {
+  const rows = (await pg("order as o")
+    .leftJoin("sale_fact as f", function joinLive() {
+      this.on("f.order_id", "=", "o.id").andOnNull("f.deleted_at");
+    })
+    .whereNull("o.deleted_at")
+    .where("o.created_at", ">=", since)
+    .whereNotIn("o.status", ["draft", "archived"])
+    .whereNull("f.id")
+    .orderBy("o.created_at", "asc")
+    .limit(limit)
+    .select("o.id")) as Array<{ id: string }>;
+  return rows.map((r) => String(r.id));
+}
+
+/**
+ * Projects every recent order that has no facts (see `ordersMissingFacts`).
+ * Idempotent and never throws: `projectOrder` replaces an order's rows and
+ * logs its own failures. Logs `[sale-fact] reconciled N orders` when it did
+ * anything. Returns how many orders got rows.
+ */
+export async function reconcileSaleFacts(container: MedusaContainer, now = new Date()): Promise<number> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const since = new Date(now.getTime() - RECONCILE_DAYS * 86400_000);
+    const ids = await ordersMissingFacts(pg, since);
+    let done = 0;
+    for (const id of ids) if ((await projectOrder(container, id)) > 0) done++;
+    if (ids.length) logger.info(`[sale-fact] reconciled ${done} orders (${ids.length} without facts since ${since.toISOString().slice(0, 10)})`);
+    return done;
+  } catch (e) {
+    logger.warn(`[sale-fact] reconcile skipped: ${(e as Error).message}`);
+    return 0;
   }
 }

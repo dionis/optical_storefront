@@ -1,0 +1,134 @@
+/* Franja de pendientes del Ejecutivo (BacklogStrip.jsx): lo que hay VIVO ahora
+   mismo, en una o dos filas horizontales. El dueño odia el espacio en blanco y
+   quiere todo en una vista, así que la celda es de DOS líneas (etiqueta ·
+   cifra + contexto en la misma línea) y la franja mide ~62 px en una fila.
+   Solo tokens --adm-*: funciona en claro, en oscuro y con el color de la
+   tienda activa (--adm-accent). No se imprime (adm-noprint en el componente):
+   es el estado de hoy, no del período que lleva el reporte. */
+
+.bl-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 0 0 10px; padding: 7px 8px 7px 9px;
+  background: var(--adm-surface); color: var(--adm-ink);
+  border: 1px solid var(--adm-line); border-left: 3px solid var(--adm-accent);
+  border-radius: var(--adm-radius-sm);
+}
+
+/* Rótulo: recuerda que estas cifras NO siguen el período de la barra. */
+.bl-tag {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 0;
+  font: 800 10px/1 var(--adm-font); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--adm-muted); white-space: nowrap; cursor: help;
+}
+.bl-tag svg { color: var(--adm-accent-ink); }
+
+/* Las cifras, en rejilla: dos filas parejas de cuatro en una pantalla normal
+   y una sola fila de ocho cuando hay sitio de verdad. Una fila flexible dejaba
+   la última celda sola ocupando todo el ancho, que es justo el espacio en
+   blanco que el dueño no quiere. */
+.bl-cells { flex: 1 1 auto; min-width: 0; display: grid; gap: 6px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .bl-cells { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ── Celda = botón de verdad, con el «?» de ayuda fuera de él ────────────── */
+.bl-cell { position: relative; min-width: 0; }
+.bl-go {
+  width: 100%; height: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px;
+  min-height: 44px; padding: 5px 4px 5px 8px; text-align: left; font: inherit; cursor: pointer;
+  background: var(--adm-surface-2); color: var(--adm-ink);
+  border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm);
+  transition: border-color .15s, background .15s, box-shadow .18s, transform .14s var(--adm-ease, ease);
+}
+.bl-go:hover { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); transform: translateY(-1px); box-shadow: var(--adm-shadow-hover); }
+.bl-go:active { transform: none; }
+.bl-go:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.bl-cell.has-help .bl-go { padding-right: 16px; }
+
+.bl-ico { color: var(--adm-muted); flex: none; }
+.bl-txt { min-width: 0; display: grid; gap: 1px; }
+.bl-txt small { font: 700 10.5px/1.2 var(--adm-font); color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl-fig { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.bl-fig b { font: 700 15.5px/1.15 var(--adm-display); color: var(--adm-ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; }
+.bl-fig i { font: 600 10.5px/1.2 var(--adm-font); font-style: normal; color: var(--adm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl-chev { color: var(--adm-muted); opacity: .4; transition: opacity .15s, transform .15s, color .15s; }
+.bl-go:hover .bl-chev { opacity: 1; color: var(--adm-accent-ink); transform: translateX(1px); }
+.bl-skel { height: 15px; }
+.bl-help { position: absolute; top: 2px; right: 2px; z-index: 1; }
+
+/* ── Lo que sí está pendiente destaca; lo que está en cero se apaga ──────── */
+.bl-cell.info .bl-go { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+.bl-cell.info .bl-fig b, .bl-cell.info .bl-ico { color: var(--adm-accent-ink); }
+
+.bl-cell.warn .bl-go { background: var(--adm-amber-soft, var(--adm-gold-soft)); border-color: var(--adm-gold-line); }
+.bl-cell.warn .bl-fig b, .bl-cell.warn .bl-ico { color: var(--adm-amber-dark); }
+
+/* Atrasados: más que el resto — fondo rojo suave, borde marcado y cifra mayor. */
+.bl-cell.bad .bl-go { background: var(--adm-red-soft); border-color: var(--adm-red-line); box-shadow: inset 3px 0 0 var(--adm-red); }
+.bl-cell.bad .bl-fig b { color: var(--adm-red-dark); font-size: 17px; }
+.bl-cell.bad .bl-txt small, .bl-cell.bad .bl-ico { color: var(--adm-red-dark); }
+.bl-cell.bad .bl-go:hover { background: var(--adm-red-soft); border-color: var(--adm-red); }
+
+/* Referencia (ayer / hoy): neutras a propósito, no son pendientes. */
+.bl-cell.ref .bl-go { background: var(--adm-surface); }
+
+/* Un cero no reclama atención: sin color, apagado y sin flecha insistente. */
+.bl-cell.zero .bl-go { background: var(--adm-surface); border-color: var(--adm-line-2); box-shadow: none; }
+.bl-cell.zero .bl-fig b { color: var(--adm-muted); font-weight: 600; font-size: 15.5px; }
+.bl-cell.zero .bl-txt small, .bl-cell.zero .bl-ico, .bl-cell.zero .bl-fig i { color: var(--adm-muted); opacity: .75; }
+.bl-cell.zero .bl-chev { opacity: .2; }
+.bl-cell.zero .bl-go:hover { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+
+/* Avisos al final de la franja (lectura fallida o cifras parciales). */
+.bl-note { flex: 1 1 100%; font: 600 11px/1.3 var(--adm-font); color: var(--adm-muted); align-self: center; }
+.bl-note.err { color: var(--adm-red-dark); }
+
+/* ── Nada pendiente: una sola línea tranquila, no seis ceros ─────────────── */
+.bl-strip.clear { align-items: center; border-left-color: var(--adm-green); padding: 6px 8px 6px 9px; }
+.bl-clear { flex: 1 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 600 12px/1.3 var(--adm-font); color: var(--adm-muted); }
+.bl-clear svg { color: var(--adm-green); flex: none; }
+.bl-minis { flex: 0 0 auto; display: flex; gap: 6px; }
+.bl-mini {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; cursor: pointer; font: inherit;
+  background: var(--adm-surface-2); color: var(--adm-ink); border: 1px solid var(--adm-line); border-radius: 999px;
+  transition: border-color .15s, background .15s;
+}
+.bl-mini:hover { background: var(--adm-accent-soft); border-color: var(--adm-accent-line); }
+.bl-mini:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.bl-mini small { font: 700 10.5px/1.2 var(--adm-font); color: var(--adm-muted); white-space: nowrap; }
+.bl-mini b { font: 700 13px/1.15 var(--adm-display); font-variant-numeric: tabular-nums; }
+.bl-mini.zero b { color: var(--adm-muted); font-weight: 600; }
+
+/* Pantalla ancha: las ocho en una sola fila. Ahí la celda es estrecha, así que
+   la flecha se va (el fondo ya cambia al pasar por encima) y esos ~19 px se los
+   queda el texto, que si no recortaba la línea de contexto. */
+@media (min-width: 1560px) {
+  .bl-cells { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .bl-go { grid-template-columns: auto 1fr; padding-right: 8px; }
+  .bl-chev { display: none; }
+  .bl-cell.has-help .bl-go { padding-right: 14px; }
+  /* Y la línea de contexto baja bajo la cifra en vez de pelearse con ella. */
+  .bl-fig { display: block; }
+  .bl-fig i { display: block; margin-top: 1px; }
+}
+
+/* Móvil: dos por fila (la franja crece a dos o tres filas, nunca a una lista). */
+@media (max-width: 720px) {
+  .bl-strip { padding: 6px; gap: 5px; }
+  .bl-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .bl-tag { flex: 1 1 100%; padding: 1px 0 2px; }
+  .bl-strip.clear { flex-wrap: wrap; }
+  .bl-minis { flex: 1 1 100%; }
+  .bl-mini { flex: 1 1 0; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-go { transition: none; }
+  .bl-go:hover { transform: none; }
+}
+
+/* La guía completa de HelpTip reserva una columna para la lista de temas
+   relacionados (help.css: `grid-template-columns: 200px 1fr`). Los dos temas de
+   la franja («dinero en la calle» y «atrasados») viven en este módulo y no
+   pertenecen a ningún grupo de HELP_GROUPS, así que esa lista no se pinta y el
+   texto se quedaba metido en la columna estrecha de 200 px. Sin tocar help.css
+   ni HelpTip.jsx: cuando no hay lista, una sola columna. (Si algún día esos dos
+   temas entran en HELP_GROUPS, esta regla deja de aplicar sola.) */

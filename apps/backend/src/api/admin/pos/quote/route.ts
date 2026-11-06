@@ -1,7 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { opticalChange } from "../../../../lib/optical-change";
 import { cleanDiscountPct, cleanLines, cleanRxMeta, discountNeedsApproval, type PosLineInput } from "../../../../lib/pos";
-import { checkPrescriptions, PosError, quoteSale, rxContexts, type RxInput } from "../../../../lib/pos-data";
+import { checkPrescriptions, PosError, quoteSale, rxContexts, rxDesigns, type RxInput } from "../../../../lib/pos-data";
 import { posHandler, posScope, sellableStore } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
 
@@ -39,7 +39,7 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     let rx_check: { fulfillable: boolean; warnings: unknown[]; validation?: unknown } | null = null;
     if (body.prescription?.rx) {
       try {
-        rx_check = { fulfillable: true, ...checkPrescriptions(req.scope, { new: body.prescription, worn: null }, false, rxContexts(quote)) };
+        rx_check = { fulfillable: true, ...checkPrescriptions(req.scope, { new: body.prescription, worn: null }, false, rxContexts(quote), rxDesigns(quote)) };
       } catch (e) {
         if (e instanceof PosError && e.reason === "invalid_prescription") rx_check = { fulfillable: false, warnings: [], validation: e.extra.validation };
         else throw e;
