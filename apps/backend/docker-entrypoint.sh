@@ -25,7 +25,8 @@ cd /app/apps/backend/.medusa/server
 # it (see the Dockerfile's own note on this line's history).
 /app/apps/backend/node_modules/.bin/medusa db:migrate || echo "[deploy] db:migrate fallo; arrancando de todos modos"
 
-# exec replaces this shell with Medusa as PID 1, so Coolify/Docker's SIGTERM
-# on stop reaches Medusa directly for a clean shutdown instead of being
-# swallowed by a shell that is not listening for it.
+# exec replaces this shell with Medusa, so the SIGTERM that tini (PID 1, see
+# the Dockerfile) forwards on stop reaches Medusa directly for a clean shutdown
+# instead of being swallowed by a shell that is not listening for it. Medusa
+# must NOT be PID 1 itself: it never reaps re-parented orphans (zombie PIDs).
 exec /app/apps/backend/node_modules/.bin/medusa start -H 0.0.0.0

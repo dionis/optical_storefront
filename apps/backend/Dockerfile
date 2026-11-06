@@ -64,7 +64,7 @@ COPY --from=build /app/apps/backend/.medusa/server ./apps/backend/.medusa/server
 # own error annotations) crashes the request with UnicodeEncodeError instead
 # of returning the friendly error the panel expects.
 # ---------------------------------------------------------------------------
-RUN apk add --no-cache python3 curl && \
+RUN apk add --no-cache python3 curl tini && \
     curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 ENV PYTHONUTF8=1
@@ -90,4 +90,11 @@ RUN chmod +x /app/docker-entrypoint.sh
 WORKDIR /app/apps/backend/.medusa/server
 
 EXPOSE 9000
+# tini is PID 1, never Medusa. Every orphan in the container is re-parented to PID 1,
+# and Node only reaps its OWN children: with `exec medusa start` as PID 1 the orphans
+# piled up as zombies, each one still holding a PID. Production reached the cgroup's
+# 7000-PID cap after ~11 days (6976 zombies under Medusa), after which nothing in the
+# container could start a thread — vision-measure answered "can't start new thread".
+# tini reaps them and still forwards SIGTERM to the entrypoint/Medusa on stop.
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["/app/docker-entrypoint.sh"]
