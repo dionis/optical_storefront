@@ -256,7 +256,11 @@ export interface MeasureJobProgress {
 
 export interface MeasureJobStatus {
   ok: boolean;
-  status: 'pending' | 'done' | 'error' | 'unknown';
+  /**
+   * `transient` is client-side only: the status read itself failed (5xx, unreadable body,
+   * network blip) — says nothing about the job, which may well still be running.
+   */
+  status: 'pending' | 'done' | 'error' | 'unknown' | 'transient';
   result?: MeasureResponse;
   error?: string;
   progress?: MeasureJobProgress | null;
@@ -376,10 +380,22 @@ export async function startMeasureJob(
 
 /** One read of a job's status. `signal` lets a poll loop stop waiting mid-request. */
 export async function pollMeasureJob(jobId: string, signal?: AbortSignal): Promise<MeasureJobStatus> {
-  const res = await fetch(`${API_BASE}/vision-measure/job/${encodeURIComponent(jobId)}`, { signal });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/vision-measure/job/${encodeURIComponent(jobId)}`, { signal });
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') throw error;
+    return { ok: false, status: 'transient', error: `Sin conexión con el servicio (${(error as Error)?.message ?? error}).` };
+  }
   const body = await res.json().catch(() => null);
-  if (!body) {
-    return { ok: false, status: 'unknown', error: `Respuesta ilegible del servicio (HTTP ${res.status}).` };
+  // Only a real 404 from the job store means "this job is gone". A 5xx or an unreadable
+  // body is the STATUS READ failing (e.g. the service briefly unable to start a thread),
+  // not the job: the run keeps going server-side, so the caller should just ask again.
+  if (res.status === 404) {
+    return { ok: false, status: 'unknown', error: body?.error || 'El trabajo de medición no existe o expiró.' };
+  }
+  if (!res.ok || !body) {
+    return { ok: false, status: 'transient', error: body?.error || `Respuesta ilegible del servicio (HTTP ${res.status}).` };
   }
   return body as MeasureJobStatus;
 }
