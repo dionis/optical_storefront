@@ -84,8 +84,12 @@ const TABLES: Record<string, Row[]> = {
 
 /** Minimal chainable Knex stand-in over the fixtures above. */
 function makeKnex(tables: Record<string, Row[]> = TABLES): Knex {
-  const build = (rows: Row[]) => {
-    const state = { rows: [...rows] };
+  // `rows === null` = the table does not exist. Like real Knex, that fails when the query
+  // RUNS (await / .catch), never when the table is merely named — otherwise a `.catch()`
+  // fallback in the code under test (lens_treatment_price in lens-quote.ts) could never
+  // be exercised.
+  const build = (rows: Row[] | null, table: string) => {
+    const state = { rows: rows ? [...rows] : [] };
     const builder: Record<string, unknown> = {
       whereNull(col: string) {
         state.rows = state.rows.filter((r) => r[col] == null);
@@ -102,16 +106,20 @@ function makeKnex(tables: Record<string, Row[]> = TABLES): Knex {
         state.rows.sort((a, b) => sign * (Number(a[col]) - Number(b[col])));
         return builder;
       },
-      then(resolve: (v: Row[]) => unknown, reject?: (e: unknown) => unknown) {
-        return Promise.resolve(state.rows).then(resolve, reject);
+      then(resolve?: (v: Row[]) => unknown, reject?: (e: unknown) => unknown) {
+        const result = rows
+          ? Promise.resolve(state.rows)
+          : Promise.reject(new Error(`relation "${table}" does not exist`));
+        return result.then(resolve, reject);
+      },
+      catch(reject: (e: unknown) => unknown) {
+        return (builder.then as (r: undefined, j: typeof reject) => Promise<unknown>)(undefined, reject);
       },
     };
     return builder;
   };
-  const fn = (table: string) => {
-    if (!(table in tables)) throw new Error(`relation "${table}" does not exist`);
-    return build(tables[table] as Row[]);
-  };
+  const fn = (table: string) =>
+    build(table in tables ? (tables[table] as Row[]) : null, table);
   return fn as unknown as Knex;
 }
 
