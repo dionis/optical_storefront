@@ -1,5 +1,17 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+// @ts-expect-error plain .mjs shared with the storefront build, no type declarations
+import { loadTenant, applyTenantEnv, fillHtml, tenantViteEnv } from '../../scripts/tenant/load.mjs';
+
+// Which optician this build is (same manifest and branch rule as the storefront):
+// fills VITE_TENANT_* before Vite reads the environment and the HTML placeholders.
+const tenant = loadTenant(resolve(__dirname, '..', '..'));
+applyTenantEnv(tenant.manifest);
+const tenantHtml = {
+  name: 'tenant-html',
+  transformIndexHtml: (html: string) =>
+    fillHtml(html, { TENANT_COMPACT_NAME: process.env.VITE_TENANT_COMPACT_NAME || tenantViteEnv(tenant.manifest).VITE_TENANT_COMPACT_NAME })
+};
 
 // The measurement API runs as a separate process (apps/vision-measure). It is proxied
 // rather than called directly so the browser only ever talks to its own origin: no CORS
@@ -13,6 +25,7 @@ const BASE = process.env.VITE_TRYON_BASE || '/';
 
 export default defineConfig({
   base: BASE,
+  plugins: [tenantHtml],
   server: {
     port: 3000,
     host: true,

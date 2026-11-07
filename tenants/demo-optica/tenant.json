@@ -1,0 +1,50 @@
+{
+  "slug": "demo-optica",
+  "identity": {
+    "name": "Óptica Demo",
+    "compactName": "OPTICADEMO",
+    "legalName": "Óptica Demo LLC",
+    "tagline": { "es": "Tu visión, nuestro oficio", "en": "Your vision, our craft" }
+  },
+  "seo": {
+    "title": {
+      "es": "Óptica Demo — Espejuelos con receta online",
+      "en": "Óptica Demo — Prescription eyeglasses online"
+    },
+    "description": {
+      "es": "Óptica Demo: espejuelos con receta online, con probador virtual y lectura automática de la receta.",
+      "en": "Óptica Demo: prescription eyeglasses online, with a virtual try-on and automatic prescription reading."
+    },
+    "socialTitle": { "es": "Óptica Demo", "en": "Óptica Demo" },
+    "socialDescription": {
+      "es": "Espejuelos con receta online con probador virtual.",
+      "en": "Prescription eyeglasses online with a virtual try-on."
+    }
+  },
+  "domains": {
+    "storefront": "https://www.optica-demo.example",
+    "api": "https://api.optica-demo.example"
+  },
+  "locale": {
+    "default": "es",
+    "languages": ["es", "en"],
+    "timezone": "America/New_York",
+    "currency": "usd",
+    "country": "us"
+  },
+  "brand": {
+    "primary": "#1d4d3a",
+    "primaryDark": "#123328",
+    "accent": "#c2410c",
+    "themeColor": "#1d4d3a",
+    "emailPrimary": "#1d4d3a",
+    "emailAccent": "#c2410c",
+    "logo": "/logo-oficial.png",
+    "logoMark": "/logo-oficial-mark.png"
+  },
+  "supplier": {
+    "id": "capri",
+    "imageCredit": "caprioptics.com"
+  },
+  "owner": { "email": "dueno@optica-demo.example", "name": "Dueño de prueba" }
+}

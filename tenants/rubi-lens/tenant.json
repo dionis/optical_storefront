@@ -1,0 +1,58 @@
+{
+  "slug": "rubi-lens",
+  "identity": {
+    "name": "RUBI LENS",
+    "compactName": "RUBILENS",
+    "legalName": "RUBI LENS",
+    "tagline": { "es": "Óptica y Salud Visual", "en": "Optics & Vision Care" }
+  },
+  "seo": {
+    "title": {
+      "es": "RUBI LENS — Espejuelos de marca online",
+      "en": "RUBI LENS — Designer eyeglasses online"
+    },
+    "description": {
+      "es": "RUBI LENS: bienestar y estilo para tu visión. Espejuelos de marca online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) con probador virtual y lentes con receta. Español / English.",
+      "en": "RUBI LENS: wellness and style for your vision. Designer eyeglasses online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) with a virtual try-on and prescription lenses. Español / English."
+    },
+    "socialTitle": {
+      "es": "RUBI LENS — Óptica y Salud Visual",
+      "en": "RUBI LENS — Optics & Vision Care"
+    },
+    "socialDescription": {
+      "es": "Espejuelos de marca online con probador virtual y lentes con receta. Español / English.",
+      "en": "Designer eyeglasses online with a virtual try-on and prescription lenses. Español / English."
+    },
+    "appDescription": {
+      "es": "Espejuelos de marca online con probador virtual y lentes con receta.",
+      "en": "Designer eyeglasses online with a virtual try-on and prescription lenses."
+    },
+    "alternateName": "Óptica El Rancho",
+    "sameAs": ["https://opticaelrancho.com/"]
+  },
+  "domains": {
+    "storefront": "https://www.rubilens.com",
+    "api": "https://api.rubilens.com"
+  },
+  "locale": {
+    "default": "es",
+    "languages": ["es", "en"],
+    "timezone": "America/Chicago",
+    "currency": "usd",
+    "country": "us"
+  },
+  "brand": {
+    "primary": "#01326b",
+    "primaryDark": "#021f44",
+    "accent": "#d6123e",
+    "themeColor": "#0E5AD0",
+    "emailPrimary": "#0b2f66",
+    "emailAccent": "#b8921e",
+    "logo": "/logo-oficial.png",
+    "logoMark": "/logo-oficial-mark.png"
+  },
+  "supplier": {
+    "id": "capri",
+    "imageCredit": "caprioptics.com"
+  }
+}

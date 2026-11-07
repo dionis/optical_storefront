@@ -16,6 +16,7 @@ import {
 import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
+import { warmTenantProfile } from "../lib/tenant-profile";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -245,13 +246,23 @@ function visionMeasureCors(
   next();
 }
 
+/**
+ * Keeps the owner-edited tenant profile (name, legal name…) loaded so the
+ * synchronous `tenant()` used by emails, SMS and the sheet reflects it. Fire and
+ * forget: the request never waits for the database here.
+ */
+function tenantProfileWarm(req: MedusaRequest, _res: MedusaResponse, next: MedusaNextFunction): void {
+  warmTenantProfile(req.scope);
+  next();
+}
+
 export default defineMiddlewares({
   routes: [
     {
       // Security headers on every response (HSTS, nosniff, no framing…). See
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
-      middlewares: [securityHeaders],
+      middlewares: [securityHeaders, tenantProfileWarm],
     },
     {
       // Role gate for every admin route, Medusa's own included: owner and
@@ -329,6 +340,13 @@ export default defineMiddlewares({
       matcher: "/admin/store-pricing/import",
       method: ["POST"],
       bodyParser: { sizeLimit: "2mb" },
+    },
+    {
+      // A brand logo (≤ 300 KB) travels as a base64 `data:` URL; the route
+      // checks the decoded size, this only lets the encoded body in.
+      matcher: "/admin/tenant/brand/logo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "1mb" },
     },
     {
       // «Productos y precios» → Importar: the whole Excel book (every model,

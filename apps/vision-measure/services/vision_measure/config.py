@@ -195,7 +195,7 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         ),
         env_keys=("OPENROUTER_API_KEY",),
         docs_url="https://openrouter.ai/keys",
-        extra_headers={"X-Title": "RUBILENS VTO"},
+        extra_headers={"X-Title": f"{os.environ.get('STORE_NAME', '').strip() or 'RUBILENS'} VTO"},
     ),
 )
 

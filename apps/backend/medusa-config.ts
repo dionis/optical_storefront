@@ -354,5 +354,9 @@ export default defineConfig({
     {
       resolve: "./src/modules/ai-usage",
     },
+    // Perfil de la óptica que edita el dueño y quién es el dueño (multi-tenant). Configuración, nunca se purga.
+    {
+      resolve: "./src/modules/tenant-profile",
+    },
   ],
 });

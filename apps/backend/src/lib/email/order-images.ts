@@ -17,6 +17,7 @@
  */
 import type { Attachment } from "@medusajs/framework/types";
 import { readPrivateObject } from "../tryon-image";
+import { tenantHost } from "../tenant";
 
 /** Raw bytes budget for every image in one email (base64 adds ~33%). */
 const MAX_TOTAL_BYTES = 18 * 1024 * 1024;
@@ -67,7 +68,7 @@ export async function loadOrderImages(
     seq += 1;
     const isImage = obj.contentType.startsWith("image/");
     const filename = `${base}-${displayId}-${seq}.${extOf(obj.contentType, key)}`;
-    const cid = isImage ? `${base}-${seq}@rubilens` : null;
+    const cid = isImage ? `${base}-${seq}@${tenantHost()}` : null;
     out.attachments.push({
       content: obj.buffer.toString("base64"),
       filename,

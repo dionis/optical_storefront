@@ -1,0 +1,31 @@
+/* «Configuración de la óptica» (Setup.jsx). Reutiliza la lista de Seguridad (.adm-sec-list). */
+.adm-setup .adm-sec-list li { align-items: center; }
+.adm-setup .adm-sec-list li .adm-sec-main { flex: 1; min-width: 0; }
+.adm-setup .adm-sec-list li.unknown .adm-sec-mark { color: var(--adm-muted); }
+.adm-setup-done { display: inline-flex; align-items: center; gap: 6px; color: var(--adm-green, #1e6b3a); font-weight: 600; font-size: 13px; }
+.adm-setup-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.adm-setup-h4 { margin: 16px 0 8px; font-size: 13px; color: var(--adm-ink); }
+.adm-setup-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; cursor: pointer; }
+.adm-setup .adm-field.is-bad .adm-input { border-color: var(--adm-red, #c0392b); }
+
+/* Marca (BrandEditor.jsx) */
+.adm-brand-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .adm-brand-grid { grid-template-columns: 1fr; } }
+.adm-brand-color { display: flex; gap: 6px; align-items: center; }
+.adm-brand-color input[type="color"] { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--adm-line); border-radius: 8px; background: var(--adm-surface); cursor: pointer; }
+.adm-brand-ok { color: var(--adm-green); font-weight: 600; }
+.adm-brand-bad { color: var(--adm-red); font-weight: 600; }
+.adm-brand .adm-field { margin-top: 10px; }
+.adm-brand-logo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.adm-brand-logo img { height: 40px; max-width: 160px; object-fit: contain; background: var(--adm-bg); border: 1px solid var(--adm-line); border-radius: 8px; padding: 4px; }
+.adm-brand-upload { cursor: pointer; }
+.adm-brand-preview { border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 10px; display: grid; gap: 10px; background: var(--adm-surface); }
+.adm-brand-pv-header { border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; }
+.adm-brand-pv-header img, .adm-brand-pv-mail img { height: 26px; max-width: 140px; object-fit: contain; }
+.adm-brand-pv-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #1e2733; }
+.adm-brand-pv-price { font-weight: 700; }
+.adm-brand-pv-body button { color: #fff; border: 0; border-radius: 8px; padding: 7px 14px; font-weight: 600; cursor: default; }
+.adm-brand-pv-badge { color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+.adm-brand-pv-mail { border-left: 6px solid; border-radius: 6px; overflow: hidden; background: #f5f2ec; }
+.adm-brand-pv-mail > div { padding: 8px 10px; }
+.adm-brand-pv-mail p { margin: 0; padding: 8px 10px; font-size: 12px; color: #374151; }

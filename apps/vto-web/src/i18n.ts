@@ -11,6 +11,9 @@
 
 export type Lang = 'es' | 'en';
 
+/** The optician's compact name, from the tenant manifest at build time (vite.config.ts). */
+export const BRAND: string = (import.meta as any).env?.VITE_TENANT_COMPACT_NAME || 'RUBILENS';
+
 type Dict = Record<string, string>;
 
 const ES: Dict = {
@@ -53,8 +56,8 @@ const ES: Dict = {
   'catalog.glbError': 'No se pudo interpretar «{file}». Revisa el detalle bajo la montura.',
 
   // Card calibration
-  'app.pageTitle': 'TRY ON RUBILENS · Probador virtual de gafas',
-  'report.pageTitle': 'Informe de medición · TRY ON RUBILENS',
+  'app.pageTitle': `TRY ON ${BRAND} · Probador virtual de gafas`,
+  'report.pageTitle': `Informe de medición · TRY ON ${BRAND}`,
   'status.startFailed': 'No se pudo iniciar el probador virtual:',
   'card.step1': 'Apoya una tarjeta real <strong>plana contra la frente o el pómulo</strong>, en el mismo plano que los ojos.',
   'card.step2': 'Pulsa <strong>Congelar</strong> para fijar la imagen.',
@@ -551,8 +554,8 @@ const EN: Dict = {
   'catalog.glbEmpty': 'The file is empty.',
   'catalog.glbError': 'Could not parse "{file}". See the detail under the frame.',
 
-  'app.pageTitle': 'TRY ON RUBILENS · Virtual Eyewear Try-On',
-  'report.pageTitle': 'Measurement report · TRY ON RUBILENS',
+  'app.pageTitle': `TRY ON ${BRAND} · Virtual Eyewear Try-On`,
+  'report.pageTitle': `Measurement report · TRY ON ${BRAND}`,
   'status.startFailed': 'The virtual try-on could not start:',
   'card.step1': 'Hold a real card <strong>flat against the brow or cheekbone</strong>, in the same plane as the eyes.',
   'card.step2': 'Press <strong>Freeze</strong> to hold the image still.',

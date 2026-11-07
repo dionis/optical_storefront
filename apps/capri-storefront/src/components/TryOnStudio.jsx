@@ -4,6 +4,7 @@ import { loadCache, saveCache } from "../lib/appCache.js";
 import { brandByName } from "../data/brands.js";
 import { createPortal } from "react-dom";
 import { useLang } from "../i18n/LanguageContext.jsx";
+import { TENANT } from "../config/tenant.js";
 import { IconGlasses, IconLensWidth, IconBridge, IconTemple } from "./measureIcons.jsx";
 import { IconMaterial, IconMeasures, IconGender, IconCamera, IconCheck, Icon360, IconGlasses as IconGlassesUi } from "./UiIcons.jsx";
 import MeasureReport from "./MeasureReport.jsx";
@@ -1075,7 +1076,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
   async function shareResult() {
     const src = mData?.frontImage || frontImg;
     const text = t("vm.shareText");
-    const title = "RUBI LENS";
+    const title = TENANT.name;
     const url = typeof location !== "undefined" ? location.href : "";
     try {
       if (src && typeof navigator !== "undefined" && navigator.canShare) {
@@ -1188,7 +1189,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
       cx.textBaseline = "alphabetic";
       cx.fillStyle = "#ffffff";
       cx.font = `800 ${Math.round(38 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
-      cx.fillText("RUBI LENS", pad, gy + Math.round(50 * s));
+      cx.fillText(TENANT.name, pad, gy + Math.round(50 * s));
       cx.fillStyle = "rgba(200,215,240,0.92)";
       cx.font = `600 ${Math.round(26 * s)}px system-ui, -apple-system, Segoe UI, Arial`;
       const sub = [product?.name, product?.brand, color?.name].filter(Boolean).join("   ·   ");
@@ -1694,7 +1695,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
 
   // Ficha del espejuelo seleccionado (foto + medidas + pie con fecha/logo). Se usa
   // en captura/revisión (ancho completo, debajo) y en el RESULTADO (columna derecha,
-  // bajo las medidas calculadas). El pie (fecha/hora + logo RUBI LENS) va SIEMPRE.
+  // bajo las medidas calculadas). El pie (fecha/hora + logo de la óptica) va SIEMPRE.
   function frameAside() {
     return (
       <aside className="fs-card ts2-frame">
@@ -1778,7 +1779,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
           </div>
         </div>
 
-        {/* Pie profesional: fecha, hora y logo RUBI LENS */}
+        {/* Pie profesional: fecha, hora y logo de la óptica */}
         <div className="fs-foot">
           <div className="fs-foot-meta">
             <span className="fs-foot-date">
@@ -1790,7 +1791,7 @@ export default function TryOnStudio({ product, colorIdx = 0, onClose, onAddPresc
               {timeStr}
             </span>
           </div>
-          <img src="/logo-oficial.png" alt="RUBI LENS" className="fs-foot-logo" />
+          <img src={TENANT.logo} alt={TENANT.name} className="fs-foot-logo" />
         </div>
       </aside>
     );

@@ -1,9 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import type { IUserModuleService } from "@medusajs/framework/types";
-import { Modules } from "@medusajs/framework/utils";
+import { ownerExplicitCheck } from "../../../lib/owner-explicit";
 import { securityAudit } from "../../../lib/security";
-import { configuredOwnerEmail } from "../../../lib/staff-roles";
-import { storedOwnerUserId } from "../../../lib/store-settings";
+import { gatherSetupFacts, tenantSecurityChecks } from "../../../lib/tenant-setup";
 
 /**
  * GET /admin/security-status — the owner's security checklist.
@@ -12,28 +10,21 @@ import { storedOwnerUserId } from "../../../lib/store-settings";
  * (test/live), webhook secret, notification providers… as pass/fail items.
  * Never returns a value, only whether each item is in order. Admin session
  * required (the /admin prefix is authenticated by Medusa).
+ *
+ * Read from the database, so added here and not in the pure securityAudit:
+ *   - `owner.explicit`: the owner is named by a transfer from the panel
+ *     (store_setting.owner_user_id) or by the deploy (STORE_OWNER_EMAIL), not
+ *     only "the oldest user" (lib/owner-explicit.ts). No email shown.
+ *   - `tenant.*`: store profile complete and setup finished (lib/tenant-setup.ts);
+ *     left out when that read fails rather than shown as failing.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   res.setHeader("Cache-Control", "no-store");
   const audit = securityAudit();
-  // The owner is named explicitly: by a transfer from the panel
-  // (store_setting.owner_user_id, which wins) or by the deploy
-  // (STORE_OWNER_EMAIL), and that user exists; otherwise the oldest user is the
-  // owner by default (lib/staff-scope.ts ownerUserId). No email shown.
-  const want = configuredOwnerEmail();
-  let ownerOk = false;
-  try {
-    const users = req.scope.resolve<IUserModuleService>(Modules.USER);
-    const named = await storedOwnerUserId(req.scope).catch(() => null);
-    if (named) ownerOk = (await users.listUsers({ id: [named] }, { take: 1, select: ["id"] })).length > 0;
-    if (!ownerOk && want) {
-      const all = await users.listUsers({}, { take: 1000, select: ["id", "email"] });
-      ownerOk = all.some((u) => String(u.email ?? "").trim().toLowerCase() === want);
-    }
-  } catch {
-    ownerOk = false;
-  }
-  audit.checks.push({ key: "owner.explicit", ok: ownerOk, detail: ownerOk ? "" : want ? "no_user" : "unset" });
+  const owner = await ownerExplicitCheck(req.scope);
+  audit.checks.push({ key: "owner.explicit", ok: owner.ok, detail: owner.detail });
+  const tenantChecks = await gatherSetupFacts(req.scope).then(tenantSecurityChecks).catch(() => []);
+  audit.checks.push(...tenantChecks);
   audit.failing = audit.checks.filter((c) => !c.ok).length;
   res.status(200).json(audit);
 }

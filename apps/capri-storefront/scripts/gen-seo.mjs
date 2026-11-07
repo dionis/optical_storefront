@@ -6,18 +6,21 @@
 // of product pages to crawl. Pages that belong to a person (checkout, orders,
 // the panel, the seller panel) are kept out of the index.
 //
-// Site URL: VITE_SITE_URL, else Vercel's production URL, else the live store.
+// Site URL: VITE_SITE_URL, else Vercel's production URL, else the storefront of
+// this build's tenant manifest (scripts/tenant/load.mjs: TENANT_FILE or the branch).
 // Run: node scripts/gen-seo.mjs   (scripts/vercel-build.sh does it)
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadTenant } from "../../../scripts/tenant/load.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = join(ROOT, "public");
 
 const explicit = (process.env.VITE_SITE_URL || "").trim();
 const vercelProd = (process.env.VERCEL_PROJECT_PRODUCTION_URL || "").trim();
-const SITE = (explicit || (vercelProd ? `https://${vercelProd}` : "https://www.rubilens.com")).replace(/\/+$/, "");
+const manifestSite = () => loadTenant(join(ROOT, "..", ".."), process.env).manifest.domains.storefront;
+const SITE = (explicit || (vercelProd ? `https://${vercelProd}` : manifestSite())).replace(/\/+$/, "");
 
 // Same slug rules as src/data/products.js (frames) and src/data/cases.js (cases).
 const slugOf = (sku) => String(sku).toLowerCase().replace(/[^a-z0-9]+/g, "");

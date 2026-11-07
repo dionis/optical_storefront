@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="%TENANT_LANG%">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0E5AD0" />
+    <meta name="theme-color" content="%TENANT_THEME_COLOR%" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Probador virtual: precalienta la conexión al CDN del modelo de detección
@@ -23,8 +23,8 @@
          primera llamada de datos, que son el LCP del catálogo. -->
     <link rel="preconnect" href="https://svuuuobjgrkscsjgpwkx.supabase.co" crossorigin />
     <link rel="dns-prefetch" href="https://svuuuobjgrkscsjgpwkx.supabase.co" />
-    <link rel="preconnect" href="https://api.rubilens.com" crossorigin />
-    <link rel="dns-prefetch" href="https://api.rubilens.com" />
+    <link rel="preconnect" href="%TENANT_API_ORIGIN%" crossorigin />
+    <link rel="dns-prefetch" href="%TENANT_API_ORIGIN%" />
     <!-- Fuentes SIN bloquear el primer pintado: la hoja llega como "print"
          (no bloquea render) y al cargar se promociona a "all". display=swap ya
          garantiza texto visible con la fuente del sistema mientras tanto. -->
@@ -34,29 +34,23 @@
       <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
             rel="stylesheet" />
     </noscript>
-    <title>RUBI LENS — Espejuelos de marca online</title>
-    <meta name="description" content="RUBI LENS: bienestar y estilo para tu visión. Espejuelos de marca online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) con probador virtual y lentes con receta. Español / English." />
+    <title>%TENANT_TITLE%</title>
+    <meta name="description" content="%TENANT_DESCRIPTION%" />
 
     <!-- Open Graph / redes sociales -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="RUBI LENS — Óptica y Salud Visual" />
-    <meta property="og:title" content="RUBI LENS — Óptica y Salud Visual" />
-    <meta property="og:description" content="Espejuelos de marca online con probador virtual y lentes con receta. Español / English." />
+    <meta property="og:site_name" content="%TENANT_SOCIAL_TITLE%" />
+    <meta property="og:title" content="%TENANT_SOCIAL_TITLE%" />
+    <meta property="og:description" content="%TENANT_SOCIAL_DESCRIPTION%" />
     <meta property="og:image" content="/og-image.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="RUBI LENS — Óptica y Salud Visual" />
+    <meta name="twitter:title" content="%TENANT_SOCIAL_TITLE%" />
     <meta name="twitter:image" content="/og-image.jpg" />
     <!-- Organization schema for the site as a whole; product pages add their own
-         Product JSON-LD from src/lib/seo.js. Keep names in sync with src/config/tenant.js. -->
+         Product JSON-LD from src/lib/seo.js. Filled from tenants/<slug>/tenant.json. -->
     <script type="application/ld+json">
     {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "RUBI LENS",
-      "alternateName": "Óptica El Rancho",
-      "url": "https://www.rubilens.com/",
-      "logo": "https://www.rubilens.com/logo-oficial.png",
-      "sameAs": ["https://opticaelrancho.com/"]
+%TENANT_ORG_JSONLD%
     }
     </script>
   </head>

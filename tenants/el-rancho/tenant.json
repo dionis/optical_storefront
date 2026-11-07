@@ -1,0 +1,56 @@
+{
+  "slug": "el-rancho",
+  "identity": {
+    "name": "Óptica El Rancho",
+    "compactName": "EL RANCHO",
+    "legalName": "Óptica El Rancho",
+    "tagline": { "es": "Óptica y Salud Visual", "en": "Optics & Vision Care" }
+  },
+  "seo": {
+    "title": {
+      "es": "Óptica El Rancho — Espejuelos de marca online",
+      "en": "Óptica El Rancho — Designer eyeglasses online"
+    },
+    "description": {
+      "es": "Óptica El Rancho: bienestar y estilo para tu visión. Espejuelos de marca online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) con probador virtual y lentes con receta. Español / English.",
+      "en": "Óptica El Rancho: wellness and style for your vision. Designer eyeglasses online (DiCaprio, Flexure, Millennial, Peachtree, Four You, Trendy) with a virtual try-on and prescription lenses. Español / English."
+    },
+    "socialTitle": {
+      "es": "Óptica El Rancho — Óptica y Salud Visual",
+      "en": "Óptica El Rancho — Optics & Vision Care"
+    },
+    "socialDescription": {
+      "es": "Espejuelos de marca online con probador virtual y lentes con receta. Español / English.",
+      "en": "Designer eyeglasses online with a virtual try-on and prescription lenses. Español / English."
+    },
+    "appDescription": {
+      "es": "Espejuelos de marca online con probador virtual y lentes con receta.",
+      "en": "Designer eyeglasses online with a virtual try-on and prescription lenses."
+    }
+  },
+  "domains": {
+    "storefront": "https://opticaelrancho.com",
+    "api": "https://api-staging.161-153-9-98.sslip.io"
+  },
+  "locale": {
+    "default": "es",
+    "languages": ["es", "en"],
+    "timezone": "America/Chicago",
+    "currency": "usd",
+    "country": "us"
+  },
+  "brand": {
+    "primary": "#01326b",
+    "primaryDark": "#021f44",
+    "accent": "#d6123e",
+    "themeColor": "#0E5AD0",
+    "emailPrimary": "#0b2f66",
+    "emailAccent": "#b8921e",
+    "logo": "/logo-oficial.png",
+    "logoMark": "/logo-oficial-mark.png"
+  },
+  "supplier": {
+    "id": "capri",
+    "imageCredit": "caprioptics.com"
+  }
+}

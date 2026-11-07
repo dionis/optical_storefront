@@ -48,6 +48,9 @@ export const AUDIT_ACTIONS = [
   "catalog.delete",
   "ai_credit.change",
   "ai_alert.change",
+  "tenant.profile",
+  "tenant.bootstrap",
+  "tenant.brand",
   // Opening a patient file (docs/PATIENTS.md): who read whose health data. No values stored.
   "patient.view",
 ] as const;
