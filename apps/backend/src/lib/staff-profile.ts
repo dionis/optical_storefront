@@ -12,7 +12,10 @@ import { isValidEmail, isValidPhone } from "./field-rules";
  *   notes        internal notes                      — admins only
  *
  * "Admins" = the owner and superadmins (the owner's own permissions). The
- * person edits their contact and preferences; everything else only admins.
+ * person edits their contact and preferences, plus their own display name
+ * and photo (how they appear to the team — theirs to choose, QA D-15,
+ * 5-nov-2026); the receipt code is generated and the work terms are the
+ * owner's, so everything else only admins.
  */
 
 /**
@@ -29,7 +32,9 @@ export const WORK_FIELDS = ["hire_date", "commission_pct", "monthly_goal", "priv
 export const EMERGENCY_FIELDS = ["emergency_name", "emergency_relation", "emergency_phone"] as const;
 export const IDENTITY_FIELDS = ["display_name", "seller_code", "photo_url"] as const;
 
-const SELF_EDITABLE = new Set<string>([...CONTACT_FIELDS, ...PREFERENCE_FIELDS, "photo_url"]);
+/** What a person may change on their own profile: contact, preferences, display name and photo. */
+export const SELF_EDITABLE_FIELDS = ["display_name", "photo_url", ...CONTACT_FIELDS, ...PREFERENCE_FIELDS] as const;
+const SELF_EDITABLE = new Set<string>(SELF_EDITABLE_FIELDS);
 // The receipt code is generated (lib/staff-code.ts), never typed — not even by the owner.
 const ADMIN_EDITABLE = new Set<string>([
   "display_name",

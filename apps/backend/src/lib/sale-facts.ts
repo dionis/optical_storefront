@@ -36,6 +36,20 @@ export interface LineContext {
   tz: string;
 }
 
+/**
+ * The instant a sale happened, the one every day bucket is cut from. A till
+ * sale's is `pos_sale.created_at`: the statement (lib/pos-statement.ts) and
+ * the cash report already read that column, so the Executive's
+ * `sold_date_local` must come from the same clock — the order row is written
+ * a few hundred milliseconds earlier, and at 23:59:59 local those
+ * milliseconds would put the same sale in two different days (and months).
+ * A web order has only its own `created_at`. Pure.
+ */
+export function saleInstantOf(orderCreatedAt: string | Date, saleCreatedAt?: string | Date | null): Date {
+  const sale = saleCreatedAt ? new Date(saleCreatedAt) : null;
+  return sale && !Number.isNaN(sale.getTime()) ? sale : new Date(orderCreatedAt);
+}
+
 /** A line item as one fact. Pure. */
 export function factFromLine(item: Record<string, unknown>, productMeta: Record<string, unknown>, ctx: LineContext) {
   const md = (item.metadata ?? {}) as Record<string, unknown>;
@@ -118,7 +132,7 @@ export async function projectOrder(container: MedusaContainer, orderId: string):
       sellerCode: sale?.seller_code ?? normalizeSellerCodeLoose(md.seller_code),
       customerId: order.customer_id ?? null,
       paymentMethods: [...new Set(payments.filter((p) => p.kind !== "refund").map((p) => p.method_code))],
-      soldAt: new Date(order.created_at),
+      soldAt: saleInstantOf(order.created_at, (sale as { created_at?: string | Date | null } | undefined)?.created_at ?? null),
       status: sale?.status === "voided" || order.status === "canceled" ? "voided" : "active",
       tz: tenant().timezone,
     };

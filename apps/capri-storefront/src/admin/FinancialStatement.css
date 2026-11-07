@@ -1,0 +1,46 @@
+/* Estado de resultados (FinancialStatement.jsx). Formato de estado financiero:
+   concepto a la izquierda, importes alineados a la derecha en cifras
+   tabulares, secciones en banda, subtotales en negrita, la utilidad neta con
+   doble raya. Tokens --adm-* (modo oscuro del armazón). */
+
+/* Inside the panel's flex column the table's width pushed the whole
+   view past the screen (the Excel/PDF buttons were cut off at 1280 px); the table
+   scrolls inside .fst-scroll instead (QA v2). */
+.fst { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* .adm-section's `margin: 0 auto` inside the panel's flex column sized the view to its content. */
+.fst.adm-section { width: 100%; max-width: 100%; }
+.fst-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fst-head h2 { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 17px; }
+.fst-act { margin-left: auto; display: inline-flex; gap: 6px; }
+.fst-prep { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 600; color: var(--adm-amber-dark, var(--adm-amber)); }
+.fst-bar { display: flex; align-items: flex-end; gap: 8px 12px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); background: var(--adm-surface); }
+.fst-bar label { display: inline-flex; flex-direction: column; gap: 2px; font-size: 10.5px; font-weight: 700; color: var(--adm-muted); text-transform: uppercase; letter-spacing: .03em; }
+.fst-bar select, .fst-bar input[type="month"] { height: 28px; padding: 0 6px; border: 1px solid var(--adm-line); border-radius: 6px; background: var(--adm-surface); color: var(--adm-ink); font: 500 12.5px var(--adm-font); text-transform: none; }
+.fst-bar label.fst-check { flex-direction: row; align-items: center; gap: 5px; text-transform: none; font-size: 12px; letter-spacing: 0; }
+.fst-wrap { min-width: 0; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); background: var(--adm-surface); padding: 10px 12px; }
+.fst-wrap.is-loading { opacity: .6; }
+.fst-sub { margin: 0 0 8px; font-size: 12.5px; color: var(--adm-muted); }
+.fst-scroll { overflow-x: auto; }
+.fst-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.fst-table thead th { position: sticky; top: 0; background: var(--adm-navy, #1F2A44); color: #fff; padding: 6px 8px; text-align: right; font-size: 11.5px; white-space: nowrap; }
+.fst-table thead th.c { text-align: left; min-width: 240px; }
+.fst-table thead th.tot { background: var(--adm-navy-deep, #111827); }
+.fst-table th.c { text-align: left; font-weight: 500; padding: 3px 8px; white-space: normal; }
+.fst-table th.c .adm-help-btn, .fst-table th.c button { margin-left: 4px; }
+.fst-table td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--adm-line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fst-table td.tot { background: var(--adm-surface-2); font-weight: 700; }
+.fst-table td.neg { color: var(--adm-red); }
+.fst-table td.tl, .fst-table th.tl { text-align: center; color: var(--adm-muted); font-size: 11px; }
+.fst-table thead th.tl { color: #fff; }
+.fst-table tr.sec th { text-align: left; padding: 7px 8px 3px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--adm-navy, var(--adm-ink)); background: var(--adm-blue-soft, var(--adm-surface-2)); }
+.fst-table tr.lv2 th.c { padding-left: 22px; color: var(--adm-ink); }
+.fst-table tr.b th.c, .fst-table tr.b td { font-weight: 700; }
+.fst-table tr.band th.c, .fst-table tr.band td { background: var(--adm-surface-2); }
+.fst-table tr.fin th.c, .fst-table tr.fin td { background: var(--adm-gold-soft, var(--adm-surface-2)); border-top: 2px solid var(--adm-ink); border-bottom: 3px double var(--adm-ink); font-size: 13.5px; }
+.fst-notes { margin: 10px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--adm-muted); }
+.fst-notes li { margin: 2px 0; }
+
+@media (max-width: 760px) {
+  .fst-table thead th.c { min-width: 170px; }
+  .fst-act { margin-left: 0; }
+}

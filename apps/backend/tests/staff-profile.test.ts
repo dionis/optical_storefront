@@ -1,5 +1,6 @@
 import {
   EMPTY_PROFILE,
+  SELF_EDITABLE_FIELDS,
   cleanProfilePatch,
   hasPrivilege,
   suggestSellerCode,
@@ -20,12 +21,22 @@ const full: StaffProfileData = {
 };
 
 describe("cleanProfilePatch", () => {
-  it("lets a person edit only contact and preferences", () => {
+  it("lets a person edit only contact, preferences, their display name and photo", () => {
     expect(cleanProfilePatch({ phone_mobile: " (832) 555-0101 ", locale: "en" }, "self")).toEqual({
       patch: { phone_mobile: "(832) 555-0101", locale: "en" },
     });
+    // Their own name as the team sees it (QA D-15): trimmed, capped, empty → null.
+    expect(cleanProfilePatch({ display_name: "  Sofía V.  " }, "self")).toEqual({ patch: { display_name: "Sofía V." } });
+    expect(cleanProfilePatch({ display_name: "" }, "self")).toEqual({ patch: { display_name: null } });
+    expect(cleanProfilePatch({ display_name: "x".repeat(100) }, "self")).toEqual({ patch: { display_name: "x".repeat(80) } });
     expect(cleanProfilePatch({ seller_code: "CM07" }, "self")).toEqual({ reason: "forbidden_field", field: "seller_code" });
     expect(cleanProfilePatch({ privileges: ["costs.manage"] }, "self")).toEqual({ reason: "forbidden_field", field: "privileges" });
+    // The work terms, the emergency contact and the notes stay the owner's.
+    for (const field of ["hire_date", "commission_pct", "monthly_goal", "emergency_phone", "internal_notes"]) {
+      expect(cleanProfilePatch({ [field]: "1" }, "self")).toEqual({ reason: "forbidden_field", field });
+    }
+    // The whitelist itself, so a field added to it is a visible decision.
+    expect([...SELF_EDITABLE_FIELDS].sort()).toEqual(["address", "alert_email", "display_name", "email_alt", "locale", "phone_landline", "phone_mobile", "phone_whatsapp", "photo_url"]);
   });
 
   it("validates what admins write", () => {

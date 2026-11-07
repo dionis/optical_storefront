@@ -1,6 +1,7 @@
-/* Ayuda contextual del panel (HelpTip.jsx): botón «?», globo y ventana de guía.
+/* Ayuda contextual del panel (HelpTip.jsx): botón «?» y botón «Ayuda». La
+   ventana (fondo desenfocado, hoja en tablet vertical) está en help-modal.css.
    Solo tokens --adm-*: hereda el color de la tienda y el modo oscuro porque el
-   portal cuelga de `.adm-shell`. Nada de aquí toca admin.css. */
+   portal cuelga de `.adm-shell`. */
 
 .adm-help-root { display: contents; }
 
@@ -24,10 +25,11 @@
 /* En cabeceras de tabla y etiquetas en mayúsculas el «?» no debe gritar. */
 th .adm-help-btn, .ex-kpi .adm-help-btn, label .adm-help-btn, legend .adm-help-btn { opacity: .75; }
 th .adm-help-btn:hover, .ex-kpi .adm-help-btn:hover, label .adm-help-btn:hover, legend .adm-help-btn:hover { opacity: 1; }
-/* Pantallas táctiles: zona de toque mínima sin agrandar el dibujo. */
+/* Pantallas táctiles: zona de toque de 44 px (WCAG 2.5.5) sin agrandar el
+   dibujo: el «?» mide 12–16 px y el ::after invisible lo rodea hasta 44. */
 @media (pointer: coarse) {
   .adm-help-btn { position: relative; }
-  .adm-help-btn::after { content: ""; position: absolute; inset: -8px; }
+  .adm-help-btn::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); border-radius: 999px; }
 }
 
 /* Botón de texto «Ayuda» para cabeceras. */
@@ -53,95 +55,8 @@ th .adm-help-btn:hover, .ex-kpi .adm-help-btn:hover, label .adm-help-btn:hover, 
 /* En cabeceras h2/h3 el «?» va algo separado y centrado con el texto. */
 h2 > .adm-help-btn, h3 > .adm-help-btn { margin-left: 8px; vertical-align: middle; }
 
-/* ── Globo ─────────────────────────────────────────────────────────────── */
-.adm-help-pop {
-  position: fixed; z-index: 460; width: min(300px, calc(100vw - 16px));
-  background: var(--adm-tip-bg); color: #fff; border-radius: 12px; padding: 10px 12px 9px;
-  font: 400 12.5px/1.5 var(--adm-font); letter-spacing: 0; text-align: left; text-transform: none;
-  box-shadow: var(--adm-shadow-lg); display: flex; flex-direction: column; gap: 5px;
-  animation: admHelpPop .18s var(--adm-ease) both;
-}
-.adm-help-pop::before {
-  content: ""; position: absolute; left: var(--adm-help-arrow, 14px); top: -5px; width: 10px; height: 10px;
-  background: var(--adm-tip-bg); transform: rotate(45deg); border-radius: 2px;
-}
-.adm-help-pop.above::before { top: auto; bottom: -5px; }
-.adm-help-pop b { font-size: 13px; font-weight: 700; color: #fff; }
-.adm-help-pop > span { color: rgba(255, 255, 255, .88); }
-.adm-help-more {
-  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 5px 9px;
-  border: 1px solid rgba(255, 255, 255, .22); border-radius: 8px; background: rgba(255, 255, 255, .08); color: #fff;
-  font: 700 12px/1.2 var(--adm-font); cursor: pointer; transition: background .15s, border-color .15s;
-}
-.adm-help-more:hover, .adm-help-more:focus-visible { background: rgba(255, 255, 255, .18); border-color: rgba(255, 255, 255, .4); outline: none; }
-@keyframes admHelpPop { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
-
-/* ── Ventana ───────────────────────────────────────────────────────────── */
-.adm-help-backdrop {
-  position: fixed; inset: 0; z-index: 500; background: var(--adm-overlay); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
-  display: grid; place-items: center; padding: 16px; animation: admHelpFade .16s ease both;
-}
-@keyframes admHelpFade { from { opacity: 0; } to { opacity: 1; } }
-.adm-help-modal {
-  width: min(720px, 100%); max-height: min(86vh, 760px); display: flex; flex-direction: column; overflow: hidden;
-  background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); border-radius: var(--adm-radius);
-  box-shadow: var(--adm-shadow-lg); font-family: var(--adm-font); font-size: 13.5px; line-height: 1.5;
-  animation: admHelpPop .22s var(--adm-ease) both;
-}
-.adm-help-head {
-  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "kicker close" "title close"; align-items: center; gap: 2px 12px;
-  padding: 14px 16px 12px 20px; border-bottom: 1px solid var(--adm-line); background: var(--adm-grad-surface);
-}
-.adm-help-kicker { grid-area: kicker; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-accent-ink); }
-.adm-help-head h3 { grid-area: title; margin: 0; font: 600 20px/1.2 var(--adm-display); letter-spacing: -.015em; color: var(--adm-navy); }
-.adm-help-close {
-  grid-area: close; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
-  border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-muted); cursor: pointer; transition: background .15s, color .15s;
-}
-.adm-help-close:hover, .adm-help-close:focus-visible { background: var(--adm-accent-soft); color: var(--adm-accent-ink); outline: none; }
-
-.adm-help-grid { display: grid; grid-template-columns: 200px 1fr; min-height: 0; flex: 1; }
-.adm-help-nav { border-right: 1px solid var(--adm-line); background: var(--adm-surface-2); padding: 12px 8px; overflow: auto; }
-.adm-help-nav small { display: block; padding: 0 10px 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-faint); }
-.adm-help-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.adm-help-nav button {
-  width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--adm-muted);
-  font: 600 12.5px/1.3 var(--adm-font); cursor: pointer; transition: background .15s, color .15s;
-}
-.adm-help-nav button:hover, .adm-help-nav button:focus-visible { background: var(--adm-row-hover); color: var(--adm-ink); outline: none; }
-.adm-help-nav button.on { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
-
-.adm-help-body { overflow: auto; padding: 16px 22px 22px; display: flex; flex-direction: column; gap: 16px; overscroll-behavior: contain; }
-.adm-help-sec h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font: 700 12px/1.2 var(--adm-font); letter-spacing: .05em; text-transform: uppercase; color: var(--adm-accent-ink); }
-.adm-help-sec p { margin: 0; color: var(--adm-ink); }
-.adm-help-sec ol, .adm-help-sec ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
-.adm-help-sec ol li::marker { font-weight: 700; color: var(--adm-accent-ink); }
-.adm-help-example { padding: 10px 12px; border-radius: 10px; background: var(--adm-gold-soft); border: 1px solid var(--adm-gold-line); color: var(--adm-ink); }
-.adm-help-pitfalls { list-style: none; padding-left: 0 !important; }
-.adm-help-pitfalls li { position: relative; padding: 7px 10px 7px 30px; border-radius: 10px; background: var(--adm-amber-soft); border: 1px solid var(--adm-danger-line); }
-.adm-help-pitfalls li::before { content: "!"; position: absolute; left: 10px; top: 8px; width: 14px; height: 14px; border-radius: 999px; background: var(--adm-amber); color: #fff; font: 800 10px/14px var(--adm-font); text-align: center; }
-
-/* Oscuro: los fondos suaves fijos (dorado/ámbar) se apagan para no deslumbrar. */
-.adm-shell[data-mode="dark"] .adm-help-example { background: color-mix(in srgb, var(--adm-gold) 14%, var(--adm-surface)); border-color: color-mix(in srgb, var(--adm-gold) 35%, var(--adm-surface)); }
-.adm-shell[data-mode="dark"] .adm-help-pitfalls li { background: color-mix(in srgb, var(--adm-amber) 14%, var(--adm-surface)); border-color: color-mix(in srgb, var(--adm-amber) 35%, var(--adm-surface)); }
-.adm-shell[data-mode="dark"] .adm-help-btn { background: transparent; }
-
-/* Móvil: la lista de temas pasa a chips horizontales encima del texto. */
-@media (max-width: 640px) {
-  .adm-help-backdrop { padding: 0; align-items: end; }
-  .adm-help-modal { max-height: 92vh; border-radius: var(--adm-radius) var(--adm-radius) 0 0; }
-  .adm-help-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .adm-help-nav { border-right: 0; border-bottom: 1px solid var(--adm-line); padding: 8px 10px; }
-  .adm-help-nav small { display: none; }
-  .adm-help-nav ul { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding-bottom: 2px; }
-  .adm-help-nav button { width: auto; white-space: nowrap; padding: 6px 10px; border: 1px solid var(--adm-line); border-radius: 999px; }
-  .adm-help-nav button.on { border-color: var(--adm-accent-line); }
-  .adm-help-body { padding: 14px 16px 20px; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .adm-help-pop, .adm-help-modal, .adm-help-backdrop { animation: none; }
   .adm-help-btn { transition: none; }
 }
 
-@media print { .adm-help-btn, .adm-help-text, .adm-help-pop, .adm-help-backdrop { display: none !important; } }
+@media print { .adm-help-btn, .adm-help-text, .adm-help-info { display: none !important; } }

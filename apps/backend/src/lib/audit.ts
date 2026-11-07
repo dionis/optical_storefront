@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = [
   "password.change",
   "password.reset",
   "password.reset_requested",
+  "session.revoke",
   "stores.change",
   "privileges.change",
   "profile.change",
@@ -40,8 +41,14 @@ export const AUDIT_ACTIONS = [
   "alert.rule",
   "assortment.change",
   "catalog.sync",
+  "catalog.create",
+  // v2 (docs/PRICE-MATRIX.md): a model, a brand or a treatment edited / removed from «Productos y precios».
+  "catalog.update",
+  "catalog.delete",
   "ai_credit.change",
   "ai_alert.change",
+  // Opening a patient file (docs/PATIENTS.md): who read whose health data. No values stored.
+  "patient.view",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

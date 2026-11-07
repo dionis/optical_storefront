@@ -1,0 +1,8 @@
+/* Promoción por artículo en el resumen de la venta (PosSaleSummary.jsx). */
+.pos-sum-promo { color: var(--adm-red-dark); font-weight: 700; }
+.pos-sum-promo s { color: var(--adm-muted); font-weight: 500; }
+/* POS search result / frame card: the reduced price with the old one struck through underneath. */
+.pos-promo { display: block; font-size: 11px; font-weight: 700; color: var(--adm-red-dark); white-space: nowrap; }
+.pos-promo s { color: var(--adm-muted); font-weight: 500; margin-right: 2px; }
+.pos-promo-line { display: block; font-size: 11px; }
+.pos-ac-price .pos-promo, .pfc-price .pos-promo { text-align: right; }

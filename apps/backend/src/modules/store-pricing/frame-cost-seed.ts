@@ -1,4 +1,5 @@
-import { CAPRI_PRICE_LIST, type CapriPrice } from "./capri-price-list-2026";
+import { CAPRI_BY_KEY, CAPRI_PRICE_LIST, type CapriPrice } from "./capri-price-list-2026";
+import { CAPRI_PREV_PRICE_LIST, type CapriPrevPrice } from "./capri-price-list-prev";
 
 /**
  * SQL that puts the supplier's price list into `store_frame_cost`, written
@@ -41,7 +42,10 @@ const CHUNK = 60;
  * supplier list; duplicate keys are dropped (the first wins) because one
  * `INSERT … ON CONFLICT DO UPDATE` cannot touch the same row twice.
  */
-export function frameCostSeedStatements(rows: readonly CapriPrice[] = CAPRI_PRICE_LIST): string[] {
+/** Which list a seeded row comes from: the 2026 list, or the previous one (v2). */
+export type SeededFrameCostSource = "supplier_list" | "supplier_list_prev";
+
+export function frameCostSeedStatements(rows: readonly CapriPrice[] = CAPRI_PRICE_LIST, source: SeededFrameCostSource = "supplier_list"): string[] {
   const seen = new Set<string>();
   const unique = rows.filter((r) => {
     const key = String(r.key ?? "").trim();
@@ -56,7 +60,7 @@ export function frameCostSeedStatements(rows: readonly CapriPrice[] = CAPRI_PRIC
       .slice(i, i + CHUNK)
       .map(
         (r) =>
-          `(${sqlText(frameCostId(r.key))}, ${sqlText(r.key)}, ${sqlText(r.model)}, ${sqlInt(r.book_cents)}, ${sqlInt(r.cost_cents)}, 'supplier_list')`
+          `(${sqlText(frameCostId(r.key))}, ${sqlText(r.key)}, ${sqlText(r.model)}, ${sqlInt(r.book_cents)}, ${sqlInt(r.cost_cents)}, ${sqlText(source)})`
       )
       .join(",\n             ");
     out.push(`
@@ -67,8 +71,28 @@ export function frameCostSeedStatements(rows: readonly CapriPrice[] = CAPRI_PRIC
         book_cents     = EXCLUDED.book_cents,
         cost_cents     = EXCLUDED.cost_cents,
         updated_at     = NOW()
-      WHERE store_frame_cost.source = 'supplier_list';
+      WHERE store_frame_cost.source = ${sqlText(source)};
     `);
   }
   return out;
+}
+
+/**
+ * The PREVIOUS list's rows the seed adds (v2): only keys the 2026 list does
+ * not carry (2026 → previous → none) and only with a real wholesale figure (a
+ * model the old book only estimated stays «sin costo», never a guess). As
+ * `CapriPrice` rows (`book_cents` 0: the old book has no catalogue price).
+ *
+ * Seeded with `source = 'supplier_list_prev'`, whose guard means:
+ *   · a key the 2026 list already seeded (`supplier_list`) is NOT touched;
+ *   · an owner's edit is NOT touched;
+ *   · a previous-list row is refreshed by a later run.
+ */
+export function prevFrameCostSeedRows(
+  prev: readonly CapriPrevPrice[] = CAPRI_PREV_PRICE_LIST,
+  current: ReadonlyMap<string, unknown> = CAPRI_BY_KEY
+): CapriPrice[] {
+  return prev
+    .filter((p) => p.wholesale_cents != null && p.wholesale_cents > 0 && !current.has(p.key))
+    .map((p) => ({ model: p.model, key: p.key, book_cents: 0, cost_cents: p.wholesale_cents as number }));
 }

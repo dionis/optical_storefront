@@ -438,8 +438,9 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   return (
     <div className="adm-section ex-root adm-exec-hub">
       <div className="ex-head">
-        <h2>{title}<HelpTip topic="exec.overview" size={16} /></h2>
-        <p>{t("adm.ex.sub")} <HelpTip topic="exec.storeFilter" size={12} /> <HelpTip topic="exec.period" size={12} /></p>
+        {/* The help says what THIS reader sees: cost, profit and margin only leave the server with costs.view (redactInsights), so the copy must not promise them to a manager without it (QA D-R8). */}
+        <h2>{title}<HelpTip topic={showProfit ? "exec.overview" : "exec.overviewPlain"} size={16} /></h2>
+        <p>{t(showProfit ? "adm.ex.sub" : "adm.ex.subPlain")} <HelpTip topic="exec.storeFilter" size={12} /> <HelpTip topic="exec.period" size={12} /></p>
         <span className={`ex-scope adm-noprint ${state === "loading" ? "busy" : ""}`} title={prevHint || undefined}>
           <Icon name="calendar" size={12} />{scopeText} · {from} → {to}
           {state === "error" && <em className="ex-note err">{t("adm.ex.loadFailed")}</em>}
@@ -475,7 +476,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
         {noSales && <EmptyPeriod kind="sales" />}
 
         <AccordionGroup>
-          <Accordion id="ex-stages" icon="receipt" title={t("adm.ex.acc.stages")} subtitle={t("adm.ex.acc.stagesSub")} badge={sales.totals.count || null} right={<HelpTip topic="exec.orders" />}
+          <Accordion id="ex-stages" icon="receipt" title={t("adm.ex.acc.stages")} subtitle={t("adm.ex.acc.stagesSub")} badge={sales.totals.count || null} right={<HelpTip topic={showProfit ? "exec.orders" : "exec.ordersPlain"} />}
             open={openOf("ex-stages")} onToggle={toggled("stages")}
             summary={[
               { label: t("adm.ex.pill.sales"), value: m(sales.totals.total), strong: true },
@@ -615,6 +616,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
                 topSeller ? { label: t("adm.ex.pill.top"), value: `${topSeller.name} · ${m(topSeller.sales)}` } : null,
                 { label: t("adm.ex.pill.count"), value: int(sales.totals.count, lang) },
               ]}>
+              {showProfit && <button type="button" className="ex-link" onClick={() => go("products", { sub: "rules-statement" })}><Icon name="receipt" size={13} /> {t("adm.fin.st.open")} <Icon name="arrowRight" size={13} /></button>}
               <Trends rows={sales.rows} range={dates} web={sf.isAll || sf.isWeb} sellers={sellerRows.rows} zero={sellerRows.zero} onSeller={openSeller} go={go} showCommission={showCommission} loading={sales.state === "loading"} />
             </Accordion>
           )}

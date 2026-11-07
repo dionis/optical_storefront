@@ -30,6 +30,21 @@ const AGE_ES = { adult: "Adulto", kids: "Niños" };
 
 const mapEnum = (table, v) => (v ? table[String(v).toLowerCase()] || v : v);
 
+// Intervalos de medida del filtro (los mismos textos que `filters.js`). El
+// scraper los manda ya calculados (`eye_size_bucket`…, ver
+// apps/scraper/scraper/normalize.py); cuando un producto llega sin el intervalo
+// pero con la medida exacta en mm (seed de QA, cargas manuales), se calcula aquí
+// con los MISMOS umbrales para que los filtros de tamaño y la ficha no queden
+// vacíos. Si tampoco hay medida, se deja "" como antes.
+const bucketOf = (mm, steps, last) => {
+  if (typeof mm !== "number" || !(mm > 0)) return "";
+  for (const [max, label] of steps) if (mm <= max) return label;
+  return last;
+};
+const EYE_STEPS = [[43, "34-43 mm"], [47, "44-47 mm"], [50, "48-50 mm"], [53, "51-53 mm"], [56, "54-56 mm"], [59, "57-59 mm"]];
+const BRIDGE_STEPS = [[15, "13-15 mm"], [17, "16-17 mm"], [19, "18-19 mm"], [22, "20-22 mm"]];
+const TEMPLE_STEPS = [[120, "115-120 mm"], [130, "125-130 mm"], [140, "135-140 mm"], [150, "145-150 mm"]];
+
 // R2 keys are stored bare; hotlinked/dev images are already absolute URLs.
 // Shared with the order history — see src/data/imageUrl.js.
 
@@ -91,7 +106,14 @@ function colorsOf(product) {
 
 function toFrame(product) {
   const m = product.metadata || {};
-  const materials = m.material ? [mapEnum(MATERIAL_ES, m.material)] : [];
+  // `metadata.material` llega como string (scraper: "acetate") o como lista
+  // (seed/catálogo local: ["Acetato", "Plástica"]). Antes la lista se envolvía
+  // en OTRA lista (`[["Acetato","Plástica"]]`) y la ficha reventaba al hacer
+  // `.toLowerCase()` sobre un array → pantalla en blanco en /producto/:slug.
+  // Siempre devolvemos una lista plana de strings canónicos.
+  const materials = (Array.isArray(m.material) ? m.material : m.material ? [m.material] : [])
+    .filter((x) => typeof x === "string" && x.trim())
+    .map((x) => mapEnum(MATERIAL_ES, x.trim()));
   const price = priceOf(product);
   return {
     sku: product.title,
@@ -105,9 +127,9 @@ function toFrame(product) {
       material: materials,
       gender: mapEnum(GENDER_ES, m.gender) || "",
       age: mapEnum(AGE_ES, m.age_group) || "",
-      eye_size: m.eye_size_bucket || "",
-      bridge_size: m.bridge_size_bucket || "",
-      temple_length: m.temple_length_bucket || "",
+      eye_size: m.eye_size_bucket || bucketOf(m.eye_size, EYE_STEPS, "Más de 60 mm"),
+      bridge_size: m.bridge_size_bucket || bucketOf(m.bridge_size, BRIDGE_STEPS, "23-24 mm"),
+      temple_length: m.temple_length_bucket || bucketOf(m.temple_length, TEMPLE_STEPS, "155+ mm"),
       // Medidas exactas (mm) para la fila de especificaciones de la ficha:
       // "eye · bridge · temple" (p. ej. 55 · 18 · 145).
       eye: typeof m.eye_size === "number" ? m.eye_size : null,
@@ -191,10 +213,16 @@ export async function loadFromMedusa() {
   const frames = [];
   const cases = [];
   for (const p of all) {
-    const slug = ((p.metadata || {}).brand_slug || (p.metadata || {}).collection_slug || "");
+    const meta = p.metadata || {};
+    const slug = meta.brand_slug || meta.collection_slug || "";
+    // Un estuche se reconoce por su colección ("case", scraper) o por
+    // `metadata.kind === "case"` (seed de QA / cargas manuales sin colección):
+    // antes un estuche sin `brand_slug` se descartaba y la tienda se quedaba
+    // sin estuches en modo Medusa.
+    const isCase = slug === "case" || meta.kind === "case";
     // Skip any product outside the curated collections (see ALLOWED_BRAND_SLUGS).
-    if (!ALLOWED_BRAND_SLUGS.has(slug)) continue;
-    if (slug === "case") cases.push(toCase(p));
+    if (!isCase && !ALLOWED_BRAND_SLUGS.has(slug)) continue;
+    if (isCase) cases.push(toCase(p));
     else frames.push(toFrame(p));
   }
   return { products: frames, cases };

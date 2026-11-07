@@ -63,8 +63,12 @@ function oneMeasure(v) {
 // a proposito: ~2 lineas en web y ~4 en responsive (ademas se recorta por CSS).
 function productPitch(product, lang, tvFn) {
   const a = product.attributes || {};
-  const shape = (tvFn(a.shape) || "").toLowerCase();
-  const mat = ((a.material || []).map(tvFn).filter(Boolean)[0] || "").toLowerCase();
+  // Defensa: un atributo que no sea texto (p. ej. material anidado en una lista
+  // por un catálogo mal formado) nunca debe tumbar la ficha entera.
+  const str = (v) => (typeof v === "string" ? v : "");
+  const shape = str(tvFn(a.shape)).toLowerCase();
+  const matList = Array.isArray(a.material) ? a.material.flat() : a.material ? [a.material] : [];
+  const mat = str(matList.map(tvFn).find((x) => typeof x === "string" && x)).toLowerCase();
   const kids = a.age === "Niños";
   const g = a.gender;
   if (lang === "en") {
@@ -301,13 +305,25 @@ export default function ProductDetail() {
   // Si no hay logo para esta marca, cae al monograma de iniciales.
   const brandInfo = BRAND_BY_SLUG[product.brand_slug];
   const brandLogo = brandInfo ? (brandInfo.logoWide || brandInfo.logo) : null; // sello plano de la lámina de marca
-  const measures = [product.attributes.eye_size, product.attributes.bridge_size, product.attributes.temple_length]
-    .map(oneMeasure).filter((x) => x != null && x !== "").join(" - ");
+  // Medida a mostrar: el valor exacto en mm si el catálogo lo trae (`eye`/
+  // `bridge`/`temple`, los mismos que usa el flujo de receta) y, si no, el punto
+  // medio del intervalo del filtro ("51-53" → 52). Antes solo se miraba el
+  // intervalo: con el catálogo de Medusa la ficha quedaba sin medidas mientras
+  // /recetas mostraba «51 - 18 - 145».
+  const mmOf = (bucket, exact) => {
+    if (typeof exact === "number" && exact > 0) return String(exact);
+    const b = oneMeasure(bucket);
+    return b != null && b !== "" ? b : "";
+  };
+  const eyeMm = mmOf(product.attributes.eye_size, product.attributes.eye);
+  const bridgeMm = mmOf(product.attributes.bridge_size, product.attributes.bridge);
+  const templeMm = mmOf(product.attributes.temple_length, product.attributes.temple);
+  const measures = [eyeMm, bridgeMm, templeMm].filter((x) => x !== "").join(" - ");
   // Medidas con diagrama de referencia + ayuda (que significa / como se mide).
   const MEAS = {
-    eye: { img: "/measure-eye.png", label: t("spec.eye"), val: oneMeasure(product.attributes.eye_size), help: t("meas.eye.help") },
-    bridge: { img: "/measure-bridge.png", label: t("spec.bridge"), val: oneMeasure(product.attributes.bridge_size), help: t("meas.bridge.help") },
-    temple: { img: "/measure-temple.png", label: t("spec.temple"), val: oneMeasure(product.attributes.temple_length), help: t("meas.temple.help") },
+    eye: { img: "/measure-eye.png", label: t("spec.eye"), val: eyeMm, help: t("meas.eye.help") },
+    bridge: { img: "/measure-bridge.png", label: t("spec.bridge"), val: bridgeMm, help: t("meas.bridge.help") },
+    temple: { img: "/measure-temple.png", label: t("spec.temple"), val: templeMm, help: t("meas.temple.help") },
   };
   const MEAS_ORDER = ["eye", "bridge", "temple"];
   const genderVal = product.attributes.gender;
@@ -432,8 +448,9 @@ export default function ProductDetail() {
                   ))}
                 </div>
               ) : (
+                /* `fetchpriority` en minúsculas: React 18 no conoce `fetchPriority` (aviso en consola). */
                 <img src={mainSrc} alt={`${product.name} ${color.name} · ${t(`pdp.view.${view}`)}`} className={mainMirror ? "mirror" : ""}
-                     fetchPriority="high" decoding="async"
+                     fetchpriority="high" decoding="async"
                      style={fits.single ? { transform: (mainMirror ? "scaleX(-1) " : "") + fits.single.transform, transformOrigin: fits.single.transformOrigin } : undefined}
                      onError={(e) => { if (color && e.currentTarget.src !== color.image) e.currentTarget.src = color.image; else e.currentTarget.style.opacity = 0.3; }} />
               )}
@@ -622,7 +639,8 @@ export default function ProductDetail() {
                         aria-label={`${MEAS[k].label} — ${t("meas.howto")}`}>ⓘ</button>
                 <img className="pdp-measure-img" src={MEAS[k].img} alt={MEAS[k].label} loading="lazy" />
                 <span className="pdp-measure-k">{MEAS[k].label}</span>
-                <b className="pdp-measure-v">{MEAS[k].val} mm</b>
+                {/* Sin dato del proveedor se muestra «—», no « mm» vacío. */}
+                <b className="pdp-measure-v">{MEAS[k].val ? `${MEAS[k].val} mm` : "—"}</b>
               </div>
             ))}
           </div>

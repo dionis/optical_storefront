@@ -4,7 +4,7 @@
  * owner's rule: no general status, not even of their own store).
  */
 import { GET } from "../src/api/admin/sales-analytics/me/route";
-import { salesSummary } from "../src/lib/sales-analytics";
+import { lineCommissionCents, salesSummary } from "../src/lib/sales-analytics";
 import { getStaffScope } from "../src/lib/staff-scope";
 
 jest.mock("../src/lib/alerts", () => ({ localParts: () => ({ date: "2026-10-21", weekday: 3 }) }));
@@ -23,6 +23,8 @@ jest.mock("../src/lib/cash", () => ({ openSessionFor: jest.fn(async () => null) 
 jest.mock("../src/lib/seller-link", () => ({ sellerOfUser: jest.fn(async () => null) }));
 jest.mock("../src/lib/sales-analytics", () => ({
   salesSummary: jest.fn(async () => ({ current: { total: 100, count: 1, avg_ticket: 100, tax: 0 }, previous: { total: 0, count: 0, avg_ticket: 0, tax: 0 }, balance_due: 0, insurance_due: 0 })),
+  // Per-line commission of the month (SQL): 10 % of one $100 line.
+  lineCommissionCents: jest.fn(async (_c: unknown, _f: unknown, pct: number) => Math.round(10000 * pct) / 100),
 }));
 jest.mock("../src/lib/staff-profile-data", () => ({ profileOf: jest.fn(async () => ({ commission_pct: 10, monthly_goal: null })) }));
 jest.mock("../src/lib/staff-scope", () => ({ getStaffScope: jest.fn() }));
@@ -49,6 +51,9 @@ describe("GET /admin/sales-analytics/me", () => {
     expect(body.store_today).toBeNull();
     expect(body.workplace).toMatchObject({ store: { id: "est_1" }, terminal: { id: "t1" } });
     expect(body.commission).toEqual({ pct: 10, amount: 10 });
+    // The month's commission is added per sold line (lib/sales-analytics.ts lineCommissionCents), with the seller's own filter.
+    expect((lineCommissionCents as jest.Mock).mock.calls[0][1]).toMatchObject({ sellers: ["u_me"], from: "2026-10-01", to: "2026-10-21" });
+    expect((lineCommissionCents as jest.Mock).mock.calls[0][2]).toBe(10);
     // Every summary read is the seller's own.
     for (const call of (salesSummary as jest.Mock).mock.calls) expect(call[1].sellers).toEqual(["u_me"]);
   });

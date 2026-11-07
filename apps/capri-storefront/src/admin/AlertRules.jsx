@@ -91,7 +91,7 @@ function RuleForm({ initial, stores, canSchedule, suggestions, onSave, onCancel 
   );
 }
 
-export default function AlertRules() {
+export default function AlertRules({ me = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const [rules, setRules] = useState([]);
@@ -112,9 +112,12 @@ export default function AlertRules() {
     load();
     posContext().then((c) => setStores(c.stores || [])).catch(() => {});
     // Sugerencias: el email de avisos de cada persona del equipo (o su login); se guarda la dirección, no la persona.
-    fetchTeam()
+    // Solo para quien administra: /admin/team responde 403 a un supervisor (y la pantalla no debe pedir lo que no puede leer).
+    if (me && me.is_admin === false) setSuggestions([]);
+    else fetchTeam()
       .then((r) => setSuggestions((r.team || []).map((m) => ({ email: m.email, label: m.seller_code || [m.first_name, m.last_name].filter(Boolean).join(" ") || m.email }))))
       .catch(() => setSuggestions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const save = async (rule) => {

@@ -23,6 +23,7 @@ import {
   stageIndex,
   type OrderStage,
 } from "./order-status";
+import { absoluteImageUrl } from "./image-url";
 
 /**
  * Marca `has_tryon` en cada orden: una consulta por lote pregunta cuáles de las
@@ -319,7 +320,8 @@ function projectItem(item: RawItem) {
     quantity: item.quantity ?? 1,
     unit_price: item.unit_price ?? 0,
     total: item.total ?? 0,
-    thumbnail: item.thumbnail || item.variant?.product?.thumbnail || null,
+    // Absolute (lib/image-url.ts): a bare bucket key would render as a broken box.
+    thumbnail: absoluteImageUrl(item.thumbnail || item.variant?.product?.thumbnail || null),
     // What the cost sheet keys on: brand slug (frame_brand rules) and SKU
     // (frame_sku rules, cases).
     sku: itemSku(item),
@@ -701,6 +703,19 @@ export function redactBoardMoney<T extends { total?: unknown }>(rows: T[]): Arra
 }
 
 /**
+ * A slim row as a supervisor or manager receives it: the money redacted AND
+ * no `next_stages`. Moving a stage (POST …/stage) is admin-only (the guard's
+ * allowlist, tests/staff-roles.test.ts), and the panel only offers the moves
+ * the server lists — so a non-admin row must list none, or «Pedidos» would
+ * paint an «Avanzar» that answers 403 (QA roles 5-nov-2026). Pure.
+ */
+export function restrictBoardRows<T extends { total?: unknown; next_stages?: unknown }>(
+  rows: T[]
+): Array<Omit<T, "total" | "next_stages"> & { total: null; next_stages: [] }> {
+  return rows.map((o) => ({ ...o, total: null, next_stages: [] as [] }));
+}
+
+/**
  * What the board hands a caller by role. Admins (owner, superadmin) read it
  * whole. A supervisor or manager reads the SLIM view only (no items, no
  * customer, no addresses: the stage of each order of their stores, which is
@@ -827,6 +842,28 @@ export async function fetchBoardOrder(
   const order = projectBoardOrder(rows[0]);
   await Promise.all([markTryon(scope, [order]), markPosDelivered(scope, [order])]);
   return order;
+}
+
+/**
+ * The board rows of given orders, by id, in no particular order: what a
+ * report that already knows WHICH sales it is about (the seller's dashboard,
+ * fed by `sale_fact`) needs for the parts the facts do not carry — display
+ * number, stage, the customer's name. Bounded by the caller (it passes a
+ * page, never a period); an empty list reads nothing.
+ */
+export async function fetchBoardOrdersByIds(scope: MedusaContainer, ids: readonly string[]): Promise<BoardOrder[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const { result } = await getOrdersListWorkflow(scope).run({
+    input: {
+      fields: ORDER_BOARD_FIELDS,
+      variables: { filters: { id: unique }, skip: 0, take: unique.length },
+    },
+  });
+  const rows = (Array.isArray(result) ? result : result.rows) as unknown as Record<string, unknown>[];
+  const projected = rows.map(projectBoardOrder);
+  await Promise.all([markTryon(scope, projected), markPosDelivered(scope, projected)]);
+  return projected;
 }
 
 /** Type guard so a hand-typed query string can't smuggle in an unknown stage. */

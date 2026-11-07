@@ -92,6 +92,8 @@ packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 # vto-web compilado dentro del storefront (lo genera el build de Vercel)
 apps/capri-storefront/public/tryon-3d/
+# Generated from the catalog at build time (apps/capri-storefront/scripts/gen-seo.mjs)
+apps/capri-storefront/public/sitemap.xml
 # Modelos 3D pesados generados fuera del repo (se copian a mano cuando toca)
 *.glb.bak
 apps/vto-web/public/models/*.tmp

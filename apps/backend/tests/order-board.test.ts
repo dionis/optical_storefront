@@ -17,6 +17,7 @@ import {
   projectPayments,
   promisedOnOf,
   redactBoardMoney,
+  restrictBoardRows,
   slimBoardOrder,
 } from "../src/lib/order-board";
 import { deriveOrderProgress } from "../src/lib/order-status";
@@ -328,6 +329,16 @@ describe("order board by role — slim rows, own stores, no money", () => {
     expect(red.total).toBeNull();
     expect(red).toEqual(expect.objectContaining({ id: "order_1", stage: slim.stage, next_stages: slim.next_stages, establishment_id: "est_1", promised_on: "2026-10-20" }));
     expect(JSON.stringify(red)).not.toContain("270");
+  });
+
+  it("restrictBoardRows (a supervisor's or manager's row) nulls the total and lists no moves: the panel offers only what the server lists", () => {
+    const slim = slimBoardOrder(pos("order_1", "est_1", 270));
+    expect(slim.next_stages.length).toBeGreaterThan(0);
+    const [row] = restrictBoardRows([slim]);
+    expect(row.total).toBeNull();
+    expect(row.next_stages).toEqual([]);
+    expect(row).toEqual(expect.objectContaining({ id: "order_1", stage: slim.stage, stage_history: slim.stage_history, establishment_id: "est_1" }));
+    expect(JSON.stringify(row)).not.toContain("270");
   });
 
   it("filterBoardRows with `stores` keeps only till sales of those stores (a web order is not theirs)", () => {

@@ -6,11 +6,12 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, signOutEverywhere } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
 import StaffProfile from "./StaffProfile.jsx";
+import useDefaultCommission from "./finance/useDefaultCommission.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, typedEmail } from "../data/fieldRules.js";
 
@@ -21,14 +22,17 @@ const isAdminRole = (role) => role === "owner" || role === "superadmin";
  * libre) o una nueva con tienda y su único punto de venta. El servidor aplica
  * la misma regla (lib/seller-link.ts); aquí solo se evita el viaje.
  */
-const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "10" };
+// commission_pct "" = la comisión por defecto del dueño: el servidor la aplica (lib/seller-link.ts).
+const EMPTY_LINK = { mode: "existing", seller_id: "", establishment_id: "", terminal_id: "", commission_pct: "" };
 const linkMissing = (l) => (l.mode === "existing" ? !l.seller_id : !l.establishment_id || !l.terminal_id);
 const linkPayload = (l) => (l.mode === "existing"
   ? { seller_id: l.seller_id }
-  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, commission_pct: Number(l.commission_pct) || 0 } });
+  : { create: { establishment_id: l.establishment_id, terminal_id: l.terminal_id, ...(String(l.commission_pct).trim() === "" ? {} : { commission_pct: Number(l.commission_pct) || 0 }) } });
 
 function SellerLinkFields({ value, onChange, userId = null, sellers, stores, terminals, disabled }) {
   const { t } = useLang();
+  // Vacío = la comisión por defecto («Reglas y comisiones»); se enseña de marcador.
+  const defaultPct = useDefaultCommission();
   const set = (patch) => onChange({ ...value, ...patch });
   const free = sellers.filter((s) => s.active && (!s.user_id || s.user_id === userId));
   const storeOf = (id) => stores.find((x) => x.id === id);
@@ -73,7 +77,7 @@ function SellerLinkFields({ value, onChange, userId = null, sellers, stores, ter
             </select>
           </label>
           <label className="adm-field">{t("adm.sel.commission")}
-            <input className="adm-input" type="number" min="0" max="100" step="0.5" value={value.commission_pct} onChange={(e) => set({ commission_pct: e.target.value })} />
+            <input className="adm-input" type="number" min="0" max="100" step="0.5" value={value.commission_pct} placeholder={defaultPct} onChange={(e) => set({ commission_pct: e.target.value })} />
           </label>
           <div className="adm-field">{t("adm.sel.code")}<span className="muted adm-code-ro">{t("adm.sel.codeAuto")}</span></div>
         </div>
@@ -254,6 +258,20 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
+  // Cierre de sesión remoto: sus pestañas abiertas quedan fuera en la siguiente
+  // petición; la cuenta sigue activa y vuelve a entrar con su contraseña.
+  const kickSessions = async (m) => {
+    const ok = await confirm({ title: t("adm.team.sessions.confirm", { email: m.email }), message: t("adm.team.sessions.body"), confirmLabel: t("adm.team.sessions.kick") });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await signOutEverywhere(m.id);
+      toast({ tone: "success", title: t("adm.team.sessions.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
   const changeStores = async (m, ids) => {
     setBusy(true);
     try {
@@ -384,6 +402,11 @@ export default function Team() {
               {!demo && m.id !== meId && (
                 <button className="btn-xs" aria-expanded={pwFor === m.id} onClick={() => { setPwValue(""); setPwFor((o) => (o === m.id ? null : m.id)); }}>
                   <Icon name="lock" size={12} /> {t("adm.team.pw.open")}
+                </button>
+              )}
+              {!demo && m.id !== meId && !m.is_disabled && (
+                <button className="btn-xs" disabled={busy} onClick={() => kickSessions(m)} title={t("adm.team.sessions.help")}>
+                  <Icon name="logout" size={12} /> {t("adm.team.sessions.kick")}
                 </button>
               )}
               {!demo && (

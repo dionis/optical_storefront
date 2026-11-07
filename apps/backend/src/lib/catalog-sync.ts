@@ -7,6 +7,7 @@
  * when the schedule is due, what a valid setting or run request is, and how much
  * of a worker's report is kept. The queue itself is `catalog-sync-data.ts`.
  */
+import { absoluteImageUrl } from "./image-url";
 
 export const SETTINGS_ID = "default";
 
@@ -261,7 +262,7 @@ export function cleanNewProducts(raw: unknown): NewProduct[] {
       handle,
       title: text(p.title, 160),
       brand: text(p.brand, 80),
-      thumbnail: text(p.thumbnail, 400),
+      thumbnail: absoluteImageUrl(text(p.thumbnail, 400)),
       colors: count(p.colors),
     });
   }

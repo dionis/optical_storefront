@@ -17,6 +17,8 @@ import { resolveImageSized } from "../data/imageUrl.js";
 import { frameSpecRows } from "../data/frameSpecLabels.js";
 import { hexFor } from "../data/products.js";
 import "./pos-frame-card.css";
+import { listPromoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
 
 /** Lo que `hexFor` devuelve cuando el nombre del color no se reconoce: sin muestra, solo texto. */
 const UNKNOWN_HEX = hexFor("");
@@ -32,6 +34,9 @@ export function frameLineFields(p, v) {
     variant_title: v.title,
     image: v.image || p.thumbnail || null,
     price: p.price,
+    // The owner's item promotion in this store (docs/PRICE-MATRIX.md): `price` is already reduced.
+    price_before: p.price_before ?? null,
+    discount_pct: p.discount_pct ?? null,
     brand: p.brand ?? null,
     model: p.model ?? p.title,
     color: v.color ?? v.title ?? null,
@@ -140,7 +145,16 @@ export default function PosFrameCard({ frame, money, compact = false, onRemove, 
   );
   const price = frame.price == null
     ? <span className="pfc-price none">{t("adm.pos.frame.card.noPrice")}</span>
-    : <span className="pfc-price" title={t("adm.pos.frame.card.price")}>{money ? money(frame.price) : frame.price}</span>;
+    : (
+      <span className="pfc-price" title={t("adm.pos.frame.card.price")}>
+        {money ? money(frame.price) : frame.price}
+        {listPromoOf(frame) && (
+          <small className="pos-promo" title={t("adm.pm.promo", { before: money ? money(listPromoOf(frame).before) : listPromoOf(frame).before, pct: listPromoOf(frame).pct })}>
+            <s>{money ? money(listPromoOf(frame).before) : listPromoOf(frame).before}</s> −{listPromoOf(frame).pct} %
+          </small>
+        )}
+      </span>
+    );
   const remove = typeof onRemove === "function" && (
     <button type="button" className="btn-xs warn pfc-remove" onClick={onRemove} aria-label={t("adm.pos.frame.card.remove")} title={t("adm.pos.frame.card.remove")}>
       <Icon name="trash" size={12} />

@@ -42,14 +42,19 @@ export interface StaffAccessStatus {
   disabled_at: string | null;
   /** User id of who deactivated them; null when active. */
   disabled_by: string | null;
+  /** ISO instant of the last "log out everywhere" (lib/session-control.ts); tokens issued before it are dead. null = never. */
+  sessions_revoked_at: string | null;
 }
 
-const ACTIVE: StaffAccessStatus = { disabled_at: null, disabled_by: null };
+const ACTIVE: StaffAccessStatus = { disabled_at: null, disabled_by: null, sessions_revoked_at: null };
+
+const isoOf = (v: unknown): string | null => (v ? (v instanceof Date ? v.toISOString() : String(v)) : null);
 
 function toStatus(r: Record<string, unknown> | undefined): StaffAccessStatus {
-  if (!r || !r.disabled_at) return ACTIVE;
-  const at = r.disabled_at instanceof Date ? r.disabled_at.toISOString() : String(r.disabled_at);
-  return { disabled_at: at, disabled_by: r.disabled_by == null ? null : String(r.disabled_by) };
+  if (!r) return ACTIVE;
+  const sessions_revoked_at = isoOf(r.sessions_revoked_at);
+  if (!r.disabled_at) return { ...ACTIVE, sessions_revoked_at };
+  return { disabled_at: isoOf(r.disabled_at), disabled_by: r.disabled_by == null ? null : String(r.disabled_by), sessions_revoked_at };
 }
 
 export async function accessStatusByUser(container: MedusaContainer, userIds: string[]): Promise<Map<string, StaffAccessStatus>> {
@@ -76,11 +81,26 @@ export async function setAccessDisabled(
   const s = svc(container);
   const [row] = await s.listStaffProfiles({ user_id: userId }, { take: 1 });
   const before = toStatus(row as unknown as Record<string, unknown> | undefined);
-  const after: StaffAccessStatus = disabled ? { disabled_at: new Date().toISOString(), disabled_by: actorId } : ACTIVE;
+  const after: StaffAccessStatus = disabled
+    ? { disabled_at: new Date().toISOString(), disabled_by: actorId, sessions_revoked_at: before.sessions_revoked_at }
+    : { ...ACTIVE, sessions_revoked_at: before.sessions_revoked_at };
   const data = { disabled_at: after.disabled_at ? new Date(after.disabled_at) : null, disabled_by: after.disabled_by, updated_by: actorId };
   if (row) await s.updateStaffProfiles({ id: row.id, ...data } as never);
   else await s.createStaffProfiles({ user_id: userId, ...data } as never);
   return { before, after };
+}
+
+/**
+ * Stamps `sessions_revoked_at = at` on the person's profile row (created when
+ * they have none yet). Only writes; lib/session-control.ts decides when and
+ * audits, and invalidates the scope cache.
+ */
+export async function setSessionsRevokedAt(container: MedusaContainer, userId: string, at: Date, actorId: string | null): Promise<void> {
+  const s = svc(container);
+  const [row] = await s.listStaffProfiles({ user_id: userId }, { take: 1 });
+  const data = { sessions_revoked_at: at, updated_by: actorId };
+  if (row) await s.updateStaffProfiles({ id: row.id, ...data } as never);
+  else await s.createStaffProfiles({ user_id: userId, ...data } as never);
 }
 
 /** Seller codes in use by live profiles, except `exceptUserId`'s. */

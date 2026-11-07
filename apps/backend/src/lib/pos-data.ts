@@ -16,16 +16,18 @@ import { recordAudit } from "./audit";
 import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
-import { LensFinishError } from "./lens-finish";
+import { LensFinishError, type LensFinish } from "./lens-finish";
 import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { fetchBoardOrder } from "./order-board";
 import { StageError, transitionOrderStage } from "./order-stage-transition";
-import { addBusinessDays, LAB_BUSINESS_DAYS } from "./order-status";
+import { LAB_BUSINESS_DAYS } from "./order-status";
 import {
   discountLine,
+  localYear,
   lowestFreeTray,
   nextTerminalCode,
+  promisedDate,
   rxNumber,
   saleNumber,
   type CleanedPayments,
@@ -45,9 +47,13 @@ import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { applyPct, linePromoPcts, metadataSaysCase, NO_PROMO, productDiscountOf, promoStoreLine, type LinePromo } from "./price-matrix";
+import { storeDiscountIndex } from "./price-matrix-data";
 import { brandOf, isExposed } from "./store-assortment";
-import { listAssortmentRules } from "./store-assortment-data";
+import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
+import { effectiveAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
+import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
 
 /**
@@ -325,7 +331,8 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   }
   if (existing) {
     const metadata = { ...(existing.metadata ?? {}) } as Record<string, unknown>;
-    if (!metadata.birth_date) metadata.birth_date = c.birth_date;
+    // Never erase a known birth date with a blank one.
+    if (!metadata.birth_date && c.birth_date) metadata.birth_date = c.birth_date;
     await svc.updateCustomers(existing.id, {
       first_name: existing.first_name || c.first_name,
       last_name: existing.last_name || c.last_name,
@@ -383,6 +390,9 @@ export interface StoredRx {
 }
 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));
+// `rx_date` is a DATE column: pg hands it back as midnight in the server's
+// zone (UTC), so the UTC slice IS the stored day. Do not shift it to the
+// store's zone — that would move every prescription one day back.
 const isoDay = (v: unknown): string | null => (v ? new Date(v as string).toISOString().slice(0, 10) : null);
 
 function toStoredRx(r: Record<string, unknown>): StoredRx {
@@ -492,7 +502,9 @@ export function checkPrescriptions(
 }
 
 async function nextRxNumber(container: MedusaContainer, now = new Date()): Promise<string> {
-  const year = now.getUTCFullYear();
+  // The store's year, not the server's: on New Year's Eve the till is still in
+  // the old year while the UTC clock already turned (lib/pos.ts localYear).
+  const year = localYear(now, tenant().timezone);
   const res = await pgOf(container).raw(
     `INSERT INTO rx_sequence (year, last_value) VALUES (?, 1)
      ON CONFLICT (year) DO UPDATE SET last_value = rx_sequence.last_value + 1
@@ -558,8 +570,15 @@ export interface PosProduct {
   product_id: string;
   title: string;
   thumbnail: string | null;
-  /** Frame only, in this store, before sales tax. Null when the model has no price. */
+  /**
+   * Frame only, in this store, before sales tax — WITH the owner's promotion on
+   * the model in this store (store_item_discount). Null when it has no price.
+   */
   price: number | null;
+  /** The same price before the promotion (equal to `price` when there is none). */
+  price_before: number | null;
+  /** The owner's promotion on this model in this store, %; null = none. */
+  discount_pct: number | null;
   variants: PosProductVariant[];
   /** Colours whose code (UPC/SKU, barcode) matched the search, best first; empty when found by name. */
   matched_variant_ids: string[];
@@ -580,7 +599,12 @@ const firstText = (...values: unknown[]): string | null => {
   return null;
 };
 
-/** Products the owner priced as cases (rules with scope "case"); everything else is a frame. */
+/**
+ * Products the owner priced as cases (rules with scope "case" this store can
+ * see). Together with the catalogue's own word (`metadataSaysCase`: brand
+ * case/cases, `metadata.kind` "case") it decides the scope — the matrix uses
+ * the same test per store (lib/price-matrix.ts `storePriceScope`).
+ */
 function caseProductIds(rules: Array<{ scope: string; target: string | null }>): Set<string> {
   return new Set(rules.filter((r) => r.scope === "case" && r.target).map((r) => r.target as string));
 }
@@ -590,6 +614,9 @@ function caseProductIds(rules: Array<{ scope: string; target: string | null }>):
  * barcode, EAN — whole (a scanner) or in part (typed from the tag) (HU-20),
  * with each model's price in the store (HU-17: shown, never editable).
  */
+/** A model the owner discontinued (any status but published; absent = not known, allowed). Pure. */
+export const isDiscontinued = (status: string | null | undefined): boolean => typeof status === "string" && status !== "published";
+
 export async function searchPosProducts(container: MedusaContainer, establishmentId: string, q: string): Promise<PosProduct[]> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const term = q.trim().slice(0, 80);
@@ -608,7 +635,8 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const { productIds: codeIds, matched } = rankCodeMatches(byCode as VariantCodes[], term);
   const [{ data: exact }, { data: named }, assortment] = await Promise.all([
     codeIds.length
-      ? query.graph({ entity: "product", fields, filters: { id: codeIds } }).then((r) => ({
+      ? // Published only, like the name search: a discontinued model found by its tag code is not for sale.
+        query.graph({ entity: "product", fields, filters: { id: codeIds, status: "published" } as never }).then((r) => ({
           data: (r.data as Array<{ id: string }>).slice().sort((x, y) => codeIds.indexOf(x.id) - codeIds.indexOf(y.id)),
         }))
       : Promise.resolve({ data: [] as unknown[] }),
@@ -619,7 +647,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       // Wider than the 20 shown: models the store does not expose are dropped below.
       pagination: { take: 60 },
     }),
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
   ]);
   const seen = new Set<string>();
   const products = ([...exact, ...named] as Array<{
@@ -633,9 +661,10 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
     .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
     .filter((p) => isExposed(assortment, { id: p.id, brand: brandOf(p.metadata) }))
     .slice(0, 20);
-  const [rules, prices] = await Promise.all([
+  const [rules, prices, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, products.map((p) => p.id)),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const byId = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
@@ -646,21 +675,31 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       title: v.title ?? "",
       sku: v.sku ?? null,
       barcode: v.barcode ?? null,
-      image: firstText(v.metadata?.["image"]),
+      // Absolute (lib/image-url.ts): the catalogue stores bare bucket keys.
+      image: absoluteImageUrl(firstText(v.metadata?.["image"])),
       color: firstText(v.metadata?.["color"], v.title),
       price: null,
     }));
-    const thumbnail = firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image));
+    const thumbnail = absoluteImageUrl(firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image)));
     // Main photo first, then the gallery, then the colours' photos — deduplicated.
-    const images = [...new Set([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)].filter((u): u is string => !!u))].slice(0, MAX_CARD_IMAGES);
+    const images = absoluteImageUrls([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)]).slice(0, MAX_CARD_IMAGES);
+    const brandSlug = brandOf(p.metadata);
+    // The store's brand price applies when the model has no exact price (v2).
+    const priced =
+      base === null
+        ? null
+        : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) || metadataSaysCase(p.metadata) ? "case" : "frame", target: p.id, base, lenses: 0, brand: brandSlug });
+    const before = priced ? priced.total : null;
+    // The model's own discount, else its brand's (v2).
+    const discountPct = productDiscountOf(discounts, establishmentId, p.id, brandSlug);
     return {
       product_id: p.id,
       title: p.title,
       thumbnail,
-      price:
-        base === null
-          ? null
-          : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
+      // The same promotion `quoteSale` applies, so the card and the quote agree.
+      price: before === null ? null : dollars(applyPct(cents(before), discountPct)),
+      price_before: before,
+      discount_pct: before === null ? null : discountPct,
       variants,
       matched_variant_ids: matched.get(p.id) ?? [],
       brand: frameBrand(p.metadata),
@@ -686,7 +725,11 @@ export interface QuotedLine {
   lens_requires_add: boolean;
   /** Frame size from the catalog, for the prescription check and the lab ticket. */
   eye_size: number | null;
-  /** Store list price of the line, before discount and tax. */
+  /**
+   * Store list price of the line, before the seller's discount and tax — and
+   * AFTER the owner's per-article promotion (`promo`), so the seller's
+   * discount, its limit and the approval all work on the reduced price.
+   */
   list: number;
   frame: number;
   lenses: number;
@@ -694,8 +737,11 @@ export interface QuotedLine {
   tax_amount: number;
   tax_rate: number;
   unit_price: number;
-  frame_source: "store_exact" | "adjusted" | "own_frame";
+  /** `brand` (v2): the store's price for every model of the brand (lib/store-pricing.ts). */
+  frame_source: "store_exact" | "brand" | "adjusted" | "own_frame";
   below_minimum: boolean;
+  /** The owner's promotion on this line (lib/price-matrix.ts `promoStoreLine`); null = none. */
+  promo: LinePromo | null;
 }
 
 export interface Quote {
@@ -724,34 +770,37 @@ export async function quoteSale(
   const { data: variants } = variantIds.length
     ? await query.graph({
         entity: "variant",
-        fields: ["id", "title", "sku", "product.id", "product.title"],
+        fields: ["id", "title", "sku", "product.id", "product.title", "product.status"],
         filters: { id: variantIds },
       })
     : { data: [] as unknown[] };
   const variantById = new Map(
-    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string } }>).map((v) => [v.id, v])
+    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string; status?: string | null } }>).map((v) => [v.id, v])
   );
   const productIds = [...new Set([...variantById.values()].map((v) => v.product?.id).filter((v): v is string => Boolean(v)))];
-  const [rules, prices, settings, metadata, assortment] = await Promise.all([
+  const [rules, prices, settings, metadata, assortment, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, productIds),
     resolveStoreSettings(container),
     loadProductMetadata(pg, productIds),
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const priceById = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
 
   const quoted: QuotedLine[] = [];
   for (const line of lines) {
-    let lensCents: number;
+    let lensParts: { lens_base_cents: number; photo_cents: number; ar_cents: number };
     let category: string | null;
     let requiresAdd: boolean;
+    let finish: LensFinish | null;
     try {
       const b = await computeLensBreakdown(pg, line.selection, establishmentId);
-      lensCents = b.total_cents;
+      lensParts = { lens_base_cents: b.lens_base_cents, photo_cents: b.photo_cents, ar_cents: b.ar_cents };
       category = b.category;
       requiresAdd = b.requires_add;
+      finish = b.finish;
     } catch (e) {
       // The finish the seller picked has no priced cell (a digital single
       // vision the owner has not priced yet, or "stock" on a progressive).
@@ -764,20 +813,29 @@ export async function quoteSale(
     let listFrame: number;
     let listLenses: number;
     let frameSource: QuotedLine["frame_source"];
+    let promo: LinePromo | null;
     let min = { frame_min: null as number | null, floor_pct: null as number | null };
     const variant = line.variant_id ? variantById.get(line.variant_id) : undefined;
     const productId = variant?.product?.id ?? null;
+    // The owner's promotion on each part of this line in this store (store_item_discount).
+    // v2: the model's brand slug, so the store's brand price and brand discount apply.
+    const brandSlug = productId ? brandOf(metadata.get(productId)) || null : null;
+    const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, brandSlug, selection: line.selection, category, finish }) : NO_PROMO;
 
     if (line.kind === "own_frame") {
       // No frame is sold: the store's adjustment applies to the lenses alone
       // (a fixed amount lands on the frame part when the base is 0, so move it).
-      const sp = storeLinePrice(rules, { establishmentId, scope: "frame", target: "", base: 0, lenses: lensCents / 100 });
+      const sp = promoStoreLine(rules, { establishmentId, scope: "frame", target: "", base: 0, lens: lensParts }, pcts);
       listFrame = 0;
       listLenses = dollars(cents(sp.frame) + cents(sp.lenses));
       frameSource = "own_frame";
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope: "frame", target: "" });
     } else {
       if (!variant || !productId) throw new PosError("bad_variant");
+      // A discontinued model (draft, «Productos y precios» → descontinuar) leaves
+      // the till too: the search hides it, this stops a stale screen or a scan.
+      if (isDiscontinued(variant.product?.status)) throw new PosError("discontinued");
       // The store only sells what it exposes (store-assortment.ts); the search
       // already hides the rest, this stops a stale screen or a scanned code.
       if (!isExposed(assortment, { id: productId, brand: brandOf(metadata.get(productId)) })) {
@@ -785,11 +843,12 @@ export async function quoteSale(
       }
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
-      const scope = caseIds.has(productId) ? "case" : "frame";
-      const sp = storeLinePrice(rules, { establishmentId, scope, target: productId, base, lenses: lensCents / 100 });
+      const scope = caseIds.has(productId) || metadataSaysCase(metadata.get(productId)) ? "case" : "frame";
+      const sp = promoStoreLine(rules, { establishmentId, scope, target: productId, brand: brandSlug, base, lens: lensParts }, pcts);
       listFrame = sp.frame;
       listLenses = sp.lenses;
-      frameSource = sp.frame_source;
+      frameSource = sp.before.frame_source;
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope, target: productId });
     }
 
@@ -825,6 +884,7 @@ export async function quoteSale(
       unit_price: dollars(cents(d.total) + cents(tax_amount)),
       frame_source: frameSource,
       below_minimum: discountPct > 0 && belowMinimum(min, { list, frame: d.frame, total: d.total }),
+      promo,
     });
   }
 
@@ -1364,6 +1424,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           tax_rate: l.tax_rate,
           price_pretax: dollars(cents(l.frame) + cents(l.lenses)),
           frame_source: l.frame_source,
+          // The owner's per-article promotion (null = none): `list_price` above is
+          // already the reduced price; this keeps what it was before and by how much.
+          promo: l.promo,
           frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
           own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i] } : null,
         };
@@ -1410,7 +1473,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   const seq = await nextSaleSeq(container, store.id);
   const number = saleNumber(store.code, seq);
   const withLenses = quote.lines.some((l) => l.lens_category);
-  const promisedOn = (withLenses ? addBusinessDays(new Date(), LAB_BUSINESS_DAYS) : new Date()).toISOString().slice(0, 10);
+  // Counted on the store's calendar: a sale at 7 pm in Texas is still "today"
+  // there although the UTC date has already moved on (lib/pos.ts promisedDate).
+  const promisedOn = promisedDate(new Date(), tenant().timezone, withLenses ? LAB_BUSINESS_DAYS : 0);
   const p = input.payments;
   const sale = await pos(container).createPosSales({
     number,
@@ -1542,6 +1607,8 @@ export interface SaleRow {
   delivered_at: string | null;
   voided_at: string | null;
   void_reason: string | null;
+  /** Free text written with the void (or the void request): what the approver reads before confirming. */
+  void_note: string | null;
   void_requested_at: string | null;
   created_at: string;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
@@ -1591,6 +1658,7 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
     delivered_at: iso(s.delivered_at),
     voided_at: iso(s.voided_at),
     void_reason: (s.void_reason as string | null) ?? null,
+    void_note: typeof s.void_note === "string" && s.void_note.trim() ? s.void_note.trim() : null,
     void_requested_at: iso(s.void_requested_at),
     created_at: new Date(s.created_at as string).toISOString(),
     payments: payments
@@ -1908,10 +1976,37 @@ export async function requestVoid(container: MedusaContainer, sale: SaleRow, act
 }
 
 /**
+ * The void as one guarded UPDATE. Two confirmations of the same sale (a
+ * double click, two managers at once) both passed the `status !== "voided"`
+ * check on what each had read and both wrote the refund rows: the customer
+ * was "given back" twice what they paid once. The WHERE makes the database
+ * decide who voids: one UPDATE matches, the other finds 0 rows and is told
+ * `sale_voided`. The refunds, the order and the tray follow only for the
+ * winner. Same style as `deliveryClaimPlan`.
+ */
+export function voidClaimPlan(saleId: string, actorId: string, reason: VoidReason, note: string | null): SqlPlan {
+  // `void_note = COALESCE(NULLIF(?, ''), void_note)`: a confirmation without a
+  // note of its own keeps what the seller wrote when asking (the reason the
+  // approver read); a new note replaces it.
+  return {
+    sql: `UPDATE pos_sale
+             SET status = 'voided', voided_at = now(), voided_by = ?, void_reason = ?, void_note = COALESCE(NULLIF(?, ''), void_note), updated_at = now()
+           WHERE id = ? AND deleted_at IS NULL AND status <> 'voided'
+       RETURNING voided_at`,
+    bindings: [actorId, reason, note ?? "", saleId],
+  };
+}
+
+/**
  * Voids a sale: the sale is never deleted and keeps its number (HU-84); it is
  * marked voided with who, when and why. The Medusa order is canceled when no
  * fulfillment has shipped; what the customer paid is recorded as refunds in
  * the ledger, so the cash count and the reports stay true.
+ *
+ * The mark is taken FIRST, atomically (`voidClaimPlan`); everything that
+ * follows (order, refunds, claims, tray, facts) runs once, for whoever took
+ * it. A failure after the claim leaves a voided sale whose follow-ups are
+ * logged for the owner to finish by hand — never two refunds.
  */
 export async function voidSale(
   container: MedusaContainer,
@@ -1921,8 +2016,38 @@ export async function voidSale(
   note: string | null
 ): Promise<{ sale: SaleRow; order_canceled: boolean }> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
+  // Cheap early exit on what the caller saw; the UPDATE below is the real gate.
   if (sale.status === "voided") throw new PosError("sale_voided", 409);
+  const plan = voidClaimPlan(sale.id, actorId, reason, note);
+  const res = (await pgOf(container).raw(plan.sql, plan.bindings)) as RawRows<{ voided_at: unknown }>;
+  if (!res.rows[0]) {
+    // Refused: say why from the sale as it is now, not as the caller saw it.
+    const now = await getSale(container, sale.id);
+    if (!now) throw new PosError("sale_not_found", 404);
+    throw new PosError("sale_voided", 409);
+  }
+  try {
+    return await voidFollowUps(container, sale, actorId, reason, note);
+  } catch (e) {
+    // The mark stands (never a second refund); what did not get written is in the log.
+    logger.error(`[pos] void ${sale.number}: marked voided but a follow-up failed: ${(e as Error).message}`);
+    throw e;
+  }
+}
+
+/** Everything a void does once the sale is marked: order, refunds, claims, tray, facts, audit. */
+async function voidFollowUps(
+  container: MedusaContainer,
+  sale: SaleRow,
+  actorId: string,
+  reason: VoidReason,
+  note: string | null
+): Promise<{ sale: SaleRow; order_canceled: boolean }> {
+  const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const svc = pos(container);
+  // The payments as they are NOW (a balance collected between the screen and
+  // the click is refunded too), not as the caller's screen had them.
+  const held = (await getSale(container, sale.id)) ?? sale;
   let orderCanceled = false;
   if (sale.order_id) {
     try {
@@ -1937,7 +2062,7 @@ export async function voidSale(
   }
   // Net paid per method (refunds are negative rows), returned by the same method.
   const byMethod = new Map<string, number>();
-  for (const p of sale.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
+  for (const p of held.payments) byMethod.set(p.method_code, (byMethod.get(p.method_code) ?? 0) + cents(p.amount));
   const methods = new Map((await listPaymentMethods(container)).map((m) => [m.code, m]));
   const refundable = [...byMethod.entries()].filter(([code, amount]) => amount > 0 && !(methods.get(code)?.kind === "insurance" || methods.get(code)?.receivable));
   // A cash refund leaves the store's register (opening it if nobody has yet); other methods never touch it.
@@ -1961,17 +2086,9 @@ export async function voidSale(
   const claims = await svc.listInsuranceClaims({ sale_id: sale.id, status: ["pending", "submitted"] } as never, { take: 20 });
   if (claims.length) await svc.updateInsuranceClaims(claims.map((c) => ({ id: c.id, status: "rejected", note: "sale voided" })) as never);
 
-  await svc.updatePosSales({
-    id: sale.id,
-    status: "voided",
-    voided_at: new Date(),
-    voided_by: actorId,
-    void_reason: reason,
-    void_note: note,
-    paid_cents: 0,
-    insurance_cents: 0,
-    balance_cents: 0,
-  });
+  // Status, who, when and why were written by the claim; only the figures
+  // move now that the refunds exist.
+  await svc.updatePosSales({ id: sale.id, paid_cents: 0, insurance_cents: 0, balance_cents: 0 });
   await releaseTray(container, sale.id);
   await voidFacts(container, sale.id);
   if (sale.order_id) await stampOrder(container, sale.order_id, { pos_voided: true, balance_due_cents: 0 }).catch(() => null);
@@ -1981,7 +2098,7 @@ export async function voidSale(
     entity: "pos_sale",
     entityId: sale.id,
     establishmentId: sale.establishment_id,
-    before: { status: sale.status, total: sale.total, paid: sale.paid },
+    before: { status: sale.status, total: sale.total, paid: held.paid },
     after: { status: "voided", reason, note, order_canceled: orderCanceled },
   });
   return { sale: (await getSale(container, sale.id)) as SaleRow, order_canceled: orderCanceled };

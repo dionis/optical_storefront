@@ -342,27 +342,39 @@ describe("catalogSellingPrices / withCatalogPrice", () => {
 
   it("with no store, is the Medusa base unless the owner typed a global price; a model without price is left out", () => {
     const prices = catalogSellingPrices(catalog, [], null);
-    expect(prices.get("DC406")).toEqual({ product_id: "p1", price_cents: 9900 });
-    expect(prices.get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500 });
+    expect(prices.get("DC406")).toEqual({ product_id: "p1", price_cents: 9900, source: "base" });
+    expect(prices.get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500, source: "base" });
     expect(prices.has("ML8")).toBe(false);
     const own = catalogSellingPrices(catalog, [rule({ target: "p1", value: 120 })], null);
-    expect(own.get("DC406")).toEqual({ product_id: "p1", price_cents: 12000 });
+    expect(own.get("DC406")).toEqual({ product_id: "p1", price_cents: 12000, source: "owner" });
+  });
+
+  it("with no store, the CHAIN's general rule applies to the master too — the price every store starts from (QA note, 5-nov-2026)", () => {
+    const chain = [rule({ establishment_id: null, scope: "frame", target: null, mode: "percent", value: 10 })];
+    const master = catalogSellingPrices(catalog, chain, null);
+    expect(master.get("DC406")).toEqual({ product_id: "p1", price_cents: 10890, source: "rule" });
+    // A frames rule leaves the case alone; a store that inherits shows the very same figure.
+    expect(master.get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500, source: "base" });
+    expect(catalogSellingPrices(catalog, chain, A).get("DC406")).toEqual({ product_id: "p1", price_cents: 10890, source: "adjusted" });
+    // The owner's own price for the model is never adjusted by the rule.
+    const own = catalogSellingPrices(catalog, [...chain, rule({ target: "p1", value: 120 })], null);
+    expect(own.get("DC406")).toEqual({ product_id: "p1", price_cents: 12000, source: "owner" });
   });
 
   it("with a store, is that store's price: its exact price, else base + its adjustment", () => {
     const rules = [rule({ establishment_id: A, scope: "frame", target: null, mode: "percent", value: 10 }), rule({ establishment_id: B, scope: "frame", target: "p1", value: 80 })];
-    expect(catalogSellingPrices(catalog, rules, A).get("DC406")).toEqual({ product_id: "p1", price_cents: 10890 });
-    expect(catalogSellingPrices(catalog, rules, B).get("DC406")).toEqual({ product_id: "p1", price_cents: 8000 });
+    expect(catalogSellingPrices(catalog, rules, A).get("DC406")).toEqual({ product_id: "p1", price_cents: 10890, source: "adjusted" });
+    expect(catalogSellingPrices(catalog, rules, B).get("DC406")).toEqual({ product_id: "p1", price_cents: 8000, source: "exact" });
     // A rule for all frames leaves the case alone.
-    expect(catalogSellingPrices(catalog, rules, A).get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500 });
+    expect(catalogSellingPrices(catalog, rules, A).get("GRANDECASE")).toEqual({ product_id: "p2", price_cents: 500, source: "base" });
   });
 
   it("withCatalogPrice appends price_cents and product_id after the existing fields, null when the catalogue has no price", () => {
     const rows = frameCostStoreRows([master({ cost_cents: 2099 }), master({ sku: "ML8", model: "ML 8", cost_cents: 1500 })], indexFrameCostVariations([]), null).map(frameCostStoreView);
     const out = withCatalogPrice(rows, catalogSellingPrices(catalog, [], null));
     expect(Object.keys(out[0]).slice(0, 9)).toEqual(Object.keys(rows[0]));
-    expect(out.find((r) => r.sku === "DC406")).toMatchObject({ cost_cents: 2099, price_cents: 9900, product_id: "p1" });
-    expect(out.find((r) => r.sku === "ML8")).toMatchObject({ cost_cents: 1500, price_cents: null, product_id: null });
+    expect(out.find((r) => r.sku === "DC406")).toMatchObject({ cost_cents: 2099, price_cents: 9900, product_id: "p1", price_source: "base" });
+    expect(out.find((r) => r.sku === "ML8")).toMatchObject({ cost_cents: 1500, price_cents: null, product_id: null, price_source: null });
   });
 });
 
@@ -389,6 +401,18 @@ describe("the «Costos monturas» tab", () => {
     expect(body.slice(-2)).toEqual([25, ""]);
     // One row per model, not one per (model, store).
     expect(rows.filter((r, i) => i > 3 && r.length).length).toBe(1);
+  });
+
+  it("names a brand the owner added by hand with its product's brand, not the slug", () => {
+    const own: CatalogModel[] = [
+      { product_id: "p9", sku: "MRQ200", title: "MRQ 200", brand_slug: "marca-real-qa", brand_name: "Marca Real QA", is_case: false, price_cents: 4400 },
+      { product_id: "p1", sku: "DC406", title: "DC406", brand_slug: "di-caprio", brand_name: "DI CAPRIO (scraped)", is_case: false, price_cents: 9900 },
+    ];
+    const rows = frameCostsSheetRows([master({ sku: "MRQ200", cost_cents: 2200 }), master({ cost_cents: 2099 })], own);
+    const body = rows.filter((r, i) => i > 3 && r.length);
+    expect(body.find((r) => r[1] === "MRQ200")?.[2]).toBe("Marca Real QA");
+    // A known brand keeps the name from the brand list.
+    expect(body.find((r) => r[1] === "DC406")?.[2]).toBe("Di Caprio");
   });
 
   it("is exactly the old tab when there are no stores", () => {

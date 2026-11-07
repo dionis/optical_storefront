@@ -80,6 +80,13 @@ export function lensCellCostCents(design_code: string, material_code: string, fi
   return cache.cells.get(keyOf(design_code, material_code, effective)) ?? null;
 }
 
+/** True once the table was read and at least one cell carries a cost: the lab's list is a cost source (lib/sales-insights.ts costSourcesMissing). */
+export function lensCellCostsKnown(): boolean {
+  if (!cache?.loaded) return false;
+  for (const v of cache.cells.values()) if (v !== null && v > 0) return true;
+  return false;
+}
+
 /** Reads the matrix cells (and the designs' categories) into the cache; a failure keeps the previous state. */
 export async function ensureLensCellCostCache(container: MedusaContainer): Promise<void> {
   if (cache && Date.now() - cache.at < TTL_MS) return;

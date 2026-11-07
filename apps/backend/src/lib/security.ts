@@ -167,6 +167,9 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "node_env.production", ok: production, detail: env.NODE_ENV || "" });
   checks.push({ key: "security.strict_mode", ok: env.SECURITY_STRICT === "1" });
   checks.push({ key: "auth.self_register_blocked", ok: env.ADMIN_SELF_REGISTER !== "1" });
+  // docker-entrypoint.sh sets this when `db:migrate` failed at boot: the server
+  // is up on an old schema and the routes that needed the change will 500.
+  checks.push({ key: "db.migrations_applied", ok: env.MEDUSA_MIGRATE_STATUS !== "failed", detail: env.MEDUSA_MIGRATE_STATUS || "" });
   checks.push({
     key: "auth.login_rate_limit",
     ok: true,

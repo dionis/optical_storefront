@@ -115,7 +115,8 @@
 .sd-table .neg { color: var(--adm-red-dark); }
 .sd-collect { border-top: 1px dashed var(--adm-line); padding-top: 10px; display: grid; gap: 8px; }
 .sd-collect-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.sd-collect-row select, .sd-collect-row input { min-height: 40px; font-size: 14px; flex: 1 1 140px; min-width: 0; }
+.sd-collect-row select, .sd-collect-row input { min-height: 40px; font-size: 14px; flex: 1 1 140px; min-width: 0; padding: 4px 10px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface); color: var(--adm-ink); box-sizing: border-box; }
+.sd-collect-row select:focus, .sd-collect-row input:focus { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
 .sd-collect-row .btn-sm { flex: none; }
 .sd-hint { font-size: 12px; color: var(--adm-muted); margin: 0; }
 
@@ -175,6 +176,24 @@
   .sd-card .pos-docs { grid-template-columns: 1fr; }
   .sd-foot .btn-sm { flex: 1 1 auto; }
 }
+
+/* ── Tablet vertical (< 900 px o vertical hasta 1024): la ficha sube como hoja
+   inferior de ancho completo, con el pie (cobrar, entregar) al alcance del
+   pulgar y por encima de la barra de inicio de iOS. ── */
+@keyframes sdSheet { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 899.98px), (max-width: 1024px) and (orientation: portrait) {
+  .sd-root { align-items: flex-end; justify-content: stretch; }
+  .sd-panel { width: 100%; height: auto; max-height: 92vh; max-height: 92dvh; border-left: 0; border-radius: 20px 20px 0 0; overflow: hidden; animation: sdSheet .28s var(--adm-ease, ease) both; }
+  .sd-head { padding-top: 20px; }
+  .sd-head::after { content: ""; position: absolute; top: 7px; left: 50%; width: 42px; height: 5px; margin-left: -21px; border-radius: 999px; background: var(--adm-line); }
+  .sd-foot { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (pointer: coarse) {
+  .sd-foot .btn-sm, .sd-head-actions .btn-sm, .sd-head-actions .btn-xs, .sd-card .pos-docs .btn-sm { min-height: 44px; }
+  .sd-collect-row select, .sd-collect-row input { min-height: 48px; font-size: 16px; }
+  .sd-head-actions button, .sd-close { min-width: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .sd-panel { animation: none !important; } }
 
 /* ── Impresión: solo la ficha ── */
 @media print {

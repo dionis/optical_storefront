@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
+import HelpTip from "./HelpTip.jsx";
 import { downloadText, elementToCsv, printElement, rowsToCsv } from "./exportUtils.js";
 import { downloadXlsx } from "./exportXlsx.js";
 import { exportReport } from "./ReportDoc.jsx";
@@ -26,30 +27,18 @@ export function useChartHeight(fraction = 0.21, min = 130, max = 230) {
   return h;
 }
 
-/** Globo de ayuda: se abre al clic, se cierra con Escape o clic fuera. */
+/**
+ * Ayuda «i» de una tarjeta: abre la misma ventana que los «?» (HelpTip.jsx),
+ * delante de la pantalla y con el fondo desenfocado, con `title` y `text` ya
+ * traducidos. Antes era un globo pequeño; el dueño pidió (7-nov-2026) que toda
+ * ayuda se abra en ventana.
+ */
 export function InfoTip({ text, title }) {
   const { t } = useLang();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDoc); window.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); window.removeEventListener("keydown", onKey); };
-  }, [open]);
   if (!text) return null;
   return (
-    <span className="adm-tip" ref={ref}>
-      <button type="button" className="adm-tip-btn" aria-label={t("adm.ui.help")} aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
-        <Icon name="info" size={14} />
-      </button>
-      {open && (
-        <span className="adm-tip-pop" role="dialog" onClick={(e) => e.stopPropagation()}>
-          {title && <b>{title}</b>}
-          <span>{text}</span>
-        </span>
-      )}
+    <span className="adm-tip">
+      <HelpTip variant="info" title={title || t("adm.ui.help")} body={text} label={t("adm.ui.help")} />
     </span>
   );
 }

@@ -7,6 +7,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { FRAME_ONLY } from "../data/lensPricing.js";
 import Icon from "./icons.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import { promoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
 
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
 
@@ -43,7 +45,10 @@ export function describeSelection(selection, catalog, t, lang) {
 export function PosRunningTotal({ quote, status, lines, catalog, money, beforeLenses = false }) {
   const { t, lang } = useLang();
   // En móvil arranca plegada (solo el total); en escritorio, con el desglose a la vista.
-  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches));
+  // Plegada de entrada en móvil y en tablet vertical: la línea de cabecera ya
+  // dice montura, lentes y total; el detalle se abre con un toque. En vertical
+  // la franja es pegajosa y abierta se comía un cuarto de la pantalla.
+  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px), (pointer: coarse) and (orientation: portrait)").matches));
   if (!lines.length) return null;
   const pending = !quote;
   const dash = "—";
@@ -157,6 +162,11 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
                     <small className="muted">
                       {[!own && `${t("adm.pos.sum.frame")} ${money(l.frame)}`, l.lenses > 0 && `${t("adm.pos.sum.lenses")} ${money(l.lenses)}`, l.tax_amount > 0 && `${t("adm.pos.price.tax")} ${money(l.tax_amount)}`].filter(Boolean).join(" · ")}
                     </small>
+                    {(() => {
+                      // The owner's item promotion (docs/PRICE-MATRIX.md): the line is already at the discounted price.
+                      const p = promoOf(l);
+                      return p ? <small className="pos-sum-promo">{t("adm.pm.promoBefore")} <s>{money(p.before)}</s> · {t("adm.pm.promoTag", { pct: p.pct })}</small> : null;
+                    })()}
                   </div>
                   <b className="pos-sum-price">{money(l.unit_price)}</b>
                 </li>

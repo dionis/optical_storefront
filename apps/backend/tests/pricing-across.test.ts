@@ -97,6 +97,15 @@ describe("buildAcrossRows — the price per store", () => {
     expect(row.stores[1].price_cents).toBe(12000);
   });
 
+  it("the chain's general rule (no store) is the master, tagged rule, and a store that inherits shows the same figure", () => {
+    const rules = [rule({ establishment_id: null, scope: "frame", mode: "percent", value: 10 }), rule({ establishment_id: B, scope: "frame", target: "prod_1", mode: "override", value: 95 })];
+    const [row] = buildAcrossRows([product()], stores, rules, null, NOW);
+    expect(row.master_price_cents).toBe(11000);
+    expect(row.master_source).toBe("rule");
+    expect(row.stores[0]).toMatchObject({ price_cents: 11000, source: "adjusted" });
+    expect(row.stores[1]).toMatchObject({ price_cents: 9500, source: "exact" });
+  });
+
   it("the floor moves a converted price and the cell says so", () => {
     setPriceBandCache({ ...EMPTY_PRICE_BAND, floor_below_cents: 3000, floor_to_cents: 6000 });
     const [row] = buildAcrossRows([product({ base: 8 })], stores, [], null, NOW);

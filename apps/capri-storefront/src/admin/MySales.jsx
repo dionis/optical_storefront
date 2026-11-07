@@ -33,14 +33,17 @@ function MySalesList({ me, range, storeParam, openSale }) {
   const bodyRef = useRef(null);
   const m = (v) => money(v, "usd", lang);
   useEffect(() => {
+    // Solo la última petición pinta: al cambiar de tienda o período deprisa, la respuesta lenta de la anterior se descarta.
+    let alive = true;
     setState("loading");
     const p = new URLSearchParams({ from: range.from, to: range.to });
     // El servidor ya fuerza «solo las mías» a un vendedor; para los demás roles se pide explícitamente.
     if (me?.id) p.set("sellers", me.id);
     if (storeParam) p.set("stores", storeParam);
     adminFetch(`/admin/sales-analytics/sales?${p.toString()}`)
-      .then((r) => { setRows((r.sales || []).filter((s) => s.sale_id)); setState("ok"); })
-      .catch(() => setState("error"));
+      .then((r) => { if (!alive) return; setRows((r.sales || []).filter((s) => s.sale_id)); setState("ok"); })
+      .catch(() => { if (alive) setState("error"); });
+    return () => { alive = false; };
   }, [range.from, range.to, storeParam, me?.id]);
   const list = rows || [];
   const sum = (k) => Math.round(list.reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
@@ -126,9 +129,14 @@ export default function MySales({ go, me, openSale }) {
   const multi = Boolean(me) && stores.length > 1;
   const storeParam = multi && !isAll && !isWeb ? storeId : "";
   const seller = me?.role === "seller";
+  // Solo la última petición pinta: al cambiar de tienda deprisa, la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
   const load = () => {
+    const seq = ++loadSeq.current;
     setState("loading");
-    adminFetch(`/admin/sales-analytics/me${storeParam ? `?store=${encodeURIComponent(storeParam)}` : ""}`).then((r) => { setD(r); setState("ok"); }).catch(() => setState("error"));
+    adminFetch(`/admin/sales-analytics/me${storeParam ? `?store=${encodeURIComponent(storeParam)}` : ""}`)
+      .then((r) => { if (seq !== loadSeq.current) return; setD(r); setState("ok"); })
+      .catch(() => { if (seq === loadSeq.current) setState("error"); });
   };
   useEffect(load, [storeParam]); // eslint-disable-line react-hooks/exhaustive-deps
   const m = (v) => money(v, "usd", lang);

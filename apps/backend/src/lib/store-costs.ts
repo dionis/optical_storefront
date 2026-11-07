@@ -1,9 +1,41 @@
 /**
  * Store costs and the monthly result (functional document E13, HU-91 to
  * HU-96). Pure — no I/O; store-pnl.ts loads the data. Amounts in cents.
+ *
+ * 7-nov-2026 («Reglas y comisiones» en acordeones + estado de resultados):
+ *  - frequencies daily / weekly / biweekly join monthly / quarterly / annual /
+ *    one_time. Each one has a MONTHLY NORMALISATION (`MONTHLY_FACTOR`):
+ *      daily × 365/12 (30.4167) · weekly × 52/12 · biweekly × 26/12 ·
+ *      monthly × 1 · quarterly ÷ 3 · annual ÷ 12 · one_time in its month (or
+ *      spread over `amortize_months`).
+ *    The month's charge is spread with a running round (`spreadCents`), so a
+ *    year of an annual item adds up to its amount EXACTLY (1,000.00 / 12 is
+ *    83.33 + … + 83.37, never 12 × 83.33 = 999.96): a statement for the IRS
+ *    that is a few cents short of the invoice is a statement nobody signs.
+ *  - `active` false keeps the item (and its history) and leaves it out of every
+ *    figure; deleting is still soft.
+ *  - `per_sale` true: the amount is charged ON EACH SALE of the store in the
+ *    month («se cobra en cada venta»: bag, cleaning cloth, card terminal fee
+ *    per ticket…). Its frequency is then ignored; it is always a variable cost.
+ *  - `tax_category` is the IRS-style bucket of the financial statement
+ *    (lib/financial-statement.ts), with a Schedule C / Form 1120-S line each.
+ *    Rows written before it existed read it from their `category`
+ *    (`taxCategoryOf`, the same map the migration used to backfill them).
  */
 
-export const COST_FREQUENCIES = ["monthly", "quarterly", "annual", "one_time"] as const;
+export const COST_FREQUENCIES = ["daily", "weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"] as const;
+export type CostFrequency = (typeof COST_FREQUENCIES)[number];
+
+/** Monthly normalisation of each frequency, as a fraction (numerator / denominator) so no float drifts. */
+export const MONTHLY_FACTOR: Record<Exclude<CostFrequency, "one_time">, readonly [number, number]> = {
+  daily: [365, 12],
+  weekly: [52, 12],
+  biweekly: [26, 12],
+  monthly: [1, 1],
+  quarterly: [1, 3],
+  annual: [1, 12],
+};
+
 export const COST_CATEGORIES = [
   "rent",
   "maintenance",
@@ -21,37 +53,154 @@ export const COST_CATEGORIES = [
   "other",
 ] as const;
 
+/** IRS-style buckets of the financial statement (Schedule C Part II / Form 1120-S deductions). */
+export const TAX_CATEGORIES = [
+  "cost_of_goods",
+  "rent",
+  "utilities",
+  "payroll",
+  "payroll_taxes",
+  "insurance",
+  "advertising",
+  "software",
+  "professional_fees",
+  "bank_fees",
+  "repairs",
+  "supplies",
+  "taxes_licenses",
+  "depreciation",
+  "other",
+] as const;
+export type TaxCategory = (typeof TAX_CATEGORIES)[number];
+
+/**
+ * The owner's category → the tax bucket. Used to backfill the rows written
+ * before `tax_category` existed (migration StoreCostFinance2) and as the
+ * fallback of a row that still has none. Choices an accountant would make:
+ * a remake (lens redone) is cost of goods; equipment is depreciated (Form
+ * 4562); shipping has no line of its own and goes to other expenses.
+ */
+export const CATEGORY_TAX: Record<(typeof COST_CATEGORIES)[number], TaxCategory> = {
+  rent: "rent",
+  maintenance: "repairs",
+  utilities: "utilities",
+  salaries: "payroll",
+  insurance: "insurance",
+  licenses: "taxes_licenses",
+  subscriptions: "software",
+  equipment: "depreciation",
+  supplies: "supplies",
+  shipping: "other",
+  repairs: "repairs",
+  remakes: "cost_of_goods",
+  accounting: "professional_fees",
+  other: "other",
+};
+
+/** The tax bucket of an item: its own, or the one its category maps to. */
+export function taxCategoryOf(item: { tax_category?: string | null; category?: string | null }): TaxCategory {
+  const own = item.tax_category ?? "";
+  if ((TAX_CATEGORIES as readonly string[]).includes(own)) return own as TaxCategory;
+  return CATEGORY_TAX[(item.category ?? "") as (typeof COST_CATEGORIES)[number]] ?? "other";
+}
+
+/** A tax bucket back to the closest owner's category, for an item created from the statement side (or an import). */
+export const TAX_DEFAULT_CATEGORY: Record<TaxCategory, (typeof COST_CATEGORIES)[number]> = {
+  cost_of_goods: "remakes",
+  rent: "rent",
+  utilities: "utilities",
+  payroll: "salaries",
+  payroll_taxes: "salaries",
+  insurance: "insurance",
+  advertising: "other",
+  software: "subscriptions",
+  professional_fees: "accounting",
+  bank_fees: "other",
+  repairs: "repairs",
+  supplies: "supplies",
+  taxes_licenses: "licenses",
+  depreciation: "equipment",
+  other: "other",
+};
+
 export interface CostItemLike {
   establishment_id: string | null;
   kind: "fixed" | "variable";
   amount_cents: number;
-  frequency: (typeof COST_FREQUENCIES)[number];
+  frequency: CostFrequency;
   amortize_months: number | null;
   starts_on: string;
   ends_on: string | null;
   allocation: { method: "percent"; shares: Record<string, number> } | { method: "sales" } | null;
+  /** Absent = active (rows and callers older than the flag). */
+  active?: boolean | null;
+  /** Charged on each sale instead of by time («se cobra en cada venta»). */
+  per_sale?: boolean | null;
+  category?: string | null;
+  tax_category?: string | null;
 }
 
 const monthIndex = (yyyyMm: string) => Number(yyyyMm.slice(0, 4)) * 12 + Number(yyyyMm.slice(5, 7)) - 1;
 
-/** What an item costs in a month (YYYY-MM): frequency, validity and amortization. */
-export function monthlyCharge(item: CostItemLike, month: string): number {
+/**
+ * Part `i` (0-based) of an amount spread at `num/den` per period, with a
+ * running round: Σ parts 0..n−1 = round(n × amount × num / den), so whole
+ * cycles add up exactly. Pure, integer cents in and out.
+ */
+export function spreadCents(amountCents: number, num: number, den: number, i: number): number {
+  if (i < 0) return 0;
+  const at = (k: number) => Math.round((amountCents * num * k) / den);
+  return at(i + 1) - at(i);
+}
+
+/** Whether the item is inside its validity in a month (YYYY-MM); the validity is read by month, not by day. */
+export function inValidity(item: Pick<CostItemLike, "starts_on" | "ends_on">, month: string): boolean {
   const m = monthIndex(month);
   const start = monthIndex(item.starts_on.slice(0, 7));
   const end = item.ends_on ? monthIndex(item.ends_on.slice(0, 7)) : Infinity;
-  if (m < start || m > end) return 0;
-  switch (item.frequency) {
-    case "monthly":
-      return item.amount_cents;
-    case "quarterly":
-      return Math.round(item.amount_cents / 3);
-    case "annual":
-      return Math.round(item.amount_cents / 12);
-    case "one_time": {
-      const n = item.amortize_months && item.amortize_months > 1 ? item.amortize_months : 1;
-      return m - start < n ? Math.round(item.amount_cents / n) : 0;
-    }
+  return m >= start && m <= end;
+}
+
+/**
+ * What an item costs in a month (YYYY-MM): frequency, validity and
+ * amortization. 0 for an inactive item and for a per-sale one (that one is
+ * `perSaleCharge`, it needs the month's sales).
+ */
+export function monthlyCharge(item: CostItemLike, month: string): number {
+  if (item.active === false || item.per_sale) return 0;
+  if (!inValidity(item, month)) return 0;
+  const i = monthIndex(month) - monthIndex(item.starts_on.slice(0, 7));
+  if (item.frequency === "one_time") {
+    const n = item.amortize_months && item.amortize_months > 1 ? item.amortize_months : 1;
+    return i < n ? spreadCents(item.amount_cents, 1, n, i) : 0;
   }
+  const f = MONTHLY_FACTOR[item.frequency] ?? MONTHLY_FACTOR.monthly;
+  return spreadCents(item.amount_cents, f[0], f[1], i);
+}
+
+/** A per-sale item in a month: its amount × the sales the store made (0 when inactive or out of validity). */
+export function perSaleCharge(item: CostItemLike, month: string, salesCount: number): number {
+  if (item.active === false || !item.per_sale) return 0;
+  if (!inValidity(item, month)) return 0;
+  return Math.max(0, Math.round(item.amount_cents)) * Math.max(0, Math.floor(salesCount));
+}
+
+/**
+ * The monthly normalised amount of an item, for the accordion headers and
+ * the «Mensual» column: what the frequency is worth in an average month
+ * (not the running-rounded charge of a given month). A one-time item is
+ * shown as its amount ÷ its amortization months; a per-sale item as its amount
+ * × `salesPerMonth` (the store's sales this month), or the amount alone.
+ * Cents, rounded once.
+ */
+export function normalizedMonthly(item: Pick<CostItemLike, "amount_cents" | "frequency" | "amortize_months" | "per_sale">, salesPerMonth: number | null = null): number {
+  if (item.per_sale) return salesPerMonth === null ? item.amount_cents : item.amount_cents * Math.max(0, Math.floor(salesPerMonth));
+  if (item.frequency === "one_time") {
+    const n = item.amortize_months && item.amortize_months > 1 ? item.amortize_months : 1;
+    return Math.round(item.amount_cents / n);
+  }
+  const f = MONTHLY_FACTOR[item.frequency] ?? MONTHLY_FACTOR.monthly;
+  return Math.round((item.amount_cents * f[0]) / f[1]);
 }
 
 /**
@@ -118,14 +267,31 @@ export function computePnl(i: PnlInput): Pnl {
 }
 
 /** Validation of a cost item as written in the panel; reason code or the clean item. */
-export function cleanCostItem(b: Record<string, unknown> | null | undefined, knownStores: string[]): { reason: string } | { item: Omit<CostItemLike, "amount_cents"> & { amount_cents: number; category: string; description: string | null; vendor: string | null; notes: string | null } } {
+export interface CleanCostItem extends Omit<CostItemLike, "amount_cents" | "active" | "per_sale" | "category" | "tax_category"> {
+  amount_cents: number;
+  category: string;
+  tax_category: TaxCategory;
+  active: boolean;
+  per_sale: boolean;
+  description: string | null;
+  vendor: string | null;
+  notes: string | null;
+}
+
+export function cleanCostItem(b: Record<string, unknown> | null | undefined, knownStores: string[]): { reason: string } | { item: CleanCostItem } {
   const x = b ?? {};
   const est = x.establishment_id === null || x.establishment_id === "" || x.establishment_id === undefined ? null : String(x.establishment_id);
   if (est && !knownStores.includes(est)) return { reason: "bad_store" };
   const kind = x.kind === "variable" ? "variable" : x.kind === "fixed" ? "fixed" : null;
   if (!kind) return { reason: "bad_kind" };
-  const category = String(x.category ?? "");
+  // The tax bucket may come alone (a row added from the «Impuestos» accordion
+  // or an import that only knows the IRS line): the owner's category follows it.
+  const taxRaw = x.tax_category === undefined || x.tax_category === null || x.tax_category === "" ? null : String(x.tax_category);
+  if (taxRaw !== null && !(TAX_CATEGORIES as readonly string[]).includes(taxRaw)) return { reason: "bad_tax_category" };
+  const category = String(x.category ?? (taxRaw ? TAX_DEFAULT_CATEGORY[taxRaw as TaxCategory] : ""));
   if (!(COST_CATEGORIES as readonly string[]).includes(category)) return { reason: "bad_category" };
+  const tax_category = (taxRaw as TaxCategory | null) ?? CATEGORY_TAX[category as (typeof COST_CATEGORIES)[number]];
+  const flag = (v: unknown, dflt: boolean) => (v === undefined || v === null || v === "" ? dflt : v === true || v === "true" || v === 1 || v === "1");
   const amount = Number(x.amount);
   if (!Number.isFinite(amount) || amount < 0 || amount > 10_000_000) return { reason: "bad_amount" };
   const frequency = String(x.frequency ?? "monthly");
@@ -159,6 +325,9 @@ export function cleanCostItem(b: Record<string, unknown> | null | undefined, kno
       establishment_id: est,
       kind,
       category,
+      tax_category,
+      active: flag(x.active, true),
+      per_sale: flag(x.per_sale, false),
       description: txt(x.description, 160),
       amount_cents: Math.round(amount * 100),
       frequency: frequency as CostItemLike["frequency"],

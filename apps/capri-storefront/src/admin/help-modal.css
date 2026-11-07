@@ -1,0 +1,127 @@
+/* Ventana de ayuda (HelpTip.jsx → HelpModal): delante de todo, con el fondo
+   oscurecido y desenfocado. Centrada en escritorio y tablet apaisada; hoja de
+   ancho completo que sube desde abajo en móvil y tablet vertical (< 900 px o
+   vertical hasta 1024). Solo tokens --adm-*: el portal cuelga de `.adm-shell`,
+   así que hereda el color de la tienda y el modo oscuro. */
+
+.adm-help-backdrop {
+  position: fixed; inset: 0; z-index: 1400;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(11, 14, 28, .42);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1); backdrop-filter: blur(6px) saturate(1.1);
+  animation: admHelpFade .18s ease both;
+  overscroll-behavior: contain;
+}
+.adm-shell[data-mode="dark"] .adm-help-backdrop { background: rgba(2, 4, 10, .62); }
+@keyframes admHelpFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes admHelpRise { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes admHelpSheet { from { transform: translateY(100%); } to { transform: none; } }
+
+.adm-help-modal {
+  position: relative; width: min(720px, 100%); max-height: min(88vh, 820px); max-height: min(88dvh, 820px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--adm-surface); color: var(--adm-ink); border: 1px solid var(--adm-line); border-radius: 18px;
+  box-shadow: 0 30px 80px -24px rgba(11, 14, 28, .55), var(--adm-shadow-lg);
+  font-family: var(--adm-font); font-size: 14px; line-height: 1.55; letter-spacing: 0; text-align: left; text-transform: none; font-weight: 400;
+  animation: admHelpRise .22s var(--adm-ease) both;
+}
+.adm-help-modal.has-nav { width: min(860px, 100%); }
+.adm-help-grip { display: none; }
+
+/* Cabecera: guía · grupo, título, resumen y cerrar */
+.adm-help-head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "kicker close" "title close" "lead lead";
+  align-items: center; gap: 2px 12px; padding: 16px 16px 14px 22px;
+  border-bottom: 1px solid var(--adm-line); background: var(--adm-grad-surface);
+}
+.adm-help-kicker { grid-area: kicker; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-accent-ink); }
+.adm-help-head h3 { grid-area: title; margin: 0; font: 600 21px/1.2 var(--adm-display); font-optical-sizing: auto; letter-spacing: -.015em; color: var(--adm-ink); }
+.adm-help-lead { grid-area: lead; margin: 8px 0 0; color: var(--adm-muted); font-size: 14px; line-height: 1.5; max-width: 62ch; }
+.adm-help-close {
+  grid-area: close; align-self: start; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
+  border: 1px solid var(--adm-line); background: var(--adm-surface); color: var(--adm-muted); cursor: pointer; transition: background .15s, color .15s;
+}
+.adm-help-close:hover, .adm-help-close:focus-visible { background: var(--adm-accent-soft); color: var(--adm-accent-ink); outline: none; }
+.adm-help-close:focus-visible { box-shadow: var(--adm-shadow-glow); }
+
+/* Cuerpo: temas relacionados a la izquierda + texto */
+.adm-help-grid { display: grid; grid-template-columns: 1fr; min-height: 0; flex: 1; }
+.adm-help-modal.has-nav .adm-help-grid { grid-template-columns: 210px minmax(0, 1fr); }
+.adm-help-nav { border-right: 1px solid var(--adm-line); background: var(--adm-surface-2); padding: 12px 8px; overflow: auto; overscroll-behavior: contain; }
+.adm-help-nav small { display: block; padding: 0 10px 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--adm-faint); }
+.adm-help-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.adm-help-nav button {
+  width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--adm-muted);
+  font: 600 12.5px/1.3 var(--adm-font); cursor: pointer; transition: background .15s, color .15s;
+}
+.adm-help-nav button:hover, .adm-help-nav button:focus-visible { background: var(--adm-row-hover); color: var(--adm-ink); outline: none; }
+.adm-help-nav button.on { background: var(--adm-accent-soft); color: var(--adm-accent-ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--adm-accent-line); }
+
+.adm-help-body { overflow: auto; padding: 18px 24px 22px; display: flex; flex-direction: column; gap: 18px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; outline: none; }
+.adm-help-sec h4 { display: flex; align-items: center; gap: 7px; margin: 0 0 7px; font: 700 12px/1.2 var(--adm-font); letter-spacing: .05em; text-transform: uppercase; color: var(--adm-accent-ink); }
+.adm-help-sec p { margin: 0; color: var(--adm-ink); }
+.adm-help-sec ol, .adm-help-sec ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 5px; }
+.adm-help-sec ol li::marker { font-weight: 700; color: var(--adm-accent-ink); }
+
+/* Fórmula: bloque monoespaciado, una línea por paso, con scroll propio si no cabe */
+.adm-help-formula {
+  margin: 0; padding: 12px 14px; border-radius: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-left: 3px solid var(--adm-accent);
+  color: var(--adm-ink); font: 500 13.5px/1.65 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; tab-size: 2;
+}
+.adm-help-formula code { font: inherit; background: none; padding: 0; color: inherit; }
+
+.adm-help-example { padding: 11px 13px; border-radius: 12px; background: var(--adm-gold-soft); border: 1px solid var(--adm-gold-line); color: var(--adm-ink); font-variant-numeric: tabular-nums; }
+.adm-help-used { list-style: none; padding-left: 0 !important; flex-direction: row !important; flex-wrap: wrap; gap: 6px !important; }
+.adm-help-used li { padding: 5px 11px; border-radius: 999px; background: var(--adm-accent-soft); color: var(--adm-accent-ink); border: 1px solid var(--adm-accent-line); font-size: 12.5px; font-weight: 600; }
+.adm-help-pitfalls { list-style: none; padding-left: 0 !important; }
+.adm-help-pitfalls li { position: relative; padding: 8px 11px 8px 32px; border-radius: 10px; background: var(--adm-amber-soft); border: 1px solid var(--adm-danger-line); }
+.adm-help-pitfalls li::before { content: "!"; position: absolute; left: 10px; top: 9px; width: 15px; height: 15px; border-radius: 999px; background: var(--adm-amber); color: #fff; font: 800 10px/15px var(--adm-font); text-align: center; }
+
+.adm-help-foot { display: flex; justify-content: flex-end; padding: 10px 16px; border-top: 1px solid var(--adm-line); background: var(--adm-surface); }
+.adm-help-foot .btn-sm { min-width: 120px; }
+
+/* Oscuro: los fondos suaves fijos (dorado/ámbar) se apagan para no deslumbrar. */
+.adm-shell[data-mode="dark"] .adm-help-example { background: color-mix(in srgb, var(--adm-gold) 14%, var(--adm-surface)); border-color: color-mix(in srgb, var(--adm-gold) 35%, var(--adm-surface)); }
+.adm-shell[data-mode="dark"] .adm-help-pitfalls li { background: color-mix(in srgb, var(--adm-amber) 14%, var(--adm-surface)); border-color: color-mix(in srgb, var(--adm-amber) 35%, var(--adm-surface)); }
+.adm-shell[data-mode="dark"] .adm-help-formula { background: color-mix(in srgb, var(--adm-accent) 8%, var(--adm-bg)); }
+
+/* Botón «i» (antiguo InfoTip de las tarjetas): mismo dibujo, abre la ventana. */
+.adm-help-info.on { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
+@media (pointer: coarse) { .adm-tip-btn.adm-help-info { min-width: 44px; min-height: 44px; } }
+
+/* Móvil y tablet vertical: hoja de ancho completo que sube desde abajo. Los
+   temas relacionados pasan a chips horizontales encima del texto. */
+@media (max-width: 899.98px), (max-width: 1024px) and (orientation: portrait) {
+  .adm-help-backdrop { padding: 0; place-items: end stretch; }
+  .adm-help-modal, .adm-help-modal.has-nav {
+    width: 100%; max-height: 90vh; max-height: 90dvh; border-radius: 20px 20px 0 0; border-bottom: 0;
+    animation: admHelpSheet .26s var(--adm-ease) both;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .adm-help-grip { display: block; position: absolute; top: 7px; left: 50%; width: 42px; height: 5px; margin-left: -21px; border-radius: 999px; background: var(--adm-line); z-index: 1; }
+  .adm-help-head { padding-top: 20px; }
+  .adm-help-modal.has-nav .adm-help-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .adm-help-nav { border-right: 0; border-bottom: 1px solid var(--adm-line); padding: 8px 12px; }
+  .adm-help-nav small { display: none; }
+  .adm-help-nav ul { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 2px; scrollbar-width: none; }
+  .adm-help-nav button { width: auto; white-space: nowrap; min-height: 40px; padding: 0 12px; border: 1px solid var(--adm-line); border-radius: 999px; }
+  .adm-help-nav button.on { border-color: var(--adm-accent-line); }
+  .adm-help-body { padding: 16px 18px 18px; }
+  .adm-help-foot .btn-sm { flex: 1; min-height: 48px; }
+}
+@media (max-width: 480px) {
+  .adm-help-head { padding-left: 16px; }
+  .adm-help-head h3 { font-size: 19px; }
+  .adm-help-formula { font-size: 12.5px; }
+}
+@media (pointer: coarse) {
+  .adm-help-close { width: 44px; height: 44px; }
+  .adm-help-nav button { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-help-modal, .adm-help-backdrop { animation: none !important; }
+}
+@media print { .adm-help-backdrop { display: none !important; } }

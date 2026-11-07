@@ -33,7 +33,7 @@ import { openRules } from "../../../../../lib/store-pricing-data";
  *     store: <id> | null,
  *     costs: [{ sku, model, book_cents, cost_cents, origin, source,
  *               master_cost_cents, inherited, updated_at,
- *               price_cents, product_id }],
+ *               price_cents, product_id, price_source }],
  *     summary: { rows, supplier_rows, owner_edited, store_variations,
  *                catalog_models, with_cost, without_cost,
  *                missing: [{ sku, title, brand_slug }] }
@@ -48,9 +48,11 @@ import { openRules } from "../../../../../lib/store-pricing-data";
  *
  * `price_cents` is the model's CURRENT selling price for the same scope (the
  * store's, or the chain's with no store — `catalogSellingPrices`, the figure
- * the catalogue card and the till use), with its `product_id`; null when the
- * catalogue has no price for that key. Cost and price on one row is what lets
- * the costs tab say the margin per model. Appended after the nine fields above.
+ * the catalogue card and the till use), with its `product_id` and
+ * `price_source` (a store: exact / band / adjusted / base; the master: owner /
+ * band / rule — the chain's general rule — / base); null when the catalogue
+ * has no price for that key. Cost and price on one row is what lets the costs
+ * tab say the margin per model. Appended after the nine fields above.
  *
  * `summary` answers the question the owner actually asks — how much of the
  * catalogue has a real cost FOR THIS STORE: `with_cost` + `without_cost` =
@@ -89,7 +91,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       openRules(req.scope, storeId ? [storeId] : []).catch(() => []),
     ]);
     const index = indexFrameCostVariations(variations);
-    const prices = catalogSellingPrices(catalog, rules, storeId);
+    // Joined by the key each model's COST lives under (model first — v2), so a
+    // model whose SKUs are slug-like still shows its price next to its cost.
+    const prices = catalogSellingPrices(catalog, rules, storeId, new Date(), new Map(costs.map((c) => [c.sku, c])));
     res.json({
       store: storeId,
       costs: withCatalogPrice(frameCostStoreRows(costs, index, storeId).map(frameCostStoreView), prices),

@@ -1,6 +1,7 @@
 // Tiendas físicas (API real /admin/establishments). Módulo sin hook de idioma:
 // los errores viajan como CLAVES adm.err.stores.* y traduce quien pinta.
-import { adminFetch } from "./adminApi.js";
+import { adminFetch, invalidateCache } from "./adminApi.js";
+import { ADMIN_LENS_MATRIX_PATH } from "../data/lensCatalog.js";
 
 const reasonKey = (e, fallback) => {
   const r = (e && e.reason) || (e && e.payload && e.payload.reason);
@@ -63,7 +64,10 @@ export async function setStoreMinimum(id, { scope, productId = null, value }) {
 /** Plan (apply=false) o aplicación (apply=true) de la lista de precios del dueño. */
 export async function importOwnerPrices(prices, apply = false) {
   try {
-    return await adminFetch("/admin/store-pricing/import", { method: "POST", body: { prices, apply } });
+    const data = await adminFetch("/admin/store-pricing/import", { method: "POST", body: { prices, apply } });
+    // An applied import rewrites lens cells too: the till's list (lensCatalog.js) must not keep the old one.
+    if (apply) invalidateCache(ADMIN_LENS_MATRIX_PATH);
+    return data;
   } catch (e) {
     throw new Error(pricingKey(e, "adm.err.pricing.importFailed"));
   }

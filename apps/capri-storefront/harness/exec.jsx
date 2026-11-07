@@ -22,8 +22,7 @@ import MySales from "/src/admin/MySales.jsx";
 import { setPeriodState } from "/src/admin/periodStore.js";
 import PricingPanel from "../src/admin/PricingPanel.jsx";
 import EmptyPeriod from "/src/admin/EmptyPeriod.jsx";
-import CatalogManager from "/src/admin/CatalogManager.jsx";
-import { loadLive } from "/src/data/catalogStore.js";
+import { matrixMock } from "./matrix-mock.js";
 
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get("mode") || "light";
@@ -315,6 +314,9 @@ window.fetch = async (input, init) => {
   if (!url.pathname.startsWith("/medusa/admin/")) return realFetch(input, init);
   const p = url.pathname.replace("/medusa", "");
   const g = (k) => url.searchParams.get(k) || "";
+  // «Productos y precios» (matriz, altas, importación): harness/matrix-mock.js.
+  const fromMatrix = await matrixMock(p, url, init);
+  if (fromMatrix) return fromMatrix;
   await new Promise((r) => setTimeout(r, 120));
   if (p === "/admin/establishments") return json({ establishments: STORES });
   // Surtido por tienda (/admin/store-assortment/:id[/products|/rule]): lo que
@@ -762,11 +764,10 @@ const OWNER = { id: "u1", role: "owner", is_admin: true, display_name: "Rubí Da
 const MANAGER = { id: "u2", role: "manager", is_admin: false, display_name: "Daniela Ruiz", privileges: ["costs.view"], store_ids: ["est_02"] };
 const SELLER = { id: "u3", role: "seller", is_admin: false, display_name: "Daniela Ruiz", privileges: [], seller_code: "DAN", store_ids: ["est_02"] };
 const me = ROLE === "owner" ? OWNER : ROLE === "seller" ? SELLER : MANAGER;
-const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go, params) => <Sellers me={me} go={go} params={params} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
-  // «Productos» del grupo Comercial: el acordeón por marca con el catálogo
-  // simulado de arriba (CM_FRAMES/CM_CASES). `loadLive` lo mete en el store del
-  // catálogo, que en el banco no lo carga nadie al arrancar.
-  products: (go, params) => <CatalogScreen params={params} />,
+const SCREENS = { pricing: (go, params) => <PricingPanel me={me} go={go} sellers={[]} params={params} />, exec: (go) => <ExecutiveHub me={me} go={go} />, salesboard: (go) => <SalesBoard me={me} go={go} tabs={["costs"]} />, audit: () => <AuditLog me={me} />, sellers: (go, params) => <Sellers me={me} go={go} params={params} />, storecosts: () => <StoreCosts me={me} />, statement: (go) => <StoreStatement me={me} go={go} />, stores: () => <Stores />, mysales: (go) => <MySales me={me} go={go} />,
+  // «Productos y precios» (Productos + Precios y costos, 6-nov-2026): la matriz
+  // con el backend simulado de harness/matrix-mock.js; ?sub= elige la pestaña.
+  products: (go, params) => <PricingPanel me={me} go={go} sellers={[]} params={params} />,
   // Estado «el período elegido no tiene nada»: las tres variantes juntas para
   // revisarlas de un vistazo en claro y en oscuro (ver harness/README).
   empty: () => (
@@ -777,11 +778,6 @@ const SCREENS = { pricing: (go) => <PricingPanel me={me} go={go} sellers={[]} />
       <EmptyPeriod kind="cash" compact />
     </div>
   ) };
-
-function CatalogScreen({ params = null }) {
-  useEffect(() => { loadLive({ force: true }).catch(() => {}); }, []);
-  return <CatalogManager me={me} params={params} />;
-}
 
 function App() {
   const [tab, setTab] = useState(TAB0);

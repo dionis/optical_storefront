@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../lib/audit";
+import { revokeSessions } from "../../../../lib/session-control";
 
 /**
  * POST /admin/team/password — el admin AUTENTICADO cambia SU contraseña.
@@ -11,6 +12,10 @@ import { recordAudit } from "../../../../lib/audit";
  * hasta completar este cambio. Exige la contraseña actual (la temporal) para
  * que un panel abierto en otro equipo no baste para secuestrar la cuenta. Es
  * también lo que usa la sección Contraseña de «Mi perfil», en cualquier momento.
+ *
+ * Cierra las demás sesiones (lib/session-control.ts): todo token anterior al
+ * cambio deja de valer. El panel vuelve a iniciar sesión con la contraseña nueva
+ * en el acto (adminTeam.js changeOwnPassword), así que la persona no lo nota.
  */
 interface Body {
   current_password?: string;
@@ -61,6 +66,10 @@ export async function POST(
   await users.updateUsers({ id: me.id, metadata });
 
   await recordAudit(req.scope, { actorId, action: "password.change", entity: "user", entityId: me.id });
+  // Every other device is signed out: a stolen or forgotten session does not
+  // survive the new password. This tab's token dies with them; the panel signs
+  // in again right away with the new password.
+  await revokeSessions(req.scope, { userId: me.id, actorId, reason: "password_changed" });
   logger.info(`[team] ${me.email} changed their password`);
-  res.json({ ok: true });
+  res.json({ ok: true, sessions_revoked: true });
 }

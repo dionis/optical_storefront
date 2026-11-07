@@ -1,5 +1,5 @@
 // Dónde se usa: pestaña «Sincronización del catálogo» de /admin (CatalogSync.jsx)
-// y la marca «Nuevo» de Productos (CatalogManager.jsx).
+// y la marca «Nuevo» de «Productos y precios» (pricing/PriceMatrix.jsx).
 //
 // Sin hook de idioma: aquí no hay prosa, solo claves (`adm.sync.*`) que traduce
 // quien pinta. El servidor es /admin/catalog-sync (apps/backend/src/api/admin/catalog-sync).

@@ -6,7 +6,8 @@ import type StoreAssortmentModuleService from "../modules/store-assortment/servi
 import type { EstablishmentRow } from "./establishments";
 import {
   catalogSellingPrices,
-  frameCostKeyOf,
+  costRefOf,
+  frameCostKeyFor,
   indexFrameCostVariations,
   listFrameCostVariations,
   listFrameCosts,
@@ -15,9 +16,10 @@ import {
   type FrameCostRow,
   type FrameCostVariationIndex,
 } from "./frame-cost";
-import { brandOf, isExposed, type AssortmentRuleLike } from "./store-assortment";
-import { hasGlobalPrice, storeLinePrice, type PriceRuleLike } from "./store-pricing";
+import { brandOf, chainBrandRules, isExposed, type AssortmentRuleLike } from "./store-assortment";
+import { storeLinePrice, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { absoluteImageUrl } from "./image-url";
 
 /**
  * HU-13 — «Como dueño, quiero ver un producto con su precio en todas las
@@ -61,8 +63,9 @@ export interface AcrossCosts {
   variations: FrameCostVariationIndex;
 }
 
-export type AcrossSource = "exact" | "band" | "adjusted" | "base";
-export type AcrossMasterSource = "owner" | "band" | "base";
+export type AcrossSource = "exact" | "brand" | "band" | "adjusted" | "base";
+/** The master cell's reason: the owner's price, the band, the CHAIN's general rule, or the bare base (`masterLinePrice`). */
+export type AcrossMasterSource = "owner" | "band" | "rule" | "base";
 
 export interface AcrossStoreCell {
   establishment_id: string;
@@ -90,7 +93,7 @@ export interface AcrossRow {
   is_case: boolean;
   /** Medusa price before any rule, in cents; null when the model has none. */
   base_cents: number | null;
-  /** The chain's price (the owner's global price, else base through the band), in cents. */
+  /** The chain's price (the owner's global price, else base through the chain rule and the band), in cents. */
   master_price_cents: number | null;
   master_source: AcrossMasterSource;
   /** The chain's cost; only for cost viewers (`redactAcrossCosts`). */
@@ -102,6 +105,7 @@ const cents = (usd: number) => Math.round(usd * 100);
 
 function sourceOf(line: ReturnType<typeof storeLinePrice>): AcrossSource {
   if (line.frame_source === "store_exact") return "exact";
+  if (line.frame_source === "brand") return "brand";
   if (line.band) return "band";
   return line.adjustment ? "adjusted" : "base";
 }
@@ -121,6 +125,7 @@ export function buildAcrossRows(
   const models: CatalogModel[] = products.map((p) => ({
     product_id: p.product_id,
     sku: p.skus[0] ?? p.title,
+    skus: p.skus,
     title: p.title,
     brand_slug: p.brand,
     is_case: p.brand === "case" || p.brand === "cases",
@@ -132,8 +137,8 @@ export function buildAcrossRows(
     // The chain's figure, from the SAME function the costs tab joins on — one
     // model at a time, so two models normalising to one SKU key never shadow
     // each other here (there, the first wins on purpose).
-    const masterHit = catalogSellingPrices([m], rules, null, now).get(frameCostKeyOf(m.sku));
-    const owner = hasGlobalPrice(rules, scope, m.product_id, now);
+    const costRef = costRefOf(m);
+    const masterHit = catalogSellingPrices([m], rules, null, now, costs?.rows).get(frameCostKeyFor(costRef, costs?.rows));
     const masterPrice = masterHit ? masterHit.price_cents : null;
     const row: AcrossRow = {
       product_id: m.product_id,
@@ -145,12 +150,12 @@ export function buildAcrossRows(
       is_case: m.is_case,
       base_cents: m.price_cents,
       master_price_cents: masterPrice,
-      master_source: owner ? "owner" : masterPrice != null && masterPrice !== m.price_cents ? "band" : "base",
+      master_source: (masterHit?.source as AcrossMasterSource | undefined) ?? "base",
       stores: stores.map((s) => {
         const line =
           m.price_cents == null
             ? null
-            : storeLinePrice(rules, { establishmentId: s.id, scope, target: m.product_id, base: m.price_cents / 100, lenses: 0 }, now);
+            : storeLinePrice(rules, { establishmentId: s.id, scope, target: m.product_id, base: m.price_cents / 100, lenses: 0, brand: m.brand_slug }, now);
         const cell: AcrossStoreCell = {
           establishment_id: s.id,
           code: s.code,
@@ -160,11 +165,12 @@ export function buildAcrossRows(
           source: line ? sourceOf(line) : "base",
           exposed: isExposed(s.assortment, { id: m.product_id, brand: m.brand_slug }),
         };
-        if (costs) cell.cost_cents = resolveFrameCost(costs.rows, costs.variations, m.sku, s.id)?.cost_cents ?? null;
+        // v2: by MODEL first, then any SKU (lib/frame-cost.ts frameCostCandidates).
+        if (costs) cell.cost_cents = resolveFrameCost(costs.rows, costs.variations, costRef, s.id)?.cost_cents ?? null;
         return cell;
       }),
     };
-    if (costs) row.cost_cents = resolveFrameCost(costs.rows, costs.variations, m.sku, null)?.cost_cents ?? null;
+    if (costs) row.cost_cents = resolveFrameCost(costs.rows, costs.variations, costRef, null)?.cost_cents ?? null;
     return row;
   });
 }
@@ -224,7 +230,7 @@ export async function searchAcrossProducts(container: MedusaContainer, q: string
   return rows.map((r) => ({
     product_id: String(r["id"]),
     title: String(r["title"] ?? ""),
-    thumbnail: (r["thumbnail"] as string | null) ?? null,
+    thumbnail: absoluteImageUrl(r["thumbnail"]),
     brand: brandOf(r["metadata"] as Record<string, unknown> | null),
     skus: Array.isArray(r["skus"]) ? (r["skus"] as unknown[]).map(String).filter(Boolean) : [],
     base: prices.get(String(r["id"])) ?? null,
@@ -249,6 +255,15 @@ export async function assortmentByStore(
     }
   } catch {
     // An un-migrated table is "every store exposes everything", the default.
+  }
+  // Brands switched off for the whole chain hide in every store (lib/store-assortment.ts).
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const off = (await pg("catalog_brand").whereNull("deleted_at").where({ active: false }).select("slug")) as Array<{ slug: string }>;
+    const chain = chainBrandRules(off.map((r) => r.slug));
+    if (chain.length) for (const bucket of out.values()) bucket.unshift(...chain);
+  } catch {
+    // No registry yet: no chain-wide switch.
   }
   return out;
 }

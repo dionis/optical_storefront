@@ -35,6 +35,9 @@
   background: var(--adm-surface-2); color: var(--adm-muted); }
 .pp-across-src.exact, .pp-across-src.owner { background: var(--adm-accent-soft, var(--adm-surface-2)); color: var(--adm-accent-ink, var(--adm-navy)); }
 .pp-across-src.band { background: var(--adm-gold-soft, var(--adm-surface-2)); color: var(--adm-amber-dark, #92400e); }
+.pp-across-src.rule { background: var(--adm-blue-soft, var(--adm-surface-2)); color: var(--adm-blue-dark, var(--adm-navy)); }
+/* Precio venta del listado de costos: la cifra y, si la hay, su etiqueta de origen. */
+.pp-price-src { display: inline-flex; align-items: center; gap: 6px; }
 .pp-across-hidden { font-size: 9.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-faint); }
 
 @media (max-width: 768px) {

@@ -95,7 +95,10 @@ function DangerZone({ t, lang, demo }) {
  */
 const GROUPS = [
   ["secrets", (k) => k.startsWith("secret.") || k.startsWith("storage.")],
-  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.")],
+  // `db.` (migrations applied at boot) lives with the server's access checks:
+  // without a matcher the row was silently dropped and a failed migration
+  // never showed up here.
+  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.") || k.startsWith("db.")],
   ["payments", (k) => k.startsWith("payments.")],
   ["services", (k) => k.startsWith("notifications.") || k.startsWith("sheet.") || k.startsWith("ocr.")],
 ];

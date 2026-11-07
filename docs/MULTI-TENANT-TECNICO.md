@@ -118,6 +118,15 @@ primer usuario al montar la tienda, **nosotros quedamos como dueño para siempre
 el dueño real no puede nombrar superadmins. Es el bloqueo principal para "dar el
 control al dueño" y se resuelve en §7.
 
+**Paso 1 hecho (7-nov-2026):** `STORE_OWNER_EMAIL` (variable del despliegue, en
+Coolify) nombra al dueño por su correo de acceso; sin ella, o si ningún usuario
+tiene ese correo, sigue siendo el más antiguo (`pickOwnerId` en `staff-roles.ts`,
+`ownerUserId` en `staff-scope.ts`, que ahora usan también `/admin/team` y los
+aprobadores de descuentos). El dueño anterior, sin filas de rol, queda como
+superadmin (regla «existía antes de los roles»). Solo quien opera la
+infraestructura puede traspasar la propiedad; la transferencia desde el panel
+(§7.2.3) sigue pendiente.
+
 ## 5. Componentes del módulo
 
 ```

@@ -13,7 +13,7 @@
 // filtro no hace nada. Cambiar de tienda o de mes vuelve a pedir el resultado
 // y los costos (el resultado llega con todas las tiendas y aquí se acota a la
 // elegida: la ruta /admin/store-costs/pnl no toma tienda).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
@@ -30,7 +30,9 @@ import SortTh from "./SortTh.jsx";
 import "./screens.css";
 
 const CATEGORIES = ["rent", "maintenance", "utilities", "salaries", "insurance", "licenses", "subscriptions", "equipment", "supplies", "shipping", "repairs", "remakes", "accounting", "other"];
-const FREQS = ["monthly", "quarterly", "annual", "one_time"];
+// Every frequency the server accepts (lib/store-costs.ts, «Reglas y comisiones»): a weekly or
+// daily item opened here showed a raw key and a select that silently read «Mensual» (QA v2).
+const FREQS = ["daily", "weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"];
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 const EMPTY = { establishment_id: "", kind: "fixed", category: "rent", description: "", amount: "", frequency: "monthly", amortize_months: "", starts_on: `${thisMonth()}-01`, ends_on: "", vendor: "", notes: "", allocation: { method: "sales", shares: {} }, attachment: null };
@@ -64,15 +66,19 @@ export default function StoreCosts({ me }) {
 
   useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
   // Cada cambio de mes o de tienda vuelve a pedir las dos lecturas (y se
-  // descarta la respuesta de una petición que ya quedó vieja).
+  // descarta la respuesta de una petición que ya quedó vieja). El contador
+  // cubre también la relectura tras guardar o borrar, que no pasa por la
+  // limpieza del efecto: solo la última petición pinta.
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     let cancelled = false;
     setState("loading");
     Promise.all([
       adminFetch(`/admin/store-costs/pnl?month=${month}`).catch(() => null),
       adminFetch(`/admin/store-costs${storeOnly ? `?store=${encodeURIComponent(storeOnly)}` : ""}`).catch(() => null),
     ]).then(([p, list]) => {
-      if (cancelled) return;
+      if (cancelled || seq !== loadSeq.current) return;
       setPnl(p);
       setItems(list?.items || []);
       setState(p || list ? "ready" : "error");

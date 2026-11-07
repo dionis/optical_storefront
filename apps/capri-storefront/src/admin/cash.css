@@ -130,4 +130,26 @@
   .cash-card { padding: 16px 14px 14px; }
   .cc-layout { grid-template-columns: 1fr; }
 }
+/* Campos de los paneles de caja con los tokens del panel: sin esto, en oscuro
+   salían con el gris nativo del navegador y esquinas rectas. */
+.cash-card input:not([type=checkbox]):not([type=radio]), .cash-card select, .cash-card textarea {
+  border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface); color: var(--adm-ink); padding: 6px 10px; box-sizing: border-box;
+}
+.cash-card input:not([type=checkbox]):not([type=radio]):focus, .cash-card select:focus, .cash-card textarea:focus { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.cash-card input::placeholder, .cash-card textarea::placeholder { color: var(--adm-faint); }
+
+/* Tablet vertical: los paneles de caja (movimiento, cierre) suben como hoja
+   inferior de ancho completo; el contador de billetes queda a mano. */
+@keyframes cashSheet { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 899.98px), (max-width: 1024px) and (orientation: portrait) {
+  .cash-overlay { align-items: flex-end; padding: 0; left: 0; }
+  .cash-backdrop { left: 0; }
+  .cash-card, .cash-card.wide { width: 100%; max-width: 100%; margin: 0; max-height: 94vh; max-height: 94dvh; overflow-y: auto; overscroll-behavior: contain; border-radius: 20px 20px 0 0; border-bottom: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); animation: cashSheet .26s var(--adm-ease, ease) both; }
+}
+@media (pointer: coarse) {
+  .cash-card .btn-sm, .cash-card .btn-xs, .cash-row-actions .btn-xs { min-height: 44px; }
+  .cash-card input, .cash-card select, .cash-form-row input, .cash-form-row select { min-height: 48px; font-size: 16px; }
+  .cash-card-close { width: 44px; height: 44px; top: 10px; right: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .cash-card { animation: none !important; } }
 @media print { .cash-overlay { display: none !important; } }

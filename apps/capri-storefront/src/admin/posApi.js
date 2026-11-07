@@ -37,7 +37,7 @@ const cached = (path, ttl, fallback) => cachedGet(path, { ttl, fetcher: () => ca
 /** Tras una mutación: olvida esas lecturas y vuelve a pedir las que estén en pantalla. */
 const after = (prefixes) => (r) => { prefixes.forEach((p) => invalidate(p)); return r; };
 /** Lo que cambia al registrar, cobrar, entregar o anular una venta. */
-const SALE_READS = ["/admin/pos/sales", "/admin/sales-analytics", "/admin/pos/cash", "/admin/pos/statement", "/admin/order-board", "/admin/store-costs/pnl", "/admin/start-map", "/admin/pos/customers"];
+const SALE_READS = ["/admin/pos/sales", "/admin/sales-analytics", "/admin/pos/cash", "/admin/pos/statement", "/admin/order-board", "/admin/store-costs/pnl", "/admin/start-map", "/admin/pos/customers", "/admin/patients"];
 const CASH_READS = ["/admin/pos/cash", "/admin/start-map"];
 const CONTEXT_READS = ["/admin/pos/context", "/admin/pos/terminals", "/admin/pos/payment-methods", "/admin/pos/settings", "/admin/establishments"];
 const TTL = { context: 300_000, list: 60_000, short: 30_000 };
@@ -46,6 +46,9 @@ export const posContext = () => cached("/admin/pos/context", TTL.context);
 export const searchProducts = (store, q) => call(`/admin/pos/products${qs({ store, q })}`);
 export const searchCustomers = (q) => call(`/admin/pos/customers${qs({ q })}`);
 export const fetchCustomer = (id) => cached(`/admin/pos/customers/${encodeURIComponent(id)}`, TTL.short);
+/** «Pacientes» (docs/PATIENTS.md): lista con totales y la ficha completa de una persona. */
+export const fetchPatients = (filters) => cached(`/admin/patients${qs(filters)}`, TTL.short);
+export const fetchPatient = (id) => cached(`/admin/patients/${encodeURIComponent(id)}`, TTL.short);
 export const quote = (body) => call("/admin/pos/quote", { method: "POST", body });
 
 export const requestApproval = (body) => call("/admin/pos/discount-approvals", { method: "POST", body });

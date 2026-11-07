@@ -1,27 +1,27 @@
-// Dónde se usa: pestaña «Precios y costos» de /admin (clave `pricing`, grupo
-// Comercial, solo dueño y superadmin).
+// Dónde se usa: pestaña «Productos y precios» de /admin (clave `products`,
+// grupo Comercial, solo dueño y superadmin). Desde el 6-nov-2026 fusiona las
+// antiguas «Productos» (catálogo por marca, surtido por tienda) y «Precios y
+// costos» en UNA pantalla, como pidió el dueño (contrato: docs/PRICE-MATRIX.md).
 //
-// UN solo panel para todo lo que pidió el dueño: «agrupar todo lo de gestión de
-// costos y precios y ganancia en un solo panel para el superadmin, incluido el
-// precio por tienda … en el mismo sitio: comisiones, costos fijos, costos
-// variables, impuestos, para saber dónde ir si quiere cambiar algo concreto».
+// Subpestañas, en `?sub=`: Monturas · Estuches · Lentes · Tratamientos son la
+// MATRIZ (pricing/PriceMatrix.jsx: artículo · costo · por tienda precio y
+// descuento); «Reglas y comisiones» guarda todo lo que NO es de un artículo y
+// ya existía en «Precios y costos»: regla general de monturas y estuches y %
+// de lentes por tienda, suelo y techo del precio (banda), comisiones, costos
+// de la tienda y por venta, impuesto, importar la lista de precios del
+// navegador y las fichas de costo por pedido. Nada de lo anterior se perdió.
 //
-// Usa el selector de tienda GLOBAL (StoreFilter): «Todas las tiendas» edita el
-// MAESTRO (la lista del dueño) y una tienda edita SUS variaciones sobre ese
-// maestro, con la pastilla «Heredado» donde no ha cambiado nada. No tiene filtro
-// de período: un precio no es un informe. Backend: /admin/pricing/* (una sola
-// lectura, `GET /admin/pricing/overview`).
+// Enlaces viejos: `?tab=pricing` cae aquí (LEGACY_TABS en AdminDashboard) y
+// los `sub` antiguos se traducen: frames/lenses(-prog)/treatments a su matriz,
+// costs/sheets a «Reglas y comisiones».
 //
-// VISTAS EN PESTAÑAS, no una pila de acordeones: «vamos a hacerlo por vistas en
-// pestañas, para evitar hacer scroll lo menos posible. Primero el manejo de las
-// monturas, luego el manejo de los lentes … luego el tratamiento de los
-// lentes». Ese es el orden de TABS, y cada pestaña entra sola en la pantalla.
-// La pestaña abierta viaja en `?sub=` (ver pricing/useSub.js), así que recargar
-// no devuelve al principio y el enlace abre la vista exacta.
+// Selector de tienda GLOBAL (StoreFilter): en la matriz, una tienda elegida deja
+// solo SUS columnas (cómodo en el teléfono); «Todas las tiendas» las enseña
+// todas. En «Reglas y comisiones» decide, como antes, si se edita el maestro o
+// la variación de esa tienda.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { SummaryPills } from "./Accordion.jsx";
 import { Profitability } from "./Costs.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
@@ -29,61 +29,130 @@ import HelpTip from "./HelpTip.jsx";
 import Icon from "./icons.jsx";
 import { SubTabs } from "./ui.jsx";
 import { money } from "./adminOrders.js";
+import { isDemoLogin } from "./adminAuth.js";
 import { fetchPricingOverview } from "./pricing/api.js";
-import FramesSection from "./pricing/FramesSection.jsx";
-import LensesSection from "./pricing/LensesSection.jsx";
-import TreatmentsSection from "./pricing/TreatmentsSection.jsx";
+import { BandBlock, RuleRow } from "./pricing/FramesSection.jsx";
+import { AdjustRow } from "./pricing/lensShared.jsx";
 import CommissionsSection from "./pricing/CommissionsSection.jsx";
-import CostsSection from "./pricing/CostsSection.jsx";
+import CostsAccordions from "./pricing/CostsSection.jsx";
+import FinAcc, { useOpenSet } from "./finance/Accordion.jsx";
+import RulesIO from "./finance/RulesIO.jsx";
+import { fetchFinanceRules } from "./finance/financeApi.js";
+import FinancialStatement from "./FinancialStatement.jsx";
+import { TENANT } from "../config/tenant.js";
+import "./finance/finance.css";
+import PriceMatrix from "./pricing/PriceMatrix.jsx";
+import PriceImport from "./PriceImport.jsx";
 import useSubTab from "./pricing/useSub.js";
 import "./pricing.css";
 
 const dollars = (cents) => (cents == null ? 0 : Math.round(Number(cents)) / 100);
 
-/**
- * Las vistas, en el orden que pidió el dueño: monturas → lentes →
- * tratamientos → lo que queda (comisiones y costos) → las fichas por pedido.
- */
-const TABS = ["frames", "lenses", "treatments", "costs", "sheets"];
+/** Subpestañas, en el orden del dueño: los artículos primero, las reglas al final. */
+const TABS = ["frames", "cases", "lenses", "treatments", "rules"];
+/** `sub` de la pantalla vieja → la nueva (los enlaces de correos y de la hoja siguen sirviendo). */
+const LEGACY_SUB = { costs: "rules", sheets: "rules", commissions: "rules", band: "rules" };
 
-/**
- * `?sub=` lleva DOS niveles con un solo parámetro: `lenses-prog` abre los
- * lentes por el tipo «progresivo». Un solo parámetro porque es el que el
- * armazón ya reparte (`params.sub`), y así un enlace apunta a la vista exacta
- * sin inventar otro nombre de consulta.
- */
-const headOf = (v) => String(v || "").split("-")[0];
-const tailOf = (v) => String(v || "").split("-").slice(1).join("-") || null;
 const normalizeSub = (v) => {
   const raw = String(v || "");
-  const head = headOf(raw);
-  if (!TABS.includes(head)) return null;
-  // Solo los lentes tienen segundo nivel; el resto se queda en su nombre.
-  return head === "lenses" ? raw : head;
+  const head = raw.split("-")[0];
+  if (TABS.includes(head)) return head;
+  return LEGACY_SUB[head] || null;
 };
 
 export default function PricingPanel({ me = null, sellers = [], go, params = null, onSub = null }) {
+  const { t } = useLang();
+  const { storeId, isAll, isWeb } = useStoreFilter(me);
+  const [view, pickSub] = useSubTab({ normalize: normalizeSub, fallback: TABS[0], sub: params?.sub ?? null, onSub });
+
+  const items = [
+    { key: "frames", icon: "glasses", label: t("adm.pm.sub.frames") },
+    { key: "cases", icon: "case", label: t("adm.pm.sub.cases") },
+    { key: "lenses", icon: "lens", label: t("adm.pm.sub.lenses") },
+    { key: "treatments", icon: "drop", label: t("adm.pm.sub.treatments") },
+    { key: "rules", icon: "percent", label: t("adm.pm.sub.rules") },
+  ];
+  const intro = {
+    frames: "adm.pm.intro.frames",
+    cases: "adm.pm.intro.cases",
+    lenses: "adm.pm.intro.lenses",
+    treatments: "adm.pm.intro.treatments",
+    rules: "adm.pm.intro.rules",
+  }[view];
+
+  return (
+    <div className="pp adm-section">
+      <div className="pp-head">
+        <h2>{t("adm.tab.products")}<HelpTip topic="price.rule" /></h2>
+      </div>
+      <SubTabs items={items} value={view} onChange={(k) => pickSub(k)} />
+      <p className="pp-intro pm-intro-m">{t(intro)}</p>
+      {view === "rules" ? (
+        <RulesView me={me} sellers={sellers} go={go} params={params} />
+      ) : (
+        <PriceMatrix
+          key={view}
+          section={view}
+          me={me}
+          onlyStore={isAll || isWeb ? null : storeId}
+          initialQ={params?.q || ""}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Reglas y comisiones» (7-nov-2026): TODO en una vista, en acordeones —
+ * costos fijos, variables, compartidos, por venta, impuestos, comisiones y el
+ * ajuste general con la banda de precio — con una tira de indicadores del mes
+ * (ventas netas, fijos, margen de contribución, punto de equilibrio,
+ * resultado), Excel de ida y vuelta de todo el bloque (finance/RulesIO.jsx) y
+ * el botón «Estado de resultados» (FinancialStatement.jsx). Costos y
+ * comisiones leen GET /admin/finance/rules; el ajuste y la banda, como
+ * siempre, `GET /admin/pricing/overview` (maestro o variación de la tienda
+ * elegida arriba) con RuleRow/BandBlock/AdjustRow de siempre.
+ */
+function RulesView({ me, sellers, go, params = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { storeId, store, stores, isAll, isWeb } = useStoreFilter(me);
-  // «Todas las tiendas» y «Tienda online» son el maestro: el canal web no es un
-  // establecimiento y no tiene variaciones propias.
+  const { storeId, store, isAll, isWeb } = useStoreFilter(me);
   const scope = isAll || isWeb ? "all" : storeId;
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
+  // Costos, comisiones e impuestos: GET /admin/finance/rules (los acordeones).
+  const [fin, setFin] = useState(null);
+  const [finState, setFinState] = useState("loading");
+  // ?sub=rules-statement abre directamente el estado de resultados (enlace del Ejecutivo).
+  const [showStatement, setShowStatement] = useState(() => String(params?.sub || "") === "rules-statement");
+  const [open, toggleAcc] = useOpenSet(["fixed", "commissions"]);
   const ref = useRef(null);
+  const demo = isDemoLogin();
 
+  // Solo la última petición de cada lectura pinta: al cambiar de tienda deprisa
+  // (o releer tras guardar y cambiar), la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
+  const finSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     setState("loading");
     fetchPricingOverview(scope)
-      .then((d) => { setData(d); setState("ok"); })
-      .catch((err) => { setState(err.message || "adm.err.pricing.load_failed"); });
+      .then((d) => { if (seq !== loadSeq.current) return; setData(d); setState("ok"); })
+      .catch((err) => { if (seq !== loadSeq.current) return; setState(err.message || "adm.err.pricing.load_failed"); });
   }, [scope]);
   useEffect(load, [load]);
+  const loadFin = useCallback(() => {
+    const seq = ++finSeq.current;
+    fetchFinanceRules(scope)
+      .then((d) => { if (seq === finSeq.current) { setFin(d); setFinState("ok"); } })
+      .catch((err) => { if (seq === finSeq.current) setFinState(err.message || "adm.err.fin.load_failed"); });
+  }, [scope]);
+  useEffect(() => { loadFin(); }, [loadFin]);
+  // Una escritura de costos o comisiones: se relee la vista (los totales
+  // mensuales, el reparto y el resultado del mes los calcula el servidor).
+  const onFinSaved = useCallback(() => { toast({ tone: "success", title: t("adm.price.saved") }); loadFin(); }, [toast, t, loadFin]);
 
-  // Cada escritura contesta solo la porción que cambió: se fusiona en el
-  // payload en vez de volver a leerlo todo (la matriz de lentes es grande y el
-  // dueño la repasa celda a celda).
+  // Cada escritura contesta la porción que cambió: se fusiona sin releer todo.
   const onSaved = useCallback((slice) => {
     if (!slice) return;
     setData((prev) => (prev ? { ...prev, ...slice } : prev));
@@ -235,16 +304,9 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
     data ? menuHandlers({ targetRef: ref, title: t("adm.price.reportTitle"), name: "precios", report }) : null
   );
 
-  // Antes de los `return` de carga y error: un hook no puede quedar detrás de
-  // un return condicional.
-  const [sub, pickSub] = useSubTab({
-    normalize: normalizeSub,
-    fallback: TABS[0],
-    sub: params?.sub ?? null,
-    onSub,
-  });
-  const view = headOf(sub);
-  const lensCat = tailOf(sub);
+  if (showStatement) {
+    return <FinancialStatement initialStore={scope === "all" ? null : scope} onClose={() => setShowStatement(false)} />;
+  }
 
   if (state === "loading") return <div className="adm-src-note loading">{t("adm.price.loading")}</div>;
   if (state !== "ok" || !data) {
@@ -256,166 +318,71 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
     );
   }
 
-  const offCount = data.costs.rules.filter((r) => !r.enabled).length;
-  const changedCells = data.lenses.store?.cells.length ?? 0;
-
-  /**
-   * Lo esencial de cada vista como pastillas, al lado del título: es lo que
-   * antes se leía en la cabecera del acordeón sin abrirlo, y sin ellas cambiar
-   * de pestaña sería cambiar a ciegas.
-   */
-  const PILLS = {
-    frames: [
-      {
-        label: t("adm.price.frames.ruleFrames"),
-        value: data.frames.rule
-          ? data.frames.rule.mode === "percent"
-            ? `${data.frames.rule.value > 0 ? "+" : ""}${data.frames.rule.value} %`
-            : money(data.frames.rule.value, "usd", lang)
-          : t("adm.price.none"),
-        strong: true,
-      },
-      { label: t("adm.price.frames.pills.frames"), value: data.frames.counts.frames },
-      { label: t("adm.price.frames.pills.cases"), value: data.frames.counts.cases },
-    ],
-    lenses: [
-      { label: t("adm.price.lenses.pills.designs"), value: data.lenses.designs.length },
-      { label: t("adm.price.lenses.pills.materials"), value: data.lenses.materials.length },
-      ...(data.lenses.store
-        ? [
-            {
-              label: t("adm.price.lenses.adjust"),
-              value: data.lenses.store.adjust_pct == null ? t("adm.price.none") : `${data.lenses.store.adjust_pct} %`,
-              strong: true,
-            },
-            ...(changedCells ? [{ label: t("adm.price.lenses.cellsOwn"), value: changedCells }] : []),
-          ]
-        : []),
-    ],
-    treatments: [
-      { label: t("adm.price.treat.pills.photo"), value: data.lenses.photo.length },
-      { label: t("adm.price.treat.pills.ar"), value: data.lenses.ar.length },
-    ],
-    costs: [
-      {
-        label: t("adm.price.comm.default"),
-        value: data.commissions.default_pct == null ? t("adm.price.none") : `${data.commissions.default_pct} %`,
-        strong: true,
-      },
-      { label: t("adm.price.comm.pills.sellers"), value: data.commissions.sellers.length },
-      { label: t("adm.price.costs.pills.rules"), value: data.costs.rules.length },
-      ...(offCount ? [{ label: t("adm.price.costs.pills.off"), value: offCount, tone: "warn" }] : []),
-      { label: t("adm.price.costs.tax"), value: `${data.costs.taxes.rate_pct} %` },
-    ],
-    sheets: [],
-  };
-
-  // `sub` es la frase de la vista: una sola línea de prosa antes de los datos,
-  // y escrita como literal para que `check-i18n` pueda comprobar la clave.
-  const items = [
-    { key: "frames", icon: "glasses", label: t("adm.price.tab.frames"), sub: t("adm.price.frames.sub") },
-    { key: "lenses", icon: "eye", label: t("adm.price.tab.lenses"), sub: t("adm.price.lenses.sub") },
-    { key: "treatments", icon: "palette", label: t("adm.price.tab.treatments"), sub: t("adm.price.treat.sub") },
-    { key: "costs", icon: "costs", label: t("adm.price.tab.costs"), sub: t("adm.price.tab.costsSub") },
-    { key: "sheets", icon: "receipt", label: t("adm.price.tab.sheets"), sub: t("adm.price.sheets.sub") },
-  ];
-  const current = items.find((i) => i.key === view) || items[0];
+  const pnl = fin?.pnl;
+  const focus = scope !== "all" ? pnl?.stores?.find((s) => s.establishment_id === scope) : pnl?.total;
+  const mo = (v) => (v === null || v === undefined ? "—" : money(Number(v), "usd", lang));
+  const kpis = focus ? [
+    { k: "net_sales", v: mo(focus.net_sales), help: "fin.kpi.netSales" },
+    { k: "fixed_total", v: mo(focus.fixed_total), help: "fin.fixedTotal" },
+    { k: "contribution_pct", v: focus.contribution_pct == null ? "—" : `${focus.contribution_pct} %`, help: "fin.contributionMargin" },
+    { k: "break_even", v: mo(focus.break_even), help: "fin.breakEven" },
+    { k: "result", v: mo(focus.result), help: "fin.kpi.result", tone: Number(focus.result) < 0 ? "bad" : "good" },
+  ] : [];
 
   return (
-    <div className="pp adm-section" ref={ref}>
-      <div className="pp-head">
-        <h2>{t("adm.tab.pricing")}<HelpTip topic="price.rule" /></h2>
-        {/* El «maestro vs. variación de tienda» se explica en la pastilla de
-            ámbito en vez de en un párrafo: una línea menos antes de los datos. */}
+    <div className="pp-rules fin-view" ref={ref}>
+      <div className="pp-meta fin-top">
+        {/* El «maestro vs. variación de tienda» va en la pastilla de ámbito: se
+            elige con el selector de tienda de arriba. */}
         <span className="pp-scope" title={t("adm.price.intro")}><Icon name="store" size={12} />{scopeLabel}</span>
+        <span className="fin-top-act">
+          <button type="button" className="btn-xs primary" onClick={() => setShowStatement(true)}><Icon name="receipt" size={13} /> {t("adm.fin.st.open")}</button>
+          {fin && <RulesIO data={fin} who={me?.display_name || me?.email || ""} business={TENANT.name} onApplied={onFinSaved} onError={onError} />}
+        </span>
       </div>
-
-      <SubTabs items={items} value={view} onChange={(k) => pickSub(k)} />
-
-      <div className="pp-meta">
-        <p className="pp-intro">{current.sub}</p>
-        <SummaryPills items={PILLS[view] || []} />
-      </div>
-
-      {view === "frames" && (
-        <FramesSection
-          frames={data.frames}
-          store={scope}
-          storeId={data.store?.id || stores[0]?.id || null}
-          onSaved={onSaved}
-          onError={onError}
-        />
-      )}
-
-      {view === "lenses" && (
-        <LensesSection
-          lenses={data.lenses}
-          store={scope}
-          cat={lensCat}
-          onCat={(c) => pickSub(`lenses-${c}`)}
-          onSaved={onSaved}
-          onError={onError}
-        />
-      )}
-
-      {view === "treatments" && (
-        <TreatmentsSection lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} />
-      )}
-
-      {/* UNA pestaña y DOS columnas, no dos pestañas: el dueño pidió
-          «comisiones, costos fijos, costos variables, impuestos … en el mismo
-          sitio, para saber dónde ir si quiere cambiar algo concreto», y las
-          comisiones son un costo más de la venta. Las dos listas son estrechas
-          (concepto + número), así que lado a lado caben enteras y se comparan
-          de un vistazo; partirlas en dos pestañas sería un clic más para ver
-          dos mitades de la misma cuenta. */}
-      {view === "costs" && (
-        <div className="pp-two">
-          {/* A la izquierda lo que se paga a la gente y lo que cuesta el mes;
-              a la derecha lo que se le descuenta a CADA venta. Repartido así
-              las dos columnas acaban a la misma altura y la pestaña entra
-              entera en la pantalla, que es de lo que iba el encargo. */}
-          <div className="pp-col">
-            <section className="pp-pane">
-              <h3>
-                <Icon name="sellers" size={14} />
-                <span className="pp-pane-t">{t("adm.price.comm.title")}</span>
-              </h3>
-              <CommissionsSection commissions={data.commissions} onSaved={onSaved} onError={onError} />
-            </section>
-            <section className="pp-pane">
-              <h3>
-                <Icon name="store" size={14} />
-                <span className="pp-pane-t">{t("adm.price.costs.perStore")}</span>
-              </h3>
-              <CostsSection
-                costs={data.costs}
-                store={scope}
-                isStore={Boolean(data.store)}
-                part="store"
-                onSaved={onSaved}
-                onError={onError}
-              />
-            </section>
-          </div>
-          <section className="pp-pane">
-            <h3>
-              <Icon name="costs" size={14} />
-              <span className="pp-pane-t">{t("adm.price.costs.perSale")}</span>
-            </h3>
-            <CostsSection
-              costs={data.costs}
-              store={scope}
-              isStore={Boolean(data.store)}
-              part="rules"
-              onSaved={onSaved}
-              onError={onError}
-            />
-          </section>
+      {kpis.length > 0 && (
+        <div className="fin-kpis" aria-label={t("adm.fin.kpi.title", { month: pnl.month })}>
+          <span className="fin-kpi-m"><Icon name="calendar" size={12} /> {t("adm.fin.kpi.month", { month: pnl.month })}</span>
+          {kpis.map((x) => (
+            <span key={x.k} className={`fin-kpi ${x.tone || ""}`}>
+              <small>{t(`adm.fin.kpi.${x.k}`)}<HelpTip topic={x.help} /></small>
+              <b>{x.v}</b>
+            </span>
+          ))}
         </div>
       )}
-
-      {view === "sheets" && <Profitability sellers={sellers} go={go} />}
+      {finState !== "ok" && finState !== "loading" && (
+        <div className="adm-login-err">{t(finState)} <button type="button" className="btn-xs" onClick={loadFin}>{t("adm.price.retry")}</button></div>
+      )}
+      {!fin && finState === "loading" && <div className="adm-src-note loading">{t("adm.fin.loading")}</div>}
+      {fin && (
+        <div className="fin-accs">
+          <CostsAccordions data={fin} scopeStore={scope === "all" ? null : scope} open={open} onToggle={toggleAcc} onSaved={onFinSaved} onError={onError} />
+          <FinAcc id="commissions" icon="sellers" title={t("adm.fin.acc.commissions")} help="fin.acc.commissions" count={fin.commissions.sellers.filter((x) => x.active).length}
+            total={focus ? focus.commissions : null} totalLabel={t("adm.fin.acc.thisMonth")} totalHelp="fin.commissionBase" open={open.has("commissions")} onToggle={toggleAcc}>
+            <CommissionsSection commissions={fin.commissions} stores={fin.stores} earned={pnl?.sellers || []} onSaved={onFinSaved} onError={onError} />
+          </FinAcc>
+          <FinAcc id="adjust" icon="percent" title={t("adm.fin.acc.adjust")} help="fin.acc.adjust" open={open.has("adjust")} onToggle={toggleAcc}>
+            <div className="pp-two fin-adjust">
+              <section className="pp-pane">
+                <RuleRow scope="frame" rule={data.frames.rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+                <RuleRow scope="case" rule={data.frames.case_rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+                <AdjustRow lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} id="pp-rules-lens-adjust" />
+                {!data.store && <p className="pp-intro">{t("adm.pm.rules.adjustHint")}</p>}
+              </section>
+              <section className="pp-pane">
+                <BandBlock store={scope} onError={onError} />
+              </section>
+            </div>
+          </FinAcc>
+        </div>
+      )}
+      {/* PriceImport trae su propia tarjeta. */}
+      {!demo && <PriceImport />}
+      <details className="pp-pane">
+        <summary><Icon name="receipt" size={14} /> {t("adm.price.tab.sheets")}</summary>
+        <Profitability sellers={sellers} go={go} />
+      </details>
     </div>
   );
 }

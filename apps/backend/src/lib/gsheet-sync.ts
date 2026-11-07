@@ -53,6 +53,7 @@ import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 import { tenantName } from "./tenant";
 import {
+  costRefOf,
   frameCostCentsFrom,
   frameCostRowFrom,
   frameCostVariationFrom,
@@ -63,6 +64,7 @@ import {
   type CatalogModel,
   type FrameCostRow,
   type FrameCostSource,
+  type FrameCostTarget,
   type FrameCostVariationIndex,
   type FrameCostVariationRow,
 } from "./frame-cost";
@@ -70,6 +72,9 @@ import { listEstablishments, type EstablishmentRow } from "./establishments";
 import { projectBoardOrder } from "./order-board";
 import { lensFinishLabel } from "./lens-finish";
 import { loadPricingOverview, type PricingOverview } from "./pricing-overview";
+import { storeSheetPrices, type SheetStorePrices } from "./price-matrix";
+import { storeDiscountIndex } from "./price-matrix-data";
+import { openRules } from "./store-pricing-data";
 import {
   KIND_LABEL,
   PROFIT_TARGET_KEY,
@@ -2819,6 +2824,7 @@ const FRAME_COSTS_HEADER_ROW = 3;
 
 const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
   supplier_list: "Lista del proveedor",
+  supplier_list_prev: "Lista anterior del proveedor",
   owner_edit: "Editado por el dueño",
 };
 
@@ -2839,8 +2845,15 @@ const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
  * Encabezado de cada columna: el código de la tienda, que es como el dueño las
  * nombra en el panel y en el asunto de los correos.
  */
-export function frameCostsSheetHeaders(stores: readonly EstablishmentRow[] = []): string[] {
-  return [...FRAME_COSTS_HEADERS, ...stores.map((s) => `Costo ${s.code || s.name}`)];
+export function frameCostsSheetHeaders(stores: readonly EstablishmentRow[] = [], withPrices = false): string[] {
+  const code = (s: EstablishmentRow) => s.code || s.name;
+  return [
+    ...FRAME_COSTS_HEADERS,
+    ...stores.map((s) => `Costo ${code(s)}`),
+    // «Productos y precios»: lo que cobra cada caja por la montura sola y la
+    // promoción del dueño en esa tienda, dos columnas por tienda.
+    ...(withPrices ? stores.flatMap((s) => [`Precio ${code(s)}`, `Desc % ${code(s)}`]) : []),
+  ];
 }
 
 /**
@@ -2856,26 +2869,46 @@ export function frameCostsSheetHeaders(stores: readonly EstablishmentRow[] = [])
  * `frameCostsSheetHeaders`): lleva lo que paga ESA tienda cuando tiene costo
  * propio y queda vacía cuando hereda el maestro. Sin tiendas la pestaña es
  * exactamente la de antes.
+ *
+ * `prices` (de `storeSheetPrices`, lib/price-matrix.ts) añade por tienda
+ * «Precio» (lo que cobra esa caja por la montura sola, sin lentes ni impuesto,
+ * ya con la regla, la banda o el precio fijado) y «Desc %» (la promoción del
+ * dueño en esa tienda, vacía si no hay). Sin `prices` no aparecen.
  */
+/** A known brand keeps its listed name; one the owner added by hand has only its product's `metadata.brand`. */
+function sheetBrandName(m: CatalogModel): string {
+  const known = brandName(m.brand_slug);
+  return known === m.brand_slug && m.brand_name ? m.brand_name : known;
+}
+
 export function frameCostsSheetRows(
   costs: readonly FrameCostRow[],
   catalog: readonly CatalogModel[],
   stores: readonly EstablishmentRow[] = [],
-  variations: FrameCostVariationIndex = new Map()
+  variations: FrameCostVariationIndex = new Map(),
+  prices?: SheetStorePrices
 ): Cell[][] {
   const rows: Cell[][] = [];
-  const headers = frameCostsSheetHeaders(stores);
+  const headers = frameCostsSheetHeaders(stores, prices !== undefined);
   const byKey = new Map(costs.map((c) => [c.sku, c]));
   const withCost = catalog.length
-    ? catalog.filter((m) => frameCostCentsFrom(byKey, m.sku) !== null).length
+    ? catalog.filter((m) => frameCostCentsFrom(byKey, costRefOf(m)) !== null).length
     : costs.length;
   /** Lo que paga cada tienda, o "" cuando hereda: una celda por tienda. */
-  const storeCells = (sku: string): Cell[] =>
+  const storeCells = (sku: FrameCostTarget): Cell[] =>
     stores.map((st) => {
       const own = frameCostVariationFrom(variations, sku, st.id);
       return own ? dollarsOf(own.cost_cents) : "";
     });
   const varied = stores.reduce((n, st) => n + (variations.get(st.id)?.size ?? 0), 0);
+  /** Precio y Desc % de cada tienda para un modelo; vacías sin precio o sin descuento. */
+  const priceCells = (productId: string | null): Cell[] =>
+    prices === undefined
+      ? []
+      : stores.flatMap((st) => {
+          const hit = productId ? prices.get(productId)?.get(st.id) : undefined;
+          return [hit?.price_cents == null ? "" : dollarsOf(hit.price_cents), hit?.discount_pct ?? ""];
+        });
 
   rows[0] = [`${tenantName()} · Costo y precio por modelo`];
   rows[1] = [
@@ -2893,7 +2926,7 @@ export function frameCostsSheetRows(
 
   if (!catalog.length) {
     for (const c of costs) {
-      rows.push([c.model, c.sku, "", dollarsOf(c.cost_cents), "", "", "", FRAME_COST_SOURCE_LABEL[c.source], stamp(c.updated_at), ...storeCells(c.sku)]);
+      rows.push([c.model, c.sku, "", dollarsOf(c.cost_cents), "", "", "", FRAME_COST_SOURCE_LABEL[c.source], stamp(c.updated_at), ...storeCells(c.sku), ...priceCells(null)]);
     }
     return rows.map((r) => r ?? []);
   }
@@ -2902,20 +2935,23 @@ export function frameCostsSheetRows(
     (a, b) => Number(a.is_case) - Number(b.is_case) || a.brand_slug.localeCompare(b.brand_slug) || a.title.localeCompare(b.title)
   );
   for (const m of sorted) {
-    const cost = frameCostRowFrom(byKey, m.sku);
+    // v2: by MODEL first (the title), then any colour's SKU, then the UPCs.
+    const ref = costRefOf(m);
+    const cost = frameCostRowFrom(byKey, ref);
     const costCents = cost ? cost.cost_cents : null;
     const margin = costCents != null && m.price_cents != null ? m.price_cents - costCents : null;
     rows.push([
       m.title || m.sku,
       m.sku,
-      brandName(m.brand_slug),
+      sheetBrandName(m),
       costCents == null ? "" : dollarsOf(costCents),
       m.price_cents == null ? "" : dollarsOf(m.price_cents),
       margin == null ? "" : dollarsOf(margin),
       margin == null || !m.price_cents ? "" : Number(((margin / m.price_cents) * 100).toFixed(1)),
       cost ? FRAME_COST_SOURCE_LABEL[cost.source] : "Sin costo",
       cost ? stamp(cost.updated_at) : "",
-      ...storeCells(m.sku),
+      ...storeCells(ref),
+      ...priceCells(m.product_id),
     ]);
   }
   return rows.map((r) => r ?? []);
@@ -2932,14 +2968,17 @@ export async function writeFrameCostsSheet(
   costs: readonly FrameCostRow[],
   catalog: readonly CatalogModel[],
   stores: readonly EstablishmentRow[] = [],
-  variations: FrameCostVariationIndex = new Map()
+  variations: FrameCostVariationIndex = new Map(),
+  prices?: SheetStorePrices
 ): Promise<void> {
   const sheets = await readSheetsMeta(cfg);
-  const rows = frameCostsSheetRows(costs, catalog, stores, variations);
+  const rows = frameCostsSheetRows(costs, catalog, stores, variations, prices);
   // El ancho de la tabla CRECE con las tiendas (una columna por tienda), así
   // que todo lo que formatea por índice de columna sale de aquí, nunca de la
   // lista fija de encabezados.
-  const n = frameCostsSheetHeaders(stores).length;
+  const n = frameCostsSheetHeaders(stores, prices !== undefined).length;
+  /** Las columnas «Desc %» (una de cada par Precio/Desc % por tienda). */
+  const pctCols = prices === undefined ? [] : stores.map((_, i) => FRAME_COSTS_HEADERS.length + stores.length + 2 * i + 1);
   /** Primera columna de tienda (y, sin tiendas, el final de la tabla). */
   const firstStoreCol = FRAME_COSTS_HEADERS.length;
   const lastRow = Math.max(rows.length, 60);
@@ -3008,10 +3047,11 @@ export async function writeFrameCostsSheet(
             horizontalAlignment: "RIGHT",
             textFormat: { bold: false, fontSize: 10, foregroundColorStyle: { rgbColor: NAVY } },
           }),
+          ...pctCols.map((c) => fmt(range(H + 1, lastRow, c, c + 1), { numberFormat: { type: "NUMBER", pattern: "0.##" }, horizontalAlignment: "RIGHT" })),
         ]
       : []),
     { updateBorders: { range: range(H + 1, Math.max(rows.length, H + 2), 0, n), innerHorizontal: { style: "SOLID", colorStyle: { rgbColor: rgb("#d9dee7") } } } },
-    ...[200, 120, 140, 90, 90, 90, 80, 160, 110, ...stores.map(() => 100)].map((px, i) => ({
+    ...[200, 120, 140, 90, 90, 90, 80, 160, 110, ...stores.map(() => 100), ...(prices === undefined ? [] : stores.flatMap(() => [100, 80]))].map((px, i) => ({
       updateDimensionProperties: { range: { sheetId: sid, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 }, properties: { pixelSize: px }, fields: "pixelSize" },
     })),
     { setBasicFilter: { filter: { range: range(H, Math.max(rows.length, H + 2), 0, n) } } },
@@ -3071,7 +3111,17 @@ export async function mirrorFrameCostsToSheet(container: MedusaContainer): Promi
       listFrameCostVariations(container).catch(() => [] as FrameCostVariationRow[]),
     ]);
     const active = stores.filter((st) => st.is_active);
-    await writeFrameCostsSheet(cfg, costs, catalog, active, indexFrameCostVariations(variations));
+    // Precio y Desc % por tienda: mejor esfuerzo dentro del mejor esfuerzo —
+    // sin reglas o sin descuentos legibles la pestaña sale sin esas columnas.
+    let prices: SheetStorePrices | undefined;
+    try {
+      const ids = active.map((st) => st.id);
+      const [rules, discounts] = await Promise.all([openRules(container, ids), storeDiscountIndex(container, ids)]);
+      prices = storeSheetPrices(catalog, ids, rules, discounts);
+    } catch (error) {
+      logger.warn(`[gsheet] pestaña ${FRAME_COSTS_SHEET}: precios por tienda no disponibles: ${(error as Error).message}`);
+    }
+    await writeFrameCostsSheet(cfg, costs, catalog, active, indexFrameCostVariations(variations), prices);
     logger.info(
       `[gsheet] pestaña ${FRAME_COSTS_SHEET} actualizada (${costs.length} costos, ${catalog.length} modelos, ${active.length} tiendas, ${variations.length} costos propios de tienda).`
     );

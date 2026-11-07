@@ -2,7 +2,7 @@
 import { pageTitle } from "../config/tenant.js";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { DISCOUNTS_ENABLED } from "../config/features.js";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, useLocation } from "react-router-dom";
 import { useCatalog } from "../data/catalogStore.js";
 import { BRAND_BY_SLUG } from "../data/brands.js";
 import { FILTER_GROUPS, productMatches, BRAND_FILTER_KEY } from "../data/filters.js";
@@ -28,7 +28,10 @@ export default function Catalog() {
     });
   }, [lang]);
   const { products: PRODUCTS, cases: CASES, loading } = useCatalog();
-  const brand = slug ? BRAND_BY_SLUG[slug] : null;
+  // `/estuches` (ruta propia, está en el sitemap) es el listado de estuches:
+  // equivale a `/marca/case`. Sin esto mostraba TODAS las monturas.
+  const { pathname } = useLocation();
+  const brand = slug ? BRAND_BY_SLUG[slug] : pathname === "/estuches" ? BRAND_BY_SLUG.case : null;
   const q = (params.get("q") || "").toLowerCase().trim();
   const ageParam = params.get("age");
   const shapeParam = params.get("shape");
