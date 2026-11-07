@@ -30,7 +30,7 @@ export async function createAdmin({ email, password, firstName = "", lastName = 
       body: { email, password, first_name: firstName, last_name: lastName, role, ...(seller ? { seller } : {}) },
     });
   } catch (e) {
-    throw new Error(reasonKey(e, "adm.err.team.createFailed"));
+    throw new Error(reasonKey(e, ASSIGNABLE_ROLES.includes(role) ? `adm.err.team.createFailedFor.${role}` : "adm.err.team.createFailed"));
   }
 }
 

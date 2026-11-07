@@ -216,7 +216,7 @@ export default function Team() {
       setForm({ email: "", password: "", firstName: "", lastName: "", role: "" });
       setNewLink(EMPTY_LINK);
       fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
-      toast({ tone: "success", title: t("adm.team.created"), message: t("adm.team.createdSub") });
+      toast({ tone: "success", title: t(`adm.team.createdFor.${newRole}`), message: t("adm.team.createdSub") });
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -225,7 +225,7 @@ export default function Team() {
   const remove = async (m) => {
     const ok = await confirm({
       tone: "danger",
-      title: t("adm.team.deleteConfirm", { email: m.email }),
+      title: t("adm.team.deleteConfirm", { email: m.email, role: t(roleKey(m.role)) }),
       message: t("adm.team.deleteBody"),
     });
     if (!ok) return;
@@ -247,7 +247,7 @@ export default function Team() {
     if (!active) {
       const ok = await confirm({
         tone: "danger",
-        title: t("adm.team.deactivateConfirm", { email: m.email }),
+        title: t("adm.team.deactivateConfirm", { email: m.email, role: t(roleKey(m.role)) }),
         message: t("adm.team.deactivateBody"),
         confirmLabel: t("adm.team.deactivate"),
       });
@@ -345,7 +345,7 @@ export default function Team() {
         <h3>{t("adm.team.newTitle")}</h3>
         <p className="adm-sub">{t("adm.team.newSub")}</p>
         <form className="adm-team-form" onSubmit={submit}>
-          <input type="email" required maxLength={LIMITS.email} aria-invalid={shownNew("email") ? true : undefined} placeholder={t("adm.team.email")} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: typedEmail(e.target.value) }))} autoComplete="off" />
+          <input type="email" required maxLength={LIMITS.email} aria-invalid={shownNew("email") ? true : undefined} placeholder={t(`adm.team.emailFor.${newRole}`)} aria-label={t(`adm.team.emailFor.${newRole}`)} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: typedEmail(e.target.value) }))} autoComplete="off" />
           <FieldError error={shownNew("email")} />
           <input type="text" required minLength={8} placeholder={t("adm.team.tempPass")} value={form.password} onChange={set("password")} autoComplete="off" />
           <input maxLength={LIMITS.name} aria-invalid={shownNew("firstName") ? true : undefined} placeholder={t("adm.team.firstName")} value={form.firstName} onChange={set("firstName")} />
@@ -358,7 +358,7 @@ export default function Team() {
             </select>
             <HelpTip topic="team.roles" />
           </span>
-          <button className="btn-sm primary" disabled={demo || busy || (newRole === "seller" && linkMissing(newLink))}>{busy ? "…" : t("adm.team.create")}</button>
+          <button className="btn-sm primary" disabled={demo || busy || (newRole === "seller" && linkMissing(newLink))}>{busy ? "…" : t(`adm.team.createFor.${newRole}`)}</button>
         </form>
         {newRole === "seller" && (
           <SellerLinkFields value={newLink} onChange={setNewLink} sellers={sellers} stores={stores} terminals={terminals} disabled={demo || busy} />
