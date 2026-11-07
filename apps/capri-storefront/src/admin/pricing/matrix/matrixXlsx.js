@@ -10,7 +10,7 @@
 // `_key` (hidden column) = "<section>|<row key>" — how the import finds the row
 // even if the owner retouches the visible SKU or title. Group rows have no key.
 import { colName, inkOn, tint } from "../../exportXlsx.js";
-import { MATRIX_SECTIONS, norm, parseInput, usd } from "./model.js";
+import { MATRIX_SECTIONS, groupLabel, norm, parseInput, rowTitle, usd } from "./model.js";
 
 export const KEY_HEADER = "_key";
 
@@ -49,11 +49,14 @@ export const storeHeader = (s) => [s.code, s.name].filter(Boolean).join(" · ");
  * @param now      Date (cover)
  * @param t        dictionary function
  * @param fmtDate  (Date) => string, in the panel language
+ * @param lang     "es" | "en" — lens/treatment titles and group labels are
+ *                 rebuilt in this language, the same as on screen (the server
+ *                 sends them in Spanish with raw codes: «Fotocromático Grey · sv»)
  */
-export function matrixWorkbook({ sections, stores, costAccess = true, who = "", now = new Date(), t, fmtDate = (d) => d.toISOString() }) {
+export function matrixWorkbook({ sections, stores, costAccess = true, who = "", now = new Date(), t, fmtDate = (d) => d.toISOString(), lang = "es" }) {
   const present = MATRIX_SECTIONS.filter((s) => sections[s]);
   const sheets = [coverSheet({ sections, present, stores, who, now, t, fmtDate })];
-  for (const section of present) sheets.push(sectionSheet({ section, data: sections[section], stores, costAccess, t, now, fmtDate }));
+  for (const section of present) sheets.push(sectionSheet({ section, data: sections[section], stores, costAccess, t, now, fmtDate, lang }));
   return sheets;
 }
 
@@ -90,7 +93,7 @@ function coverSheet({ sections, present, stores, who, now, t, fmtDate }) {
   };
 }
 
-function sectionSheet({ section, data, stores, costAccess, t, now, fmtDate }) {
+function sectionSheet({ section, data, stores, costAccess, t, now, fmtDate, lang }) {
   const base = [
     { label: t(GROUP_LABEL[section]), width: 18 },
     { label: t(TITLE_LABEL[section]), width: section === "frames" || section === "cases" ? 18 : 30 },
@@ -125,15 +128,16 @@ function sectionSheet({ section, data, stores, costAccess, t, now, fmtDate }) {
     { cells: r3 },
   ];
   for (const g of data.groups || []) {
-    const gr = [{ v: `${g.label}  (${(g.rows || []).length})`, s: S.group }];
+    const label = groupLabel(g, t, lang);
+    const gr = [{ v: `${label}  (${(g.rows || []).length})`, s: S.group }];
     for (let i = 1; i < keyCol; i++) gr.push({ v: "", s: S.group });
     rows.push({ cells: gr });
     merges.push(`A${rows.length}:${colName(nb - 1)}${rows.length}`);
     for (const r of g.rows || []) {
       const n = rows.length + 1;
       const cells = [
-        { v: g.label, s: S.muted },
-        { v: r.title || "", s: S.text },
+        { v: label, s: S.muted },
+        { v: rowTitle(r, t, lang), s: S.text },
         { v: r.sku || r.key || "", s: S.muted },
       ];
       if (costAccess) cells.push({ v: usd(r.cost_cents), s: S.money });

@@ -403,6 +403,18 @@ describe("the «Costos monturas» tab", () => {
     expect(rows.filter((r, i) => i > 3 && r.length).length).toBe(1);
   });
 
+  it("names a brand the owner added by hand with its product's brand, not the slug", () => {
+    const own: CatalogModel[] = [
+      { product_id: "p9", sku: "MRQ200", title: "MRQ 200", brand_slug: "marca-real-qa", brand_name: "Marca Real QA", is_case: false, price_cents: 4400 },
+      { product_id: "p1", sku: "DC406", title: "DC406", brand_slug: "di-caprio", brand_name: "DI CAPRIO (scraped)", is_case: false, price_cents: 9900 },
+    ];
+    const rows = frameCostsSheetRows([master({ sku: "MRQ200", cost_cents: 2200 }), master({ cost_cents: 2099 })], own);
+    const body = rows.filter((r, i) => i > 3 && r.length);
+    expect(body.find((r) => r[1] === "MRQ200")?.[2]).toBe("Marca Real QA");
+    // A known brand keeps the name from the brand list.
+    expect(body.find((r) => r[1] === "DC406")?.[2]).toBe("Di Caprio");
+  });
+
   it("is exactly the old tab when there are no stores", () => {
     const rows = frameCostsSheetRows([master()], catalog);
     expect(rows[3]).toEqual(frameCostsSheetHeaders());

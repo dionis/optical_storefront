@@ -261,7 +261,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
     try {
       const sections = await loadAll();
       const now = new Date();
-      const sheets = matrixWorkbook({ sections, stores: allStores, costAccess, who, now, t, fmtDate });
+      const sheets = matrixWorkbook({ sections, stores: allStores, costAccess, who, now, t, fmtDate, lang });
       const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       downloadBytes(`${t("adm.pm.xlsx.file")}-${stamp}.xlsx`, buildStyledXlsx(sheets));
       toast({ tone: "success", title: t("adm.pm.exported") });

@@ -2872,6 +2872,12 @@ export function frameCostsSheetHeaders(stores: readonly EstablishmentRow[] = [],
  * ya con la regla, la banda o el precio fijado) y «Desc %» (la promoción del
  * dueño en esa tienda, vacía si no hay). Sin `prices` no aparecen.
  */
+/** A known brand keeps its listed name; one the owner added by hand has only its product's `metadata.brand`. */
+function sheetBrandName(m: CatalogModel): string {
+  const known = brandName(m.brand_slug);
+  return known === m.brand_slug && m.brand_name ? m.brand_name : known;
+}
+
 export function frameCostsSheetRows(
   costs: readonly FrameCostRow[],
   catalog: readonly CatalogModel[],
@@ -2932,7 +2938,7 @@ export function frameCostsSheetRows(
     rows.push([
       m.title || m.sku,
       m.sku,
-      brandName(m.brand_slug),
+      sheetBrandName(m),
       costCents == null ? "" : dollarsOf(costCents),
       m.price_cents == null ? "" : dollarsOf(m.price_cents),
       margin == null ? "" : dollarsOf(margin),

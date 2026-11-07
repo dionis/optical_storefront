@@ -250,4 +250,27 @@ await test("patchSiblingCost: one photochromic cost shows on all its category ro
   assert.equal(next[0].rows[2].cost_cents, null);
 });
 
+await test("export titles lens cells, treatments and groups in the panel language (not the server's Spanish codes)", async () => {
+  const tt = (k) => ({ "adm.price.lens.finish.stock": "Stock", "adm.price.lens.finish.digital": "Digital surfaced", "adm.price.lenses.cat.sv": "Single vision", "adm.pm.grp.photo": "Photochromic", "adm.pm.grp.cases": "Cases" }[k] || t(k));
+  const sections = {
+    lenses: { groups: [{ key: "sv", kind: "design", label: "Visión Sencilla", label_en: "Single Vision", rows: [
+      { kind: "lens", key: "sv:cr39", title: "CR-39 (Resina) · stock", material_label_es: "CR-39 (Resina)", material_label_en: "CR-39 (Resin)", finish: "stock", stores: { est_1: cell(4000), est_2: cell(4000) } },
+    ] }] },
+    treatments: { groups: [{ key: "photo", kind: "treatment", label: "Fotocromáticos", rows: [
+      { kind: "photo", key: "photo-grey:sv", title: "Fotocromático Grey · sv", label_es: "Fotocromático Grey", label_en: "Photochromic Grey", category: "sv", stores: { est_1: cell(9000), est_2: cell(9000) } },
+    ] }] },
+  };
+  const read = await readXlsx(buildStyledXlsx(matrixWorkbook({ sections, stores: STORES, t: tt, lang: "en" })));
+  const cellsOf = (sheet) => sheet.rows.flat().map(String);
+  const lens = cellsOf(read[1]), tr = cellsOf(read[2]);
+  assert.ok(lens.includes("Single Vision  (1)") && lens.includes("CR-39 (Resin) · Stock"), lens.join("|"));
+  assert.ok(tr.includes("Photochromic  (1)") && tr.includes("Photochromic Grey · Single vision"), tr.join("|"));
+  assert.ok(!tr.some((v) => / · sv$/.test(v)) && !lens.some((v) => / · stock$/.test(v)));
+  // the keys still identify the rows: re-reading gives no changes
+  const out = workbookToImport(read, { current: sections, stores: STORES });
+  assert.deepEqual(out.problems, []);
+  assert.equal(out.rows.length, 0, JSON.stringify(out.rows));
+  assert.equal(out.unchanged, 2);
+});
+
 console.log(process.exitCode ? "xlsx tests FAILED" : `xlsx tests passed (${passed})`);

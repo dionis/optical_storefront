@@ -556,6 +556,12 @@ export interface CatalogModel {
   sku: string;
   title: string;
   brand_slug: string;
+  /**
+   * The brand as the product names it (`metadata.brand`). The known brands have
+   * their own name list; a brand the owner adds from «Productos y precios» only
+   * has this one, so without it the sheet would print the slug.
+   */
+  brand_name?: string | null;
   is_case: boolean;
   /** Selling price in cents; null when the model has none yet. */
   price_cents: number | null;
@@ -597,6 +603,7 @@ export async function loadCatalogModels(container: MedusaContainer): Promise<Cat
           sku: String(variants.find((v) => v.sku)?.sku ?? p.handle ?? p.title ?? ""),
           title: String(p.title ?? ""),
           brand_slug,
+          brand_name: typeof (p.metadata as Record<string, unknown> | null)?.["brand"] === "string" ? String((p.metadata as Record<string, unknown>)["brand"]) : null,
           // Same word as the till (lib/price-matrix.ts metadataSaysCase): the brand or metadata.kind.
           is_case: brand_slug === "case" || brand_slug === "cases" || (p.metadata as Record<string, unknown> | null)?.["kind"] === "case",
           price_cents: price,

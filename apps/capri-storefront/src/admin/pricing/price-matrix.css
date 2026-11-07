@@ -176,11 +176,15 @@
 .pm-lg-exact { width: 6px; height: 6px; border-radius: 50%; background: var(--adm-accent); display: inline-block; }
 
 /* ───── Diálogos ───── */
-.pm-veil { position: fixed; inset: 0; z-index: 1200; background: var(--adm-overlay); display: grid; place-items: center; padding: 16px; animation: pm-fade .15s ease-out; }
+.pm-veil { position: fixed; inset: 0; z-index: 1200; background: var(--adm-overlay); display: grid; place-items: center; padding: 16px; animation: pm-fade .15s ease-out;
+  /* one column that can shrink: an auto track grows to the content (a nowrap
+     import plan) and pushed the dialog — close and Apply — off a 390 px phone */
+  grid-template-columns: minmax(0, 1fr); }
 @keyframes pm-fade { from { opacity: 0; } }
 .pm-modal { width: min(640px, 100%); max-height: min(88vh, 900px); display: flex; flex-direction: column; background: var(--adm-surface); color: var(--adm-ink);
   border: 1px solid var(--adm-line); border-radius: var(--adm-radius); box-shadow: var(--adm-shadow-lg); font-family: var(--adm-font); font-size: 13px; }
 .pm-modal.wide { width: min(880px, 100%); }
+.pm-modal { min-width: 0; justify-self: center; }
 .pm-modal-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--adm-line-2); }
 .pm-modal-h h3 { margin: 0; font-size: 15px; font-weight: 800; }
 .pm-modal-h p { margin: 3px 0 0; font-size: 12px; color: var(--adm-muted); }
@@ -263,5 +267,6 @@
   .pm-x { opacity: 1; }
   .pm-sw span { display: none; }
   .pm-modal { max-height: 94vh; }
+  .pm-imp-table td:first-child { min-width: 120px; }
   .pm-f.num { width: calc(50% - 4px); }
 }
