@@ -1,4 +1,4 @@
-import { assignmentRowsFor, configuredOwnerEmail, pickOwnerId, isAllowedForInactiveUser, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
+import { assignmentRowsFor, configuredOwnerEmail, pickOwnerId, isAllowedForInactiveUser, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied, ownerTransferDenied } from "../src/lib/staff-roles";
 
 const row = (over: Partial<AssignmentLike>): AssignmentLike => ({
   role: "seller",
@@ -215,5 +215,29 @@ describe("pickOwnerId", () => {
   it("reads STORE_OWNER_EMAIL trimmed and lower-cased", () => {
     expect(configuredOwnerEmail({ STORE_OWNER_EMAIL: "  Rubi@Example.com " } as NodeJS.ProcessEnv)).toBe("rubi@example.com");
     expect(configuredOwnerEmail({} as NodeJS.ProcessEnv)).toBe("");
+  });
+});
+
+describe("ownerTransferDenied", () => {
+  const ok = { actorRole: "superadmin" as const, actorIsTarget: false, targetIsOwner: false, targetRole: "superadmin" as const, targetDisabled: false };
+
+  it("lets a superadmin or the owner hand ownership to another superadmin", () => {
+    expect(ownerTransferDenied(ok)).toBeNull();
+    expect(ownerTransferDenied({ ...ok, actorRole: "owner" })).toBeNull();
+  });
+
+  it("is only for the owner and superadmins", () => {
+    for (const actorRole of ["supervisor", "manager", "seller", null] as const) {
+      expect(ownerTransferDenied({ ...ok, actorRole })).toBe("forbidden_role");
+    }
+  });
+
+  it("only goes to another active superadmin", () => {
+    expect(ownerTransferDenied({ ...ok, actorIsTarget: true })).toBe("self_owner");
+    expect(ownerTransferDenied({ ...ok, targetIsOwner: true, targetRole: "owner" })).toBe("already_owner");
+    expect(ownerTransferDenied({ ...ok, targetDisabled: true })).toBe("owner_target_disabled");
+    for (const targetRole of ["supervisor", "manager", "seller", null] as const) {
+      expect(ownerTransferDenied({ ...ok, targetRole })).toBe("owner_target_not_superadmin");
+    }
   });
 });

@@ -16,8 +16,10 @@ import { ensureStaffCode } from "../../../lib/staff-code";
  *                           queda marcado must_change_password y el panel le
  *                           exige cambiarla en su primera entrada.
  *
- * DUEÑO = el usuario más antiguo (creado con `npx medusa user` al montar la
- * tienda; la API lo sigue llamando `is_super`). No se puede borrar ni cambiar
+ * DUEÑO = siempre uno solo: el último nombrado con POST /admin/team/:id/owner
+ * (traspaso entre superadmins, lib/owner-transfer.ts); antes de ningún
+ * traspaso, el de STORE_OWNER_EMAIL o el usuario más antiguo (lo decide
+ * ownerUserId; la API lo sigue llamando `is_super`). No se puede borrar ni cambiar
  * de rol — ver [id]/route.ts y [id]/role/route.ts — así la tienda nunca se
  * queda sin su administrador raíz por un clic de más. Los roles y quién puede
  * darlos viven en lib/staff-roles.ts.
@@ -68,7 +70,7 @@ export function sellerLinkRefusal(res: MedusaResponse, error: unknown): boolean 
 export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMember[]> {
   const users = req.scope.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 200, order: { created_at: "ASC" } });
-  // The owner is STORE_OWNER_EMAIL's user, else the oldest (lib/staff-scope.ts ownerUserId).
+  // The owner: last transfer, else STORE_OWNER_EMAIL's user, else the oldest (lib/staff-scope.ts ownerUserId).
   const ownerId = await ownerUserId(req.scope);
   // Owner first, then oldest first, as the screen lists them.
   all.sort((a, b) => Number(b.id === ownerId) - Number(a.id === ownerId));

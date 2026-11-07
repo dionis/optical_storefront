@@ -123,9 +123,14 @@ Coolify) nombra al dueño por su correo de acceso; sin ella, o si ningún usuari
 tiene ese correo, sigue siendo el más antiguo (`pickOwnerId` en `staff-roles.ts`,
 `ownerUserId` en `staff-scope.ts`, que ahora usan también `/admin/team` y los
 aprobadores de descuentos). El dueño anterior, sin filas de rol, queda como
-superadmin (regla «existía antes de los roles»). Solo quien opera la
-infraestructura puede traspasar la propiedad; la transferencia desde el panel
-(§7.2.3) sigue pendiente.
+superadmin (regla «existía antes de los roles»). **Paso 2 hecho (7-nov-2026, rama `develop_optical_storepos`):** traspaso desde el
+panel, Equipo → «Hacer dueño» (`POST /admin/team/:id/owner`,
+`src/lib/owner-transfer.ts`). Decisión del dueño: lo puede hacer el dueño **o un
+superadmin**, solo hacia **otro superadmin activo**, con la contraseña de quien lo
+hace; el anterior queda como superadmin y siempre hay un único dueño. Se guarda en
+`store_setting.owner_user_id`, que manda sobre `STORE_OWNER_EMAIL`. Al unir con
+`multi-tenant-modulo-develop`, su `tenant_profile.owner_user_id` y su
+`/admin/tenant/transfer-owner` (solo el dueño) deben quedar en **una** sola fuente.
 
 ## 5. Componentes del módulo
 

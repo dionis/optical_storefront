@@ -6,7 +6,7 @@ import HelpTip from "./HelpTip.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import { isDemoLogin } from "./adminAuth.js";
 import { shortDate } from "./adminOrders.js";
-import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, signOutEverywhere } from "./adminTeam.js";
+import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASSIGNABLE_ROLES, roleKey, resetPassword, signOutEverywhere, transferOwner } from "./adminTeam.js";
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
@@ -175,6 +175,11 @@ export default function Team() {
   const iAmOwner = myRole === "owner";
   const [pwFor, setPwFor] = useState(null);
   const [pwValue, setPwValue] = useState("");
+  // Traspaso de la propiedad: fila abierta y la contraseña de quien lo hace.
+  const [ownerFor, setOwnerFor] = useState(null);
+  const [ownerPw, setOwnerPw] = useState("");
+  // El dueño o un superadmin traspasa la propiedad, solo a otro superadmin activo (el servidor lo vuelve a comprobar).
+  const canMakeOwner = (m) => (iAmOwner || myRole === "superadmin") && m.role === "superadmin" && !m.is_super && m.id !== meId && !m.is_disabled;
   // Roles que puedo dar: el superadmin solo puede darlo el dueño.
   const grantable = ASSIGNABLE_ROLES.filter((r) => iAmOwner || r !== "superadmin");
   const newRole = form.role || grantable[0];
@@ -298,6 +303,21 @@ export default function Team() {
     } finally { setBusy(false); }
   };
 
+  const submitOwner = async (e, m) => {
+    e.preventDefault();
+    if (busy || !ownerPw) return;
+    setBusy(true);
+    try {
+      const r = await transferOwner(m.id, ownerPw);
+      setTeam(r.team || []);
+      setOwnerFor(null);
+      setOwnerPw("");
+      toast({ tone: "success", title: t("adm.team.owner.done", { email: m.email }) });
+    } catch (err) {
+      toast({ tone: "error", title: t(err.message) });
+    } finally { setBusy(false); }
+  };
+
   const changeRole = async (m, role, seller) => {
     if (role === m.role && !seller) return;
     // Pasar a vendedor necesita su ficha: se elige antes de llamar al servidor.
@@ -404,6 +424,11 @@ export default function Team() {
                   <Icon name="lock" size={12} /> {t("adm.team.pw.open")}
                 </button>
               )}
+              {!demo && canMakeOwner(m) && (
+                <button className="btn-xs" aria-expanded={ownerFor === m.id} title={t("adm.team.owner.help")} onClick={() => { setOwnerPw(""); setOwnerFor((o) => (o === m.id ? null : m.id)); }}>
+                  <Icon name="sparkles" size={12} /> {t("adm.team.owner.open")}
+                </button>
+              )}
               {!demo && m.id !== meId && !m.is_disabled && (
                 <button className="btn-xs" disabled={busy} onClick={() => kickSessions(m)} title={t("adm.team.sessions.help")}>
                   <Icon name="logout" size={12} /> {t("adm.team.sessions.kick")}
@@ -432,6 +457,14 @@ export default function Team() {
                 <button className="btn-sm primary" disabled={busy || pwValue.length < 8}>{t("adm.team.pw.save")}</button>
                 <button type="button" className="btn-sm" onClick={() => setPwFor(null)}>{t("adm.ord.cancel")}</button>
                 <small className="muted">{t("adm.team.pw.hint", { email: m.email })}</small>
+              </form>
+            )}
+            {ownerFor === m.id && canMakeOwner(m) && (
+              <form className="adm-team-profile adm-team-pw" onSubmit={(e) => submitOwner(e, m)}>
+                <input className="adm-input" type="password" required autoComplete="current-password" aria-label={t("adm.team.owner.password")} placeholder={t("adm.team.owner.password")} value={ownerPw} onChange={(e) => setOwnerPw(e.target.value)} />
+                <button className="btn-sm primary" disabled={busy || !ownerPw}>{t("adm.team.owner.save")}</button>
+                <button type="button" className="btn-sm" onClick={() => setOwnerFor(null)}>{t("adm.ord.cancel")}</button>
+                <small className="muted">{t("adm.team.owner.hint", { email: m.email })}</small>
               </form>
             )}
             {openProfile === m.id && (

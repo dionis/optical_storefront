@@ -7,6 +7,7 @@ import type SellerModuleService from "../modules/seller/service";
 import type { CounterSeller } from "./pos";
 import { recordAudit } from "./audit";
 import { accessStatusByUser, profilesByUser } from "./staff-profile-data";
+import { storedOwnerUserId } from "./store-settings";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
@@ -119,13 +120,26 @@ export function invalidateStaffScope(userId?: string): void {
 }
 
 /**
- * The owner: the user with STORE_OWNER_EMAIL, else the oldest admin user
- * (`pickOwnerId`). Every place that needs the owner asks here — /admin/team,
- * the staff guard, the approvers of a discount — so they never disagree.
+ * The owner — always exactly one: the user the last ownership transfer named
+ * (store_setting.owner_user_id, lib/owner-transfer.ts); before any transfer, or
+ * if that user no longer exists, the user with STORE_OWNER_EMAIL, else the
+ * oldest admin user (`pickOwnerId`). Every place that needs the owner asks here
+ * — /admin/team, the staff guard, the approvers of a discount — so they never
+ * disagree.
  */
 export async function ownerUserId(container: MedusaContainer): Promise<string | null> {
   if (ownerCache && Date.now() - ownerCache.at < TTL_MS) return ownerCache.id;
   const users = container.resolve<IUserModuleService>(Modules.USER);
+  // A settings row that cannot be read (not migrated yet, database hiccup) must
+  // not lock anyone out: the rule falls back to the env / oldest user.
+  const named = await storedOwnerUserId(container).catch(() => null);
+  if (named) {
+    const [found] = await users.listUsers({ id: [named] }, { take: 1, select: ["id"] });
+    if (found) {
+      ownerCache = { at: Date.now(), id: found.id };
+      return found.id;
+    }
+  }
   const want = configuredOwnerEmail();
   // A handful of users: read them all (oldest first) and match the email case-insensitively.
   const all = await users.listUsers({}, { take: want ? 1000 : 1, order: { created_at: "ASC" }, select: ["id", "email"] });

@@ -13,6 +13,7 @@ export const AUDIT_ACTIONS = [
   "price.change",
   "price.import",
   "role.change",
+  "owner.transfer",
   "password.change",
   "password.reset",
   "password.reset_requested",

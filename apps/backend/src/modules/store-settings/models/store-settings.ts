@@ -44,6 +44,12 @@ export const StoreSetting = model.define("store_setting", {
    * parsed and clamped to [0, 1] on read. Empty/unset = no frame tax.
    */
   frame_tax_rate: model.text().nullable(),
+  /**
+   * Panel user named owner by the last ownership transfer (lib/owner-transfer.ts).
+   * NULL = never transferred: STORE_OWNER_EMAIL, else the oldest user, decides.
+   * One column in one row, so there is never more than one owner.
+   */
+  owner_user_id: model.text().nullable(),
   /** Admin user who last changed the configuration. */
   updated_by: model.text().nullable(),
 });

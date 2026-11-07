@@ -572,7 +572,7 @@ const TOPICS_ES = {
   "team.roles": {
     title: "Roles del equipo",
     short: "Dueño y superadmin lo ven todo; supervisor varias tiendas; encargado su tienda; vendedor solo sus ventas. El rol decide qué pantallas y qué números ve cada persona.",
-    what: "Cada persona del panel tiene un rol. Dueño: la cuenta original, lo puede todo y es el único que nombra superadmins. Superadmin: mismos derechos que el dueño (precios, aprobaciones, alertas, equipo). Supervisor: ve y aprueba en las tiendas que se le asignan, con costos. Encargado: gestiona su tienda (caja, ventas, equipo de la tienda, aprobaciones hasta su límite). Vendedor: hace ventas y ve solo las suyas y su comisión; no ve costos ni ganancia.",
+    what: "Cada persona del panel tiene un rol. Dueño: hay uno solo; lo puede todo y es el único que nombra superadmins. El dueño o un superadmin puede traspasar la propiedad a otro superadmin («Hacer dueño», con su contraseña) y el anterior queda como superadmin. Superadmin: mismos derechos que el dueño (precios, aprobaciones, alertas, equipo). Supervisor: ve y aprueba en las tiendas que se le asignan, con costos. Encargado: gestiona su tienda (caja, ventas, equipo de la tienda, aprobaciones hasta su límite). Vendedor: hace ventas y ve solo las suyas y su comisión; no ve costos ni ganancia.",
     how: [
       "Al crear a alguien, elige el rol y, salvo dueño/superadmin, las tiendas a las que tiene acceso.",
       "Un vendedor necesita además su ficha de vendedor (tienda, punto de venta y comisión).",
@@ -1326,7 +1326,7 @@ const TOPICS_EN = {
   "team.roles": {
     title: "Team roles",
     short: "Owner and superadmin see everything; supervisor several stores; store manager their store; seller only their own sales. The role decides which screens and which numbers each person sees.",
-    what: "Every person in the panel has a role. Owner: the original account, can do everything and is the only one who appoints superadmins. Superadmin: same rights as the owner (prices, approvals, alerts, team). Supervisor: sees and approves in the stores assigned to them, with costs. Store manager: runs their store (till, sales, store team, approvals up to their limit). Seller: makes sales and sees only their own and their commission; no costs or profit.",
+    what: "Every person in the panel has a role. Owner: there is only one; can do everything and is the only one who appoints superadmins. The owner or a superadmin can hand ownership to another superadmin (\"Make owner\", with their password) and the previous owner stays as a superadmin. Superadmin: same rights as the owner (prices, approvals, alerts, team). Supervisor: sees and approves in the stores assigned to them, with costs. Store manager: runs their store (till, sales, store team, approvals up to their limit). Seller: makes sales and sees only their own and their commission; no costs or profit.",
     how: [
       "When creating someone, pick the role and, except for owner/superadmin, the stores they have access to.",
       "A seller also needs their seller record (store, terminal and commission).",

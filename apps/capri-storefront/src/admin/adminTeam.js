@@ -16,7 +16,7 @@ export async function fetchMe() {
 }
 
 // Roles que se pueden asignar desde el panel, de más a menos permisos. "owner"
-// no está: el dueño es siempre el usuario más antiguo (lo decide el backend).
+// no está: el dueño no se asigna, se traspasa (transferOwner; lo decide el backend).
 export const ASSIGNABLE_ROLES = ["superadmin", "supervisor", "manager", "seller"];
 
 /** Clave de traducción del rol; null = sin acceso. */
@@ -166,5 +166,21 @@ export async function saveMyProfile(patch) {
     return await adminFetch("/admin/team/me/profile", { method: "POST", body: patch });
   } catch (e) {
     throw profileErr(e, "adm.err.profile.saveFailed");
+  }
+}
+
+/**
+ * Traspasa la propiedad de la tienda a otro superadmin (lo hace el dueño o un
+ * superadmin, con su propia contraseña). Siempre hay un único dueño: el
+ * anterior queda como superadmin. Devuelve el equipo ya actualizado.
+ */
+export async function transferOwner(id, password) {
+  try {
+    return await adminFetch(`/admin/team/${encodeURIComponent(id)}/owner`, {
+      method: "POST",
+      body: { password },
+    });
+  } catch (e) {
+    throw new Error(reasonKey(e, "adm.err.team.ownerFailed"));
   }
 }

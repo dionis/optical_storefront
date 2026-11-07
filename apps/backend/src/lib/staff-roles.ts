@@ -6,10 +6,14 @@
  * Owner decisions this encodes (docs "Gestión de Tiendas RUBI LENS"):
  *  - owner and superadmin have the same rights: store prices, approving
  *    discounts, configuring alerts. Only the owner names or removes superadmins.
- *  - the owner is the user whose email is STORE_OWNER_EMAIL (set in the
- *    deploy, so only whoever runs the infrastructure can hand ownership over);
+ *  - there is exactly ONE owner. It is the user the last ownership transfer
+ *    named (store_setting.owner_user_id, lib/owner-transfer.ts); before any
+ *    transfer, the user whose email is STORE_OWNER_EMAIL (set in the deploy);
  *    without it, or when no user has that email, the oldest admin user (the one
  *    created with `medusa user` when the store was set up). `pickOwnerId`.
+ *  - ownership moves only between superadmins: the owner or a superadmin hands
+ *    it to another active superadmin (`ownerTransferDenied`), and the previous
+ *    owner stays as a superadmin (owner's decision, 7-nov-2026).
  *  - admins that existed before roles did keep the access they had: a user with
  *    no assignment rows at all resolves to superadmin. Once someone has rows,
  *    only those rows count, so deactivating every row really removes access.
@@ -118,6 +122,31 @@ export function roleChangeDenied(args: {
   if (args.actorIsTarget) return "self_role";
   const touchesSuperadmin = args.nextRole === "superadmin" || args.targetRole === "superadmin";
   if (touchesSuperadmin && args.actorRole !== "owner") return "owner_only";
+  return null;
+}
+
+/**
+ * Why `actorRole` may not hand ownership to the target; null when allowed. Reason
+ * codes are the panel's adm.err.team.<reason>:
+ *   · only the owner and superadmins transfer ownership     → `forbidden_role`
+ *   · the target must be someone else                       → `self_owner`
+ *   · the target is already the owner                       → `already_owner`
+ *   · the target must be an active panel user               → `owner_target_disabled`
+ *   · the target must already be a superadmin               → `owner_target_not_superadmin`
+ * There is only one owner: the transfer replaces it, never adds one.
+ */
+export function ownerTransferDenied(args: {
+  actorRole: StaffRole | null;
+  actorIsTarget: boolean;
+  targetIsOwner: boolean;
+  targetRole: StaffRole | null;
+  targetDisabled: boolean;
+}): string | null {
+  if (!isAdminRole(args.actorRole)) return "forbidden_role";
+  if (args.actorIsTarget) return "self_owner";
+  if (args.targetIsOwner) return "already_owner";
+  if (args.targetDisabled) return "owner_target_disabled";
+  if (args.targetRole !== "superadmin") return "owner_target_not_superadmin";
   return null;
 }
 
