@@ -5,7 +5,7 @@ import { STORE_ASSORTMENT_MODULE } from "../modules/store-assortment";
 import type StoreAssortmentModuleService from "../modules/store-assortment/service";
 import { recordAudit } from "./audit";
 import { KNOWN_BRANDS } from "./costing";
-import { brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
+import { brandExposed, brandOf, brandSqlOf, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
 import { storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
 import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
@@ -119,7 +119,7 @@ export async function searchStoreCatalog(
   let sql = published(pg).joinRaw(SKU_LATERAL).select("product.id", "product.title", "product.thumbnail", "product.metadata", "sku_of.sku").orderBy("product.title").limit(limit);
   if (q.length >= 2) sql = sql.whereILike("product.title", `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
   if (brand) {
-    sql = sql.whereRaw("lower(coalesce(product.metadata->>'brand_slug', product.metadata->>'collection_slug', '')) = ?", [brand]);
+    sql = sql.whereRaw(`${brandSqlOf("product")} = ?`, [brand]);
   }
   const [rows, rules] = await Promise.all([sql, listAssortmentRules(container, establishmentId)]);
   return (rows as Array<Record<string, unknown>>).map((r) => {

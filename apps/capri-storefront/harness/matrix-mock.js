@@ -303,10 +303,11 @@ function applyBody(it, b) {
   if (Array.isArray(b.features)) it.features = b.features;
   if (Array.isArray(b.images)) it.images = b.images;
   if (Array.isArray(b.colors)) {
-    const keep = new Set(b.colors.map((c) => c.id).filter(Boolean));
+    // The backend reads `variant_id` (docs/PRICE-MATRIX.md v2 «Modelos»).
+    const keep = new Set(b.colors.map((c) => c.variant_id).filter(Boolean));
     const sold = it.colors.find((c) => c.sold && !keep.has(c.id));
     if (sold) return "color_sold";
-    it.colors = b.colors.map((c, i) => ({ id: c.id || `var_${it.key}_n${Date.now() % 1e5}_${i}`, name: c.name, image: c.image || null, sold: it.colors.find((x) => x.id === c.id)?.sold || false }));
+    it.colors = b.colors.map((c, i) => ({ id: c.variant_id || `var_${it.key}_n${Date.now() % 1e5}_${i}`, name: c.name, image: c.image || null, sold: it.colors.find((x) => x.id === c.variant_id)?.sold || false }));
     it.thumbnail = it.colors.find((c) => c.image)?.image || it.images[0] || null;
   }
   if (b.model) it.title = b.model;
@@ -402,6 +403,20 @@ export async function matrixMock(p, url, init) {
     it.colors = [];
     applyBody(it, { ...b, sku: undefined, model: undefined });
     return json({ product_id: id, handle: slug(b.sku), row: rowOf(it) }, 201);
+  }
+  // The edit dialog reads Medusa's own product (there is no GET /admin/catalog/frames/:id).
+  const mp = /^\/admin\/products\/([^/]+)$/.exec(p);
+  if (mp && method === "GET") {
+    await sleep(DELAY);
+    const it = items.get(decodeURIComponent(mp[1]));
+    if (!it || !isProduct(it)) return fail("not_found", 404);
+    const { frame } = frameOut(it);
+    const metadata = { kind: frame.kind, brand: frame.brand, brand_slug: frame.brand_slug, features: frame.features };
+    for (const k of [...ATTRS, ...MEAS]) if (k !== "description") metadata[k] = frame[k];
+    const colorImages = frame.colors.map((c) => c.image).filter(Boolean);
+    return json({ product: { id: frame.id, title: frame.model, description: frame.description, status: frame.status, metadata,
+      images: [...(frame.images || []), ...colorImages].map((url) => ({ url })),
+      variants: frame.colors.map((c, i) => ({ id: c.id, title: c.name, sku: i ? `${frame.sku}-${slug(c.name)}` : frame.sku, metadata: { color: c.name, image: c.image || null } })) } });
   }
   const fr = /^\/admin\/catalog\/frames\/([^/]+)$/.exec(p);
   if (fr) {

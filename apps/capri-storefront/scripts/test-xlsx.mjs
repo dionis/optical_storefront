@@ -224,6 +224,8 @@ await test("promoOf: single part, mixed parts, none", () => {
   assert.deepEqual(promoOf({ list: 54, promo: { frame_pct: 10, lens_pct: 0, before_cents: 6000 } }), { before: 60, pct: 10 });
   assert.deepEqual(promoOf({ list: 150, promo: { frame_pct: 10, lens_pct: 30, before_cents: 200000 / 10 } }), { before: 200, pct: 25 });
   assert.equal(promoOf({ list: 60 }), null);
+  // QA v2: a frame −20 % with lenses at full price is −10 % of the line (what the receipt prints).
+  assert.deepEqual(promoOf({ list: 126, promo: { frame_pct: 20, lens_pct: null, photo_pct: null, ar_pct: null, before_cents: 14000 } }), { before: 140, pct: 10 });
   assert.equal(promoOf({ list: 60, promo: { frame_pct: 0, before_cents: 6000 } }), null);
 });
 
@@ -396,7 +398,8 @@ await test("v2 forms: brand, model edit (Medusa fallback), only changed store pr
   const { errors, body } = validateFrameForm({ ...f, brand: "Di Caprio", editing: true, prices, description: "" }, { stores: STORES, initialPrices: init });
   assert.deepEqual(errors, {});
   assert.deepEqual(body.prices, { est_2: { price: 55, discount: 0 } });
-  assert.deepEqual(body.colors, [{ id: "var_1", name: "Black", image: "https://cdn/a.jpg" }]);
+  // The contract names the kept colour `variant_id` (an `id` made the server re-create it — QA v2).
+  assert.deepEqual(body.colors, [{ variant_id: "var_1", name: "Black", image: "https://cdn/a.jpg" }]);
   assert.equal(body.material, "acetate");
   assert.equal(body.description, ""); // emptied on purpose: it travels to clear it
   assert.equal(body.b, undefined); // B was never set: it does not travel

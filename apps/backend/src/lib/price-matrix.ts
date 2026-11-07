@@ -1134,6 +1134,54 @@ export interface CellWriteInput {
  *             lens / photo / ar → the store's own cell (lens_store_price; null → the master / its %)
  *   discount  any → store_item_discount (null or 0 → no discount)
  */
+/**
+ * The matrix cell writes an «Editar modelo» asks for (`cost`, `prices` of
+ * POST /admin/catalog/frames/:id), as `planCellWrite` inputs — only the
+ * figures that CHANGE against the row as the matrix shows it today. The
+ * dialog sends the cost it was opened with every time; writing it again would
+ * turn a Capri cost into an owner edit, and a brand discount shown in the form
+ * would become the model's own. Unknown store → `store_not_found`; a bad value
+ * → the cell's reason. Pure. (QA v2: the route ignored both and the dialog
+ * said «actualizado».)
+ */
+export function frameEditCellWrites(
+  body: Record<string, unknown>,
+  row: Pick<MatrixRow, "kind" | "key" | "cost_cents" | "cost_source" | "stores">,
+  storeIds: readonly string[]
+): { writes: CellWriteInput[] } | { reason: string } {
+  const writes: CellWriteInput[] = [];
+  const base = { kind: row.kind, key: row.key };
+  if ("cost" in body) {
+    const parsed = parseCellValue("cost", body["cost"]);
+    if ("reason" in parsed) return parsed;
+    const now = row.cost_cents ?? null;
+    const changed = parsed.value === null ? row.cost_source === "owner_edit" : parsed.value !== now;
+    if (changed) writes.push({ ...base, field: "cost", store: null, value: body["cost"] });
+  }
+  const prices = body["prices"];
+  if (prices != null) {
+    if (typeof prices !== "object" || Array.isArray(prices)) return { reason: "bad_value" };
+    for (const [storeId, raw] of Object.entries(prices as Record<string, unknown>)) {
+      if (!storeIds.includes(storeId)) return { reason: "store_not_found" };
+      const cellIn = (raw ?? {}) as Record<string, unknown>;
+      if (typeof cellIn !== "object" || Array.isArray(cellIn)) return { reason: "bad_value" };
+      const cur = row.stores?.[storeId];
+      if ("price" in cellIn) {
+        const parsed = parseCellValue("price", cellIn["price"]);
+        if ("reason" in parsed) return parsed;
+        const exactNow = cur?.exact ? cur.price_cents : null;
+        if (parsed.value !== exactNow) writes.push({ ...base, field: "price", store: storeId, value: cellIn["price"] });
+      }
+      if ("discount" in cellIn) {
+        const parsed = parseCellValue("discount", cellIn["discount"]);
+        if ("reason" in parsed) return parsed;
+        if (parsed.value !== (cur?.discount_pct ?? null)) writes.push({ ...base, field: "discount", store: storeId, value: cellIn["discount"] });
+      }
+    }
+  }
+  return { writes };
+}
+
 export function planCellWrite(input: CellWriteInput): { op: CellOp } | { reason: string } {
   if (input.kind === "brand") return planBrandCellWrite(input);
   if (!isItemKind(input.kind)) return { reason: "bad_kind" };

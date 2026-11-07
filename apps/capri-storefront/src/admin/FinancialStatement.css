@@ -3,7 +3,12 @@
    tabulares, secciones en banda, subtotales en negrita, la utilidad neta con
    doble raya. Tokens --adm-* (modo oscuro del armazón). */
 
-.fst { display: flex; flex-direction: column; gap: 8px; }
+/* Inside the panel's flex column the table's width pushed the whole
+   view past the screen (the Excel/PDF buttons were cut off at 1280 px); the table
+   scrolls inside .fst-scroll instead (QA v2). */
+.fst { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* .adm-section's `margin: 0 auto` inside the panel's flex column sized the view to its content. */
+.fst.adm-section { width: 100%; max-width: 100%; }
 .fst-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .fst-head h2 { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 17px; }
 .fst-act { margin-left: auto; display: inline-flex; gap: 6px; }
@@ -12,7 +17,7 @@
 .fst-bar label { display: inline-flex; flex-direction: column; gap: 2px; font-size: 10.5px; font-weight: 700; color: var(--adm-muted); text-transform: uppercase; letter-spacing: .03em; }
 .fst-bar select, .fst-bar input[type="month"] { height: 28px; padding: 0 6px; border: 1px solid var(--adm-line); border-radius: 6px; background: var(--adm-surface); color: var(--adm-ink); font: 500 12.5px var(--adm-font); text-transform: none; }
 .fst-bar label.fst-check { flex-direction: row; align-items: center; gap: 5px; text-transform: none; font-size: 12px; letter-spacing: 0; }
-.fst-wrap { border: 1px solid var(--adm-line); border-radius: var(--adm-radius); background: var(--adm-surface); padding: 10px 12px; }
+.fst-wrap { min-width: 0; border: 1px solid var(--adm-line); border-radius: var(--adm-radius); background: var(--adm-surface); padding: 10px 12px; }
 .fst-wrap.is-loading { opacity: .6; }
 .fst-sub { margin: 0 0 8px; font-size: 12.5px; color: var(--adm-muted); }
 .fst-scroll { overflow-x: auto; }

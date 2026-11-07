@@ -10,8 +10,11 @@ const PARTS = ["frame_pct", "lens_pct", "photo_pct", "ar_pct"];
 /**
  * { before, pct } en dólares y por ciento, o null cuando la línea no tiene
  * promoción (o el precio de antes no es mayor que el de ahora). Una sola parte
- * rebajada (o todas con el mismo %) enseña ese %; si las partes llevan % distintos
- * se enseña el efectivo de la línea, con un decimal.
+ * El % es SIEMPRE el efectivo de la línea, con un decimal, como el recibo
+ * impreso (lib/pos-documents.ts docLinePromo): una montura −20 % con lentes sin
+ * rebaja es «Precio antes $140 · −10 %», no −20 % (QA v2, 7-nov-2026: la caja
+ * decía −20 % y el recibo −10 %). El % de la parte solo se usa si la línea no
+ * trae su precio.
  */
 export function promoOf(line) {
   const p = line?.promo ?? line?.metadata?.promo ?? null;
@@ -27,8 +30,8 @@ export function promoOf(line) {
   if (p.before_cents == null && docPct > 0) return { before, pct: Math.round(docPct * 100) / 100 };
   const pcts = [...new Set(PARTS.map((k) => Number(p[k]) || 0).filter((v) => v > 0))];
   let pct;
-  if (pcts.length === 1) pct = pcts[0];
-  else if (Number.isFinite(now) && now < before) pct = Math.round(((before - now) / before) * 1000) / 10;
+  if (Number.isFinite(now) && now < before) pct = Math.round(((before - now) / before) * 1000) / 10;
+  else if (!Number.isFinite(now) && pcts.length === 1) pct = pcts[0];
   else return null;
   if (!(pct > 0)) return null;
   return { before, pct: Math.round(pct * 100) / 100 };

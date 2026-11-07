@@ -203,6 +203,13 @@
 }
 
 /* ── Armazón ─────────────────────────────────────────────────────────────── */
+/* The store's global `html, body { overflow-x: hidden }` (styles/index.css)
+   makes <body> a scroll container that never scrolls (the viewport does), and
+   every `position: sticky` inside the panel — the top bar, the POS step bar and
+   its Atrás/Siguiente footer — then sticks to <body> instead of the screen: on
+   a tablet the footer of «Pago» sat below the fold (QA v2, 7-nov-2026). The
+   viewport keeps clipping sideways through <html>; <body> goes back to visible. */
+body:has(> #root .adm-shell), body:has(.adm-shell) { overflow-x: visible; }
 .adm-shell { min-height: 100vh; background: var(--adm-bg); color: var(--adm-ink); font-family: var(--adm-font); font-size: 13.5px; line-height: 1.35; letter-spacing: -.004em; display: flex; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-feature-settings: "ss01" 0; }
 /* Las cifras de la UI alinean siempre en columna; la cabecera de sección, los KPIs
    y los importes grandes van en Fraunces con su eje óptico. */

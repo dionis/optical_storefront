@@ -1,4 +1,4 @@
-import { assortmentRuleDenied, brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike } from "../src/lib/store-assortment";
+import { assortmentRuleDenied, brandExposed, brandOf, brandSqlOf, exposureSource, isExposed, type AssortmentRuleLike } from "../src/lib/store-assortment";
 import { toProduct } from "../src/lib/store-assortment-data";
 
 const brandRule = (target: string, exposed: boolean): AssortmentRuleLike => ({ scope: "brand", target, exposed });
@@ -39,6 +39,11 @@ describe("brandExposed / brandOf", () => {
     expect(brandOf({ brand_slug: "Di-Caprio" })).toBe("di-caprio");
     expect(brandOf({ collection_slug: "case" })).toBe("case");
     expect(brandOf(null)).toBe("");
+    // QA v2: a case with no brand of its own is the «case» brand's (its price, discount and switch).
+    expect(brandOf({ kind: "case" })).toBe("case");
+    expect(brandOf({ kind: "case", brand_slug: "di-caprio" })).toBe("di-caprio");
+    expect(brandOf({ kind: "frame" })).toBe("");
+    expect(brandSqlOf("p")).toContain("p.metadata->>'kind' = 'case'");
   });
 });
 

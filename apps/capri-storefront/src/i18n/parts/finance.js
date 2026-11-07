@@ -659,6 +659,7 @@ const en = {
 const HELP_ES = {
   "fin.monthly": {
     title: "Total mensual normalizado",
+    formula: "Mensual = importe × factor de la frecuencia\n  diaria 365/12 · semanal 52/12 · cada 2 semanas 26/12 · mensual 1\n  trimestral 1/3 · anual 1/12 · única 1/meses en que se reparte\nPor venta: mensual = importe × ventas de la tienda en el mes",
     short: "Lo que vale cada partida en un mes promedio según su frecuencia: diaria × 30.42 (365/12), semanal × 52/12, cada 2 semanas × 26/12, mensual × 1, trimestral ÷ 3, anual ÷ 12, única ÷ meses en que se reparte. Una partida por venta: importe × ventas del mes.",
     what: "Permite comparar partidas que se pagan con frecuencias distintas y sumarlas. Las partidas apagadas no suman. El cargo real de un mes concreto se reparte con redondeo acumulado: un año de una partida anual suma exactamente su importe, nunca 12 × un mes redondeado.",
     why: "Es el número que entra en el resultado de cada tienda y en el estado de resultados: si la frecuencia está mal, el mes sale el doble o la mitad.",
@@ -704,6 +705,7 @@ const HELP_ES = {
   },
   "fin.perSaleCost": {
     title: "Costo por venta del mes",
+    formula: "Costo por venta = Σ (importe de cada partida por venta × ventas del mes)\n                + fijos por venta de la ficha × ventas del mes",
     short: "Σ partidas por venta (importe × ventas del mes) + fijos por venta de la ficha × ventas del mes.",
     what: "Es lo que cuesta, este mes, el hecho de vender, aparte de la montura y los lentes. Las comisiones del cobro y de vendedores se ven en su propia línea.",
   },
@@ -720,35 +722,46 @@ const HELP_ES = {
   },
   "fin.commissionBase": {
     title: "Base de la comisión",
+    formula: "Comisión de una línea = redondeo(neto de la línea × % ÷ 100)\n% = perfil de la persona → su ficha de vendedor → comisión por defecto",
+    example: "Neto $126.00 al 7 % → $8.82.",
     short: "La comisión se calcula sobre la VENTA NETA de cada línea (cobrado menos impuesto de venta), redondeada por línea. Nunca sobre el impuesto.",
     what: "El total del mes es la suma de las comisiones de las ventas no anuladas de la tienda (o de todas). Es la misma cifra en el Ejecutivo, el resultado por tienda, Vendedores y el panel del vendedor.",
   },
   "fin.contribution": {
     title: "Contribución",
+    formula: "Contribución = ventas netas − costo de la mercancía − comisiones del cobro\n             − comisiones de vendedores − variables del mes − partidas por venta",
     short: "Ventas netas − costo de la mercancía − comisiones del cobro − comisiones de vendedores − costos variables (a mano y por venta).",
     what: "Lo que dejan las ventas para pagar los costos fijos. Es la ganancia bruta del Ejecutivo menos los variables a mano del mes.",
   },
   "fin.contributionMargin": {
     title: "Margen de contribución",
+    formula: "Margen de contribución % = contribución ÷ ventas netas × 100",
     short: "Contribución ÷ ventas netas × 100. Cuántos centavos de cada dólar vendido quedan para los costos fijos.",
     what: "Si es 40 %, cada $100 de venta neta aporta $40 a renta, sueldos y demás fijos. Con margen cero o negativo no hay punto de equilibrio.",
   },
   "fin.fixedTotal": {
     title: "Costos fijos del mes",
+    formula: "Fijos del mes = Σ partidas fijas de la tienda (mensual)\n              + su parte de las partidas compartidas",
+    example: "Renta $2,500 + seguro $150 + 50 % del software compartido de $300 → $2,800.00.",
     short: "Σ partidas fijas de la tienda + su parte de los compartidos, ya normalizadas al mes. No incluye las variables ni las por venta.",
   },
   "fin.breakEven": {
     title: "Punto de equilibrio",
+    formula: "Punto de equilibrio = fijos del mes ÷ (contribución ÷ ventas netas)\nSin contribución positiva → no hay punto de equilibrio",
     short: "Costos fijos ÷ margen de contribución (la fracción sin redondear). Las ventas netas del mes con las que el resultado queda en cero.",
     what: "Por debajo, la tienda pierde; por encima, cada dólar aporta el margen de contribución. Se calcula con la fracción exacta, no con el % mostrado.",
     example: "Fijos $8,100 y margen 78.1 % → equilibrio $10,367.87 de ventas netas.",
   },
   "fin.kpi.netSales": {
     title: "Ventas netas",
+    formula: "Ventas netas = Σ (total de la venta − impuesto de venta)\n               de las ventas de tienda no anuladas del mes",
+    example: "Una venta de $109.33 con $8.33 de impuesto aporta $101.00.",
     short: "Σ (total cobrado − impuesto de venta) de las ventas no anuladas del mes, en tienda. Es el ingreso del negocio.",
   },
   "fin.kpi.result": {
     title: "Resultado del mes",
+    formula: "Resultado = contribución − (fijos de la tienda + su parte de los compartidos)",
+    example: "Contribución $1,012.30 − fijos $9,350.00 → resultado −$8,337.70.",
     short: "Contribución − costos fijos (con compartidos). Es la utilidad neta del estado de resultados para la misma tienda y mes, al centavo.",
   },
   "fin.acc.fixed": {
@@ -793,14 +806,17 @@ const HELP_ES = {
   },
   "fin.st.revenue": {
     title: "Ingresos netos",
+    formula: "Ingresos = Σ (total − impuesto de venta) de las ventas no anuladas, en tienda y en línea",
     short: "Σ (cobrado − impuesto de venta) de las ventas no anuladas, en tienda y en línea. El envío no es ingreso. Igual a «ventas netas» del Ejecutivo.",
   },
   "fin.st.cogs": {
     title: "Costo de la mercancía vendida",
+    formula: "Costo de la mercancía = monturas + lentes + tratamientos + fijos por venta\n                      + partidas con categoría «Costo de mercancía»",
     short: "Monturas, lentes y tratamientos según las reglas de costo actuales, los fijos por venta (laboratorio, empaque) y las partidas «Costo de mercancía». Igual al «costo» del Ejecutivo más esas partidas.",
   },
   "fin.st.grossProfit": {
     title: "Utilidad bruta",
+    formula: "Utilidad bruta = ingresos − costo de la mercancía",
     short: "Ingresos netos − costo de la mercancía vendida. Margen bruto = utilidad bruta ÷ ingresos.",
   },
   "fin.st.cardFees": {
@@ -813,14 +829,17 @@ const HELP_ES = {
   },
   "fin.st.opex": {
     title: "Gastos de operación",
+    formula: "Gastos de operación = Σ partidas por categoría fiscal\n                    + comisiones del cobro + comisiones de vendedores",
     short: "Partidas por categoría fiscal (normalizadas al mes, con la parte de los compartidos y las por venta) + comisiones del cobro + comisiones de vendedores.",
   },
   "fin.st.operating": {
     title: "Utilidad de operación",
+    formula: "Utilidad de operación = utilidad bruta − gastos de operación",
     short: "Utilidad bruta − gastos de operación.",
   },
   "fin.st.netIncome": {
     title: "Utilidad neta",
+    formula: "Utilidad neta = ingresos − costo de la mercancía − gastos de operación\n(negocio de paso: el impuesto sobre la renta no se resta aquí)",
     short: "Ingresos − costo de lo vendido − gastos de operación − comisiones del cobro − comisiones de vendedores. Igual al «resultado» de la tienda (Σ tiendas + en línea en el consolidado).",
     what: "Negocio de paso (pass-through): el impuesto sobre la renta lo paga el dueño en su declaración, no se resta aquí. No hay otros ingresos ni gastos fuera de la operación.",
   },
@@ -830,10 +849,12 @@ const HELP_ES = {
   },
   "fin.st.grossSales": {
     title: "Cobrado a clientes",
+    formula: "Cobrado a clientes = ingresos + impuesto de venta",
     short: "Σ total de las ventas (con impuesto, después del descuento). Ingresos netos + impuesto de venta.",
   },
   "fin.st.grossContribution": {
     title: "Ganancia bruta del Ejecutivo",
+    formula: "Ganancia bruta = ingresos − costo de monturas, lentes y fijos por venta\n               − comisiones del cobro − comisiones de vendedores",
     short: "Ingresos − costo de monturas y lentes − comisiones del cobro − comisiones de vendedores. Es la «ganancia» que enseña el Ejecutivo para el mismo período.",
   },
 };
@@ -841,6 +862,7 @@ const HELP_ES = {
 const HELP_EN = {
   "fin.monthly": {
     title: "Normalised monthly total",
+    formula: "Monthly = amount × frequency factor\n  daily 365/12 · weekly 52/12 · every 2 weeks 26/12 · monthly 1\n  quarterly 1/3 · annual 1/12 · one-time 1/months it is spread over\nPer sale: monthly = amount × the store's sales in the month",
     short: "What each item is worth in an average month by its frequency: daily × 30.42 (365/12), weekly × 52/12, biweekly × 26/12, monthly × 1, quarterly ÷ 3, annual ÷ 12, one-time ÷ the months it is spread over. A per-sale item: amount × sales of the month.",
     what: "Lets you compare and add up items paid at different frequencies. Items switched off do not add. The actual charge of a given month is spread with a running round: a year of an annual item adds up to its amount exactly, never 12 × a rounded month.",
     why: "It is the number that goes into each store's result and the income statement: a wrong frequency doubles or halves the month.",
@@ -886,6 +908,7 @@ const HELP_EN = {
   },
   "fin.perSaleCost": {
     title: "Per-sale cost of the month",
+    formula: "Per-sale cost = Σ (each per-sale item × the month's sales)\n              + the cost sheet's fixed per sale × the month's sales",
     short: "Σ per-sale items (amount × sales of the month) + the sheet's fixed per sale × sales of the month.",
     what: "What selling itself costs this month, apart from the frame and lenses. Payment fees and seller commissions have their own lines.",
   },
@@ -902,35 +925,46 @@ const HELP_EN = {
   },
   "fin.commissionBase": {
     title: "Commission base",
+    formula: "Line commission = round(line net × % ÷ 100)\n% = the person's profile → their seller record → default commission",
+    example: "Net $126.00 at 7 % → $8.82.",
     short: "The commission is computed on the NET SALE of each line (collected minus sales tax), rounded per line. Never on the tax.",
     what: "The month's total is the sum of the commissions of the store's (or every store's) sales not voided. The same figure in the Executive, the store result, Sellers and the seller's own panel.",
   },
   "fin.contribution": {
     title: "Contribution",
+    formula: "Contribution = net sales − cost of goods − payment fees\n             − seller commissions − variable items − per-sale items",
     short: "Net sales − cost of goods − payment fees − seller commissions − variable costs (by hand and per sale).",
     what: "What sales leave to pay the fixed costs. It is the Executive's gross profit minus the month's variable items.",
   },
   "fin.contributionMargin": {
     title: "Contribution margin",
+    formula: "Contribution margin % = contribution ÷ net sales × 100",
     short: "Contribution ÷ net sales × 100. How many cents of each dollar sold are left for the fixed costs.",
     what: "At 40 %, each $100 of net sales contributes $40 to rent, wages and the other fixed costs. With a zero or negative margin there is no break-even.",
   },
   "fin.fixedTotal": {
     title: "Fixed costs of the month",
+    formula: "Fixed costs = Σ the store's fixed items (monthly)\n            + its share of the shared items",
+    example: "Rent $2,500 + insurance $150 + 50 % of a $300 shared software → $2,800.00.",
     short: "Σ the store's fixed items + its share of the shared ones, normalised to the month. Excludes variable and per-sale items.",
   },
   "fin.breakEven": {
     title: "Break-even",
+    formula: "Break-even = fixed costs ÷ (contribution ÷ net sales)\nNo positive contribution → no break-even",
     short: "Fixed costs ÷ contribution margin (the unrounded fraction). The net sales of the month at which the result is zero.",
     what: "Below it the store loses money; above it each dollar contributes the contribution margin. Computed with the exact fraction, not the % shown.",
     example: "Fixed $8,100 and a 78.1 % margin → break-even at $10,367.87 of net sales.",
   },
   "fin.kpi.netSales": {
     title: "Net sales",
+    formula: "Net sales = Σ (sale total − sales tax)\n            of the month's store sales not voided",
+    example: "A $109.33 sale with $8.33 tax adds $101.00.",
     short: "Σ (collected − sales tax) of the month's in-store sales not voided. The business's revenue.",
   },
   "fin.kpi.result": {
     title: "Result of the month",
+    formula: "Result = contribution − (store fixed costs + its share of the shared ones)",
+    example: "Contribution $1,012.30 − fixed $9,350.00 → result −$8,337.70.",
     short: "Contribution − fixed costs (shared included). It is the income statement's net income for the same store and month, to the cent.",
   },
   "fin.acc.fixed": {
@@ -975,14 +1009,17 @@ const HELP_EN = {
   },
   "fin.st.revenue": {
     title: "Net revenue",
+    formula: "Revenue = Σ (total − sales tax) of the sales not voided, in store and online",
     short: "Σ (collected − sales tax) of the sales not voided, in store and online. Shipping is not revenue. Equal to the Executive's «net sales».",
   },
   "fin.st.cogs": {
     title: "Cost of goods sold",
+    formula: "Cost of goods = frames + lenses + treatments + fixed per sale\n              + items in the «Cost of goods» category",
     short: "Frames, lenses and treatments by the current cost rules, per-sale fixed costs (lab, packaging) and items filed as «Cost of goods sold». Equal to the Executive's «cost» plus those items.",
   },
   "fin.st.grossProfit": {
     title: "Gross profit",
+    formula: "Gross profit = revenue − cost of goods",
     short: "Net revenue − cost of goods sold. Gross margin = gross profit ÷ revenue.",
   },
   "fin.st.cardFees": {
@@ -995,14 +1032,17 @@ const HELP_EN = {
   },
   "fin.st.opex": {
     title: "Operating expenses",
+    formula: "Operating expenses = Σ items by tax category\n                   + payment fees + seller commissions",
     short: "Items by tax category (normalised to the month, with the share of shared and the per-sale ones) + payment fees + seller commissions.",
   },
   "fin.st.operating": {
     title: "Operating income",
+    formula: "Operating income = gross profit − operating expenses",
     short: "Gross profit − operating expenses.",
   },
   "fin.st.netIncome": {
     title: "Net income",
+    formula: "Net income = revenue − cost of goods − operating expenses\n(pass-through business: income tax is not subtracted here)",
     short: "Revenue − cost of goods − operating expenses − payment fees − seller commissions. Equal to the store «result» (Σ stores + online in the consolidated).",
     what: "Pass-through business: income tax is paid by the owner on their return, it is not subtracted here. There is no other income or expense outside operations.",
   },
@@ -1012,10 +1052,12 @@ const HELP_EN = {
   },
   "fin.st.grossSales": {
     title: "Charged to customers",
+    formula: "Charged to customers = revenue + sales tax",
     short: "Σ total of the sales (tax included, after discount). Net revenue + sales tax.",
   },
   "fin.st.grossContribution": {
     title: "Executive gross profit",
+    formula: "Gross profit = revenue − frame, lens and per-sale fixed cost\n             − payment fees − seller commissions",
     short: "Revenue − frame and lens cost − payment fees − seller commissions. The «profit» the Executive shows for the same period.",
   },
 };

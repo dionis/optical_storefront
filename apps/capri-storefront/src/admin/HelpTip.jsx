@@ -352,7 +352,8 @@ export function HelpModal({ topic, custom = null, onNavigate, onClose }) {
                 <ul className="adm-help-pitfalls">{pitfalls.map((l, i) => <li key={i}>{l}</li>)}</ul>
               </Section>
             )}
-            {empty && <p className="muted">{t("adm.help.ui.missing")}</p>}
+            {/* A topic with only its summary is complete: the lead above says it all (QA v2: it read «no guide yet» under the guide). */}
+            {empty && !short && <p className="muted">{t("adm.help.ui.missing")}</p>}
           </div>
         </div>
         <footer className="adm-help-foot">

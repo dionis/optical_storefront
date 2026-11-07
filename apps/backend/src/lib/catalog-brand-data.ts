@@ -5,6 +5,7 @@ import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import { catalogBrandId } from "../modules/store-pricing/catalog-brand-seed";
 import { recordAudit } from "./audit";
+import { brandSqlOf } from "./store-assortment";
 import {
   derivedBrandRow,
   mergeBrands,
@@ -51,7 +52,7 @@ export async function catalogueBrandCounts(container: MedusaContainer): Promise<
   const rows = (await pg("product")
     .whereNull("deleted_at")
     .whereIn("status", LISTED_STATUSES)
-    .select(pg.raw(`lower(coalesce(metadata->>'brand_slug', metadata->>'collection_slug', '')) as slug`))
+    .select(pg.raw(`${brandSqlOf("product")} as slug`))
     .select(pg.raw(`max(metadata->>'brand') as name`))
     .select(pg.raw(`count(*) filter (where metadata->>'kind' = 'case') as cases`))
     .select(pg.raw(`bool_and(coalesce(metadata->>'source', '') = 'manual') as manual`))
@@ -184,7 +185,7 @@ export async function deleteBrand(container: MedusaContainer, slug: string, acto
   const pg = pgOf(container);
   const [{ n } = { n: 0 }] = (await pg("product")
     .whereNull("deleted_at")
-    .whereRaw(`lower(coalesce(metadata->>'brand_slug', metadata->>'collection_slug', '')) = ?`, [slug])
+    .whereRaw(`${brandSqlOf("product")} = ?`, [slug])
     .count({ n: "*" })) as Array<{ n: number | string }>;
   const models = Number(n) || 0;
   if (models > 0) return { reason: "brand_has_models", models };

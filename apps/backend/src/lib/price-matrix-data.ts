@@ -25,6 +25,7 @@ import { parseLensFinish } from "./lens-finish";
 import { loadLensMatrix, type LensMatrixRow } from "./lens-matrix";
 import { writeLensMaster } from "./lens-price-write";
 import { assortmentByStore } from "./pricing-across";
+import { brandSqlOf } from "./store-assortment";
 import { clearPriceBandCache } from "./pricing";
 import { lensBaseKey, parseLensBaseKey, upsertStoreLensPrice, type LensStorePriceLike } from "./pricing-overview";
 import {
@@ -226,7 +227,7 @@ export async function loadProductRows(container: MedusaContainer, opts: { q?: st
       .select(pg.raw(SKUS_SQL));
     if (withBase) sql = sql.select(pg.raw(BASE_SQL));
     if (opts.ids) sql = sql.whereIn("product.id", opts.ids.length ? opts.ids : ["__none__"]);
-    if (opts.brand) sql = sql.whereRaw(`lower(coalesce(product.metadata->>'brand_slug', product.metadata->>'collection_slug', '')) = ?`, [opts.brand]);
+    if (opts.brand) sql = sql.whereRaw(`${brandSqlOf("product")} = ?`, [opts.brand]);
     if (q) {
       const pattern = like(q);
       sql = sql.where((b) => {
@@ -779,7 +780,7 @@ export async function catalogBrandsV1(container: MedusaContainer): Promise<Catal
   const rows = (await pg("product")
     .whereNull("deleted_at")
     .whereIn("status", LISTED_STATUSES)
-    .select(pg.raw(`lower(coalesce(metadata->>'brand_slug', metadata->>'collection_slug', '')) as slug`))
+    .select(pg.raw(`${brandSqlOf("product")} as slug`))
     .select(pg.raw(`max(metadata->>'brand') as name`))
     .count({ models: "*" })
     .groupByRaw("1")) as Array<Record<string, unknown>>;

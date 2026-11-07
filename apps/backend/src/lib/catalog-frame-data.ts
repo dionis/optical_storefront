@@ -10,7 +10,7 @@ import {
 } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
 import { recordAudit } from "./audit";
-import { attributeMetadata, planColorEdit, type CatalogFramePatch, type ExistingVariant } from "./catalog-frame";
+import { attributeMetadata, galleryAfterEdit, planColorEdit, type CatalogFramePatch, type ExistingVariant } from "./catalog-frame";
 import { importSkuKey } from "./price-matrix";
 
 /**
@@ -203,9 +203,11 @@ export async function updateCatalogFrame(
   if (patch.title !== undefined) productUpdate["title"] = patch.title;
   if (patch.description !== undefined) productUpdate["description"] = patch.description;
   if (patch.status !== undefined) productUpdate["status"] = patch.status;
-  if (patch.images !== undefined) {
-    productUpdate["images"] = patch.images.map((url) => ({ url }));
-    productUpdate["thumbnail"] = patch.images[0] ?? null;
+  // The gallery is rebuilt like the create's: extra photos, then the colours' photos.
+  const gallery = galleryAfterEdit(p, patch);
+  if (gallery !== undefined) {
+    productUpdate["images"] = gallery.map((url) => ({ url }));
+    productUpdate["thumbnail"] = gallery[0] ?? null;
   }
   await updateProductsWorkflow(container).run({ input: { products: [productUpdate as never] } });
 

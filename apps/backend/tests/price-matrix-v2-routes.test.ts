@@ -260,4 +260,18 @@ describe("POST /admin/catalog/uploads", () => {
     expect((out.body as { url: string }).url).toMatch(/^https:\/\/.+\/catalog\/1-logo\.png$/);
     expect(createFiles).toHaveBeenCalledWith([expect.objectContaining({ mimeType: "image/png", access: "public", filename: expect.stringMatching(/^catalog\/\d+-logo\.png$/) })]);
   });
+
+  it("sends the bytes as base64, so a PNG survives the file provider byte for byte (QA v2)", async () => {
+    access.mockResolvedValue(ADMIN);
+    // A real PNG header: 0x89 and every byte ≥ 0x80 must reach the provider intact.
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xc3, 0x80]);
+    let sent = "";
+    const createFiles = jest.fn(async (list: Array<{ content: string }>) => { sent = list[0].content; return [{ id: "f", url: "catalog/1-a.png" }]; });
+    const file = { originalname: "a.png", mimetype: "image/png", size: bytes.length, buffer: bytes };
+    expect((await call(uploadPost as never, null, {}, {}, { file, services: { file: { createFiles } } })).status).toBe(201);
+    // What @medusajs/file-local and file-s3 2.17 do with `content`:
+    const decoded = Buffer.from(sent, "base64");
+    const stored = decoded.toString("base64") === sent ? decoded : Buffer.from(sent, "utf8");
+    expect(stored.equals(bytes)).toBe(true);
+  });
 });

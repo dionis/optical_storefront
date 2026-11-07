@@ -313,8 +313,10 @@ export function validateFrameForm(form, { takenSkus = new Set(), stores = [], in
   if (!SKU_RE.test(sku)) errors.sku = "bad_sku";
   else if (takenSkus.has(sku.toUpperCase().replace(/[^A-Z0-9]+/g, ""))) errors.sku = "sku_taken";
   const colors = (form.colors || [])
-    .map((c) => ({ ...(c.id ? { id: c.id } : {}), name: String(c.name || "").trim(), image: String(c.image || "").trim() }))
-    .filter((c) => c.id || c.name || c.image);
+    // The contract names the kept colour's variant `variant_id` (an `id` here
+    // made the server plan every kept colour as new — QA v2, 7-nov-2026).
+    .map((c) => ({ ...(c.id ? { variant_id: c.id } : {}), name: String(c.name || "").trim(), image: String(c.image || "").trim() }))
+    .filter((c) => c.variant_id || c.name || c.image);
   if (!colors.length || colors.some((c) => !c.name || (c.image && !URL_RE.test(c.image)))) errors.colors = "bad_colors";
   const images = (form.images || []).map((u) => String(u || "").trim()).filter(Boolean);
   if (images.some((u) => !URL_RE.test(u))) errors.images = "bad_image";
@@ -370,9 +372,9 @@ export function validateFrameForm(form, { takenSkus = new Set(), stores = [], in
 }
 
 /**
- * A model as the edit dialog fills its form: GET /admin/catalog/frames/:id
- * (`frame`, same shape as the create body) or, as a fallback, Medusa's own
- * product (`GET /admin/products/:id`: title, variants, images, metadata).
+ * A model as the edit dialog fills its form: Medusa's own product
+ * (`GET /admin/products/:id`: title, variants, images, metadata); a `frame`
+ * object in the create body's shape is read too.
  */
 export function frameToForm(src, row = null) {
   const f = src?.frame || src?.product || src || {};

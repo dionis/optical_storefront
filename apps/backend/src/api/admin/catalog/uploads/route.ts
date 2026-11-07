@@ -40,7 +40,11 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
       {
         filename: catalogUploadKey(file.originalname),
         mimeType: file.mimetype,
-        content: file.buffer.toString("binary"),
+        // Base64, never "binary": Medusa 2.17's file providers (local and S3/R2)
+        // decode the content as base64 and fall back to UTF-8, so a "binary"
+        // (latin1) string reached the disk/bucket with every byte ≥ 0x80
+        // re-encoded as two — a corrupt PNG/JPEG (QA v2, 7-nov-2026).
+        content: file.buffer.toString("base64"),
         access: "public" as const,
       },
     ]);

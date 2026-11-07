@@ -30,7 +30,9 @@ import SortTh from "./SortTh.jsx";
 import "./screens.css";
 
 const CATEGORIES = ["rent", "maintenance", "utilities", "salaries", "insurance", "licenses", "subscriptions", "equipment", "supplies", "shipping", "repairs", "remakes", "accounting", "other"];
-const FREQS = ["monthly", "quarterly", "annual", "one_time"];
+// Every frequency the server accepts (lib/store-costs.ts, «Reglas y comisiones»): a weekly or
+// daily item opened here showed a raw key and a select that silently read «Mensual» (QA v2).
+const FREQS = ["daily", "weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"];
 const errKey = (e) => (e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic");
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 const EMPTY = { establishment_id: "", kind: "fixed", category: "rent", description: "", amount: "", frequency: "monthly", amortize_months: "", starts_on: `${thisMonth()}-01`, ends_on: "", vendor: "", notes: "", allocation: { method: "sales", shares: {} }, attachment: null };

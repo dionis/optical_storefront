@@ -40,6 +40,7 @@ import {
   groupFrameRows,
   indexImportBrands,
   indexItemDiscounts,
+  frameEditCellWrites,
   linePromoPcts,
   photoPricesAfter,
   planCellWrite,
@@ -69,7 +70,7 @@ import {
   mergeBrands,
   type BrandRow,
 } from "../src/lib/catalog-brand";
-import { cleanCatalogFrame, cleanCatalogFramePatch, buildCatalogFrameProduct, planColorEdit } from "../src/lib/catalog-frame";
+import { cleanCatalogFrame, cleanCatalogFramePatch, buildCatalogFrameProduct, galleryAfterEdit, planColorEdit } from "../src/lib/catalog-frame";
 
 const row = (over: Partial<FrameCostRow> = {}): FrameCostRow => ({
   sku: "DC50",
@@ -565,6 +566,62 @@ describe("editing a model (POST /admin/catalog/frames/:id)", () => {
     expect(plan.remove).toEqual(["v3"]);
     expect(plan.newOptionValues).toEqual(["Smoke Grey"]);
     expect(plan.unknown).toEqual(["v9"]);
+  });
+
+  it("takes the panel's colour `id` as the variant (QA v2: kept colours were planned as new)", () => {
+    const out = cleanCatalogFramePatch({ colors: [{ id: "v1", name: "Negro", image: "https://cdn/n.png" }, { variant_id: "v2", name: "Carey" }, { name: "Rojo" }] });
+    expect(out).toEqual({ patch: { attributes: {}, colors: [{ variant_id: "v1", name: "Negro", image: "https://cdn/n.png" }, { variant_id: "v2", name: "Carey" }, { variant_id: null, name: "Rojo" }] } });
+    const existing = [
+      { id: "v1", title: "Negro", sku: "MV2300", metadata: null },
+      { id: "v2", title: "Carey", sku: "MV2300-carey", metadata: null },
+    ];
+    if (!("patch" in out) || !out.patch.colors) throw new Error("expected a patch with colours");
+    const plan = planColorEdit(existing, out.patch.colors, "MV2300");
+    expect(plan.remove).toEqual([]);
+    expect(plan.create.map((c) => c.name)).toEqual(["Rojo"]);
+  });
+
+  it("«Editar modelo» writes cost and per-store prices as matrix cells, only what changed (QA v2)", () => {
+    const cell = (price: number | null, exact: boolean, pct: number | null) => ({ price_cents: price, source: exact ? "store_exact" : "brand", exact, discount_pct: pct, final_cents: price, exposed: true }) as never;
+    const row = { kind: "frame" as const, key: "prod_1", cost_cents: 3150, cost_source: "supplier_list", stores: { s1: cell(9900, true, null), s2: cell(7900, false, 15) } };
+    // Unchanged cost and prices (the dialog sends what it opened with) → nothing; a brand discount shown is not copied.
+    expect(frameEditCellWrites({ cost: 31.5, prices: { s1: { price: 99, discount: 0 }, s2: { price: null, discount: 15 } } }, row, ["s1", "s2"])).toEqual({ writes: [] });
+    // New cost, new exact price in s2, cleared price in s1, new discount in s1.
+    expect(frameEditCellWrites({ cost: "32.75", prices: { s1: { price: null, discount: 5 }, s2: { price: 85 } } }, row, ["s1", "s2"])).toEqual({
+      writes: [
+        { kind: "frame", key: "prod_1", field: "cost", store: null, value: "32.75" },
+        { kind: "frame", key: "prod_1", field: "price", store: "s1", value: null },
+        { kind: "frame", key: "prod_1", field: "discount", store: "s1", value: 5 },
+        { kind: "frame", key: "prod_1", field: "price", store: "s2", value: 85 },
+      ],
+    });
+    // Clearing a cost only writes when it is the owner's (back to the list).
+    expect(frameEditCellWrites({ cost: null }, row, ["s1"])).toEqual({ writes: [] });
+    expect(frameEditCellWrites({ cost: null }, { ...row, cost_source: "owner_edit" }, ["s1"])).toEqual({ writes: [{ kind: "frame", key: "prod_1", field: "cost", store: null, value: null }] });
+    expect(frameEditCellWrites({ prices: { nope: { price: 1 } } }, row, ["s1"])).toEqual({ reason: "store_not_found" });
+    expect(frameEditCellWrites({ prices: { s1: { discount: 99 } } }, row, ["s1"])).toEqual({ reason: "discount_range" });
+    expect(frameEditCellWrites({ cost: "abc" }, row, ["s1"])).toEqual({ reason: "bad_value" });
+  });
+
+  it("rebuilds the gallery on an edit like the create (extras, then colour photos); untouched → undefined", () => {
+    const current = {
+      images: ["https://cdn/extra.jpg", "https://cdn/black.jpg", "https://cdn/tort.jpg"],
+      variants: [
+        { id: "v1", title: "Black", sku: "X", metadata: { image: "https://cdn/black.jpg" } },
+        { id: "v2", title: "Tortoise", sku: "X-t", metadata: { image: "https://cdn/tort.jpg" } },
+      ],
+    };
+    // The dialog sends no extra photos and a new photo for colour 2: the colour photos stay, the extras go.
+    expect(galleryAfterEdit(current, { images: [], colors: [{ variant_id: "v1", name: "Black" }, { variant_id: "v2", name: "Tortoise", image: "https://cdn/new.jpg" }] }))
+      .toEqual(["https://cdn/black.jpg", "https://cdn/new.jpg"]);
+    // Only a colour photo changes: the extra photos are kept, first.
+    expect(galleryAfterEdit(current, { colors: [{ variant_id: "v1", name: "Black", image: "https://cdn/b2.jpg" }, { variant_id: "v2", name: "Tortoise" }] }))
+      .toEqual(["https://cdn/extra.jpg", "https://cdn/b2.jpg", "https://cdn/tort.jpg"]);
+    expect(galleryAfterEdit(current, { colors: [{ variant_id: "v1", name: "Negro" }, { variant_id: "v2", name: "Tortoise" }] })).toBeUndefined();
+    expect(galleryAfterEdit(current, {})).toBeUndefined();
+    // A removed photo (null) leaves the gallery.
+    expect(galleryAfterEdit(current, { images: ["https://cdn/extra.jpg"], colors: [{ variant_id: "v1", name: "Black", image: null }, { variant_id: "v2", name: "Tortoise" }] }))
+      .toEqual(["https://cdn/extra.jpg", "https://cdn/tort.jpg"]);
   });
 });
 

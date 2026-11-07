@@ -143,7 +143,7 @@ export default function TreatmentDialog({ row = null, costAccess = true, onClose
         </div>
         {!editing && photo && (errors.prices || CATS.some((c) => errors[`price:${c}`])) && <small className="pm-f-err">{t("adm.pm.add.photoPricesErr")}</small>}
         {!editing && photo && <small className="pm-f-hint">{t("adm.pm.add.photoHint")}</small>}
-        {editing && <small className="pm-f-hint">{t(photo ? "adm.pm.edit.treatCostHint" : "adm.pm.edit.pricesHint")}</small>}
+        {editing && <small className="pm-f-hint">{t(photo ? "adm.pm.edit.treatCostHint" : "adm.pm.edit.treatPricesHint")}</small>}
       </form>
     </Modal>
   );

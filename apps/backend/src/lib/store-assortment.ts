@@ -21,11 +21,25 @@ export interface AssortmentRuleLike {
   exposed: boolean;
 }
 
-/** Brand of a product as the scraper writes it (metadata.brand_slug, else collection_slug). */
+/** The pseudo-brand every case belongs to when it carries no brand of its own (the scraper's own slug for Capri cases). */
+export const CASE_BRAND = "case";
+
+/**
+ * Brand of a product as the scraper writes it (metadata.brand_slug, else
+ * collection_slug). A case without a brand is the «case» brand's: the matrix
+ * files it under «Estuches» (docs/PRICE-MATRIX.md), so its brand price, brand
+ * discount and «Visible» switch must reach it too (QA v2, 7-nov-2026: a
+ * brandless case sat under the header but ignored its price).
+ */
 export function brandOf(metadata: Record<string, unknown> | null | undefined): string {
   const m = metadata ?? {};
-  return String(m["brand_slug"] ?? m["collection_slug"] ?? "").trim().toLowerCase();
+  const slug = String(m["brand_slug"] ?? m["collection_slug"] ?? "").trim().toLowerCase();
+  return slug || (m["kind"] === "case" ? CASE_BRAND : "");
 }
+
+/** `brandOf` in SQL, for a `product` row under `alias` (filters and counts must agree with the code). */
+export const brandSqlOf = (alias = "product"): string =>
+  `coalesce(nullif(lower(trim(coalesce(${alias}.metadata->>'brand_slug', ${alias}.metadata->>'collection_slug', ''))), ''), case when ${alias}.metadata->>'kind' = 'case' then '${CASE_BRAND}' else '' end)`;
 
 /** What the brand alone decides for its models (true when there is no brand rule). */
 export function brandExposed(rules: AssortmentRuleLike[], brand: string): boolean {

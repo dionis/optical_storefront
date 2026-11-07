@@ -1,11 +1,11 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
-import { cleanCatalogFramePatch } from "../../../../../lib/catalog-frame";
+import { cleanCatalogFramePatch, type CatalogFramePatch } from "../../../../../lib/catalog-frame";
 import { deleteCatalogFrame, updateCatalogFrame } from "../../../../../lib/catalog-frame-data";
 import { mirrorPricesToSheet } from "../../../../../lib/gsheet-sync";
-import { redactMatrixRow } from "../../../../../lib/price-matrix";
-import { invalidatePriceCaches, loadMatrixRow } from "../../../../../lib/price-matrix-data";
+import { frameEditCellWrites, planCellWrite, redactMatrixRow, type CellOp } from "../../../../../lib/price-matrix";
+import { executeCellOp, invalidatePriceCaches, loadMatrixRow, loadMatrixStores } from "../../../../../lib/price-matrix-data";
 import { matrixAccess } from "../../../../../lib/price-matrix-route";
 
 /**
@@ -21,8 +21,10 @@ import { matrixAccess } from "../../../../../lib/price-matrix-route";
  * wanted: `{ variant_id, name }` keeps or renames a colour, `{ name }` adds one
  * (SKU `<model SKU>-<colour>`, the model's Medusa price), and a colour left out
  * is removed — only if it was never sold, otherwise 409 `variant_sold` with
- * `variant_ids` and nothing is written. Cost and prices are cells of the
- * matrix, not of this route.
+ * `variant_ids` and nothing is written. `cost?` and `prices?: { <store id>:
+ * { price?, discount? } }` (what the edit dialog shows) are written with the
+ * matrix's own cell writers, only where they change (QA v2, 7-nov-2026:
+ * before, they were silently ignored); a cost needs «Gestionar costos».
  *
  * NOTE: the catalogue sync still owns the fields it scrapes on a Capri model
  * (title, description, attributes): an edit of a scraped model lasts until the
@@ -43,21 +45,61 @@ export async function POST(req: AuthenticatedMedusaRequest<Record<string, unknow
     res.status(403).json({ type: "not_allowed", reason: "forbidden_role", message: "Only the owner or a superadmin can edit models." });
     return;
   }
-  const cleaned = cleanCatalogFramePatch((req.body ?? {}) as Record<string, unknown>);
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+  const wantsCells = "cost" in raw || raw["prices"] != null;
+  const cleanedIn = cleanCatalogFramePatch(raw);
+  // Only a cost or a price is a change too.
+  const cleaned = "reason" in cleanedIn && cleanedIn.reason === "nothing_to_change" && wantsCells ? { patch: { attributes: {} } as CatalogFramePatch } : cleanedIn;
   if ("reason" in cleaned) {
     res.status(422).json({ type: "invalid_data", reason: cleaned.reason, message: "Invalid model change." });
     return;
   }
   const id = String(req.params?.id ?? "");
+  const body = raw;
   try {
-    const out = await updateCatalogFrame(req.scope, id, cleaned.patch, access.actorId);
+    // Cost and per-store prices: validated BEFORE anything is written.
+    let ops: CellOp[] = [];
+    let current = null as Awaited<ReturnType<typeof loadMatrixRow>>;
+    let stores: Awaited<ReturnType<typeof loadMatrixStores>> | undefined;
+    if (wantsCells) {
+      stores = await loadMatrixStores(req.scope);
+      current = await loadMatrixRow(req.scope, "frame", id, { withCosts: true, stores });
+      if (!current) {
+        res.status(404).json({ type: "not_found", reason: "product_not_found", message: `No model ${id}.` });
+        return;
+      }
+      const planned = frameEditCellWrites(body, current, (stores ?? []).map((s) => s.id));
+      if ("reason" in planned) {
+        res.status(planned.reason === "store_not_found" ? 404 : 422).json({ type: planned.reason === "store_not_found" ? "not_found" : "invalid_data", reason: planned.reason, message: "Invalid model price or cost." });
+        return;
+      }
+      if (planned.writes.some((w) => w.field === "cost") && !access.canManageCosts) {
+        res.status(403).json({ type: "not_allowed", reason: "forbidden_role", message: "Changing a cost needs «Gestionar costos»." });
+        return;
+      }
+      for (const w of planned.writes) {
+        const p = planCellWrite(w);
+        if ("reason" in p) {
+          res.status(422).json({ type: "invalid_data", reason: p.reason, message: "Invalid model price or cost." });
+          return;
+        }
+        ops.push(p.op);
+      }
+    }
+    const touchesProduct = Object.keys(cleaned.patch).some((k) => k !== "attributes") || Object.keys(cleaned.patch.attributes).length > 0;
+    const out = touchesProduct ? await updateCatalogFrame(req.scope, id, cleaned.patch, access.actorId) : { product_id: id };
     if ("reason" in out) {
       const status = out.reason === "product_not_found" ? 404 : out.reason === "variant_sold" ? 409 : 422;
       res.status(status).json({ type: status === 404 ? "not_found" : status === 409 ? "conflict" : "invalid_data", reason: out.reason, variant_ids: out.variant_ids, message: "The model cannot take this change." });
       return;
     }
+    for (const op of ops) {
+      const failed = await executeCellOp(req.scope, op, current, access.actorId);
+      if (failed) throw new Error(`cell write ${op.op} refused: ${failed}`);
+    }
+    ops = [];
     invalidatePriceCaches();
-    const row = await loadMatrixRow(req.scope, "frame", id, { withCosts: access.canSeeCosts });
+    const row = await loadMatrixRow(req.scope, "frame", id, { withCosts: access.canSeeCosts, stores });
     logger.info(`[catalog] model ${id} edited by ${access.actorId ?? "?"}`);
     void mirrorPricesToSheet(req.scope);
     res.json({ product_id: id, row: row && !access.canSeeCosts ? redactMatrixRow(row) : row });

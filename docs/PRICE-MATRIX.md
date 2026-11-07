@@ -678,3 +678,24 @@ configurado, disco local si no. Solo dueño/superadmin (403
   venta. Mientras tanto, la forma de mover el precio de la web es el precio
   **maestro** (celda del maestro / precio global del dueño), que `price-sync`
   respeta.
+
+### 10. Correcciones de la QA v2 contra el backend real (7-nov-2026)
+
+- **Subidas**: el contenido va al módulo de archivos en **base64** (los
+  proveedores `file-local`/`file-s3` 2.17 decodifican base64 y, si no, UTF-8:
+  con `"binary"` cada byte ≥ 0x80 se duplicaba y todo PNG/JPEG salía roto). Lo
+  mismo en las fotos de reseñas.
+- **Editar modelo**: los colores conservados viajan como `variant_id` (el panel
+  mandaba `id` y el servidor planeaba cada color como nuevo → 500 «Variant …
+  already exists»; también acepta `id` como alias). La galería se rehace como en
+  el alta (fotos extra + fotos de los colores): antes `images: []` dejaba el
+  producto sin galería ni portada. `cost` y `prices` del diálogo se escriben con
+  los escritores de la celda **solo si cambian** (`frameEditCellWrites`; antes se
+  ignoraban en silencio); un costo necesita «Gestionar costos».
+- **Estuches sin marca**: `brandOf` (y su SQL `brandSqlOf`) da `case` a un
+  producto `metadata.kind = case` sin marca propia, así que el precio, el
+  descuento y el interruptor de la cabecera «Estuches» les llegan (matriz, caja,
+  búsqueda del POS, Excel «Marcas», conteo de modelos de la marca).
+- El panel lee el modelo a editar de `GET /admin/products/:id` (no existe un
+  `GET /admin/catalog/frames/:id`; el intento dejaba dos 404 en consola).
+

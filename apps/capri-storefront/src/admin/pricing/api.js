@@ -493,11 +493,9 @@ export async function createCatalogFrame(body) {
  * (`GET /admin/products/:id`), que trae variantes, fotos y `metadata`.
  */
 export async function fetchCatalogFrame(id) {
-  try {
-    return await adminFetch(`/admin/catalog/frames/${seg(id)}`);
-  } catch (e) {
-    if (e?.status !== 404 && e?.status !== 405) throw new Error(key(e, "adm.err.pricing.load_failed"));
-  }
+  // The backend has no GET /admin/catalog/frames/:id (POST and DELETE only):
+  // asking it first left two 404s in the console on every «Editar modelo».
+  // Medusa's own product carries everything the form needs.
   try {
     return await adminFetch(`/admin/products/${seg(id)}`, { query: { fields: "id,title,handle,description,thumbnail,status,*images,*variants,metadata" } });
   } catch (e) {

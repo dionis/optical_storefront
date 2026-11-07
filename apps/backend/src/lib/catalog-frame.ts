@@ -410,7 +410,11 @@ export function cleanCatalogFramePatch(body: Record<string, unknown>): { patch: 
       const k = handleOfSku(name) || name.toLowerCase();
       if (seenNames.has(k)) return { reason: "bad_colors" };
       seenNames.add(k);
-      const id = blank(obj["variant_id"]) ? null : String(obj["variant_id"]).trim();
+      // `variant_id` is the contract; `id` (what the panel's form holds) is
+      // accepted too — without it every kept colour would be planned as NEW
+      // and its old variant removed (QA v2, 7-nov-2026).
+      const idIn = !blank(obj["variant_id"]) ? obj["variant_id"] : obj["id"];
+      const id = blank(idIn) ? null : String(idIn).trim();
       if (id) {
         if (seenIds.has(id)) return { reason: "bad_colors" };
         seenIds.add(id);
@@ -428,6 +432,32 @@ export function cleanCatalogFramePatch(body: Record<string, unknown>): { patch: 
   const changes = Object.keys(patch).filter((k) => k !== "attributes").length + Object.keys(patch.attributes).length;
   if (!changes) return { reason: "nothing_to_change" };
   return { patch };
+}
+
+/**
+ * The product gallery after an edit, as the create builds it (main photo =
+ * `images[0]`, then each colour's photo, no repeats) — or `undefined` when the
+ * edit touches neither the extra photos nor a colour's photo. Without this an
+ * edit sent `images: []` (the dialog's extra photos) and the product lost its
+ * gallery and thumbnail, colour photos included (QA v2). Pure.
+ */
+export function galleryAfterEdit(
+  current: { images: readonly string[]; variants: readonly ExistingVariant[] },
+  patch: { images?: string[]; colors?: FrameColorEdit[] }
+): string[] | undefined {
+  const colorPhotoChange = (patch.colors ?? []).some((c) => c.image !== undefined || !c.variant_id);
+  if (patch.images === undefined && !colorPhotoChange) return undefined;
+  const imageOf = (v: ExistingVariant | undefined): string | null => {
+    const u = v?.metadata?.["image"];
+    return typeof u === "string" && u ? u : null;
+  };
+  const oldColorPhotos = new Set(current.variants.map(imageOf).filter((u): u is string => !!u));
+  const extras = patch.images ?? current.images.filter((u) => !oldColorPhotos.has(u));
+  const byId = new Map(current.variants.map((v) => [v.id, v]));
+  const colorPhotos = patch.colors
+    ? patch.colors.map((c) => (c.image !== undefined ? c.image : imageOf(c.variant_id ? byId.get(c.variant_id) : undefined)))
+    : current.variants.map(imageOf);
+  return [...new Set([...extras, ...colorPhotos.filter((u): u is string => !!u)])];
 }
 
 /** What an existing variant looks like to the colour planner. */
