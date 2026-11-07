@@ -928,7 +928,7 @@ function unpricedDigitalRow(
 export interface TreatmentSectionInput {
   photos: readonly LensMatrixRow[];
   ars: readonly LensMatrixRow[];
-  /** Lab cost by option code (null = unknown). */
+  /** Lab cost by `code:category` (falling back to `code`, the option's single cost); null = unknown. */
   photoCosts: ReadonlyMap<string, number | null>;
   arCosts: ReadonlyMap<string, number | null>;
   storeRows: ReadonlyMap<string, LensStorePriceLike[]>;
@@ -969,7 +969,7 @@ export function buildTreatmentGroups(input: TreatmentSectionInput, stores: reado
         stores: lensCells("photo", key, master, stores, input.storeRows, discounts),
       };
       if (withCosts) {
-        const cost = input.photoCosts.get(code) ?? null;
+        const cost = input.photoCosts.get(key) ?? input.photoCosts.get(code) ?? null;
         row.cost_cents = cost;
         row.cost_source = cost == null ? null : "owner_edit";
       }
@@ -1562,9 +1562,31 @@ export interface TreatmentInput {
   /** Explicit code; null = derived from the label. */
   code: string | null;
   cost_cents: number | null;
+  /** photo: lab cost per category in cents (null = unknown); absent = `cost_cents` for every category. */
+  costs?: Record<PhotoCategory, number | null>;
   ar_group: (typeof AR_GROUPS)[number];
   /** photo: cents per category (null = not offered); ar: price_cents in `ar`. */
   prices: { sv: number | null; bifocal: number | null; prog: number | null } | { ar: number };
+}
+
+/**
+ * A photochromic's `costs` body `{ sv?, bifocal?, prog? }` in dollars → cents
+ * (null / "" = unknown). `partial`: only the keys sent (an edit); else every
+ * key is optional and missing ones are unknown. Pure.
+ */
+export function photoCostsOf(raw: unknown, partial: boolean): { costs: Partial<Record<PhotoCategory, number | null>> } | { reason: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { reason: "bad_value" };
+  const obj = raw as Record<string, unknown>;
+  const out: Partial<Record<PhotoCategory, number | null>> = {};
+  for (const cat of PHOTO_CATEGORIES) {
+    if (!(cat in obj)) continue;
+    const c = parseCellValue("cost", obj[cat]);
+    if ("reason" in c) return c;
+    out[cat] = c.value;
+  }
+  if (Object.keys(obj).some((k) => !(PHOTO_CATEGORIES as readonly string[]).includes(k))) return { reason: "bad_value" };
+  if (partial && !Object.keys(out).length) return { reason: "bad_value" };
+  return { costs: out };
 }
 
 const cleanLabel = (v: unknown): string | null => (typeof v === "string" && v.trim() && v.trim().length <= 80 ? v.trim() : null);
@@ -1608,6 +1630,12 @@ export function cleanTreatment(body: Record<string, unknown>): { treatment: Trea
     if (out.sv === null && out.bifocal === null && out.prog === null) return { reason: "bad_value" };
     prices = out;
   }
+  let costs: Record<PhotoCategory, number | null> | undefined;
+  if (type === "photo" && body["costs"] != null) {
+    const parsed = photoCostsOf(body["costs"], false);
+    if ("reason" in parsed) return parsed;
+    costs = { sv: null, bifocal: null, prog: null, ...parsed.costs };
+  }
   return {
     treatment: {
       type,
@@ -1615,6 +1643,7 @@ export function cleanTreatment(body: Record<string, unknown>): { treatment: Trea
       label_en: (en ?? es) as string,
       code,
       cost_cents: cost.value,
+      ...(costs ? { costs } : {}),
       ar_group: group as (typeof AR_GROUPS)[number],
       prices,
     },
@@ -1632,6 +1661,8 @@ export interface TreatmentPatch {
   ar_group?: (typeof AR_GROUPS)[number];
   /** Cents; null = unknown. */
   cost_cents?: number | null;
+  /** photo: lab cost of the categories sent, in cents (null = unknown). */
+  costs?: Partial<Record<PhotoCategory, number | null>>;
   /** photo: only the categories sent (null = no longer offered); ar: `{ ar }`. */
   prices?: Partial<Record<PhotoCategory, number | null>> | { ar: number };
   is_active?: boolean;
@@ -1660,6 +1691,12 @@ export function cleanTreatmentPatch(type: "photo" | "ar", body: Record<string, u
     const cost = parseCellValue("cost", body["cost"]);
     if ("reason" in cost) return cost;
     patch.cost_cents = cost.value;
+  }
+  if ("costs" in body) {
+    if (type !== "photo") return { reason: "bad_value" };
+    const parsed = photoCostsOf(body["costs"], true);
+    if ("reason" in parsed) return parsed;
+    patch.costs = parsed.costs;
   }
   if ("prices" in body) {
     const raw = body["prices"];

@@ -421,17 +421,39 @@ async function loadLensSection(container: MedusaContainer, stores: MatrixStore[]
   );
 }
 
+/**
+ * Lab cost of each photochromic row, keyed `code:category` (its own column,
+ * else the option's old single cost) and `code` (the single cost). Pure.
+ */
+export function photoCostIndex(rows: ReadonlyArray<Record<string, unknown>>): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  for (const r of rows) {
+    const code = String(r["code"] ?? "");
+    if (!code) continue;
+    const single = num(r["cost_cents"]);
+    out.set(code, single);
+    for (const cat of ["sv", "bifocal", "prog"] as const) {
+      const own = num(r[`cost_${cat}_cents`]);
+      out.set(`${code}:${cat}`, own ?? single);
+    }
+  }
+  return out;
+}
+
 /** The treatments section: photochromics × category and ARs, with the options' lab costs. */
 async function loadTreatmentSection(container: MedusaContainer, stores: MatrixStore[], withCosts: boolean): Promise<MatrixGroup[]> {
   const pg = pgOf(container);
   const ids = stores.map((s) => s.id);
-  const costsOf = (table: string) =>
+  const costsOf = (table: string, extra: string[] = []) =>
     withCosts
-      ? (pg(table).whereNull("deleted_at").select("code", "cost_cents") as Promise<Array<Record<string, unknown>>>).catch(() => [] as Array<Record<string, unknown>>)
+      ? (pg(table).whereNull("deleted_at").select("code", "cost_cents", ...extra) as Promise<Array<Record<string, unknown>>>)
+          // A database before the per-category columns: the single cost only.
+          .catch(() => (extra.length ? (pg(table).whereNull("deleted_at").select("code", "cost_cents") as Promise<Array<Record<string, unknown>>>) : Promise.reject(new Error("no costs"))))
+          .catch(() => [] as Array<Record<string, unknown>>)
       : Promise.resolve([] as Array<Record<string, unknown>>);
   const [matrix, photoCosts, arCosts, storeRows, discounts] = await Promise.all([
     loadLensMatrix(pg),
-    costsOf("lens_photo_option"),
+    costsOf("lens_photo_option", ["cost_sv_cents", "cost_bifocal_cents", "cost_prog_cents"]),
     costsOf("lens_ar_option"),
     lensStoreRows(pg, ids),
     storeDiscountIndex(container, ids),
@@ -440,7 +462,7 @@ async function loadTreatmentSection(container: MedusaContainer, stores: MatrixSt
     {
       photos: matrix.photos,
       ars: matrix.ars,
-      photoCosts: new Map(photoCosts.map((r) => [String(r["code"]), num(r["cost_cents"])])),
+      photoCosts: photoCostIndex(photoCosts),
       arCosts: new Map(arCosts.map((r) => [String(r["code"]), num(r["cost_cents"])])),
       storeRows,
       photoByMaterial: matrix.treatment_prices.some((t) => t["treatment_code"] === "photo"),
@@ -891,6 +913,8 @@ export async function createTreatment(container: MedusaContainer, t: TreatmentIn
   const svc = lensSvc(container);
   if (t.type === "photo") {
     const p = t.prices as { sv: number | null; bifocal: number | null; prog: number | null };
+    // A category not offered has no cost either; one sent for it is dropped.
+    const costOf = (cat: "sv" | "bifocal" | "prog") => (p[cat] === null ? null : t.costs?.[cat] ?? t.cost_cents);
     await svc.createLensPhotoOptions({
       code,
       label_es: t.label_es,
@@ -900,6 +924,9 @@ export async function createTreatment(container: MedusaContainer, t: TreatmentIn
       price_bifocal_cents: p.bifocal,
       price_prog_cents: p.prog,
       cost_cents: t.cost_cents,
+      cost_sv_cents: costOf("sv"),
+      cost_bifocal_cents: costOf("bifocal"),
+      cost_prog_cents: costOf("prog"),
       sort,
       is_active: true,
     } as never);
@@ -920,7 +947,7 @@ export async function createTreatment(container: MedusaContainer, t: TreatmentIn
     action: "catalog.create",
     entity: table,
     entityId: code,
-    after: { type: t.type, code, prices: t.prices, cost_cents: t.cost_cents, ar_group: t.type === "ar" ? t.ar_group : null },
+    after: { type: t.type, code, prices: t.prices, cost_cents: t.cost_cents, costs: t.type === "photo" ? t.costs ?? null : null, ar_group: t.type === "ar" ? t.ar_group : null },
   });
   invalidatePriceCaches();
   return { code };

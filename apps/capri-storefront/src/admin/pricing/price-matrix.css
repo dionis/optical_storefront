@@ -470,3 +470,13 @@
   .pp > .adm-subtabs button { padding: 6px 9px 6px 6px; gap: 6px; }
   .pp > .adm-subtabs button > .adm-ico { width: 24px; height: 24px; padding: 4px; }
 }
+
+/* Fotocromático: costo y precio de venta por tipo de lente (TreatmentDialog). */
+.pm-cat-grid { width: 100%; max-width: 460px; border-collapse: separate; border-spacing: 0 6px; }
+.pm-cat-grid th { text-align: left; font-size: 11px; font-weight: 800; color: var(--adm-muted); text-transform: uppercase; letter-spacing: .03em; padding: 0 8px 0 0; }
+.pm-cat-grid thead th.num { text-align: right; padding-right: 2px; }
+.pm-cat-grid tbody th { font-size: 13px; font-weight: 700; color: var(--adm-ink); text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.pm-cat-grid td { padding: 0 0 0 8px; width: 130px; }
+.pm-cat-grid td .pp-input { width: 100%; }
+.pm-cat-grid tr.is-off tbody th, .pm-cat-grid tr.is-off th { color: var(--adm-faint); }
+@media (max-width: 520px) { .pm-cat-grid td { width: 96px; } }

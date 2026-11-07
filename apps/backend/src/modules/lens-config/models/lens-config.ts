@@ -93,8 +93,15 @@ export const LensPhotoOption = model.define("lens_photo_option", {
   price_sv_cents: model.number().nullable(),
   price_bifocal_cents: model.number().nullable(),
   price_prog_cents: model.number().nullable(),
-  /** What the lab charges for it (one figure for every category); null = unknown. Never public. */
+  /**
+   * Legacy single lab cost (before costs per category). Still read as the
+   * fallback of a category with no cost of its own; new writes go per category.
+   */
   cost_cents: model.number().nullable(),
+  /** What the lab charges per design category (a bifocal or progressive blank costs more); null = unknown. Never public. */
+  cost_sv_cents: model.number().nullable(),
+  cost_bifocal_cents: model.number().nullable(),
+  cost_prog_cents: model.number().nullable(),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
 });

@@ -35,7 +35,7 @@ const BASE_PRICES: Row[] = [
 ];
 
 const PHOTOS: Row[] = [
-  { code: "photo-grey", label_es: "Fotocromático Grey", label_en: "Photochromic Grey", colors: ["grey"], price_sv_cents: 8500, price_bifocal_cents: 11000, price_prog_cents: 9000, sort: 0, is_active: true, deleted_at: null },
+  { code: "photo-grey", label_es: "Fotocromático Grey", label_en: "Photochromic Grey", colors: ["grey"], price_sv_cents: 8500, price_bifocal_cents: 11000, price_prog_cents: 9000, cost_cents: 2000, cost_sv_cents: 2000, cost_bifocal_cents: 3500, cost_prog_cents: 4200, sort: 0, is_active: true, deleted_at: null },
   { code: "photo-brown", label_es: "Fotocromático Brown", label_en: "Photochromic Brown", colors: ["brown"], price_sv_cents: null, price_bifocal_cents: 11000, price_prog_cents: 9000, sort: 1, is_active: true, deleted_at: null },
 ];
 
@@ -126,6 +126,8 @@ describe("loadLensMatrix", () => {
     const m = await loadLensMatrix(makeKnex());
     expect(flatten(m).some((r) => "cost_cents" in r)).toBe(false);
     expect(JSON.stringify(m)).not.toContain("cost_cents");
+    // The photochromics' per-category lab costs too (UpgradeLensPhotoCostByCategory10).
+    expect(JSON.stringify(m)).not.toMatch(/cost_(sv|bifocal|prog)_cents/);
   });
 
   it("carries one cell per (design, material, finish), deleted cells excluded", async () => {

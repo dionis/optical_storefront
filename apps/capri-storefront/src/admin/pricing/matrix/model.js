@@ -232,20 +232,6 @@ export function replaceRow(groups, row) {
   return groups.map((g) => (g.rows.some((r) => r.key === row.key) ? { ...g, rows: g.rows.map((r) => (r.key === row.key ? { ...row } : r)) } : g));
 }
 
-/**
- * After a photochromic cost write: every row of the same option (`code:<cat>`)
- * shows the cost the server returned for the written one. Pure.
- */
-export function patchSiblingCost(groups, row) {
-  const code = String(row?.code || String(row?.key || "").split(":")[0] || "");
-  if (!code) return groups;
-  const same = (r) => r.key !== row.key && r.kind === "photo" && (r.code === code || String(r.key).split(":")[0] === code);
-  return groups.map((g) => (!g.rows.some(same) ? g : {
-    ...g,
-    rows: g.rows.map((r) => (same(r) ? { ...r, cost_cents: row.cost_cents ?? null, cost_source: row.cost_source ?? null } : r)),
-  }));
-}
-
 /** Patch one store cell of one row (optimistic writes and exposure toggles). */
 export function patchCell(groups, rowKey, storeId, patch) {
   return groups.map((g) => (!g.rows.some((r) => r.key === rowKey) ? g : {
@@ -513,6 +499,38 @@ export function validateTreatmentForm(form, { editing = false } = {}) {
   const en = String(form.label_en || "").trim();
   if (!es) errors.label_es = "bad_label";
   if (!en) errors.label_en = "bad_label";
+  const money = (raw) => { const v = parseInput(raw); return v === undefined || (v != null && v < 0) ? undefined : v; };
+
+  // Photochromic: cost AND price per lens type (single vision, bifocal,
+  // progressive). An empty price = not offered in that type (its cost is not sent).
+  if (type === "photo") {
+    const cats = form.cats || {};
+    const init = form.initial || {};
+    const prices = {};
+    const costs = {};
+    for (const c of PHOTO_CATS) {
+      const price = money(cats[c]?.price);
+      const cost = money(cats[c]?.cost);
+      if (price === undefined) errors[`price:${c}`] = "bad_value";
+      if (cost === undefined) errors[`cost:${c}`] = "bad_value";
+      if (price === undefined || cost === undefined) continue;
+      if (editing) {
+        // Only what changed travels: the rest of the option stays as it is.
+        if (price !== (init[c]?.price ?? null)) prices[c] = price;
+        if (cost !== (init[c]?.cost ?? null) && (price != null || init[c]?.cost != null)) costs[c] = cost;
+      } else if (price != null) {
+        prices[c] = price;
+        if (cost != null) costs[c] = cost;
+      }
+    }
+    const offered = PHOTO_CATS.filter((c) => money(cats[c]?.price) != null);
+    if (!offered.length && !Object.keys(errors).some((k) => k.startsWith("price:"))) errors.prices = "bad_value";
+    const body = editing
+      ? { label_es: es, label_en: en, ...(Object.keys(prices).length ? { prices } : {}), ...(Object.keys(costs).length ? { costs } : {}) }
+      : { type, label_es: es, label_en: en, prices, ...(Object.keys(costs).length ? { costs } : {}) };
+    return { errors, body };
+  }
+
   const cost = parseInput(form.cost);
   if (cost === undefined || (cost != null && cost < 0)) errors.cost = "bad_value";
   if (editing) {
@@ -524,29 +542,37 @@ export function validateTreatmentForm(form, { editing = false } = {}) {
     };
     return { errors, body };
   }
-  let prices;
-  if (type === "photo") {
-    prices = {};
-    for (const c of ["sv", "bifocal", "prog"]) {
-      const v = parseInput(form.prices?.[c]);
-      if (v === undefined || (v != null && v < 0)) errors[`price:${c}`] = "bad_value";
-      else if (v != null) prices[c] = v;
-    }
-    if (!Object.keys(prices).length && !Object.keys(errors).some((k) => k.startsWith("price:"))) errors.prices = "bad_value";
-  } else {
-    const v = parseInput(form.price);
-    if (v == null || v < 0) errors.price = "bad_value";
-    prices = v;
-  }
+  const v = parseInput(form.price);
+  if (v == null || v < 0) errors.price = "bad_value";
   const body = {
     type,
     label_es: es,
     label_en: en,
     ...(cost != null ? { cost } : {}),
     ...(type === "ar" ? { ar_group: ["all", "sv", "bifprog"].includes(form.ar_group) ? form.ar_group : "all" } : {}),
-    prices,
+    prices: v,
   };
   return { errors, body };
+}
+
+/** Lens types a photochromic is priced (and costed) in. */
+export const PHOTO_CATS = ["sv", "bifocal", "prog"];
+
+/**
+ * The dialog's starting values for a photochromic: cost and price per lens
+ * type, read from its rows in the matrix (one row per type offered; key
+ * `code:<type>`). Dollars as numbers, null = empty. Pure.
+ */
+export function photoFormFrom(groups, code) {
+  const out = {};
+  for (const c of PHOTO_CATS) out[c] = { cost: null, price: null };
+  for (const g of groups || []) for (const r of g.rows || []) {
+    if (r.kind !== "photo") continue;
+    const [rc, cat] = String(r.key || "").split(":");
+    if ((r.code || rc) !== code || !PHOTO_CATS.includes(r.category || cat)) continue;
+    out[r.category || cat] = { cost: r.cost_cents == null ? null : Number(r.cost_cents) / 100, price: r.master_cents == null ? null : Number(r.master_cents) / 100 };
+  }
+  return out;
 }
 
 /**

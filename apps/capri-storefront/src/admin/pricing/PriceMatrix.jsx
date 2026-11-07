@@ -59,7 +59,7 @@ import MoreMenu from "./matrix/MoreMenu.jsx";
 import { BrandLogo, Thumb } from "./matrix/Media.jsx";
 import {
   MATRIX_SECTIONS, brandCell, brandOff, brandScope, costTone, orderOff, rowHiddenSome, groupOff, filterGroups, finalCents, groupLabel, groupStats, isBrandGroup, marginOf,
-  patchCell, patchSiblingCost, removeRow, replaceGroup, replaceRow, rowKind, rowTitle, slugify, sourceKey, sourceTone, treatmentCode, usd, withRegistry,
+  patchCell, removeRow, replaceGroup, replaceRow, rowKind, rowTitle, slugify, sourceKey, sourceTone, treatmentCode, usd, withRegistry,
 } from "./matrix/model.js";
 import { matrixWorkbook, workbookToImport } from "./matrix/matrixXlsx.js";
 import "./price-matrix.css";
@@ -218,13 +218,9 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
     const kind = rowKind(row, section);
     const res = await saveMatrixCell({ kind, key: row.key, field, store: storeId, value });
     if (res?.row) {
-      setGroups((g) => {
-        let next = replaceRow(g, res.row);
-        // A photochromic has ONE cost per option, shown on each of its category
-        // rows (`code:sv`, `code:bifocal`, `code:prog`): the siblings take it too.
-        if (kind === "photo" && field === "cost") next = patchSiblingCost(next, res.row);
-        return next;
-      });
+      // Each row is its own cell, a photochromic's cost included: every lens
+      // type (`code:sv`, `code:bifocal`, `code:prog`) has its own cost and price.
+      setGroups((g) => replaceRow(g, res.row));
     } else load(true);
   }, [section, load]);
 
@@ -945,6 +941,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       {dialog?.type === "treatment" && (
         <TreatmentDialog
           row={dialog.row || null}
+          groups={groups}
           costAccess={costAccess}
           onClose={() => setDialog(null)}
           onCreated={(res, body, { editing } = {}) => afterSave({

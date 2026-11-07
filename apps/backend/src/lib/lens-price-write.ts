@@ -12,8 +12,8 @@ import { lensBaseKey, parseLensBaseKey } from "./pricing-overview";
  * two screens can never write a cell two different ways.
  *
  *   base   "<design>:<material>[:<finish>]"   price or lab cost of the cell
- *   photo  "<code>:<sv|bifocal|prog>"         price in that category, or the
- *                                             option's cost (one per option)
+ *   photo  "<code>:<sv|bifocal|prog>"         price or lab cost in that category
+ *          "<code>" (cost only)               the same cost in every category
  *   ar     "<code>"                           price or cost of the treatment
  *
  * Amounts in CENTS. A price is never removed from the master (null = 0, the
@@ -41,6 +41,7 @@ export async function canonicalLensBaseKey(container: MedusaContainer, key: stri
 }
 
 const PHOTO_COLUMN: Record<string, string> = { sv: "price_sv_cents", bifocal: "price_bifocal_cents", prog: "price_prog_cents" };
+const PHOTO_COST_COLUMN: Record<string, string> = { sv: "cost_sv_cents", bifocal: "cost_bifocal_cents", prog: "cost_prog_cents" };
 
 /** Writes one cell of the owner's master list; a `reason` code when the item does not exist. */
 export async function writeLensMaster(
@@ -78,12 +79,19 @@ export async function writeLensMaster(
   }
   if (kind === "photo") {
     const [code, category] = key.split(":");
-    const column = field === "cost" ? "cost_cents" : PHOTO_COLUMN[category ?? ""];
-    if (!code || !column || (field === "cost" && category !== undefined && !PHOTO_COLUMN[category])) return "bad_key";
+    if (!code || (category !== undefined && !PHOTO_COLUMN[category]) || (field === "price" && category === undefined)) return "bad_key";
     const rows = (await svc.listLensPhotoOptions({ code })) as unknown as Record<string, unknown>[];
     const row = rows.find((r) => !r["deleted_at"]);
     if (!row) return "unknown_item";
-    await svc.updateLensPhotoOptions([{ id: row["id"], [column]: field === "cost" ? amountCents : amountCents ?? 0 }] as never);
+    if (field === "price") {
+      await svc.updateLensPhotoOptions([{ id: row["id"], [PHOTO_COLUMN[category as string]]: amountCents ?? 0 }] as never);
+    } else if (category !== undefined) {
+      // Each category has its own lab cost (a progressive blank costs more).
+      await svc.updateLensPhotoOptions([{ id: row["id"], [PHOTO_COST_COLUMN[category]]: amountCents }] as never);
+    } else {
+      // No category: the same cost everywhere (the old single figure too).
+      await svc.updateLensPhotoOptions([{ id: row["id"], cost_cents: amountCents, cost_sv_cents: amountCents, cost_bifocal_cents: amountCents, cost_prog_cents: amountCents }] as never);
+    }
     return null;
   }
   if (kind === "ar") {

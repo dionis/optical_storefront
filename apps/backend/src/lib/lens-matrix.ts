@@ -62,10 +62,16 @@ export function publicBaseCell(row: LensMatrixRow): LensMatrixBaseCell {
  * to be dropped by name or it would leave on the public matrix. Pure.
  */
 export function publicOptionRow(row: LensMatrixRow): LensMatrixRow {
-  if (!("cost_cents" in row)) return row;
-  const { cost_cents: _cost, ...rest } = row;
+  // Every lab-cost column, by name: the single one and the photochromics' per
+  // category ones (UpgradeLensPhotoCostByCategory10). A new cost column must be added here.
+  if (!Object.keys(row).some((k) => PRIVATE_COST_COLUMNS.has(k))) return row;
+  const rest: LensMatrixRow = {};
+  for (const [k, v] of Object.entries(row)) if (!PRIVATE_COST_COLUMNS.has(k)) rest[k] = v;
   return rest;
 }
+
+/** Lab-cost columns of the option tables: never on the public matrix. */
+export const PRIVATE_COST_COLUMNS: ReadonlySet<string> = new Set(["cost_cents", "cost_sv_cents", "cost_bifocal_cents", "cost_prog_cents"]);
 
 /** The master list, straight from the lens-config tables. */
 export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {

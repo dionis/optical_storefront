@@ -80,7 +80,19 @@ export async function updateTreatment(
   if (p.label_es !== undefined) update["label_es"] = p.label_es;
   if (p.label_en !== undefined) update["label_en"] = p.label_en;
   if (p.is_active !== undefined) update["is_active"] = p.is_active;
-  if (p.cost_cents !== undefined) update["cost_cents"] = p.cost_cents;
+  if (p.cost_cents !== undefined) {
+    update["cost_cents"] = p.cost_cents;
+    // A photochromic's single cost sent alone = that cost in every category.
+    if (type === "photo" && !p.costs) {
+      update["cost_sv_cents"] = p.cost_cents;
+      update["cost_bifocal_cents"] = p.cost_cents;
+      update["cost_prog_cents"] = p.cost_cents;
+    }
+  }
+  if (type === "photo" && p.costs) {
+    for (const cat of ["sv", "bifocal", "prog"] as const) if (p.costs[cat] !== undefined) update[`cost_${cat}_cents`] = p.costs[cat];
+  }
+  if (type === "ar" && p.costs) return { reason: "bad_value" };
   if (type === "ar") {
     if (p.ar_group !== undefined) update["ar_group"] = p.ar_group;
     if (p.prices && "ar" in p.prices) update["price_cents"] = p.prices.ar;

@@ -18,7 +18,7 @@ import { buildStyledXlsx, buildXlsx, readXlsx, unzip, inkOn, tint } from "../src
 import { matrixWorkbook, workbookToImport, mapColumns, KEY_HEADER } from "../src/admin/pricing/matrix/matrixXlsx.js";
 import { promoOf } from "../src/admin/pricing/promo.js";
 import {
-  parseInput, filterGroups, groupStats, validateFrameForm, validateTreatmentForm, replaceRow, patchSiblingCost,
+  parseInput, filterGroups, groupStats, validateFrameForm, validateTreatmentForm, photoFormFrom, replaceRow,
   brandCell, withRegistry, brandOff, rowOff, rowHiddenSome, groupOff, orderOff, sourceTone, costTone, validateBrandForm, frameToForm, rowPrices, monogram, attrSlug, replaceGroup, removeRow, treatmentCode,
 } from "../src/admin/pricing/matrix/model.js";
 
@@ -246,17 +246,6 @@ await test("replaceRow replaces the row (no stale flags) and filterGroups skips 
   assert.deepEqual(f[0].rows.map((r) => r.key), ["sv:poly"]);
 });
 
-await test("patchSiblingCost: one photochromic cost shows on all its category rows", () => {
-  const groups = [{ key: "photo", rows: [
-    { key: "photo-grey:sv", kind: "photo", code: "photo-grey", cost_cents: 2500, stores: {} },
-    { key: "photo-grey:prog", kind: "photo", code: "photo-grey", cost_cents: null, stores: {} },
-    { key: "photo-brown:prog", kind: "photo", code: "photo-brown", cost_cents: null, stores: {} },
-  ] }];
-  const next = patchSiblingCost(groups, { key: "photo-grey:sv", kind: "photo", code: "photo-grey", cost_cents: 2500, cost_source: "owner_edit" });
-  assert.equal(next[0].rows[1].cost_cents, 2500);
-  assert.equal(next[0].rows[2].cost_cents, null);
-});
-
 await test("export titles lens cells, treatments and groups in the panel language (not the server's Spanish codes)", async () => {
   const tt = (k) => ({ "adm.price.lens.finish.stock": "Stock", "adm.price.lens.finish.digital": "Digital surfaced", "adm.price.lenses.cat.sv": "Single vision", "adm.pm.grp.photo": "Photochromic", "adm.pm.grp.cases": "Cases" }[k] || t(k));
   const sections = {
@@ -448,6 +437,25 @@ await test("switched off last: brandOff / rowOff / groupOff / orderOff and the Â
   assert.equal(filterGroups([regOff], { q: "zzz", filters: new Set(["off"]), storeIds: ids }).length, 0);
   // Without filters every group stays, empty ones included.
   assert.equal(filterGroups([live, chainOff, regOff, emptyOn], { storeIds: ids }).length, 4);
+});
+
+await test("photochromic: a cost and a price per lens type (create and edit send only what changed)", () => {
+  const made = validateTreatmentForm({ type: "photo", label_es: "Gris", label_en: "Grey", cats: { sv: { cost: "9", price: "30" }, bifocal: { cost: "15", price: "" }, prog: { cost: "", price: "50" } } });
+  assert.deepEqual(made.errors, {});
+  // Bifocal has no price: not offered, so its cost does not travel either.
+  assert.deepEqual(made.body, { type: "photo", label_es: "Gris", label_en: "Grey", prices: { sv: 30, prog: 50 }, costs: { sv: 9 } });
+  const bad = validateTreatmentForm({ type: "photo", label_es: "G", label_en: "G", cats: { sv: { cost: "x", price: "30" } } });
+  assert.deepEqual(bad.errors, { "cost:sv": "bad_value" });
+  const groups = [{ key: "photo", rows: [
+    { kind: "photo", key: "photo-grey:sv", code: "photo-grey", category: "sv", cost_cents: 900, master_cents: 3000 },
+    { kind: "photo", key: "photo-grey:prog", code: "photo-grey", category: "prog", cost_cents: 2100, master_cents: 5000 },
+    { kind: "photo", key: "photo-brown:sv", code: "photo-brown", category: "sv", cost_cents: 1, master_cents: 1 },
+  ] }];
+  const init = photoFormFrom(groups, "photo-grey");
+  assert.deepEqual(init, { sv: { cost: 9, price: 30 }, bifocal: { cost: null, price: null }, prog: { cost: 21, price: 50 } });
+  const edit = validateTreatmentForm({ type: "photo", label_es: "Gris", label_en: "Grey", initial: init, cats: { sv: { cost: "9", price: "32" }, bifocal: { cost: "15", price: "40" }, prog: { cost: "24", price: "50" } } }, { editing: true });
+  assert.deepEqual(edit.errors, {});
+  assert.deepEqual(edit.body, { label_es: "Gris", label_en: "Grey", prices: { sv: 32, bifocal: 40 }, costs: { bifocal: 15, prog: 24 } });
 });
 
 console.log(process.exitCode ? "xlsx tests FAILED" : `xlsx tests passed (${passed})`);

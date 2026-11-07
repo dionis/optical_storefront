@@ -247,10 +247,15 @@ tenga que adivinarlos.
   de una fila de estuche crea una regla `scope: "case"` (y cierra un precio
   fijado que hubiera quedado en `scope: "frame"`), así matriz y caja siguen
   cuadrando.
-- **Tratamientos**: el costo de un fotocromático es **uno por opción** (la
-  columna nueva está en `lens_photo_option`), así que las filas `código:sv`,
-  `código:bifocal`, `código:prog` muestran el mismo costo y escribirlo en
-  cualquiera lo cambia en las tres. Una categoría sin precio en el maestro no
+- **Tratamientos**: desde el 7-nov-2026 un fotocromático tiene **costo por tipo
+  de lente**, como su precio (`cost_sv_cents`, `cost_bifocal_cents`,
+  `cost_prog_cents` en `lens_photo_option`, migración
+  `UpgradeLensPhotoCostByCategory10`, que copió el costo único donde el tipo se
+  ofrece): cada fila `código:sv`, `código:bifocal`, `código:prog` muestra y
+  escribe el suyo; `cost_cents` queda como respaldo de lectura. El alta y la
+  edición del tratamiento piden costo y precio por tipo (`costs`/`prices`
+  `{ sv, bifocal, prog }`). Ninguna columna de costo sale por la matriz pública
+  (`PRIVATE_COST_COLUMNS` en `lens-matrix.ts`). Una categoría sin precio en el maestro no
   tiene fila. `by_material: true` avisa que la caja cobra ese tratamiento por
   la tabla diseño × material (`lens_treatment_price`: AR Green/Blue, y el
   fotocromático cuando esa tabla tiene filas `photo`) siempre que exista la
