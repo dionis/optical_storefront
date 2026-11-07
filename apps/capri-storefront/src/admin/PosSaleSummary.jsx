@@ -45,7 +45,10 @@ export function describeSelection(selection, catalog, t, lang) {
 export function PosRunningTotal({ quote, status, lines, catalog, money, beforeLenses = false }) {
   const { t, lang } = useLang();
   // En móvil arranca plegada (solo el total); en escritorio, con el desglose a la vista.
-  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches));
+  // Plegada de entrada en móvil y en tablet vertical: la línea de cabecera ya
+  // dice montura, lentes y total; el detalle se abre con un toque. En vertical
+  // la franja es pegajosa y abierta se comía un cuarto de la pantalla.
+  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px), (pointer: coarse) and (orientation: portrait)").matches));
   if (!lines.length) return null;
   const pending = !quote;
   const dash = "—";

@@ -429,6 +429,12 @@ export interface CostOrderLike {
     title?: string;
     quantity?: unknown;
     sku?: string | null;
+    /**
+     * The MODEL (the product title, "DC 50"), v2: the frame's cost is looked
+     * up by model first, then by SKU (lib/frame-cost.ts). Optional — without
+     * it the cost cache's catalogue aliases give the model of the SKU.
+     */
+    model?: string | null;
     brand_slug?: string | null;
     lens?: {
       design_code?: string | null;
@@ -676,7 +682,7 @@ export function computeCostSheet(
     // that would have matched — exactly one `frame:` line per item either way,
     // because `summarizeCostSheets` pairs frame lines with items by position
     // and adding a second one would both double the cost and shift that pairing.
-    const supplierCents = sku ? frameCost(sku, storeId) : null;
+    const supplierCents = sku ? frameCost(sku, storeId, item.model ?? null) : null;
     if (supplierCents !== null) {
       const amount = round2(supplierCents / 100);
       materials.push({

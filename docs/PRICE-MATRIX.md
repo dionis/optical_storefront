@@ -381,3 +381,300 @@ La pestaña «Costos monturas» lleva, tras las columnas «Costo <tienda>», un 
 «Precio <tienda>» (lo que cobra esa caja por la montura sola) y «Desc %
 <tienda>» (vacía sin promoción) por tienda activa. Mejor esfuerzo: si no se
 pueden leer reglas o descuentos, la pestaña sale como antes.
+
+---
+
+# v2 — 7-nov-2026 (petición del dueño tras verlo en staging)
+
+Hallazgos en staging: (1) **los 556 modelos salen «falta» de costo**: el costo se busca por SKU (`capriKeyOf(sku)`) y en staging los SKU son `dc-50-di-caprio-grey` (el scraper los inventa cuando no hay UPC); hay que casar por **modelo** (título del producto «DC 50» → `DC50`), y por SKU como respaldo; (2) **miniaturas rotas**: `product.thumbnail` es una clave de R2, no una URL; (3) sin logos de marca; (4) Comisiones con mucho espacio vacío.
+
+## Costos: 2026 primero, la lista anterior como respaldo
+
+`capri-price-list-2026.ts` (julio 2026, 609 filas) manda. Si un modelo no está en 2026, se usa la **lista anterior** (el `PRICE_BOOK` mayorista de agosto, `git show e3bb8ba:apps/backend/src/data/wholesale-prices.ts`, que el dueño llama «2024»), guardada como módulo propio `capri-price-list-prev.ts`. `store_frame_cost.source` gana `supplier_list_prev`. Un `owner_edit` nunca se pisa. Script/migración idempotente que siembra/actualiza los costos de todos los modelos del catálogo con esa precedencia.
+
+## Marcas (nuevo registro)
+
+Tabla `catalog_brand` (módulo store-pricing o un módulo `catalog` nuevo): `slug` (único), `name`, `logo_url`, `kind` (`frame` | `case`), `source` (`capri` | `manual`), `active`, `sort`. Siembra: las marcas de Capri presentes en el catálogo con su logo de `apps/capri-storefront/public/brands/logo-<slug>.png` (los slugs del catálogo pueden diferir: four-you↔4u, etc. — mapa explícito).
+
+Rutas: `GET /admin/catalog/brands` (ahora con `logo_url`, `kind`, `active`, `models`), `POST /admin/catalog/brands` {name, kind, logo_url}, `POST /admin/catalog/brands/:slug` {name?, logo_url?, active?, sort?}, `DELETE /admin/catalog/brands/:slug` (solo sin modelos; si no, 409 `brand_has_models`).
+
+## Archivos (logo, fotos)
+
+`POST /admin/catalog/uploads` (multipart, un archivo, imagen ≤ 8 MB, jpg/png/webp) → `{ url }` con el módulo de archivos de Medusa (R2 público si está configurado; en local, disco). Thumbnails y logos siempre se devuelven como URL absoluta (`R2_PUBLIC_URL` + clave cuando es clave).
+
+## Modelos (montura / estuche): alta, edición, baja
+
+`POST /admin/catalog/frames` acepta además `images[]`, `material`, `shape`, `style`, `gender`, `age_group`, `features[]`, `description` (los mismos campos de la ficha de la tienda online). `POST /admin/catalog/frames/:id` edita los mismos campos (y colores: añadir/renombrar; quitar solo si esa variante nunca se vendió). `DELETE /admin/catalog/frames/:id`: si nunca se vendió, se borra; si se vendió, pasa a descontinuado (draft) — respuesta `{ deleted | archived }`.
+
+## Precio y descuento por marca
+
+En la cabecera del acordeón, por tienda: **precio de marca** (todos los modelos de esa marca a ese precio en esa tienda) y **desc % de marca**. Datos: `store_price_rule` con `scope` frame|case, `target` `brand:<slug>`, `mode` override; `store_item_discount` con `item_kind` `brand`, `item_key` slug. Precedencia en `storeLinePrice` (y por tanto en la caja, la matriz, la hoja y el Excel): **precio exacto del modelo > precio de marca > ajuste de la tienda > banda > maestro**. Descuento: el del modelo si existe, si no el de la marca. Filas de la matriz con `source: "brand"` cuando el precio viene de la marca. API: `POST /admin/pricing/matrix/cell` con `kind: "brand"`, `key: <slug>`, `field: price|discount`, `store`. El GET devuelve en cada grupo `stores[est].brand_price_cents` y `brand_discount_pct`.
+
+## Tratamientos
+
+`POST /admin/pricing/treatments/:code` (editar etiquetas, grupo, costo) y `DELETE` (si nunca se vendió; si se vendió, `is_active=false`).
+
+## Exportar / importar
+
+Todo lo anterior entra en el Excel de la matriz (hoja «Marcas» con precio/desc de marca por tienda). Reglas y comisiones exporta/importa su propio libro (ver docs/CONTABILIDAD.md).
+
+## Implementación v2 (backend, 7-nov-2026)
+
+Lo que sigue es lo que el backend hace de verdad con el contrato v2 de
+arriba, con los detalles que el contrato no fijaba. Nada de v1 cambia de
+forma: todo lo nuevo son campos o rutas añadidos.
+
+### Archivos
+
+| Qué | Dónde |
+|---|---|
+| Costo por **modelo** (candidatos, precedencia, alias del catálogo) | `apps/backend/src/lib/frame-cost.ts` (`frameCostCandidates`, `frameCostRowFrom`, `frameCostKeyFor`, `frameCostRowExact`, `costRefOf`, `loadCatalogAliases`) |
+| Lista anterior del proveedor | `src/modules/store-pricing/capri-price-list-prev.ts` (`CAPRI_PREV_PRICE_LIST`, 460 filas de `e3bb8ba`, `capriPrevCostCents`) |
+| Siembra de la lista anterior | `src/modules/store-pricing/frame-cost-seed.ts` (`prevFrameCostSeedRows`, `frameCostSeedStatements(rows, source)`) |
+| URL absolutas de imágenes | `src/lib/image-url.ts` (`absoluteImageUrl`, `absoluteImageUrls`, `publicAssetBase`, `catalogUploadKey`) |
+| Registro de marcas | modelo `src/modules/store-pricing/models/catalog-brand.ts` (`CatalogBrand`, prefijo `cbr`), puro `src/lib/catalog-brand.ts`, datos `src/lib/catalog-brand-data.ts`, siembra `src/modules/store-pricing/catalog-brand-seed.ts` |
+| Precio / descuento de marca | `src/lib/store-pricing.ts` (`brandTarget`, `brandOfTarget`, `brandPriceRule`, `StoreLineInput.brand`), `src/lib/price-matrix.ts` (`productDiscountOf(…, brandSlug)`, `brandStoreCell`, `planCellWrite` kind `brand`, import «Marcas»), `src/lib/price-matrix-data.ts` (`executeCellOp` → `executeBrandOp`, `loadBrandGroup`, `brandExists`) |
+| Editar / borrar modelos | puro `src/lib/catalog-frame.ts` (`cleanFrameExtras`, `cleanCatalogFramePatch`, `planColorEdit`, `attributeMetadata`), datos `src/lib/catalog-frame-data.ts` (workflows de Medusa) |
+| Editar / borrar tratamientos | puro `cleanTreatmentPatch` / `photoPricesAfter` en `src/lib/price-matrix.ts`, datos `src/lib/treatment-data.ts` |
+| Rutas nuevas | `src/api/admin/catalog/brands/route.ts` (GET + POST), `brands/[slug]/route.ts` (POST, DELETE), `frames/[id]/route.ts` (POST, DELETE), `uploads/route.ts` (POST), `src/api/admin/pricing/treatments/[code]/route.ts` (POST, DELETE); `pricing/matrix/cell` acepta `kind: "brand"` |
+| Migraciones (módulo store-pricing) | `CreateCatalogBrand8.ts` (tabla + CHECK de `kind`/`source` + índice único parcial por `slug` + siembra), `UpgradeStoreFrameCostPrev9.ts` (CHECK de `source` con `supplier_list_prev` + siembra de la lista anterior). Idempotentes, con `down`; probadas contra la base local de QA (`medusa db:migrate`). |
+| Tests | `tests/price-matrix-v2.test.ts` (claves y precedencia de costo con ejemplos reales, lista anterior, imágenes, precedencia de precio de marca, descuentos, matriz, celda, import «Marcas», registro de marcas, alta/edición de modelos, tratamientos), `tests/price-matrix-v2-routes.test.ts` (la caja con precio y descuento de marca, el escritor de la celda de marca, guardias y razones de las rutas nuevas, subida) |
+
+### 1. Costos: por modelo, no por SKU
+
+- **Candidatos** (`frameCostCandidates`), en este orden: el **modelo** (título
+  del producto, mayúsculas y solo A-Z0-9: «DC 50» → `DC50`; también sin una
+  palabra de marca delante o detrás: «Grande GR 801» → `GR801`, «SimplyLite
+  SL101» → `SL101`; y las dos formas que ya conocía `capriKeyOf`: `YC21102` →
+  `21102`, `DI CAPRIO CASE` → `DICAPRIOCAS`), luego **cada SKU** de los colores
+  igual, luego **cada SKU cortado por palabras** (el SKU que inventa el
+  scraper sin UPC, `dc-50-di-caprio-grey` → `DC50DICAPRIO`, `DC50DI`, `DC50`…;
+  palabras enteras, nunca `DC501`), y al final **los UPC**
+  (`metadata.upc_by_color`).
+- **Precedencia** (`frameCostRowFrom`), en tres pasadas sobre esos candidatos:
+  (1) una fila **`owner_edit`** bajo cualquiera de las claves (el dueño gana
+  donde sea que la pantalla vieja la haya guardado, p. ej. bajo
+  `DC50DICAPRIOGREY`); (2) cualquier fila guardada (las sembradas de la lista);
+  (3) las listas compiladas: **2026 → anterior → nada** (nunca 0).
+- **Quien solo tiene un SKU** (`frameCostCents(sku, storeId)`: costing,
+  sales-insights, **store-pnl**): la caché de costos carga ahora también los
+  **alias del catálogo** (SKU / UPC normalizado → título, una consulta Knex
+  por minuto, `loadCatalogAliases`) y busca primero por ese modelo. **Las
+  firmas no cambian**; `FrameCostLookup` gana un tercer argumento opcional
+  `model` y `CostOrderLike.items[].model` es opcional. `store-pnl.ts` no se
+  tocó: con los alias, el `sku` que ya pasa (`sale_fact.sku`) se costea por
+  modelo.
+- **Matriz**: cada fila de montura/estuche trae `cost_key` (solo con
+  `cost_access`): la clave del modelo bajo la que vive (o se escribiría) su
+  costo. Escribir la celda de costo usa esa clave, ya no el SKU del color, así
+  que un modelo de staging guarda su costo en `DC50` y lo leen todos. La vista
+  entre tiendas, la hoja («Costos monturas»), `GET /admin/pricing/frames/costs`
+  (precio unido al costo por la clave del modelo) y el resumen de cobertura
+  usan la misma resolución.
+- **Comprobado en la base de QA** (133 modelos, 613 filas de costo): con los
+  SKU que el scraper inventaría (`<handle>-<color>`), v1 encontraba costo para
+  0 de 133; v2 para 133 de 133 por modelo, 133 por el SKU solo (cortes por
+  palabra) y 133 por `frameCostCents` con los alias. La matriz real
+  (`loadMatrixSection`) de QA: 126/126 monturas y 7/7 estuches con costo.
+
+### 2. Lista anterior
+
+- `capri-price-list-prev.ts` = el `PRICE_BOOK` de `e3bb8ba` (marca, modelo,
+  clave en mayúsculas, `wholesale_cents`; lo que el libro viejo solo
+  **estimaba** queda en `null` = sin costo, no una suposición).
+- `store_frame_cost.source` acepta `supplier_list_prev` (modelo y CHECK);
+  `FRAME_COST_SOURCES`/`FRAME_COST_ORIGINS` lo incluyen y la hoja lo rotula
+  «Lista anterior del proveedor». Vaciar el costo de un modelo que solo está
+  en la lista anterior vuelve a ella con ese `source`.
+- La siembra solo añade claves que 2026 no tiene y con cifra real, con la
+  guarda `WHERE store_frame_cost.source = 'supplier_list_prev'`: nunca toca una
+  fila de 2026 ni un `owner_edit`. **Hoy no añade ninguna fila**: las 460
+  claves del libro viejo están en 2026 salvo tres (DI CAPRIO CASE, GRANDE CASE,
+  SIMPLYLITE CASE) que no tenían cifra. El respaldo queda cableado para la
+  próxima lista.
+- Una fila de costo por clave del proveedor ES una fila por modelo del
+  catálogo: todo modelo, tenga los SKU que tenga, se resuelve a esa clave. No
+  hace falta sembrar por producto (y una migración no puede leer `product`,
+  que es de otro módulo).
+
+### 3. Imágenes
+
+`absoluteImageUrl`: una clave del bucket → `R2_PUBLIC_URL` (o
+`VITE_R2_PUBLIC_URL`, o el bucket de la tienda por defecto, el mismo que usan
+los correos) + clave; `http(s)://`, `data:`, `blob:` y `//…` se dejan igual;
+**una ruta que empieza por `/` también** (los logos `/brands/…` los sirve el
+origen del panel). Aplicado en: filas de la matriz (`thumbnail`), logos de
+marca, búsqueda del POS (`thumbnail`, `images[]`, `variants[].image`), ficha
+de catálogo por tienda (`/admin/store-assortment/:id/products` y la ficha),
+vista entre tiendas, tablero de pedidos (`items[].thumbnail`) y la lista de
+modelos nuevos de la sincronización. El panel ya no tiene que prefijar nada.
+
+### 4. Marcas (`catalog_brand`)
+
+- Columnas: `slug` (único entre vivas), `name`, `logo_url`, `kind`
+  (`frame`|`case`), `source` (`capri`|`manual`), `active`, `sort`,
+  `created_by`, `updated_by`, timestamps, `deleted_at`.
+- Siembra (migración): Di Caprio, Flexure, Millennial, Peachtree, Four You
+  (`4u`), Trendy, Simplylite (`simply-lite`, sin logo), Grande, ProRx, Cases
+  (`case`, kind `case`), con `sort` 10…100 en el orden de la tienda y
+  `logo_url` = `/brands/logo-<archivo>.png` según el mapa explícito
+  `BRAND_LOGO_FILES` (`four-you`→`4u`, `cases`→`case`, …; el resto `null`).
+  `ON CONFLICT DO NOTHING`: nunca pisa una edición.
+- **Registro al leer**: `GET /admin/catalog/brands` (y la matriz) inserta las
+  marcas que algún modelo lleva y el registro no tiene (`source` `manual` si
+  todos sus modelos son manuales, si no `capri`; logo del mapa; `sort` 1000),
+  así que una marca del catálogo nunca desaparece. Sin la tabla, la lista sale
+  como en v1.
+- `GET /admin/catalog/brands` → `{ brands: [{ slug, name, models, logo_url,
+  kind, active, source, sort, registered }] }`, ordenadas por `sort` y nombre
+  (más las conocidas sin modelos, como antes).
+- `POST /admin/catalog/brands` `{ name, kind?, logo_url?, slug?, sort? }` → 201
+  `{ brand }`; 409 `brand_taken` (también si el catálogo ya usa ese slug); 422
+  `bad_name`/`bad_kind`/`bad_slug`/`bad_logo`/`bad_value`.
+- `POST /admin/catalog/brands/:slug` `{ name?, logo_url?, active?, sort?, kind? }`
+  → `{ brand }`; 404 `brand_not_found`; 422 `nothing_to_change` y los de arriba.
+  El nombre nuevo es la etiqueta del grupo en la matriz; no reescribe
+  `metadata.brand` de los productos.
+- `DELETE /admin/catalog/brands/:slug` → `{ deleted: true }`; 409
+  `brand_has_models` con `models` (cuenta todo modelo no borrado, también los
+  descontinuados).
+- `logo_url` acepta una URL http(s) (la de una subida) o una ruta del origen
+  (`/brands/…`); `""`/`null` lo quita.
+- La matriz pone `logo_url` en cada grupo de marca.
+
+### 5. Subidas
+
+`POST /admin/catalog/uploads` (multipart, campo `file`) → 201 `{ url }`
+absoluta. Middleware `catalogUpload` en `src/api/middlewares.ts` (multer en
+memoria, un archivo, JPEG/PNG/WEBP, ≤ 8 MB → 415 `unsupported_media_type`, 413
+`file_too_large`; esas dos respuestas ahora llevan también `reason`), y el
+módulo de archivos de Medusa como las fotos de reseñas (`createFiles`,
+`access: "public"`, clave `catalog/<ms>-<nombre>`): R2 público si está
+configurado, disco local si no. Solo dueño/superadmin (403
+`forbidden_role`); 400 `file_required`; 503 `upload_failed`.
+
+### 6. Modelos
+
+- `POST /admin/catalog/frames` acepta además `images[]` (URL http(s), máx. 20;
+  la primera es la portada, luego las fotos de los colores), `material` (texto
+  o lista), `shape`, `style`, `gender`, `age_group`, `features[]` y
+  `description` (→ `product.description`), con las **mismas claves de
+  `metadata` que escribe el scraper**. Razones nuevas: `bad_images`,
+  `bad_attribute`, `bad_description`.
+- `POST /admin/catalog/frames/:id` edita solo lo enviado: `model` (título),
+  `brand`/`brand_slug`, `status` (`published`|`draft`), medidas, `images[]`,
+  los atributos (un `null` borra la clave), `description` y `colors`: la lista
+  **completa** deseada — `{ variant_id, name, image? }` mantiene o renombra
+  (y añade el valor a la opción «Color»), `{ name }` crea (SKU `<SKU del
+  modelo>-<color>`, nunca uno ya usado, precio Medusa del modelo) y un color
+  que falta se borra **solo si nunca se vendió**; si no, 409 `variant_sold`
+  con `variant_ids` y no se escribe nada. Responde `{ product_id, row }`.
+  `metadata` se **fusiona** (Medusa la reemplaza) y gana `edited_at`/`edited_by`.
+  Razones: `product_not_found` (404), `bad_sku`, `bad_brand`, `bad_status`,
+  `bad_measure`, `bad_colors`, `bad_images`, `bad_attribute`,
+  `bad_description`, `nothing_to_change` (422). Probado contra QA (renombrar y
+  devolver un color de un producto de prueba con los workflows reales).
+- `DELETE /admin/catalog/frames/:id` → `{ deleted: true }` (nunca vendido:
+  `deleteProductsWorkflow`) o `{ archived: true }` (vendido: pasa a `draft`,
+  con `archived_at`/`archived_by`).
+- «Vendido» = una línea en `order_line_item` (web y caja) o en `sale_fact`.
+- Auditoría `catalog.update` / `catalog.delete` (añadidas a `AUDIT_ACTIONS`;
+  el panel necesita sus etiquetas).
+- **Límite conocido**: en un modelo **del scraper** (no manual), la siguiente
+  sincronización vuelve a escribir los campos que el scraper posee (título,
+  descripción, atributos). Hacer que una edición del dueño sobreviva exige un
+  cambio en `apps/scraper/scraper/medusa_push.py` (respetar, p. ej.,
+  `metadata.edited_at` o una lista de campos bloqueados) — fuera de este
+  cambio; hay que decidirlo con Eyewear Dev. Renombrar un color deja el valor
+  viejo en la opción «Color» (sin variantes; inofensivo).
+
+### 7. Precio y descuento de marca
+
+- Datos: `store_price_rule` (`establishment_id`, `scope` `frame`|`case`,
+  `target` **`brand:<slug>`**, `mode` `override`, `source`
+  `price-matrix-brand`) y `store_item_discount` (`item_kind` **`brand`**,
+  `item_key` = slug). Sin migración: las columnas ya son texto libre.
+- `storeLinePrice` recibe `brand` (el slug de la marca del modelo): **precio
+  exacto del modelo > precio de marca > ajuste de la tienda > banda >
+  maestro**. El precio de marca, como el exacto, no se ajusta ni lo mueve la
+  banda; un ajuste fijo antiguo (`scope all`) pasa a los lentes.
+  `frame_source` gana `"brand"`. Solo la marca de **esa** tienda y de ese
+  `scope`; sin `brand` todo es como antes (y la montura del cliente nunca
+  toma precio de marca).
+- Descuento: el del modelo (`frame`/`case`) si existe, si no el de su marca
+  (`productDiscountOf(index, store, productId, brandSlug)`).
+- Dónde se aplica: la caja (`quoteSale` pasa el `brand_slug` de la metadata
+  del producto; `QuotedLine.frame_source` puede ser `brand`), la búsqueda del
+  POS, la matriz (celdas con `source: "brand"`), la vista entre tiendas
+  (`source: "brand"`), la ficha de catálogo por tienda, la hoja y el Excel.
+  `rulesByTarget(rules)(productId, brandSlug)` añade las reglas de la marca a
+  la porción de cada modelo (sigue siendo una pasada).
+- Matriz: cada grupo de marca trae en `stores[est]` además
+  `brand_price_cents` (centavos o `null`) y `brand_discount_pct` (`null` sin
+  descuento). En «Monturas» se leen las reglas `scope: "frame"`; en
+  «Estuches», `scope: "case"`.
+- `POST /admin/pricing/matrix/cell` `{ kind: "brand", key: <slug>, field:
+  "price"|"discount", store, value, scope? }` (`scope` por defecto `case`
+  para la marca `case`/`cases`, `frame` para el resto). Responde **`{ group }`**
+  (el grupo de esa marca con su cabecera y todas sus filas recalculadas), no
+  `{ row }`. Razones: `bad_field` (costo), `store_required`, `unknown_item`
+  (slug mal formado o marca que no existe), `discount_range`, `bad_value`.
+  Audita `price.change` (`price_rule` / `item_discount`).
+- `GET /admin/store-pricing/:id` ya no lista los precios de marca entre los
+  exactos de modelo: van aparte en `brand_prices: [{ scope, brand, price,
+  since }]`; Precios → Monturas (vista antigua) tampoco los muestra como
+  modelos.
+- Importar: filas `{ section: "brands", key: <slug>, stores: { <código>: {
+  price, discount } } }` (ausente = no se toca, `null` vacía, igual =
+  `unchanged`). `cost` en una marca → `bad_row`. Cada cambio del plan trae
+  `kind: "brand"`, `key` = slug y `scope`. Se aplican con el mismo escritor
+  que la celda.
+
+### 8. Tratamientos
+
+- `POST /admin/pricing/treatments/:code` `{ type?, label_es?, label_en?,
+  ar_group? (solo AR), cost?, is_active?, prices? }` — `prices` para un
+  fotocromático es `{ sv?, bifocal?, prog? }` (solo las categorías enviadas;
+  `null` = deja de ofrecerse, pero debe quedar al menos una → `bad_value`), para
+  un AR un número. `type` solo hace falta si el código existiera en las dos
+  listas (`bad_type`). Responde `{ type, code, rows }`. Un `cost` necesita
+  «Gestionar costos». 404 `treatment_not_found`; 422 `bad_label`, `bad_value`,
+  `nothing_to_change`.
+- `DELETE /admin/pricing/treatments/:code[?type=]` → `{ deleted: true, type }`
+  (nunca vendido: se borra la fila — su código queda libre — y los precios
+  propios / descuentos de tiendas de esa opción) o `{ archived: true, type }`
+  (vendido: `is_active = false`). «Vendido» = `sale_fact.lens_photo` /
+  `lens_ar` = código, o `order_line_item.metadata.lens_config.photo_code` /
+  `ar_code` = código (web y caja).
+
+### 9. La tienda online (decisión C8)
+
+- **Cómo salen hoy los precios de la web**: la web en modo Medusa
+  (`VITE_USE_MEDUSA`) pinta `variants[].calculated_price` (precio de la
+  variante en Medusa) y la línea del carrito (`/store/carts/:id/configured-line`)
+  cobra ese mismo `calculated_amount` + lentes. Ese precio de variante es el
+  **maestro**: lo escribe el job `price-sync` cada 4 h (precio global del
+  dueño si lo fijó; si no, la conversión del libro mayorista + la banda de la
+  cadena). Sin `VITE_USE_MEDUSA` la web usa el catálogo estático empaquetado.
+  Ningún establecimiento interviene: «Op4 Online Optical Store» es solo una
+  columna más (`establishment.kind` es `own|family|partner|consignment`, no
+  hay un tipo «online»), y lo que se escriba en su columna solo lo cobra una
+  caja de Op4.
+- **No se implementó** que un precio de esa columna mueva el precio Medusa:
+  no es contenido ni seguro. El precio de la variante es a la vez la **base de
+  todas las tiendas** (`productPrices` → `storeLinePrice`), así que escribirlo
+  cambiaría el precio de todas las cajas que heredan; y `price-sync` lo
+  sobrescribiría a las 4 h.
+- **Lo que haría falta** (para decidir): (1) marcar qué establecimiento es la
+  web (`establishment.kind = 'online'` — migración del CHECK/enum — o un
+  `web_establishment_id` en `store_setting`); (2) que el precio de la web se
+  calcule con `storeLinePrice` + descuentos de ese establecimiento **sobre la
+  base Medusa** en el servidor: en `configured-line` (lo que se cobra) y en
+  una ruta pública de precios del catálogo (o un campo calculado en
+  `/store/products`) que la tienda lea en lugar de `calculated_price`; (3)
+  cambiar la tienda (`medusaCatalog.js priceOf`) para leer ese precio. La
+  alternativa — un *price list* de Medusa para la web — no sirve: las reglas
+  de price list de Medusa v2 son por grupo de clientes/región, no por canal de
+  venta. Mientras tanto, la forma de mover el precio de la web es el precio
+  **maestro** (celda del maestro / precio global del dueño), que `price-sync`
+  respeta.

@@ -9,7 +9,10 @@ pruebas: `apps/backend/tests/accounting-audit.test.ts` (una prueba por fórmula 
 por defecto corregido) y `apps/backend/tests/accounting-reconciliation.test.ts`
 (un mes de una tienda leído por las cinco pantallas, con las identidades que
 deben cumplirse) y `apps/backend/tests/accounting-coherence.test.ts` (los
-defectos de la verificación del 5-nov-2026 sobre base real, abajo). Si alguien
+defectos de la verificación del 5-nov-2026 sobre base real, abajo) y
+`apps/backend/tests/financial-statement.test.ts` (frecuencias, estado de
+resultados contra resultado y Ejecutivo, comisión por defecto, importación;
+§8). Si alguien
 cambia una fórmula, esas pruebas fallan.
 
 ---
@@ -345,10 +348,12 @@ costo de mercancía = reglas de costo del dueño, una ficha por venta,
 comisiones de cobro= Σ pos_sale_payment.fee_cents del mes (día local),
                      EXCLUYENDO los de ventas anuladas
 comisiones         = Σ redondeo(neto de la línea × % del vendedor / 100)
-                     % = perfil de la persona, y si no tiene, su ficha de vendedor
-variables a mano   = partidas "variable" del mes de la tienda
-fijos              = partidas "fixed" del mes de la tienda
-compartidos        = su parte de las partidas sin tienda
+                     % = perfil de la persona → su ficha de vendedor → la
+                     comisión por defecto (lib/commission-pct.ts, §8)
+variables a mano   = partidas "variable" activas del mes de la tienda
+                     + partidas «por venta» × ventas de la tienda
+fijos              = partidas "fixed" activas del mes de la tienda
+compartidos        = su parte de las partidas sin tienda (activas, no por venta)
 
 variable_total  = fees + comisiones + variables a mano
 contribución    = ventas netas − costo de mercancía − variable_total
@@ -359,14 +364,35 @@ punto de equilibrio = fijos_total / (contribución / ventas netas)   (null si la
                       contribución no es positiva)
 ```
 
-### Frecuencias y vigencia de una partida (`monthlyCharge`)
+### Frecuencias y vigencia de una partida (`monthlyCharge`, 7-nov-2026)
 
-| Frecuencia | Cargo del mes |
-|---|---|
-| `monthly` | el importe |
-| `quarterly` | `redondeo(importe / 3)` |
-| `annual` | `redondeo(importe / 12)` |
-| `one_time` | `redondeo(importe / n)` durante `n = amortize_months` meses desde `starts_on`; 0 después |
+Equivalente mensual (`MONTHLY_FACTOR`, fracciones exactas) y cargo del mes `i`
+contado desde `starts_on` con **redondeo acumulado** (`spreadCents`:
+`round((i+1)·M) − round(i·M)`), de modo que un ciclo completo suma
+**exactamente** lo que dice la frecuencia:
+
+| Frecuencia | Equivalente mensual `M` | Un año suma |
+|---|---|---|
+| `daily` | importe × 365/12 (30.4167) | importe × 365 |
+| `weekly` | importe × 52/12 | importe × 52 |
+| `biweekly` (cada 2 semanas, no «dos veces al mes») | importe × 26/12 | importe × 26 |
+| `monthly` | importe | importe × 12 |
+| `quarterly` | importe / 3 | importe × 4 |
+| `annual` | importe / 12 | importe |
+| `one_time` | importe / `n` durante `n = amortize_months` meses desde `starts_on` (1 si no se reparte); 0 después | importe |
+
+Antes era `redondeo(importe / 12)` cada mes: una partida anual de $1,000.00
+sumaba $999.96 en el año. Ahora 83.33 + 83.34 + … suma $1,000.00.
+
+- `active = false` → 0 en todo (se conserva con su historial). Borrar sigue
+  siendo lógico.
+- `per_sale = true` («se cobra en cada venta») → `perSaleCharge` = importe ×
+  ventas de la tienda en el mes (ventas = pedidos distintos de `sale_fact`
+  activos). Ignora la frecuencia y **siempre es variable** (entra en
+  `variable_manual` del resultado). Una partida por venta compartida se cobra en
+  cada tienda sobre **sus** ventas; no se reparte.
+- La columna «Mensual» del panel (`normalizedMonthly`) es `round(importe × M)`
+  — el valor de un mes promedio — y no el cargo redondeado de un mes concreto.
 
 La vigencia se evalúa **por mes**, no por día: `starts_on` y `ends_on` se
 recortan a `YYYY-MM`. Una partida que arranca el 31 de enero cobra enero
@@ -497,6 +523,139 @@ ventana del tablero (300 pedidos) por código de referido, con la comisión
 sobre el bruto con impuesto. El número de pedido, la etapa y las iniciales del
 cliente se leen del pedido solo para las filas mostradas
 (`fetchBoardOrdersByIds`).
+
+---
+
+## 8. «Reglas y comisiones» y estado de resultados (7-nov-2026)
+
+### Una sola computación: el libro (`lib/financial-statement.ts`)
+
+`ledgerOf` (pura) convierte meses de `sale_fact`, pagos, reglas de costo y
+partidas en **centavos por mes y por entidad** (cada tienda —solo
+`channel = 'pos'`— y «web»). `store-pnl.ts monthPnl` se construye **sobre esa
+función** (antes tenía el mismo código en línea; su API y sus exportaciones
+—`commissionsOf`, `sumFeesByStore`— siguen iguales, reexportadas), y el estado
+de resultados también. El resultado de una tienda y su columna del estado son
+el mismo número por construcción. `loadLedger` lee todo el rango en un puñado de
+consultas (no una tanda por mes).
+
+### Comisión por defecto: la única fuente (`lib/commission-pct.ts`)
+
+```
+% de una línea = perfil de la persona (staff_profile.commission_pct)
+               → su ficha de vendedor (seller.commission_pct, por usuario o código)
+               → la comisión por defecto (store_pricing_setting.default_commission_pct)
+                 SOLO si la línea tiene vendedor (seller_id)
+               → ninguna (venta sin vendedor, o código de referido sin ficha)
+```
+
+La aplican Ejecutivo (`sales-insights.ts commissionResolver`), el resultado y
+el estado (`loadLedger`), el mapa de inicio (`start-map.ts`) y el panel propio
+(`/admin/sales-analytics/me`, que además dejó de tratar un 0 de la ficha como
+«sin %»). Al **crear** un vendedor (`POST /admin/sellers` sin `commission_pct`,
+o Equipo → ficha nueva sin %) se guarda la comisión por defecto; los
+formularios de Vendedores y Equipo arrancan con ella (`useDefaultCommission`,
+`GET /admin/pricing/commissions`). Cambiar la comisión por defecto recalcula
+también el pasado de quien no tiene % propio, como cualquier regla.
+
+### Categoría fiscal (`tax_category`) y líneas del IRS
+
+`cost_item.tax_category` ∈ `cost_of_goods, rent, utilities, payroll,
+payroll_taxes, insurance, advertising, software, professional_fees, bank_fees,
+repairs, supplies, taxes_licenses, depreciation, other`. Las filas anteriores
+se rellenaron desde su `category` (migración `StoreCostFinance2`, mismo mapa
+que `CATEGORY_TAX`): rent→rent, maintenance→repairs, utilities→utilities,
+salaries→payroll, insurance→insurance, licenses→taxes_licenses,
+subscriptions→software, equipment→depreciation, supplies→supplies,
+shipping→other, repairs→repairs, remakes→cost_of_goods,
+accounting→professional_fees, other→other. La misma migración apagó
+(`active = false`) las partidas que una tienda había apagado **para sí misma**
+con el interruptor «Se cobra» (`store_cost_toggle`, `ref_kind = 'cost'`): ese
+interruptor no cambiaba ninguna cifra y ahora sí cuenta. En la base QA no había
+ninguno.
+
+| Línea del estado | Schedule C (1040) | Form 1120-S |
+|---|---|---|
+| Ingresos netos | 1 | 1a |
+| Costo de la mercancía | 4 (Parte III) | 2 (1125-A) |
+| Utilidad bruta | 5 | 3 |
+| Publicidad | 8 | 16 |
+| Comisiones de vendedores | 10 (contratistas; a empleados: 26) | 19 |
+| Comisiones del cobro / bancarias / otros | 27a (Parte V) | 19 |
+| Depreciación | 13 (4562) | 14 (4562) |
+| Seguros | 15 | 19 |
+| Honorarios profesionales | 17 | 19 |
+| Software | 18 | 19 |
+| Renta | 20b | 11 |
+| Reparaciones | 21 | 9 |
+| Suministros | 22 | 19 |
+| Impuestos y licencias, impuestos sobre nómina | 23 | 12 |
+| Servicios | 25 | 19 |
+| Sueldos | 26 | 8 |
+| Total gastos | 28 | 20 |
+| Utilidad neta | 31 | 21 |
+
+Orientativo para el contador (`TAX_LINES`); el PDF y el Excel lo dicen: «Preparado
+para revisión del contador — no sustituye asesoría fiscal».
+
+### El estado de resultados (`statementOf`, `GET /admin/finance/statement`)
+
+Meses calendario locales **completos** (`from`/`to` se ensanchan a sus meses;
+máximo 36), agrupados por mes, trimestre o año; por tienda, «web» y consolidado.
+
+```
+Ingresos           = ventas netas en tienda + ventas netas en línea
+                     (Σ total − impuesto de sale_fact activas)
+Costo de mercancía = monturas + lentes + tratamientos + fijos por venta
+                     (líneas "material" de computeCostSheet, una ficha por venta)
+                     + partidas con tax_category = cost_of_goods
+Utilidad bruta     = ingresos − costo de mercancía
+Gastos de operación= Σ partidas por categoría fiscal (resto de categorías)
+                     + comisiones del cobro + comisiones de vendedores
+Utilidad de operación = utilidad bruta − gastos de operación
+Utilidad neta      = utilidad de operación   (negocio pass-through: sin ISR)
+Impuesto de venta  = Σ tax_cents, APARTE: pasivo con el estado, nunca ingreso
+Márgenes           = cada uno ÷ ingresos, un decimal; null sin ingresos
+Punto de equilibrio= fijos ÷ (contribución / ingresos), fracción sin redondear
+```
+
+- **Comisiones del cobro**: tienda = `pos_sale_payment.fee_cents` del mes local
+  sin anuladas (igual que el resultado); web = `% de pasarela × lo cobrado +
+  fijo` por pedido (igual que el Ejecutivo).
+- La web no carga partidas de tienda (renta, sueldos son de las tiendas).
+- Las reglas `order_percent` de reparto (renta 5 %, marketing…) **no** son
+  gasto incurrido: son presupuesto de la ficha. Ni el resultado ni el estado las
+  restan (el Ejecutivo tampoco).
+
+Identidades (fijadas por `tests/financial-statement.test.ts` y comprobadas
+sobre la base QA con `src/scripts/verify-financial-statement.ts`: 42
+comprobaciones, 0 diferencias):
+
+| Identidad | |
+|---|---|
+| ingresos − costo de mercancía − Σ categorías − comisiones del cobro − comisiones = utilidad neta | por construcción |
+| columna de una tienda: utilidad neta = `monthPnl.result`, contribución = `contribution`, fijos = `fixed_total`, equilibrio = `break_even` | mismo libro |
+| consolidado: ingresos = `Ejecutivo.net`; costo de monturas/lentes/fijos = `Ejecutivo.cost`; comisiones del cobro = `Ejecutivo.fee`; comisiones = `Ejecutivo.commission`; `memo.gross_contribution` = `Ejecutivo.profit`; impuesto de venta = `Ejecutivo.tax` | mismas líneas y reglas |
+| consolidado: utilidad neta = Σ resultado de las tiendas + utilidad de la web | |
+| un trimestre / año = Σ de sus meses; un costo compartido suma exacto entre tiendas | resto mayor |
+
+Lo que difiere **a propósito**: la utilidad bruta del estado resta las partidas
+`cost_of_goods` (rehechos) que el resultado por tienda pone en fijos/variables;
+la utilidad neta es la misma.
+
+### «Reglas y comisiones» (panel) e importación
+
+`GET /admin/finance/rules?store=` da los acordeones (costos con su `monthly`,
+reglas por venta con su «Se cobra» por tienda, comisiones, impuesto, y el
+`monthPnl` del mes para los indicadores). Las escrituras usan las rutas de
+siempre (`/admin/store-costs*` con los campos nuevos, `/admin/costing/rules`,
+`/admin/pricing/{commissions,taxes,costs/toggle}`).
+`POST /admin/finance/rules/import { apply }` (`lib/store-costs-import.ts`):
+con `apply: false` devuelve el plan (altas, cambios campo a campo, sin cambios,
+errores); con `apply: true` aplica ese plan, 422 `import_has_errors` si hay
+errores. **Nunca borra**: una partida que no está en el libro queda igual; para
+retirarla, `Activo = No`. Fila con `id` desconocido = error (no se crea un
+duplicado).
 
 ---
 
@@ -700,8 +859,9 @@ Defectos encontrados y corregidos (cada uno con prueba en
 6. **El documento afirmaba `Ejecutivo.profit = contribution`**: solo sin
    partidas variables a mano. Corregido arriba.
 
-Sin cambio, para decidir: la «Comisión por defecto» de Precios (7 %) no se
-aplica en ningún cálculo ni al crear una ficha (el formulario arranca en 10 %);
+Sin cambio, para decidir: ~~la «Comisión por defecto» de Precios (7 %) no se
+aplica en ningún cálculo ni al crear una ficha (el formulario arranca en 10 %)~~
+(resuelto el 7-nov-2026, ver §8);
 el rango «Todo» del panel público manda el mes en curso (página, no ruta);
 partidas de costo duplicadas en la base QA (dato); 4 aprobaciones `approved`
 sin usar que caducan a las 24 h.

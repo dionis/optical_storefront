@@ -6,6 +6,7 @@
  * email always sends.
  */
 import type { Knex } from "@mikro-orm/knex";
+import { publicAssetBase } from "../image-url";
 import type { EmailLocale } from "./copy";
 import {
   frameSizeNotation,
@@ -167,11 +168,8 @@ function localizeSpecs(raw: RawFrameSpecs | null, locale: EmailLocale): FrameSpe
  * si no hay ninguna (o es el placeholder del .env.example) usa el bucket de la
  * tienda, que es donde viven hoy todas las fotos.
  */
-const DEFAULT_ASSET_BASE = "https://svuuuobjgrkscsjgpwkx.supabase.co/storage/v1/object/public/eyewear-assets";
-function assetBase(): string {
-  const raw = (process.env.R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
-  return raw && !/example\.com/.test(raw) ? raw : DEFAULT_ASSET_BASE;
-}
+// The base lives in lib/image-url.ts now (the panel's routes use it too).
+const assetBase = (): string => publicAssetBase();
 
 /** URL pública de una foto de producto, redimensionada (JPEG) para correo. */
 export function productImageUrl(key: string | null | undefined, width = 480): string | null {

@@ -204,3 +204,9 @@
   .adm-sf-pop { min-width: min(300px, 92vw); }
 }
 @media (prefers-reduced-motion: reduce) { .adm-sf-pop { animation: none; } .adm-sf-chev { transition: none; } }
+
+/* Tablet táctil: el selector de tienda (también el compacto de las cabeceras) a 44 px. */
+@media (pointer: coarse) {
+  .adm-sf-btn, .adm-store-filter.compact .adm-sf-btn { min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  .adm-sf-opt { min-height: 44px; }
+}

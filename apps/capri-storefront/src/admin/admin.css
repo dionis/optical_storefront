@@ -900,7 +900,10 @@
   .adm-team-row { flex-wrap: wrap; }
   .cost-rule { grid-template-columns: 1fr minmax(70px, 90px) minmax(50px, 70px) auto; }
 }
-@media (max-width: 768px) {
+/* Tablet vertical y móvil (< 900 px: iPad 10.2" vertical = 810, Galaxy Tab
+   vertical = 712–800): la barra lateral pasa a cajón hamburguesa y el contenido
+   usa todo el ancho, que en el mostrador es para el formulario de la venta. */
+@media (max-width: 899.98px) {
   /* Cajón hamburguesa: la barra sale de pantalla y aparece como panel. */
   .adm-side { transform: translateX(-100%); width: min(300px, 86vw) !important; }
   .adm-shell.drawer-open .adm-side { transform: none; }
@@ -908,11 +911,15 @@
   .adm-shell.is-collapsed .adm-nav-item { justify-content: flex-start; padding: 10px; }
   .adm-shell.is-collapsed .adm-side-head { justify-content: flex-start; padding: 14px; }
   .adm-collapse { display: none; }
-  .adm-side-close { display: inline-flex; border: none; background: rgba(255,255,255,.1); color: #fff; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; align-items: center; justify-content: center; }
+  .adm-side-close { display: inline-flex; border: none; background: rgba(255,255,255,.1); color: #fff; width: 44px; height: 44px; border-radius: 12px; cursor: pointer; align-items: center; justify-content: center; }
   .adm-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(6, 28, 64, .45); opacity: 0; pointer-events: none; transition: opacity .25s; backdrop-filter: blur(2px); }
   .adm-shell.drawer-open .adm-scrim { opacity: 1; pointer-events: auto; }
   .adm-main, .adm-shell.is-collapsed .adm-main { margin-left: 0; }
-  .adm-burger { display: inline-grid; place-items: center; border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 10px; width: 40px; height: 40px; cursor: pointer; color: var(--adm-ink); flex: none; }
+  .adm-burger { display: inline-grid; place-items: center; border: 1px solid var(--adm-line); background: var(--adm-surface); border-radius: 12px; width: 44px; height: 44px; cursor: pointer; color: var(--adm-ink); flex: none; }
+  .adm-nav-item { min-height: 44px; }
+  .adm-top { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+}
+@media (max-width: 768px) {
   /* Pantalla táctil: todo lo que se toca mide al menos 40 px. */
   .btn-sm, .adm-icobtn, .adm-txt, .adm-sel, .adm-input, .adm-search, .adm-price-input, .adm-range button, .adm-find, .adm-user-chip, .adm-team-form input, .adm-team-form select, .adm-team-role { min-height: 40px; }
   .btn-xs, .adm-chip, .adm-mini, .adm-tip-btn { min-height: 34px; }
@@ -1873,3 +1880,53 @@ img.adm-frame-mi-white { display: none; }
 .adm-crash-detail { width: 100%; }
 .adm-crash-detail summary { cursor: pointer; font-size: 12px; color: var(--adm-faint); }
 .adm-crash-detail pre { margin: 8px 0 0; padding: 10px; max-height: 240px; overflow: auto; background: var(--adm-surface-2); border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tablet (7-nov-2026). Los vendedores trabajan en tablets: iPad 10.2" (810×1080
+   vertical / 1080×810 apaisada) y Galaxy Tab (800×1280). Reglas:
+   - < 900 px: cajón hamburguesa (bloque «Tablet vertical y móvil» de arriba).
+   - 900–1199 px en vertical: la barra lateral queda en iconos (AdminShell la
+     contrae sola con `is-rail`; el submenú sale flotante junto al icono).
+   - Pantalla táctil: todo lo que se toca mide ≥ 44 px (WCAG 2.5.5).
+   ══════════════════════════════════════════════════════════════════════════ */
+.adm-shell.is-rail .adm-collapse { display: none; }
+@media (pointer: coarse) {
+  /* Por encima de los 40 px del bloque «≤ 768 px» (Galaxy Tab vertical = 712). */
+  .btn-sm, .adm-icobtn, .adm-user-chip, .adm-txt, .adm-sel, .adm-input, .adm-search, .adm-price-input, .adm-find { min-height: 44px; }
+  .adm-nav-item { min-height: 44px; }
+  .adm-shell.is-collapsed .adm-nav-item { min-height: 48px; }
+  /* Iconos de exportar, selector de tienda y chips que son botones (filtros de caja,
+     estados): el dibujo no cambia, la zona de toque sí. */
+  .adm-mini { width: 44px; height: 44px; }
+  .adm-sf-btn { min-height: 44px; }
+  button.adm-chip, button.cash-chip, button.cr-chip { min-height: 44px; padding-left: 14px; padding-right: 14px; }
+  .cr-filters select, .cr-dates input, .adm-shell .cr-filters select { min-height: 44px; font-size: 16px; }
+  .btn-xs { min-height: 44px; }
+  .adm-subtabs button { min-height: 44px; }
+  .adm-range button { min-height: 38px; }
+  .adm-find-x { width: 32px; height: 32px; }
+  .adm-tip-btn { min-width: 44px; min-height: 44px; }
+  .adm-switch { min-height: 44px; }
+  .adm-switch input { width: 44px; height: 26px; }
+  .adm-switch input::after { width: 22px; height: 22px; }
+  .adm-switch input:checked::after { transform: translateX(18px); }
+  /* Campos: 16 px evita que iOS haga zoom al enfocar y descuadre la pantalla. */
+  .pos input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .pos select, .pos textarea,
+  .adm-txt, .adm-input, .adm-sel, .adm-search, .adm-find input, .sd-panel input, .sd-panel select, .sd-panel textarea,
+  .cash-card input, .cash-card select, .cash-card textarea { font-size: max(16px, 1em); }
+  .pos input[type="checkbox"], .pos input[type="radio"], .sd-panel input[type="checkbox"], .cash-card input[type="checkbox"] { width: 22px; height: 22px; }
+  /* Campos del punto de venta, ventas de tienda, caja y cobros (.pos): 48 px. */
+  .pos input:not([type=checkbox]):not([type=radio]):not([type=file]), .pos select { min-height: 48px; }
+}
+/* Las tarjetas del POS son una rejilla de una columna: sin `minmax(0, 1fr)` una
+   tabla ancha (libro de caja, ventas) estiraba la columna más allá de la tarjeta
+   y lo de la derecha quedaba recortado (fichas, botones) en tablet vertical. */
+.pos-card { grid-template-columns: minmax(0, 1fr); }
+.pos-card > * { min-width: 0; }
+
+/* Nada de scroll horizontal de página en tablet: lo ancho (tablas, cuadrículas)
+   se desplaza dentro de su propio contenedor. */
+@media (max-width: 1199.98px) {
+  .adm-main { min-width: 0; max-width: 100vw; }
+  .adm-body { overflow-x: clip; }
+}

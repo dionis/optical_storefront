@@ -16,7 +16,8 @@
  * cents, rounded to the cent PER PART (frame, lens cell, photochromic, AR), so
  * the parts on the receipt add up to the line.
  */
-import { frameCostRowFrom, resolveFrameCost, type FrameCostRow, type FrameCostVariationIndex } from "./frame-cost";
+import { frameCostKeyFor, frameCostRowExact, resolveFrameCost, upcsOf, type FrameCostRef, type FrameCostRow, type FrameCostVariationIndex } from "./frame-cost";
+import { absoluteImageUrl } from "./image-url";
 import { defaultLensFinish, LENS_FINISHES, parseLensFinish, type LensFinish } from "./lens-finish";
 import type { LensMatrixPayload, LensMatrixRow } from "./lens-matrix";
 import {
@@ -29,7 +30,7 @@ import {
   type LensStorePriceLike,
 } from "./pricing-overview";
 import { brandOf, isExposed, type AssortmentRuleLike } from "./store-assortment";
-import { globalPrice, hasGlobalPrice, storeLinePrice, type PriceRuleLike, type StoreLinePrice } from "./store-pricing";
+import { brandPriceRule, brandTarget, globalPrice, hasGlobalPrice, storeLinePrice, type PriceRuleLike, type StoreLinePrice } from "./store-pricing";
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
 
@@ -124,9 +125,24 @@ export function discountOf(index: DiscountIndex, storeId: string | null | undefi
  * in: a model can sit in «Estuches» by its brand and still be quoted as a
  * frame, and the product id is the same either way.
  */
-export function productDiscountOf(index: DiscountIndex, storeId: string | null | undefined, productId: string | null | undefined): number | null {
+export function productDiscountOf(
+  index: DiscountIndex,
+  storeId: string | null | undefined,
+  productId: string | null | undefined,
+  brandSlug?: string | null
+): number | null {
   if (!productId) return null;
-  return discountOf(index, storeId, "frame", productId) ?? discountOf(index, storeId, "case", productId);
+  // v2: the model's own discount, else its BRAND's in that store (`item_kind` "brand", key = slug).
+  return discountOf(index, storeId, "frame", productId) ?? discountOf(index, storeId, "case", productId) ?? brandDiscountOf(index, storeId, brandSlug);
+}
+
+/** `store_item_discount.item_kind` of a brand's discount (v2); `item_key` is the brand slug. */
+export const BRAND_DISCOUNT_KIND = "brand";
+
+/** A store's discount on a whole brand, or null. */
+export function brandDiscountOf(index: DiscountIndex, storeId: string | null | undefined, brandSlug: string | null | undefined): number | null {
+  if (!brandSlug) return null;
+  return discountOf(index, storeId, BRAND_DISCOUNT_KIND, brandSlug);
 }
 
 // ── One line of the till, with the promotion ────────────────────────────────
@@ -157,6 +173,8 @@ export function linePromoPcts(
   storeId: string,
   line: {
     productId: string | null;
+    /** The model's brand slug (v2): its brand discount applies when the model has none. */
+    brandSlug?: string | null;
     selection: { design_code: string; material_code?: string | null; photo_code?: string | null; ar_code?: string | null };
     category: string | null;
     finish: LensFinish | null;
@@ -166,7 +184,7 @@ export function linePromoPcts(
   const withLenses = s.design_code !== "frame-only";
   const category = line.category ?? "";
   return {
-    frame_pct: productDiscountOf(index, storeId, line.productId),
+    frame_pct: productDiscountOf(index, storeId, line.productId, line.brandSlug),
     lens_pct:
       withLenses && s.material_code
         ? discountOf(index, storeId, "lens", lensBaseKey(s.design_code, s.material_code, line.finish ?? defaultLensFinish(category), category))
@@ -181,6 +199,8 @@ export interface PromoLineInput {
   scope: "frame" | "case";
   /** Product id; "" for the frame the customer brought. */
   target: string;
+  /** The model's brand slug (v2): the store's brand price applies when the model has no exact one. */
+  brand?: string | null;
   /** Medusa price of the frame in dollars (0 for the customer's own frame). */
   base: number;
   /** The lens add-on of THIS store, per part, in cents (lib/lens-quote.ts `computeLensBreakdown`). */
@@ -220,7 +240,7 @@ export function promoStoreLine(
 ): PromoLine {
   const { lens_base_cents, photo_cents, ar_cents } = input.lens;
   const lensCents = lens_base_cents + photo_cents + ar_cents;
-  const base = { establishmentId: input.establishmentId, scope: input.scope, target: input.target, base: input.base };
+  const base = { establishmentId: input.establishmentId, scope: input.scope, target: input.target, base: input.base, brand: input.brand ?? null };
   const before = storeLinePrice(rules, { ...base, lenses: lensCents / 100 }, now);
   const lensAfter = applyPct(lens_base_cents, pcts.lens_pct) + applyPct(photo_cents, pcts.photo_pct) + applyPct(ar_cents, pcts.ar_pct);
   const after = lensAfter === lensCents ? before : storeLinePrice(rules, { ...base, lenses: lensAfter / 100 }, now);
@@ -258,6 +278,7 @@ export function promoLinePct(promo: { before_cents: number } | null | undefined,
 /**
  * Why a store cell shows its figure:
  *   store_exact  the owner fixed the price in that store
+ *   brand        the store's price for every model of the brand (v2)
  *   rule         the store's (or chain's) adjustment — % / fixed amount, or the
  *                store's "% over the master" on the lens list
  *   band         the floor or ceiling moved a computed frame price
@@ -265,7 +286,7 @@ export function promoLinePct(promo: { before_cents: number } | null | undefined,
  *                master lens list)
  *   base         the bare Medusa price of the model
  */
-export type CellSource = "store_exact" | "rule" | "band" | "master" | "base";
+export type CellSource = "store_exact" | "brand" | "rule" | "band" | "master" | "base";
 
 export interface MatrixStore {
   id: string;
@@ -336,6 +357,12 @@ export interface MatrixRow {
   /** Cost viewers only (`redactMatrixCosts`). */
   cost_cents?: number | null;
   cost_source?: string | null;
+  /**
+   * Frames / cases, cost viewers only (v2): the supplier key the cost lives
+   * (or would be written) under — the MODEL's ("DC50"), not the SKU's, so a
+   * slug-SKU model writes its cost where every reader resolves it.
+   */
+  cost_key?: string;
   stores: Record<string, MatrixCell>;
 }
 
@@ -353,7 +380,19 @@ export interface MatrixGroup {
    * per-store switch shows. The switch itself writes through
    * `POST /admin/store-assortment/:id/rule`.
    */
-  stores?: Record<string, { brand_rule: boolean | null; exposed_rows: number }>;
+  stores?: Record<string, MatrixBrandStore>;
+  /** Brand groups (v2): the brand's logo — absolute URL, or a path on the panel's origin (`/brands/logo-….png`); null = none. */
+  logo_url?: string | null;
+}
+
+/** One store's brand header (v2 adds the brand price and the brand discount). */
+export interface MatrixBrandStore {
+  brand_rule: boolean | null;
+  exposed_rows: number;
+  /** The store's price for every model of the brand (no exact price of their own), cents; null = none. */
+  brand_price_cents?: number | null;
+  /** The store's discount on the brand (models without their own), %; null = none. */
+  brand_discount_pct?: number | null;
 }
 
 export interface MatrixResponse {
@@ -367,7 +406,10 @@ export interface MatrixResponse {
 export interface MatrixProduct {
   product_id: string;
   title: string;
+  /** Absolute URL (lib/image-url.ts), never a bare storage key. */
   thumbnail: string | null;
+  /** Every colour's UPC (`metadata.upc_by_color`), the last way a cost is matched. */
+  upcs?: string[];
   status: string;
   brand_slug: string;
   /** Display name from the metadata ("Di Caprio"); "" when unscraped. */
@@ -409,7 +451,8 @@ export function toMatrixProduct(raw: MatrixProductRaw, caseIds: ReadonlySet<stri
   return {
     product_id: raw.product_id,
     title: raw.title,
-    thumbnail: raw.thumbnail,
+    thumbnail: absoluteImageUrl(raw.thumbnail),
+    upcs: upcsOf(md),
     status: raw.status,
     brand_slug,
     brand_name,
@@ -465,6 +508,7 @@ export function priceScopeFor(kind: "frame" | "case", productId: string, caseIds
 
 function frameSource(line: StoreLinePrice, rules: PriceRuleLike[], scope: "frame" | "case", target: string, now: Date): CellSource {
   if (line.frame_source === "store_exact") return "store_exact";
+  if (line.frame_source === "brand") return "brand";
   if (line.band) return "band";
   if (line.adjustment) return "rule";
   return hasGlobalPrice(rules, scope, target, now) ? "master" : "base";
@@ -478,16 +522,17 @@ function frameSource(line: StoreLinePrice, rules: PriceRuleLike[], scope: "frame
 export function storeFramePrice(
   rules: PriceRuleLike[],
   storeId: string,
-  product: { product_id: string; base_cents: number | null; price_scope: "frame" | "case" },
+  product: { product_id: string; base_cents: number | null; price_scope: "frame" | "case"; brand_slug?: string | null },
   now = new Date()
 ): { price_cents: number | null; source: CellSource; exact: boolean } {
   const line = storeLinePrice(
     rules,
-    { establishmentId: storeId, scope: product.price_scope, target: product.product_id, base: (product.base_cents ?? 0) / 100, lenses: 0 },
+    { establishmentId: storeId, scope: product.price_scope, target: product.product_id, base: (product.base_cents ?? 0) / 100, lenses: 0, brand: product.brand_slug ?? null },
     now
   );
   const exact = line.frame_source === "store_exact";
-  if (product.base_cents == null && !exact) return { price_cents: null, source: "base", exact: false };
+  // A brand price is a price even when the model has none in Medusa.
+  if (product.base_cents == null && !exact && line.frame_source !== "brand") return { price_cents: null, source: "base", exact: false };
   return { price_cents: toCents(line.frame), source: frameSource(line, rules, product.price_scope, product.product_id, now), exact };
 }
 
@@ -508,7 +553,7 @@ function cellOf(price: { price_cents: number | null; source: CellSource; exact: 
  * else, so handing it this slice gives the same figure while a 600-model ×
  * N-store matrix scans a handful of rules per cell instead of all of them.
  */
-export function rulesByTarget(rules: readonly PriceRuleLike[]): (productId: string) => PriceRuleLike[] {
+export function rulesByTarget(rules: readonly PriceRuleLike[]): (productId: string, brandSlug?: string | null) => PriceRuleLike[] {
   const general: PriceRuleLike[] = [];
   const own = new Map<string, PriceRuleLike[]>();
   for (const r of rules) {
@@ -520,12 +565,15 @@ export function rulesByTarget(rules: readonly PriceRuleLike[]): (productId: stri
     }
   }
   const cache = new Map<string, PriceRuleLike[]>();
-  return (productId: string) => {
-    const hit = cache.get(productId);
+  // v2: a model's slice also carries its BRAND's rules (`brand:<slug>`).
+  return (productId: string, brandSlug?: string | null) => {
+    const cacheKey = `${productId}|${brandSlug ?? ""}`;
+    const hit = cache.get(cacheKey);
     if (hit) return hit;
-    const mine = own.get(productId);
-    const out = mine ? [...general, ...mine] : general;
-    cache.set(productId, out);
+    const mine = own.get(productId) ?? [];
+    const brand = brandSlug ? own.get(brandTarget(brandSlug)) ?? [] : [];
+    const out = mine.length || brand.length ? [...general, ...mine, ...brand] : general;
+    cache.set(cacheKey, out);
     return out;
   };
 }
@@ -551,7 +599,7 @@ export function modelSkuOf(p: { skus: readonly string[]; title: string }, costRo
   const byTitle = p.skus.find((s) => importSkuKey(s) === titleKey);
   if (byTitle) return byTitle;
   const rows = costRows ?? NO_COST_ROWS;
-  const known = p.skus.find((s) => frameCostRowFrom(rows, s) !== null);
+  const known = p.skus.find((s) => frameCostRowExact(rows, s) !== null);
   if (known) return known;
   return [...p.skus].sort((a, b) => a.length - b.length || a.localeCompare(b))[0] as string;
 }
@@ -571,7 +619,7 @@ export function buildFrameRows(
 ): MatrixRow[] {
   const forProduct = rulesByTarget(rules);
   return products.map((p) => {
-    const rulesOf = forProduct(p.product_id);
+    const rulesOf = forProduct(p.product_id, p.brand_slug);
     const kind: ItemKind = p.is_case ? "case" : "frame";
     const sku = modelSkuOf(p, costs ? costs.rows : null);
     const row: MatrixRow = {
@@ -590,18 +638,28 @@ export function buildFrameRows(
       stores: {},
     };
     if (costs) {
-      const resolved = resolveFrameCost(costs.rows, costs.variations, sku, null);
+      // v2: by MODEL first (the title, «DC 50» → DC50), then every colour's
+      // SKU, then the UPCs — staging's SKUs are `dc-50-di-caprio-grey`.
+      const ref = matrixCostRef(p, sku);
+      const resolved = resolveFrameCost(costs.rows, costs.variations, ref, null);
       row.cost_cents = resolved ? resolved.cost_cents : null;
       row.cost_source = resolved ? resolved.origin : null;
+      row.cost_key = resolved ? resolved.sku : frameCostKeyFor(ref, costs.rows);
     }
     for (const s of stores) {
       const scope = storePriceScope(rulesOf, s.id, p.product_id, p.meta_case ?? p.price_scope === "case");
       const price = storeFramePrice(rulesOf, s.id, scope === p.price_scope ? p : { ...p, price_scope: scope }, now);
       const exposed = isExposed(assortment.get(s.id) ?? [], { id: p.product_id, brand: p.brand_slug });
-      row.stores[s.id] = cellOf(price, productDiscountOf(discounts, s.id, p.product_id), exposed);
+      row.stores[s.id] = cellOf(price, productDiscountOf(discounts, s.id, p.product_id, p.brand_slug), exposed);
     }
     return row;
   });
+}
+
+/** How a matrix model names itself for its cost: title (the model), the model SKU, every SKU, the UPCs. Pure. */
+export function matrixCostRef(p: Pick<MatrixProduct, "title" | "skus" | "upcs">, modelSku?: string): FrameCostRef {
+  const skus = modelSku && !p.skus.includes(modelSku) ? [modelSku, ...p.skus] : modelSku ? [modelSku, ...p.skus.filter((s) => s !== modelSku)] : p.skus;
+  return { model: p.title, skus, upcs: p.upcs ?? [] };
 }
 
 /** The owner's own chain price of the model when he typed one, else the Medusa base, in cents. */
@@ -655,7 +713,7 @@ export type SheetStorePrices = ReadonlyMap<string, ReadonlyMap<string, { price_c
  * Pure.
  */
 export function storeSheetPrices(
-  catalog: ReadonlyArray<{ product_id: string; price_cents: number | null; is_case?: boolean }>,
+  catalog: ReadonlyArray<{ product_id: string; price_cents: number | null; is_case?: boolean; brand_slug?: string | null }>,
   storeIds: readonly string[],
   rules: PriceRuleLike[],
   discounts: DiscountIndex,
@@ -665,11 +723,11 @@ export function storeSheetPrices(
   const out = new Map<string, Map<string, { price_cents: number | null; discount_pct: number | null }>>();
   for (const m of catalog) {
     const perStore = new Map<string, { price_cents: number | null; discount_pct: number | null }>();
-    const rulesOf = forProduct(m.product_id);
+    const rulesOf = forProduct(m.product_id, m.brand_slug);
     for (const id of storeIds) {
       const scope = m.is_case ? "case" : storePriceScope(rulesOf, id, m.product_id, false);
-      const price = storeFramePrice(rulesOf, id, { product_id: m.product_id, base_cents: m.price_cents, price_scope: scope }, now);
-      perStore.set(id, { price_cents: price.price_cents, discount_pct: productDiscountOf(discounts, id, m.product_id) });
+      const price = storeFramePrice(rulesOf, id, { product_id: m.product_id, base_cents: m.price_cents, price_scope: scope, brand_slug: m.brand_slug }, now);
+      perStore.set(id, { price_cents: price.price_cents, discount_pct: productDiscountOf(discounts, id, m.product_id, m.brand_slug) });
     }
     out.set(m.product_id, perStore);
   }
@@ -680,7 +738,8 @@ export function storeSheetPrices(
 export function withBrandExposure(
   groups: MatrixGroup[],
   stores: readonly MatrixStore[],
-  assortment: ReadonlyMap<string, AssortmentRuleLike[]>
+  assortment: ReadonlyMap<string, AssortmentRuleLike[]>,
+  pricing: { rules: PriceRuleLike[]; discounts: DiscountIndex; scope: "frame" | "case"; logos?: ReadonlyMap<string, string | null>; now?: Date } | null = null
 ): MatrixGroup[] {
   return groups.map((g) => {
     // The switch writes a BRAND rule named by the group key; a group whose rows
@@ -690,11 +749,37 @@ export function withBrandExposure(
     const perStore: NonNullable<MatrixGroup["stores"]> = {};
     for (const s of stores) {
       const rule = (assortment.get(s.id) ?? []).find((r) => r.scope === "brand" && r.target === g.key);
-      perStore[s.id] = { brand_rule: rule ? rule.exposed : null, exposed_rows: g.rows.filter((r) => r.stores[s.id]?.exposed).length };
+      const cell: MatrixBrandStore = { brand_rule: rule ? rule.exposed : null, exposed_rows: g.rows.filter((r) => r.stores[s.id]?.exposed).length };
+      if (pricing) {
+        Object.assign(cell, brandStoreCell(pricing.rules, pricing.discounts, s.id, g.key, pricing.scope, pricing.now));
+      }
+      perStore[s.id] = cell;
     }
-    return { ...g, stores: perStore };
+    const out: MatrixGroup = { ...g, stores: perStore };
+    if (pricing?.logos) out.logo_url = pricing.logos.get(g.key) ?? null;
+    return out;
   });
 }
+
+/** A store's brand price (cents) and brand discount (%) for one brand and scope; nulls when none. Pure. */
+export function brandStoreCell(
+  rules: PriceRuleLike[],
+  discounts: DiscountIndex,
+  storeId: string,
+  slug: string,
+  scope: "frame" | "case",
+  now = new Date()
+): { brand_price_cents: number | null; brand_discount_pct: number | null } {
+  const rule = brandPriceRule(rules, storeId, scope, slug, now);
+  return {
+    brand_price_cents: rule ? toCents(Number(rule.value)) : null,
+    brand_discount_pct: brandDiscountOf(discounts, storeId, slug),
+  };
+}
+
+/** The scope a brand's price is written and read under: cases for the case brand, frames otherwise. */
+export const brandScopeOf = (slug: string, explicit?: unknown): "frame" | "case" =>
+  explicit === "case" || explicit === "frame" ? explicit : CASE_SLUGS.has(slug) ? "case" : "frame";
 
 // ── Lenses and treatments ────────────────────────────────────────────────────
 
@@ -987,7 +1072,13 @@ export type CellOp =
   | { op: "frame_price"; kind: "frame" | "case"; productId: string; storeId: string; usd: number | null }
   | { op: "lens_cost"; kind: "lens" | "photo" | "ar"; storeKind: "base" | "photo" | "ar"; key: string; cents: number | null }
   | { op: "lens_price"; kind: "lens" | "photo" | "ar"; storeKind: "base" | "photo" | "ar"; key: string; storeId: string; cents: number | null }
-  | { op: "discount"; kind: ItemKind; key: string; storeId: string; pct: number | null };
+  | { op: "discount"; kind: ItemKind; key: string; storeId: string; pct: number | null }
+  // v2: a brand's price / discount in one store (`kind: "brand"`, key = slug).
+  | { op: "brand_price"; slug: string; storeId: string; scope: "frame" | "case"; usd: number | null }
+  | { op: "brand_discount"; slug: string; storeId: string; pct: number | null };
+
+/** A brand slug as the catalogue writes it (lib/catalog-frame.ts brandSlugOf). */
+export const isBrandSlug = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9][a-z0-9-]{0,59}$/.test(v);
 
 const isBlank = (v: unknown): boolean => v === null || v === undefined || (typeof v === "string" && v.trim() === "");
 
@@ -1029,6 +1120,8 @@ export interface CellWriteInput {
   /** Store id as sent; existence is checked by the route. */
   store: unknown;
   value: unknown;
+  /** `kind: "brand"` only: "frame" | "case" (default: case for the case brand, frame otherwise). */
+  scope?: unknown;
 }
 
 /**
@@ -1042,6 +1135,7 @@ export interface CellWriteInput {
  *   discount  any → store_item_discount (null or 0 → no discount)
  */
 export function planCellWrite(input: CellWriteInput): { op: CellOp } | { reason: string } {
+  if (input.kind === "brand") return planBrandCellWrite(input);
   if (!isItemKind(input.kind)) return { reason: "bad_kind" };
   const kind = input.kind;
   if (!CELL_FIELDS.includes(input.field as CellField)) return { reason: "bad_field" };
@@ -1068,18 +1162,44 @@ export function planCellWrite(input: CellWriteInput): { op: CellOp } | { reason:
     : { op: { op: "lens_price", kind, storeKind, key, storeId: store as string, cents: value } };
 }
 
+/**
+ * `kind: "brand"` (v2): the price or the discount of a whole brand in one
+ * store. No cost (`bad_field`: a brand has none of its own), a store always.
+ *
+ *   price     store_price_rule `scope` frame|case, `target` brand:<slug>, mode override (null → none)
+ *   discount  store_item_discount `item_kind` brand, `item_key` slug (null / 0 → none)
+ */
+function planBrandCellWrite(input: CellWriteInput): { op: CellOp } | { reason: string } {
+  if (input.field !== "price" && input.field !== "discount") return { reason: "bad_field" };
+  const store = isBlank(input.store) ? null : String(input.store).trim();
+  if (!store) return { reason: "store_required" };
+  const parsed = parseCellValue(input.field, input.value);
+  if ("reason" in parsed) return parsed;
+  const slug = typeof input.key === "string" ? input.key.trim().toLowerCase() : "";
+  if (!isBrandSlug(slug)) return { reason: "unknown_item" };
+  if (!isBlank(input.scope) && input.scope !== "frame" && input.scope !== "case") return { reason: "bad_value" };
+  if (input.field === "discount") return { op: { op: "brand_discount", slug, storeId: store, pct: parsed.value } };
+  return { op: { op: "brand_price", slug, storeId: store, scope: brandScopeOf(slug, input.scope), usd: parsed.value === null ? null : parsed.value / 100 } };
+}
+
 // ── Import ───────────────────────────────────────────────────────────────────
+
+/** The import's own section for the «Marcas» sheet (v2): not a matrix section, a brand header. */
+export const IMPORT_BRAND_SECTION = "brands";
+export type ImportSection = MatrixSection | typeof IMPORT_BRAND_SECTION;
 
 export interface ImportChange {
   /** 0-based position of the row in the request. */
   row: number;
-  section: MatrixSection;
-  /** The article as the owner reads it: SKU for frames and cases, the key otherwise. */
+  section: ImportSection;
+  /** The article as the owner reads it: SKU for frames and cases, the key otherwise (the slug for a brand). */
   item: string;
   title: string;
-  kind: ItemKind;
-  /** The key the writer uses (product id or lens / treatment key). */
+  kind: ItemKind | "brand";
+  /** The key the writer uses (product id, lens / treatment key, or brand slug). */
   key: string;
+  /** Brand rows only: the scope the brand price is written under. */
+  scope?: "frame" | "case";
   field: CellField;
   store: string | null;
   store_code: string | null;
@@ -1106,7 +1226,27 @@ export interface ImportIndex {
   products: ReadonlyMap<string, MatrixRow>;
   lenses: ReadonlyMap<string, MatrixRow>;
   treatments: ReadonlyMap<string, MatrixRow>;
+  /** v2: brand headers by slug («Marcas»); absent = the request names none. */
+  brands?: ReadonlyMap<string, ImportBrand>;
   stores: readonly MatrixStore[];
+}
+
+/** A brand as the «Marcas» sheet names it, with today's price and discount per store. */
+export interface ImportBrand {
+  slug: string;
+  label: string;
+  scope: "frame" | "case";
+  stores: Record<string, { brand_price_cents: number | null; brand_discount_pct: number | null }>;
+}
+
+/** Brand groups of the frames and cases sections as import targets (first section wins on a slug). Pure. */
+export function indexImportBrands(groups: readonly MatrixGroup[], scope: "frame" | "case", into: Map<string, ImportBrand>): void {
+  for (const g of groups) {
+    if (g.kind !== "brand" || !g.stores || into.has(g.key)) continue;
+    const stores: ImportBrand["stores"] = {};
+    for (const [id, c] of Object.entries(g.stores)) stores[id] = { brand_price_cents: c.brand_price_cents ?? null, brand_discount_pct: c.brand_discount_pct ?? null };
+    into.set(g.key, { slug: g.key, label: g.label, scope, stores });
+  }
 }
 
 /** How an import SKU is matched: case and punctuation do not matter ("dc-407" = "DC407"). */
@@ -1156,6 +1296,10 @@ export function buildImportPlan(rows: unknown, index: ImportIndex, canonicalKey:
     }
     const r = raw as Record<string, unknown>;
     const section = r["section"];
+    if (section === IMPORT_BRAND_SECTION) {
+      planBrandImportRow(i, r, index, storeByCode, changes, errors, () => unchanged++);
+      return;
+    }
     if (!isMatrixSection(section)) {
       errors.push({ row: i, reason: "bad_section", detail: section == null ? null : String(section) });
       return;
@@ -1249,9 +1393,67 @@ export function buildImportPlan(rows: unknown, index: ImportIndex, canonicalKey:
   };
 }
 
+/**
+ * One «Marcas» row: `{ section: "brands", key: <slug>, stores: { <code>: { price, discount } } }`.
+ * Same rules as an article: an absent cell is not touched, null empties it, a
+ * value already there is `unchanged`. A brand has no cost (`cost` → `bad_row`).
+ */
+function planBrandImportRow(
+  i: number,
+  r: Record<string, unknown>,
+  index: ImportIndex,
+  storeByCode: Map<string, MatrixStore>,
+  changes: ImportChange[],
+  errors: ImportError[],
+  same: () => void
+): void {
+  const label = typeof r["key"] === "string" ? r["key"].trim().toLowerCase() : "";
+  const brand = label ? index.brands?.get(label) : undefined;
+  if (!brand) {
+    errors.push({ row: i, reason: "unknown_item", detail: label || null });
+    return;
+  }
+  if ("cost" in r && !isBlank(r["cost"])) {
+    errors.push({ row: i, reason: "bad_row", detail: "cost" });
+    return;
+  }
+  const perStore = r["stores"];
+  if (perStore != null && (typeof perStore !== "object" || Array.isArray(perStore))) {
+    errors.push({ row: i, reason: "bad_row", detail: "stores" });
+    return;
+  }
+  const base = { row: i, section: IMPORT_BRAND_SECTION as ImportSection, item: brand.slug, title: brand.label, kind: "brand" as const, key: brand.slug, scope: brand.scope };
+  for (const [code, cellRaw] of Object.entries((perStore ?? {}) as Record<string, unknown>)) {
+    const store = storeByCode.get(code.trim().toUpperCase());
+    if (!store) {
+      errors.push({ row: i, reason: "store_not_found", detail: code });
+      continue;
+    }
+    if (!cellRaw || typeof cellRaw !== "object" || Array.isArray(cellRaw)) {
+      errors.push({ row: i, reason: "bad_row", detail: code });
+      continue;
+    }
+    const cellIn = cellRaw as Record<string, unknown>;
+    const now = brand.stores[store.id] ?? { brand_price_cents: null, brand_discount_pct: null };
+    const where = { store: store.id, store_code: store.code };
+    if ("price" in cellIn) {
+      const parsed = parseCellValue("price", cellIn["price"]);
+      if ("reason" in parsed) errors.push({ row: i, reason: parsed.reason, detail: `${code}.price` });
+      else if (parsed.value === now.brand_price_cents) same();
+      else changes.push({ ...base, field: "price", ...where, before: dollarsOf(now.brand_price_cents), after: dollarsOf(parsed.value) });
+    }
+    if ("discount" in cellIn) {
+      const parsed = parseCellValue("discount", cellIn["discount"]);
+      if ("reason" in parsed) errors.push({ row: i, reason: parsed.reason, detail: `${code}.discount` });
+      else if (parsed.value === now.brand_discount_pct) same();
+      else changes.push({ ...base, field: "discount", ...where, before: now.brand_discount_pct, after: parsed.value });
+    }
+  }
+}
+
 /** The cell write a planned change becomes (its `after` back in the units the cell takes). */
 export function changeAsCellWrite(c: ImportChange): CellWriteInput {
-  return { kind: c.kind, key: c.key, field: c.field, store: c.store, value: c.after };
+  return { kind: c.kind, key: c.key, field: c.field, store: c.store, value: c.after, scope: c.scope };
 }
 
 // ── New treatments ───────────────────────────────────────────────────────────
@@ -1358,3 +1560,77 @@ export function cleanTreatment(body: Record<string, unknown>): { treatment: Trea
 
 /** The finish of a base-price row as stored; null on a database without the column. */
 export const finishOfRow = (v: unknown): LensFinish | null => parseLensFinish(v);
+
+// ── Editing a treatment (v2) ─────────────────────────────────────────────────
+
+export interface TreatmentPatch {
+  label_es?: string;
+  label_en?: string;
+  ar_group?: (typeof AR_GROUPS)[number];
+  /** Cents; null = unknown. */
+  cost_cents?: number | null;
+  /** photo: only the categories sent (null = no longer offered); ar: `{ ar }`. */
+  prices?: Partial<Record<PhotoCategory, number | null>> | { ar: number };
+  is_active?: boolean;
+}
+
+/**
+ * Validates `POST /admin/pricing/treatments/:code` for an option of `type`.
+ * Only the keys present change. `prices`: photo → `{ sv?, bifocal?, prog? }`
+ * in dollars (null = no longer offered in that category — at least one must
+ * stay, checked by the writer against the stored row), ar → a number. Reasons:
+ * `bad_label`, `bad_value`, `nothing_to_change`. Pure.
+ */
+export function cleanTreatmentPatch(type: "photo" | "ar", body: Record<string, unknown>): { patch: TreatmentPatch } | { reason: string } {
+  const patch: TreatmentPatch = {};
+  for (const key of ["label_es", "label_en"] as const) {
+    if (!(key in body)) continue;
+    const v = cleanLabel(body[key]);
+    if (!v) return { reason: "bad_label" };
+    patch[key] = v;
+  }
+  if ("ar_group" in body) {
+    if (type !== "ar" || !AR_GROUPS.includes(body["ar_group"] as (typeof AR_GROUPS)[number])) return { reason: "bad_value" };
+    patch.ar_group = body["ar_group"] as (typeof AR_GROUPS)[number];
+  }
+  if ("cost" in body) {
+    const cost = parseCellValue("cost", body["cost"]);
+    if ("reason" in cost) return cost;
+    patch.cost_cents = cost.value;
+  }
+  if ("prices" in body) {
+    const raw = body["prices"];
+    if (type === "ar") {
+      const p = parseCellValue("price", raw);
+      if ("reason" in p || p.value === null) return { reason: "bad_value" };
+      patch.prices = { ar: p.value };
+    } else {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { reason: "bad_value" };
+      const obj = raw as Record<string, unknown>;
+      const out: Partial<Record<PhotoCategory, number | null>> = {};
+      for (const cat of PHOTO_CATEGORIES) {
+        if (!(cat in obj)) continue;
+        const p = parseCellValue("price", obj[cat]);
+        if ("reason" in p) return { reason: "bad_value" };
+        out[cat] = p.value;
+      }
+      if (!Object.keys(out).length) return { reason: "bad_value" };
+      patch.prices = out;
+    }
+  }
+  if ("is_active" in body) {
+    if (typeof body["is_active"] !== "boolean") return { reason: "bad_value" };
+    patch.is_active = body["is_active"];
+  }
+  if (!Object.keys(patch).length) return { reason: "nothing_to_change" };
+  return { patch };
+}
+
+/** The photochromic's categories after a patch: at least one must keep a price. Pure. */
+export function photoPricesAfter(
+  current: Record<PhotoCategory, number | null>,
+  patch: Partial<Record<PhotoCategory, number | null>>
+): Record<PhotoCategory, number | null> | null {
+  const next = { ...current, ...patch };
+  return next.sv === null && next.bifocal === null && next.prog === null ? null : next;
+}

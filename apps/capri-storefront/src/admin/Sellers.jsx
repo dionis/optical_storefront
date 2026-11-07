@@ -24,9 +24,11 @@ import { emailProblem, LIMITS, nameProblem, phoneProblem, typedEmail, typedPhone
 import { useStoreFilter } from "./StoreFilter.jsx";
 import { usePeriodFilter } from "./periodStore.js";
 import { menuHandlers, useRegisterExport } from "./GlobalFilterBar.jsx";
+import useDefaultCommission from "./finance/useDefaultCommission.js";
 import "./screens.css";
 
-const EMPTY = { name: "", email: "", phone: "", address: "", code: "", commission_pct: "10", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
+// commission_pct "" = la comisión por defecto del dueño (useDefaultCommission; el servidor aplica la misma).
+const EMPTY = { name: "", email: "", phone: "", address: "", code: "", commission_pct: "", notes: "", active: true, establishment_id: "", terminal_id: "", social: { instagram: "", facebook: "", tiktok: "", whatsapp: "" } };
 // Un vendedor activo siempre tiene tienda y un único punto de venta de esa
 // tienda; inactivo puede no tener ninguno. El servidor aplica la misma regla
 // (sellerPlacementProblem); esto solo evita el viaje de ida y vuelta.
@@ -36,7 +38,10 @@ const initials = (name) => String(name || "?").split(/\s+/).map((w) => w[0]).fil
 
 function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, busy, addressConflict = null }) {
   const { t } = useLang();
-  const [f, setF] = useState({ ...EMPTY, ...initial, establishment_id: initial.establishment_id || "", terminal_id: initial.terminal_id || "", social: { ...EMPTY.social, ...(initial.social || {}) }, commission_pct: String(initial.commission_pct ?? "10") });
+  const [f, setF] = useState({ ...EMPTY, ...initial, establishment_id: initial.establishment_id || "", terminal_id: initial.terminal_id || "", social: { ...EMPTY.social, ...(initial.social || {}) }, commission_pct: String(initial.commission_pct ?? "") });
+  // Alta: arranca con la comisión por defecto («Reglas y comisiones»), la única fuente.
+  const defaultPct = useDefaultCommission();
+  useEffect(() => { if (!initial.id && defaultPct !== "") setF((x) => (x.commission_pct === "" ? { ...x, commission_pct: defaultPct } : x)); }, [defaultPct, initial.id]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setS = (k, v) => setF((x) => ({ ...x, social: { ...x.social, [k]: v } }));
   // Cambiar de tienda suelta el punto de venta: el anterior es de otra tienda.
@@ -55,7 +60,7 @@ function SellerForm({ initial = EMPTY, stores, terminals, onSubmit, onCancel, bu
     if (Object.values(problems).some(Boolean)) { setShowErrors(true); return; }
     if (missing) return;
     const { address_link: _link, ...rest } = f;
-    onSubmit({ ...rest, ...extra, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: Number(f.commission_pct) || 0 });
+    onSubmit({ ...rest, ...extra, code: undefined, establishment_id: f.establishment_id || null, terminal_id: f.terminal_id || null, commission_pct: String(f.commission_pct).trim() === "" ? undefined : Number(f.commission_pct) || 0 });
   };
   // Lo que respondió el servidor al guardar manda sobre lo que se vio al abrir.
   const addrLink = addressConflict ? { state: "conflict", other: addressConflict.other } : initial.address_link;

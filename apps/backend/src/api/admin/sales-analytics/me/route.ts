@@ -1,3 +1,5 @@
+import { resolveCommissionPct } from "../../../../lib/commission-pct";
+import { loadDefaultCommissionPct } from "../../../../lib/store-cost-toggle";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { localParts } from "../../../../lib/alerts";
 import { readyToHand } from "../../../../lib/ready-orders";
@@ -45,7 +47,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const profile = await profileOf(req.scope, userId);
     // A counter seller's record carries the commission when the profile has none.
     const record = scope.role === "seller" ? await sellerOfUser(req.scope, userId) : null;
-    const commissionPct = profile.commission_pct ?? (record && record.commission_pct > 0 ? record.commission_pct : null);
+    // One precedence everywhere (lib/commission-pct.ts): profile, seller record, then the owner's default.
+    const commissionPct = resolveCommissionPct(profile.commission_pct, record ? record.commission_pct : null, true, await loadDefaultCommissionPct(req.scope));
 
     // Where they sell: the store and till of their seller record.
     const storeId = scope.seller?.establishment_id ?? null;

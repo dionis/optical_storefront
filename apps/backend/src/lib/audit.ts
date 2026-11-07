@@ -42,6 +42,9 @@ export const AUDIT_ACTIONS = [
   "assortment.change",
   "catalog.sync",
   "catalog.create",
+  // v2 (docs/PRICE-MATRIX.md): a model, a brand or a treatment edited / removed from «Productos y precios».
+  "catalog.update",
+  "catalog.delete",
   "ai_credit.change",
   "ai_alert.change",
 ] as const;

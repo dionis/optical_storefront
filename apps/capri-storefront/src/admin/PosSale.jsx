@@ -27,6 +27,7 @@ import {
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import PosCapture from "./PosCapture.jsx";
 import PosFrameCard, { frameLineFields } from "./PosFrameCard.jsx";
 import { setActiveStore } from "./useStoreTheme.js";
 import AdminFrameCard from "./AdminFrameCard.jsx";
@@ -35,6 +36,7 @@ import FieldError from "../components/FieldError.jsx";
 import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
 import { customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import "./pos.css";
+import "./pos-tablet.css";
 import RxForm from "./PosRx.jsx";
 import HelpTip from "./HelpTip.jsx";
 import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, validateRx } from "./rxRules.js";
@@ -63,8 +65,33 @@ export function ageFrom(birth, today = new Date()) {
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
 const EMPTY_OWN = { open: false, description: "", photo: null };
-// Móvil o tablet: en un ordenador `capture` no abre la cámara, solo repetiría el selector de archivos.
-const hasTouchCamera = () => window.matchMedia?.("(pointer: coarse)").matches === true;
+/**
+ * Teclado en pantalla (tablet): mide cuánto tapa el teclado con visualViewport
+ * y lo publica como `--pos-kb` en la raíz del POS, más la clase `kb-open`. La
+ * barra Atrás/Siguiente, pegada abajo, sube por encima del teclado (iOS Safari
+ * y Android Chrome no encogen el viewport de diseño al abrirlo) y la cabecera
+ * pegajosa se compacta para dejar sitio a la cuadrícula de la receta.
+ */
+function useKeyboardInset(ref) {
+  useEffect(() => {
+    const el = ref.current;
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!el || !vv) return undefined;
+    let raf = 0;
+    const apply = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        el.style.setProperty("--pos-kb", `${kb}px`);
+        el.classList.toggle("kb-open", kb > 120);
+      });
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => { cancelAnimationFrame(raf); vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply); };
+  }, [ref]);
+}
 const EMPTY_PAYMENT = { method_code: "", amount: null, details: {} };
 const toCents = (v) => Math.round((Number(v) || 0) * 100);
 const centsText = (c) => (c > 0 ? (c / 100).toFixed(2) : "");
@@ -307,6 +334,15 @@ export default function PosSale({ me }) {
   const catalog = useAdminLensCatalog(storeId);
   const [terminalId, setTerminalId] = useState("");
   const [step, setStep] = useState(0);
+  const rootRef = useRef(null);
+  useKeyboardInset(rootRef);
+  // Cada paso empieza arriba: en la tablet el botón Siguiente queda al final de un formulario largo.
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) { firstStep.current = false; return; }
+    const top = rootRef.current?.getBoundingClientRect().top;
+    if (top != null && top < 0) window.scrollBy({ top: top - 8, behavior: "smooth" });
+  }, [step]);
   const [busy, setBusy] = useState(false);
 
   // 1 · cliente
@@ -439,16 +475,12 @@ export default function PosSale({ me }) {
     setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
     setOwn(EMPTY_OWN);
   };
-  const onOwnPhoto = async (e) => {
-    const f = e.target.files?.[0];
-    // Sin esto, volver a elegir el mismo archivo no dispara onChange.
-    e.target.value = "";
+  // Reciben el archivo ya elegido (PosCapture vacía el input para que repetir la misma foto dispare otra vez).
+  const onOwnPhoto = async (f) => {
     if (!f) return;
     try { setOwn((o) => ({ ...o, photo: null })); const url = await photoDataUrl(f); setOwn((o) => ({ ...o, photo: url })); } catch (err) { toast({ tone: "error", title: t(err.message) }); }
   };
-  const onOcr = async (e) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
+  const onOcr = async (f) => {
     if (!f) return;
     setOcr({ status: "loading", confirmed: false });
     try {
@@ -667,7 +699,7 @@ export default function PosSale({ me }) {
   const stepName = STEPS[step];
 
   return (
-    <div className="adm-section pos">
+    <div className="adm-section pos" ref={rootRef}>
       <div className="adm-head-row pos-head">
         <h2>{t("adm.tab.pos")}</h2>
         <div className="pos-where">
@@ -686,27 +718,35 @@ export default function PosSale({ me }) {
         </div>
       </div>
 
+      {/* Cabecera pegajosa: pasos + total en curso, siempre a la vista (también con el teclado abierto, compactada). */}
       {stepName !== "done" && (
-        <ol className="pos-steps">
-          {STEPS.slice(0, -1).map((s, i) => (
-            <li key={s} className={i === step ? "on" : i < step ? "ok" : ""}>
-              <button type="button" disabled={i > step} onClick={() => setStep(i)}>{i + 1}. {t(`adm.pos.step.${s}`)}</button>
-              {i === step && STEP_HELP[s] && <HelpTip topic={STEP_HELP[s]} />}
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {stepName !== "done" && step >= QUOTE_FROM && (
-        <PosRunningTotal quote={q?.quote || null} status={qStatus} lines={lines} catalog={catalog} money={m} beforeLenses={step < RX_FROM} />
+        <div className="pos-sticky">
+          <ol className="pos-steps" aria-label={t("adm.pos.steps.label")} style={{ "--pos-steps": STEPS.length - 1 }}>
+            {STEPS.slice(0, -1).map((s, i) => (
+              <li key={s} className={i === step ? "on" : i < step ? "ok" : ""}>
+                <button type="button" className="pos-step-btn" disabled={i > step} onClick={() => setStep(i)} aria-current={i === step ? "step" : undefined}
+                  aria-label={`${t("adm.pos.steps.of", { n: i + 1, total: STEPS.length - 1 })}: ${t(`adm.pos.step.${s}`)}`}>
+                  <span className="pos-step-n" aria-hidden="true">{i < step ? <Icon name="check" size={13} /> : i + 1}</span>
+                  <span className="pos-step-txt">{t(`adm.pos.step.${s}`)}</span>
+                </button>
+                {i === step && STEP_HELP[s] && <HelpTip topic={STEP_HELP[s]} size={16} />}
+              </li>
+            ))}
+          </ol>
+          {step >= QUOTE_FROM && (
+            <PosRunningTotal quote={q?.quote || null} status={qStatus} lines={lines} catalog={catalog} money={m} beforeLenses={step < RX_FROM} />
+          )}
+        </div>
       )}
 
       <div className={`adm-card pos-card ${frameListOpen ? "ac-open" : ""}`}>
         {stepName === "customer" && (
           <>
+            <div className="pos-cust-grid">
+            <div className="pos-cust-main">
             <label className="pos-search">
               <Icon name="search" size={16} />
-              <input maxLength={80} value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
+              <input type="search" enterKeyHint="search" autoComplete="off" autoCorrect="off" spellCheck={false} maxLength={80} value={custQ} onChange={(e) => setCustQ(e.target.value)} placeholder={t("adm.pos.cust.search")} aria-label={t("adm.pos.cust.search")} />
             </label>
             {custHits.length > 0 && (
               <ul className="pos-hits">
@@ -732,34 +772,36 @@ export default function PosSale({ me }) {
                 </div>
               );
             })}
-            {customerId && (
-              <div className="pos-picked">
-                <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
-                {custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ""}
-                <button type="button" className="btn-xs" onClick={newCustomer}>{t("adm.pos.cust.new")}</button>
-              </div>
-            )}
             <div className="pos-form">
-              <label>{t("adm.pos.cust.first")}<input maxLength={LIMITS.name} value={customer.first_name} onChange={setC("first_name")} autoComplete="off" {...custField("first_name").props} /><FieldError error={custField("first_name").problem} /></label>
-              <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
-              <label>{t("adm.pos.cust.email")}<input type="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
-              <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
+              <label>{t("adm.pos.cust.first")}<input maxLength={LIMITS.name} value={customer.first_name} onChange={setC("first_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("first_name").props} /><FieldError error={custField("first_name").problem} /></label>
+              <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
+              <label>{t("adm.pos.cust.email")}<input type="email" inputMode="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
+              <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" enterKeyHint="next" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
               <label>
                 <span className="pos-birth-lbl">
                   {t("adm.pos.cust.birth")}
                   {/* La edad ya calculada, al lado: el dato con el que de verdad se trabaja. */}
                   {ageFrom(customer.birth_date) !== null && <b className="pos-age">{t("adm.pos.cust.age", { n: ageFrom(customer.birth_date) })}</b>}
                 </span>
-                <input type="date" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
+                <input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
                 <FieldError error={custField("birth_date").problem} />
               </label>
             </div>
+            </div>
+            <div className="pos-cust-side">
+              {customerId && (
+                <div className="pos-picked">
+                  <Icon name="user" size={14} /> {t("adm.pos.cust.existing")}
+                  {custInfo?.sales?.length ? ` · ${t("adm.pos.cust.purchases", { n: custInfo.sales.length })}` : ""}
+                  <button type="button" className="btn-xs" onClick={newCustomer}>{t("adm.pos.cust.new")}</button>
+                </div>
+              )}
             <details className="pos-address" ref={addressRef}>
               <summary>{t("adm.pos.cust.address")}</summary>
               <div className="pos-form">
                 <label>{t("adm.pos.cust.address1")}<AddressInput maxLength={LIMITS.street} value={customer.address_1} onChange={setC("address_1")} {...custField("address_1").props} onPick={(p) => setCustomer((c) => ({ ...c, address_1: p.area ? "" : p.address_1 || c.address_1, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("address_1").problem} /></label>
-                <label>{t("adm.pos.cust.city")}<input maxLength={LIMITS.city} value={customer.city} onChange={setC("city")} {...custField("city").props} /><FieldError error={custField("city").problem} /></label>
-                <label>{t("adm.pos.cust.state")}<input maxLength={LIMITS.state} value={customer.province} onChange={setC("province")} {...custField("province").props} /><FieldError error={custField("province").problem} /></label>
+                <label>{t("adm.pos.cust.city")}<input maxLength={LIMITS.city} value={customer.city} onChange={setC("city")} autoComplete="off" autoCapitalize="words" enterKeyHint="next" {...custField("city").props} /><FieldError error={custField("city").problem} /></label>
+                <label>{t("adm.pos.cust.state")}<input maxLength={LIMITS.state} value={customer.province} onChange={setC("province")} autoComplete="off" autoCapitalize="characters" enterKeyHint="next" {...custField("province").props} /><FieldError error={custField("province").problem} /></label>
                 <label>{t("adm.pos.cust.zip")}<AddressInput mode="zip" inputMode="numeric" maxLength={LIMITS.zip} value={customer.postal_code} onChange={setC("postal_code", typedZip)} {...custField("postal_code").props} onPick={(p) => setCustomer((c) => ({ ...c, city: p.city || c.city, province: p.state || c.province, postal_code: p.postal_code || c.postal_code }))} /><FieldError error={custField("postal_code").problem} /></label>
               </div>
             </details>
@@ -769,6 +811,8 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={wears === false} onChange={() => setWears(false)} /> {t("adm.pos.no")}</label>
               <FieldError error={showCustErrors && wears === null ? "val.wears" : null} />
             </fieldset>
+            </div>
+            </div>
             {/* Usa espejuelos: se mide lo que usa hoy aquí mismo, para compararlo con la receta nueva
                 y ver si la vista ha empeorado (aviso de cambio óptico en Precio y en el recibo). */}
             {wears && (
@@ -796,20 +840,10 @@ export default function PosSale({ me }) {
                 <HelpTip topic="pos.ownFrame" />
                 {own.open && (
                   <div className="pos-own">
-                    <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} /></label>
-                    <div className="pos-own-photo">
-                      {hasTouchCamera() && (
-                        <label className="pos-file">
-                          <Icon name="camera" size={16} /> {own.photo ? t("adm.pos.own.retake") : t("adm.pos.own.photo")}
-                          <input type="file" accept="image/*" capture="environment" onChange={onOwnPhoto} />
-                        </label>
-                      )}
-                      <label className="pos-file">
-                        <Icon name="upload" size={16} /> {t("adm.pos.own.file")}
-                        <input type="file" accept="image/*" onChange={onOwnPhoto} />
-                      </label>
-                    </div>
-                    {own.photo && <img className="pos-own-img" src={own.photo} alt={t("adm.pos.own.tag")} />}
+                    <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
+                    {/* Cámara trasera o galería; vista previa con «Repetir foto». La foto se reduce en photoDataUrl (imagePrep). */}
+                    <PosCapture onFile={onOwnPhoto} preview={own.photo} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")}
+                      onClear={() => setOwn((o) => ({ ...o, photo: null }))} previewAlt={t("adm.pos.own.tag")} />
                     <small className="muted">{t("adm.pos.own.hint")}</small>
                     <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
                   </div>
@@ -841,40 +875,37 @@ export default function PosSale({ me }) {
             </label>
             {noRx && lines.some((l) => l.kind === "own_frame") && <div className="adm-demo-banner">{t("adm.err.pos.own_frame_needs_lenses")}</div>}
             {!noRx && (
-              <>
-                <div className="pos-rx-head">
-                  <h3>{t("adm.pos.rx.new")}</h3>
-                  {/* Dos entradas: la cámara del móvil o tablet, o un archivo (foto o PDF) ya guardado. */}
+              <div className="pos-rx-layout">
+                {/* Apaisada: la receta a la izquierda y la foto (con su vista previa) a la derecha; vertical: la foto primero. */}
+                <aside className="pos-rx-aside">
                   <div className="pos-rx-ocr">
-                    {hasTouchCamera() && (
-                      <label className="pos-file">
-                        <Icon name="camera" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.takePhoto")}
-                        <input type="file" accept="image/*" capture="environment" onChange={onOcr} disabled={ocr.status === "loading"} />
-                      </label>
-                    )}
-                    <label className="pos-file">
-                      <Icon name="upload" size={16} /> {ocr.status === "loading" ? t("adm.pos.rx.reading") : t("adm.pos.rx.upload")}
-                      <input type="file" accept="image/*,application/pdf" onChange={onOcr} disabled={ocr.status === "loading"} />
-                    </label>
-                    <HelpTip topic="pos.rx.ocr" />
+                    {/* Dos entradas: la cámara de la tablet o una foto/PDF ya guardado (galería o archivos). */}
+                    <PosCapture onFile={onOcr} accept="image/*,application/pdf" busy={ocr.status === "loading"} busyLabel={t("adm.pos.rx.reading")}
+                      cameraLabel={t("adm.pos.rx.takePhoto")} fileLabel={t("adm.pos.rx.upload")} previewAlt={t("adm.pos.cap.preview")} />
+                    <HelpTip topic="pos.rx.ocr" size={16} />
                   </div>
+                  {wears && (
+                    <div className="pos-worn-summary">
+                      <span><b>{t("adm.pos.rx.worn")}</b> · {t("adm.pos.worn.takenInStep1")}</span>
+                      <small className="muted">{wornSummary}</small>
+                      <button type="button" className="btn-xs" onClick={() => setStep(0)}><Icon name="edit" size={12} /> {t("adm.pos.worn.edit")}</button>
+                    </div>
+                  )}
+                </aside>
+                <div className="pos-rx-main">
+                  <div className="pos-rx-head">
+                    <h3>{t("adm.pos.rx.new")}</h3>
+                  </div>
+                  {ocr.status === "done" && !ocr.confirmed && (
+                    <div className="pos-ocr">
+                      {t("adm.pos.rx.review")}
+                      <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
+                    </div>
+                  )}
+                  <RxForm mode="new" idp="new" value={rxNew} onChange={setRxNew} type={rxNew.type} errors={rxCheck.errors} warnings={rxCheck.warnings}
+                    showErrors={rxFilled(rxNew)} source={ocr.status === "done" ? "ocr" : "manual"} disabled={ocr.status === "loading"} />
                 </div>
-                {ocr.status === "done" && !ocr.confirmed && (
-                  <div className="pos-ocr">
-                    {t("adm.pos.rx.review")}
-                    <button type="button" className="btn-xs primary" onClick={() => setOcr((o) => ({ ...o, confirmed: true }))}>{t("adm.pos.rx.confirm")}</button>
-                  </div>
-                )}
-                <RxForm mode="new" idp="new" value={rxNew} onChange={setRxNew} type={rxNew.type} errors={rxCheck.errors} warnings={rxCheck.warnings}
-                  showErrors={rxFilled(rxNew)} source={ocr.status === "done" ? "ocr" : "manual"} disabled={ocr.status === "loading"} />
-                {wears && (
-                  <div className="pos-worn-summary">
-                    <span><b>{t("adm.pos.rx.worn")}</b> · {t("adm.pos.worn.takenInStep1")}</span>
-                    <small className="muted">{wornSummary}</small>
-                    <button type="button" className="btn-xs" onClick={() => setStep(0)}><Icon name="edit" size={12} /> {t("adm.pos.worn.edit")}</button>
-                  </div>
-                )}
-              </>
+              </div>
             )}
           </>
         )}
@@ -919,7 +950,7 @@ export default function PosSale({ me }) {
                   </tbody>
                 </table>
                 <div className="pos-discount">
-                  <label><span>{t("adm.pos.price.discount")}<HelpTip topic="pos.step.price" /></span><input inputMode="decimal" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
+                  <label><span>{t("adm.pos.price.discount")}<HelpTip topic="pos.step.price" /></span><input inputMode="decimal" enterKeyHint="done" autoComplete="off" maxLength={5} value={discount} onChange={(e) => setDiscount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" /></label>
                   <small className="muted">{ctx.discount_limit_pct == null ? t("adm.pos.price.noLimit") : t("adm.pos.price.limit", { n: ctx.discount_limit_pct })}</small>
                 </div>
                 <dl className="pos-totals">
@@ -935,7 +966,7 @@ export default function PosSale({ me }) {
                     <b><Icon name="lock" size={14} /> {q.quote.below_minimum ? t("adm.pos.approval.belowMin") : t("adm.pos.approval.needed")}</b>
                     {!approval && (
                       <>
-                        <input maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} />
+                        <input maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("adm.pos.approval.reason")} aria-label={t("adm.pos.approval.reason")} autoCapitalize="sentences" enterKeyHint="send" />
                         <button type="button" className="btn-sm primary" disabled={busy} onClick={askApproval}>{t("adm.pos.approval.ask")}</button>
                       </>
                     )}
@@ -964,16 +995,16 @@ export default function PosSale({ me }) {
                     <option value="">{t("adm.pos.pay.method")}</option>
                     {methods.map((x) => <option key={x.code} value={x.code}>{methodName(x, t, lang)}</option>)}
                   </select>
-                  <input inputMode="decimal" maxLength={LIMITS.amount} value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
+                  <input inputMode="decimal" autoComplete="off" enterKeyHint="done" maxLength={LIMITS.amount} value={p.amount} onChange={(e) => set({ amount: e.target.value.replace(/[^\d.]/g, "") })} placeholder={t("adm.pos.pay.amount")} aria-label={t("adm.pos.pay.amount")} />
                   <button type="button" className="btn-xs" onClick={() => set({ amount: centsText(toCents(total) - othersCents) })}>{t("adm.pos.pay.rest")}</button>
                   {meth?.reference_fields?.map((f) => (
-                    <input key={f.key} maxLength={f.key === "last4" ? 4 : 80} inputMode={f.key === "last4" ? "numeric" : undefined} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: f.key === "last4" ? e.target.value.replace(/\D/g, "") : e.target.value } })}
+                    <input key={f.key} maxLength={f.key === "last4" ? 4 : 80} inputMode={f.key === "last4" ? "numeric" : undefined} autoComplete="off" autoCorrect="off" spellCheck={false} value={p.details[f.key] || ""} onChange={(e) => set({ details: { ...p.details, [f.key]: f.key === "last4" ? e.target.value.replace(/\D/g, "") : e.target.value } })}
                       placeholder={`${meth.builtin ? t(`adm.pos.ref.${f.key}`) : (lang === "en" && f.label_en) || f.label || f.key}${f.required ? " *" : ""}`}
                       aria-label={meth.builtin ? t(`adm.pos.ref.${f.key}`) : f.label || f.key} />
                   ))}
                   {meth?.counts_as_cash && (
                     <>
-                      <input inputMode="decimal" maxLength={LIMITS.amount} value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
+                      <input inputMode="decimal" autoComplete="off" enterKeyHint="done" maxLength={LIMITS.amount} value={p.details.tendered || ""} onChange={(e) => set({ details: { ...p.details, tendered: e.target.value.replace(/[^\d.]/g, "") } })} placeholder={t("adm.pos.pay.tendered")} aria-label={t("adm.pos.pay.tendered")} />
                       {tendered > 0 && <small className="pos-change-due">{t("adm.pos.pay.change", { v: m(Math.max(0, tendered - (Number(p.amount) || 0))) })}</small>}
                     </>
                   )}
@@ -1027,7 +1058,7 @@ export default function PosSale({ me }) {
       </div>
 
       {stepName !== "done" && (
-        <div className="pos-nav">
+        <div className="pos-nav pos-nav-sticky">
           <button type="button" className="btn-sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}><Icon name="chevronLeft" size={14} /> {t("adm.pos.back")}</button>
           {stepName === "payment" ? (
             <button type="button" className="btn-sm primary big" disabled={!canNext() || busy} onClick={confirmSale}>

@@ -27,6 +27,7 @@ import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import "./screens.css";
 import "./fit.css";
+import HelpTip from "./HelpTip.jsx";
 
 function pctDelta(cur, prev) {
   if (!prev) return null;
@@ -215,7 +216,7 @@ export default function StoreStatus({ go, tabs = [], me }) {
     <div className="adm-section ss adm-fit" ref={bodyRef}>
       <div className="adm-fit-bar">
         <div className="adm-fit-title">
-          <h2>{t("adm.tab.storestatus")}</h2>
+          <h2>{t("adm.tab.storestatus")}<HelpTip topic="storestatus.what" size={16} /></h2>
           <p className="adm-fit-sub">{t("adm.ss.sub")}</p>
         </div>
         {/* La tienda y el reporte (PDF/Excel/CSV) van en la barra de filtros global del panel. */}

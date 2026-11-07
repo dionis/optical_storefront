@@ -23,6 +23,7 @@ import {
   stageIndex,
   type OrderStage,
 } from "./order-status";
+import { absoluteImageUrl } from "./image-url";
 
 /**
  * Marca `has_tryon` en cada orden: una consulta por lote pregunta cuáles de las
@@ -319,7 +320,8 @@ function projectItem(item: RawItem) {
     quantity: item.quantity ?? 1,
     unit_price: item.unit_price ?? 0,
     total: item.total ?? 0,
-    thumbnail: item.thumbnail || item.variant?.product?.thumbnail || null,
+    // Absolute (lib/image-url.ts): a bare bucket key would render as a broken box.
+    thumbnail: absoluteImageUrl(item.thumbnail || item.variant?.product?.thumbnail || null),
     // What the cost sheet keys on: brand slug (frame_brand rules) and SKU
     // (frame_sku rules, cases).
     sku: itemSku(item),

@@ -10,12 +10,17 @@
 // 2. edit cells in the read rows (price, discount, cost, clear exact) → only those changes
 // 3. the same file re-zipped with DEFLATE + shared strings (what Excel saves) reads the same
 // 4. the legacy downloadXlsx/buildXlsx path still builds and reads
+// 5. v2: the «Marcas» sheet (brand price / discount per store) round-trips with 0 changes
+//    and its edits become `section: "brands"` rows; v2 model helpers
 import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
 import { buildStyledXlsx, buildXlsx, readXlsx, unzip, inkOn, tint } from "../src/admin/exportXlsx.js";
 import { matrixWorkbook, workbookToImport, mapColumns, KEY_HEADER } from "../src/admin/pricing/matrix/matrixXlsx.js";
 import { promoOf } from "../src/admin/pricing/promo.js";
-import { parseInput, filterGroups, groupStats, validateFrameForm, validateTreatmentForm, replaceRow, patchSiblingCost } from "../src/admin/pricing/matrix/model.js";
+import {
+  parseInput, filterGroups, groupStats, validateFrameForm, validateTreatmentForm, replaceRow, patchSiblingCost,
+  brandCell, withRegistry, sourceTone, costTone, validateBrandForm, frameToForm, rowPrices, monogram, attrSlug, replaceGroup, removeRow, treatmentCode,
+} from "../src/admin/pricing/matrix/model.js";
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -28,7 +33,7 @@ const t = (k, p) => (p ? `${k}${JSON.stringify(p)}` : ({
   "adm.pm.col.design": "Diseño", "adm.pm.col.material": "Material", "adm.pm.col.key": "Clave", "adm.pm.col.family": "Familia",
   "adm.pm.col.treatment": "Tratamiento", "adm.pm.col.price": "Precio", "adm.pm.col.discount": "Desc %", "adm.pm.col.final": "Final",
   "adm.pm.sub.frames": "Monturas", "adm.pm.sub.cases": "Estuches", "adm.pm.sub.lenses": "Lentes", "adm.pm.sub.treatments": "Tratamientos",
-  "adm.pm.xlsx.cover": "Portada",
+  "adm.pm.xlsx.cover": "Portada", "adm.pm.sub.brands": "Marcas", "adm.pm.col.kind": "Tipo", "adm.pm.col.models": "Modelos",
 }[k] || k));
 
 const STORES = [
@@ -271,6 +276,134 @@ await test("export titles lens cells, treatments and groups in the panel languag
   assert.deepEqual(out.problems, []);
   assert.equal(out.rows.length, 0, JSON.stringify(out.rows));
   assert.equal(out.unchanged, 2);
+});
+
+
+/* ───────── v2: «Marcas» sheet and helpers ───────── */
+const bstores = (a, b) => ({ est_1: { brand_rule: null, exposed_rows: 1, brand_price_cents: a?.[0] ?? null, brand_discount_pct: a?.[1] ?? null }, est_2: { brand_rule: null, exposed_rows: 1, brand_price_cents: b?.[0] ?? null, brand_discount_pct: b?.[1] ?? null } });
+const V2 = {
+  frames: { section: "frames", cost_access: true, stores: STORES, groups: [
+    { key: "di-caprio", label: "Di Caprio", kind: "brand", stores: bstores([6500, null], [null, 15]), rows: [
+      { kind: "frame", key: "prod_dc407", product_id: "prod_dc407", sku: "DC407", title: "DC407", cost_cents: 1650, cost_source: "supplier_list",
+        stores: { est_1: cell(6500, { source: "brand" }), est_2: cell(6297, { discount_pct: 15, final_cents: 5352 }) } },
+    ] },
+    { key: "flexure", label: "Flexure", kind: "brand", stores: bstores(null, null), rows: [
+      { kind: "frame", key: "prod_fx1", product_id: "prod_fx1", sku: "FX1", title: "FX1", cost_cents: 1200, cost_source: "supplier_list_prev", stores: { est_1: cell(4000), est_2: cell(4000) } },
+    ] },
+  ] },
+  cases: { section: "cases", cost_access: true, stores: STORES, groups: [
+    { key: "case", label: "Cases", kind: "brand", stores: bstores(null, [1500, null]), rows: [
+      { kind: "case", key: "prod_cs1", product_id: "prod_cs1", sku: "CS1", title: "Estuche", cost_cents: 180, cost_source: "supplier_list", stores: { est_1: cell(597), est_2: cell(1500, { source: "brand" }) } },
+    ] },
+  ] },
+};
+const v2book = () => buildStyledXlsx(matrixWorkbook({ sections: V2, stores: STORES, costAccess: true, who: "Rubí", now: NOW, t, fmtDate: (d) => d.toISOString() }));
+
+await test("v2: «Marcas» sheet — last sheet, brand price bold, hidden _key per brand and scope", async () => {
+  const read = await readXlsx(v2book());
+  assert.deepEqual(read.map((x) => x.name), ["Portada", "Monturas", "Estuches", "Marcas"]);
+  const br = read[3].rows;
+  assert.deepEqual(br[1].slice(0, 5), ["Tipo", "Marca", "Clave", "Modelos", "Op1 · Katy"]);
+  assert.deepEqual(br[2].slice(4, 8), ["Precio", "Desc %", "Precio", "Desc %"]);
+  assert.deepEqual(br[3].slice(0, 8), ["Monturas", "Di Caprio", "di-caprio", 1, 65, null, null, 0.15]);
+  assert.equal(br[3][8], "brands|frame:di-caprio");
+  assert.equal(br[5][8], "brands|case:case");
+  assert.equal(br[5][6], 15);
+  const files = await unzip(v2book());
+  const s4 = new TextDecoder().decode(files["xl/worksheets/sheet4.xml"]);
+  assert.match(s4, /<mergeCell ref="E2:F2"\/>/);
+  assert.match(s4, /<pane xSplit="4" ySplit="3"/);
+});
+
+await test("v2: untouched book with «Marcas» → 0 changes", async () => {
+  const out = workbookToImport(await readXlsx(v2book()), { current: V2, stores: STORES });
+  assert.deepEqual(out.problems, []);
+  assert.equal(out.rows.length, 0, JSON.stringify(out.rows));
+  assert.equal(out.unchanged, 3 + 3);
+});
+
+await test("v2: brand edits → section «brands» rows with scope, only what changed", async () => {
+  const read = await readXlsx(v2book());
+  const br = read[3].rows;
+  br[3][4] = 70; // Di Caprio Op1 brand price 65 → 70
+  br[3][7] = null; // Di Caprio Op2 brand discount 15 % → cleared
+  br[4][5] = 0.2; // Flexure Op1 discount 20 %
+  br[5][6] = null; // Cases Op2 brand price cleared
+  br.push(["", "Peachtree", "peachtree", 0, 55]); // a brand typed by hand, no _key
+  const out = workbookToImport(read, { current: V2, stores: STORES });
+  assert.deepEqual(out.problems, []);
+  assert.deepEqual(out.rows, [
+    { section: "brands", key: "di-caprio", scope: "frame", stores: { Op1: { price: 70 }, Op2: { discount: null } } },
+    { section: "brands", key: "flexure", scope: "frame", stores: { Op1: { discount: 20 } } },
+    { section: "brands", key: "case", scope: "case", stores: { Op2: { price: null } } },
+    { section: "brands", key: "peachtree", scope: "frame", stores: { Op1: { price: 55 } } },
+  ]);
+  assert.deepEqual(out.origins.map((o) => o.sheet), ["Marcas", "Marcas", "Marcas", "Marcas"]);
+});
+
+await test("v2 helpers: brandCell, withRegistry, source / cost tones, monogram, attrSlug", () => {
+  const g = V2.frames.groups[0];
+  assert.deepEqual(brandCell(g, "est_1"), { priceCents: 6500, pct: null });
+  assert.deepEqual(brandCell(g, "est_2"), { priceCents: null, pct: 15 });
+  assert.deepEqual(brandCell(null, "x"), { priceCents: null, pct: null });
+  const reg = [
+    { slug: "di-caprio", name: "Di Caprio", logo_url: "/brands/logo-di-caprio.png", kind: "frame", models: 1 },
+    { slug: "peachtree", name: "Peachtree", logo_url: null, kind: "frame", models: 0 },
+    { slug: "gone", name: "Gone", kind: "frame", models: 0, active: false },
+    { slug: "trendy", name: "Trendy", kind: "case", models: 0 },
+  ];
+  const v = withRegistry(V2.frames.groups, reg, "frames");
+  assert.equal(v[0].logo_url, "/brands/logo-di-caprio.png");
+  assert.deepEqual(v.map((x) => x.key), ["di-caprio", "flexure", "peachtree"]);
+  assert.equal(v[2].empty, true);
+  assert.deepEqual(withRegistry(V2.cases.groups, reg, "cases").map((x) => x.key), ["case", "trendy"]);
+  assert.equal(withRegistry([{ key: "sv", kind: "design", rows: [] }], reg, "lenses").length, 1);
+  assert.deepEqual(["store_exact", "brand", "rule", "band", "master", "base", undefined].map(sourceTone), ["exact", "brand", "rule", "band", "master", "master", "master"]);
+  assert.deepEqual(["supplier_list", "supplier_list_prev", "owner_edit", "lab", null].map(costTone), ["c2026", "prev", "own", "lab", null]);
+  assert.equal(monogram("Di Caprio"), "DC");
+  assert.equal(monogram("flexure"), "FL");
+  assert.equal(attrSlug("shape", "Ojo de gato"), "cat-eye");
+  assert.equal(attrSlug("material", ["acetate"]), "acetate");
+  assert.equal(attrSlug("style", "full-rim"), "full-frame");
+  const gs = [{ key: "a", rows: [{ key: "r1" }, { key: "r2" }] }];
+  assert.deepEqual(removeRow(gs, "r1")[0].rows.map((r) => r.key), ["r2"]);
+  assert.equal(replaceGroup(gs, { key: "a", label: "A" })[0].rows.length, 2);
+  assert.equal(treatmentCode({ key: "photo-grey:sv" }), "photo-grey");
+});
+
+await test("v2 forms: brand, model edit (Medusa fallback), only changed store prices travel", () => {
+  assert.deepEqual(validateBrandForm({ name: "Di Caprio" }, { takenSlugs: new Set(["di-caprio"]) }).errors, { name: "brand_taken" });
+  assert.deepEqual(validateBrandForm({ name: "Nueva", kind: "case", logo_url: "https://cdn/x.png" }).body, { name: "Nueva", kind: "case", logo_url: "https://cdn/x.png" });
+  assert.deepEqual(validateBrandForm({ name: "X", logo_url: "ftp://x" }).errors, { logo_url: "bad_image" });
+  assert.deepEqual(validateBrandForm({ name: "Ren", logo_url: "", active: false }, { editing: true }).body, { name: "Ren", logo_url: null, active: false });
+  // Medusa's product as the edit form's source (no GET /admin/catalog/frames/:id yet).
+  const product = { product: { id: "prod_1", title: "DC 50", description: "Linda", images: [{ url: "https://cdn/a.jpg" }, { url: "https://cdn/side.jpg" }],
+    variants: [{ id: "var_1", title: "Black", sku: "DC50", metadata: { image: "https://cdn/a.jpg" } }],
+    metadata: { brand: "Di Caprio", brand_slug: "di-caprio", eye_size: 52, bridge_size: 18, temple_length: 140, material: "acetate", shape: "cat-eye", gender: "women", age_group: "adult", features: ["Spring Hinge"], a: 52 } } };
+  const row = { key: "prod_1", product_id: "prod_1", sku: "DC50", title: "DC 50", cost_cents: 1650, stores: { est_1: { price_cents: 6000, source: "store_exact", exact: true, discount_pct: 10 }, est_2: { price_cents: 5000, source: "rule", discount_pct: null } } };
+  const f = frameToForm(product, row);
+  assert.equal(f.brandSlug, "di-caprio");
+  assert.equal(f.model, "DC 50");
+  assert.deepEqual(f.colors, [{ id: "var_1", name: "Black", image: "https://cdn/a.jpg" }]);
+  assert.deepEqual(f.images, ["https://cdn/side.jpg"]);
+  assert.equal(f.shape, "cat-eye");
+  assert.equal(f.eye_size, "52");
+  assert.equal(f.a, "52");
+  assert.equal(f.cost, "16.50");
+  const init = rowPrices(row, STORES);
+  assert.deepEqual(init, { est_1: { price: 60, discount: 10 }, est_2: { price: null, discount: 0 } });
+  const prices = { est_1: { price: "60", discount: "10" }, est_2: { price: "55", discount: "" } };
+  const { errors, body } = validateFrameForm({ ...f, brand: "Di Caprio", editing: true, prices, description: "" }, { stores: STORES, initialPrices: init });
+  assert.deepEqual(errors, {});
+  assert.deepEqual(body.prices, { est_2: { price: 55, discount: 0 } });
+  assert.deepEqual(body.colors, [{ id: "var_1", name: "Black", image: "https://cdn/a.jpg" }]);
+  assert.equal(body.material, "acetate");
+  assert.equal(body.description, ""); // emptied on purpose: it travels to clear it
+  assert.equal(body.b, undefined); // B was never set: it does not travel
+  assert.equal(body.style, undefined);
+  const bad = validateFrameForm({ brand: "X", sku: "X1", colors: [{ name: "N" }], images: ["nope"], a: "500" }, { stores: [] });
+  assert.deepEqual(bad.errors, { images: "bad_image", a: "bad_measure" });
+  assert.deepEqual(validateTreatmentForm({ type: "ar", label_es: "AR", label_en: "AR", cost: "3", ar_group: "sv" }, { editing: true }).body, { label_es: "AR", label_en: "AR", cost: 3, ar_group: "sv" });
 });
 
 console.log(process.exitCode ? "xlsx tests FAILED" : `xlsx tests passed (${passed})`);

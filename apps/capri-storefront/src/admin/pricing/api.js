@@ -1,7 +1,7 @@
 // Llamadas de «Precios y costos» (/admin/pricing/*). Módulo SIN hook de
 // idioma: lo que llegue a la pantalla viaja como CLAVE de diccionario
 // (adm.err.pricing.<reason>) y traduce quien pinta.
-import { adminFetch, adminGet, invalidateCache } from "../adminApi.js";
+import { adminFetch, adminGet, adminUpload, invalidateCache } from "../adminApi.js";
 // RESPALDO, no fuente: la lista de Capri que vivía en el navegador. Solo se usa
 // si el servidor no contesta los costos (ver `loadFrameCosts`), para que la
 // pantalla no quede en blanco; en ese estado NO se puede editar, porque lo que
@@ -412,9 +412,11 @@ export async function fetchMatrix(section, { q = "" } = {}) {
  * (costo, precio) o en por ciento (descuento); null vacía la casilla. Devuelve
  * la fila entera tal como la pinta el GET.
  */
-export async function saveMatrixCell({ kind, key: itemKey, field, store, value }) {
+export async function saveMatrixCell({ kind, key: itemKey, field, store, value, scope }) {
   const body = { kind, key: itemKey, field, value: value === null || value === "" || value === undefined ? null : Number(value) };
   if (field !== "cost") body.store = store;
+  // v2: a brand cell (`kind: "brand"`, key = slug) says which family it prices.
+  if (kind === "brand" && scope) body.scope = scope;
   const data = await post(`${MATRIX_PATH}/cell`, body);
   forgetPriceCaches();
   return data;
@@ -427,12 +429,53 @@ export async function importMatrix(rows, apply = false) {
   return data;
 }
 
-/** Marcas del catálogo, para el selector del alta de montura. */
+/**
+ * Marcas del catálogo (v2: registro `catalog_brand`):
+ * `{ brands: [{ slug, name, logo_url, kind, active, source, sort, models }] }`.
+ */
 export async function fetchCatalogBrands() {
   try {
     return await adminFetch("/admin/catalog/brands");
   } catch (e) {
     throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}
+
+const del = async (path) => {
+  try {
+    return await adminFetch(path, { method: "DELETE" });
+  } catch (e) {
+    const err = new Error(key(e, "adm.err.pricing.save_failed"));
+    err.payload = e?.payload || null;
+    throw err;
+  }
+};
+const seg = (v) => encodeURIComponent(String(v));
+
+/** Marca nueva: `{ name, kind: "frame"|"case", logo_url? }` → `{ brand }`. */
+export const createCatalogBrand = (body) => post("/admin/catalog/brands", body);
+/** Editar marca: `{ name?, logo_url?, active?, sort? }` → `{ brand }`. */
+export async function updateCatalogBrand(slug, body) {
+  const data = await post(`/admin/catalog/brands/${seg(slug)}`, body);
+  forgetPriceCaches();
+  return data;
+}
+/** Borrar una marca SIN modelos (si tiene, 409 `brand_has_models`). */
+export const deleteCatalogBrand = (slug) => del(`/admin/catalog/brands/${seg(slug)}`);
+
+/**
+ * Sube una imagen (logo, foto de color o del modelo): multipart con un solo
+ * archivo `file`, jpg/png/webp ≤ 8 MB → `{ url }` absoluta.
+ */
+export async function uploadCatalogImage(file) {
+  const form = new FormData();
+  form.append("file", file, file.name || "foto.jpg");
+  try {
+    const res = await adminUpload("/admin/catalog/uploads", form);
+    if (!res?.url) throw Object.assign(new Error("no url"), { reason: "upload_failed" });
+    return res;
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.upload_failed"));
   }
 }
 
@@ -443,9 +486,59 @@ export async function createCatalogFrame(body) {
   return data;
 }
 
+/**
+ * Un modelo para el diálogo de edición. Contrato propuesto:
+ * `GET /admin/catalog/frames/:id` → `{ frame }` con la misma forma que el alta.
+ * Mientras esa ruta no exista (404/405) se lee el producto de Medusa
+ * (`GET /admin/products/:id`), que trae variantes, fotos y `metadata`.
+ */
+export async function fetchCatalogFrame(id) {
+  try {
+    return await adminFetch(`/admin/catalog/frames/${seg(id)}`);
+  } catch (e) {
+    if (e?.status !== 404 && e?.status !== 405) throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+  try {
+    return await adminFetch(`/admin/products/${seg(id)}`, { query: { fields: "id,title,handle,description,thumbnail,status,*images,*variants,metadata" } });
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}
+
+/** Editar un modelo (mismos campos que el alta; colores con `id` = variante). */
+export async function updateCatalogFrame(id, body) {
+  const data = await post(`/admin/catalog/frames/${seg(id)}`, body);
+  forgetPriceCaches();
+  return data;
+}
+
+/** Borrar un modelo: `{ deleted: true }` si nunca se vendió, `{ archived: true }` si pasó a descontinuado. */
+export async function deleteCatalogFrame(id) {
+  const data = await del(`/admin/catalog/frames/${seg(id)}`);
+  forgetPriceCaches();
+  return data;
+}
+
 /** Fotocromático o antirreflejo nuevo. */
 export async function createTreatment(body) {
   const data = await post("/admin/pricing/treatments", body);
   forgetPriceCaches();
   return data;
 }
+
+/** Editar un tratamiento (nombres, grupo, costo). */
+export async function updateTreatment(code, body) {
+  const data = await post(`/admin/pricing/treatments/${seg(code)}`, body);
+  forgetPriceCaches();
+  return data;
+}
+
+/** Borrar un tratamiento: `{ deleted }` si nunca se vendió, `{ archived }` (inactivo) si sí. */
+export async function deleteTreatment(code) {
+  const data = await del(`/admin/pricing/treatments/${seg(code)}`);
+  forgetPriceCaches();
+  return data;
+}
+
+/** ¿La respuesta de un DELETE dice que se archivó (descontinuado/inactivo) en vez de borrarse? */
+export const wasArchived = (res) => Boolean(res && (res.archived === true || res.result === "archived" || res.status === "archived" || (res.deleted === false && res.archived !== false)));

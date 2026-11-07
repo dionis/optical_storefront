@@ -90,6 +90,7 @@ function respondToUploadError(
 ): boolean {
   if (err instanceof UnsupportedUploadError) {
     res.status(415).json({
+      reason: "unsupported_media_type",
       error_code: "unsupported_media_type",
       error: opts.unsupportedMessage,
     });
@@ -99,6 +100,7 @@ function respondToUploadError(
   // reachable here, and it is the common one on a modern phone camera.
   if (err && typeof err === "object" && (err as { code?: string }).code === "LIMIT_FILE_SIZE") {
     res.status(413).json({
+      reason: "file_too_large",
       error_code: "file_too_large",
       error: opts.tooLargeMessage,
     });
@@ -168,6 +170,38 @@ function reviewPhotosUpload(
         tooLargeMessage: `Each photo must be under ${Math.round(
           REVIEW_PHOTO_MAX_BYTES / (1024 * 1024)
         )} MB.`,
+      })
+    ) {
+      return;
+    }
+    next(err);
+  });
+}
+
+/**
+ * «Productos y precios» uploads (v2, docs/PRICE-MATRIX.md «Archivos»): a
+ * brand logo or a model photo. One public image, JPEG / PNG / WEBP, ≤ 8 MB —
+ * the limits live in src/api/admin/catalog/uploads/route.ts too.
+ */
+const CATALOG_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const CATALOG_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const catalogImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: CATALOG_UPLOAD_MAX_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (CATALOG_UPLOAD_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new UnsupportedUploadError(file.mimetype));
+  },
+});
+
+/** Same three-argument shape as `ocrUpload`, and for the same reason. */
+function catalogUpload(req: MedusaRequest, res: MedusaResponse, next: MedusaNextFunction): void {
+  catalogImageUpload.single("file")(req as never, res as never, (err: unknown) => {
+    if (!err) return next();
+    if (
+      respondToUploadError(err, res, {
+        unsupportedMessage: "Catalogue images must be JPEG, PNG or WEBP.",
+        tooLargeMessage: `The image must be under ${Math.round(CATALOG_UPLOAD_MAX_BYTES / (1024 * 1024))} MB.`,
       })
     ) {
       return;
@@ -346,6 +380,14 @@ export default defineMiddlewares({
       matcher: "/store/product-review-photos",
       method: ["POST"],
       middlewares: [reviewPhotosUpload],
+    },
+    {
+      // Brand logos and model photos from «Productos y precios» (multipart, one
+      // image). The staff guard on /admin* runs first: restricted roles never
+      // reach multer.
+      matcher: "/admin/catalog/uploads",
+      method: ["POST"],
+      middlewares: [catalogUpload],
     },
     {
       matcher: "/store/orders/:id",

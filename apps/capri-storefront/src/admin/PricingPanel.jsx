@@ -34,7 +34,13 @@ import { fetchPricingOverview } from "./pricing/api.js";
 import { BandBlock, RuleRow } from "./pricing/FramesSection.jsx";
 import { AdjustRow } from "./pricing/lensShared.jsx";
 import CommissionsSection from "./pricing/CommissionsSection.jsx";
-import CostsSection from "./pricing/CostsSection.jsx";
+import CostsAccordions from "./pricing/CostsSection.jsx";
+import FinAcc, { useOpenSet } from "./finance/Accordion.jsx";
+import RulesIO from "./finance/RulesIO.jsx";
+import { fetchFinanceRules } from "./finance/financeApi.js";
+import FinancialStatement from "./FinancialStatement.jsx";
+import { TENANT } from "../config/tenant.js";
+import "./finance/finance.css";
 import PriceMatrix from "./pricing/PriceMatrix.jsx";
 import PriceImport from "./PriceImport.jsx";
 import useSubTab from "./pricing/useSub.js";
@@ -61,9 +67,9 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
 
   const items = [
     { key: "frames", icon: "glasses", label: t("adm.pm.sub.frames") },
-    { key: "cases", icon: "box", label: t("adm.pm.sub.cases") },
-    { key: "lenses", icon: "eye", label: t("adm.pm.sub.lenses") },
-    { key: "treatments", icon: "palette", label: t("adm.pm.sub.treatments") },
+    { key: "cases", icon: "case", label: t("adm.pm.sub.cases") },
+    { key: "lenses", icon: "lens", label: t("adm.pm.sub.lenses") },
+    { key: "treatments", icon: "drop", label: t("adm.pm.sub.treatments") },
     { key: "rules", icon: "percent", label: t("adm.pm.sub.rules") },
   ];
   const intro = {
@@ -82,7 +88,7 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
       <SubTabs items={items} value={view} onChange={(k) => pickSub(k)} />
       <p className="pp-intro pm-intro-m">{t(intro)}</p>
       {view === "rules" ? (
-        <RulesView me={me} sellers={sellers} go={go} />
+        <RulesView me={me} sellers={sellers} go={go} params={params} />
       ) : (
         <PriceMatrix
           key={view}
@@ -97,17 +103,29 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
 }
 
 /**
- * «Reglas y comisiones»: lo que no es de un artículo, con el mismo payload de
- * siempre (`GET /admin/pricing/overview`, maestro o variación de la tienda
- * elegida arriba) y los mismos componentes que ya tenía «Precios y costos».
+ * «Reglas y comisiones» (7-nov-2026): TODO en una vista, en acordeones —
+ * costos fijos, variables, compartidos, por venta, impuestos, comisiones y el
+ * ajuste general con la banda de precio — con una tira de indicadores del mes
+ * (ventas netas, fijos, margen de contribución, punto de equilibrio,
+ * resultado), Excel de ida y vuelta de todo el bloque (finance/RulesIO.jsx) y
+ * el botón «Estado de resultados» (FinancialStatement.jsx). Costos y
+ * comisiones leen GET /admin/finance/rules; el ajuste y la banda, como
+ * siempre, `GET /admin/pricing/overview` (maestro o variación de la tienda
+ * elegida arriba) con RuleRow/BandBlock/AdjustRow de siempre.
  */
-function RulesView({ me, sellers, go }) {
+function RulesView({ me, sellers, go, params = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
   const { storeId, store, isAll, isWeb } = useStoreFilter(me);
   const scope = isAll || isWeb ? "all" : storeId;
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
+  // Costos, comisiones e impuestos: GET /admin/finance/rules (los acordeones).
+  const [fin, setFin] = useState(null);
+  const [finState, setFinState] = useState("loading");
+  // ?sub=rules-statement abre directamente el estado de resultados (enlace del Ejecutivo).
+  const [showStatement, setShowStatement] = useState(() => String(params?.sub || "") === "rules-statement");
+  const [open, toggleAcc] = useOpenSet(["fixed", "commissions"]);
   const ref = useRef(null);
   const demo = isDemoLogin();
 
@@ -118,6 +136,17 @@ function RulesView({ me, sellers, go }) {
       .catch((err) => { setState(err.message || "adm.err.pricing.load_failed"); });
   }, [scope]);
   useEffect(load, [load]);
+  const loadFin = useCallback(() => {
+    let off = false;
+    fetchFinanceRules(scope)
+      .then((d) => { if (!off) { setFin(d); setFinState("ok"); } })
+      .catch((err) => { if (!off) setFinState(err.message || "adm.err.fin.load_failed"); });
+    return () => { off = true; };
+  }, [scope]);
+  useEffect(loadFin, [loadFin]);
+  // Una escritura de costos o comisiones: se relee la vista (los totales
+  // mensuales, el reparto y el resultado del mes los calcula el servidor).
+  const onFinSaved = useCallback(() => { toast({ tone: "success", title: t("adm.price.saved") }); loadFin(); }, [toast, t, loadFin]);
 
   // Cada escritura contesta la porción que cambió: se fusiona sin releer todo.
   const onSaved = useCallback((slice) => {
@@ -271,6 +300,10 @@ function RulesView({ me, sellers, go }) {
     data ? menuHandlers({ targetRef: ref, title: t("adm.price.reportTitle"), name: "precios", report }) : null
   );
 
+  if (showStatement) {
+    return <FinancialStatement initialStore={scope === "all" ? null : scope} onClose={() => setShowStatement(false)} />;
+  }
+
   if (state === "loading") return <div className="adm-src-note loading">{t("adm.price.loading")}</div>;
   if (state !== "ok" || !data) {
     return (
@@ -281,43 +314,67 @@ function RulesView({ me, sellers, go }) {
     );
   }
 
+  const pnl = fin?.pnl;
+  const focus = scope !== "all" ? pnl?.stores?.find((s) => s.establishment_id === scope) : pnl?.total;
+  const mo = (v) => (v === null || v === undefined ? "—" : money(Number(v), "usd", lang));
+  const kpis = focus ? [
+    { k: "net_sales", v: mo(focus.net_sales), help: "fin.kpi.netSales" },
+    { k: "fixed_total", v: mo(focus.fixed_total), help: "fin.fixedTotal" },
+    { k: "contribution_pct", v: focus.contribution_pct == null ? "—" : `${focus.contribution_pct} %`, help: "fin.contributionMargin" },
+    { k: "break_even", v: mo(focus.break_even), help: "fin.breakEven" },
+    { k: "result", v: mo(focus.result), help: "fin.kpi.result", tone: Number(focus.result) < 0 ? "bad" : "good" },
+  ] : [];
+
   return (
-    <div className="pp-rules" ref={ref}>
-      <div className="pp-meta">
+    <div className="pp-rules fin-view" ref={ref}>
+      <div className="pp-meta fin-top">
         {/* El «maestro vs. variación de tienda» va en la pastilla de ámbito: se
             elige con el selector de tienda de arriba. */}
         <span className="pp-scope" title={t("adm.price.intro")}><Icon name="store" size={12} />{scopeLabel}</span>
+        <span className="fin-top-act">
+          <button type="button" className="btn-xs primary" onClick={() => setShowStatement(true)}><Icon name="receipt" size={13} /> {t("adm.fin.st.open")}</button>
+          {fin && <RulesIO data={fin} who={me?.display_name || me?.email || ""} business={TENANT.name} onApplied={onFinSaved} onError={onError} />}
+        </span>
       </div>
-      <div className="pp-two">
-        <div className="pp-col">
-          <section className="pp-pane">
-            <h3><Icon name="percent" size={14} /><span className="pp-pane-t">{t("adm.pm.rules.adjust")}</span></h3>
-            <RuleRow scope="frame" rule={data.frames.rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
-            <RuleRow scope="case" rule={data.frames.case_rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
-            <AdjustRow lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} id="pp-rules-lens-adjust" />
-            {!data.store && <p className="pp-intro">{t("adm.pm.rules.adjustHint")}</p>}
-          </section>
-          <section className="pp-pane">
-            <BandBlock store={scope} onError={onError} />
-          </section>
-          <section className="pp-pane">
-            <h3><Icon name="sellers" size={14} /><span className="pp-pane-t">{t("adm.price.comm.title")}</span></h3>
-            <CommissionsSection commissions={data.commissions} onSaved={onSaved} onError={onError} />
-          </section>
+      {kpis.length > 0 && (
+        <div className="fin-kpis" aria-label={t("adm.fin.kpi.title", { month: pnl.month })}>
+          <span className="fin-kpi-m"><Icon name="calendar" size={12} /> {t("adm.fin.kpi.month", { month: pnl.month })}</span>
+          {kpis.map((x) => (
+            <span key={x.k} className={`fin-kpi ${x.tone || ""}`}>
+              <small>{t(`adm.fin.kpi.${x.k}`)}<HelpTip topic={x.help} /></small>
+              <b>{x.v}</b>
+            </span>
+          ))}
         </div>
-        <div className="pp-col">
-          <section className="pp-pane">
-            <h3><Icon name="store" size={14} /><span className="pp-pane-t">{t("adm.price.costs.perStore")}</span></h3>
-            <CostsSection costs={data.costs} store={scope} isStore={Boolean(data.store)} part="store" onSaved={onSaved} onError={onError} />
-          </section>
-          <section className="pp-pane">
-            <h3><Icon name="costs" size={14} /><span className="pp-pane-t">{t("adm.price.costs.perSale")}</span></h3>
-            <CostsSection costs={data.costs} store={scope} isStore={Boolean(data.store)} part="rules" onSaved={onSaved} onError={onError} />
-          </section>
-          {/* PriceImport trae su propia tarjeta. */}
-          {!demo && <PriceImport />}
+      )}
+      {finState !== "ok" && finState !== "loading" && (
+        <div className="adm-login-err">{t(finState)} <button type="button" className="btn-xs" onClick={loadFin}>{t("adm.price.retry")}</button></div>
+      )}
+      {!fin && finState === "loading" && <div className="adm-src-note loading">{t("adm.fin.loading")}</div>}
+      {fin && (
+        <div className="fin-accs">
+          <CostsAccordions data={fin} scopeStore={scope === "all" ? null : scope} open={open} onToggle={toggleAcc} onSaved={onFinSaved} onError={onError} />
+          <FinAcc id="commissions" icon="sellers" title={t("adm.fin.acc.commissions")} help="fin.acc.commissions" count={fin.commissions.sellers.filter((x) => x.active).length}
+            total={focus ? focus.commissions : null} totalLabel={t("adm.fin.acc.thisMonth")} totalHelp="fin.commissionBase" open={open.has("commissions")} onToggle={toggleAcc}>
+            <CommissionsSection commissions={fin.commissions} stores={fin.stores} earned={pnl?.sellers || []} onSaved={onFinSaved} onError={onError} />
+          </FinAcc>
+          <FinAcc id="adjust" icon="percent" title={t("adm.fin.acc.adjust")} help="fin.acc.adjust" open={open.has("adjust")} onToggle={toggleAcc}>
+            <div className="pp-two fin-adjust">
+              <section className="pp-pane">
+                <RuleRow scope="frame" rule={data.frames.rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+                <RuleRow scope="case" rule={data.frames.case_rule} store={scope} onSaved={onSaved} onError={onError} t={t} lang={lang} />
+                <AdjustRow lenses={data.lenses} store={scope} onSaved={onSaved} onError={onError} id="pp-rules-lens-adjust" />
+                {!data.store && <p className="pp-intro">{t("adm.pm.rules.adjustHint")}</p>}
+              </section>
+              <section className="pp-pane">
+                <BandBlock store={scope} onError={onError} />
+              </section>
+            </div>
+          </FinAcc>
         </div>
-      </div>
+      )}
+      {/* PriceImport trae su propia tarjeta. */}
+      {!demo && <PriceImport />}
       <details className="pp-pane">
         <summary><Icon name="receipt" size={14} /> {t("adm.price.tab.sheets")}</summary>
         <Profitability sellers={sellers} go={go} />

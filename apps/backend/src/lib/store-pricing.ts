@@ -13,6 +13,13 @@
  *     - exact price of a product in that store (scope "frame"/"case"): the
  *       final price of that component, never adjusted. A fixed amount then
  *       goes on the lenses instead, if there are any.
+ *     - BRAND price in that store (v2, 7-nov-2026; scope "frame"/"case",
+ *       target `brand:<slug>`, mode "override"): every model of that brand at
+ *       that price in that store, unless the model has its own exact price.
+ *       Same treatment as an exact price (no adjustment, no band).
+ *
+ *   Precedence of the frame part: model's exact price > brand price > store
+ *   adjustment > band > master (docs/PRICE-MATRIX.md, v2).
  *     A general adjustment with NO store (establishment_id null) is the
  *     CHAIN's rule: every store without one of its own applies it, and so
  *     does the master price itself (`masterLinePrice`) — the master is what
@@ -116,11 +123,41 @@ export function globalPriceOverrides(rules: PriceRuleLike[], now = new Date()): 
   return new Map([...out].map(([k, v]) => [k, v.value]));
 }
 
+/** `target` of a brand price rule: `brand:<slug>`. */
+export const BRAND_TARGET_PREFIX = "brand:";
+export const brandTarget = (slug: string): string => `${BRAND_TARGET_PREFIX}${slug}`;
+/** The brand slug of a `brand:<slug>` target; null for a product target. */
+export const brandOfTarget = (target: string | null | undefined): string | null =>
+  typeof target === "string" && target.startsWith(BRAND_TARGET_PREFIX) && target.length > BRAND_TARGET_PREFIX.length ? target.slice(BRAND_TARGET_PREFIX.length) : null;
+
+/**
+ * The open brand price of a store for a scope, or null. The latest active
+ * `override` rule on `brand:<slug>` of THAT store (a brand price is always a
+ * store's: there is no chain-wide one). Pure.
+ */
+export function brandPriceRule(
+  rules: PriceRuleLike[],
+  establishmentId: string,
+  scope: "frame" | "case",
+  brandSlug: string | null | undefined,
+  now = new Date()
+): PriceRuleLike | null {
+  if (!brandSlug) return null;
+  const target = brandTarget(brandSlug);
+  return pick(rules, now, (r) => r.establishment_id === establishmentId && r.scope === scope && r.target === target && r.mode === "override");
+}
+
 export interface StoreLineInput {
   establishmentId: string;
   scope: "frame" | "case";
   /** Medusa product id of the frame (or case): prices are per model, not per colour. */
   target: string;
+  /**
+   * The model's brand slug (`metadata.brand_slug`), v2: a store's BRAND price
+   * applies when the model has no exact price of its own. Absent = no brand
+   * price is looked at (what every caller did before).
+   */
+  brand?: string | null;
   /** Medusa price of the frame, before any rule. */
   base: number;
   /** Lens add-on from the matrix, before store rules; 0 for frame-only. */
@@ -131,8 +168,8 @@ export interface StoreLinePrice {
   frame: number;
   lenses: number;
   total: number;
-  /** What produced the frame part: the store's exact price, or base + adjustment. */
-  frame_source: "store_exact" | "adjusted";
+  /** What produced the frame part: the store's exact price, the store's brand price, or base + adjustment. */
+  frame_source: "store_exact" | "brand" | "adjusted";
   adjustment: { mode: "percent" | "delta"; value: number } | null;
   /**
    * The floor or the ceiling that moved the frame, in dollars; null when the
@@ -227,7 +264,12 @@ export function storeLinePrice(
 ): StoreLinePrice {
   const est = input.establishmentId;
   const base = globalPrice(rules, input.scope, input.target, input.base, now);
-  const exact = pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override");
+  const own = input.target
+    ? pick(rules, now, (r) => r.establishment_id === est && r.scope === input.scope && r.target === input.target && r.mode === "override")
+    : null;
+  // The model's own price beats the brand's; the brand's beats every rule below.
+  const brandRule = own ? null : brandPriceRule(rules, est, input.scope, input.target ? input.brand : null, now);
+  const exact = own ?? brandRule;
   const general = generalAdjustment(rules, est, input.scope, now);
   const adjustment = general ? { mode: general.mode as "percent" | "delta", value: Number(general.value) } : null;
 
@@ -271,7 +313,7 @@ export function storeLinePrice(
     frame,
     lenses,
     total: cents(frame + lenses),
-    frame_source: exact ? "store_exact" : "adjusted",
+    frame_source: own ? "store_exact" : brandRule ? "brand" : "adjusted",
     adjustment,
     /** What the band did to the frame, so a quote can explain the figure. */
     band: banded && frame !== frameBefore ? { from: frameBefore, to: frame } : null,

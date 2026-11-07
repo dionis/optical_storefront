@@ -5,7 +5,17 @@ import { recordAudit } from "../../../../lib/audit";
 import { mirrorPricesToSheet } from "../../../../lib/gsheet-sync";
 import { loadPricingOverview } from "../../../../lib/pricing-overview";
 import { findSellerById, parseCommissionPct, sellerService } from "../../../../lib/sellers";
-import { saveDefaultCommissionPct } from "../../../../lib/store-cost-toggle";
+import { loadDefaultCommissionPct, saveDefaultCommissionPct } from "../../../../lib/store-cost-toggle";
+
+/**
+ * GET /admin/pricing/commissions → { default_pct }
+ *
+ * The owner's default commission, for the forms that create a seller (Sellers,
+ * Team): they start from it instead of a number of their own. null = never set.
+ */
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
+  res.json({ default_pct: await loadDefaultCommissionPct(req.scope) });
+}
 
 /**
  * POST /admin/pricing/commissions

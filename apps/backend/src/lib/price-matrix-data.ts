@@ -8,6 +8,8 @@ import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import { recordAudit } from "./audit";
 import { buildCatalogFrameProduct, handleOfSku, type CatalogFrameInput } from "./catalog-frame";
+import { listBrands } from "./catalog-brand-data";
+import type { BrandView } from "./catalog-brand";
 import { KNOWN_BRANDS } from "./costing";
 import { listEstablishments } from "./establishments";
 import {
@@ -26,6 +28,8 @@ import { assortmentByStore } from "./pricing-across";
 import { clearPriceBandCache } from "./pricing";
 import { lensBaseKey, parseLensBaseKey, upsertStoreLensPrice, type LensStorePriceLike } from "./pricing-overview";
 import {
+  BRAND_DISCOUNT_KIND,
+  brandScopeOf,
   buildFrameRows,
   buildImportPlan,
   buildLensGroups,
@@ -34,6 +38,7 @@ import {
   changeAsCellWrite,
   deriveTreatmentCode,
   groupFrameRows,
+  indexImportBrands,
   indexImportRows,
   indexItemDiscounts,
   planCellWrite,
@@ -41,6 +46,7 @@ import {
   toMatrixProduct,
   type CellOp,
   type DiscountIndex,
+  type ImportBrand,
   type ImportPlan,
   type ItemDiscountLike,
   type ItemKind,
@@ -52,7 +58,7 @@ import {
   type TreatmentInput,
   withBrandExposure,
 } from "./price-matrix";
-import { type PriceRuleLike } from "./store-pricing";
+import { brandTarget, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices, replaceRule } from "./store-pricing-data";
 
 /**
@@ -141,7 +147,7 @@ export async function storeDiscountIndex(container: MedusaContainer, storeIds: s
  */
 export async function setItemDiscount(
   container: MedusaContainer,
-  input: { storeId: string; kind: ItemKind; key: string; pct: number | null },
+  input: { storeId: string; kind: ItemKind | typeof BRAND_DISCOUNT_KIND; key: string; pct: number | null },
   actorId: string | null
 ): Promise<{ before: number | null; after: number | null }> {
   const service = pricingSvc(container);
@@ -209,7 +215,7 @@ const BASE_SQL = `(select pr.amount from product_variant v2
  * subquery cannot run (a Medusa that names its link table differently) the
  * prices come from `productPrices` instead, in pages.
  */
-export async function loadProductRows(container: MedusaContainer, opts: { q?: string; ids?: string[] } = {}): Promise<MatrixProductRaw[]> {
+export async function loadProductRows(container: MedusaContainer, opts: { q?: string; ids?: string[]; brand?: string } = {}): Promise<MatrixProductRaw[]> {
   const pg = pgOf(container);
   const q = (opts.q ?? "").trim().slice(0, 80);
   const build = (withBase: boolean) => {
@@ -220,6 +226,7 @@ export async function loadProductRows(container: MedusaContainer, opts: { q?: st
       .select(pg.raw(SKUS_SQL));
     if (withBase) sql = sql.select(pg.raw(BASE_SQL));
     if (opts.ids) sql = sql.whereIn("product.id", opts.ids.length ? opts.ids : ["__none__"]);
+    if (opts.brand) sql = sql.whereRaw(`lower(coalesce(product.metadata->>'brand_slug', product.metadata->>'collection_slug', '')) = ?`, [opts.brand]);
     if (q) {
       const pattern = like(q);
       sql = sql.where((b) => {
@@ -259,7 +266,18 @@ export async function loadProductRows(container: MedusaContainer, opts: { q?: st
   });
 }
 
-const brandNames = (): Map<string, string> => new Map(KNOWN_BRANDS.map((b) => [b.slug, b.name]));
+/** Display names: the registry's (the owner may rename a brand), over the known list. */
+const brandNames = (registry: readonly BrandView[] = []): Map<string, string> =>
+  new Map([...KNOWN_BRANDS.map((b) => [b.slug, b.name] as [string, string]), ...registry.map((b) => [b.slug, b.name] as [string, string])]);
+
+/** The brand registry for the matrix headers (names, logos). Never throws: without it, the catalogue's names. */
+async function registryOrEmpty(container: MedusaContainer): Promise<BrandView[]> {
+  try {
+    return await listBrands(container);
+  } catch {
+    return [];
+  }
+}
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
@@ -276,15 +294,18 @@ async function loadProductSection(
   container: MedusaContainer,
   section: "frames" | "cases" | null,
   stores: MatrixStore[],
-  opts: { q?: string; ids?: string[]; withCosts: boolean }
+  opts: { q?: string; ids?: string[]; brand?: string; withCosts: boolean }
 ): Promise<MatrixGroup[]> {
   const ids = stores.map((s) => s.id);
-  const [raw, rules, discounts, assortment, costRows] = await Promise.all([
-    loadProductRows(container, { q: opts.q, ids: opts.ids }),
+  // A single row (`ids`, the cell route's answer) needs no registry: no header is drawn for it.
+  const wantsHeaders = !opts.ids;
+  const [raw, rules, discounts, assortment, costRows, registry] = await Promise.all([
+    loadProductRows(container, { q: opts.q, ids: opts.ids, brand: opts.brand }),
     openRules(container, ids).catch(() => [] as PriceRuleLike[]),
     storeDiscountIndex(container, ids),
     assortmentByStore(container, ids),
     opts.withCosts ? listFrameCosts(container).catch(() => [] as FrameCostRow[]) : Promise.resolve([] as FrameCostRow[]),
+    wantsHeaders ? registryOrEmpty(container) : Promise.resolve([] as BrandView[]),
   ]);
   const caseIds = caseProductIdsOf(rules);
   const products = raw
@@ -298,7 +319,37 @@ async function loadProductSection(
     assortment,
     opts.withCosts ? { rows: new Map(costRows.map((c) => [c.sku, c])), variations: new Map() } : null
   );
-  return withBrandExposure(groupFrameRows(rows, products, brandNames()), stores, assortment);
+  // v2: each brand header carries, per store, the brand price and the brand
+  // discount (the cases section reads case-scoped brand prices), and the logo.
+  return withBrandExposure(groupFrameRows(rows, products, brandNames(registry)), stores, assortment, {
+    rules,
+    discounts,
+    scope: section === "cases" ? "case" : "frame",
+    logos: wantsHeaders ? new Map(registry.map((b) => [b.slug, b.logo_url])) : undefined,
+  });
+}
+
+/**
+ * ONE brand's group as the frames (or cases) section shows it — the answer of
+ * a `kind: "brand"` cell write, so the screen repaints the header and every
+ * row under it. Null when the brand has no listed model.
+ */
+export async function loadBrandGroup(
+  container: MedusaContainer,
+  slug: string,
+  scope: "frame" | "case",
+  opts: { withCosts: boolean; stores?: MatrixStore[] }
+): Promise<MatrixGroup | null> {
+  const stores = opts.stores ?? (await loadMatrixStores(container));
+  const groups = await loadProductSection(container, scope === "case" ? "cases" : "frames", stores, { brand: slug, withCosts: opts.withCosts });
+  return groups.find((g) => g.key === slug) ?? groups[0] ?? null;
+}
+
+/** Whether a brand slug exists: some listed model carries it, or the registry has it. */
+export async function brandExists(container: MedusaContainer, slug: string): Promise<boolean> {
+  const brands = await registryOrEmpty(container);
+  if (brands.some((b) => b.slug === slug)) return true;
+  return (await loadProductRows(container, { brand: slug })).length > 0;
 }
 
 const num = (v: unknown): number | null => {
@@ -462,16 +513,21 @@ export function invalidatePriceCaches(): void {
  * `setItemDiscount` audit themselves; costs as `cost.change`, lens cells as
  * `price.change`, the same entities the older routes use).
  */
-export async function executeCellOp(container: MedusaContainer, op: CellOp, row: MatrixRow, actorId: string | null): Promise<string | null> {
+export async function executeCellOp(container: MedusaContainer, op: CellOp, rowIn: MatrixRow | null, actorId: string | null): Promise<string | null> {
+  if (op.op === "brand_price" || op.op === "brand_discount") return executeBrandOp(container, op, actorId);
+  if (!rowIn) return "unknown_item";
+  const row = rowIn;
   switch (op.op) {
     case "frame_cost": {
-      if (!row.sku) return "unknown_item";
-      const { row: after, before } = await setOwnerFrameCost(container, { sku: row.sku, costCents: op.cents }, actorId);
+      // v2: the MODEL's key (row.cost_key, e.g. DC50), never a slug SKU's.
+      const costKey = row.cost_key || row.sku;
+      if (!costKey) return "unknown_item";
+      const { row: after, before } = await setOwnerFrameCost(container, { sku: costKey, costCents: op.cents }, actorId);
       await recordAudit(container, {
         actorId,
         action: "cost.change",
         entity: "frame_cost",
-        entityId: frameCostKeyOf(row.sku),
+        entityId: frameCostKeyOf(costKey),
         before: frameCostAudit(before),
         after: frameCostAudit(after),
       });
@@ -559,6 +615,30 @@ export async function executeCellOp(container: MedusaContainer, op: CellOp, row:
   }
 }
 
+/**
+ * A brand's price or discount in one store (v2). The price is a
+ * `store_price_rule` on `brand:<slug>` (family price, mode override — closing
+ * the open one, as every price write does); the discount a
+ * `store_item_discount` of kind `brand`. Both audited by their writers.
+ */
+async function executeBrandOp(
+  container: MedusaContainer,
+  op: Extract<CellOp, { op: "brand_price" } | { op: "brand_discount" }>,
+  actorId: string | null
+): Promise<string | null> {
+  if (op.op === "brand_discount") {
+    await setItemDiscount(container, { storeId: op.storeId, kind: BRAND_DISCOUNT_KIND, key: op.slug, pct: op.pct }, actorId);
+    return null;
+  }
+  await replaceRule(
+    container,
+    { establishmentId: op.storeId, scope: op.scope, target: brandTarget(op.slug), family: "price" },
+    op.usd === null ? null : { mode: "override", value: Math.round(op.usd * 100) / 100, source: "price-matrix-brand" },
+    actorId
+  );
+  return null;
+}
+
 // ── Import ───────────────────────────────────────────────────────────────────
 
 export interface ImportContext {
@@ -578,10 +658,12 @@ export async function planMatrixImport(container: MedusaContainer, rows: unknown
   const stores = await loadMatrixStores(container);
   const list = Array.isArray(rows) ? rows : [];
   const sections = new Set<MatrixSection>();
+  let wantsBrands = false;
   for (const r of list) {
     const s = (r as Record<string, unknown> | null)?.["section"];
     if (s === "frames" || s === "cases") sections.add("frames");
     else if (s === "lenses" || s === "treatments") sections.add(s);
+    else if (s === "brands") wantsBrands = true;
   }
   const index = { products: new Map<string, MatrixRow>(), lenses: new Map<string, MatrixRow>(), treatments: new Map<string, MatrixRow>() };
   const byKey = new Map<string, MatrixRow>();
@@ -602,13 +684,26 @@ export async function planMatrixImport(container: MedusaContainer, rows: unknown
       }
     }
   }
+  // «Marcas» (v2): the brand headers of the frames section, then the cases'
+  // (the case brand's price is case-scoped), as they are today.
+  let brands: Map<string, ImportBrand> | undefined;
+  if (wantsBrands) {
+    brands = new Map();
+    const [frameGroups, caseGroups] = await Promise.all([
+      loadProductSection(container, "frames", stores, { withCosts: false }),
+      loadProductSection(container, "cases", stores, { withCosts: false }),
+    ]);
+    indexImportBrands(caseGroups.filter((g) => brandScopeOf(g.key) === "case"), "case", brands);
+    indexImportBrands(frameGroups, "frame", brands);
+    indexImportBrands(caseGroups, "case", brands);
+  }
   // "prog-mid:cr39:digital" (as a book may spell it) → the stored "prog-mid:cr39".
   const canonical = (key: string): string => {
     const parts = parseLensBaseKey(key);
     if (!parts) return key;
     return lensBaseKey(parts.design_code, parts.material_code, parts.finish, categoryOf.get(parts.design_code) ?? null);
   };
-  return { stores, rows: byKey, plan: buildImportPlan(list, { ...index, stores }, canonical) };
+  return { stores, rows: byKey, plan: buildImportPlan(list, { ...index, brands, stores }, canonical) };
 }
 
 /**
@@ -627,8 +722,9 @@ export async function applyMatrixImport(
   const worker = async () => {
     for (let c = queue.shift(); c; c = queue.shift()) {
       const planned = planCellWrite(changeAsCellWrite(c));
-      const row = ctx.rows.get(rowKey(c.kind, c.key));
-      if ("reason" in planned || !row) {
+      // A brand change has no article row: its writer only needs the slug.
+      const row = c.kind === "brand" ? null : ctx.rows.get(rowKey(c.kind, c.key)) ?? null;
+      if ("reason" in planned || (!row && c.kind !== "brand")) {
         failed.push({ row: c.row, reason: "reason" in planned ? planned.reason : "unknown_item" });
         continue;
       }
@@ -661,11 +757,24 @@ export interface CatalogBrand {
 }
 
 /**
- * Every brand of the catalogue with its number of listed models, plus the
- * known brands that have none yet (so a new model can be added to one). ONE
- * query. Sorted by name.
+ * v2: the brand registry merged with the catalogue (lib/catalog-brand-data.ts
+ * `listBrands`) — slug, name, models, plus logo_url, kind, active, source,
+ * sort — with the known brands that have no model yet. Falls back to the
+ * catalogue-only list (v1) when the registry cannot be read.
  */
-export async function catalogBrands(container: MedusaContainer): Promise<CatalogBrand[]> {
+export async function catalogBrands(container: MedusaContainer): Promise<Array<CatalogBrand & Partial<BrandView>>> {
+  try {
+    const brands = await listBrands(container);
+    const seen = new Set(brands.map((b) => b.slug));
+    const extra = KNOWN_BRANDS.filter((b) => !seen.has(b.slug)).map((b) => ({ slug: b.slug, name: b.name, models: 0 }));
+    return [...brands, ...extra].sort((a, b) => ((a as Partial<BrandView>).sort ?? 0) - ((b as Partial<BrandView>).sort ?? 0) || a.name.localeCompare(b.name));
+  } catch {
+    return catalogBrandsV1(container);
+  }
+}
+
+/** The v1 list: catalogue brands with their models, plus the known ones. ONE query. Sorted by name. */
+export async function catalogBrandsV1(container: MedusaContainer): Promise<CatalogBrand[]> {
   const pg = pgOf(container);
   const rows = (await pg("product")
     .whereNull("deleted_at")

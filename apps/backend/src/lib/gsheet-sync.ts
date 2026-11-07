@@ -53,6 +53,7 @@ import { loadPrescriptionRecords } from "./prescription-read";
 import { storefrontOrigin } from "./order-access";
 import { tenantName } from "./tenant";
 import {
+  costRefOf,
   frameCostCentsFrom,
   frameCostRowFrom,
   frameCostVariationFrom,
@@ -63,6 +64,7 @@ import {
   type CatalogModel,
   type FrameCostRow,
   type FrameCostSource,
+  type FrameCostTarget,
   type FrameCostVariationIndex,
   type FrameCostVariationRow,
 } from "./frame-cost";
@@ -2822,6 +2824,7 @@ const FRAME_COSTS_HEADER_ROW = 3;
 
 const FRAME_COST_SOURCE_LABEL: Record<FrameCostSource, string> = {
   supplier_list: "Lista del proveedor",
+  supplier_list_prev: "Lista anterior del proveedor",
   owner_edit: "Editado por el dueño",
 };
 
@@ -2889,10 +2892,10 @@ export function frameCostsSheetRows(
   const headers = frameCostsSheetHeaders(stores, prices !== undefined);
   const byKey = new Map(costs.map((c) => [c.sku, c]));
   const withCost = catalog.length
-    ? catalog.filter((m) => frameCostCentsFrom(byKey, m.sku) !== null).length
+    ? catalog.filter((m) => frameCostCentsFrom(byKey, costRefOf(m)) !== null).length
     : costs.length;
   /** Lo que paga cada tienda, o "" cuando hereda: una celda por tienda. */
-  const storeCells = (sku: string): Cell[] =>
+  const storeCells = (sku: FrameCostTarget): Cell[] =>
     stores.map((st) => {
       const own = frameCostVariationFrom(variations, sku, st.id);
       return own ? dollarsOf(own.cost_cents) : "";
@@ -2932,7 +2935,9 @@ export function frameCostsSheetRows(
     (a, b) => Number(a.is_case) - Number(b.is_case) || a.brand_slug.localeCompare(b.brand_slug) || a.title.localeCompare(b.title)
   );
   for (const m of sorted) {
-    const cost = frameCostRowFrom(byKey, m.sku);
+    // v2: by MODEL first (the title), then any colour's SKU, then the UPCs.
+    const ref = costRefOf(m);
+    const cost = frameCostRowFrom(byKey, ref);
     const costCents = cost ? cost.cost_cents : null;
     const margin = costCents != null && m.price_cents != null ? m.price_cents - costCents : null;
     rows.push([
@@ -2945,7 +2950,7 @@ export function frameCostsSheetRows(
       margin == null || !m.price_cents ? "" : Number(((margin / m.price_cents) * 100).toFixed(1)),
       cost ? FRAME_COST_SOURCE_LABEL[cost.source] : "Sin costo",
       cost ? stamp(cost.updated_at) : "",
-      ...storeCells(m.sku),
+      ...storeCells(ref),
       ...priceCells(m.product_id),
     ]);
   }

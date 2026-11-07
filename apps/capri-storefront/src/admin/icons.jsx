@@ -98,6 +98,18 @@ const PATHS = {
   undo: ["M3 7v6h6", "M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"],
   // Desactivar una tienda o un punto de venta (no es «borrar»: se apaga).
   power: ["M12 2v10", "M18.4 6.6a9 9 0 1 1-12.77.04"],
+  // «Productos y precios» v2 (7-nov-2026): secciones, catálogo y fotos.
+  // Estuche de gafas: cápsula con bisagra y cierre.
+  case: ["M3 12a5 5 0 0 1 5-5h8a5 5 0 0 1 0 10H8a5 5 0 0 1-5-5z", "M3 12h18", "M10.5 12v1.5h3V12"],
+  // Lente: lente biconvexa con el eje óptico.
+  lens: ["M12 2.5c3.6 2.3 5.5 5.6 5.5 9.5s-1.9 7.2-5.5 9.5C8.4 19.2 6.5 15.9 6.5 12S8.4 4.8 12 2.5z", "M2 12h3", "M19 12h3"],
+  // Tratamiento: gota (recubrimiento) con su brillo.
+  drop: ["M12 2.7s-6.5 7.1-6.5 11.6a6.5 6.5 0 0 0 13 0C18.5 9.8 12 2.7 12 2.7z", "M9.3 14.6a2.8 2.8 0 0 0 2.4 2.6"],
+  tag: ["M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z", "M7.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"],
+  image: ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z", "m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"],
+  imagePlus: ["M16 5h6", "M19 2v6", "M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5", "m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21", "M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"],
+  moreHorizontal: ["M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z", "M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z", "M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"],
+  ruler: ["M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0z", "m14.5 12.5 2-2", "m11.5 9.5 2-2", "m8.5 6.5 2-2", "m17.5 15.5 2-2"],
 };
 
 export const ICON_NAMES = Object.keys(PATHS);

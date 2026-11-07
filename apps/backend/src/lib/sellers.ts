@@ -322,7 +322,7 @@ export function sellerPlacementProblem(
  */
 export type SellerLinkInput =
   | { seller_id: string }
-  | { create: { establishment_id: string; terminal_id: string; commission_pct: number; code: string | null } };
+  | { create: { establishment_id: string; terminal_id: string; commission_pct: number; code: string | null; /** No % sent: take the owner's default (lib/seller-link.ts). */ use_default?: boolean } };
 
 export type SellerLinkReason = "seller_link_required" | "seller_not_found" | "seller_taken" | "seller_inactive" | "commission_invalid" | SellerPlacementReason;
 
@@ -338,10 +338,12 @@ export function parseSellerLink(raw: unknown): SellerLinkInput | { reason: Selle
   const terminal_id = typeof cc["terminal_id"] === "string" ? cc["terminal_id"].trim() : "";
   if (!establishment_id) return { reason: "store_required" };
   if (!terminal_id) return { reason: "terminal_required" };
-  const pct = parseCommissionPct(cc["commission_pct"]);
+  const rawPct = cc["commission_pct"];
+  const pct = parseCommissionPct(rawPct);
   if (pct === null) return { reason: "commission_invalid" };
   const code = String(cc["code"] ?? "").trim() || null;
-  return { create: { establishment_id, terminal_id, commission_pct: pct, code } };
+  const use_default = rawPct === undefined || rawPct === null || rawPct === "";
+  return { create: { establishment_id, terminal_id, commission_pct: pct, code, ...(use_default ? { use_default } : {}) } };
 }
 
 /**

@@ -616,6 +616,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
                 topSeller ? { label: t("adm.ex.pill.top"), value: `${topSeller.name} · ${m(topSeller.sales)}` } : null,
                 { label: t("adm.ex.pill.count"), value: int(sales.totals.count, lang) },
               ]}>
+              {showProfit && <button type="button" className="ex-link" onClick={() => go("products", { sub: "rules-statement" })}><Icon name="receipt" size={13} /> {t("adm.fin.st.open")} <Icon name="arrowRight" size={13} /></button>}
               <Trends rows={sales.rows} range={dates} web={sf.isAll || sf.isWeb} sellers={sellerRows.rows} zero={sellerRows.zero} onSeller={openSeller} go={go} showCommission={showCommission} loading={sales.state === "loading"} />
             </Accordion>
           )}

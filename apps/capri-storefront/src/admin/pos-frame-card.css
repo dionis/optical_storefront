@@ -74,3 +74,5 @@
 .pos-lines li.pos-line-card span { flex: initial; min-width: 0; }
 .pos-lines li.pos-line-card .pfc-title { flex: 1 1 auto; }
 .pos-lines li.pos-line-card .pfc-swatch { flex: 0 0 auto; }
+/* Tablet: el selector de color de la montura elegida, a 44 px de alto. */
+@media (pointer: coarse) { .pfc-color-select { min-height: 44px; padding: 4px 12px; font-size: 16px; } }

@@ -1,3 +1,5 @@
+import { commissionResolverOf } from "./commission-pct";
+import { loadDefaultCommissionPct } from "./store-cost-toggle";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -778,15 +780,11 @@ async function loadOrderContext(pg: Knex, f: AnalyticsFilter, orderIds?: string[
   };
 }
 
-/** Same precedence as the seller's own panel: their profile, then their seller record. */
+/** One precedence everywhere (lib/commission-pct.ts): their profile, their seller record, then the owner's default. */
 async function commissionResolver(container: MedusaContainer, lines: InsightLine[], costing: Awaited<ReturnType<typeof loadCostingContext>>): Promise<(l: InsightLine) => number | null> {
   const sellerIds = [...new Set(lines.map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
-  const profiles = await profilesByUser(container, sellerIds);
-  return (l: InsightLine) => {
-    const own = l.seller_id ? profiles.get(l.seller_id)?.commission_pct ?? null : null;
-    if (own !== null) return own;
-    return l.seller_code ? costing.sellerByCode.get(l.seller_code)?.commission_pct ?? null : null;
-  };
+  const [profiles, defaultPct] = await Promise.all([profilesByUser(container, sellerIds), loadDefaultCommissionPct(container)]);
+  return commissionResolverOf(profiles, costing.sellerByCode, defaultPct);
 }
 
 /**

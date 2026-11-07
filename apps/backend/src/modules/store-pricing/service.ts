@@ -8,6 +8,7 @@ import {
   StorePriceBandVariation,
   StorePriceRule,
   StoreItemDiscount,
+  CatalogBrand,
 } from "./models/index";
 
 /**
@@ -30,4 +31,6 @@ export default class StorePricingModuleService extends MedusaService({
   StorePriceBand,
   StorePriceBandVariation,
   StoreItemDiscount,
+  // v2: the brand registry of «Productos y precios» (lib/catalog-brand-data.ts).
+  CatalogBrand,
 }) {}

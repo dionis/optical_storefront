@@ -1,6 +1,8 @@
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import type { Knex } from "@mikro-orm/knex";
 import { CAPRI_BY_KEY, capriKeyOf } from "../modules/store-pricing/capri-price-list-2026";
+import { CAPRI_PREV_BY_KEY } from "../modules/store-pricing/capri-price-list-prev";
 import { STORE_PRICING_MODULE } from "../modules/store-pricing";
 import type StorePricingModuleService from "../modules/store-pricing/service";
 import { brandOf } from "./store-assortment";
@@ -47,10 +49,26 @@ import { masterLinePrice, storeLinePrice, type MasterLinePrice, type PriceRuleLi
  *     a per-store load would be a query inside the loop. With an empty or stale
  *     cache the answer degrades to the compiled supplier list, never to zero,
  *     and never to another store's figure.
+ *
+ * v2 (7-nov-2026, docs/PRICE-MATRIX.md): a model is matched to its cost by
+ * MODEL first (the product title, "DC 50" → DC50), then by every colour's
+ * SKU (also cut at word boundaries: the scraper's `dc-50-di-caprio-grey`),
+ * then by UPC — `frameCostCandidates`. A caller that only holds a SKU
+ * (costing, the sales panel, the store P&L: `frameCostCents(sku, storeId)`)
+ * gets the model from the catalogue aliases the cache loads with the costs.
+ * The supplier lists: 2026 first, then the previous one
+ * (`capri-price-list-prev.ts`, source `supplier_list_prev`), then nothing.
  */
 
-export const FRAME_COST_SOURCES = ["supplier_list", "owner_edit"] as const;
+/**
+ * `supplier_list_prev` (v2, 7-nov-2026): the figure comes from the PREVIOUS
+ * supplier list (`capri-price-list-prev.ts`) because the 2026 list does not
+ * carry the model. A new list refreshes both kinds of supplier rows; neither
+ * ever touches `owner_edit`.
+ */
+export const FRAME_COST_SOURCES = ["supplier_list", "supplier_list_prev", "owner_edit"] as const;
 export type FrameCostSource = (typeof FRAME_COST_SOURCES)[number];
+export const isFrameCostSource = (v: unknown): v is FrameCostSource => FRAME_COST_SOURCES.includes(v as FrameCostSource);
 
 /**
  * WHERE an effective cost comes from, in precedence order. `source` above says
@@ -58,11 +76,11 @@ export type FrameCostSource = (typeof FRAME_COST_SOURCES)[number];
  * was asked about, which is the difference between "the chain pays this" and
  * "this store pays this".
  */
-export const FRAME_COST_ORIGINS = ["store_variation", "owner_edit", "supplier_list"] as const;
+export const FRAME_COST_ORIGINS = ["store_variation", "owner_edit", "supplier_list", "supplier_list_prev"] as const;
 export type FrameCostOrigin = (typeof FRAME_COST_ORIGINS)[number];
 
 export interface FrameCostRow {
-  /** Normalised key (A-Z0-9) the catalogue SKU resolves to. */
+  /** Normalised key (A-Z0-9) the catalogue model resolves to. */
   sku: string;
   /** Model as the supplier prints it ("CASE SC-2 W/CLIP"). */
   model: string;
@@ -92,14 +110,18 @@ export type FrameCostVariationIndex = ReadonlyMap<string, ReadonlyMap<string, Fr
 /**
  * The synchronous lookup `computeCostSheet` takes: cents, or null when
  * unknown. `storeId` is the store the sale belongs to — without it the answer
- * is the master, which is what the chain-wide views want.
+ * is the master, which is what the chain-wide views want. `model` (the product
+ * title, v2) is tried BEFORE the SKU when the caller has it; without it the
+ * cache's catalogue aliases supply it (see `frameCostCents`).
  */
-export type FrameCostLookup = (sku: string, storeId?: string | null) => number | null;
+export type FrameCostLookup = (sku: string, storeId?: string | null, model?: string | null) => number | null;
 
 const plainKey = (sku: unknown): string =>
   String(sku ?? "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+
+const EMPTY_ROWS: ReadonlyMap<string, FrameCostRow> = new Map();
 
 /**
  * Key a catalogue SKU is stored under. `capriKeyOf` carries the two shapes the
@@ -110,56 +132,204 @@ export function frameCostKeyOf(sku: string): string {
   return capriKeyOf(sku);
 }
 
-/** The supplier list's row for a key, as a `FrameCostRow`; null when it has none. */
-function listRow(key: string): FrameCostRow | null {
-  const hit = CAPRI_BY_KEY.get(key);
-  if (!hit) return null;
-  return {
-    sku: hit.key,
-    model: hit.model,
-    book_cents: hit.book_cents,
-    cost_cents: hit.cost_cents,
-    source: "supplier_list",
-    updated_at: null,
-    updated_by: null,
+// ── Which supplier key a catalogue model is (v2: model first) ────────────────
+//
+// Until 7-nov-2026 the cost was looked up by the variant SKU alone. In staging
+// the scraper invents SKUs when Capri publishes no UPC — `<handle>-<colour>`,
+// e.g. `dc-50-di-caprio-grey` — so EVERY model read «falta». The supplier's
+// lists are keyed by MODEL ("DC 50" → DC50), which is the product's title, so
+// the model is now asked first and the SKUs (and the UPCs) only after it.
+
+/**
+ * What names a catalogue model for its cost: its title (the model, "DC 50"),
+ * every colour's SKU, every colour's UPC. Any of them may be missing; a bare
+ * string is a SKU (the shape every caller used before v2).
+ */
+export interface FrameCostRef {
+  model?: string | null;
+  skus?: ReadonlyArray<string | null | undefined>;
+  upcs?: ReadonlyArray<string | null | undefined>;
+}
+export type FrameCostTarget = string | FrameCostRef;
+
+/**
+ * Words a catalogue title or a scraper SKU may carry around the model that the
+ * supplier's list never prints ("Grande GR 801", "dc-50-di-caprio-grey"). Only
+ * stripped as a whole prefix or suffix of the normalised key, and only tried
+ * after the key as written, so "SIMPLYLITE CASE" still matches itself first.
+ */
+export const FRAME_COST_BRAND_WORDS = [
+  "DICAPRIO",
+  "FLEXURE",
+  "MILLENNIAL",
+  "MILLENIAL",
+  "PEACHTREE",
+  "TRENDY",
+  "FOURYOU",
+  "4U",
+  "GRANDE",
+  "SIMPLYLITE",
+  "PRORX",
+] as const;
+
+/** The spellings of ONE string, most literal first. */
+function keySpellings(raw: unknown): string[] {
+  const plain = plainKey(raw);
+  if (!plain) return [];
+  const out = [plain];
+  const add = (k: string) => {
+    if (k.length >= 2 && !out.includes(k)) out.push(k);
   };
+  // The two catalogue shapes `capriKeyOf` knows: YC21102 → 21102, DI CAPRIO CASE → DI CAPRIO CAS.
+  if (plain.startsWith("YC")) add(plain.slice(2));
+  if (plain === "DICAPRIOCASE") add("DICAPRIOCAS");
+  for (const w of FRAME_COST_BRAND_WORDS) {
+    if (plain.length > w.length + 1 && plain.startsWith(w)) add(plain.slice(w.length));
+    if (plain.length > w.length + 1 && plain.endsWith(w)) add(plain.slice(0, plain.length - w.length));
+  }
+  return out;
 }
 
 /**
- * The MASTER row for a SKU: the stored one (looked up by its own spelling
- * first, then by the supplier's key), else the compiled list, else null. Pure.
+ * A slug-like SKU (`dc-50-di-caprio-grey`, `T 35-crystal-black`) cut at every
+ * word boundary, longest first: DC50DICAPRIO, DC50DI, DC50, DC. Whole words
+ * only, so `dc-50-…` can never become DC501. Empty for a one-word SKU.
  */
-export function frameCostRowFrom(rows: ReadonlyMap<string, FrameCostRow>, sku: string): FrameCostRow | null {
-  const plain = plainKey(sku);
-  if (!plain) return null;
-  const direct = rows.get(plain);
-  if (direct) return direct;
-  const key = frameCostKeyOf(sku);
-  return rows.get(key) ?? listRow(key);
+function slugPrefixes(raw: unknown): string[] {
+  const words = String(raw ?? "")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+  const out: string[] = [];
+  for (let n = words.length - 1; n >= 1; n--) {
+    const k = plainKey(words.slice(0, n).join(""));
+    if (k.length >= 2 && !out.includes(k)) out.push(k);
+  }
+  return out;
 }
 
-/** The master `cost_cents` for a SKU, or null when nothing knows it. Pure. */
-export function frameCostCentsFrom(rows: ReadonlyMap<string, FrameCostRow>, sku: string): number | null {
-  const row = frameCostRowFrom(rows, sku);
+const asRef = (target: FrameCostTarget): FrameCostRef => (typeof target === "string" ? { skus: [target] } : target ?? {});
+
+/**
+ * Every key a model could be stored under, in the order they are tried:
+ *
+ *   1. the MODEL (title) as written, then without a brand word around it;
+ *   2. each SKU as written (and its YC / brand-word spellings);
+ *   3. each SKU cut at word boundaries (the scraper's `<handle>-<colour>`);
+ *   4. each UPC.
+ *
+ * Pure, deterministic, no duplicates.
+ */
+export function frameCostCandidates(target: FrameCostTarget): string[] {
+  const ref = asRef(target);
+  const out: string[] = [];
+  const push = (keys: string[]) => {
+    for (const k of keys) if (!out.includes(k)) out.push(k);
+  };
+  push(keySpellings(ref.model));
+  const skus = (ref.skus ?? []).filter((s): s is string => typeof s === "string" && s.trim() !== "");
+  for (const s of skus) push(keySpellings(s));
+  for (const s of skus) push(slugPrefixes(s));
+  for (const u of ref.upcs ?? []) push(plainKey(u) ? [plainKey(u)] : []);
+  return out;
+}
+
+/** A supplier list's row for a key (2026 first, then the previous list); null when neither has one. */
+function listRow(key: string): FrameCostRow | null {
+  const hit = CAPRI_BY_KEY.get(key);
+  if (hit) {
+    return { sku: hit.key, model: hit.model, book_cents: hit.book_cents, cost_cents: hit.cost_cents, source: "supplier_list", updated_at: null, updated_by: null };
+  }
+  const prev = CAPRI_PREV_BY_KEY.get(key);
+  if (prev && prev.wholesale_cents != null) {
+    return { sku: prev.key, model: prev.model, book_cents: 0, cost_cents: prev.wholesale_cents, source: "supplier_list_prev", updated_at: null, updated_by: null };
+  }
+  return null;
+}
+
+/** The compiled lists' figure for a key (2026 → previous → none), as a row. Pure. */
+export function supplierListRow(key: string): FrameCostRow | null {
+  return listRow(plainKey(key));
+}
+
+/**
+ * The MASTER row for a model, in three passes over `frameCostCandidates`:
+ *
+ *   1. a row the OWNER edited, under any of the model's keys (his figure beats
+ *      the lists wherever the panel saved it — older screens saved under the
+ *      SKU spelling, v2 under the model);
+ *   2. any stored row (the seeded supplier rows), model key first;
+ *   3. the compiled lists (2026, then the previous one).
+ *
+ * Null when nothing knows the model — never a zero. Pure.
+ */
+export function frameCostRowFrom(rows: ReadonlyMap<string, FrameCostRow>, target: FrameCostTarget): FrameCostRow | null {
+  const keys = frameCostCandidates(target);
+  if (!keys.length) return null;
+  for (const k of keys) {
+    const r = rows.get(k);
+    if (r && r.source === "owner_edit") return r;
+  }
+  for (const k of keys) {
+    const r = rows.get(k);
+    if (r) return r;
+  }
+  for (const k of keys) {
+    const r = listRow(k);
+    if (r) return r;
+  }
+  return null;
+}
+
+/**
+ * The row stored (or listed) under THIS spelling only — the SKU as written,
+ * then its supplier key — with none of the model / word-boundary candidates.
+ * What tells «this colour's SKU IS the model's key» apart from «this SKU
+ * merely starts with it» (lib/price-matrix.ts `modelSkuOf`). Pure.
+ */
+export function frameCostRowExact(rows: ReadonlyMap<string, FrameCostRow>, sku: string): FrameCostRow | null {
+  const plain = plainKey(sku);
+  if (!plain) return null;
+  const key = frameCostKeyOf(sku);
+  return rows.get(plain) ?? rows.get(key) ?? listRow(key);
+}
+
+/** The master `cost_cents` for a model, or null when nothing knows it. Pure. */
+export function frameCostCentsFrom(rows: ReadonlyMap<string, FrameCostRow>, target: FrameCostTarget): number | null {
+  const row = frameCostRowFrom(rows, target);
   return row ? row.cost_cents : null;
 }
 
 /**
- * A store's own row for a SKU, with the same two-step key resolution as the
- * master (own spelling, then the supplier's key) so a variation typed from one
- * screen is found from every other. Pure; null when that store inherits.
+ * The key a cost of this model is (or would be) stored under: the key of the
+ * row that answers for it today, else the first key a supplier list knows,
+ * else the model as written (else the first SKU). What a write uses, so an
+ * edit lands on the very row every reader resolves. Pure.
+ */
+export function frameCostKeyFor(target: FrameCostTarget, rows: ReadonlyMap<string, FrameCostRow> = EMPTY_ROWS): string {
+  const hit = frameCostRowFrom(rows, target);
+  if (hit) return hit.sku;
+  const keys = frameCostCandidates(target);
+  return keys[0] ?? "";
+}
+
+/**
+ * A store's own row for a model, with the same candidate keys as the master so
+ * a variation typed from one screen is found from every other. Pure; null when
+ * that store inherits.
  */
 export function frameCostVariationFrom(
   variations: FrameCostVariationIndex,
-  sku: string,
+  target: FrameCostTarget,
   storeId: string | null | undefined
 ): FrameCostVariationRow | null {
   if (!storeId) return null;
   const own = variations.get(storeId);
   if (!own || own.size === 0) return null;
-  const plain = plainKey(sku);
-  if (!plain) return null;
-  return own.get(plain) ?? own.get(frameCostKeyOf(sku)) ?? null;
+  for (const k of frameCostCandidates(target)) {
+    const hit = own.get(k);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** An effective cost together with the master it is (or is not) a variation of. */
@@ -171,7 +341,7 @@ export interface ResolvedFrameCost {
   book_cents: number;
   /** What the asked scope pays, in cents. Never 0 by default — see the module doc. */
   cost_cents: number;
-  /** Which of the three layers answered. */
+  /** Which of the layers answered. */
   origin: FrameCostOrigin;
   /** The chain's figure, kept even when a store overrides it, so the panel can show both. */
   master_cost_cents: number | null;
@@ -184,19 +354,19 @@ export interface ResolvedFrameCost {
 
 /**
  * THE resolution, in one pure function: the store's variation, then the master
- * (the owner's edit or the supplier's list), then nothing. Returns null when no
+ * (the owner's edit or a supplier list), then nothing. Returns null when no
  * layer knows the model — never a zero.
  */
 export function resolveFrameCost(
   rows: ReadonlyMap<string, FrameCostRow>,
   variations: FrameCostVariationIndex,
-  sku: string,
+  target: FrameCostTarget,
   storeId: string | null | undefined
 ): ResolvedFrameCost | null {
-  const master = frameCostRowFrom(rows, sku);
-  const own = frameCostVariationFrom(variations, sku, storeId);
+  const master = frameCostRowFrom(rows, target);
+  const own = frameCostVariationFrom(variations, target, storeId);
   if (!master && !own) return null;
-  const key = own?.sku ?? master?.sku ?? frameCostKeyOf(sku);
+  const key = own?.sku ?? master?.sku ?? frameCostCandidates(target)[0] ?? "";
   const base = {
     sku: key,
     model: master?.model ?? key,
@@ -219,16 +389,16 @@ export function resolveFrameCost(
 }
 
 /**
- * `cost_cents` for a SKU in a store (or chain-wide with no store), or null when
- * nothing knows it. Pure, and the function every margin goes through.
+ * `cost_cents` for a model in a store (or chain-wide with no store), or null
+ * when nothing knows it. Pure, and the function every margin goes through.
  */
 export function frameCostCentsFor(
   rows: ReadonlyMap<string, FrameCostRow>,
   variations: FrameCostVariationIndex,
-  sku: string,
+  target: FrameCostTarget,
   storeId: string | null | undefined
 ): number | null {
-  const resolved = resolveFrameCost(rows, variations, sku, storeId);
+  const resolved = resolveFrameCost(rows, variations, target, storeId);
   return resolved ? resolved.cost_cents : null;
 }
 
@@ -252,6 +422,13 @@ let cache: {
   rows: Map<string, FrameCostRow>;
   /** store → normalised SKU → that store's own figure. */
   stores: Map<string, Map<string, FrameCostVariationRow>>;
+  /**
+   * Catalogue aliases: normalised variant SKU / UPC → the model (product
+   * title). What lets a caller that only holds a sale's SKU
+   * (`sale_fact.sku`, a board order's line) still be costed by MODEL — the
+   * store P&L, the sales panel and the costs tab pass a SKU and nothing else.
+   */
+  aliases: Map<string, string>;
   loaded: boolean;
 } | null = null;
 
@@ -272,14 +449,48 @@ export function indexFrameCostVariations(
 /** Replace the cache with these rows (the loader and the tests). */
 export function setFrameCostCache(
   rows: readonly FrameCostRow[],
-  variations: readonly FrameCostVariationRow[] = []
+  variations: readonly FrameCostVariationRow[] = [],
+  aliases: ReadonlyMap<string, string> | ReadonlyArray<CatalogAlias> = new Map()
 ): void {
   cache = {
     at: Date.now(),
     rows: new Map(rows.map((r) => [r.sku, r])),
     stores: indexFrameCostVariations(variations),
+    aliases: Array.isArray(aliases) ? indexCatalogAliases(aliases as ReadonlyArray<CatalogAlias>) : new Map(aliases as ReadonlyMap<string, string>),
     loaded: true,
   };
+}
+
+/** One colour of the catalogue as the alias loader reads it. */
+export interface CatalogAlias {
+  /** The product title (the model). */
+  title: string;
+  sku?: string | null;
+  upc?: string | null;
+}
+
+/**
+ * Normalised SKU / UPC → model. A code two products share (it should not
+ * happen) keeps the first, like the supplier list does with a duplicate key.
+ * Pure.
+ */
+export function indexCatalogAliases(rows: ReadonlyArray<CatalogAlias>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const title = String(r.title ?? "").trim();
+    if (!title) continue;
+    for (const code of [r.sku, r.upc]) {
+      const k = plainKey(code);
+      if (k && !out.has(k)) out.set(k, title);
+    }
+  }
+  return out;
+}
+
+/** The model the catalogue gives this SKU (or UPC), when the cache holds the catalogue. */
+export function catalogModelOfSku(sku: string | null | undefined): string | null {
+  const k = plainKey(sku);
+  return k ? cache?.aliases.get(k) ?? null : null;
 }
 
 /** Drop the cache: after an edit, and between tests. */
@@ -316,14 +527,18 @@ export function frameCostsLoaded(): boolean {
  * does not carry still falls back to the compiled list, so a model the next
  * supplier list adds is costed before anyone reseeds anything.
  */
-export function frameCostCents(sku: string, storeId?: string | null): number | null {
-  return cache?.loaded ? frameCostCentsFor(cache.rows, cache.stores, sku, storeId) : null;
+export function frameCostCents(sku: string, storeId?: string | null, model?: string | null): number | null {
+  if (!cache?.loaded) return null;
+  // v2: the MODEL first — the caller's (the product title) or, when it only
+  // has the SKU, the one the catalogue gives that SKU — then the SKU itself.
+  const name = model && String(model).trim() ? model : catalogModelOfSku(sku);
+  return frameCostCentsFor(cache.rows, cache.stores, { model: name, skus: [sku] }, storeId);
 }
 
 const svc = (c: MedusaContainer) => c.resolve<StorePricingModuleService>(STORE_PRICING_MODULE);
 
 function toRow(r: Record<string, unknown>): FrameCostRow {
-  const source = r["source"] === "owner_edit" ? "owner_edit" : "supplier_list";
+  const source: FrameCostSource = isFrameCostSource(r["source"]) ? r["source"] : "supplier_list";
   const at = r["updated_at"];
   return {
     sku: String(r["sku"] ?? ""),
@@ -404,7 +619,29 @@ export async function ensureFrameCostCache(container: MedusaContainer): Promise<
   } catch {
     stores = cache?.stores ?? new Map();
   }
-  cache = { at: Date.now(), rows, stores, loaded };
+  let aliases: Map<string, string>;
+  try {
+    aliases = indexCatalogAliases(await loadCatalogAliases(container));
+  } catch {
+    // No catalogue (a stubbed container, a database without Medusa's tables):
+    // the SKU alone still resolves through `frameCostCandidates`.
+    aliases = cache?.aliases ?? new Map();
+  }
+  cache = { at: Date.now(), rows, stores, aliases, loaded };
+}
+
+/**
+ * Every live colour of the catalogue with its model: ONE query (~600 models ×
+ * 3 colours), refreshed with the cost cache. Throws — the caller swallows it.
+ */
+export async function loadCatalogAliases(container: MedusaContainer): Promise<CatalogAlias[]> {
+  const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+  const rows = (await pg("product_variant as v")
+    .join("product as p", "p.id", "v.product_id")
+    .whereNull("v.deleted_at")
+    .whereNull("p.deleted_at")
+    .select("p.title", "v.sku", pg.raw(`v.metadata->>'upc' as upc`))) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({ title: String(r["title"] ?? ""), sku: (r["sku"] as string | null) ?? null, upc: (r["upc"] as string | null) ?? null }));
 }
 
 /**
@@ -415,7 +652,8 @@ export async function ensureFrameCostCache(container: MedusaContainer): Promise<
  *  - setting marks the row `owner_edit`, which is what makes the seeding
  *    migration and the next supplier list leave it alone;
  *  - clearing restores the list's `cost_cents` and marks the row
- *    `supplier_list` again, so it starts following the list once more. A model
+ *    `supplier_list` (or `supplier_list_prev` when only the previous list
+ *    has it) again, so it starts following the list once more. A model
  *    the list does not carry is cleared back to "cost unknown" by deleting the
  *    row (nothing else can answer for it, and 0 would be a lie).
  *
@@ -458,7 +696,8 @@ export async function setOwnerFrameCost(
         supplier_model: fromList.model,
         book_cents: fromList.book_cents,
         cost_cents: fromList.cost_cents,
-        source: "supplier_list",
+        // The 2026 list's, or the previous list's when only that one has it.
+        source: fromList.source,
         updated_by: actorId,
       },
     ] as never);
@@ -565,6 +804,26 @@ export interface CatalogModel {
   is_case: boolean;
   /** Selling price in cents; null when the model has none yet. */
   price_cents: number | null;
+  /** v2, optional: every colour's SKU, so the cost is found by model, then by any SKU. */
+  skus?: string[];
+  /** v2, optional: every colour's UPC (`metadata.upc_by_color`). */
+  upcs?: string[];
+}
+
+/**
+ * How a catalogue model names itself for its cost (v2): the title is the
+ * MODEL ("DC 50" → DC50), then every colour's SKU, then the UPCs. Pure.
+ */
+export function costRefOf(m: Pick<CatalogModel, "title" | "sku" | "skus" | "upcs">): FrameCostRef {
+  const skus = m.skus?.length ? (m.sku && !m.skus.includes(m.sku) ? [m.sku, ...m.skus] : m.skus) : [m.sku];
+  return { model: m.title, skus, upcs: m.upcs ?? [] };
+}
+
+/** The UPCs a product's metadata carries (`upc_by_color`, the scraper's). Pure. */
+export function upcsOf(metadata: Record<string, unknown> | null | undefined): string[] {
+  const raw = metadata?.["upc_by_color"];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  return Object.values(raw as Record<string, unknown>).filter((v): v is string => typeof v === "string" && v.trim() !== "");
 }
 
 /**
@@ -601,6 +860,8 @@ export async function loadCatalogModels(container: MedusaContainer): Promise<Cat
         out.push({
           product_id: String(p.id),
           sku: String(variants.find((v) => v.sku)?.sku ?? p.handle ?? p.title ?? ""),
+          skus: variants.map((v) => v.sku).filter((x): x is string => typeof x === "string" && x !== ""),
+          upcs: upcsOf(p.metadata as Record<string, unknown> | null),
           title: String(p.title ?? ""),
           brand_slug,
           brand_name: typeof (p.metadata as Record<string, unknown> | null)?.["brand"] === "string" ? String((p.metadata as Record<string, unknown>)["brand"]) : null,
@@ -655,7 +916,7 @@ export function summarizeFrameCosts(
   const missing: FrameCostSummary["missing"] = [];
   let with_cost = 0;
   for (const m of catalog) {
-    if (frameCostCentsFor(byKey, variations, m.sku, storeId) !== null) with_cost++;
+    if (frameCostCentsFor(byKey, variations, costRefOf(m), storeId) !== null) with_cost++;
     else {
       if (missing.length < MISSING_SAMPLE) missing.push({ sku: m.sku, title: m.title, brand_slug: m.brand_slug });
     }
@@ -750,7 +1011,7 @@ export function frameCostStoreRows(
 // ── Cost next to price: the selling price per model, by the cost list's key ──
 
 /** Where a catalogue selling price came from: a store cell's reasons, or the master's. */
-export type CatalogPriceSource = "exact" | "band" | "adjusted" | "base" | MasterLinePrice["frame_source"];
+export type CatalogPriceSource = "exact" | "brand" | "band" | "adjusted" | "base" | MasterLinePrice["frame_source"];
 
 /** Selling price of a catalogue model for the scope asked about, by cost-list key. */
 export interface CatalogSellingPrice {
@@ -782,7 +1043,8 @@ export function catalogSellingPrices(
   catalog: readonly CatalogModel[],
   rules: PriceRuleLike[],
   storeId: string | null,
-  now = new Date()
+  now = new Date(),
+  costRows: ReadonlyMap<string, FrameCostRow> = EMPTY_ROWS
 ): Map<string, CatalogSellingPrice> {
   const out = new Map<string, CatalogSellingPrice>();
   for (const m of catalog) {
@@ -792,15 +1054,17 @@ export function catalogSellingPrices(
     let usd: number;
     let source: CatalogPriceSource;
     if (storeId) {
-      const line = storeLinePrice(rules, { establishmentId: storeId, scope, target: m.product_id, base, lenses: 0 }, now);
+      const line = storeLinePrice(rules, { establishmentId: storeId, scope, target: m.product_id, base, lenses: 0, brand: m.brand_slug }, now);
       usd = line.frame;
-      source = line.frame_source === "store_exact" ? "exact" : line.band ? "band" : line.adjustment ? "adjusted" : "base";
+      source = line.frame_source === "store_exact" ? "exact" : line.frame_source === "brand" ? "brand" : line.band ? "band" : line.adjustment ? "adjusted" : "base";
     } else {
       const line = masterLinePrice(rules, { scope, target: m.product_id, base }, now);
       usd = line.frame;
       source = line.frame_source;
     }
-    const key = frameCostKeyOf(m.sku);
+    // The key the model's COST lives under (model first, v2), so the costs tab
+    // joins a slug-SKU model to its supplier row.
+    const key = frameCostKeyFor(costRefOf(m), costRows);
     // Two models normalising to one key (it happens in the supplier list): the
     // first wins, same as the cost side, so both halves name the same model.
     if (!out.has(key)) out.set(key, { product_id: m.product_id, price_cents: Math.round(usd * 100), source });

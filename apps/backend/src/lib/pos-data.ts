@@ -50,6 +50,7 @@ import { openRules, productPrices } from "./store-pricing-data";
 import { applyPct, linePromoPcts, metadataSaysCase, NO_PROMO, productDiscountOf, promoStoreLine, type LinePromo } from "./price-matrix";
 import { storeDiscountIndex } from "./price-matrix-data";
 import { brandOf, isExposed } from "./store-assortment";
+import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
 import { listAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
 import { tenant } from "./tenant";
@@ -674,18 +675,23 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       title: v.title ?? "",
       sku: v.sku ?? null,
       barcode: v.barcode ?? null,
-      image: firstText(v.metadata?.["image"]),
+      // Absolute (lib/image-url.ts): the catalogue stores bare bucket keys.
+      image: absoluteImageUrl(firstText(v.metadata?.["image"])),
       color: firstText(v.metadata?.["color"], v.title),
       price: null,
     }));
-    const thumbnail = firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image));
+    const thumbnail = absoluteImageUrl(firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image)));
     // Main photo first, then the gallery, then the colours' photos — deduplicated.
-    const images = [...new Set([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)].filter((u): u is string => !!u))].slice(0, MAX_CARD_IMAGES);
-    const before =
+    const images = absoluteImageUrls([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)]).slice(0, MAX_CARD_IMAGES);
+    const brandSlug = brandOf(p.metadata);
+    // The store's brand price applies when the model has no exact price (v2).
+    const priced =
       base === null
         ? null
-        : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) || metadataSaysCase(p.metadata) ? "case" : "frame", target: p.id, base, lenses: 0 }).total;
-    const discountPct = productDiscountOf(discounts, establishmentId, p.id);
+        : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) || metadataSaysCase(p.metadata) ? "case" : "frame", target: p.id, base, lenses: 0, brand: brandSlug });
+    const before = priced ? priced.total : null;
+    // The model's own discount, else its brand's (v2).
+    const discountPct = productDiscountOf(discounts, establishmentId, p.id, brandSlug);
     return {
       product_id: p.id,
       title: p.title,
@@ -731,7 +737,8 @@ export interface QuotedLine {
   tax_amount: number;
   tax_rate: number;
   unit_price: number;
-  frame_source: "store_exact" | "adjusted" | "own_frame";
+  /** `brand` (v2): the store's price for every model of the brand (lib/store-pricing.ts). */
+  frame_source: "store_exact" | "brand" | "adjusted" | "own_frame";
   below_minimum: boolean;
   /** The owner's promotion on this line (lib/price-matrix.ts `promoStoreLine`); null = none. */
   promo: LinePromo | null;
@@ -811,7 +818,9 @@ export async function quoteSale(
     const variant = line.variant_id ? variantById.get(line.variant_id) : undefined;
     const productId = variant?.product?.id ?? null;
     // The owner's promotion on each part of this line in this store (store_item_discount).
-    const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, selection: line.selection, category, finish }) : NO_PROMO;
+    // v2: the model's brand slug, so the store's brand price and brand discount apply.
+    const brandSlug = productId ? brandOf(metadata.get(productId)) || null : null;
+    const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, brandSlug, selection: line.selection, category, finish }) : NO_PROMO;
 
     if (line.kind === "own_frame") {
       // No frame is sold: the store's adjustment applies to the lenses alone
@@ -835,7 +844,7 @@ export async function quoteSale(
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
       const scope = caseIds.has(productId) || metadataSaysCase(metadata.get(productId)) ? "case" : "frame";
-      const sp = promoStoreLine(rules, { establishmentId, scope, target: productId, base, lens: lensParts }, pcts);
+      const sp = promoStoreLine(rules, { establishmentId, scope, target: productId, brand: brandSlug, base, lens: lensParts }, pcts);
       listFrame = sp.frame;
       listLenses = sp.lenses;
       frameSource = sp.before.frame_source;

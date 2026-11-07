@@ -141,3 +141,28 @@
 @media print {
   .adm-bar { display: none !important; }
 }
+
+/* Tablet táctil (iPad 810–1080, Galaxy Tab 800–1280; 7-nov-2026): en una sola
+   fila no cabía nada (buscador de 130 px, período cortado). Con dedo: el
+   buscador ocupa su propia fila, debajo tienda · período · rango, y exportar
+   queda a la derecha; todo lo que se toca mide 44 px. */
+@media (pointer: coarse) {
+  .adm-bar .adm-omni-box { min-height: 44px; }
+  .adm-bar .adm-omni-input { font-size: 16px; }
+  .adm-bar .adm-store-filter.compact .adm-sf-btn, .adm-bar .adm-store-filter.static { min-height: 44px; }
+  .adm-bar-range { min-height: 44px; }
+  .adm-bar-seg button { min-height: 44px; padding: 6px 12px; }
+  .adm-bar-export .adm-export-menu .btn-xs { min-height: 44px; }
+}
+@media (pointer: coarse) and (min-width: 769px) and (max-width: 1366px) {
+  /* Dos filas como mucho (la barra es pegajosa: cada fila es pantalla perdida):
+     1.ª buscador · tienda · exportar; 2.ª período (se desplaza) · rango. */
+  .adm-bar { flex-wrap: wrap; gap: 6px 10px; }
+  .adm-bar-filters, .adm-bar-period { display: contents; }
+  .adm-bar-search { order: 1; flex: 1 1 220px; max-width: none; }
+  .adm-bar-filters > .adm-bar-search:only-child { max-width: none; }
+  .adm-bar-store { order: 2; flex: 0 0 auto; }
+  .adm-bar-export { order: 3; flex: 0 0 auto; margin-left: auto; }
+  .adm-bar-seg { order: 4; flex: 1 1 auto; min-width: 0; max-width: max-content; }
+  .adm-bar-range { order: 5; flex: 0 0 auto; }
+}

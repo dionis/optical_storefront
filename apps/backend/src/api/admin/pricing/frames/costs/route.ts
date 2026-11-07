@@ -91,7 +91,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       openRules(req.scope, storeId ? [storeId] : []).catch(() => []),
     ]);
     const index = indexFrameCostVariations(variations);
-    const prices = catalogSellingPrices(catalog, rules, storeId);
+    // Joined by the key each model's COST lives under (model first — v2), so a
+    // model whose SKUs are slug-like still shows its price next to its cost.
+    const prices = catalogSellingPrices(catalog, rules, storeId, new Date(), new Map(costs.map((c) => [c.sku, c])));
     res.json({
       store: storeId,
       costs: withCatalogPrice(frameCostStoreRows(costs, index, storeId).map(frameCostStoreView), prices),

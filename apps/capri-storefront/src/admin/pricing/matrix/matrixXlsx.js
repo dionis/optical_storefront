@@ -9,15 +9,26 @@
 //   row 4… one bold group row per brand / design / family, then its articles.
 // `_key` (hidden column) = "<section>|<row key>" — how the import finds the row
 // even if the owner retouches the visible SKU or title. Group rows have no key.
+//
+// v2 (7-nov-2026): a last sheet «Marcas» with the brand price and the brand
+// discount of every frame / case brand per store (no «Final», no cost):
+//   row 2  Tipo | Marca | Clave | Modelos | «Op1 · Katy» (merged ×2) … | _key
+//   row 3                                   Precio | Desc %            …
+// `_key` = "brands|<frame|case>:<slug>"; the import sends
+// `{ section: "brands", key: <slug>, scope: "frame"|"case", stores: { <code>: { price, discount } } }`.
 import { colName, inkOn, tint } from "../../exportXlsx.js";
-import { MATRIX_SECTIONS, groupLabel, norm, parseInput, rowTitle, usd } from "./model.js";
+import { MATRIX_SECTIONS, brandCell, groupLabel, norm, parseInput, rowTitle, usd } from "./model.js";
 
 export const KEY_HEADER = "_key";
 
 const GROUP_LABEL = { frames: "adm.pm.col.brand", cases: "adm.pm.col.brand", lenses: "adm.pm.col.design", treatments: "adm.pm.col.family" };
 const TITLE_LABEL = { frames: "adm.pm.col.model", cases: "adm.pm.col.model", lenses: "adm.pm.col.material", treatments: "adm.pm.col.treatment" };
 const SKU_LABEL = { frames: "adm.pm.col.sku", cases: "adm.pm.col.sku", lenses: "adm.pm.col.key", treatments: "adm.pm.col.key" };
-export const SHEET_LABEL = { frames: "adm.pm.sub.frames", cases: "adm.pm.sub.cases", lenses: "adm.pm.sub.lenses", treatments: "adm.pm.sub.treatments" };
+export const SHEET_LABEL = { frames: "adm.pm.sub.frames", cases: "adm.pm.sub.cases", lenses: "adm.pm.sub.lenses", treatments: "adm.pm.sub.treatments", brands: "adm.pm.sub.brands" };
+/** Brand groups of the frames / cases sections, the rows of the «Marcas» sheet. */
+const BRAND_SECTIONS = [["frames", "frame"], ["cases", "case"]];
+const brandGroupsOf = (sections) => BRAND_SECTIONS.flatMap(([sec, scope]) =>
+  (sections[sec]?.groups || []).filter((g) => g.kind === "brand" && g.stores).map((g) => ({ g, scope, sec })));
 
 const NAVY = "#1B1F3A";
 const LINE = "#D5D9E2";
@@ -57,7 +68,66 @@ export function matrixWorkbook({ sections, stores, costAccess = true, who = "", 
   const present = MATRIX_SECTIONS.filter((s) => sections[s]);
   const sheets = [coverSheet({ sections, present, stores, who, now, t, fmtDate })];
   for (const section of present) sheets.push(sectionSheet({ section, data: sections[section], stores, costAccess, t, now, fmtDate, lang }));
+  const brandRows = brandGroupsOf(sections);
+  if (brandRows.length) sheets.push(brandsSheet({ brandRows, stores, t, now, fmtDate, lang }));
   return sheets;
+}
+
+function brandsSheet({ brandRows, stores, t, now, fmtDate, lang }) {
+  const base = [
+    { label: t("adm.pm.col.kind"), width: 12 },
+    { label: t("adm.pm.col.brand"), width: 22 },
+    { label: t("adm.pm.col.key"), width: 16 },
+    { label: t("adm.pm.col.models"), width: 9, right: true },
+  ];
+  const nb = base.length;
+  const per = 2; // Precio, Desc %
+  const keyCol = nb + stores.length * per;
+  const cols = [...base.map((b) => ({ width: b.width })), ...stores.flatMap(() => [{ width: 11 }, { width: 8 }]), { width: 24, hidden: true }];
+  const r2 = base.map((b) => ({ v: b.label, s: b.right ? S.headR : S.head }));
+  const r3 = base.map((b) => ({ v: "", s: b.right ? S.headR : S.head }));
+  const merges = base.map((_, i) => `${colName(i)}2:${colName(i)}3`);
+  stores.forEach((s, i) => {
+    const color = s.color || "#4F5BD5";
+    const c0 = nb + i * per;
+    const top = { bold: true, fill: color, color: inkOn(color), border: true, align: "center" };
+    const soft = tint(color, 0.82);
+    const sub = { bold: true, fill: soft, color: inkOn(soft), border: true, align: "right" };
+    r2.push({ v: storeHeader(s), s: top }, { v: "", s: top });
+    r3.push({ v: t("adm.pm.col.price"), s: sub }, { v: t("adm.pm.col.discount"), s: sub });
+    merges.push(`${colName(c0)}2:${colName(c0 + per - 1)}2`);
+  });
+  r2[keyCol] = { v: KEY_HEADER, s: S.muted };
+  r3[keyCol] = { v: "", s: S.muted };
+  merges.push(`${colName(keyCol)}2:${colName(keyCol)}3`);
+  const rows = [
+    { height: 22, cells: [{ v: `${t(SHEET_LABEL.brands)} · ${fmtDate(now)}`, s: S.title }] },
+    { height: 20, cells: r2 },
+    { cells: r3 },
+  ];
+  for (const { g, scope, sec } of brandRows) {
+    const cells = [
+      { v: t(SHEET_LABEL[sec]), s: S.muted },
+      { v: groupLabel(g, t, lang), s: { border: true, bold: true } },
+      { v: g.key, s: S.muted },
+      { v: (g.rows || []).length, s: { border: true, numFmt: "int" } },
+    ];
+    for (const s of stores) {
+      const bc = brandCell(g, s.id);
+      cells.push({ v: usd(bc.priceCents), s: bc.priceCents != null ? S.moneyBold : S.money });
+      cells.push({ v: bc.pct ? bc.pct / 100 : null, s: S.pct });
+    }
+    cells[keyCol] = { v: `brands|${scope}:${g.key}`, s: S.muted };
+    rows.push({ cells });
+  }
+  return {
+    name: t(SHEET_LABEL.brands),
+    cols,
+    rows,
+    merges,
+    freeze: { row: 3, col: nb },
+    autoFilter: `A3:${colName(keyCol - 1)}${Math.max(3, rows.length)}`,
+  };
 }
 
 function coverSheet({ sections, present, stores, who, now, t, fmtDate }) {
@@ -81,9 +151,11 @@ function coverSheet({ sections, present, stores, who, now, t, fmtDate }) {
     const n = (sections[sec].groups || []).reduce((a, g) => a + (g.rows || []).length, 0);
     rows.push({ cells: [{ v: t(SHEET_LABEL[sec]), s: S.text }, { v: n, s: { border: true, numFmt: "int" } }, { v: "", s: S.text }] });
   }
+  const nBrands = brandGroupsOf(sections).length;
+  if (nBrands) rows.push({ cells: [{ v: t(SHEET_LABEL.brands), s: S.text }, { v: nBrands, s: { border: true, numFmt: "int" } }, { v: "", s: S.text }] });
   rows.push({ cells: [] });
   rows.push({ cells: [{ v: t("adm.pm.xlsx.howTo"), s: { bold: true } }] });
-  for (const k of ["adm.pm.xlsx.how1", "adm.pm.xlsx.how2", "adm.pm.xlsx.how3", "adm.pm.xlsx.how4"]) rows.push({ cells: [{ v: `• ${t(k)}`, s: { color: "#3C4257" } }] });
+  for (const k of ["adm.pm.xlsx.how1", "adm.pm.xlsx.how2", "adm.pm.xlsx.how5", "adm.pm.xlsx.how3", "adm.pm.xlsx.how4"]) rows.push({ cells: [{ v: `• ${t(k)}`, s: { color: "#3C4257" } }] });
   return {
     name: t("adm.pm.xlsx.cover"),
     gridlines: false,
@@ -253,6 +325,8 @@ export function workbookToImport(read, { current = {}, stores = [] } = {}) {
       if (r.sku) index[sec].bySku.set(norm(r.sku), r);
     }
   }
+  // Brand groups (the «Marcas» sheet): `<scope>:<slug>` → group.
+  const brandIdx = new Map(brandGroupsOf(current).map(({ g, scope }) => [`${scope}:${g.key}`, g]));
   // `origins[i]` = where `rows[i]` came from (sheet, 1-based row), so a server
   // error about request row i can be shown as the Excel row the owner edits.
   const out = { rows: [], origins: [], scanned: 0, unchanged: 0, sheets: 0, unknownStores: [], unknownStoreSheets: [], problems: [] };
@@ -270,11 +344,19 @@ export function workbookToImport(read, { current = {}, stores = [] } = {}) {
       let key = null;
       if (helper.includes("|")) [section, key] = [helper.slice(0, helper.indexOf("|")), helper.slice(helper.indexOf("|") + 1)];
       const skuText = map.base.sku != null ? String(r[map.base.sku] ?? "").trim() : "";
+      if (!section && skuText && /^(marcas?|brands?)$/.test(norm(sheet.name).trim())) {
+        // A brand typed by hand in the «Marcas» sheet: its slug, as a frame brand.
+        [section, key] = ["brands", skuText.includes(":") ? skuText : `frame:${skuText}`];
+      }
       if (!section) {
         // A row the owner typed by hand: only frames/cases can be found by SKU.
         if (!skuText || (map.base.cost == null && !map.stores.some((s) => !blank(r[s.price]) || !blank(r[s.discount])))) continue;
         section = guessSection(sheet.name, index, skuText);
         if (!section) { out.problems.push({ sheet: sheet.name, row: i + 1, reason: "unknown_item" }); continue; }
+      }
+      if (section === "brands") {
+        brandRow({ r, i, key, map, sheet, brandIdx, byCode, out });
+        continue;
       }
       if (!MATRIX_SECTIONS.includes(section)) continue;
       out.scanned += 1;
@@ -330,6 +412,48 @@ export function workbookToImport(read, { current = {}, stores = [] } = {}) {
   }
   out.unknownStores = [...unknown];
   return out;
+}
+
+/** One row of the «Marcas» sheet → a `section: "brands"` import row with only what changed. */
+function brandRow({ r, i, key, map, sheet, brandIdx, byCode, out }) {
+  const at = key.indexOf(":");
+  const scope = at > 0 ? key.slice(0, at) : "frame";
+  const slug = at > 0 ? key.slice(at + 1) : key;
+  if (!slug) return;
+  out.scanned += 1;
+  const g = brandIdx.get(`${scope}:${slug}`) || null;
+  const perStore = {};
+  for (const s of map.stores) {
+    const store = byCode.get(s.code);
+    if (!store) continue;
+    const now = brandCell(g, store.id);
+    const entry = {};
+    if (s.price != null) {
+      const raw = r[s.price];
+      const before = usd(now.priceCents);
+      if (blank(raw)) { if (before != null) entry.price = null; }
+      else {
+        const v = moneyIn(raw);
+        if (v === undefined) out.problems.push({ sheet: sheet.name, row: i + 1, reason: "bad_value" });
+        else if (before == null || Math.abs(v - before) >= 0.005) entry.price = v;
+      }
+    }
+    if (s.discount != null) {
+      const raw = r[s.discount];
+      const before = now.pct || 0;
+      if (blank(raw)) { if (before > 0) entry.discount = null; }
+      else {
+        const v = pctIn(raw);
+        if (v === undefined) out.problems.push({ sheet: sheet.name, row: i + 1, reason: "bad_value" });
+        else if (Math.abs(v - before) >= 0.005) entry.discount = v;
+      }
+    }
+    if (Object.keys(entry).length) perStore[s.code] = entry;
+  }
+  if (Object.keys(perStore).length) {
+    out.rows.push({ section: "brands", key: slug, scope, stores: perStore });
+    out.origins.push({ sheet: sheet.name, row: i + 1 });
+  } else out.unchanged += 1;
 }
 
 /** Store-looking codes in a header row ("Op7 · Nueva") so an unknown store is reported, not silently dropped. */

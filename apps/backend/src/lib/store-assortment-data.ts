@@ -8,6 +8,7 @@ import { KNOWN_BRANDS } from "./costing";
 import { brandExposed, brandOf, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
 import { storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
 
 /**
  * Reads and writes of the per-store assortment (semantics in store-assortment.ts).
@@ -84,7 +85,7 @@ export function toProduct(r: Record<string, unknown>): CatalogProduct {
   return {
     id: String(r["id"]),
     title: String(r["title"] ?? ""),
-    thumbnail: (r["thumbnail"] as string | null) ?? null,
+    thumbnail: absoluteImageUrl(r["thumbnail"]),
     brand,
     is_case: brand === "case",
     sku,
@@ -209,7 +210,8 @@ export async function storeCatalogProduct(container: MedusaContainer, establishm
   ]);
   const base = prices[0]?.price ?? null;
   const scope = brand === "case" || rules.some((r) => r.scope === "case" && r.target === p.id) ? "case" : "frame";
-  const store = base === null ? null : storeLinePrice(rules, { establishmentId, scope, target: p.id, base, lenses: 0 });
+  // v2: the store's brand price applies when the model has no exact one.
+  const store = base === null ? null : storeLinePrice(rules, { establishmentId, scope, target: p.id, base, lenses: 0, brand });
   const i18n = (md["i18n"] ?? {}) as Record<string, { title?: string; description?: string } | undefined>;
   const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : typeof v === "string" && v ? [v] : []);
 
@@ -221,13 +223,14 @@ export async function storeCatalogProduct(container: MedusaContainer, establishm
     brand,
     brand_name: text(md["brand"]) ?? brand,
     is_case: scope === "case",
-    thumbnail: (p.thumbnail as string | null) ?? null,
-    images: ((p.images ?? []) as Array<{ url?: string }>).map((i) => i.url).filter(Boolean) as string[],
+    // Absolute URLs (lib/image-url.ts): the catalogue stores bare bucket keys.
+    thumbnail: absoluteImageUrl(p.thumbnail),
+    images: absoluteImageUrls(((p.images ?? []) as Array<{ url?: string }>).map((i) => i.url)),
     colors: ((p.variants ?? []) as Array<Record<string, any>>).map((v) => ({
       id: v.id as string,
       title: (v.title as string) ?? "",
       sku: (v.sku as string | null) ?? null,
-      image: text((v.metadata ?? {})["image"]),
+      image: absoluteImageUrl(text((v.metadata ?? {})["image"])),
     })),
     description: {
       en: text(p.description),

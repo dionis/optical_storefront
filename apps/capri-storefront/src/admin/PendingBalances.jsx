@@ -39,6 +39,7 @@ import { ExportMenu } from "./ui.jsx";
 import { daysOverdue } from "./lateness.js";
 import "./screens.css";
 import "./roles.css";
+import HelpTip from "./HelpTip.jsx";
 
 /** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); vive en lateness.js (también la usa Pedidos y etapas). */
 export { daysOverdue };
@@ -218,7 +219,7 @@ export default function PendingBalances({ me, openSale, embedded = false, params
       {!embedded && (
         <div className="adm-head-row">
           <div>
-            <h2>{t("adm.pb.title")}</h2>
+            <h2>{t("adm.pb.title")}<HelpTip topic="pending.what" size={16} /></h2>
             <p className="adm-sub">{t(seller ? "adm.pb.subSeller" : "adm.pb.sub")}</p>
           </div>
           <div className="pos-filters">
