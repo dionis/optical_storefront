@@ -98,7 +98,7 @@ const GROUPS = [
   // `db.` (migrations applied at boot) lives with the server's access checks:
   // without a matcher the row was silently dropped and a failed migration
   // never showed up here.
-  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.") || k.startsWith("db.")],
+  ["access", (k) => k.startsWith("auth.") || k.startsWith("cors.") || k.startsWith("urls.") || k.startsWith("node_env.") || k.startsWith("security.") || k.startsWith("db.") || k.startsWith("owner.")],
   ["payments", (k) => k.startsWith("payments.")],
   ["services", (k) => k.startsWith("notifications.") || k.startsWith("sheet.") || k.startsWith("ocr.")],
 ];

@@ -952,7 +952,7 @@ function navFromUrl(tabs) {
   const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const want = q.get("tab") || "";
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number"]) if (q.get(k)) params[k] = q.get(k);
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number", "patient"]) if (q.get(k)) params[k] = q.get(k);
   // A legacy tab keeps the deep link's own `sub`/`q` (?tab=pricing&sub=lenses) over its default.
   if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1], ...params }, n: 0 };
   // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.

@@ -28,11 +28,12 @@ const lensName = (list, code, lang) => {
 const dpt = (v) => (v == null || v === "" ? "—" : `${Number(v) > 0 ? "+" : Number(v) < 0 ? "−" : ""}${Math.abs(Number(v)).toFixed(2)}`);
 const nameOf = (p) => [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim();
 
-function TierBadge({ tier, lapsed, t }) {
+function TierBadge({ tier, lapsed, examOverdue = false, t }) {
   return (
     <span className="pt-badges">
       {tier && tier !== "none" && <span className={`pt-tier t-${tier}`}>{t(`adm.pt.tier.${tier}`)}</span>}
       {lapsed && <span className="pt-tier t-lapsed" title={t("adm.pt.lapsedHint")}>{t("adm.pt.lapsed")}</span>}
+      {examOverdue && <span className="pt-tier t-exam" title={t("adm.pt.examDueHint")}>{t("adm.pt.examDue")}</span>}
     </span>
   );
 }
@@ -90,7 +91,7 @@ function PatientFile({ id, stores, openSale, onBack }) {
         <div className="pt-who">
           <h3>{nameOf(c) || c.email || t("adm.pt.noName")}</h3>
           <div className="pt-who-sub">
-            <TierBadge tier={s.tier} lapsed={s.lapsed} t={t} />
+            <TierBadge tier={s.tier} lapsed={s.lapsed} examOverdue={Boolean(file.exam?.overdue)} t={t} />
             {c.since && <span>{t("adm.pt.since", { date: shortDate(c.since, lang) })}</span>}
           </div>
         </div>
@@ -245,18 +246,20 @@ export default function Patients({ me, openSale, params = {} }) {
   const [state, setState] = useState("loading");
   const [sel, setSel] = useState(params.patient || null);
   const seq = useRef(0);
+  // Llegar desde el buscador del panel con otro paciente, ya en esta pestaña.
+  useEffect(() => { if (params.patient) setSel(params.patient); }, [params.patient]);
 
   useEffect(() => { const id = setTimeout(() => setDebQ(q.trim()), 300); return () => clearTimeout(id); }, [q]);
   useEffect(() => {
     const n = ++seq.current;
     setState("loading");
     // «Tienda online» no es un establecimiento: la lista va sin filtro de tienda.
-    fetchPatients({ q: debQ.length >= 2 ? debQ : "", sort, store: isAll || isWeb ? "" : storeId, limit: 200 })
+    fetchPatients({ q: debQ.length >= 2 ? debQ : "", sort, store: isAll || isWeb ? "" : storeId, limit: 200, exam: tier === "exam" ? "overdue" : "" })
       .then((r) => { if (n !== seq.current) return; setList(r.patients || []); setTruncated(Boolean(r.truncated)); setState("ok"); })
       .catch((e) => { if (n === seq.current) setState(e.message || "adm.err.pos.generic"); });
-  }, [debQ, sort, storeId, isAll, isWeb]);
+  }, [debQ, sort, storeId, isAll, isWeb, tier === "exam"]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = useMemo(() => (list || []).filter((p) => !tier || (tier === "lapsed" ? p.lapsed : p.tier === tier)), [list, tier]);
+  const shown = useMemo(() => (list || []).filter((p) => !tier || tier === "exam" || (tier === "lapsed" ? p.lapsed : p.tier === tier)), [list, tier]);
   const totals = useMemo(() => {
     const live = (list || []).filter((p) => p.purchases > 0);
     const total = live.reduce((a, p) => a + p.total_cents, 0);
@@ -283,9 +286,9 @@ export default function Patients({ me, openSale, params = {} }) {
             </select>
           </div>
           <div className="pt-chips" role="group" aria-label={t("adm.pt.filterTier")}>
-            {["", ...TIERS, "lapsed"].map((k) => (
+            {["", ...TIERS, "lapsed", "exam"].map((k) => (
               <button key={k || "all"} type="button" className={tier === k ? "on" : ""} aria-pressed={tier === k} onClick={() => setTier(k)}>
-                {k ? t(k === "lapsed" ? "adm.pt.lapsed" : `adm.pt.tier.${k}`) : t("adm.pt.all")}
+                {k ? t(k === "lapsed" ? "adm.pt.lapsed" : k === "exam" ? "adm.pt.examDue" : `adm.pt.tier.${k}`) : t("adm.pt.all")}
               </button>
             ))}
           </div>
@@ -308,11 +311,11 @@ export default function Patients({ me, openSale, params = {} }) {
                       <small>{t("adm.pt.rowNums", { n: p.purchases, avg: p.avg_cents == null ? "—" : m(p.avg_cents) })}</small>
                       <small>{p.last_at ? shortDate(p.last_at, lang) : t("adm.pt.never")}</small>
                     </span>
-                    <TierBadge tier={p.tier} lapsed={p.lapsed} t={t} />
+                    <TierBadge tier={p.tier} lapsed={p.lapsed} examOverdue={Boolean(p.exam?.overdue)} t={t} />
                   </button>
                 </li>
               ))}
-              {!shown.length && <li className="pt-empty">{t(debQ ? "adm.pt.noMatch" : "adm.pt.none")}</li>}
+              {!shown.length && <li className="pt-empty">{t(tier === "exam" ? "adm.pt.noneExam" : debQ ? "adm.pt.noMatch" : "adm.pt.none")}</li>}
             </ul>
           )}
           {truncated && <p className="pt-note"><Icon name="info" size={12} /> {t("adm.pt.truncated")}</p>}

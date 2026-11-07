@@ -38,6 +38,7 @@
 .pt-tier.t-returning { background: var(--adm-green-soft); color: var(--adm-green-dark); }
 .pt-tier.t-new { background: var(--adm-accent-soft); color: var(--adm-accent-ink); }
 .pt-tier.t-lapsed { background: var(--adm-amber-soft); color: var(--adm-amber-dark); }
+.pt-tier.t-exam { background: var(--adm-red-soft); color: var(--adm-red-dark); }
 
 .pt-file { display: flex; flex-direction: column; gap: 10px; }
 .pt-pick { align-items: center; justify-content: center; min-height: 260px; border: 1px dashed var(--adm-line); border-radius: 14px; color: var(--adm-muted); text-align: center; padding: 20px; }

@@ -24,6 +24,16 @@ vendedor no la ve (403 `forbidden_role`) y sigue con la vista del cliente en la 
   history, exam }`. Fuera de sus tiendas responde 404 (no revela que existe).
   Cada apertura queda en Auditoría (`patient.view`, sin valores).
 
+- `exam=overdue` = **lista de recordatorio**: pacientes cuya última receta hecha
+  aquí (no la que usaba) tiene 12 meses o más; se filtra en el servidor, así que
+  incluye a los que compraron hace mucho. Cada fila trae `last_rx_on` y `exam`.
+
+## Desde otras pantallas
+
+- El buscador del panel lleva un resultado de paciente a su ficha (Pacientes)
+  para quien puede abrirla; un vendedor sigue yendo a sus ventas.
+- Seguridad muestra «Dueño del panel definido (STORE_OWNER_EMAIL)».
+
 ## Reglas (`src/lib/patient-history.ts`, `PATIENT_RULES`)
 
 - Promedio = total de compras válidas / número de compras válidas.
@@ -34,7 +44,7 @@ vendedor no la ve (403 `forbidden_role`) y sigue con la vista del cliente en la 
 
 ## Pantalla (`Patients.jsx`, `patients.css`, `i18n/parts/patients.js`)
 
-Lista (buscar, ordenar, filtrar por categoría; total y ticket promedio de la
+Lista (buscar, ordenar, filtrar por categoría o «Examen vencido»; total y ticket promedio de la
 selección) y ficha en acordeones: datos, historial de compras (por tienda,
 abre la hoja de la venta), evolución de la graduación y próximo examen. En
 tableta vertical y móvil, una columna con «Volver a la lista». Sin exportación

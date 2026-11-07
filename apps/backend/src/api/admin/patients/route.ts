@@ -9,12 +9,13 @@ export const canSeePatients = (scope: Pick<StaffScope, "is_admin" | "role">): bo
   scope.is_admin || scope.role === "supervisor" || scope.role === "manager";
 
 /**
- * GET /admin/patients?q=&store=&sort=recent|total|purchases|avg&limit= → { patients, truncated }
+ * GET /admin/patients?q=&store=&sort=recent|total|purchases|avg&exam=overdue&limit= → { patients, truncated }
  *
  * The «Pacientes» list (docs/PATIENTS.md): purchases, total spent, average
  * ticket, last purchase and band of each patient, from sale_fact (POS + web,
  * voided sales excluded). `store` narrows to patients who bought there; a
- * supervisor or manager only ever sees patients of their stores. Reasons:
+ * supervisor or manager only ever sees patients of their stores. `exam=overdue`
+ * = the recall list: last prescription 12 months old or more. Reasons:
  * `forbidden_role` (403), `forbidden_store` (403).
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
@@ -34,6 +35,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       storeIds,
       sort: query.sort as PatientSort,
       limit: Number(query.limit) || undefined,
+      examOverdue: query.exam === "overdue",
     });
     res.json(out);
   });

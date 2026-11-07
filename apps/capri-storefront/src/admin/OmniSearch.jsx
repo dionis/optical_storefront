@@ -85,7 +85,7 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
  *
  * `{ store }` sin `tab` significa «solo fija el filtro, no te muevas».
  */
-export function destinationFor(kind, item) {
+export function destinationFor(kind, item, { patientFiles = false } = {}) {
   const x = item || {};
   const extra = x.extra || {};
   switch (kind) {
@@ -93,6 +93,8 @@ export function destinationFor(kind, item) {
     case "order":
       return { tab: "storeorders", params: clean({ order: extra.order_id || x.id, store: x.store_id }) };
     case "patient":
+      // Quien puede abrir fichas va a la del paciente (Pacientes); el resto, a sus ventas.
+      if (patientFiles && x.id) return { tab: "patients", params: { patient: x.id } };
       return { tab: "storeorders", params: clean({ q: x.label || extra.phone, store: x.store_id }) };
     case "seller":
       // Su ficha, no sus pedidos: quien busca a una persona quiere ver cómo va.
@@ -233,7 +235,8 @@ export default function OmniSearch({ me = null, go = null }) {
   /** Elegir un resultado SIEMPRE hace algo: fija la tienda o salta a su pantalla. */
   const choose = (entry) => {
     if (!entry) return;
-    const dest = destinationFor(entry.kind, entry.item);
+    const patientFiles = !me || me.is_admin !== false || me.role === "supervisor" || me.role === "manager";
+    const dest = destinationFor(entry.kind, entry.item, { patientFiles });
     setOpen(false);
     if (dest.store) { sf.setStoreId(dest.store); return; }
     if (typeof go === "function") go(dest.tab, dest.params);

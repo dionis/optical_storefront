@@ -1,7 +1,7 @@
 import type { ICustomerModuleService, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
-import { examDue, groupPurchases, listRow, summarize, type PatientFactLike, type PatientListAgg, type Purchase, type PatientSummary } from "./patient-history";
+import { examDue, groupPurchases, listRow, PATIENT_RULES, summarize, type PatientFactLike, type PatientListAgg, type Purchase, type PatientSummary } from "./patient-history";
 import { getCustomer, lastPrescription, opticalHistory, searchCustomers, type HistoryEntry, type PosCustomerRow, type StoredRx } from "./pos-data";
 import { getPosSettings } from "./pos-settings";
 
@@ -18,7 +18,22 @@ export type PatientSort = "recent" | "total" | "purchases" | "avg";
 export const PATIENT_SORTS: readonly PatientSort[] = ["recent", "total", "purchases", "avg"];
 export const PATIENT_LIST_MAX = 200;
 
-export interface PatientListItem extends PosCustomerRow, ReturnType<typeof listRow> {}
+export interface PatientListItem extends PosCustomerRow, ReturnType<typeof listRow> {
+  /** Day of the last prescription made here (not the one they wore), or null. */
+  last_rx_on: string | null;
+  exam: { due_on: string; overdue: boolean } | null;
+}
+
+/** The day a prescription counts from: its own date, else when it was recorded. */
+const RX_DAY = "coalesce(rx_date::date, created_at::date)";
+/** Prescriptions per customer, the worn ones left out (they say nothing about the next exam). */
+const lastRxQuery = (pg: Knex) =>
+  pg("prescription")
+    .whereNull("deleted_at")
+    .whereNotNull("customer_id")
+    .where((q) => q.whereNull("kind").orWhere("kind", "<>", "worn"))
+    .groupBy("customer_id")
+    .select("customer_id");
 
 /**
  * «Pacientes» list. With `q` (≥ 2 characters): the customers the till's search
@@ -29,7 +44,7 @@ export interface PatientListItem extends PosCustomerRow, ReturnType<typeof listR
  */
 export async function listPatients(
   container: MedusaContainer,
-  input: { q?: string; storeIds: string[] | null; sort?: PatientSort; limit?: number; now?: Date }
+  input: { q?: string; storeIds: string[] | null; sort?: PatientSort; limit?: number; now?: Date; examOverdue?: boolean }
 ): Promise<{ patients: PatientListItem[]; truncated: boolean }> {
   const pg = pgOf(container);
   const limit = Math.min(Math.max(Number(input.limit) || 100, 1), PATIENT_LIST_MAX);
@@ -53,6 +68,10 @@ export async function listPatients(
       "customer_id",
       pg("sale_fact").distinct("customer_id").whereNull("deleted_at").whereIn("establishment_id", input.storeIds).whereNotNull("customer_id")
     );
+  }
+  // Recall list: whose last prescription (not the one they wore) is PATIENT_RULES.examMonths old or more.
+  if (input.examOverdue) {
+    agg.whereIn("customer_id", lastRxQuery(pg).havingRaw(`max(${RX_DAY}) <= (?::date - make_interval(months => ?))`, [(input.now ?? new Date()).toISOString().slice(0, 10), PATIENT_RULES.examMonths]));
   }
   const sort = PATIENT_SORTS.includes(input.sort as PatientSort) ? (input.sort as PatientSort) : "recent";
   const orderSql = {
@@ -84,6 +103,12 @@ export async function listPatients(
   }
   const now = input.now ?? new Date();
   const aggBy = new Map(page.map((r) => [r.customer_id, r]));
+  const rxIds = [...new Set([...page.map((r) => r.customer_id), ...(searched ?? []).map((c) => c.id)])];
+  const lastRx = new Map<string, string>();
+  if (rxIds.length) {
+    const rx = (await lastRxQuery(pg).whereIn("customer_id", rxIds).select(pg.raw(`max(${RX_DAY})::text as last_rx`))) as unknown as Array<{ customer_id: string; last_rx: string | null }>;
+    for (const r of rx) if (r.last_rx) lastRx.set(r.customer_id, String(r.last_rx).slice(0, 10));
+  }
   // A search keeps its own order (best match first) and shows who never bought, with zeros;
   // the store filter still applies to them (a non-admin finds only their stores' patients).
   const ids = searched
@@ -91,7 +116,15 @@ export async function listPatients(
     : page.map((r) => r.customer_id);
   const patients = ids
     .filter((id) => byId.has(id))
-    .map((id) => ({ ...(byId.get(id) as PosCustomerRow), ...listRow(aggBy.get(id) ?? { customer_id: id, purchases: 0, total_cents: 0, first_at: null, last_at: null }, now) }));
+    .map((id) => {
+      const rxDay = lastRx.get(id) ?? null;
+      return {
+        ...(byId.get(id) as PosCustomerRow),
+        ...listRow(aggBy.get(id) ?? { customer_id: id, purchases: 0, total_cents: 0, first_at: null, last_at: null }, now),
+        last_rx_on: rxDay,
+        exam: rxDay ? examDue({ rx_date: rxDay, created_at: rxDay }, now) : null,
+      };
+    });
   return { patients, truncated };
 }
 
