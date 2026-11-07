@@ -17,7 +17,8 @@ import { applyStoreLensPrice, lensArKey, lensBaseKey, lensPhotoKey, loadStoreLen
  *
  * `lens_base_price` also holds the lab's `cost_cents`, which is internal and
  * must NEVER leave through either route: base cells are rebuilt field by field
- * here (`publicBaseCell`), whatever columns the query returned.
+ * here (`publicBaseCell`), whatever columns the query returned. The same goes
+ * for the photochromic and AR options' `cost_cents` (`publicOptionRow`).
  */
 
 export interface LensMatrixBaseCell {
@@ -55,6 +56,17 @@ export function publicBaseCell(row: LensMatrixRow): LensMatrixBaseCell {
   };
 }
 
+/**
+ * A photochromic or AR option row without its lab cost (`cost_cents`,
+ * UpgradeLensListOptionCost9): those tables are read whole, so the column has
+ * to be dropped by name or it would leave on the public matrix. Pure.
+ */
+export function publicOptionRow(row: LensMatrixRow): LensMatrixRow {
+  if (!("cost_cents" in row)) return row;
+  const { cost_cents: _cost, ...rest } = row;
+  return rest;
+}
+
 /** The master list, straight from the lens-config tables. */
 export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {
   // lens_treatment_price may not exist yet (before its migration); if the query
@@ -78,8 +90,8 @@ export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {
     designs: designs as LensMatrixRow[],
     materials: materials as LensMatrixRow[],
     base_prices: (baseRows as LensMatrixRow[]).map(publicBaseCell),
-    photos: photos as LensMatrixRow[],
-    ars: ars as LensMatrixRow[],
+    photos: (photos as LensMatrixRow[]).map(publicOptionRow),
+    ars: (ars as LensMatrixRow[]).map(publicOptionRow),
     treatment_prices: treatment_prices as LensMatrixRow[],
   };
 }

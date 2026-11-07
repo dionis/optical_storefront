@@ -1,4 +1,7 @@
-// Dónde se usa: «Precios y costos» → acordeón «Monturas y estuches».
+// Dónde se usa: «Productos y precios» → «Reglas y comisiones» (PricingPanel.jsx) importa
+// RuleRow y BandBlock. El resto de este archivo (precio exacto, costos, «un modelo en
+// todas las tiendas») lo sustituyó la matriz (PriceMatrix.jsx) el 6-nov-2026.
+// Historia: «Precios y costos» → acordeón «Monturas y estuches».
 // Lo que pidió el dueño, tal cual: UNA regla para todas las monturas (y otra
 // para los estuches) y, si quiere cambiar una montura a pesar de la regla, la
 // busca y le pone el precio — y entonces la pantalla enseña solo la regla y los
@@ -43,7 +46,7 @@ import {
 import "./pricing-across.css";
 
 /** La regla en UNA fila editable: modo, valor y guardar. */
-function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
+export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
   const [mode, setMode] = useState(rule ? rule.mode : "none");
   const [value, setValue] = useState(rule ? String(rule.value) : "");
   const [busy, setBusy] = useState(false);
@@ -121,7 +124,7 @@ function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
  * («READ 2: $8 → $60»). El dueño acaba de vivir que un cambio de regla le
  * moviera 147 precios: esto es para que no vuelva a pasar a ciegas.
  */
-function BandBlock({ store, onError }) {
+export function BandBlock({ store, onError }) {
   const { t, lang } = useLang();
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);

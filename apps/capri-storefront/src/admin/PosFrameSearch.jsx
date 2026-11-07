@@ -12,6 +12,8 @@ import Icon from "./icons.jsx";
 import { searchProducts } from "./posApi.js";
 import { resolveImageSized } from "../data/imageUrl.js";
 import { sizeNotation } from "./PosFrameCard.jsx";
+import { listPromoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
 
 const MIN_CHARS = 2;
 
@@ -166,7 +168,14 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
                           ) : many ? t("adm.pos.frame.colors", { n: p.variants.length }) : p.variants[0]?.color || p.variants[0]?.title || p.variants[0]?.sku || ""}
                         </small>
                       </span>
-                      <span className="pos-ac-price">{unpriced ? t("adm.pos.frame.noPrice") : money(p.price)}</span>
+                      <span className="pos-ac-price">
+                        {unpriced ? t("adm.pos.frame.noPrice") : money(p.price)}
+                        {!unpriced && listPromoOf(p) && (
+                          <small className="pos-promo" title={t("adm.pm.promo", { before: money(listPromoOf(p).before), pct: listPromoOf(p).pct })}>
+                            <s>{money(listPromoOf(p).before)}</s> −{listPromoOf(p).pct} %
+                          </small>
+                        )}
+                      </span>
                       {!unpriced && <Icon name={many ? (expanded === p.product_id ? "chevronUp" : "chevronDown") : "plus"} size={14} />}
                     </button>
                     {onView && (

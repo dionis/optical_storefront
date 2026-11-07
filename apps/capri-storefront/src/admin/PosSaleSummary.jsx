@@ -7,6 +7,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import { FRAME_ONLY } from "../data/lensPricing.js";
 import Icon from "./icons.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import { promoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
 
 const EYE_FIELDS = ["sph", "cyl", "axis", "add", "prism"];
 
@@ -157,6 +159,11 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
                     <small className="muted">
                       {[!own && `${t("adm.pos.sum.frame")} ${money(l.frame)}`, l.lenses > 0 && `${t("adm.pos.sum.lenses")} ${money(l.lenses)}`, l.tax_amount > 0 && `${t("adm.pos.price.tax")} ${money(l.tax_amount)}`].filter(Boolean).join(" · ")}
                     </small>
+                    {(() => {
+                      // The owner's item promotion (docs/PRICE-MATRIX.md): the line is already at the discounted price.
+                      const p = promoOf(l);
+                      return p ? <small className="pos-sum-promo">{t("adm.pm.promoBefore")} <s>{money(p.before)}</s> · {t("adm.pm.promoTag", { pct: p.pct })}</small> : null;
+                    })()}
                   </div>
                   <b className="pos-sum-price">{money(l.unit_price)}</b>
                 </li>

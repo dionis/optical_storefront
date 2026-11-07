@@ -38,6 +38,8 @@ import "./pos.css";
 import RxForm from "./PosRx.jsx";
 import HelpTip from "./HelpTip.jsx";
 import { EMPTY_RX, EYE_FIELDS, binocularPd, inferType, normalizeField, splitPd, validateRx } from "./rxRules.js";
+import { promoOf } from "./pricing/promo.js";
+import "./pricing/promo.css";
 
 const STEPS = ["customer", "frame", "rx", "lenses", "price", "payment", "done"];
 // Tema de ayuda (HelpTip) de cada paso; la receta tiene los suyos en la cuadrícula.
@@ -908,7 +910,7 @@ export default function PosSale({ me }) {
                   <tbody>
                     {q.quote.lines.map((l, i) => (
                       <tr key={i} className={l.below_minimum ? "warn" : ""}>
-                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}</td>
+                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}{promoOf(l) && <small className="pos-sum-promo pos-promo-line">{t("adm.pm.promoBefore")} <s>{m(promoOf(l).before)}</s> · {t("adm.pm.promoTag", { pct: promoOf(l).pct })}</small>}</td>
                         <td data-label={t("adm.pos.price.list")}>{m(l.list)}</td>
                         <td data-label={t("adm.pos.price.tax")}>{l.tax_amount ? m(l.tax_amount) : "—"}</td>
                         <td data-label={t("adm.pos.price.total")}><b>{m(l.unit_price)}</b></td>

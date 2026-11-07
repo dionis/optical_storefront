@@ -374,3 +374,78 @@ export async function fetchPricingAcross(q) {
     throw new Error(key(e, "adm.err.pricing.load_failed"));
   }
 }
+
+/* ──────────── «Productos y precios»: la matriz única (6-nov-2026) ────────────
+   Contrato: docs/PRICE-MATRIX.md. Una fila por artículo, una columna de costo y,
+   por tienda, precio efectivo + descuento propio del artículo.
+     GET  /admin/pricing/matrix?section=frames|cases|lenses|treatments[&q=]
+     POST /admin/pricing/matrix/cell    { kind, key, field, store?, value } → { row }
+     POST /admin/pricing/matrix/import  { apply, rows }                     → { plan } | { applied }
+     GET  /admin/catalog/brands                                             → { brands }
+     POST /admin/catalog/frames         (montura o estuche nuevo)
+     POST /admin/pricing/treatments     (fotocromático o antirreflejo nuevo)
+   Sin caché en la lectura: es la pantalla donde se cambian los precios, y lo que
+   se ve tiene que ser lo de ahora. Cada escritura olvida las cachés que dependen
+   de un precio o de un costo (costos de monturas, banda, lista de lentes del POS). */
+
+const MATRIX_PATH = "/admin/pricing/matrix";
+const forgetPriceCaches = () => {
+  invalidateCache(COSTS_PATH);
+  invalidateCache(BAND_PATH);
+  invalidateCache(LENS_MATRIX_PATH);
+  invalidateCache(ACROSS_PATH);
+};
+
+/** Una sección de la matriz. `q` filtra en el servidor (opcional). */
+export async function fetchMatrix(section, { q = "" } = {}) {
+  try {
+    const query = { section };
+    if (String(q).trim()) query.q = String(q).trim();
+    return await adminFetch(MATRIX_PATH, { query });
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}
+
+/**
+ * Una casilla: `field` "cost" | "price" | "discount". `value` en dólares
+ * (costo, precio) o en por ciento (descuento); null vacía la casilla. Devuelve
+ * la fila entera tal como la pinta el GET.
+ */
+export async function saveMatrixCell({ kind, key: itemKey, field, store, value }) {
+  const body = { kind, key: itemKey, field, value: value === null || value === "" || value === undefined ? null : Number(value) };
+  if (field !== "cost") body.store = store;
+  const data = await post(`${MATRIX_PATH}/cell`, body);
+  forgetPriceCaches();
+  return data;
+}
+
+/** Importar el libro: `apply: false` devuelve el plan; `true` lo aplica (sin errores). */
+export async function importMatrix(rows, apply = false) {
+  const data = await post(`${MATRIX_PATH}/import`, { apply: Boolean(apply), rows });
+  if (apply) forgetPriceCaches();
+  return data;
+}
+
+/** Marcas del catálogo, para el selector del alta de montura. */
+export async function fetchCatalogBrands() {
+  try {
+    return await adminFetch("/admin/catalog/brands");
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}
+
+/** Montura o estuche nuevo (marca nueva incluida). */
+export async function createCatalogFrame(body) {
+  const data = await post("/admin/catalog/frames", body);
+  forgetPriceCaches();
+  return data;
+}
+
+/** Fotocromático o antirreflejo nuevo. */
+export async function createTreatment(body) {
+  const data = await post("/admin/pricing/treatments", body);
+  forgetPriceCaches();
+  return data;
+}

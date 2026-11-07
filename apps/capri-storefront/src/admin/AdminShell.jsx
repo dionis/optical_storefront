@@ -31,13 +31,13 @@ export const NAV_GROUPS = [
     { key: "posconfig", icon: "settings" },
   ] },
   // Regla del dueño: «en Comercial va todo lo que tenga que ver con manejo de
-  // precios, costos, etc.». El catálogo (Productos) es precisamente eso —
-  // costo de proveedor, precio por regla y precio propio de cada modelo—, así
-  // que vive aquí, junto a Precios y costos, y ya no en un grupo propio.
+  // precios, costos, etc.». Desde el 6-nov-2026 «Productos» y «Precios y
+  // costos» son UNA pestaña, «Productos y precios» (`products`, PricingPanel +
+  // la matriz de docs/PRICE-MATRIX.md); `?tab=pricing` sigue abriéndola
+  // (LEGACY_TABS en AdminDashboard).
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
-    { key: "pricing", icon: "prices" },
-    { key: "products", icon: "products" },
+    { key: "products", icon: "prices" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },

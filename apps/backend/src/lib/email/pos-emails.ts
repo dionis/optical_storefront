@@ -39,6 +39,7 @@ const COPY = {
     receipt_served: "Le atendió",
     receipt_customer: "Cliente",
     receipt_discount: "Descuento {pct} %",
+    receipt_promo: "Precio antes {before} · Promoción −{pct} %",
     receipt_tax: "Impuesto de venta",
     receipt_total: "Total",
     receipt_paid_deposit: "Anticipo",
@@ -97,6 +98,7 @@ const COPY = {
     receipt_served: "Served by",
     receipt_customer: "Customer",
     receipt_discount: "Discount {pct}%",
+    receipt_promo: "Price before {before} · Promotion −{pct}%",
     receipt_tax: "Sales tax",
     receipt_total: "Total",
     receipt_paid_deposit: "Deposit",
@@ -132,6 +134,11 @@ const COPY = {
 } as const;
 
 type Key = keyof (typeof COPY)["es"];
+
+/** A percentage as the receipt prints it: "10", "12.5" — a point in both languages, like `money` (es-US). */
+function fmtPct(pct: number): string {
+  return String(Math.round(pct * 10) / 10);
+}
 
 export function posT(locale: EmailLocale, key: Key, vars: Record<string, string | number> = {}): string {
   let s: string = COPY[locale][key];
@@ -252,8 +259,12 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
     // Each line shows its LIST price: the lines add up to the subtotal, then the
     // discount and the tax are taken once, visibly. (Showing the already
     // discounted price and then "−discount" again read as a double discount.)
-    if (!detailed) return { name, lens, specs: "", parts: "", price: l.list, image: null, cid: null };
-    return { name, lens: lens || (l.design_code === "frame-only" ? posT(locale, "receipt_frame_only") : ""), specs, parts, price: l.list, image: l.image_url ?? null, cid: extras.itemImages?.[i]?.cid ?? null };
+    // The owner's promotion on the line (its list price is already the reduced
+    // one): the price before it and by how much, on the simple receipt too —
+    // it is what the customer was charged, not health data.
+    const promo = l.promo ? posT(locale, "receipt_promo", { before: money(l.promo.before, locale), pct: fmtPct(l.promo.pct) }) : "";
+    if (!detailed) return { name, lens, specs: "", parts: "", promo, price: l.list, image: null, cid: null };
+    return { name, lens: lens || (l.design_code === "frame-only" ? posT(locale, "receipt_frame_only") : ""), specs, parts, promo, price: l.list, image: l.image_url ?? null, cid: extras.itemImages?.[i]?.cid ?? null };
   });
   // The shared prescription block, fed with this sale's lines.
   const orderLike = {
@@ -273,7 +284,7 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
   const itemRows = lines
     .map(
       (l) =>
-        `<tr>${detailed ? `<td width="112" style="padding:10px 12px 10px 0;border-bottom:1px solid #e7eaf0;vertical-align:top">${l.image || l.cid ? `<img src="${esc(l.cid ? `cid:${l.cid}` : String(l.image))}" width="100" alt="${esc(l.name)}" style="display:block;width:100px;max-width:100%;height:auto;border:0;border-radius:6px">` : ""}</td>` : ""}<td style="padding:10px 0;border-bottom:1px solid #e7eaf0;font-size:14px;vertical-align:top"><b>${esc(l.name)}</b>${l.specs ? `<div style="color:#5b6472;font-size:12.5px">${esc(l.specs)}</div>` : ""}${l.lens ? `<div style="color:#374151;font-size:12.5px;margin-top:2px">${esc(l.lens)}</div>` : ""}${l.parts ? `<div style="color:#5b6472;font-size:12.5px;margin-top:2px">${esc(l.parts)}</div>` : ""}</td><td style="padding:10px 0 10px 10px;border-bottom:1px solid #e7eaf0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap;vertical-align:top">${esc(money(l.price, locale))}</td></tr>`
+        `<tr>${detailed ? `<td width="112" style="padding:10px 12px 10px 0;border-bottom:1px solid #e7eaf0;vertical-align:top">${l.image || l.cid ? `<img src="${esc(l.cid ? `cid:${l.cid}` : String(l.image))}" width="100" alt="${esc(l.name)}" style="display:block;width:100px;max-width:100%;height:auto;border:0;border-radius:6px">` : ""}</td>` : ""}<td style="padding:10px 0;border-bottom:1px solid #e7eaf0;font-size:14px;vertical-align:top"><b>${esc(l.name)}</b>${l.specs ? `<div style="color:#5b6472;font-size:12.5px">${esc(l.specs)}</div>` : ""}${l.lens ? `<div style="color:#374151;font-size:12.5px;margin-top:2px">${esc(l.lens)}</div>` : ""}${l.parts ? `<div style="color:#5b6472;font-size:12.5px;margin-top:2px">${esc(l.parts)}</div>` : ""}${l.promo ? `<div style="color:#b45309;font-size:12.5px;font-weight:700;margin-top:2px">${esc(l.promo)}</div>` : ""}</td><td style="padding:10px 0 10px 10px;border-bottom:1px solid #e7eaf0;font-size:14px;font-weight:700;text-align:right;white-space:nowrap;vertical-align:top">${esc(money(l.price, locale))}</td></tr>`
     )
     .join("");
   const sum = (label: string, value: string, strong = false) =>
@@ -320,7 +331,7 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
       `${posT(locale, "receipt_date")}: ${when}`,
       ...(detailed ? [`${posT(locale, "receipt_store")}: ${[doc.store.name, doc.store.address, doc.store.phone].filter(Boolean).join(" · ")}`] : []),
       "",
-      ...lines.flatMap((l) => [`${l.name}: ${money(l.price, locale)}`, ...[l.specs, l.lens, l.parts].filter(Boolean).map((x) => `  ${x}`)]),
+      ...lines.flatMap((l) => [`${l.name}: ${money(l.price, locale)}`, ...[l.specs, l.lens, l.parts, l.promo].filter(Boolean).map((x) => `  ${x}`)]),
       "",
       ...(tot.discount > 0 || tot.tax > 0 ? [`${posT(locale, "receipt_list")}: ${money(tot.list, locale)}`] : []),
       ...(tot.discount > 0 ? [`${posT(locale, "receipt_discount", { pct: tot.discount_pct })}: −${money(tot.discount, locale)}`] : []),

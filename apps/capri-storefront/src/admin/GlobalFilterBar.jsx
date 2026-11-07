@@ -74,8 +74,8 @@ import "./empty-period.css";
  *   orders       pedidos de la WEB: no hay tienda que elegir; sí período.
  * Solo el buscador (la pantalla no depende de tienda ni de fechas, y exporta
  * por su cuenta o no exporta):
- *   products/catalog  el catálogo es el MAESTRO, no el surtido de una tienda, y
- *                     CatalogManager ya tiene su propio Excel/CSV dentro.
+ *   catalog           clave de grupo (ver abajo). «Productos y precios»
+ *                     (`products`) SÍ lleva tienda y exportación (ver BAR_TABS).
  *   stores            el directorio y el formulario de una tienda.
  *   team, security, posconfig, alerts, profile, pos.
  *   `pos` aparte: la venta se hace en el terminal asignado (contexto del POS),
@@ -107,10 +107,11 @@ export const BAR_TABS = {
   approvals: { store: true, period: false, export: false },
   audit: { store: true, period: true, export: false },
   orders: { store: false, period: true, export: true },
-  // Productos necesita la tienda: sus interruptores de marca y modelo (surtido)
-  // y el costo/precio propio actúan sobre la tienda elegida arriba («Elige una
-  // tienda arriba…»); sin el selector en la barra no había dónde elegirla.
-  products: { store: true, period: false, export: false },
+  // «Productos y precios» (Productos + Precios y costos, 6-nov-2026): la tienda
+  // deja solo sus columnas en la matriz y elige maestro/variación en «Reglas y
+  // comisiones». Exporta: la matriz registra su libro de Excel y las reglas el
+  // informe de precios de siempre (PDF/Excel/CSV).
+  products: { store: true, period: false, export: true },
   // ── Solo el buscador ──
   stores: NONE,
   team: NONE,

@@ -93,6 +93,8 @@ export const LensPhotoOption = model.define("lens_photo_option", {
   price_sv_cents: model.number().nullable(),
   price_bifocal_cents: model.number().nullable(),
   price_prog_cents: model.number().nullable(),
+  /** What the lab charges for it (one figure for every category); null = unknown. Never public. */
+  cost_cents: model.number().nullable(),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
 });
@@ -105,6 +107,8 @@ export const LensArOption = model.define("lens_ar_option", {
   label_en: model.text(),
   ar_group: model.text(), // "sv" | "bifprog" | "all"
   price_cents: model.number().default(0),
+  /** What the lab charges for it; null = unknown. Never public. */
+  cost_cents: model.number().nullable(),
   sort: model.number().default(0),
   is_active: model.boolean().default(true),
 });

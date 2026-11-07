@@ -7,6 +7,7 @@ import {
   StorePriceBand,
   StorePriceBandVariation,
   StorePriceRule,
+  StoreItemDiscount,
 } from "./models/index";
 
 /**
@@ -17,6 +18,8 @@ import {
  * src/lib/frame-cost.ts. The floor and ceiling a converted price is held
  * between (`store_price_band` + its per-store variation) are applied by the
  * pure functions in src/lib/pricing.ts and loaded in src/lib/store-pricing-data.ts.
+ * The owner's per-article promotion of each store (`store_item_discount`) is
+ * applied by src/lib/price-matrix.ts and moved by src/lib/price-matrix-data.ts.
  */
 export default class StorePricingModuleService extends MedusaService({
   StorePriceRule,
@@ -26,4 +29,5 @@ export default class StorePricingModuleService extends MedusaService({
   StoreFrameCostVariation,
   StorePriceBand,
   StorePriceBandVariation,
+  StoreItemDiscount,
 }) {}

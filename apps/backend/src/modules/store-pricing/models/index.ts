@@ -11,3 +11,4 @@ export * from "./frame-cost";
 export * from "./frame-cost-variation";
 export * from "./price-band";
 export * from "./price-band-variation";
+export * from "./item-discount";

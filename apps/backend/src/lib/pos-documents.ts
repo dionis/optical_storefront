@@ -13,6 +13,7 @@ import { parseLensFinish, resolveLensFinish, withFinishSuffix, type LensFinish }
 import { storefrontOrigin } from "./order-access";
 import { getSale, listPaymentMethods, listTerminals, PosError, type SaleRow } from "./pos-data";
 import { loadPrescriptionRecords } from "./prescription-read";
+import { promoLinePct } from "./price-matrix";
 import { presignPrescriptionUrl } from "./s3";
 import { tenant } from "./tenant";
 
@@ -84,6 +85,35 @@ export interface DocLine {
   frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
   own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null; photo_key?: string | null } | null;
   prescription_id: string | null;
+  /**
+   * The owner's promotion on this line («Productos y precios», sale line
+   * metadata `promo`): `list` above is already the reduced price; `before` is
+   * the price before it (dollars) and `pct` the line's effective % off, one
+   * decimal — what the receipt prints as «Precio antes $X · Promoción −Y %».
+   * The per-part percentages say what was discounted. Null = no promotion.
+   */
+  promo: DocLinePromo | null;
+}
+
+export interface DocLinePromo {
+  before: number;
+  pct: number;
+  frame_pct: number | null;
+  lens_pct: number | null;
+  photo_pct: number | null;
+  ar_pct: number | null;
+}
+
+/** A sale line's stored `promo` as the documents show it; null when absent or meaningless. Pure. */
+export function docLinePromo(raw: unknown, list: number): DocLinePromo | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as Record<string, unknown>;
+  const beforeCents = Math.round(Number(p["before_cents"]));
+  if (!Number.isFinite(beforeCents) || beforeCents <= 0) return null;
+  const pct = promoLinePct({ before_cents: beforeCents }, list);
+  if (pct === null) return null;
+  const part = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+  return { before: beforeCents / 100, pct, frame_pct: part(p["frame_pct"]), lens_pct: part(p["lens_pct"]), photo_pct: part(p["photo_pct"]), ar_pct: part(p["ar_pct"]) };
 }
 
 export interface SaleDocument {
@@ -230,12 +260,13 @@ export async function buildSaleDocument(
     const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null } | null;
     // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
     const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
+    const list = Number(md.list_price ?? it.unit_price ?? 0);
     lines.push({
       kind: own ? "own_frame" : "frame",
       title: String(own ? ownFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
       variant_title: own ? null : ((it.variant_title as string | null) ?? null),
       sku: own ? null : ((it.variant_sku as string | null) ?? null),
-      list: Number(md.list_price ?? it.unit_price ?? 0),
+      list,
       unit_price: Number(it.unit_price ?? 0),
       tax_amount: Number(md.tax_amount ?? 0),
       frame_price: Number(md.frame_price ?? 0),
@@ -277,6 +308,7 @@ export async function buildSaleDocument(
           }
         : null,
       prescription_id: (md.prescription_id as string | null) ?? null,
+      promo: docLinePromo(md.promo, list),
     });
   }
 

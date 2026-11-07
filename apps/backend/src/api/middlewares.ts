@@ -297,6 +297,13 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "2mb" },
     },
     {
+      // «Productos y precios» → Importar: the whole Excel book (every model,
+      // lens cell and treatment, price and discount per store) as JSON rows.
+      matcher: "/admin/pricing/matrix/import",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "5mb" },
+    },
+    {
       // A point-of-sale sale carries the photo of each frame the customer
       // brought as a base64 `data:` URL.
       matcher: "/admin/pos/sales",

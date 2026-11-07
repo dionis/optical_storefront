@@ -16,6 +16,7 @@ import Icon from "./icons.jsx";
 import { money } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { resolveImageSized } from "../data/imageUrl.js";
+import { promoOf } from "./pricing/promo.js";
 
 /** Una impresora de rollo (térmica) se reconoce por cómo la describió el dueño en el punto de venta. */
 export const isThermalPrinter = (printer) => /thermal|t[ée]rmic|roll|80\s?mm|58\s?mm/i.test(String(printer ?? ""));
@@ -92,6 +93,7 @@ export const PRINT_CSS = `
   .fold{margin-top:16px;border-top:2px dashed #111;padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
   .fold .big{font-size:34px;font-weight:900;letter-spacing:.02em}
   .muted{color:#555;font-size:11px}
+  .promo s{color:#777}
   .ph{display:flex;align-items:center;justify-content:center;border:1px solid #bbb;background:#fff;overflow:hidden;flex:0 0 auto}
   .ph img{display:block;width:100%;height:100%;object-fit:contain}
   .ph .ico{width:55%;height:55%}
@@ -168,7 +170,7 @@ export function jobHtml(doc) {
       ${head(tk)}
       <div class="grid2">
         <div><h4>${esc(t("adm.doc.job.overview"))}</h4><table class="kv"><tbody>
-          <tr><td>${esc(t("adm.doc.job.jobType"))}</td><td>${esc(t(`adm.doc.job.type.${tk.job_type}`))}</td></tr>
+          <tr><td>${esc(t("adm.doc.job.jobType"))}</td><td>${esc(t(`adm.doc.job.type.${tk.job_type}`))}${promoOf(l) ? ` <span class="muted">· ${esc(t("adm.pm.promoTag", { pct: promoOf(l).pct }))}</span>` : ""}</td></tr>
           <tr><td>Rx #</td><td>${esc(tk.rx?.rx_number || "—")}</td></tr>
           <tr><td>${esc(t("adm.doc.job.tray"))}</td><td><b>${esc(doc.sale.tray || "—")}</b></td></tr>
           <tr><td>${esc(t("adm.doc.job.invoice"))}</td><td>${esc(doc.sale.number)}</td></tr>
@@ -206,6 +208,18 @@ export function jobHtml(doc) {
 const lineName = (l, t) => (l.kind === "own_frame" ? `${t("adm.pos.own.tag")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · "));
 const lineLens = (l, t, lang) =>
   l.lens ? [bi(l.lens.design, lang), bi(l.lens.material, lang), bi(l.lens.photo, lang), bi(l.lens.ar, lang)].filter(Boolean).join(" · ") : l.design_code === "frame-only" ? t("adm.doc.rcpt.frameOnly") : "";
+/**
+ * «Precio antes $X · Promoción −Y %» under a line that carries the owner's item
+ * promotion (`line.promo`, docs/PRICE-MATRIX.md). The line's price is already the
+ * discounted one; the old price is struck through. Empty when there is no promo.
+ */
+const promoHtml = (l, t, m, tag = "div") => {
+  const p = promoOf(l);
+  if (!p) return "";
+  const mark = "\u0001";
+  const text = esc(t("adm.pm.promo", { before: mark, pct: p.pct })).replace(mark, `<s>${esc(m(p.before))}</s>`);
+  return `<${tag} class="muted promo">${text}</${tag}>`;
+};
 const payMethod = (p, t, lang) => (p.method ? bi(p.method, lang) : t(`adm.pos.method.${p.method_code}`));
 const payKindKey = (p) => (p.kind === "refund" ? "adm.doc.rcpt.refund" : p.method_code === "insurance" ? "adm.doc.rcpt.insurance" : p.kind === "balance" ? "adm.doc.rcpt.balancePaid" : "adm.doc.rcpt.deposit");
 
@@ -235,7 +249,7 @@ export function receiptHtml(doc) {
         const lens = lineLens(l, t, lang);
         const qty = l.quantity > 1 ? ` ×${l.quantity}` : "";
         return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
-          <td>${esc(lineName(l, t))}${qty}${l.sku ? `<br/><span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<br/><span class="muted">${esc(lens)}</span>` : ""}</td>
+          <td>${esc(lineName(l, t))}${qty}${l.sku ? `<br/><span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<br/><span class="muted">${esc(lens)}</span>` : ""}${promoHtml(l, t, m)}</td>
           <td class="r">${m(l.list)}</td></tr>`;
       }).join("")}
     </tbody></table>
@@ -286,7 +300,7 @@ function duoCopyHtml(doc, t, lang, copyKey) {
         const specs = [brand, l.title, l.variant_title].filter(Boolean).join(" · ");
         const lens = lineLens(l, t, lang);
         return `<tr><td class="lp">${photoBox(l, 320, l.image_url ? "" : t("adm.doc.rcpt.noPhoto"))}</td>
-          <td><b>${esc(l.kind === "own_frame" ? lineName(l, t) : specs || lineName(l, t))}</b>${l.sku ? ` <span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<div class="muted">${esc(lens)}</div>` : ""}</td>
+          <td><b>${esc(l.kind === "own_frame" ? lineName(l, t) : specs || lineName(l, t))}</b>${l.sku ? ` <span class="muted">${esc(l.sku)}</span>` : ""}${lens ? `<div class="muted">${esc(lens)}</div>` : ""}${promoHtml(l, t, m)}</td>
           <td class="c">${l.quantity}</td><td class="r">${m(l.list)}</td></tr>`;
       }).join("")}
     </tbody></table>

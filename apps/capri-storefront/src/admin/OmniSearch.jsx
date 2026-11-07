@@ -78,10 +78,8 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
  *   store         → NO navega: fija la tienda en el filtro GLOBAL, que es lo
  *                   que de verdad quiere quien busca una tienda, y además es
  *                   instantáneo (sin salto ni recarga).
- *   frame         → el catálogo. Hoy ninguna pantalla del catálogo acepta un
- *                   texto por `params`, así que se abre el catálogo sin
- *                   prefiltrar (ver el informe: falta una clave `q` en
- *                   CatalogManager para dejarlo filtrado).
+ *   frame         → «Productos y precios» con `q` = el SKU: la matriz
+ *                   (pricing/PriceMatrix.jsx) arranca filtrada por ese texto.
  *   lo demás      → Pedidos de tienda con el texto de la opción como búsqueda:
  *                   un tipo nuevo del servidor nunca deja el clic muerto.
  *

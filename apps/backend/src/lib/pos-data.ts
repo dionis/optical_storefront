@@ -16,7 +16,7 @@ import { recordAudit } from "./audit";
 import { ensureStoreSession, recordSalePayments } from "./cash";
 import type { EstablishmentRow } from "./establishments";
 import { frameBrand, loadProductMetadata, posFrameSpecs, type PosFrameSpecs } from "./frame-specs";
-import { LensFinishError } from "./lens-finish";
+import { LensFinishError, type LensFinish } from "./lens-finish";
 import { computeLensBreakdown, LensOptionError } from "./lens-quote";
 import { opticalChange, type EyeRx, type OpticalChange, type Thresholds } from "./optical-change";
 import { fetchBoardOrder } from "./order-board";
@@ -47,6 +47,8 @@ import { prescriptionColumns } from "./prescription-write";
 import { projectOrder, voidFacts } from "./sale-facts";
 import { belowMinimum, lineMinimum, storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
+import { applyPct, linePromoPcts, metadataSaysCase, NO_PROMO, productDiscountOf, promoStoreLine, type LinePromo } from "./price-matrix";
+import { storeDiscountIndex } from "./price-matrix-data";
 import { brandOf, isExposed } from "./store-assortment";
 import { listAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
@@ -567,8 +569,15 @@ export interface PosProduct {
   product_id: string;
   title: string;
   thumbnail: string | null;
-  /** Frame only, in this store, before sales tax. Null when the model has no price. */
+  /**
+   * Frame only, in this store, before sales tax — WITH the owner's promotion on
+   * the model in this store (store_item_discount). Null when it has no price.
+   */
   price: number | null;
+  /** The same price before the promotion (equal to `price` when there is none). */
+  price_before: number | null;
+  /** The owner's promotion on this model in this store, %; null = none. */
+  discount_pct: number | null;
   variants: PosProductVariant[];
   /** Colours whose code (UPC/SKU, barcode) matched the search, best first; empty when found by name. */
   matched_variant_ids: string[];
@@ -589,7 +598,12 @@ const firstText = (...values: unknown[]): string | null => {
   return null;
 };
 
-/** Products the owner priced as cases (rules with scope "case"); everything else is a frame. */
+/**
+ * Products the owner priced as cases (rules with scope "case" this store can
+ * see). Together with the catalogue's own word (`metadataSaysCase`: brand
+ * case/cases, `metadata.kind` "case") it decides the scope — the matrix uses
+ * the same test per store (lib/price-matrix.ts `storePriceScope`).
+ */
 function caseProductIds(rules: Array<{ scope: string; target: string | null }>): Set<string> {
   return new Set(rules.filter((r) => r.scope === "case" && r.target).map((r) => r.target as string));
 }
@@ -599,6 +613,9 @@ function caseProductIds(rules: Array<{ scope: string; target: string | null }>):
  * barcode, EAN — whole (a scanner) or in part (typed from the tag) (HU-20),
  * with each model's price in the store (HU-17: shown, never editable).
  */
+/** A model the owner discontinued (any status but published; absent = not known, allowed). Pure. */
+export const isDiscontinued = (status: string | null | undefined): boolean => typeof status === "string" && status !== "published";
+
 export async function searchPosProducts(container: MedusaContainer, establishmentId: string, q: string): Promise<PosProduct[]> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY);
   const term = q.trim().slice(0, 80);
@@ -617,7 +634,8 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
   const { productIds: codeIds, matched } = rankCodeMatches(byCode as VariantCodes[], term);
   const [{ data: exact }, { data: named }, assortment] = await Promise.all([
     codeIds.length
-      ? query.graph({ entity: "product", fields, filters: { id: codeIds } }).then((r) => ({
+      ? // Published only, like the name search: a discontinued model found by its tag code is not for sale.
+        query.graph({ entity: "product", fields, filters: { id: codeIds, status: "published" } as never }).then((r) => ({
           data: (r.data as Array<{ id: string }>).slice().sort((x, y) => codeIds.indexOf(x.id) - codeIds.indexOf(y.id)),
         }))
       : Promise.resolve({ data: [] as unknown[] }),
@@ -642,9 +660,10 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
     .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
     .filter((p) => isExposed(assortment, { id: p.id, brand: brandOf(p.metadata) }))
     .slice(0, 20);
-  const [rules, prices] = await Promise.all([
+  const [rules, prices, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, products.map((p) => p.id)),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const byId = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
@@ -662,14 +681,19 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
     const thumbnail = firstText(p.thumbnail, p.images?.[0]?.url, ...variants.map((v) => v.image));
     // Main photo first, then the gallery, then the colours' photos — deduplicated.
     const images = [...new Set([thumbnail, ...(p.images ?? []).map((i) => i.url), ...variants.map((v) => v.image)].filter((u): u is string => !!u))].slice(0, MAX_CARD_IMAGES);
+    const before =
+      base === null
+        ? null
+        : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) || metadataSaysCase(p.metadata) ? "case" : "frame", target: p.id, base, lenses: 0 }).total;
+    const discountPct = productDiscountOf(discounts, establishmentId, p.id);
     return {
       product_id: p.id,
       title: p.title,
       thumbnail,
-      price:
-        base === null
-          ? null
-          : storeLinePrice(rules, { establishmentId, scope: caseIds.has(p.id) ? "case" : "frame", target: p.id, base, lenses: 0 }).total,
+      // The same promotion `quoteSale` applies, so the card and the quote agree.
+      price: before === null ? null : dollars(applyPct(cents(before), discountPct)),
+      price_before: before,
+      discount_pct: before === null ? null : discountPct,
       variants,
       matched_variant_ids: matched.get(p.id) ?? [],
       brand: frameBrand(p.metadata),
@@ -695,7 +719,11 @@ export interface QuotedLine {
   lens_requires_add: boolean;
   /** Frame size from the catalog, for the prescription check and the lab ticket. */
   eye_size: number | null;
-  /** Store list price of the line, before discount and tax. */
+  /**
+   * Store list price of the line, before the seller's discount and tax — and
+   * AFTER the owner's per-article promotion (`promo`), so the seller's
+   * discount, its limit and the approval all work on the reduced price.
+   */
   list: number;
   frame: number;
   lenses: number;
@@ -705,6 +733,8 @@ export interface QuotedLine {
   unit_price: number;
   frame_source: "store_exact" | "adjusted" | "own_frame";
   below_minimum: boolean;
+  /** The owner's promotion on this line (lib/price-matrix.ts `promoStoreLine`); null = none. */
+  promo: LinePromo | null;
 }
 
 export interface Quote {
@@ -733,34 +763,37 @@ export async function quoteSale(
   const { data: variants } = variantIds.length
     ? await query.graph({
         entity: "variant",
-        fields: ["id", "title", "sku", "product.id", "product.title"],
+        fields: ["id", "title", "sku", "product.id", "product.title", "product.status"],
         filters: { id: variantIds },
       })
     : { data: [] as unknown[] };
   const variantById = new Map(
-    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string } }>).map((v) => [v.id, v])
+    (variants as Array<{ id: string; title?: string; sku?: string | null; product?: { id: string; title?: string; status?: string | null } }>).map((v) => [v.id, v])
   );
   const productIds = [...new Set([...variantById.values()].map((v) => v.product?.id).filter((v): v is string => Boolean(v)))];
-  const [rules, prices, settings, metadata, assortment] = await Promise.all([
+  const [rules, prices, settings, metadata, assortment, discounts] = await Promise.all([
     openRules(container, [establishmentId]),
     productPrices(container, productIds),
     resolveStoreSettings(container),
     loadProductMetadata(pg, productIds),
     listAssortmentRules(container, establishmentId),
+    storeDiscountIndex(container, [establishmentId]),
   ]);
   const priceById = new Map(prices.map((p) => [p.product_id, p.price]));
   const caseIds = caseProductIds(rules);
 
   const quoted: QuotedLine[] = [];
   for (const line of lines) {
-    let lensCents: number;
+    let lensParts: { lens_base_cents: number; photo_cents: number; ar_cents: number };
     let category: string | null;
     let requiresAdd: boolean;
+    let finish: LensFinish | null;
     try {
       const b = await computeLensBreakdown(pg, line.selection, establishmentId);
-      lensCents = b.total_cents;
+      lensParts = { lens_base_cents: b.lens_base_cents, photo_cents: b.photo_cents, ar_cents: b.ar_cents };
       category = b.category;
       requiresAdd = b.requires_add;
+      finish = b.finish;
     } catch (e) {
       // The finish the seller picked has no priced cell (a digital single
       // vision the owner has not priced yet, or "stock" on a progressive).
@@ -773,20 +806,27 @@ export async function quoteSale(
     let listFrame: number;
     let listLenses: number;
     let frameSource: QuotedLine["frame_source"];
+    let promo: LinePromo | null;
     let min = { frame_min: null as number | null, floor_pct: null as number | null };
     const variant = line.variant_id ? variantById.get(line.variant_id) : undefined;
     const productId = variant?.product?.id ?? null;
+    // The owner's promotion on each part of this line in this store (store_item_discount).
+    const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, selection: line.selection, category, finish }) : NO_PROMO;
 
     if (line.kind === "own_frame") {
       // No frame is sold: the store's adjustment applies to the lenses alone
       // (a fixed amount lands on the frame part when the base is 0, so move it).
-      const sp = storeLinePrice(rules, { establishmentId, scope: "frame", target: "", base: 0, lenses: lensCents / 100 });
+      const sp = promoStoreLine(rules, { establishmentId, scope: "frame", target: "", base: 0, lens: lensParts }, pcts);
       listFrame = 0;
       listLenses = dollars(cents(sp.frame) + cents(sp.lenses));
       frameSource = "own_frame";
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope: "frame", target: "" });
     } else {
       if (!variant || !productId) throw new PosError("bad_variant");
+      // A discontinued model (draft, «Productos y precios» → descontinuar) leaves
+      // the till too: the search hides it, this stops a stale screen or a scan.
+      if (isDiscontinued(variant.product?.status)) throw new PosError("discontinued");
       // The store only sells what it exposes (store-assortment.ts); the search
       // already hides the rest, this stops a stale screen or a scanned code.
       if (!isExposed(assortment, { id: productId, brand: brandOf(metadata.get(productId)) })) {
@@ -794,11 +834,12 @@ export async function quoteSale(
       }
       const base = priceById.get(productId);
       if (base == null) throw new PosError("no_price");
-      const scope = caseIds.has(productId) ? "case" : "frame";
-      const sp = storeLinePrice(rules, { establishmentId, scope, target: productId, base, lenses: lensCents / 100 });
+      const scope = caseIds.has(productId) || metadataSaysCase(metadata.get(productId)) ? "case" : "frame";
+      const sp = promoStoreLine(rules, { establishmentId, scope, target: productId, base, lens: lensParts }, pcts);
       listFrame = sp.frame;
       listLenses = sp.lenses;
-      frameSource = sp.frame_source;
+      frameSource = sp.before.frame_source;
+      promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope, target: productId });
     }
 
@@ -834,6 +875,7 @@ export async function quoteSale(
       unit_price: dollars(cents(d.total) + cents(tax_amount)),
       frame_source: frameSource,
       below_minimum: discountPct > 0 && belowMinimum(min, { list, frame: d.frame, total: d.total }),
+      promo,
     });
   }
 
@@ -1373,6 +1415,9 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           tax_rate: l.tax_rate,
           price_pretax: dollars(cents(l.frame) + cents(l.lenses)),
           frame_source: l.frame_source,
+          // The owner's per-article promotion (null = none): `list_price` above is
+          // already the reduced price; this keeps what it was before and by how much.
+          promo: l.promo,
           frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
           own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i] } : null,
         };

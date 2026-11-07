@@ -41,6 +41,7 @@ export const AUDIT_ACTIONS = [
   "alert.rule",
   "assortment.change",
   "catalog.sync",
+  "catalog.create",
   "ai_credit.change",
   "ai_alert.change",
 ] as const;

@@ -597,7 +597,8 @@ export async function loadCatalogModels(container: MedusaContainer): Promise<Cat
           sku: String(variants.find((v) => v.sku)?.sku ?? p.handle ?? p.title ?? ""),
           title: String(p.title ?? ""),
           brand_slug,
-          is_case: brand_slug === "case" || brand_slug === "cases",
+          // Same word as the till (lib/price-matrix.ts metadataSaysCase): the brand or metadata.kind.
+          is_case: brand_slug === "case" || brand_slug === "cases" || (p.metadata as Record<string, unknown> | null)?.["kind"] === "case",
           price_cents: price,
         });
       }

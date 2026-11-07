@@ -488,6 +488,11 @@ def upsert_product(
     search_resp.raise_for_status()
     products = search_resp.json().get("products", [])
 
+    if products and is_manual_product(products[0]):
+        # The owner's own model: the panel is its source of truth, not Capri.
+        print(f"[scraper] skip {product.handle}: added by hand in the panel (source=manual).")
+        return UpsertResult(product_id=str(products[0].get("id", "")), created=False)
+
     if products:
         existing = products[0]
         update = _as_update_payload(payload, existing)
@@ -521,6 +526,17 @@ def upsert_product(
     )
 
 
+def is_manual_product(product: dict[str, Any]) -> bool:
+    """True for a model the owner added by hand in the panel.
+
+    `POST /admin/catalog/frames` stamps `metadata.source = "manual"`
+    (apps/backend/src/lib/catalog-frame.ts). Such a model is not in Capri's
+    feed by definition, so the sync must neither draft it as discontinued nor
+    overwrite it if Capri ever lists a model with the same handle.
+    """
+    return ((product.get("metadata") or {}).get("source")) == "manual"
+
+
 def _list_published_handles(
     client: httpx.Client,
     base_url: str,
@@ -529,7 +545,8 @@ def _list_published_handles(
     """Return {handle: product_id} for published products we manage.
 
     Scoped to our collections via metadata.collection_slug so reconciliation never
-    touches products created outside this scraper.
+    touches products created outside this scraper — and never a model the owner
+    added by hand (`is_manual_product`), even in one of our collections.
     """
     managed: dict[str, str] = {}
     offset, limit = 0, 100
@@ -544,6 +561,8 @@ def _list_published_handles(
         products = body.get("products", [])
         for p in products:
             collection_slug = (p.get("metadata") or {}).get("collection_slug")
+            if is_manual_product(p):
+                continue
             if collection_slug in target_collections and p.get("handle"):
                 managed[p["handle"]] = p["id"]
         count = body.get("count", len(products))

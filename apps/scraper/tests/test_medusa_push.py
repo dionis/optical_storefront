@@ -7,7 +7,13 @@ import httpx
 import pytest
 from tenacity import wait_none
 
-from scraper.medusa_push import _build_medusa_payload, _get, _get_with_retry
+from scraper.medusa_push import (
+    _build_medusa_payload,
+    _get,
+    _get_with_retry,
+    _list_published_handles,
+    is_manual_product,
+)
 from scraper.models import FrameSize, ScrapedProduct
 
 
@@ -225,3 +231,83 @@ class TestGetRetryPolicy:
         # A validation rejection is a real answer — replaying it only wastes time.
         assert attempts["n"] == 1
         assert response.status_code == 422
+
+
+class TestManualProducts:
+    """A model the owner added by hand (`metadata.source = "manual"`, created by
+    `POST /admin/catalog/frames`) is not in Capri's feed: the sync must never
+    draft it as discontinued nor overwrite it."""
+
+    def test_is_manual_product(self) -> None:
+        assert is_manual_product({"metadata": {"source": "manual"}})
+        assert not is_manual_product({"metadata": {"source": "capri"}})
+        assert not is_manual_product({"metadata": None})
+        assert not is_manual_product({})
+
+    def test_reconciliation_never_lists_a_manual_product(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "count": 3,
+                    "products": [
+                        {
+                            "id": "p1",
+                            "handle": "dc-407",
+                            "metadata": {"collection_slug": "di-caprio"},
+                        },
+                        {
+                            "id": "p2",
+                            "handle": "dc-999",
+                            "metadata": {"collection_slug": "di-caprio", "source": "manual"},
+                        },
+                        {
+                            "id": "p3",
+                            "handle": "other",
+                            "metadata": {"collection_slug": "elsewhere"},
+                        },
+                    ],
+                },
+            )
+
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            managed = _list_published_handles(client, "https://medusa.test", {"di-caprio"})
+
+        # The manual model shares the brand's collection and still is not "ours".
+        assert managed == {"dc-407": "p1"}
+
+    def test_upsert_never_overwrites_a_manual_product(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from types import SimpleNamespace
+
+        import scraper.medusa_push as push
+
+        writes: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "products": [
+                            {"id": "p9", "handle": "dc-999", "metadata": {"source": "manual"}}
+                        ]
+                    },
+                )
+            writes.append(str(request.url))
+            return httpx.Response(200, json={"product": {"id": "p9"}})
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        monkeypatch.setattr(push, "_admin_client", lambda config: client)
+        config = SimpleNamespace(
+            medusa_backend_url="https://medusa.test", medusa_sales_channel_id=""
+        )
+        product = ScrapedProduct(
+            model_name="DC999", handle="dc-999", collection_slug="di-caprio", colors=["Black"]
+        )
+
+        result = push.upsert_product(product, config, PRICING)  # type: ignore[arg-type]
+
+        assert result is not None and result.product_id == "p9" and result.created is False
+        assert writes == []

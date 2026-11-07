@@ -34,5 +34,6 @@ import pricingAcross from "./pricing-across.js";
 import auth from "./auth.js";
 import sessions from "./sessions.js";
 import securityExtra from "./security-extra.js";
+import priceMatrix from "./price-matrix.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix];
