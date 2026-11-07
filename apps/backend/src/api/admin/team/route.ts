@@ -2,7 +2,8 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { IAuthModuleService, IUserModuleService, Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveRole, roleChangeDenied, type StaffRole } from "../../../lib/staff-roles";
-import { accessStatusByUser, profilesByUser } from "../../../lib/staff-profile-data";
+import { accessStatusByUser, profilesByUser, saveProfile } from "../../../lib/staff-profile-data";
+import { cleanProfilePatch } from "../../../lib/staff-profile";
 import { assignmentsByUser, getStaffScope, ownerUserId, writeStaffAssignment } from "../../../lib/staff-scope";
 import { listSellers } from "../../../lib/sellers";
 import { applySellerLink, prepareSellerLink, SellerLinkError, type PreparedSellerLink } from "../../../lib/seller-link";
@@ -45,6 +46,8 @@ export interface TeamMember {
   /** Código de recibos y fichas (perfil); null si aún no tiene. */
   seller_code: string | null;
   display_name: string | null;
+  /** Profile photo (data URL or https), for the avatar in lists; null = initials. */
+  photo_url: string | null;
   /** Seller record of a user with the `seller` role: store and till they sell from. */
   seller: { id: string; code: string; name: string; active: boolean; establishment_id: string | null; terminal_id: string | null } | null;
   /**
@@ -99,6 +102,7 @@ export async function listTeam(req: AuthenticatedMedusaRequest): Promise<TeamMem
       establishment_ids: resolved.establishment_ids,
       seller_code: profiles.get(u.id)?.seller_code ?? null,
       display_name: profiles.get(u.id)?.display_name ?? null,
+      photo_url: profiles.get(u.id)?.photo_url ?? null,
       seller: (() => {
         const s = sellerByUser.get(u.id);
         return s ? { id: s.id, code: s.code, name: s.name, active: s.active, establishment_id: s.establishment_id, terminal_id: s.terminal_id } : null;
@@ -125,6 +129,8 @@ interface CreateBody {
    * libre) o { create: { establishment_id, terminal_id, commission_pct?, code? } }.
    */
   seller?: unknown;
+  /** Optional profile photo (same rules as the profile: data:image/… or https, ≤ 200 KB). */
+  photo_url?: string | null;
 }
 
 export async function POST(
@@ -158,6 +164,18 @@ export async function POST(
   if (denied) {
     res.status(denied === "bad_role" ? 422 : 403).json({ type: "not_allowed", reason: denied, message: `Cannot create a user with role ${role}.` });
     return;
+  }
+
+  // Foto opcional del alta: mismas reglas que el perfil, comprobadas ANTES de
+  // crear el usuario para que una foto rechazada no deje un alta a medias.
+  let photo: string | null = null;
+  if (body.photo_url) {
+    const cleaned = cleanProfilePatch({ photo_url: body.photo_url }, "admin");
+    if ("reason" in cleaned) {
+      res.status(422).json({ type: "invalid_data", reason: cleaned.reason, field: "photo_url", message: `Invalid photo: ${cleaned.reason}` });
+      return;
+    }
+    photo = cleaned.patch.photo_url ?? null;
   }
 
   // Un vendedor nace con su ficha (tienda + punto de venta): se valida ANTES de
@@ -210,6 +228,13 @@ export async function POST(
   });
   // Receipt code, generated (a seller takes their record's).
   await ensureStaffCode(req.scope, user.id);
+  // The photo is cosmetic: if it cannot be stored, the person is still created
+  // and the photo can be added later from their profile.
+  if (photo) {
+    await saveProfile(req.scope, user.id, { photo_url: photo }, actorId || null).catch((e: Error) =>
+      logger.warn(`[team] photo of ${user.email} not saved: ${e.message}`)
+    );
+  }
 
   logger.info(`[team] ${role} ${user.email} created by ${actorId || "?"} (must change password on first login)`);
   res.status(200).json({ team: await listTeam(req) });

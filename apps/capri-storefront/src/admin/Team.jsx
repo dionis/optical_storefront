@@ -10,7 +10,8 @@ import { fetchTeam, createAdmin, deleteAdmin, setActive, setRole, setStores, ASS
 import { fetchStores } from "./adminStores.js";
 import { fetchSellers } from "./adminSellers.js";
 import { listTerminals } from "./posApi.js";
-import StaffProfile from "./StaffProfile.jsx";
+import StaffProfile, { PhotoUpload } from "./StaffProfile.jsx";
+import StaffAvatar from "./StaffAvatar.jsx";
 import useDefaultCommission from "./finance/useDefaultCommission.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, typedEmail } from "../data/fieldRules.js";
@@ -164,6 +165,8 @@ export default function Team() {
   const [state, setState] = useState(demo ? "demo" : "loading");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", role: "" });
+  // Foto opcional del alta (data URL ya recortada a 256×256 por PhotoUpload).
+  const [newPhoto, setNewPhoto] = useState(null);
   const [newLink, setNewLink] = useState(EMPTY_LINK);
   // Fila cuya ficha de vendedor se está eligiendo: { id, role, link }.
   const [linking, setLinking] = useState(null);
@@ -211,9 +214,10 @@ export default function Team() {
     if (Object.values(newProblems).some(Boolean)) { setShowNew(true); return; }
     setBusy(true);
     try {
-      const r = await createAdmin({ ...form, role: newRole, seller: newRole === "seller" ? linkPayload(newLink) : undefined });
+      const r = await createAdmin({ ...form, role: newRole, seller: newRole === "seller" ? linkPayload(newLink) : undefined, photo: newPhoto });
       setTeam(r.team || []);
       setForm({ email: "", password: "", firstName: "", lastName: "", role: "" });
+      setNewPhoto(null);
       setNewLink(EMPTY_LINK);
       fetchSellers().then((x) => setSellers(x.sellers || [])).catch(() => {});
       toast({ tone: "success", title: t(`adm.team.createdFor.${newRole}`), message: t("adm.team.createdSub") });
@@ -363,6 +367,9 @@ export default function Team() {
         {newRole === "seller" && (
           <SellerLinkFields value={newLink} onChange={setNewLink} sellers={sellers} stores={stores} terminals={terminals} disabled={demo || busy} />
         )}
+        <div className="adm-team-newphoto">
+          <PhotoUpload value={newPhoto} onChange={setNewPhoto} disabled={demo || busy} t={t} optional />
+        </div>
       </div>
 
       {/* Lista del equipo */}
@@ -373,7 +380,7 @@ export default function Team() {
           {team.map((m) => (
             <div key={m.id} className="adm-team-item">
             <div className={`adm-team-row ${m.is_super ? "super" : ""}`} style={m.is_disabled ? { opacity: 0.72 } : undefined}>
-              <span className="adm-team-avatar">{(m.first_name || m.email)[0].toUpperCase()}</span>
+              <StaffAvatar photo={m.photo_url} name={[m.first_name, m.last_name].filter(Boolean).join(" ") || m.display_name || m.email} />
               <span className="adm-team-main">
                 <b>{[m.first_name, m.last_name].filter(Boolean).join(" ") || m.email}</b>
                 <small className="muted">{m.email} · {shortDate(m.created_at, lang)}</small>

@@ -23,11 +23,11 @@ export const ASSIGNABLE_ROLES = ["superadmin", "supervisor", "manager", "seller"
 export const roleKey = (role) => `adm.team.role.${role || "none"}`;
 
 /** `seller`: obligatorio con rol vendedor — { seller_id } o { create: { establishment_id, terminal_id, commission_pct, code } }. */
-export async function createAdmin({ email, password, firstName = "", lastName = "", role = "superadmin", seller }) {
+export async function createAdmin({ email, password, firstName = "", lastName = "", role = "superadmin", seller, photo = null }) {
   try {
     return await adminFetch("/admin/team", {
       method: "POST",
-      body: { email, password, first_name: firstName, last_name: lastName, role, ...(seller ? { seller } : {}) },
+      body: { email, password, first_name: firstName, last_name: lastName, role, ...(seller ? { seller } : {}), ...(photo ? { photo_url: photo } : {}) },
     });
   } catch (e) {
     throw new Error(reasonKey(e, ASSIGNABLE_ROLES.includes(role) ? `adm.err.team.createFailedFor.${role}` : "adm.err.team.createFailed"));

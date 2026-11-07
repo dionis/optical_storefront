@@ -59,8 +59,8 @@ function urlToDataUrl(url) {
   });
 }
 
-/** Photo upload/capture widget. */
-function PhotoUpload({ value, onChange, disabled, t }) {
+/** Photo upload/capture widget (also used by the Team form when creating a person). */
+export function PhotoUpload({ value, onChange, disabled, t, optional = false }) {
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
   const [urlMode, setUrlMode] = useState(false);
@@ -88,7 +88,7 @@ function PhotoUpload({ value, onChange, disabled, t }) {
 
   return (
     <fieldset className="adm-profile-group adm-photo-group" disabled={disabled}>
-      <legend>{t("adm.profile.g.photo")}</legend>
+      <legend>{t("adm.profile.g.photo")}{optional ? ` · ${t("adm.team.photoOptional")}` : ""}</legend>
       <div className="adm-photo-wrap">
         <div className="adm-photo-preview">
           {value

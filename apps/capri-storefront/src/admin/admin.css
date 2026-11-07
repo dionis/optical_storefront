@@ -672,6 +672,8 @@ body:has(> #root .adm-shell), body:has(.adm-shell) { overflow-x: visible; }
 .adm-team-row:hover { background: var(--adm-line-2); }
 .adm-team-row.super { background: linear-gradient(90deg, var(--adm-accent-soft), transparent); }
 .adm-team-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--adm-navy-fill); color: #fff; display: grid; place-items: center; font-weight: 800; flex: 0 0 auto; }
+img.adm-team-avatar { object-fit: cover; background: var(--adm-bg); }
+.adm-team-newphoto { margin-top: 10px; }
 .adm-team-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .adm-team-main b { font-size: 13.5px; }
 .adm-team-tag { font-size: 11px; font-weight: 800; }
