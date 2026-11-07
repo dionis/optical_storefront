@@ -17,6 +17,7 @@
 import type { Knex } from "@mikro-orm/knex";
 import type { IUserModuleService, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
+import { ownerExplicitCheck } from "./owner-explicit";
 import { securityAudit, type SecurityCheck } from "./security";
 import { resolveStoreSettings } from "./store-settings";
 import { readTenantProfile, type TenantProfileView } from "./tenant-profile";
@@ -51,7 +52,7 @@ export interface SetupFacts {
   establishments: number | null;
   /** Active panel users. */
   users: number | null;
-  /** The profile names an owner and that user exists. */
+  /** The owner is named on purpose (transfer or STORE_OWNER_EMAIL), not only the oldest user. */
   ownerExplicit: boolean | null;
   /** Failing items of the Seguridad tab (environment only). */
   securityFailing: number | null;
@@ -97,12 +98,11 @@ export function buildSetupChecklist(f: SetupFacts): SetupChecklist {
   };
 }
 
-/** Group "tenant" of GET /admin/security-status. */
+/** Group "tenant" of GET /admin/security-status (the owner is its own item, `owner.explicit`). */
 export function tenantSecurityChecks(f: SetupFacts): SecurityCheck[] {
   const checks: SecurityCheck[] = [];
   const profile = profileComplete(f.profile);
   if (profile !== null) checks.push({ key: "tenant.profile", ok: profile });
-  if (f.ownerExplicit !== null) checks.push({ key: "tenant.owner_explicit", ok: f.ownerExplicit });
   if (f.profile) checks.push({ key: "tenant.setup_completed", ok: Boolean(f.profile.setup_completed_at) });
   return checks;
 }
@@ -127,7 +127,7 @@ export async function gatherSetupFacts(container: MedusaContainer): Promise<Setu
   const users = container.resolve<IUserModuleService>(Modules.USER);
   const notDeleted = (q: Knex.QueryBuilder) => q.whereNull("deleted_at");
 
-  const [profile, settings, lensPrices, establishments, userList, orders, posSales] = await Promise.all([
+  const [profile, settings, lensPrices, establishments, userList, orders, posSales, owner] = await Promise.all([
     safe(() => readTenantProfile(container, { fresh: true })),
     safe(() => resolveStoreSettings(container)),
     safe(() => countRows(pg, "lens_base_price", (q) => q.whereNull("deleted_at").where("price_cents", ">", 0))),
@@ -135,10 +135,10 @@ export async function gatherSetupFacts(container: MedusaContainer): Promise<Setu
     safe(() => users.listUsers({}, { select: ["id"], take: 500 })),
     safe(() => countRows(pg, "order", notDeleted)),
     safe(() => countRows(pg, "pos_sale", notDeleted)),
+    safe(() => ownerExplicitCheck(container)),
   ]);
 
-  const named = profile?.owner_user_id ?? null;
-  const ownerExplicit = profile === null || userList === null ? null : Boolean(named && userList.some((u) => u.id === named));
+  const ownerExplicit = owner ? owner.ok : null;
   const sales = orders === null && posSales === null ? null : (orders ?? 0) + (posSales ?? 0);
 
   return {

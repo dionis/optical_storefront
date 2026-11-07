@@ -27,9 +27,12 @@ const HELP = { sph: "pos.rx.sph", cyl: "pos.rx.cyl", axis: "pos.rx.axis", add: "
  *   fecha exacta o aproximada, medidas del armazón e historial).
  * - `errors`/`warnings`: resultado de validateRx; si no vienen se calcula aquí.
  * - `showErrors`: enseña también lo que falta (no solo lo que está mal) — al intentar avanzar.
+ * - `showMissingDate` (modo `worn`): avisa de que falta la fecha de la graduación
+ *   actual; por defecto va con `showErrors`, y el POS lo manda solo al pulsar
+ *   Siguiente para no regañar mientras se escribe.
  */
 export default function RxForm({
-  value, onChange, type, onTypeChange, mode = "new", disabled = false, errors, warnings, showErrors = false, idp = "rx",
+  value, onChange, type, onTypeChange, mode = "new", disabled = false, errors, warnings, showErrors = false, showMissingDate = showErrors, idp = "rx",
   source = "manual", worn, onWornChange, wornFrame, onWornFrameChange, history = [],
 }) {
   const { t } = useLang();
@@ -140,9 +143,12 @@ export default function RxForm({
                 <option value="approx">{t("adm.pos.rx.approx")}</option>
               </select>
             </label>
+            {/* La fecha (exacta o aproximada) es obligatoria para avanzar: al
+                intentarlo sin ella (`showErrors`) se dice aquí mismo, no se deja
+                el botón mudo. */}
             {worn?.dateMode === "approx"
-              ? <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" maxLength={3} value={worn?.months || ""} disabled={disabled} onChange={(e) => onWornChange?.({ ...worn, months: e.target.value.replace(/\D/g, "") })} /></label>
-              : <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={worn?.date || ""} disabled={disabled} onChange={(e) => onWornChange?.({ ...worn, date: e.target.value })} /></label>}
+              ? <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" maxLength={3} value={worn?.months || ""} disabled={disabled} aria-invalid={showMissingDate && !worn?.months ? true : undefined} onChange={(e) => onWornChange?.({ ...worn, months: e.target.value.replace(/\D/g, "") })} />{showMissingDate && !worn?.months && <small className="field-err" role="alert">{t("val.wornDate")}</small>}</label>
+              : <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={worn?.date || ""} disabled={disabled} aria-invalid={showMissingDate && !worn?.date ? true : undefined} onChange={(e) => onWornChange?.({ ...worn, date: e.target.value })} />{showMissingDate && !worn?.date && <small className="field-err" role="alert">{t("val.wornDate")}</small>}</label>}
           </>
         )}
         <span className="pos-rx-tag pd">{bin == null ? t("adm.pos.rx.pdBinMissing") : t("adm.pos.rx.pdBin", { v: bin.toFixed(1) })}</span>

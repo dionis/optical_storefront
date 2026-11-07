@@ -6,8 +6,14 @@
  * Owner decisions this encodes (docs "Gestión de Tiendas RUBI LENS"):
  *  - owner and superadmin have the same rights: store prices, approving
  *    discounts, configuring alerts. Only the owner names or removes superadmins.
- *  - the owner is the oldest admin user (the one created with `medusa user`
- *    when the store was set up), exactly as /admin/team already defines it.
+ *  - there is exactly ONE owner. It is the user the last ownership transfer
+ *    named (store_setting.owner_user_id, lib/owner-transfer.ts); before any
+ *    transfer, the user whose email is STORE_OWNER_EMAIL (set in the deploy);
+ *    without it, or when no user has that email, the oldest admin user (the one
+ *    created with `medusa user` when the store was set up). `pickOwnerId`.
+ *  - ownership moves only between superadmins: the owner or a superadmin hands
+ *    it to another active superadmin (`ownerTransferDenied`), and the previous
+ *    owner stays as a superadmin (owner's decision, 7-nov-2026).
  *  - admins that existed before roles did keep the access they had: a user with
  *    no assignment rows at all resolves to superadmin. Once someone has rows,
  *    only those rows count, so deactivating every row really removes access.
@@ -23,6 +29,22 @@ export const ADMIN_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>(["owner", 
 export const ASSIGNABLE_ROLES: readonly StaffRole[] = ["superadmin", "supervisor", "manager", "seller"];
 
 const RANK: Record<StaffRole, number> = { owner: 5, superadmin: 4, supervisor: 3, manager: 2, seller: 1 };
+
+/**
+ * The owner among the users (ordered oldest first): the one whose email is
+ * `ownerEmail` (case-insensitive), else the oldest. Pure; null when no users.
+ */
+export function pickOwnerId(users: ReadonlyArray<{ id: string; email?: string | null }>, ownerEmail?: string | null): string | null {
+  const want = String(ownerEmail ?? "").trim().toLowerCase();
+  if (want) {
+    const hit = users.find((u) => String(u.email ?? "").trim().toLowerCase() === want);
+    if (hit) return hit.id;
+  }
+  return users[0]?.id ?? null;
+}
+
+/** STORE_OWNER_EMAIL, trimmed and lower-cased ("" when unset). */
+export const configuredOwnerEmail = (env: NodeJS.ProcessEnv = process.env): string => String(env["STORE_OWNER_EMAIL"] ?? "").trim().toLowerCase();
 
 export function isStaffRole(value: unknown): value is StaffRole {
   return typeof value === "string" && (STAFF_ROLES as readonly string[]).includes(value);
@@ -104,6 +126,31 @@ export function roleChangeDenied(args: {
 }
 
 /**
+ * Why `actorRole` may not hand ownership to the target; null when allowed. Reason
+ * codes are the panel's adm.err.team.<reason>:
+ *   · only the owner and superadmins transfer ownership     → `forbidden_role`
+ *   · the target must be someone else                       → `self_owner`
+ *   · the target is already the owner                       → `already_owner`
+ *   · the target must be an active panel user               → `owner_target_disabled`
+ *   · the target must already be a superadmin               → `owner_target_not_superadmin`
+ * There is only one owner: the transfer replaces it, never adds one.
+ */
+export function ownerTransferDenied(args: {
+  actorRole: StaffRole | null;
+  actorIsTarget: boolean;
+  targetIsOwner: boolean;
+  targetRole: StaffRole | null;
+  targetDisabled: boolean;
+}): string | null {
+  if (!isAdminRole(args.actorRole)) return "forbidden_role";
+  if (args.actorIsTarget) return "self_owner";
+  if (args.targetIsOwner) return "already_owner";
+  if (args.targetDisabled) return "owner_target_disabled";
+  if (args.targetRole !== "superadmin") return "owner_target_not_superadmin";
+  return null;
+}
+
+/**
  * Why `actorRole` may not set someone else's password; null when allowed. The
  * owner and superadmins may do it for anyone (owner's decision), the owner
  * included. One's own goes through POST /admin/team/password, which asks for the
@@ -147,7 +194,10 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/users\/me$/ },
   { method: "GET", path: /^\/admin\/team\/me\/profile$/ },
   { method: "POST", path: /^\/admin\/team\/me\/profile$/ },
-  { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims)$/ },
+  // "Cerrar sesión en todos mis equipos": any role, only on oneself.
+  { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
+  // lens-matrix: the price list the till picks lenses from (store prices, never costs; lib/lens-matrix.ts).
+  { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims|lens-matrix)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals|prescriptions\/ocr)$/ },
   { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt|documents)$/ },
@@ -167,10 +217,15 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/pos\/cash-sessions\/[^/]+\/email$/ },
   // Store status: the route lets in admins, supervisors and managers, for their stores.
   { method: "GET", path: /^\/admin\/store-status$/ },
+  // Patient files: the routes let in supervisors and managers, patients of their stores only.
+  { method: "GET", path: /^\/admin\/patients(\/[^/]+)?$/ },
   // Order board (the stage of each sale in «Pedidos»): the route lets in
   // supervisors and managers for their stores, slim rows only and without
   // money (boardAccessFor, lib/order-board.ts); a seller gets forbidden_role.
+  // The single order (the sale sheet's stage block) follows the same rule in
+  // its own route; its writes (stage, tracking, note) stay admin-only.
   { method: "GET", path: /^\/admin\/order-board$/ },
+  { method: "GET", path: /^\/admin\/order-board\/[^/]+$/ },
   // The panel's single search bar: every role, each scoped by lib/omni-search.ts
   // (a seller finds only their own sales and no colleague or store).
   { method: "GET", path: /^\/admin\/search$/ },
@@ -198,6 +253,26 @@ const PRIVILEGED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; privileg
   { method: "GET", path: /^\/admin\/pricing\/frames\/(costs|band)$/, privilege: "costs.manage" },
   { method: "POST", path: /^\/admin\/pricing\/frames\/(cost|band)$/, privilege: "costs.manage" },
 ];
+
+/**
+ * The only /admin routes a person WITHOUT an active role (deactivated, or every
+ * assignment switched off) may still call: who they are — so the panel can show
+ * the «access deactivated» card instead of a dashboard — and signing out their
+ * own sessions. Everything else, the till routes included, is 403 `inactive`:
+ * the allowlist above is for people who work in a store, not for someone shown
+ * the door whose token has not expired yet (QA roles 5-nov-2026).
+ */
+const INACTIVE_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: "GET", path: /^\/admin\/team\/me$/ },
+  { method: "GET", path: /^\/admin\/users\/me$/ },
+  { method: "DELETE", path: /^\/admin\/team\/me\/sessions$/ },
+];
+
+export function isAllowedForInactiveUser(method: string, url: string): boolean {
+  const path = url.split("?")[0].replace(/\/+$/, "") || "/";
+  const m = method.toUpperCase();
+  return INACTIVE_ALLOWED.some((r) => r.method === m && r.path.test(path));
+}
 
 export function isAllowedForRestrictedRole(method: string, url: string, privileges: readonly string[] = []): boolean {
   const path = url.split("?")[0].replace(/\/+$/, "") || "/";

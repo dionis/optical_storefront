@@ -1,3 +1,5 @@
+import { commissionResolverOf } from "./commission-pct";
+import { loadDefaultCommissionPct } from "./store-cost-toggle";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
@@ -534,12 +536,9 @@ async function loadEconomics(container: MedusaContainer, f: AnalyticsFilter, acc
     loadCostingContext(container),
   ]);
   const sellerIds = [...new Set(cur.lines.map((l) => l.seller_id).filter((v): v is string => Boolean(v)))];
-  const profiles = await profilesByUser(container, sellerIds);
-  const commissionPct = (l: InsightLine): number | null => {
-    const own = l.seller_id ? profiles.get(l.seller_id)?.commission_pct ?? null : null;
-    if (own !== null) return own;
-    return l.seller_code ? costing.sellerByCode.get(l.seller_code)?.commission_pct ?? null : null;
-  };
+  // One precedence everywhere (lib/commission-pct.ts): profile, seller record, default.
+  const [profiles, defaultPct] = await Promise.all([profilesByUser(container, sellerIds), loadDefaultCommissionPct(container)]);
+  const commissionPct = commissionResolverOf(profiles, costing.sellerByCode, defaultPct);
   const econ = lineEconomics(cur.lines, {
     rules: costing.rules,
     orders: new Map(orderRows.map((r) => [String(r.order_id), { gross: Number(r.gross), net: Number(r.net), lines: Number(r.lines) }])),

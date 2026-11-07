@@ -87,7 +87,7 @@ import { takenCodes } from "../lib/staff-code";
 import { saveProfile } from "../lib/staff-profile-data";
 import { ownerUserId, writeStaffAssignment } from "../lib/staff-scope";
 import { brandOf, isExposed } from "../lib/store-assortment";
-import { listAssortmentRules } from "../lib/store-assortment-data";
+import { effectiveAssortmentRules } from "../lib/store-assortment-data";
 import { productPrices } from "../lib/store-pricing-data";
 import { tenant } from "../lib/tenant";
 import { POS_MODULE } from "../modules/pos";
@@ -727,7 +727,7 @@ async function prepareCostItems(container: MedusaContainer, stores: Establishmen
 /** Two tills, three counter sellers and one referral seller for the store. */
 async function prepareStore(container: MedusaContainer, store: EstablishmentRow, index: number, rng: () => number, password: string, allFrames: Frame[], counts: number[]): Promise<StoreCtx> {
   const pos = container.resolve<PosModuleService>(POS_MODULE);
-  const assortment = await listAssortmentRules(container, store.id);
+  const assortment = await effectiveAssortmentRules(container, store.id);
   const frames = allFrames.filter((f) => isExposed(assortment, { id: f.productId, brand: f.brand }));
   if (!frames.length) throw new Error(`[demo-seed] ${store.code} exposes no sellable frame.`);
   // A store's own best sellers: a different slice of the catalog first.

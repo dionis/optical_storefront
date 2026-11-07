@@ -3,14 +3,11 @@ import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../../lib/audit";
 import { mirrorPricesToSheet } from "../../../../lib/gsheet-sync";
-import { clearLensCellCostCache } from "../../../../lib/lens-cost";
-import { cellMatchesFinish, type LensFinish } from "../../../../lib/lens-finish";
+import { canonicalLensBaseKey, writeLensMaster } from "../../../../lib/lens-price-write";
 import {
   LENS_ADJUST_KEY,
-  lensBaseKey,
   lensPriceDenied,
   loadPricingOverview,
-  parseLensBaseKey,
   redactLensCosts,
   resolvePricingStore,
   upsertStoreLensPrice,
@@ -18,8 +15,6 @@ import {
 } from "../../../../lib/pricing-overview";
 import { hasPrivilege } from "../../../../lib/staff-profile";
 import { getStaffScope } from "../../../../lib/staff-scope";
-import { LENS_CONFIG_MODULE } from "../../../../modules/lens-config/index";
-import type LensConfigModuleService from "../../../../modules/lens-config/service";
 
 /**
  * POST /admin/pricing/lenses
@@ -105,13 +100,13 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         {
           establishmentId: store.storeId,
           kind: kind as LensStoreKind,
-          key: kind === "adjust" ? LENS_ADJUST_KEY : kind === "base" ? await canonicalBaseKey(req.scope, key) : key,
+          key: kind === "adjust" ? LENS_ADJUST_KEY : kind === "base" ? await canonicalLensBaseKey(req.scope, key) : key,
           value: value === null ? null : kind === "adjust" ? value : cents(value),
         },
         actorId
       );
     } else {
-      const failed = await writeMaster(req.scope, kind, key, field, value === null ? null : cents(value));
+      const failed = await writeLensMaster(req.scope, kind, key, field, value === null ? null : cents(value));
       if (failed) {
         res.status(422).json({ type: "invalid_data", reason: failed, message: "Unknown lens item." });
         return;
@@ -133,78 +128,4 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     logger.error(`[pricing] lens save failed: ${(error as Error).message}`);
     res.status(500).json({ type: "error", reason: "save_failed", message: "Could not save the lens price." });
   }
-}
-
-/** The category of a design, for the key and finish rules; null when unknown. */
-async function designCategory(svc: LensConfigModuleService, design_code: string): Promise<string | null> {
-  const rows = (await svc.listLensDesigns({ code: design_code })) as unknown as Record<string, unknown>[];
-  const design = rows.find((r) => !r["deleted_at"]);
-  return design ? String(design["category"] ?? "") : null;
-}
-
-/**
- * A store cell's key as `lensBaseKey` spells it, whatever the panel sent
- * ("prog-mid:cr39:digital" → "prog-mid:cr39"), so the quote finds it.
- */
-async function canonicalBaseKey(container: AuthenticatedMedusaRequest["scope"], key: string): Promise<string> {
-  const parts = parseLensBaseKey(key);
-  if (!parts) return key;
-  const svc = container.resolve<LensConfigModuleService>(LENS_CONFIG_MODULE);
-  const category = await designCategory(svc, parts.design_code);
-  return lensBaseKey(parts.design_code, parts.material_code, parts.finish, category);
-}
-
-/** Writes one cell of the owner's master list; a `reason` code when the item does not exist. */
-async function writeMaster(
-  container: AuthenticatedMedusaRequest["scope"],
-  kind: string,
-  key: string,
-  field: "price" | "cost",
-  amountCents: number | null
-): Promise<string | null> {
-  const svc = container.resolve<LensConfigModuleService>(LENS_CONFIG_MODULE);
-  if (kind === "base") {
-    const parts = parseLensBaseKey(key);
-    if (!parts) return "bad_key";
-    const { design_code, material_code } = parts;
-    const category = await designCategory(svc, design_code);
-    if (category === null) return "unknown_item";
-    // A progressive has one cell and it is digital: a "stock" write on it
-    // would create a second cell the quote never reads.
-    const finish: LensFinish = category === "prog" ? "digital" : parts.finish;
-    if (finish !== parts.finish) return "finish_unavailable";
-    const rows = (await svc.listLensBasePrices({ design_code, material_code })) as unknown as Record<string, unknown>[];
-    const cell = rows.find((r) => !r["deleted_at"] && cellMatchesFinish(r as { finish?: unknown }, finish));
-    if (field === "cost") {
-      // Cost on a cell that is not priced yet: nothing to attach it to.
-      if (!cell) return "unknown_item";
-      await svc.updateLensBasePrices([{ id: cell["id"], cost_cents: amountCents }] as never);
-    } else if (cell) {
-      await svc.updateLensBasePrices([{ id: cell["id"], price_cents: amountCents ?? 0 }] as never);
-    } else {
-      await svc.createLensBasePrices({ design_code, material_code, finish, price_cents: amountCents ?? 0 } as never);
-    }
-    // Margins read the cell's cost through a process cache (lib/lens-cost.ts).
-    clearLensCellCostCache();
-    return null;
-  }
-  if (kind === "photo") {
-    const [code, category] = key.split(":");
-    const column =
-      category === "sv" ? "price_sv_cents" : category === "bifocal" ? "price_bifocal_cents" : category === "prog" ? "price_prog_cents" : null;
-    if (!code || !column) return "bad_key";
-    const rows = (await svc.listLensPhotoOptions({ code })) as unknown as Record<string, unknown>[];
-    const row = rows.find((r) => !r["deleted_at"]);
-    if (!row) return "unknown_item";
-    await svc.updateLensPhotoOptions([{ id: row["id"], [column]: amountCents ?? 0 }] as never);
-    return null;
-  }
-  if (kind === "ar") {
-    const rows = (await svc.listLensArOptions({ code: key })) as unknown as Record<string, unknown>[];
-    const row = rows.find((r) => !r["deleted_at"]);
-    if (!row) return "unknown_item";
-    await svc.updateLensArOptions([{ id: row["id"], price_cents: amountCents ?? 0 }] as never);
-    return null;
-  }
-  return "bad_kind";
 }

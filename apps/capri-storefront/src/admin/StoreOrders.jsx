@@ -106,7 +106,10 @@ const LIST_TTL = 60_000;
 export function storeOrdersQueries({ from, to, storeId }) {
   // Mismo `limit` que useStoreSales: si no coincidiera, lo que se precarga
   // quedaría en otra clave de caché y la lista lo pediría otra vez.
-  const q = { from, to, page: 0, limit: PAGE_LIMIT };
+  // `voided: 1`: the list paints voided sales too (grey row, «Anuladas» chip,
+  // status column); without it the server leaves them out and the chip read 0
+  // with four voided sales in the month (QA roles 5-nov-2026).
+  const q = { from, to, page: 0, limit: PAGE_LIMIT, voided: 1 };
   if (storeId && storeId !== "all") q.stores = storeId;
   const b = { from: shiftDay(from, -1), to: shiftDay(to, 1), view: "stages", limit: 300 };
   if (storeId && storeId !== "all") b.store = storeId;
@@ -158,7 +161,7 @@ export function useStoreSales({ from, to, storeId }, enabled = true) {
     let on = true;
     setData((d) => ({ ...d, state: "loading" }));
     const getPage = (page) => {
-      const q = { from, to, page, limit: PAGE_LIMIT };
+      const q = { from, to, page, limit: PAGE_LIMIT, voided: 1 };
       if (storeId && storeId !== "all") q.stores = storeId;
       return adminGet("/admin/sales-analytics/sales", { query: q, ttl: LIST_TTL, force: tick > 0 });
     };

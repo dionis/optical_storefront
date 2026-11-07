@@ -1,3 +1,4 @@
+import { loadDefaultCommissionPct } from "../../../lib/store-cost-toggle";
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
@@ -136,7 +137,10 @@ export async function POST(req: AuthenticatedMedusaRequest<SellerBody>, res: Med
       email: (data["email"] as string | null) ?? null,
       phone: (data["phone"] as string | null) ?? null,
       address: (data["address"] as string | null) ?? null,
-      commission_pct: (data["commission_pct"] as number | undefined) ?? 0,
+      // Not sent (or empty) = the owner's default commission («Reglas y comisiones»), the single source.
+      commission_pct: body.commission_pct === undefined || body.commission_pct === null || body.commission_pct === ""
+        ? (await loadDefaultCommissionPct(req.scope)) ?? 0
+        : (data["commission_pct"] as number | undefined) ?? 0,
       notes: (data["notes"] as string | null) ?? null,
       social: (data["social"] as Record<string, unknown> | null) ?? null,
       active: (data["active"] as boolean | undefined) ?? true,

@@ -6,6 +6,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import {
   RESET_TOKEN_TTL_MINUTES,
+  adminPanelUrl,
   buildResetLink,
   decideResetRecipient,
   handlePasswordResetEvent,
@@ -46,6 +47,17 @@ describe("buildResetLink", () => {
   it("points at the panel with the token and the email url-encoded, no double slash", () => {
     const link = buildResetLink("https://www.rubilens.com/", "a+b/c=", "ana+x@rubilens.com");
     expect(link).toBe("https://www.rubilens.com/admin?reset=a%2Bb%2Fc%3D&email=ana%2Bx%40rubilens.com");
+  });
+  it("keeps a panel URL that already names its path (the optician's own domain)", () => {
+    expect(buildResetLink("https://opticaelrancho.com/admin/", "t", "a@b.co")).toBe("https://opticaelrancho.com/admin?reset=t&email=a%40b.co");
+  });
+});
+
+describe("adminPanelUrl", () => {
+  it("prefers ADMIN_PANEL_URL and otherwise the storefront's /admin", () => {
+    expect(adminPanelUrl("https://www.rubilens.com/", {})).toBe("https://www.rubilens.com/admin");
+    expect(adminPanelUrl("https://www.rubilens.com", { ADMIN_PANEL_URL: " https://opticaelrancho.com/admin/ " })).toBe("https://opticaelrancho.com/admin");
+    expect(adminPanelUrl("https://www.rubilens.com", { ADMIN_PANEL_URL: "" })).toBe("https://www.rubilens.com/admin");
   });
 });
 

@@ -94,6 +94,27 @@ export function htmlValues(m) {
   };
 }
 
+/**
+ * The inside of the Organization JSON-LD in index.html, one property per line
+ * with the indentation the file uses. Values go through JSON.stringify and "</"
+ * is escaped, so nothing in a manifest can close the <script>.
+ */
+export function orgJsonLd(m) {
+  const site = String(m.domains.storefront).replace(/\/+$/, "");
+  const logo = /^https?:\/\//.test(m.brand.logo) ? m.brand.logo : `${site}${m.brand.logo}`;
+  const props = [
+    ["@context", "https://schema.org"],
+    ["@type", "Organization"],
+    ["name", m.identity.name],
+    ...(m.seo.alternateName ? [["alternateName", m.seo.alternateName]] : []),
+    ["url", `${site}/`],
+    ["logo", logo],
+    ...(m.seo.sameAs?.length ? [["sameAs", m.seo.sameAs]] : []),
+  ];
+  const json = (v) => (Array.isArray(v) ? `[${v.map((x) => JSON.stringify(x)).join(", ")}]` : JSON.stringify(v)).replace(/<\//g, "<\\/");
+  return props.map(([k, v]) => `      ${JSON.stringify(k)}: ${json(v)}`).join(",\n");
+}
+
 export function fillHtml(html, values) {
   return html.replace(/%(TENANT_[A-Z_]+)%/g, (whole, key) => (key in values ? escapeHtml(values[key]) : whole));
 }
@@ -183,7 +204,7 @@ export function tenantPlugin(tenant) {
     transformIndexHtml: {
       order: "pre",
       handler(html) {
-        let out = fillHtml(html, htmlValues(m));
+        let out = fillHtml(html.replace("%TENANT_ORG_JSONLD%", () => orgJsonLd(m)), htmlValues(m));
         const css = brandCss(m);
         if (css) out = out.replace("</head>", `  <style id="tenant-brand">${css}</style>\n  </head>`);
         return out;

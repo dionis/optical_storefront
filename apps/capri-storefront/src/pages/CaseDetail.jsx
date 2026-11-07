@@ -53,8 +53,9 @@ export default function CaseDetail() {
             <button className={`heart ${isFav(item.slug) ? "on" : ""}`}
                     onClick={(e) => { e.stopPropagation(); toggleFav({ slug: item.slug, name: item.name, price: item.price, image: color.image, brand: item.brand, isCase: true }); }}
                     aria-label={t("a11y.fav")}>{isFav(item.slug) ? "♥" : "♡"}</button>
+            {/* Misma reserva que la tarjeta: sello de Estuches si la foto del proveedor no carga. */}
             <img key={color.image} src={color.image} alt={`${item.name} ${color.name}`} className="fade-in"
-                 onError={(e) => { e.currentTarget.style.opacity = 0.3; }} />
+                 onError={(e) => { const el = e.currentTarget; if (el.dataset.fb) { el.style.opacity = 0.3; return; } el.dataset.fb = "1"; el.src = "/brands/logo-case.png"; el.style.objectFit = "contain"; el.style.padding = "18%"; }} />
           </div>
           {multi && (
             <div className="pdp-thumbs">

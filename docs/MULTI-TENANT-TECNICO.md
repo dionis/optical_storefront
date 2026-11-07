@@ -24,11 +24,11 @@ código ni variables. La visión de producto está en [GUIA-GENERAL.md](GUIA-GEN
 | Vigilancia | `scripts/check-tenant.mjs` (`pnpm check:tenant`, dentro de `pnpm test`) | Falla con un nombre de óptica o del proveedor escrito en el código. Las excepciones (valores por defecto, enlaces del proveedor hasta la fase 4, claves de `localStorage`) están listadas con su motivo. |
 | Herramienta | `scripts/tenant.mjs` (`pnpm tenant list`, `validate`, `env`) | El resto de comandos (`new`, `checklist`, `bootstrap`, `vercel`) llega en la fase 3. |
 | Perfil (capa C) | módulo `tenantProfile`, `lib/tenant-profile.ts` | Rutas `GET/POST /admin/tenant` y `GET /store/tenant`. **El correo de soporte se queda en `store_setting`** (ya lo edita el dueño en Ajustes): no se migra. Las zonas de envío y la marca editable llegan en las fases 4 y 5. Un middleware refresca el perfil en memoria sin hacer esperar a la petición. |
-| Dueño explícito | `ownerUserId` en `lib/staff-scope.ts` | Una sola regla para el panel, Equipo y los aprobadores de descuentos (antes estaba copiada en tres sitios). Si el perfil no se puede leer, vuelve a la regla del usuario más antiguo. |
-| Traspaso | `POST /admin/tenant/transfer-owner`, `lib/tenant-owner.ts`, Equipo → «Propiedad del panel» | Solo el dueño, con su contraseña; el anterior queda como superadmin, se audita y se avisa por correo a los dos. |
-| Entrega al dueño (fase 3) | `src/scripts/tenant-bootstrap.ts` → `lib/tenant-bootstrap.ts` | **No usa las invitaciones de Medusa** (el registro está cerrado por seguridad): crea el usuario con una contraseña aleatoria que nadie ve, lo nombra dueño, reabre «Primeros pasos», audita (`tenant.bootstrap`) y le manda un correo con `/admin?activate=<correo>`. Ese enlace **no lleva token**: abre la pantalla de «olvidé mi contraseña» con otro título y el dueño pide ahí el enlace de 15 minutos. Simulacro salvo `TENANT_BOOTSTRAP_CONFIRM=yes`; se niega si ya hay otro dueño vivo (entonces solo vale el traspaso). Región, canal y clave publicable siguen saliendo de `seed.ts`, que se corre antes. |
+| Dueño explícito | `ownerUserId` en `lib/staff-scope.ts` (de `develop_optical_storepos`) | **Una sola fuente desde la unión del 07/11/2026**: `store_setting.owner_user_id` (traspaso) > `STORE_OWNER_EMAIL` > usuario más antiguo. El módulo multi-tenant **ya no guarda dueño** en `tenant_profile` (la columna `owner_user_id` se quitó antes de desplegarse). `lib/owner-explicit.ts` dice si el dueño está nombrado a propósito; lo usan Seguridad (`owner.explicit`) y «Primeros pasos». |
+| Traspaso | `POST /admin/team/:id/owner`, `lib/owner-transfer.ts`, Equipo → «Hacer dueño» | El de `develop_optical_storepos`: el dueño **o un superadmin**, solo hacia otro superadmin activo, con su contraseña; el anterior queda como superadmin. La ruta y la pantalla del módulo (`/admin/tenant/transfer-owner`, «Propiedad del panel») se retiraron en la unión. |
+| Entrega al dueño (fase 3) | `src/scripts/tenant-bootstrap.ts` → `lib/tenant-bootstrap.ts` | **No usa las invitaciones de Medusa** (el registro está cerrado por seguridad): crea el usuario con una contraseña aleatoria que nadie ve, lo nombra dueño en `store_setting.owner_user_id` (la misma columna que el traspaso), reabre «Primeros pasos», audita (`tenant.bootstrap`) y le manda un correo con `/admin?activate=<correo>`. Ese enlace **no lleva token**: abre la pantalla de «olvidé mi contraseña» con otro título y el dueño pide ahí el enlace de 15 minutos. Simulacro salvo `TENANT_BOOTSTRAP_CONFIRM=yes`; se niega si ya hay otro dueño vivo nombrado ahí (entonces solo vale «Hacer dueño»). `pnpm tenant env --target backend` añade además `STORE_OWNER_EMAIL` con el correo de la ficha. Región, canal y clave publicable siguen saliendo de `seed.ts`, que se corre antes. |
 | «Primeros pasos» (fase 3) | `lib/tenant-setup.ts`, `GET /admin/tenant/setup`, pestaña Administración → «Configuración de la óptica» (`Setup.jsx`) | Nueve pasos calculados en el servidor (perfil, avisos, recogida, precios de lentes, tiendas, equipo ≥ 2, dueño nombrado, Seguridad sin fallos, primera venta), cada uno con la pestaña que lo arregla; una lectura que falla sale «sin comprobar», nunca como hecha. La misma pantalla edita el perfil (contacto, redes, recogida). Insignia con los pendientes y, para el dueño sin `?tab=`, el panel abre ahí hasta que lo da por terminado. Terminar con pendientes pide confirmación; no bloquea nada. |
-| Seguridad (fase 3) | `security-status/route.ts` | Grupo nuevo «Configuración de la óptica»: `tenant.profile`, `tenant.owner_explicit`, `tenant.setup_completed`. **En RUBI LENS saldrán en rojo** hasta que su dueño haga el traspaso y complete el perfil: es real, no un fallo del despliegue. |
+| Seguridad (fase 3) | `security-status/route.ts` | Grupo nuevo «Configuración de la óptica»: `tenant.profile` y `tenant.setup_completed`. El dueño es el punto `owner.explicit` de `develop_optical_storepos`. **En RUBI LENS saldrán en rojo** hasta que complete el perfil y dé por terminada la puesta en marcha: es real, no un fallo del despliegue. |
 | Enrutado en Vercel (fase 3) | `scripts/tenant/routing.mjs`, `backend-target.mjs`, `vercel-build.sh`, `check-vercel-config.mjs` | **No por dominio (`has: host`)** como decía §9: las vistas previas de Vercel tienen otro host y habrían caído en el backend de RUBI LENS. Cada óptica nueva tiene un prefijo fijo `/medusa-t-<slug>` → su `domains.api`, y su proyecto de Vercel (con `TENANT_FILE`) usa ese prefijo en producción y en vistas previas. RUBI LENS y El Rancho siguen con `/medusa` y `/medusa-staging` por rama. Una ficha sin `domains.api` https hace fallar el build en vez de apuntar a otra tienda. Las fichas con dominios `.example`/`.test` (demo) no reciben ruta. |
 | Marca desde el panel (fase 5) | `lib/tenant-brand.ts`, rutas `/admin/tenant/brand` (+ `/revert`, `/logo`, `/publish`), migración `CreateTenantProfileBrand2`, `BrandEditor.jsx`, `src/config/brandRuntime.js` | Ver §7.5 → «Implementado». En resumen: colores y logos en `tenant_profile.brand` (la anterior en `brand_previous`); contraste AA (4.5:1) del texto blanco sobre **los dos** colores, comprobado en el servidor; logos al bucket público con revisión de bytes y SVG activo rechazado; la tienda la aplica al arrancar (última marca recordada en `localStorage`, sin parpadeo) y los correos se repintan al enviarse. |
 | Herramienta (fase 3) | `scripts/tenant.mjs` | `new` (genera la ficha desde nombre, dominio y correo del dueño), `env` (ahora con CORS, `BACKEND_URL`, buckets y la lista de claves propias por rellenar), `vercel [--check]`, `checklist` (§11 con los valores de esa óptica) y `bootstrap`. `pnpm test` falla si `vercel.json` y las fichas no coinciden. |
@@ -145,6 +145,20 @@ primer usuario al montar la tienda, **nosotros quedamos como dueño para siempre
 el dueño real no puede nombrar superadmins. Es el bloqueo principal para "dar el
 control al dueño" y se resuelve en §7.
 
+**Paso 1 hecho (7-nov-2026):** `STORE_OWNER_EMAIL` (variable del despliegue, en
+Coolify) nombra al dueño por su correo de acceso; sin ella, o si ningún usuario
+tiene ese correo, sigue siendo el más antiguo (`pickOwnerId` en `staff-roles.ts`,
+`ownerUserId` en `staff-scope.ts`, que ahora usan también `/admin/team` y los
+aprobadores de descuentos). El dueño anterior, sin filas de rol, queda como
+superadmin (regla «existía antes de los roles»). **Paso 2 hecho (7-nov-2026, rama `develop_optical_storepos`):** traspaso desde el
+panel, Equipo → «Hacer dueño» (`POST /admin/team/:id/owner`,
+`src/lib/owner-transfer.ts`). Decisión del dueño: lo puede hacer el dueño **o un
+superadmin**, solo hacia **otro superadmin activo**, con la contraseña de quien lo
+hace; el anterior queda como superadmin y siempre hay un único dueño. Se guarda en
+`store_setting.owner_user_id`, que manda sobre `STORE_OWNER_EMAIL`. **Unido el
+07/11/2026**: `multi-tenant-modulo-develop` adoptó esta fuente y retiró su
+`tenant_profile.owner_user_id` y su `/admin/tenant/transfer-owner`.
+
 ## 5. Componentes del módulo
 
 ```
@@ -157,7 +171,7 @@ tenants/
 packages/shared/src/tenant.ts     # tipo TenantManifest + validador (zod) + defaults
 scripts/tenant/                   # CLI `pnpm tenant`
 apps/backend/src/modules/tenant-profile/   # capa C de identidad
-apps/backend/src/api/admin/tenant/         # GET/POST perfil, POST transfer-owner
+apps/backend/src/api/admin/tenant/         # GET/POST perfil, setup, brand (el traspaso vive en /admin/team/:id/owner)
 apps/backend/src/api/store/tenant/         # GET perfil público
 apps/backend/src/scripts/tenant-bootstrap.ts
 apps/capri-storefront/vite-plugin-tenant.js
@@ -250,7 +264,6 @@ export const TenantProfile = model.define("tenant_profile", {
   shipping_origin: model.json().nullable(),
   shipping_zones: model.json().nullable(),    // hoy en priceStore.js / localStorage
   legal: model.json().nullable(),             // textos de privacidad/devoluciones por idioma
-  owner_user_id: model.text().nullable(),     // §7.2
   setup_completed_at: model.dateTime().nullable(),
   updated_by: model.text().nullable(),
 });
@@ -269,6 +282,12 @@ export const TenantProfile = model.define("tenant_profile", {
   navegador (regla "never trust client-side totals").
 
 ### 7.2 Propiedad explícita y traspaso
+
+> **Lo que quedó (07/11/2026):** el dueño vive en `store_setting.owner_user_id`
+> (traspaso desde Equipo → «Hacer dueño») con respaldo en `STORE_OWNER_EMAIL` y en
+> el usuario más antiguo; ver §0. La entrega usa `tenant-bootstrap` (correo de
+> activación sin token), no invitaciones de Medusa. Lo que sigue es el diseño
+> original, conservado como referencia.
 
 1. `owner_user_id` en `tenant_profile`. `staff-scope.ts` resuelve dueño =
    `owner_user_id ?? usuario más antiguo` (compatibilidad: RUBI LENS sigue igual

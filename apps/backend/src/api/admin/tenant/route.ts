@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { recordAudit } from "../../../lib/audit";
+import { ownerExplicitCheck } from "../../../lib/owner-explicit";
 import { getStaffScope, ownerUserId } from "../../../lib/staff-scope";
 import { tenant } from "../../../lib/tenant";
 import { cleanTenantProfileInput, readTenantProfile, saveTenantProfile } from "../../../lib/tenant-profile";
@@ -30,13 +31,13 @@ async function requireAdmin(req: AuthenticatedMedusaRequest, res: MedusaResponse
 
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   if (!(await requireAdmin(req, res))) return;
-  const [profile, owner] = await Promise.all([readTenantProfile(req.scope, { fresh: true }), ownerUserId(req.scope)]);
+  const [profile, owner, explicit] = await Promise.all([readTenantProfile(req.scope, { fresh: true }), ownerUserId(req.scope), ownerExplicitCheck(req.scope)]);
   res.setHeader("Cache-Control", "no-store");
   res.json({
     profile,
     effective: tenant(),
     owner_user_id: owner,
-    owner_source: profile.owner_user_id && profile.owner_user_id === owner ? "explicit" : "oldest_user",
+    owner_source: explicit.ok ? "explicit" : "oldest_user",
   });
 }
 

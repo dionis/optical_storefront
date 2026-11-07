@@ -79,12 +79,22 @@ describe("cleanCustomer", () => {
     });
   });
 
-  it("requires name, email, phone and a real birth date", () => {
+  it("requires name, email and phone; a birth date only has to be real when given", () => {
     expect(cleanCustomer({ ...ok, last_name: "" }, NOW)).toEqual({ reason: "customer_name" });
     expect(cleanCustomer({ ...ok, email: "ana@" }, NOW)).toEqual({ reason: "customer_email" });
     expect(cleanCustomer({ ...ok, phone: "12" }, NOW)).toEqual({ reason: "customer_phone" });
     expect(cleanCustomer({ ...ok, birth_date: "1980-02-30" }, NOW)).toEqual({ reason: "customer_birth_date" });
     expect(cleanCustomer({ ...ok, birth_date: "2027-01-01" }, NOW)).toEqual({ reason: "customer_birth_date" });
+  });
+
+  // The panel's customerProblems() treats the birth date as optional (owner's
+  // decision); the server must agree or the sale is refused at the last step
+  // with a message about a field the seller was never asked to fill.
+  it("accepts a customer without a birth date (blank, missing or null → null)", () => {
+    for (const birth_date of ["", "   ", null, undefined]) {
+      const r = cleanCustomer({ ...ok, birth_date }, NOW);
+      expect("customer" in r && r.customer.birth_date).toBeNull();
+    }
   });
 
   it("an address, once started, must be complete", () => {

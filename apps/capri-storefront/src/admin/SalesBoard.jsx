@@ -17,7 +17,7 @@
 // granularidad de la serie, el vendedor, comparar y los filtros finos.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
-import { useLensCatalog } from "../data/lensCatalog.js";
+import { useAdminLensCatalog } from "../data/lensCatalog.js";
 import Icon from "./icons.jsx";
 import HelpTip from "./HelpTip.jsx";
 import { TrendChart } from "./charts.jsx";
@@ -224,7 +224,7 @@ function DimTable({ by, rows, totals, label, m, t, second, showMargin, canDrill,
 /** Props: `go`/`tabs` (navegación) y `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS. */
 export default function SalesBoard({ go, tabs = [], me }) {
   const { t, lang } = useLang();
-  const { DESIGNS, MATERIALS, PHOTO, AR } = useLensCatalog();
+  const { DESIGNS, MATERIALS, PHOTO, AR } = useAdminLensCatalog();
   const [ctx, setCtx] = useState(null);
   // Período y rango: los globales del panel (barra de filtros de AdminShell).
   const { from, to } = usePeriodFilter();

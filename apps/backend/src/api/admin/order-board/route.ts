@@ -2,7 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { ORDER_STAGES } from "../../../lib/order-status";
-import { MAX_BOARD_SCAN, boardAccessFor, fetchBoardOrders, isOrderStage, redactBoardMoney } from "../../../lib/order-board";
+import { MAX_BOARD_SCAN, boardAccessFor, fetchBoardOrders, isOrderStage, restrictBoardRows } from "../../../lib/order-board";
 import { parseBoardDate } from "../../../lib/board-dates";
 import { listEstablishments } from "../../../lib/establishments";
 import { sellableStores } from "../../../lib/pos";
@@ -131,7 +131,7 @@ export async function GET(
 
     res.status(200).json({
       ...result,
-      orders: access.money ? result.orders : redactBoardMoney(result.orders),
+      orders: access.money ? result.orders : restrictBoardRows(result.orders),
       stages: ORDER_STAGES,
       // So the panel can say "showing the most recent 300" instead of implying
       // the filtered count is the whole truth.

@@ -3,6 +3,7 @@ import {
   exactPriceDenied,
   globalPrice,
   globalPriceOverrides,
+  masterLinePrice,
   storeLinePrice,
   type PriceRuleLike,
 } from "../src/lib/store-pricing";
@@ -99,6 +100,51 @@ describe("storeLinePrice", () => {
   it("rounds to cents and never goes below zero", () => {
     expect(storeLinePrice([rule({ mode: "percent", value: 3.333 })], { ...line, base: 9.99, lenses: 0 }, NOW).frame).toBe(10.32);
     expect(storeLinePrice([rule({ mode: "delta", value: -500 })], line, NOW).frame).toBe(0);
+  });
+});
+
+describe("masterLinePrice — the chain's price every store starts from (QA note, 5-nov-2026)", () => {
+  const chainRule = rule({ establishment_id: null, scope: "frame", mode: "percent", value: 10 });
+  const master = { scope: "frame" as const, target: "SKU-1", base: 100 };
+
+  it("is the bare base when the chain has no rule", () => {
+    expect(masterLinePrice([], master, NOW, null)).toEqual({ frame: 100, frame_source: "base", adjustment: null, band: null });
+  });
+
+  it("applies the CHAIN's general rule (+10 % written with no store) and says so", () => {
+    expect(masterLinePrice([chainRule], master, NOW, null)).toMatchObject({ frame: 110, frame_source: "rule", adjustment: { mode: "percent", value: 10 } });
+    expect(masterLinePrice([rule({ establishment_id: null, scope: "all", mode: "delta", value: 5 })], master, NOW, null)).toMatchObject({ frame: 105, frame_source: "rule" });
+    // The scope's own rule beats the legacy "all".
+    const both = [rule({ establishment_id: null, scope: "all", mode: "percent", value: 50 }), chainRule];
+    expect(masterLinePrice(both, master, NOW, null).frame).toBe(110);
+  });
+
+  it("is what a store that inherits charges — the master column and the inheriting till agree", () => {
+    const m = masterLinePrice([chainRule], master, NOW, null);
+    const inheriting = storeLinePrice([chainRule], { ...line, lenses: 0 }, NOW, null);
+    expect(inheriting.frame).toBe(m.frame);
+    expect(inheriting.adjustment).toEqual(m.adjustment);
+  });
+
+  it("never applies a STORE's rule: that belongs to that store alone", () => {
+    expect(masterLinePrice([rule({ establishment_id: "est_2", scope: "frame", mode: "percent", value: 40 })], master, NOW, null)).toMatchObject({ frame: 100, frame_source: "base" });
+  });
+
+  it("the owner's own price for the model wins and is left alone (no rule, no band)", () => {
+    const own = rule({ establishment_id: null, scope: "frame", target: "SKU-1", mode: "override", value: 60 });
+    const band = { floor_below_cents: 7000, floor_to_cents: 7000, cap_above_cents: null, cap_to_cents: null, apply_to_cases: false, enabled: true };
+    expect(masterLinePrice([own, chainRule], master, NOW, band)).toEqual({ frame: 60, frame_source: "owner", adjustment: null, band: null });
+  });
+
+  it("the chain's floor and ceiling come last, after the rule, and are tagged band", () => {
+    const band = { floor_below_cents: 12000, floor_to_cents: 12000, cap_above_cents: null, cap_to_cents: null, apply_to_cases: false, enabled: true };
+    expect(masterLinePrice([chainRule], master, NOW, band)).toMatchObject({ frame: 120, frame_source: "band", band: { from: 110, to: 120 } });
+  });
+
+  it("a case follows the case rule, not the frames'", () => {
+    const rules = [chainRule, rule({ establishment_id: null, scope: "case", mode: "delta", value: 2 })];
+    expect(masterLinePrice(rules, { scope: "case", target: "CASE-1", base: 5 }, NOW, null)).toMatchObject({ frame: 7, frame_source: "rule" });
+    expect(masterLinePrice([chainRule], { scope: "case", target: "CASE-1", base: 5 }, NOW, null)).toMatchObject({ frame: 5, frame_source: "base" });
   });
 });
 

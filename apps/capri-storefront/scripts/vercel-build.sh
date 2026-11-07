@@ -39,4 +39,6 @@ mkdir -p ../capri-storefront/public/tryon-3d
 cp -r dist/* ../capri-storefront/public/tryon-3d/
 
 cd ../capri-storefront
+# robots.txt + sitemap.xml from the current catalog (scripts/gen-seo.mjs).
+node scripts/gen-seo.mjs
 npm run build

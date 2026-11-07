@@ -46,6 +46,13 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="%TENANT_SOCIAL_TITLE%" />
     <meta name="twitter:image" content="/og-image.jpg" />
+    <!-- Organization schema for the site as a whole; product pages add their own
+         Product JSON-LD from src/lib/seo.js. Filled from tenants/<slug>/tenant.json. -->
+    <script type="application/ld+json">
+    {
+%TENANT_ORG_JSONLD%
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

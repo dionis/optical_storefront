@@ -19,11 +19,7 @@ export async function approverRecipients(container: MedusaContainer): Promise<Ar
   const users = container.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 500, order: { created_at: "ASC" } });
   const ids = all.map((u) => u.id);
-  const [byUser, profiles, ownerId] = await Promise.all([
-    assignmentsByUser(container, ids),
-    profilesByUser(container, ids),
-    ownerUserId(container),
-  ]);
+  const [byUser, profiles, ownerId] = await Promise.all([assignmentsByUser(container, ids), profilesByUser(container, ids), ownerUserId(container)]);
   const seen = new Set<string>();
   const out: Array<{ email: string; locale: string }> = [];
   all.forEach((u) => {

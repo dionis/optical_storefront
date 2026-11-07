@@ -10,7 +10,7 @@ import { resolveStoreSettings } from "./store-settings";
 import { disabledIds, loadCostToggles, loadDefaultCommissionPct } from "./store-cost-toggle";
 import { brandOf } from "./store-assortment";
 import { defaultLensFinish, LENS_FINISHES, parseLensFinish, type LensFinish } from "./lens-finish";
-import { isActiveAt, type PriceRuleLike } from "./store-pricing";
+import { brandOfTarget, isActiveAt, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices, type PriceRuleRow } from "./store-pricing-data";
 import { STORE_COST_MODULE } from "../modules/store-cost";
 import type StoreCostModuleService from "../modules/store-cost/service";
@@ -459,7 +459,8 @@ export async function loadPricingOverview(
   ]);
 
   // ── Frames and cases ──
-  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && isActiveAt(r, now));
+  // A brand price (`brand:<slug>`, v2) is not a model's price: the matrix shows it in the brand header.
+  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && !brandOfTarget(r.target) && isActiveAt(r, now));
   const masterById = new Map<string, PriceRuleRow>();
   const storeById = new Map<string, PriceRuleRow>();
   for (const r of liveOverrides) {

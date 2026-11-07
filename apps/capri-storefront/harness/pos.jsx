@@ -12,6 +12,10 @@ import PosFrameSearch from "/src/admin/PosFrameSearch.jsx";
 import PosFrameCard, { frameLineFields } from "/src/admin/PosFrameCard.jsx";
 import PosSale from "/src/admin/PosSale.jsx";
 import AdminFrameCard from "/src/admin/AdminFrameCard.jsx";
+import { MemoryRouter } from "react-router-dom";
+import AdminShell, { navGroupsFor } from "/src/admin/AdminShell.jsx";
+import PosSales from "/src/admin/PosSales.jsx";
+import PosCash from "/src/admin/PosCash.jsx";
 
 // adminFetch exige sesión antes de llamar: sin esto el buscador contesta
 // «no se pudo buscar en el catálogo» y nunca se llega al fallo que se busca.
@@ -30,8 +34,9 @@ const PRODUCTS = [
     matched_variant_ids: [], brand: "Grande", model: "GR 829", images: [], specs: null },
 ];
 const CTX = {
+  is_admin: true,
   stores: [{ id: "est_02", code: "Op2", name: "Fry Family", color: "#2e7d5b", currency: "usd",
-    payment_methods: ["cash", "card", "zelle"], terminals: [{ id: "t1", name: "Caja 1" }] }],
+    payment_methods: ["cash", "card", "zelle"], terminals: [{ id: "t1", code: "C1", name: "Caja 1" }] }],
   payment_methods: [{ code: "cash", label: "Efectivo" }, { code: "card", label: "Tarjeta" }, { code: "zelle", label: "Zelle" }],
 };
 // Cliente ya registrado (HU-18): se encuentra por los últimos 10 dígitos del
@@ -83,6 +88,18 @@ window.fetch = async (input, init) => {
     const q = decodeURIComponent((url.match(/[?&]q=([^&]*)/) || [])[1] || "").toLowerCase();
     return json({ products: PRODUCTS.filter((p) => !q || p.title.toLowerCase().includes(q)) });
   }
+  // Ventas de tienda (PosSales) y ficha (SaleDetailPanel): forma de lib/pos-data.ts toSale().
+  if (/\/admin\/pos\/sales\/[^/?]+$/.test(url.split("?")[0])) {
+    const id = url.split("?")[0].split("/").pop();
+    const s = SALES.find((x) => x.id === id) || SALES[0];
+    return json({ sale: { ...s, lines: [{ kind: "frame", title: "DC252", variant_title: "Negro/Dorado", unit_price: s.total, selection: { design_code: "sv", material_code: "poly" } }], customer: KNOWN, prescription: null }, ...s });
+  }
+  if (url.includes("/admin/pos/sales")) return json({ sales: SALES, has_more: false });
+  if (url.includes("/admin/sales-analytics/sales")) return json({ sales: [], has_more: false, access: { profit: true, commission: true } });
+  if (url.includes("/admin/pos/cash-sessions")) return json({ sessions: CASH_SESSIONS });
+  // Lectura de la receta (OCR) simulada: lo que devolvería /admin/pos/prescriptions/ocr.
+  if (url.includes("/admin/pos/prescriptions/ocr")) { await sleep(400); return json({ prescription: { od: { sph: -2.25, cyl: -0.5, axis: 180 }, os: { sph: -2, cyl: -0.75, axis: 175 }, pd: 63 } }); }
+  if (url.includes("/admin/pos/cash-report")) return json({ totals: { payments_cents: 182000, cash_payments_cents: 64000, card_cents: 98000, other_cents: 20000, receivable_cents: 0, movements_in_cents: 5000, movements_out_cents: 20000, cash_net_cents: 49000, fees_cents: 2900, sessions_diff_cents: -500 }, by_method: [], movements: [], sessions: [], series: [], by_category: [] });
   return json({});
 };
 
@@ -97,6 +114,39 @@ class Boundary extends React.Component {
 }
 
 const ME = { id: "u1", role: "owner", is_admin: true, display_name: "Rubí Dacosta", privileges: [] };
+const Q = new URLSearchParams(location.search);
+const MODE = Q.get("mode") === "dark" ? "dark" : "light";
+try { localStorage.setItem("adm_color_mode", MODE); } catch { /* noop */ }
+const today = new Date().toISOString().slice(0, 10);
+const SALES = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+  const total = [270, 455.5, 189, 612.25, 320, 99, 742][i];
+  const paid = i % 3 === 0 ? 100 : total;
+  return {
+    id: `sale_${i}`, number: `Op2-00${120 + i}`, establishment_id: "est_02", terminal_id: "t1", seller_id: null, seller_code: i % 2 ? "DAN" : "JOS",
+    customer_id: "cus_ana", order_id: `order_${i}`, list: total, discount: 0, discount_pct: 0, total, paid, insurance: 0, balance: Math.round((total - paid) * 100) / 100,
+    status: i === 5 ? "voided" : i === 2 ? "delivered" : "completed", tray: `Op2-${10 + i}`, promised_on: today, delivery: "pickup", delivered_at: null,
+    voided_at: i === 5 ? `${today}T15:00:00Z` : null, void_reason: i === 5 ? "customer" : null, void_note: null, void_requested_at: null,
+    created_at: `${today}T1${i}:05:00Z`, customer_name: ["Ana Pérez", "Luis Soto", "Marilin García"][i % 3], customer_phone: "(305) 555-0123",
+    frame_brand: "Di Caprio", frame_model: "DC252", frame_color: "Negro/Dorado", has_rx: i % 2 === 0, own_frame: i === 4,
+    lens_summary: { es: "Monofocal · Policarbonato · AR Green", en: "Single vision · Polycarbonate · AR Green" },
+    payments: [{ method_code: i % 2 ? "card" : "cash", amount: paid, kind: "deposit", reference: null, created_at: `${today}T1${i}:06:00Z` }],
+  };
+});
+const P = (name, code) => ({ id: code, name, code });
+const CASH_SESSIONS = [
+  { id: "cs_open", establishment_id: "est_02", terminal_id: null, status: "open", opened_by_person: P("Daniela Ruiz", "DAN"), opened_at: `${today}T13:00:00Z`, opened_signature: "DR", opening_note: null, opening: 100,
+    closed_at: null, expected: 790, counted: null, diff: null, note: null, cash_in_sales: 940, cash_payments_count: 5, refunds: 0, manual_in: 50, manual_out: 300,
+    movements: [
+      { id: "m1", kind: "in", amount_cents: 10000, amount: 100, category: "opening_float", note: null, by: P("Daniela Ruiz", "DAN"), created_at: `${today}T13:00:00Z`, sale_id: null, terminal_code: "Caja 1" },
+      { id: "m2", kind: "in", amount_cents: 27000, amount: 270, category: "sale_payment", note: "Op2-00120", by: P("Daniela Ruiz", "DAN"), created_at: `${today}T14:10:00Z`, sale_id: "sale_0", terminal_code: "Caja 1" },
+      { id: "m3", kind: "out", amount_cents: 30000, amount: 300, category: "supplier_payment", note: "Factura 1234", by: P("Daniela Ruiz", "DAN"), created_at: `${today}T15:30:00Z`, sale_id: null, terminal_code: "Caja 1" },
+      { id: "m4", kind: "in", amount_cents: 5000, amount: 50, category: "change_fund", note: "Cambio", by: P("José Pérez", "JOS"), created_at: `${today}T16:00:00Z`, sale_id: null, terminal_code: "Caja 1" },
+    ] },
+  { id: "cs_prev", establishment_id: "est_02", terminal_id: null, status: "pending_approval", opened_by_person: P("Daniela Ruiz", "DAN"), opened_at: "2026-11-05T13:00:00Z", opened_signature: "DR", opening: 100,
+    closed_at: "2026-11-05T23:00:00Z", closed_by_person: P("José Pérez", "JOS"), closed_signature: "JP", expected: 730, counted: 725, diff: -5, note: "Faltan 5", cash_in_sales: 850, refunds: 20, manual_in: 0, manual_out: 200, movements: [] },
+  { id: "cs_old", establishment_id: "est_02", terminal_id: null, status: "closed", opened_by_person: P("Daniela Ruiz", "DAN"), opened_at: "2026-11-04T13:00:00Z", opening: 100,
+    closed_at: "2026-11-04T23:00:00Z", closed_by_person: P("Daniela Ruiz", "DAN"), closed_signature: "DR", expected: 610, counted: 610, diff: 0, cash_in_sales: 510, refunds: 0, manual_in: 0, manual_out: 0, movements: [] },
+];
 
 
 // Modelo COMPLETO para la ficha de montura (AdminFrameCard): medidas enteras,
@@ -143,10 +193,26 @@ function App() {
   // ?screen=sale monta el paso de venta REAL (PosSale), que es donde el dueño
   // ve la pantalla en blanco; sin parámetro, solo el buscador y la tarjeta.
   const screen = new URLSearchParams(location.search).get("screen");
+  // ?shell=1 monta la pantalla dentro del AdminShell real (barra lateral,
+  // cabecera, cajón hamburguesa) para revisarla en tablet: ?screen=sale|possales|cash&mode=dark&step=N.
+  if (Q.get("shell") === "1") return <ShellScreen screen={screen || "sale"} />;
   if (screen === "sale") return <PosSale me={ME} />;
   // ?screen=card monta SOLO la ficha de montura (el modal del ojo del buscador).
   if (screen === "card") return <CardOnly />;
   return <Mini />;
+}
+
+const SHELL_TAB = { sale: "pos", possales: "possales", cash: "cash" };
+function ShellScreen({ screen }) {
+  const [tab, setTab] = useState(SHELL_TAB[screen] || "pos");
+  const body = tab === "possales" ? <PosSales me={ME} /> : tab === "cash" ? <PosCash me={ME} /> : <PosSale me={ME} />;
+  return (
+    <MemoryRouter>
+      <AdminShell tab={tab} onTab={setTab} user="dueno@optica.com" onLogout={() => {}} find={null} me={ME} groups={navGroupsFor(ME)}>
+        {body}
+      </AdminShell>
+    </MemoryRouter>
+  );
 }
 
 // Traduce el producto que devuelve el buscador del POS a la forma del catálogo

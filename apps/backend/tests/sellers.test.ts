@@ -5,7 +5,9 @@ import { join } from "path";
  * functions only — no database, no HTTP.
  */
 import {
+  COUNTER_SOURCE,
   SELLER_SOURCES,
+  attributeSale,
   customerInitials,
   deriveSellerCode,
   goalProgress,
@@ -20,7 +22,7 @@ import {
   sellerSourceOf,
   signSellerToken,
   statsDayFilter,
-  verifySellerToken, projectSeller } from "../src/lib/sellers";
+  verifySellerToken, projectSeller, type StatOrder } from "../src/lib/sellers";
 import { normalizeSellerCodeLoose } from "../src/lib/order-board";
 import { EMPTY_TERMINAL_USAGE, sellerTillProblem, terminalDeactivateProblem, terminalDeleteProblem, type TerminalUsage } from "../src/lib/pos";
 
@@ -225,6 +227,76 @@ describe("groupSellerStats", () => {
     expect(ana.profit).toBe(50.5);
     expect(ana.avg_profit).toBe(25.25);
     expect(rows.find((r) => r.code === "LUIS")).toMatchObject({ profit: 0, avg_profit: 0 });
+  });
+});
+
+describe("groupSellerStats over sale_fact: counter sales and web referrals (QA D-13, 5-nov-2026)", () => {
+  // SOFIA sells at the till as panel user u_sofia; LUIS only shares referral links.
+  const sellers = [
+    { id: "s1", code: "SOFIA", name: "Sofía", commission_pct: 10, active: true, user_id: "u_sofia" },
+    { id: "s2", code: "LUIS", name: "Luis", commission_pct: 5, active: true, user_id: null },
+  ];
+  const at = "2026-11-05T15:00:00Z";
+  // A till sale: seller_id = the user, seller_code = the receipt code (here the owner's ME01, not a record's code).
+  const pos = (over: Partial<StatOrder> = {}): StatOrder => ({ id: "o-pos", channel: "pos", seller_id: "u_sofia", seller_code: "SOFIA", total: 71.33, tax_total: 5.33, created_at: at, units: 2, ...over });
+  // A web order from a referral link: no user, only the code.
+  const web = (over: Partial<StatOrder> = {}): StatOrder => ({ id: "o-web", channel: "web", seller_id: null, seller_code: "LUIS", total: 100, tax_total: 0, created_at: at, units: 1, seller_source: "instagram", ...over });
+
+  it("a seller with a panel user gets their till sales, whatever code the receipt printed", () => {
+    const { sellers: rows, unattributed } = groupSellerStats([pos(), pos({ id: "o-pos2", seller_code: "ME01", total: 50, tax_total: 0 })], sellers);
+    const sofia = rows.find((r) => r.code === "SOFIA")!;
+    expect(sofia).toMatchObject({ orders: 2, revenue: 121.33, net_revenue: 116, commission: 11.6, units: 4 });
+    expect(sofia.by_source).toEqual([{ source: "counter", orders: 2, revenue: 121.33 }]);
+    expect(unattributed).toEqual({ orders: 0, revenue: 0 });
+  });
+
+  it("a referral-only seller gets the web orders that carry their code, by network", () => {
+    const { sellers: rows } = groupSellerStats([web(), web({ id: "o-web2", seller_source: null, total: 20 })], sellers);
+    const luis = rows.find((r) => r.code === "LUIS")!;
+    expect(luis).toMatchObject({ orders: 2, revenue: 120, commission: 6 });
+    expect(luis.by_source).toEqual([
+      { source: "instagram", orders: 1, revenue: 100 },
+      { source: "link", orders: 1, revenue: 20 },
+    ]);
+    expect(rows.find((r) => r.code === "SOFIA")).toMatchObject({ orders: 0, revenue: 0 });
+  });
+
+  it("a sale that matches the same seller by user AND by code is counted once", () => {
+    const { sellers: rows, unattributed, sources } = groupSellerStats([pos()], sellers);
+    expect(rows.find((r) => r.code === "SOFIA")).toMatchObject({ orders: 1, revenue: 71.33 });
+    expect(rows.reduce((n, r) => n + r.orders, 0) + unattributed.orders).toBe(1);
+    expect(sources).toEqual([{ source: "counter", orders: 1, revenue: 71.33 }]);
+  });
+
+  it("the till user wins over the code: a sale rung up by one seller with another's code goes to the user", () => {
+    const { sellers: rows } = groupSellerStats([pos({ seller_code: "LUIS" })], sellers);
+    expect(rows.find((r) => r.code === "SOFIA")!.orders).toBe(1);
+    expect(rows.find((r) => r.code === "LUIS")!.orders).toBe(0);
+  });
+
+  it("a till sale of a user with no record falls back to the code, then to unattributed", () => {
+    const byCode = groupSellerStats([pos({ seller_id: "u_owner", seller_code: "LUIS" })], sellers);
+    expect(byCode.sellers.find((r) => r.code === "LUIS")!.orders).toBe(1);
+    const nobody = groupSellerStats([pos({ seller_id: "u_owner", seller_code: "ME01" })], sellers);
+    expect(nobody.unattributed).toEqual({ orders: 1, revenue: 71.33 });
+    expect(nobody.sellers.every((r) => r.orders === 0)).toBe(true);
+  });
+
+  it("attributeSale is the single rule: user first, code second, null for nobody", () => {
+    const byUser = new Map([["u_sofia", "SOFIA"]]);
+    const byCode = new Map([["SOFIA", 1], ["LUIS", 1]]);
+    expect(attributeSale({ seller_id: "u_sofia", seller_code: "LUIS" }, byUser, byCode)).toBe("SOFIA");
+    expect(attributeSale({ seller_id: null, seller_code: "luis" }, byUser, byCode)).toBe("LUIS");
+    expect(attributeSale({ seller_id: "u_x", seller_code: "GHOST" }, byUser, byCode)).toBeNull();
+    expect(attributeSale({ seller_id: null, seller_code: null }, byUser, byCode)).toBeNull();
+  });
+
+  it("voided sales count for nobody and the counter source is not a referral network", () => {
+    const { sellers: rows, unattributed } = groupSellerStats([pos({ terminal: "canceled" })], sellers);
+    expect(rows.every((r) => r.orders === 0)).toBe(true);
+    expect(unattributed).toEqual({ orders: 0, revenue: 0 });
+    expect(sellerSourceOf({ channel: "pos", seller_source: "instagram" })).toBe(COUNTER_SOURCE);
+    expect((SELLER_SOURCES as readonly string[]).includes(COUNTER_SOURCE)).toBe(false);
   });
 });
 

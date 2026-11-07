@@ -5,14 +5,15 @@
  *   1. finds or creates the owner's panel user. A new user gets a random
  *      password nobody ever sees: the owner creates their own from the
  *      activation mail (the "forgot my password" flow, 15-minute link);
- *   2. names that user owner in the store profile (`owner_user_id`), so the
- *      technician who ran `npx medusa user` to deploy is NOT the owner;
+ *   2. names that user owner (store_setting.owner_user_id, the same column a
+ *      transfer from Equipo → «Hacer dueño» writes), so the technician who ran
+ *      `npx medusa user` to deploy is NOT the owner;
  *   3. clears `setup_completed_at`, so the panel opens on "Primeros pasos";
  *   4. audits it and mails the activation link (also printed, for when the
  *      mail provider is not configured yet).
  *
- * Refuses when the profile already names a different, existing owner: from
- * then on only that owner can give the store away (POST /admin/tenant/transfer-owner).
+ * Refuses when a different, existing owner is already named there: from then on
+ * ownership only moves through a transfer (POST /admin/team/:id/owner).
  * Running it again for the same owner is safe and resends the mail.
  */
 import { randomBytes } from "node:crypto";
@@ -23,9 +24,9 @@ import { resolveEmailLocale } from "./email/copy";
 import { buildActivationLink, renderOwnerActivationEmail } from "./email/owner-activation-email";
 import { storefrontOrigin } from "./order-access";
 import { invalidateStaffScope } from "./staff-scope";
-import { resolveStoreSettings } from "./store-settings";
+import { resolveStoreSettings, saveStoredOwnerUserId, storedOwnerUserId } from "./store-settings";
 import { tenant } from "./tenant";
-import { readTenantProfile, saveTenantProfile } from "./tenant-profile";
+import { saveTenantProfile } from "./tenant-profile";
 
 export class TenantBootstrapError extends Error {
   constructor(public reason: "bad_email" | "owner_already_set" | "identity_exists") {
@@ -58,10 +59,9 @@ export async function bootstrapTenant(container: MedusaContainer, input: Bootstr
   if (!EMAIL_RE.test(email)) throw new TenantBootstrapError("bad_email");
 
   const users = container.resolve<IUserModuleService>(Modules.USER);
-  const profile = await readTenantProfile(container, { fresh: true });
   const [existing] = await users.listUsers({ email }, { take: 1 });
 
-  const named = profile.owner_user_id;
+  const named = await storedOwnerUserId(container);
   if (named && named !== existing?.id) {
     const [stillThere] = await users.listUsers({ id: named }, { take: 1 });
     if (stillThere) throw new TenantBootstrapError("owner_already_set");
@@ -96,7 +96,8 @@ export async function bootstrapTenant(container: MedusaContainer, input: Bootstr
   }
   report.user_id = userId;
 
-  await saveTenantProfile(container, { owner_user_id: userId, setup_completed: false }, null);
+  await saveStoredOwnerUserId(container, userId, null);
+  await saveTenantProfile(container, { setup_completed: false }, null);
   invalidateStaffScope();
   await recordAudit(container, {
     actorId: null,

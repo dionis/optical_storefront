@@ -12,7 +12,6 @@ export class CreateTenantProfile1 extends Migration {
         whatsapp            TEXT,
         social              JSONB,
         pickup              JSONB,
-        owner_user_id       TEXT,
         setup_completed_at  TIMESTAMPTZ,
         updated_by          TEXT,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),

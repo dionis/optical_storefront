@@ -104,12 +104,32 @@ export function getSession() {
   }
 }
 
+/**
+ * Name of the window event the panel listens to (pages/AdminPage.jsx) when the
+ * session stops being usable: `detail.kind` is "cleared" (a 401: the token was
+ * revoked or expired, the storage is already empty) or "inactive" (a 403
+ * `inactive`: the account was deactivated while this tab was open). Without it
+ * the shell stayed painted — with the OWNER's menu, since `me` never loaded —
+ * on top of requests that all failed (QA roles 5-nov-2026).
+ */
+export const SESSION_EVENT = "oer:admin-session";
+
+function announce(kind) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: { kind } }));
+  } catch {
+    /* noop */
+  }
+}
+
 export function clearSession() {
   try {
     sessionStorage.removeItem(SESSION_KEY);
   } catch {
     /* noop */
   }
+  announce("cleared");
 }
 
 /* ─────────────────────────────  requests  ───────────────────────────── */
@@ -146,6 +166,9 @@ async function call(path, { method = "GET", body, token, query } = {}) {
   }
 
   if (!res.ok) {
+    // A deactivated account: every /admin call answers this from now on, so the
+    // page switches to the «access deactivated» card instead of erroring tab by tab.
+    if (res.status === 403 && payload?.reason === "inactive" && token) announce("inactive");
     // `message` is the server's English developer note; `reason` is the code the
     // UI turns into translated copy. Callers should prefer the reason.
     throw new AdminApiError(payload?.message || `HTTP ${res.status}`, {
@@ -268,6 +291,11 @@ export async function login(email, password) {
     // do we — telling them apart is how you enumerate accounts.
     if (error.status === 401 || error.status === 400) {
       return { ok: false, error: "adm.err.badCredentials" };
+    }
+    // The login rate limit (src/lib/security.ts): say so, or the person keeps
+    // retrying a password that was right all along.
+    if (error.status === 429) {
+      return { ok: false, error: "adm.auth.tooMany" };
     }
     return { ok: false, error: "adm.err.auth" };
   }

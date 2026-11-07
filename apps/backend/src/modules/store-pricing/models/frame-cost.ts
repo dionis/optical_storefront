@@ -35,6 +35,7 @@ export const StoreFrameCost = model.define("store_frame_cost", {
   supplier_model: model.text(),
   book_cents: model.number().default(0),
   cost_cents: model.number().default(0),
-  source: model.enum(["supplier_list", "owner_edit"]).default("supplier_list"),
+  // `supplier_list_prev` (v2): the previous supplier list, when the 2026 one lacks the model.
+  source: model.enum(["supplier_list", "supplier_list_prev", "owner_edit"]).default("supplier_list"),
   updated_by: model.text().nullable(),
 });

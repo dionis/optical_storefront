@@ -26,7 +26,9 @@
     "appDescription": {
       "es": "Espejuelos de marca online con probador virtual y lentes con receta.",
       "en": "Designer eyeglasses online with a virtual try-on and prescription lenses."
-    }
+    },
+    "alternateName": "Óptica El Rancho",
+    "sameAs": ["https://opticaelrancho.com/"]
   },
   "domains": {
     "storefront": "https://www.rubilens.com",

@@ -10,7 +10,6 @@ import { isDemoLogin } from "./adminAuth.js";
 import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
 import { Card } from "./ui.jsx";
 import { printElement } from "./exportUtils.js";
-import CatalogManager from "./CatalogManager.jsx";
 import CatalogSync from "./CatalogSync.jsx";
 import Team from "./Team.jsx";
 import Stores from "./Stores.jsx";
@@ -47,12 +46,15 @@ import StoreStatement from "./StoreStatement.jsx";
 import StoreOrders from "./StoreOrders.jsx";
 import PendingBalances from "./PendingBalances.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
+import Patients from "./Patients.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
 import Sellers from "./Sellers.jsx";
 import { TENANT } from "../config/tenant.js";
 import { useCatalog } from "../data/catalogStore.js";
+import { supplierPriceFor } from "../data/products.js";
+import { FRAME_MARKUP } from "../config/features.js";
 import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
 import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
@@ -93,8 +95,8 @@ function ThumbBars({ data, imgByName, valuePrefix = "", emptyMsg }) {
 // Range keys only — the words come from the dictionary at render time, so the
 // picker follows the language switch instead of freezing at first paint.
 // `RangePicker`, `RANGES` y la vieja `Products` vivían aquí; la pantalla de
-// Productos es ahora CatalogManager.jsx (acordeón por marca), que trae su
-// propio selector de rango. Se borran para que no queden dos versiones.
+// Productos es ahora «Productos y precios» (PricingPanel.jsx + la matriz
+// pricing/PriceMatrix.jsx), que fusionó también «Precios y costos».
 
 /* ---------------- Prices ---------------- */
 // [storageKey, dictionaryKey, basePrice]. The middle entry is a key, not a
@@ -329,7 +331,7 @@ function Prices({ preQ }) {
       <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
         <div className="adm-pp-left">
           <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{p.supplierPrice ? `${t("adm.prices.supplier")} ${money(p.supplierPrice)} × ${p.markup || 3} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
+          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{supplierPriceFor(p.sku) ? `${t("adm.prices.supplier")} ${money(supplierPriceFor(p.sku))} × ${FRAME_MARKUP} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
         </div>
         <div className="adm-pp-right">
           {ev === 0
@@ -945,13 +947,16 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
  * Las pestañas antiguas (overview/sales/prices) siguen funcionando: ahora viven
  * dentro de Ejecutivo y de Costos y precios.
  */
-const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }] };
+// `pricing` («Precios y costos») vive desde el 6-nov-2026 dentro de «Productos y
+// precios» (`products`): sus `sub` antiguos los traduce PricingPanel.
+const LEGACY_TABS = { overview: ["exec", { sub: "overview" }], sales: ["exec", { sub: "detail" }], prices: ["costs", { sub: "prices" }], pricing: ["products", {}] };
 function navFromUrl(tabs) {
   const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const want = q.get("tab") || "";
-  if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1] }, n: 0 };
   const params = {};
-  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number"]) if (q.get(k)) params[k] = q.get(k);
+  for (const k of ["sub", "order", "stage", "seller", "q", "approval", "number", "patient"]) if (q.get(k)) params[k] = q.get(k);
+  // A legacy tab keeps the deep link's own `sub`/`q` (?tab=pricing&sub=lenses) over its default.
+  if (LEGACY_TABS[want]) return { tab: LEGACY_TABS[want][0], params: { ...LEGACY_TABS[want][1], ...params }, n: 0 };
   // El panel abre en el Ejecutivo para quien lo tiene; el resto, en su caja.
   return { tab: tabs.includes(want) ? want : tabs.includes("exec") ? "exec" : tabs[0], params, n: 0 };
 }
@@ -979,9 +984,13 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   useEffect(() => {
     if (!canSeeAi) return undefined;
     let alive = true;
-    const read = () => fetchAiStatus().then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); }).catch(() => {});
+    // A 404 means the backend does not have the AI-usage module yet (older
+    // deploy): stop asking instead of logging a failed request every 10 min.
+    const id = setInterval(() => read(), 600000);
+    const read = () => fetchAiStatus()
+      .then((r) => { if (alive) setAiAttention(Number(r?.attention) || 0); })
+      .catch((e) => { if (e?.status === 404) clearInterval(id); });
     read();
-    const id = setInterval(read, 600000);
     return () => { alive = false; clearInterval(id); };
   }, [canSeeAi, nav.tab]);
   // «Configuración de la óptica»: insignia con los pasos pendientes mientras el
@@ -1034,15 +1043,12 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
       {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
-      {tab === "pricing" && <PricingPanel key={`pricing-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
       {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} params={nav.params} />}
-      {/* CatalogManager es ahora TODA la pantalla: cabecera con tarjetas y
-          acordeón por marca. La vieja <Products> repetía «Catálogo por marca»
-          debajo, que es justo lo que el acordeón sustituye. `me` hace falta:
-          sin él useStoreFilter no ve las tiendas y los interruptores de
-          surtido quedan bloqueados. */}
-      {tab === "products" && <CatalogManager me={me} params={nav.params} />}
+      {/* «Productos y precios»: Productos + Precios y costos en una pantalla
+          (matriz por marca con costo y, por tienda, precio y descuento). `me`
+          hace falta: sin él useStoreFilter no ve las tiendas. */}
+      {tab === "products" && <PricingPanel key={`products-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
       {tab === "catalogsync" && <CatalogSync />}
       {tab === "stores" && <Stores />}
       {tab === "team" && <Team />}
@@ -1053,7 +1059,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "possales" && <PosSales me={me} params={nav.params} />}
       {tab === "approvals" && <PosApprovals params={nav.params} me={me} />}
       {tab === "posconfig" && <PosConfig />}
-      {tab === "alerts" && <AlertRules />}
+      {tab === "alerts" && <AlertRules me={me} />}
       {tab === "aiusage" && <AiUsage />}
       {tab === "salesboard" && <SalesBoard go={go} tabs={tabs} me={me} />}
       {tab === "storestatus" && <StoreStatus key={`storestatus-${nav.n}`} go={go} tabs={tabs} me={me} />}
@@ -1064,6 +1070,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "storecosts" && <StoreCosts me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
+      {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

@@ -259,6 +259,10 @@ export function useStoreTheme(me, { tab } = {}) {
   const isAdmin = !me || me.is_admin !== false;
   const data = useSyncExternalStore(subscribeStores, getStoresSnapshot, getStoresSnapshot);
   const [hint, setHint] = useState(activeHint);
+  // Every pick counts, even when the hint reads the same (an admin's «Todas»
+  // falls back to `pos_store`, which may equal the store just left): without
+  // this the memo below kept the old store and the pick seemed not to take.
+  const [picks, setPicks] = useState(0);
 
   useEffect(() => {
     if (!me || isDemoLogin()) return;
@@ -267,7 +271,7 @@ export function useStoreTheme(me, { tab } = {}) {
   }, [me?.id, me?.role, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const refresh = () => setHint(activeHint());
+    const refresh = () => { setHint(activeHint()); setPicks((n) => n + 1); };
     window.addEventListener(EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => { window.removeEventListener(EVENT, refresh); window.removeEventListener("storage", refresh); };
@@ -287,5 +291,5 @@ export function useStoreTheme(me, { tab } = {}) {
     const operational = tab == null ? true : OPERATIONAL_TABS.has(tab);
     const theme = isAdmin && !operational ? neutral : storeTheme;
     return { theme, storeTheme, store, stores, multi: !isAdmin && !store && stores.length > 1, operational };
-  }, [data, hint, isAdmin, tab]);
+  }, [data, hint, picks, isAdmin, tab]);
 }

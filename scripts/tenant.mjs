@@ -137,6 +137,9 @@ function backendEnv(m, withSecrets) {
     ...(m.domains.emailFrom ? [`RESEND_FROM_EMAIL=${m.domains.emailFrom}`] : []),
     ...(m.owner?.email ? [`STORE_ORDER_NOTIFICATION_EMAIL=${m.owner.email}`, `STORE_SUPPORT_EMAIL=${m.owner.email}`] : []),
     "",
+    "# Owner (lib/staff-scope.ts ownerUserId: a transfer from the panel > this > oldest user)",
+    ...(m.owner?.email ? [`STORE_OWNER_EMAIL=${m.owner.email}`] : ["# STORE_OWNER_EMAIL=<owner email>"]),
+    "",
     "# The owner's own accounts (docs/MULTI-TENANT-TECNICO.md §17) — fill in by hand:",
     "# DATABASE_URL= REDIS_URL= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY= R2_ENDPOINT= R2_PUBLIC_URL=",
     "# STRIPE_SECRET_KEY= STRIPE_WEBHOOK_SECRET= RESEND_API_KEY= ANTHROPIC_API_KEY=",
@@ -217,6 +220,7 @@ function checklist(m) {
     `   [ ] Simulacro: ${b.dry}`,
     `   [ ] Entrega:   ${b.run}`,
     "   [ ] El dueño activa su cuenta desde el correo y completa «Primeros pasos» en el panel",
+    "   [ ] Desde entonces la propiedad solo cambia en Equipo → «Hacer dueño» (de superadmin a superadmin)",
     "11. Verificación",
     "   [ ] Seguridad en verde · compra real + reembolso · correo y SMS recibidos · fila en la hoja · cambio de estado desde la hoja",
   ];

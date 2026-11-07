@@ -1,4 +1,5 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { ownerExplicitCheck } from "../../../lib/owner-explicit";
 import { securityAudit } from "../../../lib/security";
 import { gatherSetupFacts, tenantSecurityChecks } from "../../../lib/tenant-setup";
 
@@ -10,14 +11,20 @@ import { gatherSetupFacts, tenantSecurityChecks } from "../../../lib/tenant-setu
  * Never returns a value, only whether each item is in order. Admin session
  * required (the /admin prefix is authenticated by Medusa).
  *
- * The "tenant.*" items (store profile, explicit owner, setup finished) come
- * from the database, so they are added here and not in the pure securityAudit.
- * If that read fails they are left out rather than shown as failing.
+ * Read from the database, so added here and not in the pure securityAudit:
+ *   - `owner.explicit`: the owner is named by a transfer from the panel
+ *     (store_setting.owner_user_id) or by the deploy (STORE_OWNER_EMAIL), not
+ *     only "the oldest user" (lib/owner-explicit.ts). No email shown.
+ *   - `tenant.*`: store profile complete and setup finished (lib/tenant-setup.ts);
+ *     left out when that read fails rather than shown as failing.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
-  const audit = securityAudit();
-  const tenantChecks = await gatherSetupFacts(req.scope).then(tenantSecurityChecks).catch(() => []);
-  const checks = [...audit.checks, ...tenantChecks];
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).json({ ...audit, checks, failing: checks.filter((c) => !c.ok).length });
+  const audit = securityAudit();
+  const owner = await ownerExplicitCheck(req.scope);
+  audit.checks.push({ key: "owner.explicit", ok: owner.ok, detail: owner.detail });
+  const tenantChecks = await gatherSetupFacts(req.scope).then(tenantSecurityChecks).catch(() => []);
+  audit.checks.push(...tenantChecks);
+  audit.failing = audit.checks.filter((c) => !c.ok).length;
+  res.status(200).json(audit);
 }

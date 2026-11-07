@@ -1,5 +1,5 @@
 /* Pestaña «Sincronización del catálogo» (CatalogSync.jsx) y la marca «Nuevo»
-   de Productos (CatalogManager.jsx). Solo tokens --adm-*: así siguen el modo
+   de «Productos y precios» (pricing/PriceMatrix.jsx). Solo tokens --adm-*: así siguen el modo
    claro/oscuro y los colores de la tienda (admin-theme.css). */
 
 .cs-wrap { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 16px); }

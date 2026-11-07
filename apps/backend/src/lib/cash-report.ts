@@ -48,6 +48,14 @@ export interface PaymentRow {
   counts_as_cash: boolean;
   received_by: string | null;
   establishment_id: string | null;
+  /**
+   * Status of the sale the payment belongs to. A VOIDED sale's processor fee
+   * is not a cost of the period here either: the Executive and the store
+   * result already leave it out (lib/store-pnl.ts sumFeesByStore), and the
+   * three screens must print the same `fees`. The money itself stays — it did
+   * go through the till and came back out — only the fee is not charged.
+   */
+  sale_status?: string | null;
 }
 
 export interface MovementRow {
@@ -257,7 +265,7 @@ export function buildCashReport(input: {
       a.in_count += 1;
       a.in_cents += signed;
     }
-    a.fee_cents += n(p.fee_cents);
+    if (p.sale_status !== "voided") a.fee_cents += n(p.fee_cents);
     byMethod.set(p.method_code, a);
   }
   const order = [...input.methods.map((m) => m.code), ...[...byMethod.keys()].filter((c) => !methods.has(c))];
@@ -458,7 +466,7 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
     .whereNull("s.deleted_at")
     .where("p.created_at", ">=", lo)
     .where("p.created_at", "<", hi)
-    .select("p.id", "p.method_code", "p.amount_cents", "p.fee_cents", "p.kind", "p.counts_as_cash", "p.received_by")
+    .select("p.id", "p.method_code", "p.amount_cents", "p.fee_cents", "p.kind", "p.counts_as_cash", "p.received_by", "s.status as sale_status")
     .select(pg.raw("COALESCE(p.establishment_id, s.establishment_id) AS establishment_id"))
     .select(localDay("p.created_at"));
   if (f.stores) payQ.whereRaw("COALESCE(p.establishment_id, s.establishment_id) IN (" + f.stores.map(() => "?").join(",") + ")", f.stores);
@@ -527,6 +535,7 @@ export async function cashReport(container: MedusaContainer, f: CashReportFilter
     counts_as_cash: Boolean(r.counts_as_cash),
     received_by: (r.received_by as string | null) ?? null,
     establishment_id: (r.establishment_id as string | null) ?? null,
+    sale_status: (r.sale_status as string | null) ?? null,
   }));
   const movements: MovementRow[] = mvRows.map((r) => ({
     id: String(r.id),

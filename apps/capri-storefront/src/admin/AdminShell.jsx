@@ -31,13 +31,15 @@ export const NAV_GROUPS = [
     { key: "posconfig", icon: "settings" },
   ] },
   // Regla del dueño: «en Comercial va todo lo que tenga que ver con manejo de
-  // precios, costos, etc.». El catálogo (Productos) es precisamente eso —
-  // costo de proveedor, precio por regla y precio propio de cada modelo—, así
-  // que vive aquí, junto a Precios y costos, y ya no en un grupo propio.
+  // precios, costos, etc.». Desde el 6-nov-2026 «Productos» y «Precios y
+  // costos» son UNA pestaña, «Productos y precios» (`products`, PricingPanel +
+  // la matriz de docs/PRICE-MATRIX.md); `?tab=pricing` sigue abriéndola
+  // (LEGACY_TABS en AdminDashboard).
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
-    { key: "pricing", icon: "prices" },
-    { key: "products", icon: "products" },
+    // Ficha de cada paciente: compras, total gastado, promedio y evolución de la receta (docs/PATIENTS.md).
+    { key: "patients", icon: "user" },
+    { key: "products", icon: "prices" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
   ] },
@@ -115,13 +117,36 @@ export function navGroupsFor(me) {
     ? [{ key: "storestatus", icon: "store" }, { key: "exec", icon: "dashboard" }]
     : [];
   const items = [...lead, ...WORK_GROUP.items, { key: "pendingbalances", icon: "hand" }];
-  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" });
+  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" }, { key: "patients", icon: "user" });
   return [{ ...WORK_GROUP, items: [...items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));
 export const TABS = tabsOf(navGroupsFor(null));
 
 const NAV_KEY = "adm_nav_collapsed";
+const RAIL_QUERY = "(min-width: 900px) and (max-width: 1199.98px) and (orientation: portrait)";
+const DRAWER_QUERY = "(max-width: 899.98px)";
+// Tablet apaisada (iPad 1080×810, Galaxy Tab 1280×800): arranca en iconos para
+// dar el ancho a las dos columnas del POS; el botón «Expandir» sigue funcionando
+// y se recuerda aparte de la preferencia del escritorio.
+const TABLET_LANDSCAPE_QUERY = "(pointer: coarse) and (min-width: 900px) and (max-width: 1366px) and (orientation: landscape)";
+const TABLET_NAV_KEY = "adm_nav_tablet_collapsed";
+const readTabletCollapsed = () => { try { return localStorage.getItem(TABLET_NAV_KEY) !== "0"; } catch { return true; } };
+
+/** `true` mientras la consulta de medios se cumpla (se actualiza al girar o redimensionar). */
+function useMediaQuery(query) {
+  const get = () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(query).matches : false);
+  const [on, setOn] = useState(get);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const fn = () => setOn(mq.matches);
+    fn();
+    mq.addEventListener?.("change", fn);
+    return () => mq.removeEventListener?.("change", fn);
+  }, [query]);
+  return on;
+}
 const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"; } catch { return false; } };
 
 /**
@@ -130,8 +155,16 @@ const readCollapsed = () => { try { return localStorage.getItem(NAV_KEY) === "1"
  */
 export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, find, onFind, badges = {}, groups = navGroupsFor(null), me = null, children }) {
   const { t, lang, toggle } = useLang();
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapsedPref, setCollapsedPref] = useState(readCollapsed);
+  const [tabletPref, setTabletPref] = useState(readTabletCollapsed);
+  const tabletLandscape = useMediaQuery(TABLET_LANDSCAPE_QUERY);
   const [drawer, setDrawer] = useState(false);
+  // Tablet vertical de 900–1199 px: la barra queda en iconos sola (más ancho
+  // para el contenido) sin tocar la preferencia guardada del escritorio. Por
+  // debajo de 900 px manda el cajón hamburguesa (admin.css).
+  const rail = useMediaQuery(RAIL_QUERY);
+  const collapsed = rail || (tabletLandscape ? tabletPref : collapsedPref);
+  const setCollapsed = (fn) => (tabletLandscape ? setTabletPref : setCollapsedPref)(fn);
   const findRef = useRef(null);
   const [showProfile, setShowProfile] = useState(false);
   // Grupo abierto del acordeón (uno a la vez); de entrada, el de la pestaña actual.
@@ -151,7 +184,11 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
   }, [fly]);
   useEffect(() => { if (!collapsed) setFly(null); }, [collapsed]);
 
-  useEffect(() => { try { localStorage.setItem(NAV_KEY, collapsed ? "1" : "0"); } catch { /* noop */ } }, [collapsed]);
+  useEffect(() => { try { localStorage.setItem(NAV_KEY, collapsedPref ? "1" : "0"); } catch { /* noop */ } }, [collapsedPref]);
+  useEffect(() => { try { localStorage.setItem(TABLET_NAV_KEY, tabletPref ? "1" : "0"); } catch { /* noop */ } }, [tabletPref]);
+  // Al pasar a ancho de escritorio (girar la tablet), el cajón no se queda abierto con el fondo bloqueado.
+  const drawerMode = useMediaQuery(DRAWER_QUERY);
+  useEffect(() => { if (!drawerMode) setDrawer(false); }, [drawerMode]);
   useEffect(() => {
     if (!drawer) return undefined;
     const onKey = (e) => { if (e.key === "Escape") setDrawer(false); };
@@ -294,7 +331,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
   ) : null;
 
   return (
-    <div ref={shellRef} className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
+    <div ref={shellRef} className={`adm-shell ${collapsed ? "is-collapsed" : ""} ${rail ? "is-rail" : ""} ${drawer ? "drawer-open" : ""}`} data-store-theme={theme.key} data-mode={colorMode} style={themeVars(theme, { dark: colorMode === "dark" })}>
       <aside className="adm-side" aria-hidden={undefined}>
         <div className="adm-side-head">
           <div className="adm-side-title" style={{ paddingLeft: 4 }}>
@@ -322,7 +359,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
 
       <div className="adm-main">
         <header className="adm-top" ref={topRef}>
-          <button type="button" className="adm-burger" onClick={() => setDrawer(true)} aria-label={t("adm.nav.open")}>
+          <button type="button" className="adm-burger" onClick={() => setDrawer(true)} aria-label={t("adm.nav.open")} aria-expanded={drawer}>
             <Icon name="menu" size={22} />
           </button>
           <div className="adm-top-crumb">

@@ -34,6 +34,10 @@ export interface TenantManifest {
     socialDescription: LocalizedText;
     /** Description in the installable-app manifest; defaults to socialDescription. */
     appDescription?: LocalizedText;
+    /** Other name of the business in the Organization JSON-LD of index.html. */
+    alternateName?: string;
+    /** Other official sites of the business (https), for the same JSON-LD. */
+    sameAs?: string[];
   };
   domains: {
     storefront: string;
@@ -144,6 +148,11 @@ export function validateTenantManifest(input: unknown): string[] {
   localized(m.seo?.description, "seo.description");
   localized(m.seo?.socialTitle, "seo.socialTitle");
   localized(m.seo?.socialDescription, "seo.socialDescription");
+  if (m.seo?.alternateName !== undefined) need(text(m.seo.alternateName), "seo.alternateName", "non-empty text");
+  if (m.seo?.sameAs !== undefined) {
+    need(Array.isArray(m.seo.sameAs), "seo.sameAs", "list of https URLs");
+    for (const [i, u] of (Array.isArray(m.seo.sameAs) ? m.seo.sameAs : []).entries()) need(/^https:\/\/[^\s"<>]+$/.test(String(u)), `seo.sameAs[${i}]`, "https URL");
+  }
 
   need(isOrigin(m.domains?.storefront), "domains.storefront", "https origin without a path");
   if (m.domains?.api !== undefined) need(isOrigin(m.domains.api), "domains.api", "https origin without a path");

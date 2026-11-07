@@ -77,8 +77,10 @@ export async function fetchDiscontinued() {
   const out = [];
   let offset = 0;
   for (let page = 0; page < 10; page++) {
+    // Medusa validates `status` as an ARRAY: `status=draft` is a 400
+    // ("Expected type: 'array'") and the list came back empty forever.
     const data = await adminFetch(`/admin/products`, {
-      query: { status: "draft", limit: 100, offset, fields: "id,title,handle,thumbnail,status" },
+      query: { "status[]": "draft", limit: 100, offset, fields: "id,title,handle,thumbnail,status" },
     });
     const items = data?.products || [];
     out.push(...items.map((p) => ({ medusaId: p.id, name: p.title, slug: p.handle, image: resolveImage(p.thumbnail) })));

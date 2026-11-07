@@ -24,7 +24,7 @@
 //     overdue  "1" | true → solo con más de 7 días de atraso; un número → más de esos días
 //     stage    "delivered" | "undelivered" → por si la venta ya se entregó (las filas `limited` no lo saben y no se filtran)
 //     seller   código de vendedor (va al servidor cuando el rol puede filtrar por vendedor; el vendedor solo ve lo suyo)
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
@@ -39,6 +39,7 @@ import { ExportMenu } from "./ui.jsx";
 import { daysOverdue } from "./lateness.js";
 import "./screens.css";
 import "./roles.css";
+import HelpTip from "./HelpTip.jsx";
 
 /** Días transcurridos desde la fecha prometida (o, sin ella, desde la venta); vive en lateness.js (también la usa Pedidos y etapas). */
 export { daysOverdue };
@@ -114,12 +115,15 @@ export default function PendingBalances({ me, openSale, embedded = false, params
   const filters = useMemo(() => pendingFilters(params), [params?.q, params?.overdue, params?.stage, params?.seller]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { posContext().then(setCtx).catch((e) => toast({ tone: "error", title: t(e.message) })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Solo la última petición pinta: al cambiar de tienda deprisa, la respuesta lenta de la anterior se descarta.
+  const seqRef = useRef(0);
   const load = () => {
+    const seq = ++seqRef.current;
     setState("loading");
     // Un vendedor nunca filtra por otro vendedor (el servidor lo ignora); los demás roles sí.
     listSales({ pending: 1, store, limit: 200, seller: seller ? "" : filters.seller })
-      .then((r) => { setSales(r.sales || []); setState("ok"); })
-      .catch((e) => { setState("error"); toast({ tone: "error", title: t(e.message) }); });
+      .then((r) => { if (seq !== seqRef.current) return; setSales(r.sales || []); setState("ok"); })
+      .catch((e) => { if (seq !== seqRef.current) return; setState("error"); toast({ tone: "error", title: t(e.message) }); });
   };
   useEffect(load, [store, filters.seller]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -218,7 +222,7 @@ export default function PendingBalances({ me, openSale, embedded = false, params
       {!embedded && (
         <div className="adm-head-row">
           <div>
-            <h2>{t("adm.pb.title")}</h2>
+            <h2>{t("adm.pb.title")}<HelpTip topic="pending.what" size={16} /></h2>
             <p className="adm-sub">{t(seller ? "adm.pb.subSeller" : "adm.pb.sub")}</p>
           </div>
           <div className="pos-filters">

@@ -1,7 +1,8 @@
 import type { AuthenticatedMedusaRequest, MedusaNextFunction, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
-import { isAllowedForRestrictedRole } from "./staff-roles";
+import { sessionRevoked, tokenIssuedAtMs } from "./session-control";
+import { isAllowedForInactiveUser, isAllowedForRestrictedRole } from "./staff-roles";
 import { getStaffScope } from "./staff-scope";
 
 /**
@@ -18,6 +19,14 @@ import { getStaffScope } from "./staff-scope";
  * API keys — which only admins can mint) are left to Medusa's own handling.
  * If the role cannot be loaded the request is refused: failing open would hand
  * the full admin API to every role.
+ *
+ * A token older than the person's last "log out everywhere" (a password
+ * change, a remote sign-out — lib/session-control.ts) is refused first, admins
+ * included, with 401 `session_revoked`: the panel drops its session and shows
+ * the login. A deactivated person (role null) is 403 `inactive` everywhere but
+ * on the two routes that tell the panel who they are and let them sign out
+ * (isAllowedForInactiveUser) — the role allowlist is not consulted for them,
+ * or a deactivated seller could keep quoting and listing from the till routes.
  *
  * Three arguments on purpose — see tests/middleware-arity.test.ts.
  */
@@ -40,12 +49,23 @@ export async function staffGuard(
     return;
   }
 
+  if (sessionRevoked(scope.sessions_revoked_at, tokenIssuedAtMs(ctx as { iat?: unknown }, req.get("authorization")))) {
+    res.status(401).json({ type: "unauthorized", reason: "session_revoked", message: "This session was signed out; sign in again." });
+    return;
+  }
+
   if (scope.is_admin) return next();
-  if (isAllowedForRestrictedRole(req.method, req.originalUrl ?? req.url, scope.privileges)) return next();
+  const url = req.originalUrl ?? req.url;
+  if (!scope.role) {
+    if (isAllowedForInactiveUser(req.method, url)) return next();
+    res.status(403).json({ type: "not_allowed", reason: "inactive", message: "This account is deactivated." });
+    return;
+  }
+  if (isAllowedForRestrictedRole(req.method, url, scope.privileges)) return next();
 
   res.status(403).json({
     type: "not_allowed",
-    reason: scope.role ? "forbidden_role" : "inactive",
+    reason: "forbidden_role",
     message: "This role cannot use this admin route.",
   });
 }

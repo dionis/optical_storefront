@@ -2,7 +2,9 @@
  * Phase 3 of the multi-tenant module: the "Primeros pasos" checklist, the
  * activation mail and the bootstrap that hands a new store to its owner.
  */
-const profile = { owner_user_id: null as string | null, setup_completed_at: "2026-11-01T00:00:00Z" as string | null };
+const profile = { setup_completed_at: "2026-11-01T00:00:00Z" as string | null };
+/** store_setting.owner_user_id — the column a transfer from Equipo writes too. */
+const stored = { owner_user_id: null as string | null };
 const saved: Array<Record<string, unknown>> = [];
 const audits: Array<Record<string, unknown>> = [];
 const mails: Array<{ to: string; subject: string; text: string }> = [];
@@ -11,7 +13,6 @@ jest.mock("../src/lib/tenant-profile", () => ({
   readTenantProfile: async () => ({ ...profile }),
   saveTenantProfile: async (_c: unknown, patch: Record<string, unknown>) => {
     saved.push(patch);
-    if ("owner_user_id" in patch) profile.owner_user_id = patch.owner_user_id as string;
     if ("setup_completed" in patch) profile.setup_completed_at = patch.setup_completed ? "now" : null;
     return profile;
   },
@@ -21,7 +22,13 @@ jest.mock("../src/lib/audit", () => ({
     audits.push(input);
   },
 }));
-jest.mock("../src/lib/store-settings", () => ({ resolveStoreSettings: async () => ({ support_email: "soporte@example.com" }) }));
+jest.mock("../src/lib/store-settings", () => ({
+  resolveStoreSettings: async () => ({ support_email: "soporte@example.com" }),
+  storedOwnerUserId: async () => stored.owner_user_id,
+  saveStoredOwnerUserId: async (_c: unknown, id: string) => {
+    stored.owner_user_id = id;
+  },
+}));
 
 import { buildSetupChecklist, profileComplete, tenantSecurityChecks, type SetupFacts } from "../src/lib/tenant-setup";
 import { buildActivationLink, renderOwnerActivationEmail } from "../src/lib/email/owner-activation-email";
@@ -37,7 +44,6 @@ const view = (over: Partial<TenantProfileView> = {}): TenantProfileView => ({
   pickup: { enabled: false, name: null, address: null, hours: {}, maps_url: null },
   brand: null,
   brand_previous: null,
-  owner_user_id: "user_owner",
   setup_completed_at: null,
   updated_by: null,
   updated_at: null,
@@ -94,10 +100,9 @@ describe("profileComplete", () => {
 });
 
 describe("tenantSecurityChecks", () => {
-  it("adds the three tenant items and leaves out what could not be read", () => {
+  it("adds the tenant items (the owner is Security's own owner.explicit) and leaves out what could not be read", () => {
     expect(tenantSecurityChecks(facts()).map((c) => [c.key, c.ok])).toEqual([
       ["tenant.profile", true],
-      ["tenant.owner_explicit", true],
       ["tenant.setup_completed", false],
     ]);
     expect(tenantSecurityChecks(facts({ profile: null, ownerExplicit: null }))).toEqual([]);
@@ -150,7 +155,7 @@ function container() {
 }
 
 beforeEach(() => {
-  profile.owner_user_id = null;
+  stored.owner_user_id = null;
   profile.setup_completed_at = "2026-11-01T00:00:00Z";
   USERS.length = saved.length = audits.length = mails.length = registered.length = 0;
   USERS.push({ id: "user_tech", email: "tecnico@plataforma.example" });
@@ -169,7 +174,7 @@ describe("bootstrapTenant", () => {
   it("creates the owner with an unknown password, names them owner, reopens the setup and mails the link", async () => {
     const r = await bootstrapTenant(container(), { email: " Dueno@OpticaDemo.example ", confirm: true });
     expect(r).toMatchObject({ dry_run: false, user: "created", email: "dueno@opticademo.example", mail: "sent" });
-    expect(profile.owner_user_id).toBe(r.user_id);
+    expect(stored.owner_user_id).toBe(r.user_id);
     expect(profile.setup_completed_at).toBeNull();
     expect(registered[0].length).toBeGreaterThanOrEqual(32);
     expect(audits[0]).toMatchObject({ action: "tenant.bootstrap", entityId: r.user_id });
@@ -187,7 +192,7 @@ describe("bootstrapTenant", () => {
   });
 
   it("refuses to replace an owner who is still there", async () => {
-    profile.owner_user_id = "user_tech";
+    stored.owner_user_id = "user_tech";
     await expect(bootstrapTenant(container(), { email: "otro@opticademo.example", confirm: true })).rejects.toEqual(
       new TenantBootstrapError("owner_already_set")
     );
@@ -195,10 +200,10 @@ describe("bootstrapTenant", () => {
   });
 
   it("takes over when the named owner no longer exists", async () => {
-    profile.owner_user_id = "user_gone";
+    stored.owner_user_id = "user_gone";
     const r = await bootstrapTenant(container(), { email: "dueno@opticademo.example", confirm: true });
     expect(r.previous_owner_id).toBe("user_gone");
-    expect(profile.owner_user_id).toBe(r.user_id);
+    expect(stored.owner_user_id).toBe(r.user_id);
   });
 
   it("rejects a bad email before touching anything", async () => {

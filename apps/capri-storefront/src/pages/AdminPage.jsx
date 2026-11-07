@@ -3,6 +3,7 @@ import { TENANT } from "../config/tenant.js";
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { authenticate, verifyOtp, getSession, logout, requestPasswordReset, completePasswordReset } from "../admin/adminAuth.js";
+import { SESSION_EVENT } from "../admin/adminApi.js";
 import { isDemoLogin } from "../admin/adminAuth.js";
 import { fetchMe, changeOwnPassword, roleKey } from "../admin/adminTeam.js";
 import { fetchBackendFeatures } from "../admin/backendFeatures.js";
@@ -21,15 +22,17 @@ function Login({ onOk }) {
   // its own. Anything that is not a key falls through unchanged.
   const errText = (key) => (key ? t(key) : "");
   // The email's reset link lands here as /admin?reset=<token>&email=… (built
-  // by the backend subscriber). Read once, then scrubbed from the URL so a
-  // reload or a shared screenshot does not carry the token.
+  // by the backend subscriber). Read ONCE into state and scrubbed from the URL
+  // right away (effect below), so the address bar, the history and a shared
+  // screenshot of the «new password» form never carry the token; before, it
+  // stayed in the URL until the form was left (QA roles 5-nov-2026).
   const [params, setParams] = useSearchParams();
-  const resetToken = params.get("reset") || "";
-  const resetEmail = params.get("email") || "";
+  const [resetToken] = useState(() => params.get("reset") || "");
+  const [resetEmail] = useState(() => params.get("email") || "");
   // The owner's activation mail (src/lib/tenant-bootstrap.ts) lands here as
   // /admin?activate=<email>: the "forgot my password" screen, worded as a first
   // sign-in. It carries no token — the 15-minute link comes by mail on request.
-  const activateEmail = params.get("activate") || "";
+  const [activateEmail] = useState(() => params.get("activate") || "");
   const [user, setUser] = useState(resetEmail || activateEmail);
   const [pass, setPass] = useState("");
   const [otp, setOtp] = useState("");
@@ -51,6 +54,7 @@ function Login({ onOk }) {
     setParams(next, { replace: true });
   };
   const goLogin = () => { clearResetQuery(); setActivating(false); setStage("creds"); setErr(""); setPass(""); };
+  useEffect(() => { if (resetToken || activateEmail) clearResetQuery(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitCreds = async (e) => {
     e.preventDefault();
@@ -249,9 +253,36 @@ export default function AdminPage() {
     let on = true;
     fetchMe()
       .then((r) => { if (on) { setMe(r || null); setMustChange(Boolean(r && r.must_change_password)); } })
-      .catch(() => { if (on) setMustChange(false); }); // la API puede no estar desplegada aún
+      // A 401 (token revoked or expired) means there is no one to paint a panel
+      // for: back to the login. Any other failure keeps the old behaviour (the
+      // roles API may not be deployed yet) — without `me` the shell is the full
+      // one, which is why the 401 must not fall through here.
+      .catch((e) => { if (!on) return; if (e && e.status === 401) { setSession(null); setMe(null); } else setMustChange(false); });
     return () => { on = false; };
   }, [session]);
+
+  // adminApi announces when the session stops being usable: "cleared" after a
+  // 401 (storage already empty) and "inactive" after a 403 `inactive`. The
+  // "cleared" case waits a moment and re-reads the storage, because a password
+  // change of one's own clears the old token and signs in again at once
+  // (adminTeam.changeOwnPassword): only a tab left WITHOUT a session goes back
+  // to the login. "inactive" re-asks who I am, and the role null that comes
+  // back paints the «access deactivated» card instead of a dashboard.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    let timer = null;
+    const onSession = (e) => {
+      const kind = e?.detail?.kind;
+      if (kind === "cleared") {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { timer = null; if (!getSession()) { setSession(null); setMe(null); } }, 1500);
+      } else if (kind === "inactive") {
+        fetchMe().then((r) => setMe(r || null)).catch(() => {});
+      }
+    };
+    window.addEventListener(SESSION_EVENT, onSession);
+    return () => { window.removeEventListener(SESSION_EVENT, onSession); if (timer) clearTimeout(timer); };
+  }, []);
 
   const signOut = () => { logout(); setSession(null); setMe(null); };
 

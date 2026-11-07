@@ -1,3 +1,4 @@
+import { loadDefaultCommissionPct } from "./store-cost-toggle";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { listEstablishments } from "./establishments";
 import { listTerminals } from "./pos-data";
@@ -63,7 +64,9 @@ export async function prepareSellerLink(
     return { kind: "existing", seller: seller! };
   }
 
-  const { establishment_id, terminal_id, commission_pct } = link.create;
+  const { establishment_id, terminal_id } = link.create;
+  // No % sent: the owner's default commission («Reglas y comisiones») is the single source.
+  const commission_pct = link.create.use_default ? (await loadDefaultCommissionPct(container)) ?? 0 : link.create.commission_pct;
   const placement = sellerPlacementProblem(
     { active: true, establishment_id, terminal_id },
     await listEstablishments(container),

@@ -1,7 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { listEstablishments } from "../../../../lib/establishments";
 import { openRules, productPrices, storeRuleHistoryView } from "../../../../lib/store-pricing-data";
-import { isActiveAt } from "../../../../lib/store-pricing";
+import { brandOfTarget, isActiveAt } from "../../../../lib/store-pricing";
 
 /**
  * GET /admin/store-pricing/:id — precios de una tienda: su ajuste general
@@ -31,7 +31,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   const now = new Date();
   const rules = (await openRules(req.scope, [id])).filter((r) => r.establishment_id === id && isActiveAt(r, now));
   const general = rules.find((r) => r.scope === "all" && (r.mode === "percent" || r.mode === "delta")) ?? null;
-  const exact = rules.filter((r) => r.scope !== "all" && r.mode === "override");
+  // A brand price (`brand:<slug>`, v2) is listed apart: it is not a model's exact price.
+  const exact = rules.filter((r) => r.scope !== "all" && r.mode === "override" && !brandOfTarget(r.target));
+  const brandPrices = rules.filter((r) => r.scope !== "all" && r.mode === "override" && brandOfTarget(r.target));
   const minimums = rules.filter((r) => r.mode === "min");
   const products = new Map(
     (await productPrices(req.scope, [...exact, ...minimums].filter((r) => r.target).map((r) => r.target as string))).map((p) => [p.product_id, p])
@@ -48,6 +50,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
       product_title: products.get(r.target as string)?.title ?? null,
       base_price: products.get(r.target as string)?.price ?? null,
     })),
+    // v2: the store's price for every model of a brand (scope frame|case, target brand:<slug>).
+    brand_prices: brandPrices.map((r) => ({ scope: r.scope, brand: brandOfTarget(r.target), price: r.value, since: r.valid_from })),
     // Minimum price (HU-16): the store's floor as % of list (scope "all") and per model.
     minimum_floor_pct: minimums.find((r) => r.scope === "all")?.value ?? null,
     minimums: minimums

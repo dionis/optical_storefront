@@ -18,12 +18,17 @@ const UI = {
     "adm.help.ui.pitfalls": "Errores frecuentes",
     "adm.help.ui.related": "Temas relacionados",
     "adm.help.ui.missing": "Todavía no hay guía para este tema.",
+    "adm.help.ui.whatCalc": "Qué es y cómo se calcula",
+    "adm.help.ui.formula": "Fórmula",
+    "adm.help.ui.usedIn": "Dónde se usa",
+    "adm.help.ui.gotIt": "Entendido",
     "adm.help.group.rx": "La receta",
     "adm.help.group.sale": "Hacer una venta",
     "adm.help.group.exec": "Panel ejecutivo",
     "adm.help.group.cash": "Caja",
     "adm.help.group.reports": "Informes",
     "adm.help.group.setup": "Configuración",
+    "adm.help.group.pricing": "Precios",
   },
   en: {
     "adm.help.ui.button": "Help",
@@ -37,12 +42,17 @@ const UI = {
     "adm.help.ui.pitfalls": "Common mistakes",
     "adm.help.ui.related": "Related topics",
     "adm.help.ui.missing": "There is no guide for this topic yet.",
+    "adm.help.ui.whatCalc": "What it is and how it is calculated",
+    "adm.help.ui.formula": "Formula",
+    "adm.help.ui.usedIn": "Where it is used",
+    "adm.help.ui.gotIt": "Got it",
     "adm.help.group.rx": "The prescription",
     "adm.help.group.sale": "Making a sale",
     "adm.help.group.exec": "Executive panel",
     "adm.help.group.cash": "Cash till",
     "adm.help.group.reports": "Reports",
     "adm.help.group.setup": "Settings",
+    "adm.help.group.pricing": "Prices",
   },
 };
 
@@ -387,15 +397,15 @@ const TOPICS_ES = {
   },
   "exec.kpi.collected": {
     title: "Cobrado",
-    short: "El dinero que de verdad entró en el período: cobros en caja (sin las devoluciones) y las ventas de la web, que se pagan al comprar.",
-    what: "Suma los pagos registrados en el período, sea cual sea la fecha de la venta a la que pertenecen: un anticipo de hoy y el resto de una venta del mes pasado cuentan los dos. Las devoluciones se restan.",
+    short: "Lo que las ventas del período llevan cobrado hasta hoy: anticipos y abonos de las ventas de tienda, y el total de los pedidos web (se pagan al comprar).",
+    what: "Se cuenta por la fecha de la VENTA: para cada venta del período suma lo que ya se le cobró (anticipo y cualquier abono posterior). El resto que hoy paga un cliente por una venta del mes pasado suma a ese mes pasado, no a hoy. La parte que paga un seguro no cuenta aquí. El dinero que entró en caja en el período, sea de la venta que sea, está en «Efectivo en caja» y en el Informe de caja.",
     how: ["Haz clic para ir a Caja y ver los cobros por método (efectivo, tarjeta, Zelle…)."],
     why: "Es lo que se puede depositar en el banco. Ventas altas con cobros bajos significan saldos pendientes que hay que perseguir.",
   },
   "exec.kpi.balance": {
     title: "Por cobrar",
-    short: "Lo que los clientes de la tienda deben hoy, vengan de cuando vengan las ventas. No depende del período.",
-    what: "Suma de los saldos pendientes de todas las ventas no anuladas de la(s) tienda(s) elegida(s). Un anticipo pagado deja el resto aquí hasta que el cliente recoge y paga.",
+    short: "Lo que las ventas del período todavía deben HOY. Lo que se debe de ventas de cualquier fecha es «Dinero en la calle».",
+    what: "Suma, para las ventas no anuladas del período y la(s) tienda(s) elegida(s), el saldo que cada una debe hoy. Un anticipo deja el resto aquí hasta que el cliente recoge y paga; en cuanto paga, baja también en los períodos pasados. Para ver lo que se debe sin importar la fecha de la venta, mira «Dinero en la calle» o Cobros pendientes.",
     how: ["Haz clic para ver la lista de ventas con saldo y cobrar desde cada una."],
     why: "Dinero que la tienda ya gastó en laboratorio y todavía no ha recibido. Si crece mes a mes, hay que revisar la política de anticipos.",
   },
@@ -434,6 +444,29 @@ const TOPICS_ES = {
       "Exporta a Excel para conciliar con el banco o con el laboratorio.",
     ],
     why: "Es la fuente de verdad: si un KPI parece raro, aquí se ve qué venta lo explica.",
+  },
+  "exec.ordersPlain": {
+    title: "Pedidos de la tienda",
+    short: "La lista de ventas del período: total, cobrado y pendiente de cada una. Es de donde salen los KPI de arriba.",
+    what: "Cada fila es una venta: número, fecha, cliente, vendedor, total, cobrado y pendiente. Las anuladas aparecen tachadas y no suman. El costo y la ganancia solo los ve quien tiene el permiso «Ver costos»; por eso no aparecen aquí.",
+    how: [
+      "Abre el acordeón y usa la búsqueda o el orden de columnas.",
+      "Haz clic en una venta para abrirla: desde ahí se cobra el saldo, se reenvía el recibo o se imprime la hoja del laboratorio.",
+      "Exporta a Excel para conciliar con el banco o con el laboratorio.",
+    ],
+    why: "Es la fuente de verdad: si un KPI parece raro, aquí se ve qué venta lo explica.",
+  },
+  "exec.overviewPlain": {
+    title: "Panel ejecutivo",
+    short: "La foto del negocio en un período: cuánto se vendió, cuánto entró y cuánto queda por cobrar. Toca cualquier cifra para ir al detalle.",
+    what: "Arriba eliges tienda y período; en medio ves los indicadores (KPI) de ventas y cobros; abajo, acordeones con los pedidos, la caja y los vendedores del mismo período. El costo, la ganancia y el margen solo los ve quien tiene el permiso «Ver costos». Cada tarjeta se puede exportar a Excel, CSV o PDF.",
+    how: [
+      "Elige la tienda (o todas) y el período (hoy, semana, mes o un rango).",
+      "Lee los KPI de izquierda a derecha: ventas → cobrado → por cobrar.",
+      "Abre los acordeones para ver de dónde salen los números; haz clic en un KPI para ir a la pantalla que lo explica.",
+      "Para una reunión, usa «Excel» o «PDF» en la barra: incluye los filtros aplicados.",
+    ],
+    why: "Mirar esto cada semana con el mismo período permite ver tendencias (el «vs. período anterior») y detectar a tiempo una tienda que vende pero no cobra.",
   },
   "exec.cash": {
     title: "Caja del período",
@@ -539,7 +572,7 @@ const TOPICS_ES = {
   "team.roles": {
     title: "Roles del equipo",
     short: "Dueño y superadmin lo ven todo; supervisor varias tiendas; encargado su tienda; vendedor solo sus ventas. El rol decide qué pantallas y qué números ve cada persona.",
-    what: "Cada persona del panel tiene un rol. Dueño: la cuenta original, lo puede todo y es el único que nombra superadmins. Superadmin: mismos derechos que el dueño (precios, aprobaciones, alertas, equipo). Supervisor: ve y aprueba en las tiendas que se le asignan, con costos. Encargado: gestiona su tienda (caja, ventas, equipo de la tienda, aprobaciones hasta su límite). Vendedor: hace ventas y ve solo las suyas y su comisión; no ve costos ni ganancia.",
+    what: "Cada persona del panel tiene un rol. Dueño: hay uno solo; lo puede todo y es el único que nombra superadmins. El dueño o un superadmin puede traspasar la propiedad a otro superadmin («Hacer dueño», con su contraseña) y el anterior queda como superadmin. Superadmin: mismos derechos que el dueño (precios, aprobaciones, alertas, equipo). Supervisor: ve y aprueba en las tiendas que se le asignan, con costos. Encargado: gestiona su tienda (caja, ventas, equipo de la tienda, aprobaciones hasta su límite). Vendedor: hace ventas y ve solo las suyas y su comisión; no ve costos ni ganancia.",
     how: [
       "Al crear a alguien, elige el rol y, salvo dueño/superadmin, las tiendas a las que tiene acceso.",
       "Un vendedor necesita además su ficha de vendedor (tienda, punto de venta y comisión).",
@@ -1118,15 +1151,15 @@ const TOPICS_EN = {
   },
   "exec.kpi.collected": {
     title: "Collected",
-    short: "The money that actually came in during the period: till payments (minus refunds) and web sales, which are paid at purchase.",
-    what: "Adds up the payments recorded in the period, whatever the date of the sale they belong to: today's deposit and the rest of last month's sale both count. Refunds are subtracted.",
+    short: "What the period's sales have collected so far: deposits and later payments on store sales, and the total of web orders (paid at checkout).",
+    what: "It is counted by SALE date: for each sale of the period it adds what has already been collected (deposit and any later payment). The rest a customer pays today for last month's sale adds to last month, not to today. The insurer's part does not count here. The money that came into the till during the period, whatever sale it belongs to, is in \"Cash on hand\" and the Cash report.",
     how: ["Click to go to the Till and see payments by method (cash, card, Zelle…)."],
     why: "This is what can be deposited at the bank. High sales with low collections mean pending balances to chase.",
   },
   "exec.kpi.balance": {
     title: "Balance due",
-    short: "What the store's customers owe today, whenever the sales are from. It does not depend on the period.",
-    what: "Sum of the pending balances of all non-voided sales of the chosen store(s). A deposit leaves the rest here until the customer picks up and pays.",
+    short: "What the period's sales still owe TODAY. What is owed on sales from any date is \"Money on the street\".",
+    what: "For the non-voided sales of the period and the chosen store(s), adds the balance each one owes today. A deposit leaves the rest here until the customer picks up and pays; once they pay, it drops in past periods too. To see what is owed whatever the sale date, look at \"Money on the street\" or Pending balances.",
     how: ["Click to see the list of sales with a balance and collect from each one."],
     why: "Money the store already spent at the lab and has not received yet. If it grows month after month, the deposit policy needs a look.",
   },
@@ -1166,10 +1199,33 @@ const TOPICS_EN = {
     ],
     why: "It is the source of truth: if a KPI looks odd, here you see which sale explains it.",
   },
+  "exec.ordersPlain": {
+    title: "Store orders",
+    short: "The list of sales in the period: each one's total, collected and pending. This is where the KPIs above come from.",
+    what: "Each row is a sale: number, date, customer, seller, total, collected and pending. Voided ones appear struck through and do not add up. Cost and profit are shown only to those with the «View costs» permission, which is why they are not here.",
+    how: [
+      "Open the accordion and use the search or the column sorting.",
+      "Click a sale to open it: from there you collect the balance, resend the receipt or print the lab sheet.",
+      "Export to Excel to reconcile with the bank or the lab.",
+    ],
+    why: "It is the source of truth: if a KPI looks odd, here you see which sale explains it.",
+  },
+  "exec.overviewPlain": {
+    title: "Executive panel",
+    short: "The business snapshot for a period: how much was sold, how much came in and how much is still owed. Tap any figure to drill down.",
+    what: "At the top you choose store and period; in the middle the sales and collection indicators (KPIs); below, accordions with the orders, the till and the sellers for the same period. Cost, profit and margin are shown only to those with the «View costs» permission. Every card can be exported to Excel, CSV or PDF.",
+    how: [
+      "Pick the store (or all) and the period (today, week, month or a range).",
+      "Read the KPIs left to right: sales → collected → balance due.",
+      "Open the accordions to see where the numbers come from; click a KPI to go to the screen that explains it.",
+      "For a meeting, use «Excel» or «PDF» in the bar: it includes the filters applied.",
+    ],
+    why: "Looking at this every week with the same period shows trends (the «vs. previous period») and catches early a store that sells but does not collect.",
+  },
   "exec.cash": {
     title: "Till for the period",
     short: "Payments grouped by method (cash, card, Zelle…) plus manual cash in and out.",
-    what: "Shows, for the chosen period and store, how much came in by each method, refunds, the fee each method charges and the net; and below, the manual cash movements (supplier payments, bank deposits, withdrawals…). \"Cash in till\" is cash collected + cash in − cash out.",
+    what: "Shows, for the chosen period and store, how much came in by each method, refunds, the fee each method charges and the net; and below, the manual cash movements (supplier payments, bank deposits, withdrawals…). \"Cash on hand\" is cash collected + cash in − cash out.",
     how: [
       "Compare the net cash with what was deposited at the bank: they should match except for the change fund.",
       "Click to go to the Till and see each day's closings.",
@@ -1270,7 +1326,7 @@ const TOPICS_EN = {
   "team.roles": {
     title: "Team roles",
     short: "Owner and superadmin see everything; supervisor several stores; store manager their store; seller only their own sales. The role decides which screens and which numbers each person sees.",
-    what: "Every person in the panel has a role. Owner: the original account, can do everything and is the only one who appoints superadmins. Superadmin: same rights as the owner (prices, approvals, alerts, team). Supervisor: sees and approves in the stores assigned to them, with costs. Store manager: runs their store (till, sales, store team, approvals up to their limit). Seller: makes sales and sees only their own and their commission; no costs or profit.",
+    what: "Every person in the panel has a role. Owner: there is only one; can do everything and is the only one who appoints superadmins. The owner or a superadmin can hand ownership to another superadmin (\"Make owner\", with their password) and the previous owner stays as a superadmin. Superadmin: same rights as the owner (prices, approvals, alerts, team). Supervisor: sees and approves in the stores assigned to them, with costs. Store manager: runs their store (till, sales, store team, approvals up to their limit). Seller: makes sales and sees only their own and their commission; no costs or profit.",
     how: [
       "When creating someone, pick the role and, except for owner/superadmin, the stores they have access to.",
       "A seller also needs their seller record (store, terminal and commission).",
@@ -1508,6 +1564,352 @@ const TOPICS_EN = {
   },
 };
 
+/* ───────────── Cómo se calcula cada cifra (ventana de ayuda, 7-nov-2026) ─────────────
+   Campos que la ventana pinta aparte: `formula` (bloque monoespaciado, una
+   línea por paso), `usedIn` (dónde sale esa cifra, una por línea) y, donde
+   faltaba, `example` con números. Cada fórmula está copiada del código que la
+   calcula — no se inventa ninguna:
+     Ejecutivo / Panel de ventas  backend lib/sales-insights.ts (net, cost, fee,
+                                  commission, profit, margin_pct) y salesTotals()
+                                  de StoreOrders.jsx (cobrado / por cobrar)
+     Caja                          lib/cash.ts expectedCash() y lib/cash-report.ts
+     Resultado / liquidación       lib/store-costs.ts computePnl(), lib/pos-statement.ts
+     Precio del POS                lib/pos-data.ts (quote: discountLine + impuesto)
+   Los temas `cost.*` y `backlog.*` tienen su texto en parts/costs.js y
+   parts/backlog.js; aquí solo se les añaden `formula` y `usedIn`. */
+const CALC_ES = {
+  "exec.kpi.sales": {
+    formula: "Ventas = Σ total de cada venta del período (sin las anuladas)\nTotal de una venta = precio de lista − descuento + impuesto",
+    example: "Tres ventas de $250, $180 y $320 → Ventas = $750. Una cuarta de $200 que se anuló no suma.",
+    usedIn: "Ejecutivo · KPI «Ventas»\nPanel de ventas\nEstado de tienda (hoy, semana, mes)\nInforme PDF / Excel del Ejecutivo",
+  },
+  "exec.kpi.collected": {
+    formula: "Cobrado = Σ lo cobrado hasta hoy de cada venta del período (sin anuladas)\n  venta de tienda: anticipo + abonos posteriores (la parte del seguro no)\n  pedido web: su total (se paga al comprar)\nVentas = Cobrado + Por cobrar + parte del seguro",
+    example: "Venta de $240 hoy con $100 de anticipo → suma $100 a Cobrado y $140 a Por cobrar. Si el cliente paga el resto la semana que viene, este mismo período pasa a $240 cobrados y $0 por cobrar.",
+    usedIn: "Ejecutivo · KPI «Cobrado»\nPedidos y etapas (columna Cobrado)\nInforme PDF / Excel del Ejecutivo",
+  },
+  "exec.kpi.balance": {
+    formula: "Por cobrar = Σ saldo pendiente HOY de cada venta del período (sin anuladas)\nSaldo de una venta = total − cobrado − parte del seguro",
+    example: "En el mes hubo dos ventas con saldo: $140 y $60 → Por cobrar = $200. Una venta del mes pasado con $80 pendientes no entra aquí (sí en «Dinero en la calle»).",
+    usedIn: "Ejecutivo · KPI «Por cobrar»\nPedidos y etapas (pastilla «saldo»)\nCobros pendientes (todas las fechas)",
+  },
+  "exec.kpi.cost": {
+    formula: "Costo real = materiales + fijos por pedido + comisión del cobro\n  materiales = montura + lente según las reglas de Costos\n  fijos por pedido = reglas fijas, repartidas entre las líneas de la venta\n  comisión del cobro = la registrada con cada pago (tienda)\n                       · % + fijo de la pasarela (web)",
+    example: "Montura $40 + lentes $35 + estuche (fijo por pedido) $3 + comisión de tarjeta $7.25 = costo real $85.25. La comisión del vendedor NO va aquí: se resta en la ganancia.",
+    usedIn: "Ejecutivo · KPI «Costo real»\nPanel de ventas (columna Costo)\nCostos → Ganancia",
+  },
+  "exec.kpi.profit": {
+    formula: "Ganancia bruta = Neto − costo real − comisión del vendedor\n  Neto = total − impuesto\n  costo real = materiales + fijos por pedido + comisión del cobro\n  comisión del vendedor = Neto × % del vendedor",
+    example: "Venta de $250 sin impuesto: $250 − costo real $85.25 − comisión 5 % ($12.50) = ganancia bruta $152.25.",
+    usedIn: "Ejecutivo · KPI «Ganancia bruta»\nPanel de ventas\nVendedores (ganancia y ganancia por venta)\nResultado de la tienda (contribución, antes de renta y fijos)",
+  },
+  "exec.kpi.margin": {
+    formula: "Margen % = Ganancia bruta ÷ Neto × 100   (redondeado a 1 decimal)\nNeto = ventas − impuesto",
+    example: "Ganancia bruta $152.25 ÷ Neto $250 × 100 = 60.9 %.",
+    usedIn: "Ejecutivo · KPI «Margen»\nPanel de ventas (columna Margen)\nVendedores",
+  },
+  "exec.cash": {
+    formula: "Efectivo en caja = cobros en efectivo − devoluciones en efectivo\n                 + entradas manuales − salidas manuales\n(por la fecha del cobro; el fondo inicial y las líneas automáticas\n del libro no se suman otra vez)",
+    example: "Cobros en efectivo $1,200 − una devolución $40 + entrada $50 − pago a proveedor $200 = $1,010 de efectivo en el período.",
+    usedIn: "Ejecutivo · KPI «Efectivo en caja» y acordeón «Cobros y caja»\nCaja → Informe de caja (efectivo neto)",
+  },
+  "exec.orders": {
+    formula: "Pastilla «ventas» = Σ total de las ventas listadas (sin anuladas)\nPastilla «saldo» = Σ saldo pendiente hoy de esas ventas",
+    usedIn: "Ejecutivo · acordeón «Pedidos y etapas»\nVentas de tienda",
+  },
+  "exec.ordersPlain": {
+    formula: "Pastilla «ventas» = Σ total de las ventas listadas (sin anuladas)\nPastilla «saldo» = Σ saldo pendiente hoy de esas ventas",
+    usedIn: "Ejecutivo · acordeón «Pedidos y etapas»\nVentas de tienda",
+  },
+  "exec.sellers.quota": {
+    formula: "Cuota % = ventas del vendedor ÷ ventas totales del período × 100\n(mismo período y mismo filtro de tienda; en dinero, no en número de ventas)",
+    usedIn: "Ejecutivo · acordeón «Vendedores» (columna Cuota)\nPanel del vendedor",
+  },
+  "exec.sellers.avgProfit": {
+    formula: "Ganancia por venta = ganancia bruta de sus ventas ÷ número de ventas\nganancia bruta = Neto − costo real − comisión del vendedor",
+    example: "Seis ventas que dejan en total $780 de ganancia bruta → $130 por venta.",
+    usedIn: "Ejecutivo · acordeón «Vendedores»\nPanel del vendedor",
+  },
+  "exec.sellers.commission": {
+    formula: "Comisión = Σ (Neto de cada venta × % del vendedor)\nNeto = total − impuesto",
+    example: "Ventas del mes con Neto $8,000 y comisión del 5 % → $400 a pagar.",
+    usedIn: "Ejecutivo · acordeón «Vendedores»\nPanel del vendedor y Mis ventas\nResultado de la tienda (comisiones)",
+  },
+  "cash.session": {
+    formula: "Esperado = fondo inicial + Σ entradas − Σ salidas\n  entradas: cobros en efectivo + entradas manuales\n  salidas: devoluciones en efectivo + salidas manuales\nDiferencia = contado − esperado   (0 cuadra · − falta · + sobra)",
+    usedIn: "Caja (tarjeta de la caja abierta)\nCierre de caja\nInforme de caja → Cierres",
+  },
+  "cash.close": {
+    formula: "Debe haber = fondo inicial + Σ entradas − Σ salidas del libro\n(la línea «fondo inicial» del libro solo lo refleja: no se suma dos veces)\nDiferencia = contado − debe haber\n≠ 0 → «Pendiente de autorizar» hasta la firma del dueño",
+    usedIn: "Caja → Cerrar caja (contador de billetes)\nCaja → Pendientes de autorizar\nInforme de caja → Cierres",
+  },
+  "cash.movement": {
+    formula: "Entrada manual → suma al «debe haber» de la caja abierta\nSalida manual → resta del «debe haber»",
+    example: "Caja con debe haber $730; pagas $45 de limpieza (salida, motivo «Gasto») → debe haber $685.",
+    usedIn: "Caja → Movimiento\nInforme de caja (entradas y salidas por motivo)\nEjecutivo · «Efectivo en caja»",
+  },
+  "cash.report": {
+    formula: "Cobrado por método = cobros − devoluciones (la parte del seguro va aparte, «por cobrar»)\nEfectivo neto = cobros en efectivo + entradas manuales − salidas manuales\nDiferencia de cierres = Σ (contado − esperado) de cada cierre",
+    example: "Efectivo $1,200, tarjeta $2,300 (−$20 de devolución), Zelle $400 → cobrado $3,880. Entradas $50, salidas $200 → efectivo neto $1,050.",
+    usedIn: "Caja → Informe de caja\nEjecutivo · «Cobros y caja»",
+  },
+  "statement.what": {
+    formula: "Ventas = Σ total de las ventas del mes (las anuladas, aparte)\nLiquidación (tienda socia o en consignación) = (ventas − impuestos) × % acordado",
+    example: "Ventas del mes $12,000 con $300 de impuestos, tienda en consignación al 40 % → base $11,700 × 40 % = $4,680 para la tienda.",
+    usedIn: "Tiendas → Estado de cuenta (EST-<tienda>-<AAAAMM>)\nPDF para el socio · Excel para el contador",
+  },
+  "salesboard.what": {
+    formula: "Neto = total − impuesto\nGanancia = Neto − costo − comisión del cobro − comisión del vendedor\nMargen % = Ganancia ÷ Neto × 100\nTicket medio = ventas ÷ número de ventas",
+    example: "Un vendedor con 10 ventas por $3,000 ($2,900 de Neto) y $1,450 de ganancia → margen 50 %, ticket medio $300.",
+    usedIn: "Panel de ventas (gráfica, tablas y lista)\nEjecutivo (los KPI salen de la misma lectura)",
+  },
+  "pos.step.price": {
+    formula: "Precio de cada artículo = lista × (1 − descuento % ÷ 100)\nImpuesto = precio × tasa   (solo montura o estuche SIN lentes)\nTotal = Σ (precio con descuento + impuesto)\nDescuento $ = lista − (total − impuesto)",
+    example: "Montura $120 + lentes $180 = lista $300; descuento 10 % → $270. Lleva receta: sin impuesto. Total $270, descuento $30.",
+    usedIn: "Nueva venta · paso 5 y franja del total\nRecibo (lista, subtotal, descuento e impuesto una sola vez)",
+  },
+  "pos.step.payment": {
+    formula: "Pagado = Σ importes de las líneas de pago (sin el seguro)\nSaldo = total − pagado − parte del seguro\nCambio (efectivo) = entregado − importe",
+    example: "Total $270, anticipo en efectivo $100 → saldo $170. El cliente entrega $120 → cambio $20.",
+    usedIn: "Nueva venta · paso 6\nRecibo\nCobros pendientes y «Por cobrar» del Ejecutivo",
+  },
+  "price.rule": {
+    formula: "Precio de venta = base × (1 + % ÷ 100)     (regla «porcentaje»)\nPrecio de venta = base + monto               (regla «monto fijo»)\nSin regla → precio base",
+    usedIn: "Productos y precios → Monturas y estuches\nNueva venta (precio de la montura)\nTienda web",
+  },
+  "price.override": {
+    formula: "Montura con precio propio → precio de venta = el escrito (la regla no se aplica)",
+    usedIn: "Productos y precios → Monturas y estuches («Modificados»)\nNueva venta",
+  },
+  "price.storeVariation": {
+    formula: "Lente en la tienda = precio del maestro × (1 + % de la tienda ÷ 100)\nCasilla con precio exacto → ese precio (el % no se aplica)",
+    usedIn: "Productos y precios → Lentes (tienda elegida)\nNueva venta (precio de los lentes)",
+  },
+  "price.commission": {
+    what: "Cada vendedor tiene su porcentaje y se aplica al NETO, nunca al total con impuestos. En las ventas de tienda el neto es el total menos el impuesto; en los pedidos web (fichas de costo) es lo pagado menos envío, impuestos y la comisión de Stripe. La «comisión por defecto» es con la que arranca quien no tenga una propia. Cambiar un porcentaje recalcula también las ventas pasadas, porque las cifras se calculan con las reglas de hoy.",
+    formula: "Venta de tienda: comisión = (total − impuesto) × % del vendedor\nPedido web:      comisión = (pagado − envío − impuestos − Stripe) × %",
+    usedIn: "Reglas y comisiones → Comisiones\nEjecutivo · Vendedores\nPanel del vendedor\nResultado de la tienda",
+  },
+  "price.tax": {
+    formula: "Impuesto = precio con descuento × tasa   (solo montura o estuche sin lentes)\nCon receta → 0",
+    usedIn: "Nueva venta (precio)\nCarrito de la tienda web\nFichas de costo",
+  },
+  "cost.paid": { formula: "Pagado = Σ total pagado de cada pedido (producto + envío + impuestos)", usedIn: "Ejecutivo → Costos operacionales\nCostos → Ganancia" },
+  "cost.net": { formula: "Neto = Pagado − envío − impuestos − Stripe\nStripe = Pagado × % + fijo («Comisiones de pago»)", usedIn: "Costos operacionales\nCostos → Distribución % (base de cada partida)" },
+  "cost.cost": { formula: "Costo = materiales + Σ (partida % × Neto) + comisión del vendedor + ajustes manuales", usedIn: "Costos operacionales\nCostos → Fichas de costo" },
+  "cost.profit": { formula: "Ganancia = Neto − Costo\nGanancia % = Ganancia ÷ Neto × 100", usedIn: "Costos operacionales\nCostos → Ganancia" },
+  "cost.target": { formula: "Objetivo $ = Neto × objetivo %\nDiferencia = Ganancia − Objetivo $", usedIn: "Costos operacionales (tarjeta Objetivo y marca ◆)\nCostos → Distribución %" },
+  "cost.incomplete": { formula: "Incompletas = n.º de pedidos con alguna pieza sin regla de costo (entra a $0)", usedIn: "Costos operacionales\nCostos → Fichas de costo" },
+  "cost.split": { formula: "Pagado = deducciones + materiales + partidas % + vendedor + ajustes + ganancia\nCada bloque % = bloque ÷ Pagado × 100", usedIn: "Costos operacionales (barra «Reparto del ingreso»)" },
+  "cost.deductions": { formula: "Deducciones = envío + impuestos + Stripe", usedIn: "Costos operacionales\nCostos → Comisiones de pago" },
+  "cost.materials": { formula: "Materiales = montura + lentes + tratamientos + estuche (+ fijos por pedido)", usedIn: "Costos operacionales\nCostos → Fichas de costo" },
+  "cost.percent": { formula: "Partida = Neto × %\nPartidas % = Σ partidas", usedIn: "Costos operacionales\nCostos → Distribución %" },
+  "cost.commission": { formula: "Comisión = Neto × % del vendedor", usedIn: "Costos operacionales (tarjeta Vendedores)\nVendedores" },
+  "cost.marginChart": { formula: "Ganancia del día = ventas − costo\nMargen del día % = ganancia ÷ ventas × 100", usedIn: "Costos operacionales (gráfica «Ventas vs costo por día»)" },
+  "backlog.street": { formula: "Dinero en la calle = Σ saldo pendiente de TODAS las ventas no anuladas\n(de cualquier fecha: no depende del período)", usedIn: "Ejecutivo · «Ahora mismo»\nCobros pendientes\nInicio" },
+  "backlog.overdue": { formula: "Atrasados = Σ saldo de las ventas cuya fecha prometida ya pasó", usedIn: "Ejecutivo · «Ahora mismo»\nCobros pendientes (filtro «solo atrasados»)" },
+};
+
+const CALC_EN = {
+  "exec.kpi.sales": {
+    formula: "Sales = Σ total of each sale in the period (voided ones excluded)\nTotal of a sale = list price − discount + tax",
+    example: "Three sales of $250, $180 and $320 → Sales = $750. A fourth one of $200 that was voided does not count.",
+    usedIn: "Executive · \"Sales\" KPI\nSales board\nStore status (today, week, month)\nExecutive PDF / Excel report",
+  },
+  "exec.kpi.collected": {
+    formula: "Collected = Σ collected to date on each sale of the period (voided excluded)\n  store sale: deposit + later payments (the insurer's part is not)\n  web order: its total (paid at checkout)\nSales = Collected + Balance due + insurer's part",
+    example: "A $240 sale today with a $100 deposit → adds $100 to Collected and $140 to Balance due. If the customer pays the rest next week, this same period becomes $240 collected and $0 due.",
+    usedIn: "Executive · \"Collected\" KPI\nOrders and stages (Collected column)\nExecutive PDF / Excel report",
+  },
+  "exec.kpi.balance": {
+    formula: "Balance due = Σ balance still owed TODAY on each sale of the period (voided excluded)\nBalance of a sale = total − collected − insurer's part",
+    example: "Two sales of the month still owe $140 and $60 → Balance due = $200. A sale from last month owing $80 is not here (it is in \"Money on the street\").",
+    usedIn: "Executive · \"Balance due\" KPI\nOrders and stages (\"balance\" pill)\nPending balances (all dates)",
+  },
+  "exec.kpi.cost": {
+    formula: "Real cost = materials + fixed per order + payment fee\n  materials = frame + lens from the Costs rules\n  fixed per order = fixed rules, split across the sale's lines\n  payment fee = the one recorded with each payment (store)\n                · gateway % + fixed (web)",
+    example: "Frame $40 + lenses $35 + case (fixed per order) $3 + card fee $7.25 = real cost $85.25. The seller's commission is NOT here: it is subtracted in the profit.",
+    usedIn: "Executive · \"Real cost\" KPI\nSales board (Cost column)\nCosts → Profit",
+  },
+  "exec.kpi.profit": {
+    formula: "Gross profit = Net − real cost − seller commission\n  Net = total − tax\n  real cost = materials + fixed per order + payment fee\n  seller commission = Net × seller %",
+    example: "A $250 sale with no tax: $250 − real cost $85.25 − 5% commission ($12.50) = gross profit $152.25.",
+    usedIn: "Executive · \"Gross profit\" KPI\nSales board\nSellers (profit and profit per sale)\nStore result (contribution, before rent and fixed costs)",
+  },
+  "exec.kpi.margin": {
+    formula: "Margin % = Gross profit ÷ Net × 100   (rounded to 1 decimal)\nNet = sales − tax",
+    example: "Gross profit $152.25 ÷ Net $250 × 100 = 60.9%.",
+    usedIn: "Executive · \"Margin\" KPI\nSales board (Margin column)\nSellers",
+  },
+  "exec.cash": {
+    formula: "Cash on hand = cash payments − cash refunds\n             + manual cash in − manual cash out\n(by payment date; the opening float and the ledger's automatic\n lines are not added again)",
+    example: "Cash payments $1,200 − one refund $40 + cash in $50 − supplier payment $200 = $1,010 of cash in the period.",
+    usedIn: "Executive · \"Cash on hand\" KPI and \"Collections and cash\" accordion\nTill → Cash report (net cash)",
+  },
+  "exec.orders": {
+    formula: "\"sales\" pill = Σ total of the listed sales (voided excluded)\n\"balance\" pill = Σ balance still owed today on those sales",
+    usedIn: "Executive · \"Orders and stages\" accordion\nStore sales",
+  },
+  "exec.ordersPlain": {
+    formula: "\"sales\" pill = Σ total of the listed sales (voided excluded)\n\"balance\" pill = Σ balance still owed today on those sales",
+    usedIn: "Executive · \"Orders and stages\" accordion\nStore sales",
+  },
+  "exec.sellers.quota": {
+    formula: "Share % = seller's sales ÷ total sales of the period × 100\n(same period and store filter; in money, not number of sales)",
+    usedIn: "Executive · \"Sellers\" accordion (Share column)\nSeller panel",
+  },
+  "exec.sellers.avgProfit": {
+    formula: "Profit per sale = gross profit of their sales ÷ number of sales\ngross profit = Net − real cost − seller commission",
+    example: "Six sales leaving $780 of gross profit in total → $130 per sale.",
+    usedIn: "Executive · \"Sellers\" accordion\nSeller panel",
+  },
+  "exec.sellers.commission": {
+    formula: "Commission = Σ (Net of each sale × seller %)\nNet = total − tax",
+    example: "Sales of the month with $8,000 Net and a 5% commission → $400 to pay.",
+    usedIn: "Executive · \"Sellers\" accordion\nSeller panel and My sales\nStore result (commissions)",
+  },
+  "cash.session": {
+    formula: "Expected = opening float + Σ in − Σ out\n  in: cash payments + manual cash in\n  out: cash refunds + manual cash out\nDifference = counted − expected   (0 balanced · − short · + over)",
+    usedIn: "Till (open register card)\nClosing the till\nCash report → Closings",
+  },
+  "cash.close": {
+    formula: "Should have = opening float + Σ in − Σ out of the ledger\n(the ledger's \"opening float\" line only mirrors it: never added twice)\nDifference = counted − should have\n≠ 0 → \"Pending approval\" until the owner signs",
+    usedIn: "Till → Close till (bill counter)\nTill → Pending approval\nCash report → Closings",
+  },
+  "cash.movement": {
+    formula: "Manual cash in → adds to the open register's \"should have\"\nManual cash out → subtracts from it",
+    example: "Register should have $730; you pay $45 for cleaning (cash out, reason \"Expense\") → should have $685.",
+    usedIn: "Till → Movement\nCash report (in and out by reason)\nExecutive · \"Cash on hand\"",
+  },
+  "cash.report": {
+    formula: "Collected per method = payments − refunds (the insurer's part is separate, \"receivable\")\nNet cash = cash payments + manual cash in − manual cash out\nClosing difference = Σ (counted − expected) of each closing",
+    example: "Cash $1,200, card $2,300 (−$20 refund), Zelle $400 → collected $3,880. Cash in $50, cash out $200 → net cash $1,050.",
+    usedIn: "Till → Cash report\nExecutive · \"Collections and cash\"",
+  },
+  "statement.what": {
+    formula: "Sales = Σ total of the month's sales (voided ones listed apart)\nSettlement (partner or consignment store) = (sales − taxes) × agreed %",
+    example: "Month sales $12,000 with $300 of taxes, consignment store at 40% → base $11,700 × 40% = $4,680 for the store.",
+    usedIn: "Stores → Statement (EST-<store>-<YYYYMM>)\nPDF for the partner · Excel for the accountant",
+  },
+  "salesboard.what": {
+    formula: "Net = total − tax\nProfit = Net − cost − payment fee − seller commission\nMargin % = Profit ÷ Net × 100\nAverage ticket = sales ÷ number of sales",
+    example: "A seller with 10 sales for $3,000 ($2,900 Net) and $1,450 of profit → 50% margin, $300 average ticket.",
+    usedIn: "Sales board (chart, tables and list)\nExecutive (its KPIs come from the same read)",
+  },
+  "pos.step.price": {
+    formula: "Price of each item = list × (1 − discount % ÷ 100)\nTax = price × rate   (only a frame or case WITHOUT lenses)\nTotal = Σ (discounted price + tax)\nDiscount $ = list − (total − tax)",
+    example: "Frame $120 + lenses $180 = list $300; 10% discount → $270. With a prescription: no tax. Total $270, discount $30.",
+    usedIn: "New sale · step 5 and the running-total strip\nReceipt (list, subtotal, discount and tax once)",
+  },
+  "pos.step.payment": {
+    formula: "Paid = Σ amounts of the payment lines (insurance excluded)\nBalance = total − paid − insurer's part\nChange (cash) = tendered − amount",
+    example: "Total $270, $100 cash deposit → balance $170. The customer hands over $120 → change $20.",
+    usedIn: "New sale · step 6\nReceipt\nPending balances and the Executive's \"Balance due\"",
+  },
+  "price.rule": {
+    formula: "Selling price = base × (1 + % ÷ 100)     (\"percentage\" rule)\nSelling price = base + amount              (\"fixed amount\" rule)\nNo rule → base price",
+    usedIn: "Products and prices → Frames and cases\nNew sale (frame price)\nOnline store",
+  },
+  "price.override": {
+    formula: "Frame with its own price → selling price = the one typed (the rule does not apply)",
+    usedIn: "Products and prices → Frames and cases (\"Modified\")\nNew sale",
+  },
+  "price.storeVariation": {
+    formula: "Lens in the store = master price × (1 + store % ÷ 100)\nCell with an exact price → that price (the % does not apply)",
+    usedIn: "Products and prices → Lenses (chosen store)\nNew sale (lens price)",
+  },
+  "price.commission": {
+    what: "Each seller has their percentage and it always applies to the NET, never to the total with tax. On store sales the net is the total minus tax; on web orders (cost sheets) it is what was paid minus shipping, taxes and the Stripe fee. The \"default commission\" is what someone without their own starts with. Changing a percentage re-computes past sales too, because the figures are computed with today's rules.",
+    formula: "Store sale: commission = (total − tax) × seller %\nWeb order:  commission = (paid − shipping − taxes − Stripe) × %",
+    usedIn: "Rules and commissions → Commissions\nExecutive · Sellers\nSeller panel\nStore result",
+  },
+  "price.tax": {
+    formula: "Tax = discounted price × rate   (only a frame or case without lenses)\nWith a prescription → 0",
+    usedIn: "New sale (price)\nOnline store cart\nCost sheets",
+  },
+  "cost.paid": { formula: "Paid = Σ total paid on each order (product + shipping + taxes)", usedIn: "Executive → Operating costs\nCosts → Profit" },
+  "cost.net": { formula: "Net = Paid − shipping − taxes − Stripe\nStripe = Paid × % + fixed (\"Payment fees\")", usedIn: "Operating costs\nCosts → % allocation (base of each item)" },
+  "cost.cost": { formula: "Cost = materials + Σ (% item × Net) + seller commission + manual adjustments", usedIn: "Operating costs\nCosts → Cost sheets" },
+  "cost.profit": { formula: "Profit = Net − Cost\nProfit % = Profit ÷ Net × 100", usedIn: "Operating costs\nCosts → Profit" },
+  "cost.target": { formula: "Target $ = Net × target %\nDifference = Profit − Target $", usedIn: "Operating costs (Target card and ◆ mark)\nCosts → % allocation" },
+  "cost.incomplete": { formula: "Incomplete = number of orders with some item lacking a cost rule (counted at $0)", usedIn: "Operating costs\nCosts → Cost sheets" },
+  "cost.split": { formula: "Paid = deductions + materials + % items + seller + adjustments + profit\nEach block % = block ÷ Paid × 100", usedIn: "Operating costs (\"Revenue split\" bar)" },
+  "cost.deductions": { formula: "Deductions = shipping + taxes + Stripe", usedIn: "Operating costs\nCosts → Payment fees" },
+  "cost.materials": { formula: "Materials = frame + lenses + treatments + case (+ fixed per order)", usedIn: "Operating costs\nCosts → Cost sheets" },
+  "cost.percent": { formula: "Item = Net × %\n% items = Σ items", usedIn: "Operating costs\nCosts → % allocation" },
+  "cost.commission": { formula: "Commission = Net × seller %", usedIn: "Operating costs (Sellers card)\nSellers" },
+  "cost.marginChart": { formula: "Day profit = sales − cost\nDay margin % = profit ÷ sales × 100", usedIn: "Operating costs (\"Sales vs cost per day\" chart)" },
+  "backlog.street": { formula: "Money on the street = Σ balance owed on ALL non-voided sales\n(any date: it does not depend on the period)", usedIn: "Executive · \"Right now\"\nPending balances\nHome" },
+  "backlog.overdue": { formula: "Overdue = Σ balance of the sales whose promised date has passed", usedIn: "Executive · \"Right now\"\nPending balances (\"only overdue\" filter)" },
+};
+
+/* Temas nuevos de pantallas que no tenían ayuda (Cobros pendientes, Estado de tienda). */
+const NEW_ES = {
+  "pending.what": {
+    title: "Cobros pendientes",
+    short: "Todas las ventas con saldo por cobrar, de cualquier fecha, ordenadas por los días de atraso. Desde cada una se cobra el resto.",
+    what: "Lista las ventas no anuladas de la(s) tienda(s) elegida(s) que todavía deben dinero, sin importar el período: un saldo de hace tres meses sigue aquí hasta que se cobra. Los días de atraso se cuentan desde la fecha prometida al cliente (la del recibo) o, si la venta no tiene, desde que se hizo.",
+    formula: "Saldo de una venta = total − cobrado − parte del seguro\nTotal pendiente = Σ saldos de la lista\nDías de atraso = hoy − fecha prometida (o fecha de la venta), nunca negativo\nAtrasadas = ventas con más de 7 días de atraso",
+    example: "Venta de $240 prometida para el día 3, con $100 de anticipo. El día 12 sale con $140 de saldo y 9 días de atraso: cuenta como atrasada.",
+    usedIn: "Cobros pendientes\nEjecutivo · «Dinero en la calle» y «Atrasados»\nMis ventas (pendientes de la tienda)",
+    how: [
+      "Ordena por días de atraso (ya viene así) y empieza por arriba.",
+      "Abre la venta y pulsa «Cobrar saldo» cuando el cliente pague.",
+      "Usa «solo atrasados» para la lista de llamadas del día.",
+    ],
+    why: "Cada saldo es dinero que la tienda ya pagó al laboratorio. Cuanto más viejo, más difícil de cobrar.",
+  },
+  "storestatus.what": {
+    title: "Estado de la tienda",
+    short: "La tienda AHORA: ventas de hoy, de la semana y del mes, la caja abierta, quién vende y lo que queda pendiente (aprobaciones, anulaciones, listos para entregar, saldos y seguros).",
+    what: "Una sola pantalla para el encargado: cuánto lleva vendido la tienda hoy (con la comparación frente a ayer), en la semana (desde el lunes) y en el mes, el ticket medio, el estado de la caja de la tienda y la lista de cosas por resolver. No usa el período de la barra: siempre es «ahora», con las fechas de la zona horaria de la tienda.",
+    formula: "Ventas de hoy / semana / mes = Σ total de las ventas (sin anuladas)\n  semana = desde el lunes · mes = desde el día 1\nTicket medio = ventas ÷ número de ventas\nvs. ayer % = (hoy − ayer) ÷ ayer × 100\nCon saldo = n.º de ventas con saldo > 0 · importe = Σ saldos",
+    example: "Hoy $620 en 3 ventas (ticket medio $206.67); ayer $500 → +24 % vs. ayer.",
+    usedIn: "Estado de tienda\nInforme PDF / Excel de la barra",
+    how: [
+      "Toca un indicador para ir a la pantalla que lo explica (ventas, aprobaciones, ventas de tienda).",
+      "Resuelve los pendientes en rojo antes de cerrar el día.",
+    ],
+    why: "Es lo primero que mira el encargado al abrir y lo último al cerrar: si algo queda en rojo, mañana empieza con un problema.",
+  },
+};
+const NEW_EN = {
+  "pending.what": {
+    title: "Pending balances",
+    short: "Every sale with a balance still owed, from any date, sorted by days overdue. You collect the rest from each one.",
+    what: "Lists the non-voided sales of the chosen store(s) that still owe money, whatever the period: a balance from three months ago stays here until it is collected. Days overdue count from the date promised to the customer (the one on the receipt) or, if the sale has none, from when it was made.",
+    formula: "Balance of a sale = total − collected − insurer's part\nTotal pending = Σ balances in the list\nDays overdue = today − promised date (or sale date), never negative\nOverdue = sales more than 7 days overdue",
+    example: "A $240 sale promised for the 3rd, with a $100 deposit. On the 12th it shows $140 owed and 9 days overdue: it counts as overdue.",
+    usedIn: "Pending balances\nExecutive · \"Money on the street\" and \"Overdue\"\nMy sales (store pending)",
+    how: [
+      "Sort by days overdue (the default) and start at the top.",
+      "Open the sale and press \"Collect balance\" when the customer pays.",
+      "Use \"only overdue\" for the day's call list.",
+    ],
+    why: "Each balance is money the store already paid the lab. The older it gets, the harder it is to collect.",
+  },
+  "storestatus.what": {
+    title: "Store status",
+    short: "The store RIGHT NOW: sales today, this week and this month, the open till, who is selling and what is pending (approvals, voids, ready to hand over, balances and insurance).",
+    what: "One screen for the manager: how much the store has sold today (compared with yesterday), this week (since Monday) and this month, the average ticket, the state of the store's till and the list of things to resolve. It does not use the bar's period: it is always \"now\", with the dates of the store's time zone.",
+    formula: "Sales today / week / month = Σ total of the sales (voided excluded)\n  week = since Monday · month = since the 1st\nAverage ticket = sales ÷ number of sales\nvs. yesterday % = (today − yesterday) ÷ yesterday × 100\nWith balance = number of sales owing > 0 · amount = Σ balances",
+    example: "Today $620 in 3 sales (average ticket $206.67); yesterday $500 → +24% vs. yesterday.",
+    usedIn: "Store status\nBar PDF / Excel report",
+    how: [
+      "Tap an indicator to go to the screen that explains it (sales, approvals, store sales).",
+      "Resolve the red items before closing the day.",
+    ],
+    why: "It is the first thing the manager checks when opening and the last when closing: anything left red starts tomorrow with a problem.",
+  },
+};
+
+/** Mezcla campo a campo: lo de `extra` se añade (o corrige) sobre el tema existente. */
+function withCalc(topics, extra) {
+  const out = { ...topics };
+  for (const [k, fields] of Object.entries(extra)) out[k] = { ...(out[k] || {}), ...fields };
+  return out;
+}
+
 /** Aplana {tema: {campo: texto | [líneas]}} a claves `adm.help.<tema>.<campo>`. */
 function flatten(topics) {
   const out = {};
@@ -1520,6 +1922,6 @@ function flatten(topics) {
 }
 
 export default {
-  es: { ...UI.es, ...flatten(TOPICS_ES) },
-  en: { ...UI.en, ...flatten(TOPICS_EN) },
+  es: { ...UI.es, ...flatten(withCalc({ ...TOPICS_ES, ...NEW_ES }, CALC_ES)) },
+  en: { ...UI.en, ...flatten(withCalc({ ...TOPICS_EN, ...NEW_EN }, CALC_EN)) },
 };

@@ -1,4 +1,7 @@
-// Dónde se usa: «Precios y costos» → acordeón «Monturas y estuches».
+// Dónde se usa: «Productos y precios» → «Reglas y comisiones» (PricingPanel.jsx) importa
+// RuleRow y BandBlock. El resto de este archivo (precio exacto, costos, «un modelo en
+// todas las tiendas») lo sustituyó la matriz (PriceMatrix.jsx) el 6-nov-2026.
+// Historia: «Precios y costos» → acordeón «Monturas y estuches».
 // Lo que pidió el dueño, tal cual: UNA regla para todas las monturas (y otra
 // para los estuches) y, si quiere cambiar una montura a pesar de la regla, la
 // busca y le pone el precio — y entonces la pantalla enseña solo la regla y los
@@ -43,7 +46,7 @@ import {
 import "./pricing-across.css";
 
 /** La regla en UNA fila editable: modo, valor y guardar. */
-function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
+export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
   const [mode, setMode] = useState(rule ? rule.mode : "none");
   const [value, setValue] = useState(rule ? String(rule.value) : "");
   const [busy, setBusy] = useState(false);
@@ -121,7 +124,7 @@ function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
  * («READ 2: $8 → $60»). El dueño acaba de vivir que un cambio de regla le
  * moviera 147 precios: esto es para que no vuelva a pasar a ciegas.
  */
-function BandBlock({ store, onError }) {
+export function BandBlock({ store, onError }) {
   const { t, lang } = useLang();
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -728,9 +731,16 @@ function CostsBlock({ costs, overrides, store = "all", onCostSaved, onError }) {
       header: t("adm.price.frames.cost.col.price"),
       type: "money",
       essential: true,
+      // `price_source` lo manda el servidor con el precio (catalogSellingPrices):
+      // en el maestro, «regla general» cuando la regla sin tienda lo movió, para
+      // que se vea que el maestro ya la lleva (es el precio del que parte cada
+      // tienda); «base» no se etiqueta.
       render: (r) => (r.price == null
         ? <span className="pp-now" title={t("adm.price.frames.cost.noPriceHint")}>{t("adm.price.frames.cost.noPrice")}</span>
-        : <b>{money(r.price, "usd", lang)}</b>),
+        : <span className="pp-price-src" title={r.price_source && r.price_source !== "base" ? t(`adm.price.across.srcHint.${r.price_source}`) : undefined}>
+            <b>{money(r.price, "usd", lang)}</b>
+            {r.price_source && r.price_source !== "base" && <span className={`pp-across-src ${r.price_source}`}>{t(`adm.price.across.src.${r.price_source}`)}</span>}
+          </span>),
       sortValue: (r) => (r.price == null ? -1 : r.price),
     },
     {
@@ -927,7 +937,8 @@ function AcrossBlock({ onError }) {
                     </td>
                   )}
                   <td className="num" data-label={t("adm.price.across.col.master")}>
-                    {cell(r.master_price_cents, r.master_source === "owner" ? "owner" : r.master_source === "band" ? "band" : "base")}
+                    {/* `master_source` viene del servidor (lib/store-pricing.ts masterLinePrice): propio / banda / regla general / base. */}
+                    {cell(r.master_price_cents, r.master_source || "base")}
                   </td>
                   {stores.map((s) => {
                     const c = (r.stores || []).find((x) => x.establishment_id === s.id);

@@ -6,8 +6,9 @@ import { model } from "@medusajs/framework/utils";
  * environment; see src/lib/tenant.ts for how the two layers combine and
  * docs/MULTI-TENANT-TECNICO.md §7 for the rest of the module.
  *
- * `owner_user_id` names the owner explicitly. Until it is set the owner is the
- * oldest admin user, the rule the panel has always used.
+ * Who the owner is does NOT live here: store_setting.owner_user_id (a transfer
+ * from Equipo → «Hacer dueño») > STORE_OWNER_EMAIL > oldest user, decided by
+ * ownerUserId in src/lib/staff-scope.ts.
  */
 export const TenantProfile = model.define("tenant_profile", {
   id: model.id().primaryKey(),
@@ -21,7 +22,6 @@ export const TenantProfile = model.define("tenant_profile", {
   brand: model.json().nullable(),
   /** The brand before the last change, for "back to the previous brand". */
   brand_previous: model.json().nullable(),
-  owner_user_id: model.text().nullable(),
   setup_completed_at: model.dateTime().nullable(),
   updated_by: model.text().nullable(),
 });

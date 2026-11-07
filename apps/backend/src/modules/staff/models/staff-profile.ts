@@ -46,4 +46,10 @@ export const StaffProfile = model.define("staff_profile", {
   disabled_at: model.dateTime().nullable(),
   /** Who deactivated them (user id); cleared on reactivation. */
   disabled_by: model.text().nullable(),
+  /**
+   * Tokens issued before this instant are refused (lib/session-control.ts):
+   * "log out everywhere", a remote sign-out, or any password change. null =
+   * never revoked.
+   */
+  sessions_revoked_at: model.dateTime().nullable(),
 });

@@ -6,12 +6,9 @@
  *     trimmed. Anything too long is refused, not cut (same rule as field-rules).
  *   - `readTenantProfile` caches the row for a minute and feeds the identity
  *     overlay of src/lib/tenant.ts, so `tenant()` reflects what the owner saved.
- *   - `explicitOwnerId` is the owner the panel names; src/lib/staff-scope.ts
- *     falls back to the oldest admin when it is unset (or points at a user who
- *     no longer exists).
  *
- * Ownership transfer lives in src/lib/tenant-owner.ts, which needs the staff
- * helpers; keeping it out of here avoids an import cycle with staff-scope.
+ * The owner is not part of the profile: see ownerUserId in src/lib/staff-scope.ts
+ * (store_setting.owner_user_id > STORE_OWNER_EMAIL > oldest user).
  */
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
@@ -45,13 +42,12 @@ export interface TenantProfileView {
   /** Saved from the panel; null = the deployment's colours and logos. */
   brand: TenantBrandProfile | null;
   brand_previous: TenantBrandProfile | null;
-  owner_user_id: string | null;
   setup_completed_at: string | null;
   updated_by: string | null;
   updated_at: string | null;
 }
 
-/** What the panel may change. `owner_user_id` is not here: it moves only through a transfer. */
+/** What the panel may change (the brand has its own route, src/api/admin/tenant/brand). */
 export type TenantProfilePatch = Partial<
   Pick<TenantProfileView, "display_name" | "legal_name" | "support_phone" | "whatsapp" | "social" | "pickup">
 > & { setup_completed?: boolean };
@@ -171,7 +167,6 @@ export function toView(row: Row | null | undefined): TenantProfileView {
     pickup: obj<PickupInfo>(r.pickup),
     brand: readBrand(r.brand),
     brand_previous: readBrand(r.brand_previous),
-    owner_user_id: (r.owner_user_id as string | null) ?? null,
     setup_completed_at: iso(r.setup_completed_at),
     updated_by: (r.updated_by as string | null) ?? null,
     updated_at: iso(r.updated_at),
@@ -224,7 +219,6 @@ export function warmTenantProfile(container: MedusaContainer): void {
 export async function saveTenantProfile(
   container: MedusaContainer,
   patch: TenantProfilePatch & {
-    owner_user_id?: string | null;
     brand?: TenantBrandProfile | null;
     brand_previous?: TenantBrandProfile | null;
   },
@@ -238,11 +232,6 @@ export async function saveTenantProfile(
   if (existing.length) await svc.updateTenantProfiles({ id: TENANT_PROFILE_ID, ...data });
   else await svc.createTenantProfiles({ id: TENANT_PROFILE_ID, ...data });
   return readTenantProfile(container, { fresh: true });
-}
-
-/** The owner named in the profile, or null (then staff-scope uses the oldest admin). */
-export async function explicitOwnerId(container: MedusaContainer): Promise<string | null> {
-  return (await readTenantProfile(container)).owner_user_id;
 }
 
 /** What a shopper may see: identity and contact, never who the owner is. */
