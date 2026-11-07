@@ -327,6 +327,7 @@ async function loadProductSection(
     discounts,
     scope: section === "cases" ? "case" : "frame",
     logos: wantsHeaders ? new Map(registry.map((b) => [b.slug, b.logo_url])) : undefined,
+    inactive: new Set(registry.filter((b) => b.active === false).map((b) => b.slug)),
   });
 }
 

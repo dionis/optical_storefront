@@ -5,7 +5,7 @@ import { STORE_ASSORTMENT_MODULE } from "../modules/store-assortment";
 import type StoreAssortmentModuleService from "../modules/store-assortment/service";
 import { recordAudit } from "./audit";
 import { KNOWN_BRANDS } from "./costing";
-import { brandExposed, brandOf, brandSqlOf, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
+import { brandExposed, brandOf, brandSqlOf, chainBrandRules, exposureSource, isExposed, type AssortmentRuleLike, type AssortmentScope } from "./store-assortment";
 import { storeLinePrice } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
 import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
@@ -26,6 +26,30 @@ export interface AssortmentRuleRow extends AssortmentRuleLike {
 export async function listAssortmentRules(container: MedusaContainer, establishmentId: string): Promise<AssortmentRuleRow[]> {
   const rows = await svc(container).listStoreAssortmentRules({ establishment_id: establishmentId }, { take: 10000 });
   return rows.map((r) => ({ id: r.id, scope: String(r.scope), target: String(r.target), exposed: Boolean(r.exposed) }));
+}
+
+/**
+ * Slugs of the brands switched off for the whole chain (catalog_brand.active =
+ * false). One small query; an un-migrated registry means «none».
+ */
+export async function inactiveBrandSlugs(container: MedusaContainer): Promise<string[]> {
+  try {
+    const rows = (await pgOf(container)("catalog_brand").whereNull("deleted_at").where({ active: false }).select("slug")) as Array<{ slug: string }>;
+    return rows.map((r) => String(r.slug));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What a store really exposes: its own rules plus the brands switched off in
+ * every store (synthetic `chain_brand` rules, lib/store-assortment.ts). Every
+ * reader that decides what a store sells uses this; only the rule writer below
+ * reads the raw rows, so it never stores the synthetic ones.
+ */
+export async function effectiveAssortmentRules(container: MedusaContainer, establishmentId: string): Promise<AssortmentRuleLike[]> {
+  const [rules, off] = await Promise.all([listAssortmentRules(container, establishmentId), inactiveBrandSlugs(container)]);
+  return [...chainBrandRules(off), ...rules];
 }
 
 /**
@@ -121,7 +145,7 @@ export async function searchStoreCatalog(
   if (brand) {
     sql = sql.whereRaw(`${brandSqlOf("product")} = ?`, [brand]);
   }
-  const [rows, rules] = await Promise.all([sql, listAssortmentRules(container, establishmentId)]);
+  const [rows, rules] = await Promise.all([sql, effectiveAssortmentRules(container, establishmentId)]);
   return (rows as Array<Record<string, unknown>>).map((r) => {
     const p = toProduct(r);
     return { ...p, exposed: isExposed(rules, p) };
@@ -144,7 +168,7 @@ export async function storeAssortment(container: MedusaContainer, establishmentI
   const pg = pgOf(container);
   const [rows, rules] = await Promise.all([
     published(pg).select("id", "title", "thumbnail", "metadata") as Promise<Array<Record<string, unknown>>>,
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
   ]);
   const products = rows.map((r) => ({ ...toProduct(r), brand_name: String((r["metadata"] as Record<string, unknown> | null)?.["brand"] ?? "") }));
   const names = new Map(KNOWN_BRANDS.map((b) => [b.slug, b.name]));
@@ -204,7 +228,7 @@ export async function storeCatalogProduct(container: MedusaContainer, establishm
   const md = (p.metadata ?? {}) as Record<string, unknown>;
   const brand = brandOf(md);
   const [assortment, rules, prices] = await Promise.all([
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
     openRules(container, [establishmentId]),
     productPrices(container, [p.id]),
   ]);

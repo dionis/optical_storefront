@@ -16,7 +16,7 @@ import {
   type FrameCostRow,
   type FrameCostVariationIndex,
 } from "./frame-cost";
-import { brandOf, isExposed, type AssortmentRuleLike } from "./store-assortment";
+import { brandOf, chainBrandRules, isExposed, type AssortmentRuleLike } from "./store-assortment";
 import { storeLinePrice, type PriceRuleLike } from "./store-pricing";
 import { openRules, productPrices } from "./store-pricing-data";
 import { absoluteImageUrl } from "./image-url";
@@ -255,6 +255,15 @@ export async function assortmentByStore(
     }
   } catch {
     // An un-migrated table is "every store exposes everything", the default.
+  }
+  // Brands switched off for the whole chain hide in every store (lib/store-assortment.ts).
+  try {
+    const pg = container.resolve<Knex>(ContainerRegistrationKeys.PG_CONNECTION);
+    const off = (await pg("catalog_brand").whereNull("deleted_at").where({ active: false }).select("slug")) as Array<{ slug: string }>;
+    const chain = chainBrandRules(off.map((r) => r.slug));
+    if (chain.length) for (const bucket of out.values()) bucket.unshift(...chain);
+  } catch {
+    // No registry yet: no chain-wide switch.
   }
   return out;
 }

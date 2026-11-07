@@ -48,7 +48,7 @@ import { buildStyledXlsx, downloadBytes, readXlsx } from "../exportXlsx.js";
 import { useRegisterExport } from "../GlobalFilterBar.jsx";
 import Icon from "../icons.jsx";
 import {
-  deleteCatalogBrand, deleteCatalogFrame, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, wasArchived,
+  deleteCatalogBrand, deleteCatalogFrame, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, updateCatalogBrand, wasArchived,
 } from "./api.js";
 import NumCell from "./matrix/NumCell.jsx";
 import BrandDialog, { knownErr } from "./matrix/BrandDialog.jsx";
@@ -58,7 +58,7 @@ import ImportDialog from "./matrix/ImportDialog.jsx";
 import MoreMenu from "./matrix/MoreMenu.jsx";
 import { BrandLogo, Thumb } from "./matrix/Media.jsx";
 import {
-  MATRIX_SECTIONS, brandCell, brandScope, costTone, filterGroups, finalCents, groupLabel, groupStats, isBrandGroup, marginOf,
+  MATRIX_SECTIONS, brandCell, brandOff, brandScope, costTone, orderOff, rowHiddenSome, groupOff, filterGroups, finalCents, groupLabel, groupStats, isBrandGroup, marginOf,
   patchCell, patchSiblingCost, removeRow, replaceGroup, replaceRow, rowKind, rowTitle, slugify, sourceKey, sourceTone, treatmentCode, usd, withRegistry,
 } from "./matrix/model.js";
 import { matrixWorkbook, workbookToImport } from "./matrix/matrixXlsx.js";
@@ -77,7 +77,7 @@ const writeOpen = (section, set) => {
   try { localStorage.setItem(OPEN_KEY(section), JSON.stringify([...set])); } catch { /* sin almacenamiento: solo no se recuerda */ }
 };
 
-const FILTERS = ["nocost", "discount", "exact"];
+const FILTERS = ["nocost", "discount", "exact", "off"];
 /** «Nuevo» while the scraper's `first_seen_at` is recent (optional field of the row). */
 const isNewModel = (r) => {
   const ts = r?.first_seen_at ? Date.parse(r.first_seen_at) : NaN;
@@ -176,6 +176,8 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
   const openSet = useMemo(() => open || new Set(viewGroups.length ? [viewGroups[0].key] : []), [open, viewGroups]);
   const searching = q.trim().length > 0 || filters.size > 0;
   const shown = useMemo(() => filterGroups(viewGroups, { q, filters, storeIds }), [viewGroups, q, filters, storeIds]);
+  // Frames and cases: what is sold in none of the shown stores goes last, under a separator.
+  const ordered = useMemo(() => (isFrames ? orderOff(shown, storeIds) : { on: shown, off: [] }), [isFrames, shown, storeIds]);
   const isOpen = (g) => searching || openSet.has(g.key);
   const openGroup = (key, on = true) => {
     const next = new Set(openSet);
@@ -192,16 +194,20 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
   };
 
   const counts = useMemo(() => {
-    const c = { rows: 0, nocost: 0, discount: 0, exact: 0 };
-    for (const g of groups) for (const r of g.rows || []) {
+    const c = { rows: 0, nocost: 0, discount: 0, exact: 0, off: 0 };
+    for (const g of viewGroups) {
+      if (isFrames && !(g.rows || []).length && groupOff(g, storeIds)) c.off += 1;
+    }
+    for (const g of viewGroups) for (const r of g.rows || []) {
       c.rows += 1;
+      if (isFrames && rowHiddenSome(r, g, storeIds)) c.off += 1;
       if (!(Number(r.cost_cents) > 0) && r.available !== false) c.nocost += 1;
       const cells = storeIds.map((id) => r.stores?.[id]).filter(Boolean);
       if (cells.some((x) => Number(x.discount_pct) > 0)) c.discount += 1;
       if (cells.some(isExact)) c.exact += 1;
     }
     return c;
-  }, [groups, storeIds]);
+  }, [viewGroups, storeIds, isFrames]);
 
   const toggleFilter = (f) => setFilters((s) => { const n = new Set(s); if (n.has(f)) n.delete(f); else n.add(f); return n; });
   const errTitle = (e, fallback = "adm.err.pricing.save_failed") => t(knownErr(t, String(e?.message || ""), fallback));
@@ -274,6 +280,34 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       toast({ tone: "success", title: t(visible ? "adm.pm.brandHidden" : "adm.pm.brandShown", { brand: group.label, store: store.code }) });
     } catch (e) {
       toast({ tone: "error", title: t(e.message || "adm.err.assortment.saveFailed") });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  /**
+   * General switch of a brand: on/off in EVERY store at once (catalog_brand.active).
+   * The stores' own switches are kept and rule again when it is switched back on.
+   */
+  const toggleChain = async (group, label) => {
+    const k = `chain:${group.key}`;
+    if (busy) return;
+    const turnOff = !brandOff(group);
+    if (turnOff && !(await confirm({ tone: "danger", title: t("adm.pm.chainOffQ", { brand: label }), message: t("adm.pm.chainOffMsg") }))) return;
+    setBusy(k);
+    try {
+      const res = await updateCatalogBrand(group.key, { active: !turnOff });
+      const saved = { ...(res?.brand || {}), slug: group.key, active: !turnOff };
+      setBrands((list) => {
+        const all = list || [];
+        return all.some((b) => b.slug === group.key) ? all.map((b) => (b.slug === group.key ? { ...b, ...saved } : b)) : [...all, { name: label, models: (group.rows || []).length, ...saved }];
+      });
+      setGroups((list) => list.map((g) => (g.key === group.key ? { ...g, active: !turnOff } : g)));
+      // Every model's exposure changes: the server says what each store sells now.
+      await load(true);
+      toast({ tone: "success", title: t(turnOff ? "adm.pm.chainOffDone" : "adm.pm.chainOnDone", { brand: label }) });
+    } catch (e) {
+      toast({ tone: "error", title: errTitle(e) });
     } finally {
       setBusy("");
     }
@@ -472,7 +506,11 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       return [...rest, { models: 0, active: true, ...brand }].sort((a, b) => String(a.name).localeCompare(String(b.name)));
     });
     // A rename shows at once in the header (the matrix group carries its own label).
-    if (!created) setGroups((list) => list.map((g) => (g.key === brand.slug ? { ...g, label: brand.name ?? g.label, logo_url: brand.logo_url ?? null } : g)));
+    if (!created) {
+      setGroups((list) => list.map((g) => (g.key === brand.slug ? { ...g, label: brand.name ?? g.label, logo_url: brand.logo_url ?? null, active: brand.active !== false } : g)));
+      // «Active» may have changed in the dialog: it is the general switch (every store's exposure).
+      load(true);
+    }
     toast({ tone: "success", title: t(created ? "adm.pm.created" : "adm.pm.updated", { name: brand.name }) });
     if (created && brandScope(section) === (brand.kind || "frame")) openGroup(brand.slug);
   };
@@ -511,9 +549,9 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       <div className="pm-bar adm-noprint">
         <SearchBox value={q} onChange={setQ} placeholder={t(isFrames ? "adm.pm.searchFrames" : "adm.pm.search")} />
         <div className="pm-chips" role="group" aria-label={t("adm.pm.filters")}>
-          {FILTERS.filter((f) => f !== "nocost" || costAccess).map((f) => (
+          {FILTERS.filter((f) => (f !== "nocost" || costAccess) && (f !== "off" || isFrames)).map((f) => (
             <button key={f} type="button" className={filters.has(f) ? "on" : ""} aria-pressed={filters.has(f)} onClick={() => toggleFilter(f)}>
-              {t(`adm.pm.filter.${f}`)} <small>{counts[f]}</small>
+              {f === "off" && <Icon name="eye" size={12} />}{t(`adm.pm.filter.${f}`)} <small>{counts[f]}</small>
             </button>
           ))}
         </div>
@@ -578,20 +616,28 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                 ))}
               </tr>
             </thead>
-            {shown.length === 0 && (
+            {ordered.on.length + ordered.off.length === 0 && (
               <tbody>
                 <tr><td className="pm-none" colSpan={totalCols}>{t(searching ? "adm.pm.noMatch" : "adm.pm.emptySection")}</td></tr>
               </tbody>
             )}
-            {shown.map((g) => {
+            {[...ordered.on, ...ordered.off].map((g, gi) => {
               const stats = groupStats(g, storeIds);
+              const chainOff = brandOff(g);
+              const firstOff = gi === ordered.on.length && ordered.off.length > 0;
               const expanded = isOpen(g);
               // Only a real brand group carries `stores` (its switch writes a brand rule).
               const brandLike = isBrandGroup(g, section);
               const label = groupLabel(g, t, lang);
               const reg = brandOf(g);
               return (
-                <tbody key={g.key} className={`pm-grp ${expanded ? "open" : ""} ${brandLike ? "is-brand" : ""}`}>
+                <Fragment key={g.key}>
+                {firstOff && (
+                  <tbody className="pm-off-sep-g">
+                    <tr><td colSpan={totalCols}><span className="pm-off-sep"><Icon name="eye" size={13} /> {t("adm.pm.offSep.brands", { n: ordered.off.length })}</span></td></tr>
+                  </tbody>
+                )}
+                <tbody className={`pm-grp ${expanded ? "open" : ""} ${brandLike ? "is-brand" : ""} ${g.off ? "is-off" : ""}`}>
                   <tr className="pm-gh">
                     <th colSpan={fixedCols} className="pm-c-art pm-gh-name" scope="rowgroup">
                       <div className="pm-gh-in">
@@ -602,12 +648,25 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                             <b title={label}>{label}</b>
                             <span className="pm-gh-meta">
                               <span className="pm-gh-n" title={t("adm.pm.modelsN", { n: stats.count })}>{stats.count}</span>
-                              {reg?.active === false && <em className="pm-draft">{t("adm.pm.brand.inactiveShort")}</em>}
+                              {chainOff && <em className="pm-draft">{t("adm.pm.brand.inactiveShort")}</em>}
                               {costAccess && stats.avgCostCents != null && <span className="pm-gh-s" title={t("adm.pm.avgCost")}>{t("adm.pm.avgCostShort")} {money(usd(stats.avgCostCents), "usd", lang)}</span>}
                               {stats.avgMargin != null && <span className={`pm-gh-s ${stats.avgMargin < 30 ? "low" : ""}`} title={t("adm.pm.avgMargin")}>{t("adm.pm.marginShort")} {pctText(stats.avgMargin)}</span>}
                             </span>
                           </span>
                         </button>
+                        {brandLike && (
+                          <label className={`pm-sw pm-chain ${chainOff ? "off" : ""}`} title={t(chainOff ? "adm.pm.chainOffHint" : "adm.pm.chainOnHint")}>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              checked={!chainOff}
+                              disabled={busy === `chain:${g.key}`}
+                              onChange={() => toggleChain(g, label)}
+                              aria-label={t("adm.pm.chainAria", { brand: label })}
+                            />
+                            <span className="pm-chain-l">{t("adm.pm.chainShort")}</span>
+                          </label>
+                        )}
                         {brandLike && (
                           <MoreMenu
                             label={t("adm.pm.menu.brand", { name: label })}
@@ -651,12 +710,12 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                               title={[t(bc.priceCents != null ? "adm.pm.brandPriceSet" : "adm.pm.brandPriceHint", { store: s.code }), ps.margin != null ? t("adm.pm.storeMargin", { store: s.code }) + `: ${pctText(ps.margin)}` : null].filter(Boolean).join(" · ")}
                               sub={ps.margin != null ? <span className={`pm-gh-mg ${ps.margin < 30 ? "low" : ""}`}>{t("adm.pm.marginShort")} {pctText(ps.margin)}</span> : null}
                             >
-                              <label className="pm-sw pm-gh-sw" title={t(visible ? "adm.pm.brandVisibleHint" : "adm.pm.brandHiddenHint", { store: s.code })}>
+                              <label className={`pm-sw pm-gh-sw ${chainOff ? "locked" : ""}`} title={t(chainOff ? "adm.pm.chainLockedHint" : visible ? "adm.pm.brandVisibleHint" : "adm.pm.brandHiddenHint", { store: s.code })}>
                                 <input
                                   type="checkbox"
                                   role="switch"
-                                  checked={visible}
-                                  disabled={busy === k}
+                                  checked={visible && !chainOff}
+                                  disabled={busy === k || chainOff}
                                   onChange={() => toggleBrand(g, s, visible)}
                                   aria-label={t("adm.pm.brandVisibleAria", { brand: label, store: s.code })}
                                 />
@@ -691,12 +750,21 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                       </td>
                     </tr>
                   )}
-                  {expanded && g.rows.map((r) => {
+                  {expanded && g.rows.map((r, ri) => {
                     const ct = costTone(r.cost_source);
                     const title = rowTitle(r, t, lang);
                     const draft = r.status && r.status !== "published";
+                    const offRow = isFrames && ri >= (g.offAt ?? g.rows.length);
+                    // Separator before the first model sold nowhere (not when the whole group is off).
+                    const sep = isFrames && ri > 0 && ri === g.offAt;
                     return (
-                      <tr key={r.key} data-key={r.key} className={`pm-row ${isFrames ? "has-thumb" : ""} ${draft ? "is-draft" : ""} ${flash === r.key ? "is-new" : ""}`}>
+                      <Fragment key={r.key}>
+                      {sep && (
+                        <tr className="pm-row pm-off-sep-r">
+                          <td colSpan={totalCols}><span className="pm-off-sep"><Icon name="eye" size={12} /> {t("adm.pm.offSep.models", { n: g.rows.length - g.offAt })}</span></td>
+                        </tr>
+                      )}
+                      <tr data-key={r.key} className={`pm-row ${isFrames ? "has-thumb" : ""} ${draft ? "is-draft" : ""} ${offRow ? "is-off" : ""} ${flash === r.key ? "is-new" : ""}`}>
                         <th scope="row" className="pm-c-art">
                           <span className="pm-art">
                             {isFrames && <Thumb src={r.thumbnail} icon={rowIcon} size={40} />}
@@ -777,10 +845,10 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                                       type="button"
                                       className={`pm-eye ${hidden ? "off" : ""}`}
                                       tabIndex={-1}
-                                      disabled={busy === `eye:${r.key}:${s.id}`}
+                                      disabled={busy === `eye:${r.key}:${s.id}` || chainOff}
                                       onMouseDown={(e) => e.preventDefault()}
                                       onClick={() => toggleExposure(r, s)}
-                                      title={t(hidden ? "adm.pm.showIn" : "adm.pm.hideIn", { store: s.code })}
+                                      title={chainOff ? t("adm.pm.chainLockedHint", { store: s.code }) : t(hidden ? "adm.pm.showIn" : "adm.pm.hideIn", { store: s.code })}
                                       aria-label={t(hidden ? "adm.pm.showIn" : "adm.pm.hideIn", { store: s.code })}
                                       aria-pressed={!hidden}
                                     >
@@ -821,9 +889,11 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                           );
                         })}
                       </tr>
+                      </Fragment>
                     );
                   })}
                 </tbody>
+                </Fragment>
               );
             })}
           </table>
@@ -839,6 +909,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
           <span key={k} title={t(`adm.pm.costSrc.${k}`)}><Pill tone={k}>{t(`adm.pm.pill.cost.${k}`)}</Pill></span>
         ))}
         {isFrames && <span><Icon name="eye" size={12} /> {t("adm.pm.legend.eye")}</span>}
+        {isFrames && <span><b className="pm-chain-l">{t("adm.pm.chainShort")}</b> {t("adm.pm.legend.chain")}</span>}
         <span><Icon name="arrowRight" size={12} /> {t("adm.pm.legend.keys")}</span>
       </p>
 

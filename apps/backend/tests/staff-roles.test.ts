@@ -1,4 +1,4 @@
-import { assignmentRowsFor, isAllowedForInactiveUser, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
+import { assignmentRowsFor, configuredOwnerEmail, pickOwnerId, isAllowedForInactiveUser, isAllowedForRestrictedRole, resolveRole, roleChangeDenied, type AssignmentLike, passwordResetDenied } from "../src/lib/staff-roles";
 
 const row = (over: Partial<AssignmentLike>): AssignmentLike => ({
   role: "seller",
@@ -196,5 +196,24 @@ describe("isAllowedForInactiveUser", () => {
     expect(isAllowedForInactiveUser("POST", "/admin/pos/sales")).toBe(false);
     expect(isAllowedForInactiveUser("GET", "/admin/team/me/profile")).toBe(false);
     expect(isAllowedForInactiveUser("POST", "/admin/team/password")).toBe(false);
+  });
+});
+
+describe("pickOwnerId", () => {
+  const users = [{ id: "u_dev", email: "dev@example.com" }, { id: "u_owner", email: "Owner@Example.com" }];
+  it("the oldest user without STORE_OWNER_EMAIL", () => {
+    expect(pickOwnerId(users, "")).toBe("u_dev");
+    expect(pickOwnerId(users, null)).toBe("u_dev");
+  });
+  it("the user with STORE_OWNER_EMAIL, whatever the case and spaces", () => {
+    expect(pickOwnerId(users, " owner@example.COM ")).toBe("u_owner");
+  });
+  it("falls back to the oldest when nobody has that email, and null with no users", () => {
+    expect(pickOwnerId(users, "nobody@example.com")).toBe("u_dev");
+    expect(pickOwnerId([], "owner@example.com")).toBeNull();
+  });
+  it("reads STORE_OWNER_EMAIL trimmed and lower-cased", () => {
+    expect(configuredOwnerEmail({ STORE_OWNER_EMAIL: "  Rubi@Example.com " } as NodeJS.ProcessEnv)).toBe("rubi@example.com");
+    expect(configuredOwnerEmail({} as NodeJS.ProcessEnv)).toBe("");
   });
 });

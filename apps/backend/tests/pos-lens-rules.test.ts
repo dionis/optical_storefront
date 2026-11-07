@@ -38,6 +38,7 @@ jest.mock("../src/lib/frame-specs", () => ({
 }));
 jest.mock("../src/lib/store-assortment-data", () => ({
   listAssortmentRules: jest.fn(async () => []),
+  effectiveAssortmentRules: jest.fn(async () => []),
 }));
 
 const breakdown = computeLensBreakdown as jest.MockedFunction<typeof computeLensBreakdown>;

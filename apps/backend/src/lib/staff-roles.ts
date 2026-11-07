@@ -6,8 +6,10 @@
  * Owner decisions this encodes (docs "Gestión de Tiendas RUBI LENS"):
  *  - owner and superadmin have the same rights: store prices, approving
  *    discounts, configuring alerts. Only the owner names or removes superadmins.
- *  - the owner is the oldest admin user (the one created with `medusa user`
- *    when the store was set up), exactly as /admin/team already defines it.
+ *  - the owner is the user whose email is STORE_OWNER_EMAIL (set in the
+ *    deploy, so only whoever runs the infrastructure can hand ownership over);
+ *    without it, or when no user has that email, the oldest admin user (the one
+ *    created with `medusa user` when the store was set up). `pickOwnerId`.
  *  - admins that existed before roles did keep the access they had: a user with
  *    no assignment rows at all resolves to superadmin. Once someone has rows,
  *    only those rows count, so deactivating every row really removes access.
@@ -23,6 +25,22 @@ export const ADMIN_ROLES: ReadonlySet<StaffRole> = new Set<StaffRole>(["owner", 
 export const ASSIGNABLE_ROLES: readonly StaffRole[] = ["superadmin", "supervisor", "manager", "seller"];
 
 const RANK: Record<StaffRole, number> = { owner: 5, superadmin: 4, supervisor: 3, manager: 2, seller: 1 };
+
+/**
+ * The owner among the users (ordered oldest first): the one whose email is
+ * `ownerEmail` (case-insensitive), else the oldest. Pure; null when no users.
+ */
+export function pickOwnerId(users: ReadonlyArray<{ id: string; email?: string | null }>, ownerEmail?: string | null): string | null {
+  const want = String(ownerEmail ?? "").trim().toLowerCase();
+  if (want) {
+    const hit = users.find((u) => String(u.email ?? "").trim().toLowerCase() === want);
+    if (hit) return hit.id;
+  }
+  return users[0]?.id ?? null;
+}
+
+/** STORE_OWNER_EMAIL, trimmed and lower-cased ("" when unset). */
+export const configuredOwnerEmail = (env: NodeJS.ProcessEnv = process.env): string => String(env["STORE_OWNER_EMAIL"] ?? "").trim().toLowerCase();
 
 export function isStaffRole(value: unknown): value is StaffRole {
   return typeof value === "string" && (STAFF_ROLES as readonly string[]).includes(value);

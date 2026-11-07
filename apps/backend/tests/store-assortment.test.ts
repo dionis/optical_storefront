@@ -82,3 +82,39 @@ describe("toProduct (GET /admin/store-assortment/:id/products rows)", () => {
     expect(toProduct({ id: "prod_2", title: "Case", metadata: { brand_slug: "case" }, sku: "" }).is_case).toBe(true);
   });
 });
+
+describe("brand switched off for the whole chain (catalog_brand.active = false)", () => {
+  const { chainBrandRules, brandOffInChain, isExposed: exposed, brandExposed: brandOn, exposureSource: source } = jest.requireActual("../src/lib/store-assortment");
+  const chain = chainBrandRules(["Di-Caprio ", "di-caprio", ""]);
+
+  it("builds one synthetic rule per slug, lower-cased, never empty", () => {
+    expect(chain).toEqual([{ scope: "chain_brand", target: "di-caprio", exposed: false }]);
+  });
+
+  it("hides every model of the brand in every store, over the store's brand and model rules", () => {
+    const storeRules = [
+      ...chain,
+      { scope: "brand", target: "di-caprio", exposed: true },
+      { scope: "product", target: "prod_1", exposed: true },
+    ];
+    expect(brandOffInChain(storeRules, "di-caprio")).toBe(true);
+    expect(exposed(storeRules, { id: "prod_1", brand: "di-caprio" })).toBe(false);
+    expect(exposed(storeRules, { id: "prod_2", brand: "di-caprio" })).toBe(false);
+    expect(brandOn(storeRules, "di-caprio")).toBe(false);
+    expect(source(storeRules, { id: "prod_1", brand: "di-caprio" })).toBe("chain");
+  });
+
+  it("leaves other brands and the store rules untouched", () => {
+    const storeRules = [...chain, { scope: "brand", target: "flexure", exposed: false }, { scope: "product", target: "prod_9", exposed: true }];
+    expect(exposed(storeRules, { id: "prod_3", brand: "four-you" })).toBe(true);
+    expect(exposed(storeRules, { id: "prod_4", brand: "flexure" })).toBe(false);
+    expect(exposed(storeRules, { id: "prod_9", brand: "flexure" })).toBe(true);
+    expect(brandOffInChain(storeRules, "")).toBe(false);
+  });
+
+  it("switching the brand back on restores what the store rules said", () => {
+    const storeRules = [{ scope: "brand", target: "di-caprio", exposed: false }, { scope: "product", target: "prod_1", exposed: true }];
+    expect(exposed(storeRules, { id: "prod_1", brand: "di-caprio" })).toBe(true);
+    expect(exposed(storeRules, { id: "prod_2", brand: "di-caprio" })).toBe(false);
+  });
+});

@@ -19,7 +19,7 @@ import { matrixWorkbook, workbookToImport, mapColumns, KEY_HEADER } from "../src
 import { promoOf } from "../src/admin/pricing/promo.js";
 import {
   parseInput, filterGroups, groupStats, validateFrameForm, validateTreatmentForm, replaceRow, patchSiblingCost,
-  brandCell, withRegistry, sourceTone, costTone, validateBrandForm, frameToForm, rowPrices, monogram, attrSlug, replaceGroup, removeRow, treatmentCode,
+  brandCell, withRegistry, brandOff, rowOff, rowHiddenSome, groupOff, orderOff, sourceTone, costTone, validateBrandForm, frameToForm, rowPrices, monogram, attrSlug, replaceGroup, removeRow, treatmentCode,
 } from "../src/admin/pricing/matrix/model.js";
 
 let passed = 0;
@@ -356,7 +356,8 @@ await test("v2 helpers: brandCell, withRegistry, source / cost tones, monogram, 
   ];
   const v = withRegistry(V2.frames.groups, reg, "frames");
   assert.equal(v[0].logo_url, "/brands/logo-di-caprio.png");
-  assert.deepEqual(v.map((x) => x.key), ["di-caprio", "flexure", "peachtree"]);
+  // An inactive brand without models is listed too (with the switched-off ones).
+  assert.deepEqual(v.map((x) => x.key), ["di-caprio", "flexure", "peachtree", "gone"]);
   assert.equal(v[2].empty, true);
   assert.deepEqual(withRegistry(V2.cases.groups, reg, "cases").map((x) => x.key), ["case", "trendy"]);
   assert.equal(withRegistry([{ key: "sv", kind: "design", rows: [] }], reg, "lenses").length, 1);
@@ -407,6 +408,46 @@ await test("v2 forms: brand, model edit (Medusa fallback), only changed store pr
   const bad = validateFrameForm({ brand: "X", sku: "X1", colors: [{ name: "N" }], images: ["nope"], a: "500" }, { stores: [] });
   assert.deepEqual(bad.errors, { images: "bad_image", a: "bad_measure" });
   assert.deepEqual(validateTreatmentForm({ type: "ar", label_es: "AR", label_en: "AR", cost: "3", ar_group: "sv" }, { editing: true }).body, { label_es: "AR", label_en: "AR", cost: 3, ar_group: "sv" });
+});
+
+await test("switched off last: brandOff / rowOff / groupOff / orderOff and the «off» filter", () => {
+  const ids = ["est_1", "est_2"];
+  const cell = (exposed) => ({ price_cents: 5000, exposed });
+  const live = { key: "a", kind: "brand", label: "Alpha", stores: {}, rows: [
+    { key: "a1", status: "published", stores: { est_1: cell(true), est_2: cell(true) } },
+    { key: "a2", status: "draft", stores: { est_1: cell(true), est_2: cell(true) } },
+    { key: "a3", status: "published", stores: { est_1: cell(false), est_2: cell(false) } },
+    { key: "a4", status: "published", stores: { est_1: cell(false), est_2: cell(true) } },
+  ] };
+  const chainOff = { key: "b", kind: "brand", label: "Beta", active: false, stores: {}, rows: [{ key: "b1", status: "published", stores: { est_1: cell(false), est_2: cell(false) } }] };
+  const regOff = { key: "c", kind: "brand", label: "Gamma", rows: [], stores: {}, registry: { slug: "c", active: false } };
+  const emptyOn = { key: "d", kind: "brand", label: "Delta", rows: [], stores: { est_1: { brand_rule: null } } };
+  assert.equal(brandOff(chainOff), true);
+  assert.equal(brandOff(regOff), true);
+  assert.equal(brandOff(live), false);
+  assert.deepEqual(live.rows.map((r) => rowOff(r, live, ids)), [false, true, true, false]);
+  assert.deepEqual(live.rows.map((r) => rowHiddenSome(r, live, ids)), [false, true, true, true]);
+  // One store column only (global store picker): hidden there = off.
+  assert.equal(rowOff(live.rows[3], live, ["est_1"]), true);
+  assert.equal(groupOff(live, ids), false);
+  assert.equal(groupOff(chainOff, ids), true);
+  assert.equal(groupOff(regOff, ids), true);
+  assert.equal(groupOff(emptyOn, ids), false);
+  assert.equal(groupOff({ ...emptyOn, stores: { est_1: { brand_rule: false }, est_2: { brand_rule: false } } }, ids), true);
+  const { on, off } = orderOff([chainOff, live, regOff, emptyOn], ids);
+  assert.deepEqual(on.map((g) => g.key), ["a", "d"]);
+  assert.deepEqual(off.map((g) => g.key), ["b", "c"]);
+  assert.deepEqual(on[0].rows.map((r) => r.key), ["a1", "a4", "a2", "a3"]);
+  assert.equal(on[0].offAt, 2);
+  assert.equal(on[1].offAt, 0);
+  // Filter «off»: models hidden somewhere, plus brands off with no model.
+  const f = filterGroups([live, chainOff, regOff, emptyOn], { filters: new Set(["off"]), storeIds: ids });
+  assert.deepEqual(f.map((g) => g.key), ["a", "b", "c"]);
+  assert.deepEqual(f[0].rows.map((r) => r.key), ["a2", "a3", "a4"]);
+  assert.deepEqual(filterGroups([regOff], { q: "gam", filters: new Set(["off"]), storeIds: ids }).map((g) => g.key), ["c"]);
+  assert.equal(filterGroups([regOff], { q: "zzz", filters: new Set(["off"]), storeIds: ids }).length, 0);
+  // Without filters every group stays, empty ones included.
+  assert.equal(filterGroups([live, chainOff, regOff, emptyOn], { storeIds: ids }).length, 4);
 });
 
 console.log(process.exitCode ? "xlsx tests FAILED" : `xlsx tests passed (${passed})`);

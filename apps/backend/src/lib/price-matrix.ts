@@ -383,6 +383,13 @@ export interface MatrixGroup {
   stores?: Record<string, MatrixBrandStore>;
   /** Brand groups (v2): the brand's logo — absolute URL, or a path on the panel's origin (`/brands/logo-….png`); null = none. */
   logo_url?: string | null;
+  /**
+   * Brand groups: the brand's GENERAL switch (catalog_brand.active). false =
+   * hidden in every store whatever the per-store switches say (the store rules
+   * are kept and apply again when it is switched back on). Written with
+   * `POST /admin/catalog/brands/:slug { active }`.
+   */
+  active?: boolean;
 }
 
 /** One store's brand header (v2 adds the brand price and the brand discount). */
@@ -739,7 +746,15 @@ export function withBrandExposure(
   groups: MatrixGroup[],
   stores: readonly MatrixStore[],
   assortment: ReadonlyMap<string, AssortmentRuleLike[]>,
-  pricing: { rules: PriceRuleLike[]; discounts: DiscountIndex; scope: "frame" | "case"; logos?: ReadonlyMap<string, string | null>; now?: Date } | null = null
+  pricing: {
+    rules: PriceRuleLike[];
+    discounts: DiscountIndex;
+    scope: "frame" | "case";
+    logos?: ReadonlyMap<string, string | null>;
+    /** Brands switched off for the whole chain (catalog_brand.active = false). */
+    inactive?: ReadonlySet<string>;
+    now?: Date;
+  } | null = null
 ): MatrixGroup[] {
   return groups.map((g) => {
     // The switch writes a BRAND rule named by the group key; a group whose rows
@@ -755,7 +770,7 @@ export function withBrandExposure(
       }
       perStore[s.id] = cell;
     }
-    const out: MatrixGroup = { ...g, stores: perStore };
+    const out: MatrixGroup = { ...g, stores: perStore, active: !(pricing?.inactive?.has(g.key) ?? false) };
     if (pricing?.logos) out.logo_url = pricing.logos.get(g.key) ?? null;
     return out;
   });

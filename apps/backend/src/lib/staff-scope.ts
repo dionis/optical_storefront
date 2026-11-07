@@ -1,6 +1,6 @@
 import type { MedusaContainer } from "@medusajs/framework/types";
-import type { IUserModuleService } from "@medusajs/framework/types";
-import { Modules } from "@medusajs/framework/utils";
+import type { IUserModuleService, Logger } from "@medusajs/framework/types";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { STAFF_MODULE } from "../modules/staff";
 import { SELLER_MODULE } from "../modules/seller";
 import type SellerModuleService from "../modules/seller/service";
@@ -10,7 +10,9 @@ import { accessStatusByUser, profilesByUser } from "./staff-profile-data";
 import type StaffModuleService from "../modules/staff/service";
 import {
   assignmentRowsFor,
+  configuredOwnerEmail,
   isAdminRole,
+  pickOwnerId,
   resolveRole,
   type AssignmentLike,
   type ResolvedRole,
@@ -116,12 +118,26 @@ export function invalidateStaffScope(userId?: string): void {
   ownerCache = null;
 }
 
-/** The owner = the oldest admin user, the same rule /admin/team uses. */
+/**
+ * The owner: the user with STORE_OWNER_EMAIL, else the oldest admin user
+ * (`pickOwnerId`). Every place that needs the owner asks here — /admin/team,
+ * the staff guard, the approvers of a discount — so they never disagree.
+ */
 export async function ownerUserId(container: MedusaContainer): Promise<string | null> {
   if (ownerCache && Date.now() - ownerCache.at < TTL_MS) return ownerCache.id;
   const users = container.resolve<IUserModuleService>(Modules.USER);
-  const [oldest] = await users.listUsers({}, { take: 1, order: { created_at: "ASC" } });
-  ownerCache = { at: Date.now(), id: oldest?.id ?? null };
+  const want = configuredOwnerEmail();
+  // A handful of users: read them all (oldest first) and match the email case-insensitively.
+  const all = await users.listUsers({}, { take: want ? 1000 : 1, order: { created_at: "ASC" }, select: ["id", "email"] });
+  const id = pickOwnerId(all, want);
+  if (want && all.length && id === all[0]?.id && String(all[0]?.email ?? "").toLowerCase() !== want) {
+    try {
+      container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn("[staff] STORE_OWNER_EMAIL matches no user; the oldest user stays the owner");
+    } catch {
+      // no logger (tests)
+    }
+  }
+  ownerCache = { at: Date.now(), id };
   return ownerCache.id;
 }
 

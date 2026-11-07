@@ -397,8 +397,11 @@ export default function PosSale({ me }) {
     posContext()
       .then((c) => {
         setCtx(c);
+        // The store picked in the panel's global filter wins over the last one
+        // sold in: opening the POS must not move the global picker back.
+        const picked = read("adm_active_store");
         const saved = read("pos_store");
-        const s = c.stores.find((x) => x.id === saved) || c.stores[0];
+        const s = c.stores.find((x) => x.id === picked) || c.stores.find((x) => x.id === saved) || c.stores[0];
         if (s) setStoreId(s.id);
       })
       .catch((e) => setCtxError(e.message));
@@ -412,6 +415,26 @@ export default function PosSale({ me }) {
     setTerminalId((store.terminals.find((x) => x.id === saved) || store.terminals[0])?.id || "");
   }, [store]);
   useEffect(() => { if (store && terminalId) write(`pos_terminal:${store.id}`, terminalId); }, [store, terminalId]);
+  // The global store filter drives the POS too. Mid-sale the store is locked
+  // (prices and stock are that store's): the filter snaps back, with a word why.
+  const liveRef = useRef({ ctx: null, storeId: "", step: 0 });
+  liveRef.current = { ctx, storeId, step };
+  useEffect(() => {
+    const onPick = (e) => {
+      const { ctx: c, storeId: cur, step: st } = liveRef.current;
+      if (!c || !cur) return;
+      const id = e?.detail || null;
+      if (id === cur) return;
+      const target = id ? c.stores.find((x) => x.id === id) : null;
+      const midSale = st > 0 && STEPS[st] !== "done";
+      if (target && !midSale) { setStoreId(target.id); return; }
+      const here = c.stores.find((x) => x.id === cur);
+      toast({ tone: "info", title: t(midSale ? "adm.pos.storeLocked" : "adm.pos.storeNeeded", { store: here ? here.code : "" }) });
+      setTimeout(() => setActiveStore(cur), 0);
+    };
+    window.addEventListener("adm:active-store", onPick);
+    return () => window.removeEventListener("adm:active-store", onPick);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const terminal = store?.terminals.find((x) => x.id === terminalId) || null;
   const methods = useMemo(() => (ctx?.payment_methods || []).filter((m) => store?.payment_methods.includes(m.code)), [ctx, store]);
 

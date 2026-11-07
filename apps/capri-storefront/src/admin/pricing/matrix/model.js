@@ -104,9 +104,64 @@ export function groupStats(group, storeIds) {
 /** Lower-case, accent-free text for search. */
 export const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+/* ───────── Switched off / hidden (frames and cases) ───────── */
+
+/** A brand switched off for the whole chain (general switch = catalog_brand.active false). */
+export const brandOff = (g) => g?.active === false || g?.registry?.active === false;
+
+/** A discontinued model (draft): it is sold nowhere. */
+const isDraft = (r) => Boolean(r?.status) && r.status !== "published";
+
 /**
- * Filters of the toolbar. `filters` = Set of "nocost" | "discount" | "exact".
- * Several filters together narrow (AND). Groups without rows left drop out.
+ * A model sold in NONE of the shown stores: discontinued, its brand off for
+ * the chain, or hidden in every store column. These go to the end of their
+ * group, under a separator. Lens/treatment rows carry no `exposed`: never off.
+ */
+export function rowOff(r, g, storeIds) {
+  if (isDraft(r) || brandOff(g)) return true;
+  return storeIds.length > 0 && storeIds.every((sid) => r.stores?.[sid]?.exposed === false);
+}
+
+/** A model hidden in AT LEAST one shown store (or off everywhere): the «off» filter. */
+export function rowHiddenSome(r, g, storeIds) {
+  if (isDraft(r) || brandOff(g)) return true;
+  return storeIds.some((sid) => r.stores?.[sid]?.exposed === false);
+}
+
+/**
+ * A brand group sold in none of the shown stores: off for the chain, every
+ * model off, or (no model yet) its brand rule off in every store.
+ */
+export function groupOff(g, storeIds) {
+  if (brandOff(g)) return true;
+  const rows = g?.rows || [];
+  if (rows.length) return rows.every((r) => rowOff(r, g, storeIds));
+  return g?.kind === "brand" && storeIds.length > 0 && storeIds.every((sid) => g.stores?.[sid]?.brand_rule === false);
+}
+
+/**
+ * Off things last: the groups sold nowhere after the rest (`off: true`), and
+ * inside each group the models sold nowhere after the rest; `offAt` is the
+ * index of the first such model (= rows.length when none), where the screen
+ * draws the separator. Stable: the server's order is kept on each side. Pure.
+ */
+export function orderOff(groups, storeIds) {
+  const on = [];
+  const off = [];
+  for (const g of groups) {
+    const rows = g.rows || [];
+    const live = rows.filter((r) => !rowOff(r, g, storeIds));
+    const dead = rows.filter((r) => rowOff(r, g, storeIds));
+    const next = { ...g, rows: [...live, ...dead], offAt: live.length, off: groupOff(g, storeIds) };
+    (next.off ? off : on).push(next);
+  }
+  return { on, off };
+}
+
+/**
+ * Filters of the toolbar. `filters` = Set of "nocost" | "discount" | "exact" | "off".
+ * Several filters together narrow (AND). Groups without rows left drop out
+ * (with «off», a brand with no model stays when the brand itself is off).
  */
 export function filterGroups(groups, { q = "", filters = new Set(), storeIds = [] } = {}) {
   const k = norm(q).trim();
@@ -122,11 +177,22 @@ export function filterGroups(groups, { q = "", filters = new Set(), storeIds = [
     if (filters.has("nocost") && (Number(r.cost_cents) > 0 || r.available === false)) return false;
     if (filters.has("discount") && !cellsOf(r).some((c) => Number(c.discount_pct) > 0)) return false;
     if (filters.has("exact") && !cellsOf(r).some((c) => c.exact || c.source === "store_exact")) return false;
+    if (filters.has("off") && !rowHiddenSome(r, g, storeIds)) return false;
     return true;
   };
+  const emptyOk = (g) => {
+    if ((g.rows || []).length) return false; // it had models: none matched
+    if (filters.has("off")) {
+      if (filters.size > 1) return false;
+      if (words.length && !words.every((w) => norm(`${g.label} ${g.label_en || ""} ${g.key}`).includes(w))) return false;
+      return groupOff(g, storeIds);
+    }
+    return !words.length && filters.size === 0;
+  };
   return groups
-    .map((g) => ({ ...g, rows: (g.rows || []).filter((r) => keep(r, g)) }))
-    .filter((g) => g.rows.length > 0 || (!words.length && filters.size === 0));
+    .map((g) => ({ ...g, rows: (g.rows || []).filter((r) => keep(r, g)), _empty: emptyOk(g) }))
+    .filter((g) => g.rows.length > 0 || g._empty)
+    .map(({ _empty, ...g }) => g);
 }
 
 /**
@@ -212,7 +278,7 @@ export function brandCell(group, storeId) {
 /**
  * The matrix groups plus the registry brands that have no model yet (a brand
  * just created must show up, with its «add the first model» row). Inactive
- * brands without models stay out; a group gets its registry entry attached
+ * ones too (listed with the switched-off brands); a group gets its registry entry attached
  * (`registry`: logo, kind, active, source) so the header can draw the logo.
  */
 export function withRegistry(groups, brands, section) {
@@ -227,7 +293,8 @@ export function withRegistry(groups, brands, section) {
     return b ? { ...g, registry: b, logo_url: g.logo_url ?? b.logo_url ?? null } : g;
   });
   for (const b of brands || []) {
-    if (seen.has(b.slug) || b.active === false) continue;
+    // An inactive brand with no model shows too: at the end, among the switched off.
+    if (seen.has(b.slug)) continue;
     if ((b.kind || "frame") !== kind) continue;
     if (Number(b.models) > 0) continue; // it has models: they are in some other section
     out.push({ key: b.slug, label: b.name, kind: "brand", rows: [], stores: {}, registry: b, logo_url: b.logo_url ?? null, empty: true });

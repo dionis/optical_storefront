@@ -51,7 +51,7 @@ import { applyPct, linePromoPcts, metadataSaysCase, NO_PROMO, productDiscountOf,
 import { storeDiscountIndex } from "./price-matrix-data";
 import { brandOf, isExposed } from "./store-assortment";
 import { absoluteImageUrl, absoluteImageUrls } from "./image-url";
-import { listAssortmentRules } from "./store-assortment-data";
+import { effectiveAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
 import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
@@ -647,7 +647,7 @@ export async function searchPosProducts(container: MedusaContainer, establishmen
       // Wider than the 20 shown: models the store does not expose are dropped below.
       pagination: { take: 60 },
     }),
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
   ]);
   const seen = new Set<string>();
   const products = ([...exact, ...named] as Array<{
@@ -783,7 +783,7 @@ export async function quoteSale(
     productPrices(container, productIds),
     resolveStoreSettings(container),
     loadProductMetadata(pg, productIds),
-    listAssortmentRules(container, establishmentId),
+    effectiveAssortmentRules(container, establishmentId),
     storeDiscountIndex(container, [establishmentId]),
   ]);
   const priceById = new Map(prices.map((p) => [p.product_id, p.price]));

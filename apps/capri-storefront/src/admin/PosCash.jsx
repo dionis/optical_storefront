@@ -12,7 +12,7 @@
 // El efectivo cobrado en cualquier punto de venta de la tienda entra solo:
 // el primer cobro en efectivo del día abre la caja si nadie lo hizo.
 // «Movimientos» — el informe de caja del periodo (CashReport.jsx).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
@@ -62,7 +62,14 @@ export default function PosCash({ me }) {
   const [termFilter, setTermFilter] = useState("");
 
   useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
-  const load = () => storeId && listCashSessions(storeId, 40).then((r) => setSessions(r.sessions || [])).catch(() => setSessions([]));
+  // Solo la última petición pinta: al cambiar de tienda deprisa, las cajas de la anterior no pisan las de la nueva.
+  const loadSeq = useRef(0);
+  const load = () => {
+    const seq = ++loadSeq.current;
+    return storeId && listCashSessions(storeId, 40)
+      .then((r) => { if (seq === loadSeq.current) setSessions(r.sessions || []); })
+      .catch(() => { if (seq === loadSeq.current) setSessions([]); });
+  };
   // Cambiar de tienda: su primer punto de venta y sus cajas.
   useEffect(() => { setTerminalId(ctx?.stores.find((s) => s.id === storeId)?.terminals[0]?.id || ""); load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
 

@@ -4,7 +4,7 @@
 // Dos acordeones: las pendientes de decidir (abierto) y las ya decididas. La
 // tienda la fija el filtro global del panel (StoreFilter) y se aplica aquí
 // sobre `establishment_id`; el servidor ya acota por rol.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
@@ -37,15 +37,19 @@ export default function PosApprovals({ params = {}, me }) {
     fetchTeam().then((r) => setPeople(Object.fromEntries((r.team || []).map((m) => [m.id, m])))).catch(() => {});
   }, []);
   // Las pendientes siempre completas; de las decididas, las últimas (el servidor devuelve las más recientes).
+  // Solo la última petición pinta: al cambiar de estado deprisa (o releer tras decidir), la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
   const load = () => {
+    const seq = ++loadSeq.current;
     setState("loading");
     Promise.all([listApprovals("pending"), listApprovals(status || undefined)])
       .then(([p, d]) => {
+        if (seq !== loadSeq.current) return;
         const seen = new Set();
         const all = [...(p.approvals || []), ...(d.approvals || [])].filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
         setRows(all); setState("ok");
       })
-      .catch(() => setState("error"));
+      .catch(() => { if (seq === loadSeq.current) setState("error"); });
   };
   useEffect(load, [status]);
 

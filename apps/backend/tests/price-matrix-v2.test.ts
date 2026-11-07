@@ -643,3 +643,19 @@ describe("editing a treatment (POST /admin/pricing/treatments/:code)", () => {
     expect(photoPricesAfter({ sv: 3000, bifocal: null, prog: null }, { sv: null })).toBeNull();
   });
 });
+
+describe("matrix brand groups carry the general switch", () => {
+  const { withBrandExposure: withExposure } = jest.requireActual("../src/lib/price-matrix");
+  const store = { id: "est_1", code: "Op1", name: "Katy", color: "#000" };
+  const group = (key: string) => ({ key, label: key, kind: "brand", rows: [{ kind: "frame", key: "p1", brand_slug: key, stores: { est_1: { exposed: false } } }] });
+
+  it("active=false for a brand switched off in the registry, true otherwise; store rule unchanged", () => {
+    const assortment = new Map([["est_1", [{ scope: "chain_brand", target: "di-caprio", exposed: false }, { scope: "brand", target: "di-caprio", exposed: true }]]]);
+    const [off, on] = withExposure([group("di-caprio"), group("flexure")], [store], assortment, {
+      rules: [], discounts: new Map() as never, scope: "frame", inactive: new Set(["di-caprio"]),
+    });
+    expect(off.active).toBe(false);
+    expect(off.stores.est_1.brand_rule).toBe(true);
+    expect(on.active).toBe(true);
+  });
+});

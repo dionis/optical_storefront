@@ -7,7 +7,7 @@ import { storefrontOrigin } from "./order-access";
 import type { ApprovalRow } from "./pos-data";
 import { isAdminRole, resolveRole } from "./staff-roles";
 import { profilesByUser } from "./staff-profile-data";
-import { assignmentsByUser } from "./staff-scope";
+import { assignmentsByUser, ownerUserId } from "./staff-scope";
 import { tenant } from "./tenant";
 
 /**
@@ -19,11 +19,11 @@ export async function approverRecipients(container: MedusaContainer): Promise<Ar
   const users = container.resolve<IUserModuleService>(Modules.USER);
   const all = await users.listUsers({}, { take: 500, order: { created_at: "ASC" } });
   const ids = all.map((u) => u.id);
-  const [byUser, profiles] = await Promise.all([assignmentsByUser(container, ids), profilesByUser(container, ids)]);
+  const [byUser, profiles, ownerId] = await Promise.all([assignmentsByUser(container, ids), profilesByUser(container, ids), ownerUserId(container)]);
   const seen = new Set<string>();
   const out: Array<{ email: string; locale: string }> = [];
-  all.forEach((u, i) => {
-    const role = resolveRole({ isOwner: i === 0, assignments: byUser.get(u.id) ?? [] }).role;
+  all.forEach((u) => {
+    const role = resolveRole({ isOwner: u.id === ownerId, assignments: byUser.get(u.id) ?? [] }).role;
     if (!isAdminRole(role)) return;
     const p = profiles.get(u.id);
     const email = (p?.alert_email || u.email || "").toLowerCase();

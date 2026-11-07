@@ -699,3 +699,24 @@ configurado, disco local si no. Solo dueño/superadmin (403
 - El panel lee el modelo a editar de `GET /admin/products/:id` (no existe un
   `GET /admin/catalog/frames/:id`; el intento dejaba dos 404 en consola).
 
+
+### 11. Interruptor general de la marca y lo desactivado al final (7-nov-2026)
+
+- **«Todas»** en la cabecera de cada marca (monturas y estuches) es el
+  interruptor de la cadena: `POST /admin/catalog/brands/:slug { active }`
+  (`catalog_brand.active`). Apagado, la marca no se vende en el POS de ninguna
+  tienda, ni los modelos que lleguen después: `effectiveAssortmentRules`
+  (`store-assortment-data.ts`) antepone una regla sintética `chain_brand` a las
+  de cada tienda, y `isExposed`/`brandExposed`/`exposureSource` la miran antes
+  que nada (fuente `"chain"`). Las reglas de cada tienda no se tocan: al
+  encenderla vuelve a mandar el interruptor de cada tienda. La matriz lo lee de
+  `MatrixGroup.active` y, mientras está apagada, los interruptores por tienda y
+  los ojos de los modelos quedan bloqueados. La tienda online no cambia (C8).
+- **Orden**: lo que no se vende en ninguna de las tiendas visibles va al final,
+  bajo un separador — marcas (`groupOff`: apagada en la cadena, todos sus
+  modelos fuera, o sin modelos y oculta en todas) y, dentro de cada marca, los
+  modelos (`rowOff`: descontinuado, marca apagada u oculto en todas las
+  columnas). Con el selector global en una tienda, «todas» = esa tienda.
+- **Filtro «Desactivados u ocultos»**: modelos ocultos en al menos una tienda
+  visible, descontinuados o de marca apagada, más las marcas apagadas sin
+  modelos (`rowHiddenSome`, `filterGroups`). Pruebas en `scripts/test-xlsx.mjs`.

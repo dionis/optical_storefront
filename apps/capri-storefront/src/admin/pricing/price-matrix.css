@@ -98,6 +98,24 @@
 .pm-gh-meta .pm-draft { margin: 0; }
 .pm-gh-n { font-size: 10.5px; font-weight: 800; color: var(--adm-muted); background: var(--adm-surface); border: 1px solid var(--adm-line); border-radius: 999px; padding: 0 6px; line-height: 15px; flex: none; }
 .pm-gh-s.low, .pm-gh-m.low, .pm-gh-mg.low { color: var(--adm-amber-dark); }
+
+/* Interruptor general de la marca (todas las tiendas) + lo desactivado al final */
+.pm-chain { flex: none; flex-direction: column; gap: 1px; padding: 0 4px; line-height: 1; }
+.pm-sw.pm-chain input:checked { background: var(--adm-green); }
+.pm-chain-l { font-size: 9px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; color: var(--adm-faint); }
+.pm-chain.off .pm-chain-l { color: var(--adm-red-dark); }
+.pm-gh-sw.locked input { cursor: not-allowed; }
+.pm-grp.is-off .pm-gh th, .pm-grp.is-off .pm-gh td { background: color-mix(in srgb, var(--adm-surface-2) 70%, var(--adm-line)); }
+.pm-grp.is-off .pm-gh-t > b, .pm-grp.is-off .pm-gh-btn { color: var(--adm-muted); }
+.pm-grp.is-off .pm-logo, .pm-grp.is-off .pm-thumb img { filter: grayscale(1); opacity: .6; }
+.pm-row.is-off .pm-art-t b { color: var(--adm-muted); }
+.pm-row.is-off .pm-thumb img { filter: grayscale(.8); opacity: .6; }
+.pm-off-sep { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--adm-muted); }
+.pm-off-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--adm-line); }
+.pm-off-sep-g td { padding: 14px 10px 6px !important; background: var(--adm-surface); border-top: 2px solid var(--adm-line); }
+.pm-off-sep-r td { padding: 5px 10px !important; height: auto !important; background: var(--adm-surface-2); }
+.pm-off-sep-g .pm-off-sep { position: sticky; left: 10px; }
+.pm-off-sep-r .pm-off-sep { position: sticky; left: 10px; max-width: 520px; }
 .pm-gh-store { padding: 0 9px !important; border-left: 1px solid color-mix(in srgb, var(--st) 30%, var(--adm-line)); white-space: nowrap; text-align: right; }
 .pm-grp.is-brand .pm-gh-store { padding: 0 !important; background: color-mix(in srgb, var(--st, var(--adm-accent)) 5%, var(--adm-surface-2)); }
 .pm-grp.is-brand .pm-gh-store.pm-c-disc { border-left: 0; }

@@ -9,10 +9,20 @@
  *      the scraper adds later);
  *   3. otherwise the model is exposed.
  *
+ * Above all three sits the brand's GENERAL switch (catalog_brand.active, «Activa
+ * en todas las tiendas» in Productos y precios): a brand switched off there is
+ * hidden in every store, whatever its store or model rules say. The loaders
+ * hand it to these pure functions as a synthetic rule of scope `chain_brand`
+ * (`chainBrandRules`), so every caller that already reads the store's rules
+ * — POS search, the till's `not_exposed` check, the matrix, the store catalogue
+ * — enforces it without a second lookup.
+ *
  * Pure functions only — reads and writes live in store-assortment-data.ts.
  */
 
 export const ASSORTMENT_SCOPES = ["brand", "product"] as const;
+/** Scope of the synthetic rule that carries a brand switched off for the whole chain (never stored in store_assortment_rule). */
+export const CHAIN_BRAND_SCOPE = "chain_brand";
 export type AssortmentScope = (typeof ASSORTMENT_SCOPES)[number];
 
 export interface AssortmentRuleLike {
@@ -43,17 +53,34 @@ export const brandSqlOf = (alias = "product"): string =>
 
 /** What the brand alone decides for its models (true when there is no brand rule). */
 export function brandExposed(rules: AssortmentRuleLike[], brand: string): boolean {
+  if (brandOffInChain(rules, brand)) return false;
   const r = brand ? rules.find((x) => x.scope === "brand" && x.target === brand) : undefined;
   return r ? r.exposed : true;
 }
 
+/** True when the brand is switched off for every store (catalog_brand.active = false). */
+export function brandOffInChain(rules: AssortmentRuleLike[], brand: string): boolean {
+  return Boolean(brand) && rules.some((x) => x.scope === CHAIN_BRAND_SCOPE && x.target === brand && !x.exposed);
+}
+
+/** The synthetic `chain_brand` rules for the brands switched off in the registry. Pure. */
+export function chainBrandRules(inactiveSlugs: Iterable<string>): AssortmentRuleLike[] {
+  return [...new Set([...inactiveSlugs].map((s) => String(s).trim().toLowerCase()).filter(Boolean))].map((target) => ({
+    scope: CHAIN_BRAND_SCOPE,
+    target,
+    exposed: false,
+  }));
+}
+
 export function isExposed(rules: AssortmentRuleLike[], product: { id: string; brand: string }): boolean {
+  if (brandOffInChain(rules, product.brand)) return false;
   const own = rules.find((x) => x.scope === "product" && x.target === product.id);
   return own ? own.exposed : brandExposed(rules, product.brand);
 }
 
 /** Which rule decides a model: its own, its brand's, or none (exposed by default). */
-export function exposureSource(rules: AssortmentRuleLike[], product: { id: string; brand: string }): "product" | "brand" | "default" {
+export function exposureSource(rules: AssortmentRuleLike[], product: { id: string; brand: string }): "chain" | "product" | "brand" | "default" {
+  if (brandOffInChain(rules, product.brand)) return "chain";
   if (rules.some((x) => x.scope === "product" && x.target === product.id)) return "product";
   if (product.brand && rules.some((x) => x.scope === "brand" && x.target === product.brand)) return "brand";
   return "default";

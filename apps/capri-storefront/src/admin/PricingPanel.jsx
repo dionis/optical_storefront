@@ -129,21 +129,25 @@ function RulesView({ me, sellers, go, params = null }) {
   const ref = useRef(null);
   const demo = isDemoLogin();
 
+  // Solo la última petición de cada lectura pinta: al cambiar de tienda deprisa
+  // (o releer tras guardar y cambiar), la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
+  const finSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     setState("loading");
     fetchPricingOverview(scope)
-      .then((d) => { setData(d); setState("ok"); })
-      .catch((err) => { setState(err.message || "adm.err.pricing.load_failed"); });
+      .then((d) => { if (seq !== loadSeq.current) return; setData(d); setState("ok"); })
+      .catch((err) => { if (seq !== loadSeq.current) return; setState(err.message || "adm.err.pricing.load_failed"); });
   }, [scope]);
   useEffect(load, [load]);
   const loadFin = useCallback(() => {
-    let off = false;
+    const seq = ++finSeq.current;
     fetchFinanceRules(scope)
-      .then((d) => { if (!off) { setFin(d); setFinState("ok"); } })
-      .catch((err) => { if (!off) setFinState(err.message || "adm.err.fin.load_failed"); });
-    return () => { off = true; };
+      .then((d) => { if (seq === finSeq.current) { setFin(d); setFinState("ok"); } })
+      .catch((err) => { if (seq === finSeq.current) setFinState(err.message || "adm.err.fin.load_failed"); });
   }, [scope]);
-  useEffect(loadFin, [loadFin]);
+  useEffect(() => { loadFin(); }, [loadFin]);
   // Una escritura de costos o comisiones: se relee la vista (los totales
   // mensuales, el reparto y el resultado del mes los calcula el servidor).
   const onFinSaved = useCallback(() => { toast({ tone: "success", title: t("adm.price.saved") }); loadFin(); }, [toast, t, loadFin]);

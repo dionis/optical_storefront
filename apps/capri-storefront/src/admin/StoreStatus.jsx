@@ -57,14 +57,23 @@ export default function StoreStatus({ go, tabs = [], me }) {
   const can = (tab) => tabs.includes(tab);
   const link = (tab, params) => (go && can(tab) ? () => go(tab, params) : undefined);
 
+  // Solo la última petición pinta: al cambiar de tienda deprisa, la respuesta
+  // lenta de la anterior no debe pisar la pantalla (se guarda en caché igual).
+  const seqRef = useRef(0);
   const load = (id = storeId, { force = false } = {}) => {
+    const seq = ++seqRef.current;
     const hit = CACHE.get(id);
     if (hit) setData(hit.data);
     if (hit && !force && Date.now() - hit.at < CACHE_MS) { setState("ok"); return; }
     setState("loading");
     adminFetch("/admin/store-status", { query: id ? { store: id } : {} })
-      .then((r) => { CACHE.set(id, { data: r, at: Date.now() }); setData(r); setState("ok"); })
+      .then((r) => {
+        CACHE.set(id, { data: r, at: Date.now() });
+        if (seq !== seqRef.current) return;
+        setData(r); setState("ok");
+      })
       .catch((e) => {
+        if (seq !== seqRef.current) return;
         // La tienda elegida ya no está en su alcance: el filtro vuelve a «Todas» y se carga la primera.
         if (id && (e?.reason === "store_not_found" || e?.reason === "forbidden_store")) { setStoreId(null); load(""); return; }
         setState("error");

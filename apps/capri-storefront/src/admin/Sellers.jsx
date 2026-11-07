@@ -178,12 +178,16 @@ export default function Sellers({ onChanged, go, me, params = null }) {
   const openPanel = (x) => sp.open(x.code, { from, to, store: storeOnly });
   const rootRef = useRef(null);
 
+  // Solo la última petición pinta: al cambiar de período deprisa (o releer tras
+  // guardar), la respuesta lenta de la anterior se descarta.
+  const loadSeq = useRef(0);
   const load = () => {
+    const seq = ++loadSeq.current;
     if (demo) { setState("demo"); return; }
     setState("loading");
     Promise.all([fetchSellers(), fetchSellerStats({ from, to })])
-      .then(([a, b]) => { setSellers((a.sellers || []).map(onThisOrigin)); setStats(b); setState("ok"); })
-      .catch(() => setState("error"));
+      .then(([a, b]) => { if (seq !== loadSeq.current) return; setSellers((a.sellers || []).map(onThisOrigin)); setStats(b); setState("ok"); })
+      .catch(() => { if (seq === loadSeq.current) setState("error"); });
   };
   useEffect(load, [from, to, demo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

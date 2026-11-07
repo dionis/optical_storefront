@@ -18,7 +18,7 @@ jest.mock("../src/lib/frame-specs", () => ({
   frameBrand: jest.fn(() => null),
   posFrameSpecs: jest.fn(() => ({})),
 }));
-jest.mock("../src/lib/store-assortment-data", () => ({ listAssortmentRules: jest.fn(async () => []) }));
+jest.mock("../src/lib/store-assortment-data", () => ({ listAssortmentRules: jest.fn(async () => []), effectiveAssortmentRules: jest.fn(async () => []) }));
 jest.mock("../src/lib/audit", () => ({ ...jest.requireActual("../src/lib/audit"), recordAudit: jest.fn(async () => undefined) }));
 jest.mock("../src/lib/price-matrix-route", () => ({ matrixAccess: jest.fn() }));
 jest.mock("../src/lib/gsheet-sync", () => ({ mirrorPricesToSheet: jest.fn(async () => undefined) }));
