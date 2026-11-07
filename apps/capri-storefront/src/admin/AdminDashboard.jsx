@@ -44,6 +44,7 @@ import StoreStatement from "./StoreStatement.jsx";
 import StoreOrders from "./StoreOrders.jsx";
 import PendingBalances from "./PendingBalances.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
+import Patients from "./Patients.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import Costs from "./Costs.jsx";
@@ -1046,6 +1047,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "storecosts" && <StoreCosts me={me} />}
       {tab === "statement" && <StoreStatement me={me} go={go} />}
       {tab === "storeorders" && <StoreOrders me={me} go={go} params={nav.params} />}
+      {tab === "patients" && <Patients me={me} openSale={salePanel.open} params={nav.params} />}
       {tab === "profile" && (
         <div className="adm-section">
           <div className="adm-head-row"><h2>{t("adm.tab.profile")}</h2></div>

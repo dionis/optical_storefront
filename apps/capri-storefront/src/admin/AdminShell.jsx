@@ -37,6 +37,8 @@ export const NAV_GROUPS = [
   // (LEGACY_TABS en AdminDashboard).
   { key: "commercial", icon: "orders", items: [
     { key: "orders", icon: "orders" },
+    // Ficha de cada paciente: compras, total gastado, promedio y evolución de la receta (docs/PATIENTS.md).
+    { key: "patients", icon: "user" },
     { key: "products", icon: "prices" },
     { key: "costs", icon: "percent" },
     { key: "sellers", icon: "sellers" },
@@ -113,7 +115,7 @@ export function navGroupsFor(me) {
     ? [{ key: "storestatus", icon: "store" }, { key: "exec", icon: "dashboard" }]
     : [];
   const items = [...lead, ...WORK_GROUP.items, { key: "pendingbalances", icon: "hand" }];
-  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" });
+  if (me.role === "supervisor" || me.role === "manager") items.push({ key: "storeorders", icon: "orders" }, { key: "patients", icon: "user" });
   return [{ ...WORK_GROUP, items: [...items, ...extra] }];
 }
 export const tabsOf = (groups) => groups.flatMap((g) => g.items.map((i) => i.key));

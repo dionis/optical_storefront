@@ -47,6 +47,8 @@ export const AUDIT_ACTIONS = [
   "catalog.delete",
   "ai_credit.change",
   "ai_alert.change",
+  // Opening a patient file (docs/PATIENTS.md): who read whose health data. No values stored.
+  "patient.view",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
