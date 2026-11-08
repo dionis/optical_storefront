@@ -53,4 +53,21 @@ export const PosSale = model.define("pos_sale", {
   void_note: model.text().nullable(),
   void_requested_by: model.text().nullable(),
   void_requested_at: model.dateTime().nullable(),
+  /** Free text the staff keep on the sale (never printed on the customer's receipt). */
+  internal_note: model.text().nullable(),
+  /** Last edit of the sale's details (lib/pos-sale-admin.ts updateSaleDetails). */
+  edited_at: model.dateTime().nullable(),
+  edited_by: model.text().nullable(),
+  /**
+   * Soft delete by an owner or superadmin (lib/pos-sale-admin.ts deleteSale):
+   * `deleted_at` (Medusa's own column) hides the sale everywhere; these say who
+   * and why, so it can be restored.
+   */
+  deleted_by: model.text().nullable(),
+  delete_reason: model.text().nullable(),
+  /**
+   * Numbers the sale had before being moved to another store, oldest first:
+   * [{ number, establishment_id, moved_at, moved_by }] (lib/pos-sale-admin.ts moveSale).
+   */
+  previous_numbers: model.json().nullable(),
 });

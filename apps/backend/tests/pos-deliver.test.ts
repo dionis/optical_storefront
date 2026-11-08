@@ -70,6 +70,7 @@ const saleRow = (over: Partial<SaleRow> = {}): SaleRow => ({
   void_requested_at: null,
   created_at: "2026-11-01T12:00:00.000Z",
   payments: [],
+  internal_note: null, edited_at: null, edited_by: null, deleted_at: null, deleted_by: null, delete_reason: null, previous_numbers: [],
   ...over,
 });
 

@@ -39,5 +39,6 @@ import priceMatrix from "./price-matrix.js";
 import finance from "./finance.js";
 import posTablet from "./pos-tablet.js";
 import patients from "./patients.js";
+import saleAdmin from "./sale-admin.js";
 
-export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant];
+export const PARTS = [posRx, posFrame, posDocs, adminTheme, salesBoard, cashReport, statement, exec, screens, saleDetail, help, fit, roles, report, sellers, costs, pricing, catalogSync, aiUsage, period, backlog, search, catalog, team, storeOrders, lensFinish, posFlow, posRules, auth, pricingAcross, posOps, sessions, securityExtra, priceMatrix, posTablet, finance, patients, tenant, saleAdmin];

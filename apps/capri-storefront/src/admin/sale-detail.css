@@ -206,3 +206,17 @@
   .sd-head::before { display: none; }
   .sd-card { break-inside: avoid; box-shadow: none; border-color: #bbb; }
 }
+
+/* Después de la venta: corregir datos, mover, eliminar (lib/pos-sale-admin.ts). */
+.sd-edit { display: grid; gap: 10px; border: 1px solid var(--adm-accent-line); background: var(--adm-accent-soft); border-radius: var(--adm-radius-sm); padding: 12px; }
+.sd-edit-title { margin: 0; font-size: 13px; font-weight: 800; color: var(--adm-accent-ink); }
+.sd-edit-group { border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm); padding: 8px 10px 10px; margin: 0; display: grid; gap: 8px; background: var(--adm-surface); min-width: 0; }
+.sd-edit-group legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
+.sd-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.sd-edit-field { display: grid; gap: 3px; font-size: 12px; font-weight: 600; color: var(--adm-ink-soft, var(--adm-ink)); min-width: 0; }
+.sd-edit-field input, .sd-edit-field select, .sd-edit-field textarea { min-height: 38px; font-size: 14px; padding: 4px 10px; border: 1px solid var(--adm-line); border-radius: var(--adm-radius-sm, 10px); background: var(--adm-surface); color: var(--adm-ink); box-sizing: border-box; width: 100%; font-family: inherit; }
+.sd-edit-field textarea { resize: vertical; padding: 8px 10px; }
+.sd-edit-field input:focus, .sd-edit-field select:focus, .sd-edit-field textarea:focus { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.sd-move { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); }
+.sd-move .sd-void-title { color: var(--adm-accent-ink); }
+.sd-note-text { white-space: pre-wrap; font-weight: 400; }

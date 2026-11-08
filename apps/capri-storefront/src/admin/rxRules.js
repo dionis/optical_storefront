@@ -150,3 +150,22 @@ export function hasRxErrors(errors) {
   if (!errors) return false;
   return Object.entries(errors).some(([k, v]) => (k === "od" || k === "os" ? Object.values(v || {}).some(Boolean) : Boolean(v)));
 }
+
+/** Receta del formulario → forma que espera el servidor (números o null). El tipo
+ *  (monofocal/multifocal) no viaja: el servidor lo deduce de la adición.
+ *  `verified` es si una persona revisó los valores: una receta tecleada a mano
+ *  siempre lo está; una leída de la foto solo cuando el vendedor pulsó
+ *  «Confirmar» (antes se mandaba `true` siempre y el servidor no podía
+ *  distinguirlas; ahora rechaza una lectura OCR sin confirmar: `rx_unconfirmed`). */
+export function toRx(form, source = "manual", verified = true) {
+  const eye = (e) => ({ sph: num(e.sph), cyl: num(e.cyl), axis: num(e.axis), add: num(e.add), prism: num(e.prism), base: e.base || null });
+  const pd_od = num(form.pd_od); const pd_os = num(form.pd_os);
+  const pd = binocularPd(form) ?? (pd_od == null && pd_os == null ? num(form.pd) : null);
+  return { od: eye(form.od), os: eye(form.os), pd, pd_od, pd_os, seg_height: num(form.seg_height), source, verified_by_user: verified === true, file_url: form.file_url || null };
+}
+/** Receta guardada (o leída de la foto) → formulario, ya con el formato de la hoja. */
+export const fromRx = (rx) => {
+  const eye = (e) => Object.fromEntries(EYE_FIELDS.map((k) => [k, k === "base" ? (e?.base || "") : e?.[k] == null ? "" : normalizeField(k, e[k]) || String(e[k])]));
+  const form = { ...EMPTY_RX, od: eye(rx?.od), os: eye(rx?.os), ...splitPd(rx), pd: rx?.pd == null ? "" : String(rx.pd), seg_height: rx?.seg_height == null ? "" : normalizeField("seg_height", rx.seg_height), rx_date: "", file_url: rx?.file_url || "" };
+  return { ...form, type: inferType(form) };
+};

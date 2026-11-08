@@ -232,7 +232,7 @@ export async function ensureTerminal(container: MedusaContainer, store: Establis
 }
 
 /** Takes the lowest free tray of the store for a sale (race-safe via the partial unique index). */
-async function takeTray(container: MedusaContainer, establishmentId: string, saleId: string): Promise<number> {
+export async function takeTray(container: MedusaContainer, establishmentId: string, saleId: string): Promise<number> {
   const svc = pos(container);
   for (let attempt = 0; attempt < 5; attempt++) {
     const inUse = await svc.listPosTrays({ establishment_id: establishmentId, released_at: null } as never, { take: 5000 });
@@ -1197,7 +1197,7 @@ async function usdRegionId(container: MedusaContainer): Promise<string> {
 }
 
 /** Next number of a store's sequence; atomic, so two tills never get the same one. */
-async function nextSaleSeq(container: MedusaContainer, establishmentId: string): Promise<number> {
+export async function nextSaleSeq(container: MedusaContainer, establishmentId: string): Promise<number> {
   const res = await pgOf(container).raw(
     `INSERT INTO pos_sale_counter (establishment_id, last_seq) VALUES (?, 1)
      ON CONFLICT (establishment_id) DO UPDATE SET last_seq = pos_sale_counter.last_seq + 1
@@ -1504,7 +1504,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
   return { sale, orderId, number, promisedOn, withLenses, rx };
 }
 
-async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
+export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {
   const orders = container.resolve<IOrderModuleService>(Modules.ORDER);
   const order = await orders.retrieveOrder(orderId, { select: ["id", "display_id", "metadata"] });
   await orders.updateOrders(orderId, { metadata: { ...(order.metadata ?? {}), ...patch } });
@@ -1611,6 +1611,16 @@ export interface SaleRow {
   void_note: string | null;
   void_requested_at: string | null;
   created_at: string;
+  /** Staff-only note (lib/pos-sale-admin.ts); never on the customer's receipt. */
+  internal_note: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+  /** Set only on a deleted (hidden) sale, which only owners and superadmins read. */
+  deleted_at: string | null;
+  deleted_by: string | null;
+  delete_reason: string | null;
+  /** Numbers the sale had in other stores before being moved, oldest first. */
+  previous_numbers: Array<{ number: string; establishment_id: string; moved_at: string; moved_by: string | null }>;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
   /**
    * Who the sale was for and what was sold, when the caller asked for it
@@ -1632,7 +1642,7 @@ export interface SaleRow {
   items?: string;
 }
 
-function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
+export function toSale(s: Record<string, unknown>, payments: Array<Record<string, unknown>>): SaleRow {
   const code = String(s.number).split("-")[0];
   const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
   return {
@@ -1661,6 +1671,13 @@ function toSale(s: Record<string, unknown>, payments: Array<Record<string, unkno
     void_note: typeof s.void_note === "string" && s.void_note.trim() ? s.void_note.trim() : null,
     void_requested_at: iso(s.void_requested_at),
     created_at: new Date(s.created_at as string).toISOString(),
+    internal_note: typeof s.internal_note === "string" && s.internal_note.trim() ? s.internal_note : null,
+    edited_at: iso(s.edited_at),
+    edited_by: (s.edited_by as string | null) ?? null,
+    deleted_at: iso(s.deleted_at),
+    deleted_by: (s.deleted_by as string | null) ?? null,
+    delete_reason: (s.delete_reason as string | null) ?? null,
+    previous_numbers: Array.isArray(s.previous_numbers) ? (s.previous_numbers as SaleRow["previous_numbers"]) : [],
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({
@@ -1716,7 +1733,19 @@ export async function listSales(container: MedusaContainer, f: SalesFilter, take
   if (f.status) where.status = f.status;
   if (f.withBalance) where.balance_cents = { $gt: 0 };
   if (f.from || f.to) where.created_at = { ...(f.from ? { $gte: new Date(f.from) } : {}), ...(f.to ? { $lte: new Date(f.to) } : {}) };
-  const sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
+  let sales = await svc.listPosSales(where as never, { take, order: { created_at: "DESC" } });
+  // A sale moved to another store answers to its old number too (lib/pos-sale-admin.ts moveSale).
+  if (f.number && !sales.length) {
+    const moved = (await pgOf(container)("pos_sale")
+      .whereNull("deleted_at")
+      .whereRaw("previous_numbers @> ?::jsonb", [JSON.stringify([{ number: f.number }])])
+      .limit(5)
+      .select("id")) as Array<{ id: string }>;
+    if (moved.length) {
+      const { number: _byNumber, ...rest } = where;
+      sales = await svc.listPosSales({ ...rest, id: moved.map((r) => r.id) } as never, { take, order: { created_at: "DESC" } });
+    }
+  }
   const payments = sales.length ? await svc.listPosSalePayments({ sale_id: sales.map((s) => s.id) }, { take: sales.length * 12 }) : [];
   const rows = sales.map((s) => toSale(s as unknown as Record<string, unknown>, payments as unknown as Array<Record<string, unknown>>));
   if (!opts.withDetail || !rows.length) return rows;

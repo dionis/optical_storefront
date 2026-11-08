@@ -29,7 +29,9 @@ import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
 import { STAGES, STAGE_BY_KEY, money, orderLabel, setOrderStage, stageErrorText } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
-import { collectPayment, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, posContext, voidSale } from "./posApi.js";
+import { DELETE_REASONS, collectPayment, deleteSale, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, moveSale, posContext, updateSale, voidSale } from "./posApi.js";
+import RxForm from "./PosRx.jsx";
+import { fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
 import { StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
@@ -84,6 +86,110 @@ function RxGrid({ rx }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * «Corregir datos»: cliente, receta nueva, entrega, fecha prometida y nota
+ * interna (POST /admin/pos/sales/:id). Solo se manda lo que cambió; el
+ * servidor vuelve a validar todo con las reglas de la caja y nunca toca
+ * artículos, precios ni cobros.
+ */
+function SaleEditForm({ sale, customer, address, rx, rxAllowed, busy, onSave, onCancel }) {
+  const { t } = useLang();
+  const initCust = useMemo(() => ({
+    first_name: customer?.first_name || "", last_name: customer?.last_name || "", email: customer?.email || "", phone: customer?.phone || "", birth_date: customer?.birth_date || "",
+    address_1: address?.address_1 || "", city: address?.city || "", province: address?.province || "", postal_code: address?.postal_code || "",
+  }), [customer, address]);
+  const [cust, setCust] = useState(initCust);
+  useEffect(() => setCust(initCust), [initCust]);
+  const [delivery, setDelivery] = useState(sale.delivery === "ship" ? "ship" : "pickup");
+  const [promised, setPromised] = useState(sale.promised_on || "");
+  const [note, setNote] = useState(sale.internal_note || "");
+  const [rxOpen, setRxOpen] = useState(false);
+  const initRx = useMemo(() => (rx ? fromRx(rx) : null), [rx]);
+  const [rxForm, setRxForm] = useState(initRx);
+  useEffect(() => setRxForm(initRx), [initRx]);
+  const [rxDate, setRxDate] = useState("");
+  const [showRxErrors, setShowRxErrors] = useState(false);
+
+  const custChanged = Boolean(customer) && JSON.stringify(cust) !== JSON.stringify(initCust);
+  const rxChanged = rxOpen && Boolean(rxForm) && (JSON.stringify(rxForm) !== JSON.stringify(initRx) || Boolean(rxDate));
+  const body = () => {
+    const b = {};
+    if (custChanged) {
+      const hasAddr = cust.address_1 || cust.city || cust.postal_code;
+      b.customer = {
+        first_name: cust.first_name, last_name: cust.last_name, email: cust.email, phone: cust.phone, birth_date: cust.birth_date || null,
+        address: hasAddr ? { address_1: cust.address_1, city: cust.city, province: cust.province || null, postal_code: cust.postal_code, country_code: "us" } : null,
+      };
+    }
+    if (delivery !== (sale.delivery === "ship" ? "ship" : "pickup")) b.delivery = delivery;
+    if ((promised || null) !== (sale.promised_on || null)) b.promised_on = promised || null;
+    if (note.trim() !== (sale.internal_note || "").trim()) b.internal_note = note.trim() || null;
+    if (rxChanged) b.prescription = { rx: toRx(rxForm), rx_date: rxDate || null };
+    return b;
+  };
+  const changes = Object.keys(body()).length;
+  const save = () => {
+    if (rxChanged && hasRxErrors(validateRx(rxForm, rxForm.type || inferType(rxForm)).errors)) { setShowRxErrors(true); return; }
+    onSave(body());
+  };
+  const field = (k, label, extra = {}) => (
+    <label className="sd-edit-field"><span>{t(label)}</span><input value={cust[k]} onChange={(e) => setCust((c) => ({ ...c, [k]: e.target.value }))} aria-label={t(label)} disabled={busy} {...extra} /></label>
+  );
+  return (
+    <div className="sd-edit adm-noprint">
+      <p className="sd-edit-title">{t("adm.sd.edit.title")}</p>
+      <p className="sd-hint">{t("adm.sd.edit.hint")}</p>
+      {customer ? (
+        <fieldset className="sd-edit-group">
+          <legend>{t("adm.sd.edit.customer")}</legend>
+          <div className="sd-edit-grid">
+            {field("first_name", "adm.sd.edit.firstName")}
+            {field("last_name", "adm.sd.edit.lastName")}
+            {field("email", "adm.sd.edit.email", { type: "email", inputMode: "email" })}
+            {field("phone", "adm.sd.edit.phone", { inputMode: "tel" })}
+            {field("birth_date", "adm.sd.edit.birthDate", { type: "date" })}
+            {field("address_1", "adm.sd.edit.address")}
+            {field("city", "adm.sd.edit.city")}
+            {field("province", "adm.sd.edit.province")}
+            {field("postal_code", "adm.sd.edit.zip", { inputMode: "numeric" })}
+          </div>
+          <small className="sd-hint">{t("adm.sd.edit.customerHint")}</small>
+        </fieldset>
+      ) : sale.customer_id ? <p className="sd-hint">{t("adm.sd.edit.loading")}</p> : null}
+      <div className="sd-edit-grid">
+        <label className="sd-edit-field"><span>{t("adm.sd.edit.delivery")}</span>
+          <select value={delivery} onChange={(e) => setDelivery(e.target.value)} aria-label={t("adm.sd.edit.delivery")} disabled={busy}>
+            <option value="pickup">{t("adm.sd.delivery.pickup")}</option>
+            <option value="ship">{t("adm.sd.delivery.ship")}</option>
+          </select>
+        </label>
+        <label className="sd-edit-field"><span>{t("adm.sd.edit.promised")}</span><input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} aria-label={t("adm.sd.edit.promised")} disabled={busy} /></label>
+      </div>
+      <label className="sd-edit-field"><span>{t("adm.sd.edit.note")}</span>
+        <textarea rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("adm.sd.edit.notePh")} aria-label={t("adm.sd.edit.note")} disabled={busy} />
+      </label>
+      {rxAllowed && initRx && (
+        <fieldset className="sd-edit-group">
+          <legend>{t("adm.sd.edit.rx")}</legend>
+          {!rxOpen ? (
+            <div><button type="button" className="btn-sm" disabled={busy} onClick={() => setRxOpen(true)}><Icon name="eye" size={13} /> {t("adm.sd.edit.rxEdit")}</button></div>
+          ) : (
+            <>
+              <RxForm value={rxForm} onChange={setRxForm} mode="new" disabled={busy} showErrors={showRxErrors} idp="sd-edit-rx" />
+              <label className="sd-edit-field"><span>{t("adm.sd.edit.rxDate")}</span><input type="date" value={rxDate} onChange={(e) => setRxDate(e.target.value)} aria-label={t("adm.sd.edit.rxDate")} disabled={busy} /></label>
+              <small className="sd-hint">{t("adm.sd.edit.rxHint")}</small>
+            </>
+          )}
+        </fieldset>
+      )}
+      <div className="sd-void-row">
+        <button type="button" className="btn-sm primary" disabled={busy || !changes} onClick={save}><Icon name="check" size={14} /> {t("adm.sd.edit.save")}</button>
+        <button type="button" className="btn-sm" disabled={busy} onClick={onCancel}>{t("adm.sd.edit.cancel")}</button>
+      </div>
     </div>
   );
 }
@@ -187,6 +293,10 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   const [busy, setBusy] = useState(false);
   const [pay, setPay] = useState({ method_code: "", amount: "", details: {} });
   const [voiding, setVoiding] = useState({ open: false, reason: "", note: "" });
+  // Después de la venta: "edit" (corregir datos), "move" (otra tienda) o "delete"; solo uno abierto a la vez.
+  const [mode, setMode] = useState(null);
+  const [moveTo, setMoveTo] = useState("");
+  const [del, setDel] = useState({ reason: "", note: "" });
   const [tick, setTick] = useState(0);
   // El pedido de Medusa detrás (etapa, next_stages, historial; artículos y cobros de un pedido web).
   const [order, setOrder] = useState(null);
@@ -215,6 +325,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     setData(null); setDoc(null); setCustomer(null); setRxDoc(null);
     setPay({ method_code: "", amount: "", details: {} });
     setVoiding({ open: false, reason: "", note: "" });
+    setMode(null); setMoveTo(""); setDel({ reason: "", note: "" });
     Promise.all([fetchSale(saleId), fetchSaleDocument(saleId, "receipt").then((r) => r.document).catch(() => null)])
       .then(([d, dc]) => {
         if (!on) return;
@@ -342,6 +453,27 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     (r) => { setVoiding({ open: false, reason: "", note: "" }); return r.requested ? t("adm.pos.sales.voidRequested") : t("adm.pos.sales.voided"); },
   );
 
+  const saveEdit = (patch) => run(
+    () => updateSale(s.id, patch),
+    () => { setMode(null); setTick((n) => n + 1); return t("adm.sd.edit.saved"); },
+  );
+  const doMove = async () => {
+    const target = (ctx?.stores || []).find((x) => x.id === moveTo);
+    if (!target || !(await confirm({ title: t("adm.sd.move.confirm", { n: s.number, store: `${target.code} · ${target.name}` }), message: t("adm.sd.move.hint") }))) return;
+    run(() => moveSale(s.id, target.id), (r) => { setMode(null); setMoveTo(""); setTick((n) => n + 1); return t("adm.sd.move.done", { n: r.sale?.number || "" }); });
+  };
+  const doDelete = async () => {
+    if (!(await confirm({ title: t("adm.sd.del.confirm", { n: s.number }), message: t("adm.sd.del.hint") }))) return;
+    setBusy(true);
+    try {
+      await deleteSale(s.id, del.reason, del.note);
+      toast({ tone: "success", title: t("adm.sd.del.done") });
+      onChanged?.();
+      onClose?.();
+    } catch (e) { toast({ tone: "error", title: t(errKey(e)) }); }
+    finally { setBusy(false); }
+  };
+
   if (!open || typeof document === "undefined") return null;
 
   const status = !s ? null : s.status === "voided" ? ["voided", "bad"] : s.delivered_at ? ["delivered", "ok"] : s.balance > 0 ? ["balance", "warn"] : ["completed", ""];
@@ -363,6 +495,8 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     })),
     s.void_requested_at ? { at: s.void_requested_at, key: "voidAsked", tone: "warn", icon: "alert", what: t("adm.sd.h.voidAsked"), sub: [s.void_reason ? t(`adm.pos.void.${s.void_reason}`) : "", s.void_note].filter(Boolean).join(" · ") } : null,
     s.delivered_at ? { at: s.delivered_at, key: "delivered", tone: "ok", icon: "hand", what: t("adm.sd.h.delivered"), sub: "" } : null,
+    s.edited_at ? { at: s.edited_at, key: "edited", tone: "", icon: "edit", what: t("adm.sd.h.edited"), sub: "" } : null,
+    ...(s.previous_numbers || []).map((pn, i) => ({ at: pn.moved_at, key: `mv${i}`, tone: "accent", icon: "store", what: t("adm.sd.h.moved", { n: pn.number }), sub: "" })),
     s.voided_at ? { at: s.voided_at, key: "voided", tone: "bad", icon: "undo", what: t("adm.sd.h.voided"), sub: [s.void_reason ? t(`adm.pos.void.${s.void_reason}`) : "", s.void_note].filter(Boolean).join(" · ") } : null,
   ].filter(Boolean).sort((a, b) => new Date(a.at) - new Date(b.at));
   if (s && s.promised_on && !s.delivered_at && s.status !== "voided") history.push({ at: null, key: "promised", tone: "", icon: "clock", future: true, what: t("adm.sd.h.promised"), sub: `${dayLabel(s.promised_on, lang)} · ${t("adm.sd.h.pending")}` });
@@ -373,6 +507,9 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   const canCollectDeliver = canCollect && canDeliver;
   const fullAmount = s ? Math.round((Number(pay.amount) || 0) * 100) === Math.round(s.balance * 100) : false;
   const canVoidBtn = s && s.status !== "voided";
+  // Lo que el servidor dice que esta persona puede hacer con la venta (lib/sale-permissions.ts); cada ruta lo vuelve a comprobar.
+  const perms = data?.permissions || {};
+  const moveTargets = (ctx?.stores || []).filter((x) => s && x.id !== s.establishment_id);
 
   // Pedido web (sin venta de caja): cabecera, cliente, artículos, importes y cobros salen del pedido.
   const o = orderMode ? order : null;
@@ -417,6 +554,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               <li><Icon name="calendar" size={13} /> <b>{fmt(s.created_at, lang)}</b></li>
               {(store || doc?.store) && <li><span className="sd-dot" style={{ background: store?.color || "var(--adm-line)" }} /> {t("adm.sd.store")}: <b>{store ? `${store.code} · ${store.name}` : `${doc.store.code} · ${doc.store.name}`}</b></li>}
               {s.seller_code && <li><Icon name="user" size={13} /> {t("adm.sd.seller")}: <b>{s.seller_code}</b></li>}
+              {(s.previous_numbers || []).length > 0 && <li><Icon name="history" size={13} /> {t("adm.sd.movedFrom", { n: s.previous_numbers.map((x) => x.number).join(", ") })}</li>}
               {(terminal?.code || doc?.terminal?.code) && <li><Icon name="store" size={13} /> {t("adm.sd.terminal")}: <b>{terminal?.code || doc.terminal.code}</b></li>}
             </ul>
           )}
@@ -535,6 +673,19 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
               {/* The free text of the request travels with the sale (void_note): the
                   person who confirms reads WHY the seller asked, not just the category. */}
               {s.void_requested_at && s.status !== "voided" && <div className="sd-banner warn">{t("adm.pos.sales.voidPending", { reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
+              {s.internal_note && <div className="sd-banner info"><b>{t("adm.sd.note")}:</b> <span className="sd-note-text">{s.internal_note}</span></div>}
+              {mode === "edit" && (
+                <SaleEditForm
+                  sale={s}
+                  customer={customer}
+                  address={order?.shipping_address || null}
+                  rx={(rxDoc?.tickets || []).find((tk) => tk.rx)?.rx || null}
+                  rxAllowed={rxAllowed}
+                  busy={busy}
+                  onSave={saveEdit}
+                  onCancel={() => setMode(null)}
+                />
+              )}
               {s.status === "voided" && <div className="sd-banner bad">{t("adm.pos.sales.voidedAt", { date: fmt(s.voided_at, lang), reason: t(`adm.pos.void.${s.void_reason}`) })}{s.void_note ? <><br /><small>{t("adm.pos.sales.voidNote", { note: s.void_note })}</small></> : null}</div>}
               {stageSection}
 
@@ -696,6 +847,15 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
           {canDeliver && (
             <button type="button" className={`btn-sm ${canCollectDeliver ? "" : "primary"}`} disabled={busy || s.balance > 0} title={s.balance > 0 ? t("adm.err.pos.balance_due") : undefined} onClick={deliver}><Icon name="hand" size={14} /> {t("adm.sd.act.deliver")}</button>
           )}
+          {perms.can_edit && (
+            <button type="button" className="btn-sm" disabled={busy} aria-pressed={mode === "edit"} onClick={() => { setMode((m0) => (m0 === "edit" ? null : "edit")); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="edit" size={14} /> {t("adm.sd.act.edit")}</button>
+          )}
+          {perms.can_move && moveTargets.length > 0 && (
+            <button type="button" className="btn-sm" disabled={busy} aria-pressed={mode === "move"} onClick={() => setMode((m0) => (m0 === "move" ? null : "move"))}><Icon name="store" size={14} /> {t("adm.sd.act.move")}</button>
+          )}
+          {perms.can_delete && (
+            <button type="button" className="btn-sm danger" disabled={busy} aria-pressed={mode === "delete"} onClick={() => setMode((m0) => (m0 === "delete" ? null : "delete"))}><Icon name="trash" size={14} /> {t("adm.sd.act.delete")}</button>
+          )}
           {canVoidBtn && (
             <button type="button" className="btn-sm danger" disabled={busy} onClick={() => setVoiding((v) => ({ ...v, open: !v.open, reason: v.reason || s.void_reason || "" }))}>
               <Icon name="undo" size={14} /> {ctx?.can_void ? (s.void_requested_at ? t("adm.sd.act.confirmVoid") : t("adm.sd.act.void")) : t("adm.sd.act.requestVoid")}
@@ -703,6 +863,37 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
           )}
           <span className="sd-spacer" />
           <button type="button" className="btn-sm" onClick={onClose}><Icon name="close" size={14} /> {t("adm.sd.close")}</button>
+          {mode === "move" && s && (
+            <div className="sd-void sd-move">
+              <p className="sd-void-title">{t("adm.sd.move.title")}</p>
+              <div className="sd-void-row">
+                <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)} aria-label={t("adm.sd.move.store")} title={t("adm.sd.move.store")}>
+                  <option value="">{t("adm.sd.move.store")}</option>
+                  {moveTargets.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+                </select>
+                <button type="button" className="btn-sm primary" disabled={busy || !moveTo} onClick={doMove}>{t("adm.sd.move.btn")}</button>
+                <button type="button" className="btn-sm" disabled={busy} onClick={() => setMode(null)}>{t("adm.sd.void.cancel")}</button>
+              </div>
+              <small className="sd-hint">{t("adm.sd.move.hint")}</small>
+            </div>
+          )}
+          {mode === "delete" && s && (
+            <div className="sd-void">
+              <p className="sd-void-title">{t("adm.sd.del.title")}</p>
+              <div className="sd-void-row">
+                <select value={del.reason} onChange={(e) => setDel((d) => ({ ...d, reason: e.target.value }))} aria-label={t("adm.sd.del.reason")} title={t("adm.sd.del.reason")}>
+                  <option value="">{t("adm.sd.del.reason")}</option>
+                  {DELETE_REASONS.map((r) => <option key={r} value={r}>{t(`adm.sd.del.reason.${r}`)}</option>)}
+                </select>
+                <input value={del.note} maxLength={300} onChange={(e) => setDel((d) => ({ ...d, note: e.target.value }))} placeholder={t("adm.sd.del.note")} aria-label={t("adm.sd.del.note")} />
+              </div>
+              <div className="sd-void-row">
+                <button type="button" className="btn-sm danger" disabled={busy || !del.reason || (del.reason === "other" && !del.note.trim())} onClick={doDelete}><Icon name="trash" size={14} /> {t("adm.sd.del.btn")}</button>
+                <button type="button" className="btn-sm" disabled={busy} onClick={() => setMode(null)}>{t("adm.sd.void.cancel")}</button>
+                <small className="sd-hint">{t("adm.sd.del.hint")}</small>
+              </div>
+            </div>
+          )}
           {voiding.open && s && (
             <div className="sd-void">
               <p className="sd-void-title">{t("adm.sd.void.title")}</p>

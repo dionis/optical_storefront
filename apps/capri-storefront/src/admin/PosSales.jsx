@@ -24,7 +24,8 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { adminFetch } from "./adminApi.js";
 import { money } from "./adminOrders.js";
-import { listSales, posContext, searchCustomers } from "./posApi.js";
+import { listDeletedSales, listSales, posContext, restoreSale, searchCustomers } from "./posApi.js";
+import { useFeedback } from "../components/Feedback.jsx";
 import Accordion from "./Accordion.jsx";
 import DataTable, { tableSpecFrom } from "./DataTable.jsx";
 import { useColumns } from "./useColumns.js";
@@ -111,6 +112,65 @@ export function mergeSaleDetails(s, d) {
   };
 }
 
+/**
+ * Ventas eliminadas (ocultas) de la tienda elegida, para restaurarlas. Solo
+ * dueño y superadmin (GET /admin/pos/sales?deleted=1, POST …/:id/restore;
+ * backend lib/pos-sale-admin.ts). Restaurar la devuelve tal como estaba.
+ */
+function DeletedSales({ store, storeById, onRestored }) {
+  const { t, lang } = useLang();
+  const { toast, confirm } = useFeedback();
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let on = true;
+    setRows(null);
+    listDeletedSales(store || undefined).then((r) => on && setRows(r.sales || [])).catch(() => on && setRows([]));
+    return () => { on = false; };
+  }, [store, tick]);
+  const fmt = (v) => (v ? new Date(v).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "medium", timeStyle: "short" }) : "—");
+  const reasonText = (r) => {
+    const [code, ...rest] = String(r || "").split(": ");
+    const known = ["duplicate", "test", "wrong_store", "entered_by_mistake", "other"].includes(code);
+    return [known ? t(`adm.sd.del.reason.${code}`) : code, rest.join(": ")].filter(Boolean).join(" · ");
+  };
+  const restore = async (s) => {
+    if (!(await confirm({ title: t("adm.pos.sales.restoreConfirm", { n: s.number }), message: t("adm.pos.sales.restoreBody") }))) return;
+    setBusy(true);
+    try {
+      await restoreSale(s.id);
+      toast({ tone: "success", title: t("adm.pos.sales.restored", { n: s.number }) });
+      setTick((n) => n + 1);
+      onRestored?.();
+    } catch (e) { toast({ tone: "error", title: t(e?.reason ? `adm.err.pos.${e.reason}` : "adm.err.pos.generic") }); }
+    finally { setBusy(false); }
+  };
+  if (rows === null) return <p className="adm-sub">{t("adm.pos.sales.deletedLoading")}</p>;
+  if (!rows.length) return <p className="adm-sub">{t("adm.pos.sales.deletedEmpty")}</p>;
+  return (
+    <div className="adm-table-wrap">
+      <table className="adm-table responsive">
+        <thead><tr><th>{t("adm.pos.sales.number")}</th><th>{t("adm.pos.sales.when")}</th><th>{t("adm.tbl.store")}</th><th>{t("adm.tbl.customer")}</th><th className="r">{t("adm.pos.price.total")}</th><th>{t("adm.pos.sales.deletedAt")}</th><th>{t("adm.pos.sales.deletedReason")}</th><th /></tr></thead>
+        <tbody>
+          {rows.map((s) => (
+            <tr key={s.id}>
+              <td data-label={t("adm.pos.sales.number")}><b>{s.number}</b></td>
+              <td data-label={t("adm.pos.sales.when")}>{fmt(s.created_at)}</td>
+              <td data-label={t("adm.tbl.store")}>{storeById.get(s.establishment_id)?.code || ""}</td>
+              <td data-label={t("adm.tbl.customer")}>{s.customer_name || ""}</td>
+              <td data-label={t("adm.pos.price.total")} className="r">{money(s.total, "usd", lang)}</td>
+              <td data-label={t("adm.pos.sales.deletedAt")}>{fmt(s.deleted_at)}</td>
+              <td data-label={t("adm.pos.sales.deletedReason")}>{reasonText(s.delete_reason)}</td>
+              <td><button type="button" className="btn-sm" disabled={busy} onClick={() => restore(s)}><Icon name="undo" size={13} /> {t("adm.pos.sales.restore")}</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Props: `me` (GET /admin/team/me) para el filtro de tienda global; sin él se deduce del contexto del POS.
  *  `params.number` (de la URL, `?tab=possales&number=Op2-000147`) precarga el filtro por número y abre esa
  *  venta: es el enlace que llevan los avisos por correo (p. ej. «anulación solicitada»). */
@@ -129,6 +189,9 @@ export default function PosSales({ me, params }) {
   const [custHits, setCustHits] = useState([]);
   const [customer, setCustomer] = useState(null);
   const [tick, setTick] = useState(0);
+  // Dueño y superadmin: ver las ventas eliminadas para restaurarlas.
+  const [showDeleted, setShowDeleted] = useState(false);
+  const isAdmin = Boolean(ctx?.is_admin);
   // La ficha de la venta (cajón lateral): abrirla no cambia la lista; cobrar/entregar/anular la refresca.
   const sp = useSalePanel({ me: who, ctx, onChanged: () => setTick((n) => n + 1) });
   // Llegó por enlace con número: en cuanto la lista trae esa venta, se abre su ficha (una sola vez).
@@ -284,6 +347,11 @@ export default function PosSales({ me, params }) {
         </select>
         <label className="pos-check"><input type="checkbox" checked={f.with_balance} onChange={set("with_balance")} /> {t("adm.pos.sales.withBalance")}</label>
         <input value={f.number} onChange={set("number")} placeholder={t("adm.pos.sales.number")} aria-label={t("adm.pos.sales.number")} />
+        {isAdmin && (
+          <button type="button" className={`btn-sm ${showDeleted ? "primary" : ""}`} aria-pressed={showDeleted} title={t("adm.pos.sales.showDeletedHint")} onClick={() => setShowDeleted((v) => !v)}>
+            <Icon name={showDeleted ? "receipt" : "trash"} size={13} /> {showDeleted ? t("adm.pos.sales.back") : t("adm.pos.sales.showDeleted")}
+          </button>
+        )}
         <div className="pos-cust-filter">
           {customer ? (
             <span className="pos-picked">{[customer.first_name, customer.last_name].filter(Boolean).join(" ")} <button type="button" className="btn-xs" onClick={() => setCustomer(null)} aria-label={t("adm.ord.clear")}><Icon name="close" size={12} /></button></span>
@@ -297,6 +365,11 @@ export default function PosSales({ me, params }) {
           )}
         </div>
       </div>
+      {isAdmin && showDeleted && (
+        <Accordion id="possales-deleted" icon="trash" title={t("adm.pos.sales.showDeleted")} defaultOpen>
+          <DeletedSales store={store} storeById={storeById} onRestored={() => setTick((n) => n + 1)} />
+        </Accordion>
+      )}
       <Accordion id="possales" icon="receipt" title={t("adm.scr.sales")} summary={summary} defaultOpen bodyClassName="scr-acc-table">
         <DataTable
           id="pos-sales" cols={cols} columns={columns} rows={rows} rowKey="id" totals={totals} totalsLabel={t("adm.tbl.total")}

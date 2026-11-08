@@ -37,6 +37,8 @@ import {
   sellableStore,
 } from "../../../../lib/pos-route";
 import { discountLimitFor, getPosSettings } from "../../../../lib/pos-settings";
+import { listDeletedSales } from "../../../../lib/pos-sale-admin";
+import { saleAdminDenied } from "../../../../lib/sale-permissions";
 
 /**
  * VENTAS DEL PUNTO DE VENTA.
@@ -68,6 +70,16 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
   await posHandler(req, res, async () => {
     const scope = await posScope(req);
     const q = req.query as Record<string, string | undefined>;
+    // Deleted (hidden) sales: owner and superadmin only, to restore them (lib/pos-sale-admin.ts).
+    if (q.deleted === "1") {
+      const denied = saleAdminDenied(scope);
+      if (denied) throw new PosError(denied, 403);
+      const storeIds = q.store ? [(await sellableStore(req, scope, q.store)).id] : null;
+      const rows = await listDeletedSales(req.scope, storeIds, Math.min(200, Number(q.limit) || 100));
+      const contacts = await customerContacts(req.scope, rows.map((s) => s.customer_id));
+      res.json({ sales: rows.map((s) => saleWithContact(s, s.customer_id ? contacts.get(s.customer_id) : undefined)) });
+      return;
+    }
     const ids = q.store ? [(await sellableStore(req, scope, q.store)).id] : await scopeStoreIds(req, scope);
     const seller = ownSalesOnly(scope);
     const mine = q.mine === "1";

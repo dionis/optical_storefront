@@ -30,6 +30,9 @@ export const ASSIGNABLE_ROLES: readonly StaffRole[] = ["superadmin", "supervisor
 
 const RANK: Record<StaffRole, number> = { owner: 5, superadmin: 4, supervisor: 3, manager: 2, seller: 1 };
 
+/** How high a role sits (owner 5 … seller 1); 0 for no role. "Higher privileges" means a larger number. */
+export const roleRank = (role: StaffRole | null | undefined): number => (role ? RANK[role] : 0);
+
 /**
  * The owner among the users (ordered oldest first): the one whose email is
  * `ownerEmail` (case-insensitive), else the oldest. Pure; null when no users.
@@ -200,6 +203,9 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/admin\/pos\/(context|products|sales|customers|settings|terminals|discount-approvals|insurance-claims|lens-matrix)$/ },
   { method: "POST", path: /^\/admin\/pos\/(quote|sales|discount-approvals|terminals|prescriptions\/ocr)$/ },
   { method: "GET", path: /^\/admin\/pos\/(sales|customers|discount-approvals)\/[^/]+$/ },
+  // Correcting a sale's details: the route lets in the person who made it and anyone above their role (lib/sale-permissions.ts).
+  // Deleting, restoring and moving a sale are deliberately NOT here: owner and superadmin only.
+  { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt|documents)$/ },
   { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
   { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },

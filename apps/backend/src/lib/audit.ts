@@ -29,6 +29,11 @@ export const AUDIT_ACTIONS = [
   "sale.void",
   "sale.void_request",
   "sale.deliver",
+  // After the sale (lib/pos-sale-admin.ts): details corrected, hidden, brought back, moved to another store.
+  "sale.edit",
+  "sale.delete",
+  "sale.restore",
+  "sale.move",
   "payment.method",
   "payment.collect",
   "insurance.paid",

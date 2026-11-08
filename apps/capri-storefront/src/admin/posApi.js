@@ -66,6 +66,14 @@ export const collectPayment = (id, payments) => call(`/admin/pos/sales/${encodeU
 /** Hand over; with `payments` (same rows as collectPayment) the balance is collected in the same call (HU-32). */
 export const deliverSale = (id, payments = null) => call(`/admin/pos/sales/${encodeURIComponent(id)}/deliver`, { method: "POST", body: payments?.length ? { payments } : {} }).then(after(SALE_READS));
 export const voidSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/void`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
+// After the sale (backend lib/pos-sale-admin.ts): correct the details (the seller who made it or someone above them),
+// and — owner and superadmin only — hide it, bring it back, or move it to another store (new number there).
+export const updateSale = (id, patch) => call(`/admin/pos/sales/${encodeURIComponent(id)}`, { method: "POST", body: patch }).then(after(SALE_READS));
+export const deleteSale = (id, reason, note) => call(`/admin/pos/sales/${encodeURIComponent(id)}/delete`, { method: "POST", body: { reason, note } }).then(after(SALE_READS));
+export const restoreSale = (id) => call(`/admin/pos/sales/${encodeURIComponent(id)}/restore`, { method: "POST", body: {} }).then(after(SALE_READS));
+export const moveSale = (id, store) => call(`/admin/pos/sales/${encodeURIComponent(id)}/move`, { method: "POST", body: { store } }).then(after(SALE_READS));
+export const listDeletedSales = (store) => call(`/admin/pos/sales${qs({ deleted: 1, store })}`);
+export const DELETE_REASONS = ["duplicate", "test", "wrong_store", "entered_by_mistake", "other"];
 
 export const listTerminals = (store) => cached(`/admin/pos/terminals${qs({ store })}`, TTL.context);
 export const createTerminal = (body) => call("/admin/pos/terminals", { method: "POST", body }).then(after(CONTEXT_READS));
