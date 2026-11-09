@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { LIMITS, typedDecimal, typedSigned } from "../data/fieldRules.js";
-import { PRISM_BASES, RX_TYPES, binocularPd, inferType, normalizeField, setEyeField, setPd, validateRx, withType } from "./rxRules.js";
+import { PRISM_BASES, RX_TYPES, binocularPd, flipSign, inferType, normalizeField, setEyeField, setPd, validateRx, withType } from "./rxRules.js";
 import HelpTip from "./HelpTip.jsx";
 import "./pos-rx.css";
 
@@ -63,13 +63,27 @@ export default function RxForm({
       );
     }
     const off = disabled || (k === "axis" && (Number(value[eye].cyl) || 0) === 0);
-    return (
-      <td key={k} className={err ? "err" : ""}>
-        <input id={id} inputMode={k === "axis" ? "numeric" : "decimal"} maxLength={LIMITS.measure} disabled={off} value={value[eye][k]} aria-label={label} aria-invalid={err ? true : undefined} title={err ? t(err) : undefined}
-          onChange={(e) => onChange(setEyeField(value, eye, k, TYPED[k](e.target.value)))}
-          onBlur={() => { touch(`${eye}-${k}`); const n = normalizeField(k, value[eye][k]); if (n !== value[eye][k]) onChange(setEyeField(value, eye, k, n)); }} />
-      </td>
+    const input = (
+      <input id={id} inputMode={k === "axis" ? "numeric" : "decimal"} maxLength={LIMITS.measure} disabled={off} value={value[eye][k]} aria-label={label} aria-invalid={err ? true : undefined} title={err ? t(err) : undefined}
+        onChange={(e) => onChange(setEyeField(value, eye, k, TYPED[k](e.target.value)))}
+        onBlur={() => { touch(`${eye}-${k}`); const n = normalizeField(k, value[eye][k]); if (n !== value[eye][k]) onChange(setEyeField(value, eye, k, n)); }} />
     );
+    // Esfera y cilindro pueden ser negativos: el teclado numérico del teléfono o
+    // la tableta no tiene «−», así que la casilla lleva su botón «±».
+    if (k === "sph" || k === "cyl") {
+      return (
+        <td key={k} className={err ? "err" : ""}>
+          <span className="pos-rx-signed">
+            <button type="button" className="pos-rx-sign" tabIndex={-1} disabled={off}
+              aria-label={t("adm.pos.rx.flipSign", { field: label })} title={t("adm.pos.rx.flipSign", { field: label })}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(setEyeField(value, eye, k, flipSign(value[eye][k]))); document.getElementById(id)?.focus(); }}>±</button>
+            {input}
+          </span>
+        </td>
+      );
+    }
+    return <td key={k} className={err ? "err" : ""}>{input}</td>;
   };
   const pdCell = (eye) => {
     const k = eye === "od" ? "pd_od" : "pd_os";

@@ -719,6 +719,8 @@ export interface QuotedLine {
   sku: string | null;
   selection: PosLine["selection"];
   description: string | null;
+  /** Own frame: brand, model, color and size the clerk typed (null = a catalog frame or not given). */
+  own_frame: PosLine["own_frame"];
   /** Lens design category (sv | bifocal | prog), null for a bare frame. */
   lens_category: string | null;
   /** The design needs an ADD in the prescription (bifocal, progressive). */
@@ -873,9 +875,11 @@ export async function quoteSale(
       sku: variant?.sku ?? null,
       selection: line.selection,
       description: line.description,
+      own_frame: line.own_frame,
       lens_category: line.selection.design_code === "frame-only" ? null : category,
       lens_requires_add: line.selection.design_code === "frame-only" ? false : requiresAdd,
-      eye_size: Number.isFinite(eye) && eye > 0 ? eye : null,
+      // The customer's own frame: the lens width they gave (small-frame checks use it too).
+      eye_size: line.kind === "own_frame" ? line.own_frame?.eye_size ?? null : Number.isFinite(eye) && eye > 0 ? eye : null,
       list,
       frame: d.frame,
       lenses: d.lenses,
@@ -1428,7 +1432,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           // already the reduced price; this keeps what it was before and by how much.
           promo: l.promo,
           frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
-          own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i] } : null,
+          own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i], ...(l.own_frame ?? {}) } : null,
         };
         // Nothing is shipped from the till: without this Medusa would ask for
         // a shipping method before completing the cart.

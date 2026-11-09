@@ -179,6 +179,7 @@ const ownLine = (selection: Partial<PosLine["selection"]> = {}): PosLine => ({
   selection: { design_code: "sv", material_code: "cr39", photo_code: null, ar_code: null, finish: null, ...selection },
   description: "Ray-Ban",
   photo: null,
+  own_frame: null,
 });
 
 const fullBreakdown = (over: Partial<Awaited<ReturnType<typeof computeLensBreakdown>>> = {}) => ({

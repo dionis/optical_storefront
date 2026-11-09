@@ -43,6 +43,21 @@ export function snapTo(n, step) {
  * de la hoja. Devuelve "" si no es un número. Nunca recorta al rango: el error
  * se enseña, no se esconde.
  */
+/**
+ * Cambia el signo de lo escrito en esfera o cilindro (botón «±» de la
+ * cuadrícula): el teclado numérico de los teléfonos y tabletas no trae «−», así
+ * que sin esto un cilindro negativo no se podía escribir. Vacío → «-» para
+ * seguir tecleando la cifra. Pura.
+ */
+export function flipSign(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s || s === "+") return "-";
+  if (s === "-") return "+";
+  if (s.startsWith("-")) return `+${s.slice(1)}`;
+  if (s.startsWith("+")) return `-${s.slice(1)}`;
+  return `-${s}`;
+}
+
 export function normalizeField(field, raw) {
   const r = RX_RULES[field];
   const n = num(String(raw ?? "").replace(/^\+/, ""));

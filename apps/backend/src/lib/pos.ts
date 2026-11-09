@@ -300,6 +300,58 @@ export interface PosLineInput {
   description?: unknown;
   /** Own frame: photo as a `data:` URL, stored in the private bucket. */
   photo?: unknown;
+  /** Own frame: brand, model, color and its size (lens width, bridge, temple), for the lab. */
+  own_frame?: unknown;
+}
+
+/**
+ * The frame the customer brought, as the lab needs it: brand, model, color and
+ * the three numbers printed on the temple (lens width – bridge – temple
+ * length, mm; e.g. 52-18-140). Every field optional.
+ */
+export interface OwnFrameSpecs {
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  eye_size: number | null;
+  bridge: number | null;
+  temple: number | null;
+}
+
+/** Plausible ranges (mm) of a frame's printed size; outside = a typo, refused. */
+export const OWN_FRAME_RANGES = { eye_size: [30, 75], bridge: [10, 30], temple: [100, 165] } as const;
+
+/** Validates the own-frame specs. Reasons: `bad_own_frame`. Pure. */
+export function cleanOwnFrame(raw: unknown): { specs: OwnFrameSpecs | null } | { reason: string } {
+  if (raw == null) return { specs: null };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { reason: "bad_own_frame" };
+  const o = raw as Record<string, unknown>;
+  const out: OwnFrameSpecs = {
+    brand: text(o["brand"], 60) || null,
+    model: text(o["model"], 60) || null,
+    color: text(o["color"], 40) || null,
+    eye_size: null,
+    bridge: null,
+    temple: null,
+  };
+  for (const k of ["eye_size", "bridge", "temple"] as const) {
+    const v = o[k];
+    if (v == null || v === "") continue;
+    const n = Number(String(v).replace(",", "."));
+    const [min, max] = OWN_FRAME_RANGES[k];
+    if (!Number.isFinite(n) || n < min || n > max) return { reason: "bad_own_frame" };
+    out[k] = Math.round(n * 2) / 2;
+  }
+  return { specs: Object.values(out).some((v) => v != null) ? out : null };
+}
+
+/** «Ray-Ban RB5154 · negro · 51-21-145»: what the lab ticket and the line title say. Pure. */
+export function ownFrameSummary(specs: OwnFrameSpecs | null, description: string | null = null): string | null {
+  const size = specs && specs.eye_size != null ? [specs.eye_size, specs.bridge, specs.temple].filter((v) => v != null).join("-") : "";
+  const parts = specs ? [[specs.brand, specs.model].filter(Boolean).join(" "), specs.color, size].filter(Boolean) : [];
+  const auto = parts.join(" · ");
+  if (description && auto) return `${auto} — ${description}`.slice(0, 160);
+  return (description || auto || null);
 }
 
 export interface PosLine {
@@ -308,6 +360,8 @@ export interface PosLine {
   selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null; finish: LensFinish | null };
   description: string | null;
   photo: string | null;
+  /** Own frame only: brand, model, color and size (null = not given). */
+  own_frame: OwnFrameSpecs | null;
 }
 
 /** A sale carries one frame: either from the catalog or the customer's own, never both. */
@@ -333,6 +387,8 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
     // A frame the customer brought only makes sense with lenses for it.
     if (kind === "own_frame" && design_code === "frame-only") return { reason: "own_frame_needs_lenses" };
     const photo = typeof raw.photo === "string" && raw.photo.startsWith("data:image/") ? raw.photo : null;
+    const own = kind === "own_frame" ? cleanOwnFrame(raw.own_frame) : { specs: null };
+    if ("reason" in own) return own;
     // Only the two finish codes; anything else is a bad line, not a silent default.
     const rawFinish = raw.selection?.finish;
     const finish = rawFinish == null || rawFinish === "" ? null : parseLensFinish(rawFinish);
@@ -347,8 +403,10 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
         ar_code: code(raw.selection?.ar_code),
         finish: design_code === "frame-only" ? null : finish,
       },
-      description: kind === "own_frame" ? text(raw.description, 160) || null : null,
+      // The lab reads the brand, model, color and size first, then the clerk's note.
+      description: kind === "own_frame" ? ownFrameSummary(own.specs, text(raw.description, 160) || null) : null,
       photo: kind === "own_frame" ? photo : null,
+      own_frame: kind === "own_frame" ? own.specs : null,
     });
   }
   return { lines };

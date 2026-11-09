@@ -58,3 +58,11 @@
 
 /* Las dos entradas del OCR en el paso Receta (PosSale.jsx) */
 .pos-rx-ocr { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Esfera y cilindro: botón «±» dentro de la casilla (el teclado numérico del teléfono no trae «−»). */
+.pos .pos-rx-signed { position: relative; display: block; }
+.pos .pos-rx-grid .pos-rx-signed input { padding-left: 26px; }
+.pos-rx-sign { position: absolute; left: 3px; top: 50%; transform: translateY(-50%); width: 24px; height: 30px; border: 0; border-radius: 6px; background: var(--adm-surface-2); color: var(--adm-navy); font: 800 15px/1 var(--adm-font); cursor: pointer; padding: 0; }
+.pos-rx-sign:active { background: var(--adm-accent-soft); }
+.pos-rx-sign:disabled { opacity: .4; cursor: default; }
+@media (pointer: coarse) { .pos-rx-sign { width: 28px; height: 36px; } .pos .pos-rx-grid .pos-rx-signed input { padding-left: 32px; } }

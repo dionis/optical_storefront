@@ -186,7 +186,14 @@ export function jobHtml(doc) {
         <table class="kv"><tbody>
           <tr><td>${esc(t("adm.doc.job.handling"))}</td><td><b>${esc(handling)}</b></td></tr>
           ${l.own_frame
-            ? `<tr><td>${esc(t("adm.doc.job.ownDesc"))}</td><td>${esc(l.own_frame.description || "—")}</td></tr>
+            ? `${l.own_frame.brand || l.own_frame.model || l.own_frame.eye_size != null
+                ? `<tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.own_frame.brand || "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.own_frame.model, l.own_frame.color].filter(Boolean).join(" · ") || "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.eye"))}</td><td>${esc(l.own_frame.eye_size ?? "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.bridge"))}</td><td>${esc(l.own_frame.bridge ?? "—")}</td></tr>
+                   <tr><td>${esc(t("adm.doc.job.temple"))}</td><td>${esc(l.own_frame.temple ?? "—")}</td></tr>`
+                : ""}
+               <tr><td>${esc(t("adm.doc.job.ownDesc"))}</td><td>${esc(l.own_frame.description || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.photo"))}</td><td>${esc(l.own_frame.has_photo ? t("adm.doc.job.photoYes") : t("adm.doc.job.photoNo"))}</td></tr>`
             : `<tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.frame?.brand || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.frame?.model, l.variant_title].filter(Boolean).join(" · ") || "—")}</td></tr>

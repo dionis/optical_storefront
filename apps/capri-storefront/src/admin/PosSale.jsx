@@ -64,7 +64,17 @@ export function ageFrom(birth, today = new Date()) {
 
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
-const EMPTY_OWN = { open: false, description: "", photo: null };
+const EMPTY_OWN = { open: false, brand: "", model: "", color: "", eye_size: "", bridge: "", temple: "", description: "", photo: null };
+/** Medidas impresas en la varilla (mm): ancho del lente – puente – largo de la varilla. Mismos límites que el servidor (OWN_FRAME_RANGES). */
+const OWN_SIZE = { eye_size: [30, 75, "52"], bridge: [10, 30, "18"], temple: [100, 165, "140"] };
+const ownSizeBad = (k, v) => { if (String(v ?? "").trim() === "") return false; const n = Number(String(v).replace(",", ".")); return !Number.isFinite(n) || n < OWN_SIZE[k][0] || n > OWN_SIZE[k][1]; };
+/** «Ray-Ban RB5154 · Negro · 51-21-145 — nota», como lo resume el servidor (ownFrameSummary). */
+const ownTitle = (o) => {
+  const size = String(o.eye_size || "").trim() ? [o.eye_size, o.bridge, o.temple].map((v) => String(v || "").trim()).filter(Boolean).join("-") : "";
+  const auto = [[o.brand, o.model].map((v) => v.trim()).filter(Boolean).join(" "), o.color.trim(), size].filter(Boolean).join(" · ");
+  const note = o.description.trim();
+  return auto && note ? `${auto} — ${note}` : auto || note;
+};
 /**
  * Teclado en pantalla (tablet): mide cuánto tapa el teclado con visualViewport
  * y lo publica como `--pos-kb` en la raíz del POS, más la clase `kb-open`. La
@@ -476,8 +486,11 @@ export default function PosSale({ me }) {
     setOwn(EMPTY_OWN);
   };
   const addOwn = () => {
-    if (!own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
-    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title: own.description, description: own.description, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
+    const title = ownTitle(own);
+    if (!own.brand.trim() && !own.model.trim() && !own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
+    if (Object.keys(OWN_SIZE).some((k) => ownSizeBad(k, own[k]))) { toast({ tone: "error", title: t("adm.err.pos.bad_own_frame") }); return; }
+    const specs = { brand: own.brand.trim(), model: own.model.trim(), color: own.color.trim(), eye_size: own.eye_size.trim(), bridge: own.bridge.trim(), temple: own.temple.trim() };
+    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title, description: own.description.trim(), own_frame: specs, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
     setOwn(EMPTY_OWN);
   };
   // Reciben el archivo ya elegido (PosCapture vacía el input para que repetir la misma foto dispare otra vez).
@@ -516,7 +529,7 @@ export default function PosSale({ me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null }));
+  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null, ...(l.kind === "own_frame" ? { own_frame: l.own_frame || null } : {}) }));
   const wornBody = () => (wears && !noRx ? {
     rx: toRx(rxWorn),
     worn_source: worn.source,
@@ -845,7 +858,27 @@ export default function PosSale({ me }) {
                 <HelpTip topic="pos.ownFrame" />
                 {own.open && (
                   <div className="pos-own">
-                    <label>{t("adm.pos.own.description")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
+                    {/* Marca, modelo, color y las 3 medidas de la varilla (ancho del lente – puente – varilla) para el laboratorio. */}
+                    <div className="pos-own-grid">
+                      <label>{t("adm.pos.own.brand")}<input maxLength={60} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
+                      <label>{t("adm.pos.own.model")}<input maxLength={60} value={own.model} onChange={(e) => setOwn((o) => ({ ...o, model: e.target.value }))} placeholder={t("adm.pos.own.modelPh")} autoCapitalize="characters" enterKeyHint="next" /></label>
+                      <label>{t("adm.pos.own.color")}<input maxLength={40} value={own.color} onChange={(e) => setOwn((o) => ({ ...o, color: e.target.value }))} placeholder={t("adm.pos.own.colorPh")} autoCapitalize="sentences" enterKeyHint="next" /></label>
+                    </div>
+                    <fieldset className="pos-own-size">
+                      <legend>{t("adm.pos.own.size")} <small className="muted">{t("adm.pos.own.sizeHint")}</small></legend>
+                      {Object.keys(OWN_SIZE).map((k) => (
+                        <label key={k} className={ownSizeBad(k, own[k]) ? "err" : ""}>
+                          {t(`adm.pos.own.${k}`)}
+                          <span className="pos-own-mm">
+                            <input inputMode="decimal" maxLength={5} value={own[k]} placeholder={OWN_SIZE[k][2]} aria-invalid={ownSizeBad(k, own[k]) || undefined}
+                              onChange={(e) => setOwn((o) => ({ ...o, [k]: e.target.value.replace(/[^\d.,]/g, "") }))} enterKeyHint="next" />
+                            <small>mm</small>
+                          </span>
+                          {ownSizeBad(k, own[k]) && <small className="field-err" role="alert">{t("adm.pos.own.range", { min: OWN_SIZE[k][0], max: OWN_SIZE[k][1] })}</small>}
+                        </label>
+                      ))}
+                    </fieldset>
+                    <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
                     {/* Cámara trasera o galería; vista previa con «Repetir foto». La foto se reduce en photoDataUrl (imagePrep). */}
                     <PosCapture onFile={onOwnPhoto} preview={own.photo} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")}
                       onClear={() => setOwn((o) => ({ ...o, photo: null }))} previewAlt={t("adm.pos.own.tag")} />
@@ -864,7 +897,7 @@ export default function PosSale({ me }) {
               ) : (
                 <li key={l.key}>
                   <PosFramePhoto line={l} />
-                  <span><b>{t("adm.pos.own.tag")}</b> <small className="muted">{l.description}</small></span>
+                  <span><b>{t("adm.pos.own.tag")}</b> <small className="muted">{l.title || l.description}</small></span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
               ))}
@@ -922,7 +955,7 @@ export default function PosSale({ me }) {
               <li key={l.key}>
                 <div className="pos-lens-head">
                   <PosFramePhoto line={l} size="md" />
-                  <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
+                  <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.title || l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
                 </div>
                 {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />

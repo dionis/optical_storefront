@@ -717,7 +717,15 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                       <div className="sd-line-info">
                         <div className="sd-line-title">{own ? t("adm.sd.ownFrame") : [l.frame?.brand && !String(l.title || "").toLowerCase().startsWith(String(l.frame.brand).toLowerCase()) ? l.frame.brand : null, l.title].filter(Boolean).join(" ")}</div>
                         <div className="sd-line-sub">
-                          {own ? <span>{l.own_frame?.description || l.title || t("adm.sd.ownNoDesc")}</span> : (
+                          {own ? (
+                            <>
+                              {l.own_frame?.brand && <span>{t("adm.sd.brand")}: <b>{[l.own_frame.brand, l.own_frame.model].filter(Boolean).join(" ")}</b></span>}
+                              {!l.own_frame?.brand && l.own_frame?.model && <span>{t("adm.pos.own.model")}: <b>{l.own_frame.model}</b></span>}
+                              {l.own_frame?.color && <span>{t("adm.sd.color")}: <b>{l.own_frame.color}</b></span>}
+                              {l.own_frame?.eye_size != null && <span>{t("adm.pos.own.size")}: <b>{[l.own_frame.eye_size, l.own_frame.bridge, l.own_frame.temple].filter((v) => v != null).join("-")}</b></span>}
+                              {!(l.own_frame?.brand || l.own_frame?.model || l.own_frame?.eye_size != null) && <span>{l.own_frame?.description || l.title || t("adm.sd.ownNoDesc")}</span>}
+                            </>
+                          ) : (
                             <>
                               {l.frame?.brand && <span>{t("adm.sd.brand")}: <b>{l.frame.brand}</b></span>}
                               {l.variant_title && <span>{t("adm.sd.color")}: <b>{l.variant_title}</b></span>}

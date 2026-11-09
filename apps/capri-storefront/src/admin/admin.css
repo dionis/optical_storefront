@@ -1475,6 +1475,15 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .pos .pos-rx-grid input { padding: 4px 2px; }
 .pos-own label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--adm-muted); }
 .pos-own label input { width: 100%; }
+.pos-own-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pos-own-size { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.pos-own-size legend { font-size: 12px; font-weight: 800; color: var(--adm-ink); margin-bottom: 4px; padding: 0; }
+.pos-own-size legend small { font-weight: 600; }
+.pos-own-mm { display: flex; align-items: center; gap: 4px; }
+.pos-own-mm input { flex: 1 1 auto; min-width: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.pos-own-mm small { color: var(--adm-muted); font-weight: 700; }
+.pos-own-size label.err input { border-color: var(--adm-red); }
+@media (max-width: 560px) { .pos-own-grid { grid-template-columns: minmax(0, 1fr); } }
 .pos-own-photo { display: flex; flex-wrap: wrap; gap: 8px; }
 .pos-own label.pos-file { flex-direction: row; color: inherit; }
 .pos-cfg-add > input, .pos-cfg-add > select { flex: 1 1 180px; }

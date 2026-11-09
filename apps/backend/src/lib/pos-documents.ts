@@ -83,7 +83,19 @@ export interface DocLine {
   lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null; finish: LensFinish | null } | null;
   handling: "lenses_only" | "frame_supplied" | "patient_own_frame" | null;
   frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
-  own_frame: { description: string | null; has_photo: boolean; photo_url?: string | null; photo_key?: string | null } | null;
+  own_frame: {
+    description: string | null;
+    has_photo: boolean;
+    photo_url?: string | null;
+    photo_key?: string | null;
+    /** What the clerk typed about the customer's frame (null on older sales). */
+    brand?: string | null;
+    model?: string | null;
+    color?: string | null;
+    eye_size?: number | null;
+    bridge?: number | null;
+    temple?: number | null;
+  } | null;
   prescription_id: string | null;
   /**
    * The owner's promotion on this line («Productos y precios», sale line
@@ -257,7 +269,7 @@ export async function buildSaleDocument(
     const withLenses = Boolean(s.design_code) && s.design_code !== "frame-only";
     const pm = it.product_id ? productMeta.get(String(it.product_id)) ?? {} : {};
     const n = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
-    const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null } | null;
+    const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null;
     // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
     const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
     const list = Number(md.list_price ?? it.unit_price ?? 0);
@@ -303,6 +315,12 @@ export async function buildSaleDocument(
         ? {
             description: ownFrame?.description ?? null,
             has_photo: Boolean(ownFrame?.photo_key),
+            brand: ownFrame?.brand ?? null,
+            model: ownFrame?.model ?? null,
+            color: ownFrame?.color ?? null,
+            eye_size: n(ownFrame?.eye_size),
+            bridge: n(ownFrame?.bridge),
+            temple: n(ownFrame?.temple),
             ...(opts.withPhotoUrls ? { photo_url: ownPhotoUrl } : {}),
             ...(opts.forEmail ? { photo_key: ownFrame?.photo_key ?? null } : {}),
           }

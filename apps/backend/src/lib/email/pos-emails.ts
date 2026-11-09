@@ -253,7 +253,9 @@ export function renderReceiptEmail(doc: SaleDocument, locale: EmailLocale, extra
   const lines = (doc.lines ?? []).map((l, i) => {
     const name = l.kind === "own_frame" ? `${posT(locale, "own_frame")}${l.title ? ` (${l.title})` : ""}` : [l.title, l.variant_title].filter(Boolean).join(" · ");
     const lens = l.lens ? [lbl(l.lens.design), lbl(l.lens.material), lbl(l.lens.photo), lbl(l.lens.ar)].filter(Boolean).join(" · ") : "";
-    const size = l.frame?.eye_size ? [l.frame.eye_size, l.frame.bridge].filter(Boolean).join("-") : "";
+    const size = l.frame?.eye_size
+      ? [l.frame.eye_size, l.frame.bridge].filter(Boolean).join("-")
+      : l.own_frame?.eye_size ? [l.own_frame.eye_size, l.own_frame.bridge, l.own_frame.temple].filter(Boolean).join("-") : "";
     const specs = [l.sku && `${posT(locale, "receipt_code")}: ${l.sku}`, l.frame?.brand && `${posT(locale, "receipt_brand")}: ${l.frame.brand}`, size && `${posT(locale, "receipt_size")}: ${size}`].filter(Boolean).join(" · ");
     const parts = [l.kind === "frame" && l.frame_price > 0 && `${posT(locale, "receipt_frame")}: ${money(l.frame_price, locale)}`, l.lens_price > 0 && `${posT(locale, "receipt_lenses")}: ${money(l.lens_price, locale)}`, l.tax_amount > 0 && `${posT(locale, "receipt_tax")}: ${money(l.tax_amount, locale)}`].filter(Boolean).join(" · ");
     // Each line shows its LIST price: the lines add up to the subtotal, then the
