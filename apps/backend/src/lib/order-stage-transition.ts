@@ -9,6 +9,7 @@ import {
 import { ORDER_STAGES, type OrderStage } from "./order-status";
 import { fetchBoardOrder, isOrderStage, liveFulfillments } from "./order-board";
 import { resolveEmailLocale } from "./email/copy";
+import { orderStorefrontOrigin, withStorefrontOrigin } from "./storefront-origin";
 import { renderOrderStageUpdate } from "./email/order-stage-update";
 import { sheetStageEvent, syncOrderToSheet } from "./gsheet-sync";
 import { tenant } from "./tenant";
@@ -501,6 +502,8 @@ export async function transitionOrderStage(
     let notifySms = false;
     let phone: string | null = null;
     let locale: string | null = null;
+    // The storefront the order was bought on: its tracking link points there (lib/storefront-origin.ts).
+    let origin: string | null = null;
     try {
       const query = container.resolve(ContainerRegistrationKeys.QUERY);
       const { data } = await query.graph({
@@ -517,9 +520,10 @@ export async function transitionOrderStage(
         (raw?.shipping_address?.phone ? String(raw.shipping_address.phone).trim() : "") ||
         null;
       locale = raw?.locale ?? null;
+      origin = orderStorefrontOrigin(md);
     } catch { /* sin metadata no hay SMS ni opt-out conocido; el email sale igual */ }
 
-    notified = await sendStageEmail(container, logger, {
+    notified = await withStorefrontOrigin(origin, () => sendStageEmail(container, logger, {
       email: after.email ? String(after.email) : null,
       displayId: after.display_id != null ? String(after.display_id) : orderId,
       orderId,
@@ -531,7 +535,7 @@ export async function transitionOrderStage(
       notifyEmail,
       notifySms,
       phone,
-    });
+    }));
   }
 
   if (after && before.stage !== after.stage) {

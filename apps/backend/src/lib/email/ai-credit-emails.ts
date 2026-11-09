@@ -1,6 +1,7 @@
 import type { EmailLocale } from "./copy";
 import { esc, shell, type RenderedEmail } from "./order-confirmation";
-import { storefrontOrigin } from "../order-access";
+// The panel lives on the default domain.
+import { defaultStorefrontOrigin } from "../storefront-origin";
 
 /**
  * AI credit emails: "the balance is getting low" (an owner's alert rule) and
@@ -58,7 +59,7 @@ const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{
 const usd = (v: number | null, locale: EmailLocale) =>
   v === null ? "—" : new Intl.NumberFormat(locale === "en" ? "en-US" : "es-US", { style: "currency", currency: "USD" }).format(v);
 const providerName = (p: string, locale: EmailLocale) => COPY[locale].provider[p] ?? p;
-const panelUrl = () => `${storefrontOrigin()}/admin?tab=aiusage`;
+const panelUrl = () => `${defaultStorefrontOrigin()}/admin?tab=aiusage`;
 
 function rows(items: Array<[string, string]>): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12px 0">${items

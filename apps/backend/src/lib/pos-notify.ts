@@ -3,7 +3,8 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { resolveEmailLocale } from "./email/copy";
 import { renderApprovalRequestEmail } from "./email/pos-emails";
 import type { EstablishmentRow } from "./establishments";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import type { ApprovalRow } from "./pos-data";
 import { isAdminRole, resolveRole } from "./staff-roles";
 import { profilesByUser } from "./staff-profile-data";
@@ -47,7 +48,7 @@ export async function notifyApprovalRequest(
 ): Promise<number> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const notifications = container.resolve<INotificationModuleService>(Modules.NOTIFICATION);
-  const link = `${storefrontOrigin()}/admin?tab=approvals&approval=${encodeURIComponent(approval.id)}`;
+  const link = `${defaultStorefrontOrigin()}/admin?tab=approvals&approval=${encodeURIComponent(approval.id)}`;
   let sent = 0;
   for (const r of await approverRecipients(container)) {
     const locale = resolveEmailLocale(r.locale);

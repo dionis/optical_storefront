@@ -35,6 +35,8 @@ import { renderAdminOrderSms, renderCustomerOrderSms } from "../lib/sms/order-sm
 import { notificationHealth, undeliverableReason } from "../lib/notification-health";
 import { syncOrderToSheet } from "../lib/gsheet-sync";
 import { resolveStoreSettings } from "../lib/store-settings";
+import { withStorefrontOrigin } from "../lib/storefront-origin";
+import { orderOriginById } from "../lib/storefront-origin-http";
 import { PRESCRIPTION_MODULE } from "../modules/prescription/index";
 import type PrescriptionModuleService from "../modules/prescription/service";
 
@@ -59,7 +61,17 @@ const ORDER_FIELDS = [
   "customer.last_name",
 ];
 
-export default async function orderPlacedSubscriber({
+/**
+ * Every link and image in this order's emails points at the storefront the
+ * order was bought on (`metadata.storefront_origin`, lib/storefront-origin.ts);
+ * without one, at STOREFRONT_URL.
+ */
+export default async function orderPlacedSubscriber(args: SubscriberArgs<{ id: string }>): Promise<void> {
+  const origin = await orderOriginById(args.container, args.event.data.id);
+  return withStorefrontOrigin(origin, () => sendOrderPlaced(args));
+}
+
+async function sendOrderPlaced({
   event: { data },
   container,
 }: SubscriberArgs<{ id: string }>): Promise<void> {

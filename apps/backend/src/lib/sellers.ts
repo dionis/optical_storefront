@@ -2,7 +2,8 @@ import crypto from "crypto";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { SELLER_MODULE } from "../modules/seller/index";
 import type SellerModuleService from "../modules/seller/service";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import { normalizeSellerCodeLoose, normalizeSellerSourceLoose } from "./order-board";
 import { referralSourcesByOrder, sellerFactOrders, type AnalyticsFilter } from "./sales-analytics";
 
@@ -210,7 +211,7 @@ export interface SellerLinks {
 export interface Seller extends SellerRow, SellerLinks {}
 
 export function sellerLinks(seller: Pick<SellerRow, "id" | "code" | "token_version">): SellerLinks {
-  const origin = storefrontOrigin();
+  const origin = defaultStorefrontOrigin();
   const referral_url = `${origin}/?ref=${encodeURIComponent(seller.code)}`;
   const social_links = {} as Record<SellerSource, string>;
   for (const source of SELLER_SOURCES) {

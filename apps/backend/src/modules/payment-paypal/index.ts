@@ -40,6 +40,8 @@ import type {
   WebhookActionResult,
 } from "@medusajs/framework/types";
 import crypto from "node:crypto";
+// The shopper returns to the storefront they paid from (lib/storefront-origin.ts).
+import { storefrontOrigin } from "../../lib/storefront-origin";
 
 /** Normalizes any BigNumberInput variant into a plain JS number. */
 function toNumber(amount: BigNumberInput): number {
@@ -151,8 +153,8 @@ class PayPalPaymentProvider extends AbstractPaymentProvider<PayPalOptions> {
             experience_context: {
               payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
               user_action: "PAY_NOW",
-              return_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=confirm`,
-              cancel_url: `${process.env.STOREFRONT_URL ?? "http://localhost:3000"}/checkout?step=cancel`,
+              return_url: `${storefrontOrigin()}/checkout?step=confirm`,
+              cancel_url: `${storefrontOrigin()}/checkout?step=cancel`,
             },
           },
         },

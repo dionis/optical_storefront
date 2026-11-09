@@ -50,7 +50,8 @@ import type { Knex } from "@mikro-orm/knex";
 import { deriveOrderProgress, type OrderStage, type OrderTerminalState } from "./order-status";
 import { enrichLensItems, extractPaymentInfo, type PaymentInfo } from "./email/order-enrich";
 import { loadPrescriptionRecords } from "./prescription-read";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import { tenantName } from "./tenant";
 import {
   costRefOf,
@@ -2257,7 +2258,7 @@ export async function syncOrderToSheet(
     const { orderRow, historyRow, fileLinks, mirror } = buildRows(order, event, {
       tracking,
       ...extras,
-      adminUrl: `${storefrontOrigin()}/admin`,
+      adminUrl: `${defaultStorefrontOrigin()}/admin`,
       note: options.note,
       cost,
     });

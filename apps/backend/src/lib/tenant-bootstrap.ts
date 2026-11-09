@@ -22,7 +22,8 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { recordAudit } from "./audit";
 import { resolveEmailLocale } from "./email/copy";
 import { buildActivationLink, renderOwnerActivationEmail } from "./email/owner-activation-email";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import { invalidateStaffScope } from "./staff-scope";
 import { resolveStoreSettings, saveStoredOwnerUserId, storedOwnerUserId } from "./store-settings";
 import { tenant } from "./tenant";
@@ -67,7 +68,7 @@ export async function bootstrapTenant(container: MedusaContainer, input: Bootstr
     if (stillThere) throw new TenantBootstrapError("owner_already_set");
   }
 
-  const link = buildActivationLink(storefrontOrigin(), email);
+  const link = buildActivationLink(defaultStorefrontOrigin(), email);
   const report: BootstrapReport = {
     dry_run: !input.confirm,
     email,

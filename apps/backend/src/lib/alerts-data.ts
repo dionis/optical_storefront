@@ -18,7 +18,8 @@ import {
 import { resolveEmailLocale } from "./email/copy";
 import { renderAlertEmail, renderDigestEmail, type DigestData } from "./email/alert-emails";
 import { listEstablishments } from "./establishments";
-import { storefrontOrigin } from "./order-access";
+// Staff links (panel, alerts, seller links) always use the default domain: the panel lives there.
+import { defaultStorefrontOrigin } from "./storefront-origin";
 import { resolveStoreSettings } from "./store-settings";
 import { tenant } from "./tenant";
 
@@ -32,9 +33,9 @@ import { tenant } from "./tenant";
  */
 
 const svc = (c: MedusaContainer) => c.resolve<SalesAlertModuleService>(SALES_ALERT_MODULE);
-const panelUrl = () => `${storefrontOrigin()}/admin?tab=possales`;
+const panelUrl = () => `${defaultStorefrontOrigin()}/admin?tab=possales`;
 /** Where an immediate alert sends the reader: the sale it is about when it names one, else the sales list. */
-export function alertPanelUrl(ev: Pick<AlertEvent, "event" | "data">, origin = storefrontOrigin()): string {
+export function alertPanelUrl(ev: Pick<AlertEvent, "event" | "data">, origin = defaultStorefrontOrigin()): string {
   const number = ev.data.number;
   if (ev.event === "sale.void_requested" && number) return `${origin}/admin?tab=possales&number=${encodeURIComponent(String(number))}`;
   return `${origin}/admin?tab=possales`;

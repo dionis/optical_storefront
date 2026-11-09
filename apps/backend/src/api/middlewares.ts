@@ -17,6 +17,7 @@ import { sellerPublicRateLimit } from "./store/sellers/rate-limit";
 import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
 import { warmTenantProfile } from "../lib/tenant-profile";
+import { captureCartOrigin, storefrontOriginScope } from "../lib/storefront-origin-http";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -263,6 +264,18 @@ export default defineMiddlewares({
       // lib/security.ts; the storefront gets its own set from vercel.json.
       matcher: "/*",
       middlewares: [securityHeaders, tenantProfileWarm],
+    },
+    {
+      // Several storefronts on one backend (lib/storefront-origin.ts): links built
+      // while answering a shopper point at the storefront they came from, and the
+      // cart records it so the order's emails do too.
+      matcher: "/store*",
+      middlewares: [storefrontOriginScope],
+    },
+    {
+      matcher: "/store/carts*",
+      method: ["POST"],
+      middlewares: [captureCartOrigin],
     },
     {
       // Role gate for every admin route, Medusa's own included: owner and
