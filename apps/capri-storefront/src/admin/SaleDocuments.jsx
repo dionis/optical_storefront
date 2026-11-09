@@ -127,15 +127,29 @@ export const PRINT_CSS = `
   .duo .foot .qr svg{width:16mm;height:16mm} .duo .foot .bc svg{height:9mm;width:auto}
   .duo .copy{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:4px}
   .duo .note{font-size:9px;color:#444;margin-top:3px}
+  .jobduo{display:flex;width:100%;height:200mm;overflow:hidden;page-break-after:always}
+  .jobduo:last-child{page-break-after:auto}
+  .jobduo .half{flex:1 1 0;min-width:0;height:100%;overflow:hidden}
+  .jobduo .job{zoom:.66;max-width:none;padding:0 .12in;page-break-after:auto}
+  .jobduo .cut{flex:0 0 0;border-left:1.2px dashed #777;position:relative;margin:0 1mm}
+  .jobduo .cut span{position:absolute;top:2mm;left:-6.5px;font-size:13px;line-height:1;color:#555;background:#fff;transform:rotate(90deg)}
+  .jobduo .cut small{position:absolute;bottom:2mm;left:-4px;transform:rotate(-90deg);transform-origin:left top;white-space:nowrap;font-size:8px;color:#777;background:#fff}
+  .job .copy{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:10px}
   @page{margin:8mm}
   @media print{.noprint{display:none}}
 `;
 
 /** Hoja carta apaisada para el recibo doble; se añade después del CSS común, así que su @page gana. */
 export const DUO_PAGE_CSS = `@page{size:letter landscape;margin:6mm} html,body{width:100%;height:100%} body{overflow:hidden}`;
+/** La ficha doble puede ocupar varias hojas (una por línea con lentes): sin recortar el cuerpo. */
+const JOB_DUO_PAGE_CSS = `@page{size:letter landscape;margin:6mm}`;
 
-/** Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos. */
-export function jobHtml(doc) {
+/**
+ * Ficha de laboratorio: una por línea con lentes. Sin precios ni pagos.
+ * `copyKey` (opcional) pone al pie de qué copia se trata: la ficha se imprime
+ * doble, como el recibo (jobDuoHtml).
+ */
+export function jobHtml(doc, copyKey = null) {
   const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
   const t = tIn(lang);
   const head = (tk) => `
@@ -195,6 +209,13 @@ export function jobHtml(doc) {
                 : ""}
                <tr><td>${esc(t("adm.doc.job.ownDesc"))}</td><td>${esc(l.own_frame.description || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.photo"))}</td><td>${esc(l.own_frame.has_photo ? t("adm.doc.job.photoYes") : t("adm.doc.job.photoNo"))}</td></tr>`
+            : l.frame?.off_catalog
+            ? `<tr><td>${esc(t("adm.doc.job.frameSource"))}</td><td><b>${esc(t("adm.pos.store.tag"))}</b></td></tr>
+               <tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.frame.brand || "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.frame.model, l.frame.color].filter(Boolean).join(" · ") || "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.eye"))}</td><td>${esc(l.frame.eye_size ?? "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.bridge"))}</td><td>${esc(l.frame.bridge ?? "—")}</td></tr>
+               <tr><td>${esc(t("adm.doc.job.temple"))}</td><td>${esc(l.frame.temple ?? "—")}</td></tr>`
             : `<tr><td>${esc(t("adm.doc.job.maker"))}</td><td>${esc(l.frame?.brand || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.model"))}</td><td>${esc([l.frame?.model, l.variant_title].filter(Boolean).join(" · ") || "—")}</td></tr>
                <tr><td>${esc(t("adm.doc.job.frameMaterial"))}</td><td>${esc(l.frame?.material || "—")}</td></tr>
@@ -207,6 +228,25 @@ export function jobHtml(doc) {
           <div class="muted">${esc(t("adm.doc.job.fold"))} · ${esc(doc.sale.number)}</div></div>
         <div>${code128Svg(doc.sale.number)}</div>
       </div>
+      ${copyKey ? `<div class="copy">${esc(t(copyKey))}</div>` : ""}
+    </section>`;
+  }).join("");
+}
+
+/**
+ * Ficha de laboratorio DOBLE (decisión del dueño, 9-nov-2026), como el recibo:
+ * carta apaisada, la copia del laboratorio a la izquierda y la de la tienda a
+ * la derecha, con la línea de corte en medio. Una hoja por línea con lentes.
+ */
+export function jobDuoHtml(doc) {
+  const lang = doc.terminal.ticket_locale === "es" ? "es" : "en";
+  const t = tIn(lang);
+  return doc.tickets.map((tk) => {
+    const one = { ...doc, tickets: [tk] };
+    return `<section class="jobduo">
+      <div class="half">${jobHtml(one, "adm.doc.job.labCopy")}</div>
+      <div class="cut"><span>✂</span><small>${esc(t("adm.doc.duo.cut"))}</small></div>
+      <div class="half">${jobHtml(one, "adm.doc.job.storeCopy")}</div>
     </section>`;
   }).join("");
 }
@@ -406,7 +446,7 @@ export default function SaleDocuments({ saleId, compact = false, printer = null 
         if (!doc.tickets?.length) { toast({ tone: "info", title: t("adm.doc.noLenses") }); return; }
         const own = doc.tickets.find((tk) => tk.line.own_frame?.photo_url);
         setPhoto(own ? own.line.own_frame.photo_url : null);
-        await printHtml(`${doc.sale.number} · job`, jobHtml(doc));
+        await printHtml(`${doc.sale.number} · job`, jobDuoHtml(doc), JOB_DUO_PAGE_CSS);
       } else if (kind === "receipt_duo") {
         await printHtml(`${doc.sale.number} · receipt`, receiptDuoHtml(doc), DUO_PAGE_CSS);
       } else {

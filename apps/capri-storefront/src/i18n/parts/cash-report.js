@@ -143,7 +143,7 @@ export default {
     "adm.cash.panel.when": "Cuándo",
     "adm.cash.panel.where": "Dónde",
     "adm.cash.panel.noTill": "Sin punto de venta",
-    "adm.cash.panel.noCustomer": "Sin cliente",
+    "adm.cash.panel.noCustomer": "Sin paciente",
     "adm.cash.panel.voided": "anulada",
     "adm.cash.panel.session": "Sesión de caja",
     "adm.cash.panel.sessionLine": "Abierta el {opened} por {who} ({sig})",

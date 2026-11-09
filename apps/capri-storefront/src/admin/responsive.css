@@ -199,7 +199,7 @@ html.adm-touch .adm-shell .pos .pos-search { min-height: 48px; }
    columnas (OD | OI) y cada dato una fila (Esf, Cil, Eje, …). Así cabe sin
    desplazarse de lado y cada casilla mide la mitad de la pantalla. La tabla no
    cambia (lectores de pantalla y teclado siguen igual): solo su rejilla. */
-@container pos (max-width: 560px) {
+@container pos (max-width: 700px) {
   .adm-shell .pos .pos-rx-scroll { overflow: visible; }
   .adm-shell .pos .pos-rx-grid { display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; gap: 6px 8px; width: 100%; max-width: none; border-spacing: 0; }
   .adm-shell .pos .pos-rx-grid.cols-6 { grid-template-rows: repeat(7, auto); }

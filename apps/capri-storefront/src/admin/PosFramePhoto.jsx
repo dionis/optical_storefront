@@ -9,7 +9,8 @@ import Icon from "./icons.jsx";
 /** `line`: línea de la venta en PosSale.jsx. `size="md"` la reduce para acompañar a un formulario. */
 export default function PosFramePhoto({ line, size = "" }) {
   const { t } = useLang();
-  const own = line?.kind === "own_frame";
+  // La que se escribe a mano (del paciente o de la tienda fuera de catálogo) lleva la foto que se tomó.
+  const own = line?.kind === "own_frame" || line?.kind === "store_frame";
   const src = own ? line.photo : line?.image && resolveImageSized(line.image, 640);
   const [brokenSrc, setBrokenSrc] = useState(null);
   if (!src || src === brokenSrc) return <div className={`pos-frame-photo noimg ${size}`}><Icon name={own ? "camera" : "glasses"} size={28} /></div>;

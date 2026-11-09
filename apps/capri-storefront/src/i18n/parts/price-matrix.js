@@ -419,7 +419,7 @@ export default {
     "adm.pm.attr.featurePh": "Otra característica…",
     "adm.pm.attr.featureAdd": "Añadir característica",
     "adm.pm.attr.description": "Descripción",
-    "adm.pm.attr.descriptionPh": "Lo que lee el cliente en la ficha del modelo.",
+    "adm.pm.attr.descriptionPh": "Lo que lee el paciente en la ficha del modelo.",
 
     "adm.err.pricing.brand_taken": "Ya hay una marca con ese nombre.",
     "adm.err.pricing.slug_taken": "Ya hay una marca con ese nombre.",

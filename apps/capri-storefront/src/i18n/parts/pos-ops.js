@@ -10,7 +10,7 @@ export default {
     "adm.ops.collectDeliver.full": "Para entregar hay que cobrar el saldo completo ({v}). Un cobro parcial se registra con «Registrar cobro».",
     "adm.ops.collectDeliver.confirm": "¿Cobrar {v} y entregar la venta {n}?",
     "adm.ops.collectDeliver.done": "Saldo cobrado y venta entregada",
-    "adm.ops.deliver.body": "Se libera la bandeja y el pedido pasa a «Entregado» en Pedidos y en la hoja. Si el cliente pidió correo, recibe el aviso de entrega.",
+    "adm.ops.deliver.body": "Se libera la bandeja y el pedido pasa a «Entregado» en Pedidos y en la hoja. Si el paciente pidió correo, recibe el aviso de entrega.",
     "adm.ops.goal.title": "Meta del mes",
     "adm.ops.goal.progress": "{done} de {goal} · {pct} %",
     "adm.ops.goal.left": "Faltan {left}",
@@ -18,7 +18,7 @@ export default {
     "adm.ops.goal.none": "Sin meta mensual (se fija en el perfil de la persona).",
     "adm.ops.goal.base": "Sobre el neto del mes (sin impuesto), la misma base que la comisión.",
     "adm.alerts.ev.sale.void_requested": "Anulación solicitada (un vendedor pide anular)",
-    "adm.audit.action.sale.deliver": "Entrega al cliente",
+    "adm.audit.action.sale.deliver": "Entrega al paciente",
   },
   en: {
     "adm.ops.collectDeliver": "Collect balance and hand over",

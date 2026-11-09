@@ -29,6 +29,7 @@ import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
 import { WearingCaptureCard } from "./WearingPhoto.jsx";
+import "./pos-frame-modes.css";
 import PosCapture from "./PosCapture.jsx";
 import PosFrameCard, { frameLineFields } from "./PosFrameCard.jsx";
 import { setActiveStore } from "./useStoreTheme.js";
@@ -66,7 +67,21 @@ export function ageFrom(birth, today = new Date()) {
 
 const EMPTY_CUSTOMER = { first_name: "", last_name: "", email: "", phone: "", birth_date: "", address_1: "", city: "", province: "", postal_code: "" };
 const EMPTY_WORN_FRAME = { lens_width: "", bridge: "", temple: "", lens_height: "", total_width: "", condition: "good" };
-const EMPTY_OWN = { open: false, brand: "", model: "", color: "", eye_size: "", bridge: "", temple: "", description: "", photo: null };
+const EMPTY_OWN = { brand: "", model: "", color: "", eye_size: "", bridge: "", temple: "", description: "", photo: null, price: "" };
+/**
+ * De dónde sale la montura (decisión del dueño, 9-nov-2026):
+ *  - `catalog`: del catálogo (se busca) → se cobra al precio de la lista;
+ *  - `store`:   de la tienda pero fuera del catálogo → se describe y se cobra al precio que se escribe;
+ *  - `own`:     la trae el paciente → se describe y NO se cobra.
+ */
+const FRAME_MODES = [
+  { key: "catalog", icon: "barcode" },
+  { key: "store", icon: "store" },
+  { key: "own", icon: "user" },
+];
+/** Mismos límites de precio que el servidor (STORE_FRAME_PRICE en lib/pos.ts). */
+const STORE_PRICE_MAX = 5000;
+const storePriceBad = (v) => { const s = String(v ?? "").trim(); if (!s) return false; const n = Number(s.replace(/[$,\s]/g, "")); return !Number.isFinite(n) || n <= 0 || n > STORE_PRICE_MAX; };
 /** Medidas impresas en la varilla (mm): ancho del lente – puente – largo de la varilla. Mismos límites que el servidor (OWN_FRAME_RANGES). */
 const OWN_SIZE = { eye_size: [30, 75, "52"], bridge: [10, 30, "18"], temple: [100, 165, "140"] };
 const ownSizeBad = (k, v) => { if (String(v ?? "").trim() === "") return false; const n = Number(String(v).replace(",", ".")); return !Number.isFinite(n) || n < OWN_SIZE[k][0] || n > OWN_SIZE[k][1]; };
@@ -247,7 +262,7 @@ function LensPicker({ line, onChange, catalog, rxForm, noRx }) {
       <label>
         <span>{t("adm.pos.lens.design")}<HelpTip topic="pos.step.lenses" /></span>
         <select value={sel.design_code} onChange={(e) => set({ design_code: e.target.value, material_code: e.target.value === "frame-only" ? null : sel.material_code || recommended?.id, photo_code: null, ar_code: null, finish: finishFor(catalog, e.target.value) })}>
-          {line.kind === "frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
+          {line.kind !== "own_frame" && <option value="frame-only">{t("adm.pos.lens.frameOnly")}</option>}
           {designs.map((d) => <option key={d.id} value={d.id}>{L(d.label)}</option>)}
         </select>
       </label>
@@ -357,6 +372,7 @@ export default function PosSale({ me }) {
   const [lines, setLines] = useState([]);
   const [frameListOpen, setFrameListOpen] = useState(false);
   const [own, setOwn] = useState(EMPTY_OWN);
+  const [frameMode, setFrameMode] = useState("catalog");
   const [cardProduct, setCardProduct] = useState(null);
   const { products: catProducts = [], cases: catCases = [] } = useCatalog();
   // Ficha completa de una montura (AdminFrameCard) desde el buscador, o null si el catálogo local no la tiene.
@@ -490,12 +506,20 @@ export default function PosSale({ me }) {
     setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }]);
     setOwn(EMPTY_OWN);
   };
+  // La montura escrita a mano: la del paciente (no se cobra) o una de la tienda fuera del catálogo (se cobra).
   const addOwn = () => {
+    const store = frameMode === "store";
     const title = ownTitle(own);
-    if (!own.brand.trim() && !own.model.trim() && !own.description.trim()) { toast({ tone: "error", title: t("adm.pos.own.needDescription") }); return; }
+    if (store ? !own.brand.trim() && !own.model.trim() : !own.brand.trim() && !own.model.trim() && !own.description.trim()) {
+      toast({ tone: "error", title: t(store ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription") }); return;
+    }
     if (Object.keys(OWN_SIZE).some((k) => ownSizeBad(k, own[k]))) { toast({ tone: "error", title: t("adm.err.pos.bad_own_frame") }); return; }
+    if (store && (!String(own.price).trim() || storePriceBad(own.price))) { toast({ tone: "error", title: t("adm.err.pos.bad_store_frame_price") }); return; }
     const specs = { brand: own.brand.trim(), model: own.model.trim(), color: own.color.trim(), eye_size: own.eye_size.trim(), bridge: own.bridge.trim(), temple: own.temple.trim() };
-    setLines([{ key: `own-${Date.now()}`, kind: "own_frame", variant_id: null, title, description: own.description.trim(), own_frame: specs, photo: own.photo, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
+    const base = { variant_id: null, title, description: own.description.trim(), own_frame: specs, photo: own.photo };
+    setLines([store
+      ? { key: `store-${Date.now()}`, kind: "store_frame", ...base, store_price: Number(String(own.price).replace(/[$,\s]/g, "")), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }
+      : { key: `own-${Date.now()}`, kind: "own_frame", ...base, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
     setOwn(EMPTY_OWN);
   };
   // Reciben el archivo ya elegido (PosCapture vacía el input para que repetir la misma foto dispare otra vez).
@@ -524,8 +548,8 @@ export default function PosSale({ me }) {
       if (noRx) return { ...l, selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } };
       const multi = isMulti(rxNew);
       const d = l.selection.design_code;
-      const fits = d === "frame-only" ? l.kind === "frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
-      if (fits && !(l.kind === "frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
+      const fits = d === "frame-only" ? l.kind !== "own_frame" : catalog.DESIGNS.some((x) => x.id === d && (multi ? x.cat !== "sv" : x.cat === "sv"));
+      if (fits && !(l.kind !== "own_frame" && d === "frame-only" && l.touched !== true && !noRx)) return l;
       const first = catalog.DESIGNS.find((x) => (multi ? x.cat === "prog" : x.cat === "sv"));
       const power = maxPower(rxNew);
       const mat = catalog.MATERIALS.find((m) => power <= m.maxAbs) || catalog.MATERIALS[catalog.MATERIALS.length - 1];
@@ -534,7 +558,7 @@ export default function PosSale({ me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null, ...(l.kind === "own_frame" ? { own_frame: l.own_frame || null } : {}) }));
+  const apiLines = () => lines.map((l) => ({ kind: l.kind, variant_id: l.variant_id, selection: l.selection, description: l.description || null, photo: l.photo || null, ...(l.kind === "own_frame" ? { own_frame: l.own_frame || null } : {}), ...(l.kind === "store_frame" ? { store_frame: { ...(l.own_frame || {}), price: l.store_price } } : {}) }));
   const wornBody = () => (wears && !noRx ? {
     rx: toRx(rxWorn),
     worn_source: worn.source,
@@ -708,7 +732,7 @@ export default function PosSale({ me }) {
   const reset = () => {
     idem.current = null;
     setStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
-    setLines([]); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
+    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
@@ -864,16 +888,22 @@ export default function PosSale({ me }) {
             {/* Una sola montura por venta: del inventario o la del cliente. Elegida una, las dos vías se cierran hasta quitarla. */}
             {lines.length === 0 ? (
               <>
-                {!own.open && <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />}
-                <button type="button" className="btn-sm" onClick={() => setOwn((o) => ({ ...o, open: !o.open }))}>
-                  <Icon name={own.open ? "barcode" : "camera"} size={14} /> {t(own.open ? "adm.pos.own.useStock" : "adm.pos.own.add")}
-                </button>
-                <HelpTip topic="pos.ownFrame" />
-                {own.open && (
-                  <div className="pos-own">
+                {/* ¿De dónde sale la montura? Tres formas, una sola montura por venta. */}
+                <p className="pos-frame-mode-title">{t("adm.pos.fm.label")}<HelpTip topic="pos.ownFrame" /></p>
+                <div className="pos-frame-mode" role="radiogroup" aria-label={t("adm.pos.fm.label")}>
+                  {FRAME_MODES.map((fm) => (
+                    <button key={fm.key} type="button" role="radio" aria-checked={frameMode === fm.key} className={frameMode === fm.key ? "on" : ""} onClick={() => setFrameMode(fm.key)}>
+                      <Icon name={fm.icon} size={18} />
+                      <span><b>{t(`adm.pos.fm.${fm.key}`)}</b><small>{t(`adm.pos.fm.${fm.key}.hint`)}</small></span>
+                    </button>
+                  ))}
+                </div>
+                {frameMode === "catalog" && <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />}
+                {frameMode !== "catalog" && (
+                  <div className={`pos-own ${frameMode === "store" ? "is-store" : ""}`}>
                     {/* Marca, modelo, color y las 3 medidas de la varilla (ancho del lente – puente – varilla) para el laboratorio. */}
                     <div className="pos-own-grid">
-                      <label>{t("adm.pos.own.brand")}<input maxLength={60} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
+                      <label><span>{t("adm.pos.own.brand")}{frameMode === "store" && <i className="pos-req"> *</i>}</span><input maxLength={60} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
                       <label>{t("adm.pos.own.model")}<input maxLength={60} value={own.model} onChange={(e) => setOwn((o) => ({ ...o, model: e.target.value }))} placeholder={t("adm.pos.own.modelPh")} autoCapitalize="characters" enterKeyHint="next" /></label>
                       <label>{t("adm.pos.own.color")}<input maxLength={40} value={own.color} onChange={(e) => setOwn((o) => ({ ...o, color: e.target.value }))} placeholder={t("adm.pos.own.colorPh")} autoCapitalize="sentences" enterKeyHint="next" /></label>
                     </div>
@@ -891,12 +921,22 @@ export default function PosSale({ me }) {
                         </label>
                       ))}
                     </fieldset>
-                    <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t("adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
+                    {frameMode === "store" && (
+                      <label className={`pos-store-price ${storePriceBad(own.price) ? "err" : ""}`}>
+                        <span>{t("adm.pos.store.price")}<i className="pos-req"> *</i></span>
+                        <span className="pos-money-in"><b>$</b>
+                          <input inputMode="decimal" maxLength={9} value={own.price} placeholder="0.00" aria-invalid={storePriceBad(own.price) || undefined}
+                            onChange={(e) => setOwn((o) => ({ ...o, price: e.target.value.replace(/[^\d.]/g, "") }))} enterKeyHint="done" />
+                        </span>
+                        {storePriceBad(own.price) ? <small className="field-err" role="alert">{t("adm.pos.store.priceRange", { max: STORE_PRICE_MAX })}</small> : <small className="muted">{t("adm.pos.store.priceHint")}</small>}
+                      </label>
+                    )}
+                    <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t(frameMode === "store" ? "adm.pos.store.notesPh" : "adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
                     {/* Cámara trasera o galería; vista previa con «Repetir foto». La foto se reduce en photoDataUrl (imagePrep). */}
                     <PosCapture onFile={onOwnPhoto} preview={own.photo} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")}
                       onClear={() => setOwn((o) => ({ ...o, photo: null }))} previewAlt={t("adm.pos.own.tag")} />
-                    <small className="muted">{t("adm.pos.own.hint")}</small>
-                    <button type="button" className="btn-sm primary" onClick={addOwn}>{t("adm.pos.own.save")}</button>
+                    <small className="muted">{t(frameMode === "store" ? "adm.pos.store.hint" : "adm.pos.own.hint")}</small>
+                    <button type="button" className="btn-sm primary" onClick={addOwn}>{t(frameMode === "store" ? "adm.pos.store.save" : "adm.pos.own.save")}</button>
                   </div>
                 )}
               </>
@@ -908,9 +948,12 @@ export default function PosSale({ me }) {
                     onChangeColor={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, variant_id: v.id, variant_title: v.title, color: v.color ?? v.title, sku: v.sku ?? null, barcode: v.barcode ?? null, image: v.image || x.images?.[0] || null } : x)))} />
                 </li>
               ) : (
-                <li key={l.key}>
+                <li key={l.key} className={l.kind === "store_frame" ? "is-store" : ""}>
                   <PosFramePhoto line={l} />
-                  <span><b>{t("adm.pos.own.tag")}</b> <small className="muted">{l.title || l.description}</small></span>
+                  <span>
+                    <b>{t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")}</b> <small className="muted">{l.title || l.description}</small>
+                    <small className={`pos-frame-charge ${l.kind === "store_frame" ? "paid" : "free"}`}>{l.kind === "store_frame" ? t("adm.pos.store.charged", { v: m(l.store_price) }) : t("adm.pos.own.notCharged")}</small>
+                  </span>
                   <button type="button" className="btn-xs warn" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label={t("adm.pos.remove")} title={t("adm.pos.remove")}><Icon name="trash" size={12} /></button>
                 </li>
               ))}
@@ -968,7 +1011,7 @@ export default function PosSale({ me }) {
               <li key={l.key}>
                 <div className="pos-lens-head">
                   <PosFramePhoto line={l} size="md" />
-                  <b>{l.kind === "own_frame" ? `${t("adm.pos.own.tag")} · ${l.title || l.description}` : `${l.title} · ${l.variant_title || ""}`}</b>
+                  <b>{l.kind === "frame" ? `${l.title} · ${l.variant_title || ""}` : `${t(l.kind === "store_frame" ? "adm.pos.store.tag" : "adm.pos.own.tag")} · ${l.title || l.description}`}</b>
                 </div>
                 {l.kind === "own_frame" && !noRx && <LensPresets line={l} catalog={catalog} rxForm={rxNew} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />}
                 <LensPicker line={l} catalog={catalog} rxForm={rxNew} noRx={noRx} onChange={(nl) => setLines((ls) => ls.map((x) => (x.key === l.key ? nl : x)))} />
@@ -992,7 +1035,7 @@ export default function PosSale({ me }) {
                   <tbody>
                     {q.quote.lines.map((l, i) => (
                       <tr key={i} className={l.below_minimum ? "warn" : ""}>
-                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}{promoOf(l) && <small className="pos-sum-promo pos-promo-line">{t("adm.pm.promoBefore")} <s>{m(promoOf(l).before)}</s> · {t("adm.pm.promoTag", { pct: promoOf(l).pct })}</small>}</td>
+                        <td data-label={t("adm.pos.price.item")}>{l.kind === "own_frame" ? t("adm.pos.own.tag") : l.kind === "store_frame" ? `${t("adm.pos.store.tag")} · ${l.title}` : l.title}{l.variant_title ? ` · ${l.variant_title}` : ""}{l.below_minimum && <small className="pos-flag"> {t("adm.pos.price.belowMin")}</small>}{promoOf(l) && <small className="pos-sum-promo pos-promo-line">{t("adm.pm.promoBefore")} <s>{m(promoOf(l).before)}</s> · {t("adm.pm.promoTag", { pct: promoOf(l).pct })}</small>}</td>
                         <td data-label={t("adm.pos.price.list")}>{m(l.list)}</td>
                         <td data-label={t("adm.pos.price.tax")}>{l.tax_amount ? m(l.tax_amount) : "—"}</td>
                         <td data-label={t("adm.pos.price.total")}><b>{m(l.unit_price)}</b></td>

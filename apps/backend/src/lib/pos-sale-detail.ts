@@ -139,6 +139,8 @@ export function lineFactOf(line: SaleLineRow, productMeta: Record<string, unknow
   const meta = productMeta ?? {};
   const slug = String(meta.brand_slug ?? meta.collection_slug ?? "");
   const own = md.kind === "own-frame";
+  // A store frame off the catalog: brand, model and color as the seller typed them (same reading as sale-facts).
+  const offCat = (md.kind === "store-frame" ? md.store_frame ?? null : null) as { brand?: string | null; model?: string | null; color?: string | null; description?: string | null } | null;
   const withLenses = Boolean(sel.design_code) && sel.design_code !== "frame-only";
   const str = (v: unknown) => {
     const s = v == null ? "" : String(v).trim();
@@ -147,10 +149,10 @@ export function lineFactOf(line: SaleLineRow, productMeta: Record<string, unknow
   return {
     line_item_id: String(line.id),
     category: own ? "own_frame" : slug === "case" ? "case" : "frame",
-    brand: own ? null : str(meta.brand) ?? (slug || null),
-    title: String(own ? "own_frame" : line.product_title ?? line.title ?? ""),
-    sku: own ? null : str(line.variant_sku),
-    variant_title: str(line.variant_title),
+    brand: own ? null : offCat ? str(offCat.brand) : str(meta.brand) ?? (slug || null),
+    title: String(own ? "own_frame" : offCat ? str(offCat.model) ?? str(offCat.description) ?? line.title ?? "" : line.product_title ?? line.title ?? ""),
+    sku: own || offCat ? null : str(line.variant_sku),
+    variant_title: offCat ? str(offCat.color) : str(line.variant_title),
     metadata: line.metadata ?? null,
     lens: {
       design: withLenses ? sel.design_code ?? null : null,

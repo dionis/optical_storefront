@@ -18,6 +18,28 @@ const FRAME_FIELDS = ["lens_width", "bridge", "temple", "lens_height", "total_wi
 const FRAME_LABEL = { lens_width: "lensWidth", bridge: "bridge", temple: "temple", lens_height: "lensHeight", total_width: "totalWidth" };
 const FRAME_PH = { lens_width: "50", bridge: "18", temple: "140", lens_height: "35", total_width: "136" };
 // Tema de ayuda (HelpTip) de cada columna de la cuadrícula.
+/** Hoy en la zona del dispositivo (toISOString daría el día UTC: mañana por la tarde en América). */
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+/**
+ * Fecha de una receta con la casilla «Hoy» al lado (decisión del dueño,
+ * 9-nov-2026): marcarla pone la fecha de hoy; desmarcarla la vacía; cambiar la
+ * fecha a mano la desmarca sola. También la usa «Corregir datos».
+ */
+export function RxDateInput({ value, onChange, disabled = false, invalid = false, ariaLabel }) {
+  const { t } = useLang();
+  const today = localToday();
+  return (
+    <span className="pos-rx-date">
+      <input type="date" max={today} value={value || ""} disabled={disabled} aria-invalid={invalid || undefined} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
+      <label className="pos-rx-today">
+        <input type="checkbox" checked={value === today} disabled={disabled} onChange={(e) => onChange(e.target.checked ? today : "")} />
+        {t("adm.pos.rx.today")}
+      </label>
+    </span>
+  );
+}
+
 const HELP = { sph: "pos.rx.sph", cyl: "pos.rx.cyl", axis: "pos.rx.axis", add: "pos.rx.add", prism: "pos.rx.prism", base: "pos.rx.base", pd: "pos.rx.pd", seg: "pos.rx.seg" };
 
 /**
@@ -141,7 +163,7 @@ export default function RxForm({
       <div className="pos-rx-meta">
         {mode === "new" ? (
           <>
-            <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={value.rx_date || ""} disabled={disabled} onChange={(e) => onChange({ ...value, rx_date: e.target.value })} /></label>
+            <div className="pos-rx-datef"><span>{t("adm.pos.rx.date")}</span><RxDateInput value={value.rx_date} disabled={disabled} ariaLabel={t("adm.pos.rx.date")} onChange={(d) => onChange({ ...value, rx_date: d })} /></div>
             <span className="pos-rx-tag" title={t("adm.pos.rx.origin")}>{t("adm.pos.rx.origin")}: <b>{t(`adm.pos.rx.origin.${source === "ocr" ? "ocr" : "manual"}`)}</b></span>
           </>
         ) : (
@@ -162,7 +184,7 @@ export default function RxForm({
                 el botón mudo. */}
             {worn?.dateMode === "approx"
               ? <label>{t("adm.pos.rx.monthsAgo")}<input inputMode="numeric" maxLength={3} value={worn?.months || ""} disabled={disabled} aria-invalid={showMissingDate && !worn?.months ? true : undefined} onChange={(e) => onWornChange?.({ ...worn, months: e.target.value.replace(/\D/g, "") })} />{showMissingDate && !worn?.months && <small className="field-err" role="alert">{t("val.wornDate")}</small>}</label>
-              : <label>{t("adm.pos.rx.date")}<input type="date" max={new Date().toISOString().slice(0, 10)} value={worn?.date || ""} disabled={disabled} aria-invalid={showMissingDate && !worn?.date ? true : undefined} onChange={(e) => onWornChange?.({ ...worn, date: e.target.value })} />{showMissingDate && !worn?.date && <small className="field-err" role="alert">{t("val.wornDate")}</small>}</label>}
+              : <div className="pos-rx-datef"><span>{t("adm.pos.rx.date")}</span><RxDateInput value={worn?.date} disabled={disabled} ariaLabel={t("adm.pos.rx.date")} invalid={showMissingDate && !worn?.date} onChange={(d) => onWornChange?.({ ...worn, date: d })} />{showMissingDate && !worn?.date && <small className="field-err" role="alert">{t("val.wornDate")}</small>}</div>}
           </>
         )}
         <span className="pos-rx-tag pd">{bin == null ? t("adm.pos.rx.pdBinMissing") : t("adm.pos.rx.pdBin", { v: bin.toFixed(1) })}</span>

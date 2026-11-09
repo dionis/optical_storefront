@@ -61,6 +61,8 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
   const list = md.list_price !== undefined ? cents(md.list_price) * qty : total - tax;
   const slug = String(productMeta.brand_slug ?? productMeta.collection_slug ?? "");
   const own = md.kind === "own-frame";
+  // A store frame off the catalog: a sold frame with no product; brand and model as typed.
+  const offCat = (md.kind === "store-frame" ? md.store_frame ?? null : null) as { brand?: string | null; model?: string | null; description?: string | null } | null;
   const withLenses = Boolean(sel.design_code) && sel.design_code !== "frame-only";
   return {
     order_id: ctx.orderId,
@@ -76,8 +78,8 @@ export function factFromLine(item: Record<string, unknown>, productMeta: Record<
     product_id: own ? null : ((item.product_id as string | null) ?? null),
     variant_id: own ? null : ((item.variant_id as string | null) ?? null),
     sku: own ? null : ((item.variant_sku as string | null) ?? null),
-    title: String(own ? "own_frame" : item.product_title ?? item.title ?? ""),
-    brand: own ? null : ((productMeta.brand as string | undefined) ?? (slug || null)),
+    title: String(own ? "own_frame" : offCat ? offCat.model || offCat.description || item.title || "" : item.product_title ?? item.title ?? ""),
+    brand: own ? null : offCat ? offCat.brand ?? null : ((productMeta.brand as string | undefined) ?? (slug || null)),
     category: own ? "own_frame" : slug === "case" ? "case" : "frame",
     lens_design: withLenses ? sel.design_code : null,
     lens_material: withLenses ? sel.material_code ?? null : null,

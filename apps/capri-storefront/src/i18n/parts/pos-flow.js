@@ -15,7 +15,7 @@ export default {
     "adm.pos.flow.pending": "Pendiente de calcular",
     "adm.pos.flow.lensesLater": "Se eligen en el paso Lentes",
     "adm.pos.flow.toggle": "Mostrar u ocultar el desglose",
-    "adm.pos.preset.title": "Opciones rápidas para la montura del cliente",
+    "adm.pos.preset.title": "Opciones rápidas para la montura del paciente",
     "adm.pos.preset.hint": "Un toque rellena diseño, material y tratamientos; abajo se puede ajustar.",
     "adm.pos.preset.sv_basic": "Monofocal básico",
     "adm.pos.preset.sv_ar": "Monofocal AR",
@@ -25,7 +25,7 @@ export default {
     "adm.pos.preset.prog_ar": "Progresivo AR",
     "adm.pos.dup.phone": "Este teléfono ya está registrado: {name}",
     "adm.pos.dup.email": "Este correo ya está registrado: {name}",
-    "adm.pos.dup.use": "Usar este cliente",
+    "adm.pos.dup.use": "Usar este paciente",
     "adm.pos.dup.other": "Es otra persona",
   },
   en: {

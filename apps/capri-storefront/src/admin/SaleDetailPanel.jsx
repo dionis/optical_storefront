@@ -30,7 +30,7 @@ import Icon from "./icons.jsx";
 import { STAGES, STAGE_BY_KEY, money, orderLabel, setOrderStage, stageErrorText } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
 import { DELETE_REASONS, collectPayment, deleteSale, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, moveSale, posContext, updateSale, voidSale } from "./posApi.js";
-import RxForm from "./PosRx.jsx";
+import RxForm, { RxDateInput } from "./PosRx.jsx";
 import { fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
@@ -181,7 +181,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = fa
           ) : (
             <>
               <RxForm value={rxForm} onChange={setRxForm} mode="new" disabled={busy} showErrors={showRxErrors} idp="sd-edit-rx" />
-              <label className="sd-edit-field"><span>{t("adm.sd.edit.rxDate")}</span><input type="date" value={rxDate} onChange={(e) => setRxDate(e.target.value)} aria-label={t("adm.sd.edit.rxDate")} disabled={busy} /></label>
+              <div className="sd-edit-field"><span>{t("adm.sd.edit.rxDate")}</span><RxDateInput value={rxDate} onChange={setRxDate} ariaLabel={t("adm.sd.edit.rxDate")} disabled={busy} /></div>
               <small className="sd-hint">{t("adm.sd.edit.rxHint")}</small>
             </>
           )}
@@ -734,8 +734,11 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                             </>
                           ) : (
                             <>
+                              {l.frame?.off_catalog && <span className="adm-chip warn">{t("adm.pos.store.tag")}</span>}
                               {l.frame?.brand && <span>{t("adm.sd.brand")}: <b>{l.frame.brand}</b></span>}
-                              {l.variant_title && <span>{t("adm.sd.color")}: <b>{l.variant_title}</b></span>}
+                              {l.frame?.off_catalog && l.frame?.model && <span>{t("adm.pos.own.model")}: <b>{l.frame.model}</b></span>}
+                              {(l.variant_title || l.frame?.color) && <span>{t("adm.sd.color")}: <b>{l.variant_title || l.frame.color}</b></span>}
+                              {l.frame?.off_catalog && l.frame?.eye_size != null && <span>{t("adm.pos.own.size")}: <b>{[l.frame.eye_size, l.frame.bridge, l.frame.temple].filter((v) => v != null).join("-")}</b></span>}
                               {l.sku && <span>{t("adm.sd.sku")}: <b>{l.sku}</b></span>}
                             </>
                           )}

@@ -210,7 +210,7 @@ const es = {
   "adm.fin.rk.shipping": "Envío",
 
   "adm.fin.taxRate": "Impuesto de venta (montura sin receta)",
-  "adm.fin.taxRateHint": "Se cobra al cliente y se entrega al estado: es un pasivo, no un ingreso ni un gasto.",
+  "adm.fin.taxRateHint": "Se cobra al paciente y se entrega al estado: es un pasivo, no un ingreso ni un gasto.",
 
   "adm.fin.comm.default": "Comisión por defecto",
   "adm.fin.comm.defaultHint": "Con ella nace cada vendedor nuevo y es la que se paga a quien vende sin % propio.",
@@ -377,7 +377,7 @@ const es = {
   "adm.fin.st.l.net_margin": "Margen neto",
   "adm.fin.st.l.h.memo": "Datos informativos",
   "adm.fin.st.l.memo.sales_tax": "Impuesto de venta cobrado (pasivo con el estado)",
-  "adm.fin.st.l.memo.gross_sales": "Cobrado a clientes (con impuesto)",
+  "adm.fin.st.l.memo.gross_sales": "Cobrado a pacientes (con impuesto)",
   "adm.fin.st.l.memo.sales_count": "Número de ventas",
   "adm.fin.st.l.memo.gross_contribution": "Ganancia bruta del Ejecutivo",
   "adm.fin.st.l.memo.contribution": "Contribución (resultado por tienda)",
@@ -711,7 +711,7 @@ const HELP_ES = {
   },
   "fin.salesTax": {
     title: "Impuesto de venta",
-    short: "El % que se cobra en una montura vendida sin lentes recetados. Se le cobra al cliente y se entrega al estado: es un PASIVO, no un ingreso ni un gasto.",
+    short: "El % que se cobra en una montura vendida sin lentes recetados. Se le cobra al paciente y se entrega al estado: es un PASIVO, no un ingreso ni un gasto.",
     what: "Los lentes con receta están exentos. El estado de resultados lo muestra aparte, en datos informativos, para declarar al estado lo cobrado.",
   },
   "fin.defaultCommission": {
@@ -845,11 +845,11 @@ const HELP_ES = {
   },
   "fin.st.salesTax": {
     title: "Impuesto de venta cobrado",
-    short: "Lo que se cobró al cliente por impuesto de venta en el período. No es ingreso: se debe al estado. Úsalo para la declaración de impuesto de venta.",
+    short: "Lo que se cobró al paciente por impuesto de venta en el período. No es ingreso: se debe al estado. Úsalo para la declaración de impuesto de venta.",
   },
   "fin.st.grossSales": {
-    title: "Cobrado a clientes",
-    formula: "Cobrado a clientes = ingresos + impuesto de venta",
+    title: "Cobrado a pacientes",
+    formula: "Cobrado a pacientes = ingresos + impuesto de venta",
     short: "Σ total de las ventas (con impuesto, después del descuento). Ingresos netos + impuesto de venta.",
   },
   "fin.st.grossContribution": {

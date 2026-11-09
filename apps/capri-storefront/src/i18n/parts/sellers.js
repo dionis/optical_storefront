@@ -44,7 +44,7 @@ export default {
     "adm.sp.last.empty": "Sin ventas en el período.",
     "adm.sp.last.number": "Venta",
     "adm.sp.last.date": "Fecha",
-    "adm.sp.last.customer": "Cliente",
+    "adm.sp.last.customer": "Paciente",
     "adm.sp.last.total": "Total",
     "adm.sp.last.paid": "Pagado",
     "adm.sp.last.balance": "Saldo",

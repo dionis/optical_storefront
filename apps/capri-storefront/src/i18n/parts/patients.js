@@ -66,7 +66,7 @@ export default {
     "adm.pt.voided": "Anulada: no cuenta en los totales",
     "adm.pt.discountLine": "desc. {v}",
     "adm.pt.cat.frame": "Montura",
-    "adm.pt.cat.own_frame": "Montura del cliente",
+    "adm.pt.cat.own_frame": "Montura del paciente",
     "adm.pt.cat.case": "Estuche",
     "adm.pt.rxCount": "recetas",
     "adm.pt.rxChanged": "cambió",

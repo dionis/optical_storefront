@@ -58,7 +58,7 @@ export function PosRunningTotal({ quote, status, lines, catalog, money, beforeLe
     const d = describeSelection(line.selection, catalog, t, lang);
     return {
       key: line.key ?? i,
-      frameName: own ? t("adm.pos.own.tag") : [line.title, line.variant_title].filter(Boolean).join(" · "),
+      frameName: own ? t("adm.pos.own.tag") : line.kind === "store_frame" ? `${t("adm.pos.store.tag")} · ${line.title}` : [line.title, line.variant_title].filter(Boolean).join(" · "),
       framePrice: own ? null : ql ? money(ql.frame) : dash,
       lens: beforeLenses ? t("adm.pos.flow.lensesLater") : d.lens,
       lensPrice: beforeLenses || d.frameOnly ? null : ql ? money(ql.lenses) : dash,
@@ -156,8 +156,8 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
                 <li key={line?.key ?? i}>
                   <PosFramePhoto line={line} />
                   <div className="pos-sum-item">
-                    <b>{own ? t("adm.pos.own.tag") : l.title}</b>
-                    <small>{[own ? l.description : l.variant_title, l.sku && `${t("adm.pos.sum.sku")} ${l.sku}`].filter(Boolean).join(" · ")}</small>
+                    <b>{own ? t("adm.pos.own.tag") : l.kind === "store_frame" ? t("adm.pos.store.tag") : l.title}</b>
+                    <small>{[own || l.kind === "store_frame" ? l.description : l.variant_title, l.sku && `${t("adm.pos.sum.sku")} ${l.sku}`].filter(Boolean).join(" · ")}</small>
                     <small>{lensText(l.selection)}</small>
                     <small className="muted">
                       {[!own && `${t("adm.pos.sum.frame")} ${money(l.frame)}`, l.lenses > 0 && `${t("adm.pos.sum.lenses")} ${money(l.lenses)}`, l.tax_amount > 0 && `${t("adm.pos.price.tax")} ${money(l.tax_amount)}`].filter(Boolean).join(" · ")}

@@ -25,14 +25,14 @@ const UI = {
     "adm.ecost.gl.sub": "Cada concepto en una línea, en el orden en que se descuenta del dinero pagado.",
     "adm.ecost.gl.step": "Paso {n}",
     "adm.ecost.gl.deduction.name": "Deducciones",
-    "adm.ecost.gl.deduction.def": "Dinero que el cliente pagó pero nunca fue tuyo: se va antes de contar nada.",
+    "adm.ecost.gl.deduction.def": "Dinero que el paciente pagó pero nunca fue tuyo: se va antes de contar nada.",
     "adm.ecost.gl.deduction.items": "Envío · Impuestos · Comisión de Stripe (tarjeta)",
     "adm.ecost.gl.material.name": "Materiales",
     "adm.ecost.gl.material.def": "Lo que compras para fabricar ese pedido, a precio de proveedor (importe fijo por pieza).",
     "adm.ecost.gl.material.items": "Montura · Lentes · Tratamientos (antirreflejo, fotocromático) · Estuche",
     "adm.ecost.gl.percent.name": "Partidas %",
     "adm.ecost.gl.percent.def": "Gastos del negocio repartidos como un porcentaje del neto de cada venta.",
-    "adm.ecost.gl.percent.items": "Laboratorio · Empaque · Mantenimiento · Atención al cliente · Renta · Reserva",
+    "adm.ecost.gl.percent.items": "Laboratorio · Empaque · Mantenimiento · Atención al paciente · Renta · Reserva",
     "adm.ecost.gl.seller.name": "Vendedor",
     "adm.ecost.gl.seller.def": "La comisión de quien trajo la venta: su % sobre el neto del pedido.",
     "adm.ecost.gl.seller.items": "Comisión del vendedor (según su ficha)",
@@ -140,15 +140,15 @@ const UI = {
 const HELP_ES = {
   "cost.paid": {
     title: "Pagado",
-    short: "Todo el dinero que los clientes pagaron en el período, tal cual entró: con envío, impuestos y comisión de tarjeta incluidos.",
-    what: "Es la suma de lo que pagó cada cliente por sus pedidos del período (solo pedidos pagados; los cancelados o reembolsados no cuentan). Es el número más grande de la pantalla porque todavía no se ha descontado nada: incluye el envío que cobraste, los impuestos y lo que la tarjeta se queda.",
+    short: "Todo el dinero que los pacientes pagaron en el período, tal cual entró: con envío, impuestos y comisión de tarjeta incluidos.",
+    what: "Es la suma de lo que pagó cada paciente por sus pedidos del período (solo pedidos pagados; los cancelados o reembolsados no cuentan). Es el número más grande de la pantalla porque todavía no se ha descontado nada: incluye el envío que cobraste, los impuestos y lo que la tarjeta se queda.",
     how: [
       "Se toma cada pedido pagado del período y la tienda elegida.",
-      "Se suma el total que pagó el cliente (producto + envío + impuestos).",
+      "Se suma el total que pagó el paciente (producto + envío + impuestos).",
       "Fórmula: Pagado = Σ total pagado de cada pedido.",
     ],
     why: "Es el punto de partida de todo el reparto: cada otra cifra de esta pantalla es «Pagado menos algo». Si sube pero la ganancia no, el problema está en los costos, no en las ventas.",
-    example: "Un cliente paga $300 por unas gafas: $260 de producto, $25 de envío y $15 de impuestos. Pagado = $300. Si en el mes hubo 10 pedidos así, Pagado = $3,000.",
+    example: "Un paciente paga $300 por unas gafas: $260 de producto, $25 de envío y $15 de impuestos. Pagado = $300. Si en el mes hubo 10 pedidos así, Pagado = $3,000.",
     pitfalls: [
       "Pensar que es «lo que gané»: el envío, los impuestos y Stripe van dentro y no son tuyos.",
       "Compararlo con el costo directamente: el costo se calcula sobre el Neto, no sobre el Pagado.",
@@ -256,9 +256,9 @@ const HELP_ES = {
   "cost.deductions": {
     title: "Deducciones",
     short: "Envío, impuestos y comisión de Stripe: dinero que pasó por tu cuenta pero no es tuyo. Se restan antes que cualquier costo.",
-    what: "Son tres conceptos que el cliente paga dentro del total y que tú simplemente entregas a otro: el envío a la mensajería, los impuestos al estado y la comisión de la tarjeta a Stripe. No son costos del negocio (no dependen de cómo trabajes) y por eso van aparte y se descuentan primero, para llegar al Neto.",
+    what: "Son tres conceptos que el paciente paga dentro del total y que tú simplemente entregas a otro: el envío a la mensajería, los impuestos al estado y la comisión de la tarjeta a Stripe. No son costos del negocio (no dependen de cómo trabajes) y por eso van aparte y se descuentan primero, para llegar al Neto.",
     how: [
-      "Envío e impuestos: se toman tal cual del pedido (lo que se le cobró al cliente).",
+      "Envío e impuestos: se toman tal cual del pedido (lo que se le cobró al paciente).",
       "Stripe: la regla «Comisiones de pago» (p. ej. 2.9 % + $0.30 por cobro) aplicada al total pagado.",
       "Fórmula: Deducciones = envío + impuestos + Stripe.",
     ],
@@ -288,7 +288,7 @@ const HELP_ES = {
   "cost.percent": {
     title: "Partidas %",
     short: "Gastos fijos del negocio (laboratorio, empaque, renta, atención…) repartidos como un % del neto de cada venta.",
-    what: "La renta, el laboratorio, el empaque, la atención al cliente o una reserva para imprevistos no se pagan «por pedido», pero cada pedido debe cubrir su parte. Las partidas % hacen justo eso: cada una es un porcentaje del neto que se aparta como costo. Se definen en Distribución %.",
+    what: "La renta, el laboratorio, el empaque, la atención al paciente o una reserva para imprevistos no se pagan «por pedido», pero cada pedido debe cubrir su parte. Las partidas % hacen justo eso: cada una es un porcentaje del neto que se aparta como costo. Se definen en Distribución %.",
     how: [
       "Costos → Distribución %: añade una partida por concepto con su %.",
       "Cada pedido aplica cada % a su Neto.",

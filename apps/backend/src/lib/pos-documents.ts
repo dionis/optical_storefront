@@ -82,7 +82,11 @@ export interface DocLine {
    */
   lens: { design: Bilingual; material: Bilingual; photo: Bilingual; ar: Bilingual; category: string | null; finish: LensFinish | null } | null;
   handling: "lenses_only" | "frame_supplied" | "patient_own_frame" | null;
-  frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null } | null;
+  /**
+   * The frame sold. For a store frame off the catalog (`off_catalog`) the brand,
+   * model, color and size are what the seller typed (there is no product).
+   */
+  frame: { brand: string | null; model: string | null; material: string | null; eye_size: number | null; bridge: number | null; color?: string | null; temple?: number | null; off_catalog?: boolean } | null;
   own_frame: {
     description: string | null;
     has_photo: boolean;
@@ -266,16 +270,20 @@ export async function buildSaleDocument(
     const md = mdOf(it);
     const s = sel(it);
     const own = md.kind === "own-frame";
+    // A store frame that is not in the catalog: sold (charged), described by the seller.
+    const offCat = md.kind === "store-frame";
+    const storeFrame = offCat ? ((md.store_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null) : null;
     const withLenses = Boolean(s.design_code) && s.design_code !== "frame-only";
     const pm = it.product_id ? productMeta.get(String(it.product_id)) ?? {} : {};
     const n = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
     const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null;
     // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
     const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
+    const offCatPhotoUrl = offCat && opts.withPhotoUrls ? await presignPrescriptionUrl(storeFrame?.photo_key ?? null) : null;
     const list = Number(md.list_price ?? it.unit_price ?? 0);
     lines.push({
       kind: own ? "own_frame" : "frame",
-      title: String(own ? ownFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
+      title: String(own ? ownFrame?.description ?? it.title ?? "" : offCat ? storeFrame?.description ?? it.title ?? "" : it.product_title ?? it.title ?? ""),
       variant_title: own ? null : ((it.variant_title as string | null) ?? null),
       sku: own ? null : ((it.variant_sku as string | null) ?? null),
       list,
@@ -284,7 +292,7 @@ export async function buildSaleDocument(
       frame_price: Number(md.frame_price ?? 0),
       lens_price: Number(md.lens_addon ?? 0),
       quantity: Math.max(1, Number(it.quantity ?? 1) || 1),
-      image_url: own ? ownPhotoUrl : productImageUrl((it.thumbnail as string | null) || thumbs.get(String(it.product_id ?? "")) || null),
+      image_url: own ? ownPhotoUrl : offCat ? offCatPhotoUrl : productImageUrl((it.thumbnail as string | null) || thumbs.get(String(it.product_id ?? "")) || null),
       design_code: s.design_code ?? null,
       lens: withLenses
         ? (() => {
@@ -304,6 +312,17 @@ export async function buildSaleDocument(
       handling: own ? "patient_own_frame" : withLenses ? "frame_supplied" : null,
       frame: own
         ? null
+        : offCat
+        ? {
+            brand: storeFrame?.brand ?? null,
+            model: storeFrame?.model ?? null,
+            material: null,
+            eye_size: n(storeFrame?.eye_size),
+            bridge: n(storeFrame?.bridge),
+            color: storeFrame?.color ?? null,
+            temple: n(storeFrame?.temple),
+            off_catalog: true,
+          }
         : {
             brand: (pm.brand as string | undefined) ?? (pm.brand_slug as string | undefined) ?? null,
             model: String(it.product_title ?? ""),

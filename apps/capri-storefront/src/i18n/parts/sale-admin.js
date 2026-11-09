@@ -11,8 +11,8 @@ export default {
 
     "adm.sd.edit.title": "Corregir los datos de la venta",
     "adm.sd.edit.hint": "Aquí no cambian los artículos, los precios ni los cobros: un saldo se cobra con «Cobrar» y un error de precio se resuelve anulando la venta.",
-    "adm.sd.edit.customer": "Cliente",
-    "adm.sd.edit.customerHint": "Corrige la ficha del cliente: el cambio se ve también en sus otras ventas.",
+    "adm.sd.edit.customer": "Paciente",
+    "adm.sd.edit.customerHint": "Corrige la ficha del paciente: el cambio se ve también en sus otras ventas.",
     "adm.sd.edit.firstName": "Nombre",
     "adm.sd.edit.lastName": "Apellido",
     "adm.sd.edit.email": "Correo",

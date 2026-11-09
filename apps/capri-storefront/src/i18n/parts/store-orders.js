@@ -4,7 +4,7 @@
 export default {
   es: {
     "adm.so.late": "Atrasados",
-    "adm.so.lateHint": "Pedidos sin entregar cuya fecha prometida al cliente ya pasó, deban o no saldo. La fecha es la que imprime el recibo de la venta.",
+    "adm.so.lateHint": "Pedidos sin entregar cuya fecha prometida al paciente ya pasó, deban o no saldo. La fecha es la que imprime el recibo de la venta.",
     "adm.so.lateDays": "{n} d",
     "adm.so.lateDaysHint": "Prometido para el {date}: lleva {n} día(s) de atraso",
     "adm.so.lateAlert": "{n} pasaron la fecha prometida sin entregarse",

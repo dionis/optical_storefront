@@ -740,7 +740,7 @@ export interface QuotedLine {
   tax_rate: number;
   unit_price: number;
   /** `brand` (v2): the store's price for every model of the brand (lib/store-pricing.ts). */
-  frame_source: "store_exact" | "brand" | "adjusted" | "own_frame";
+  frame_source: "store_exact" | "brand" | "adjusted" | "own_frame" | "store_frame";
   below_minimum: boolean;
   /** The owner's promotion on this line (lib/price-matrix.ts `promoStoreLine`); null = none. */
   promo: LinePromo | null;
@@ -824,13 +824,16 @@ export async function quoteSale(
     const brandSlug = productId ? brandOf(metadata.get(productId)) || null : null;
     const pcts = discounts.size ? linePromoPcts(discounts, establishmentId, { productId, brandSlug, selection: line.selection, category, finish }) : NO_PROMO;
 
-    if (line.kind === "own_frame") {
-      // No frame is sold: the store's adjustment applies to the lenses alone
-      // (a fixed amount lands on the frame part when the base is 0, so move it).
+    if (line.kind === "own_frame" || line.kind === "store_frame") {
+      // The customer's own frame is not sold; a store frame off the catalog is
+      // sold at the price the seller typed, untouched by the catalog's store
+      // rules (there is no catalog price to adjust). Either way the store's
+      // adjustment applies to the lenses alone (a fixed amount lands on the
+      // frame part when the base is 0, so move it).
       const sp = promoStoreLine(rules, { establishmentId, scope: "frame", target: "", base: 0, lens: lensParts }, pcts);
-      listFrame = 0;
+      listFrame = line.kind === "store_frame" ? dollars(line.frame_price_cents ?? 0) : 0;
       listLenses = dollars(cents(sp.frame) + cents(sp.lenses));
-      frameSource = "own_frame";
+      frameSource = line.kind;
       promo = sp.promo;
       min = lineMinimum(rules, { establishmentId, scope: "frame", target: "" });
     } else {
@@ -860,7 +863,7 @@ export async function quoteSale(
     // medical product (same rule as the web's configured-line route).
     let tax_rate = 0;
     let tax_amount = 0;
-    if (line.kind === "frame" && line.selection.design_code === "frame-only" && settings.frame_tax_rate > 0) {
+    if (line.kind !== "own_frame" && line.selection.design_code === "frame-only" && settings.frame_tax_rate > 0) {
       tax_rate = settings.frame_tax_rate;
       tax_amount = dollars(cents(d.total * tax_rate));
     }
@@ -870,7 +873,7 @@ export async function quoteSale(
       kind: line.kind,
       variant_id: variant?.id ?? null,
       product_id: productId,
-      title: line.kind === "own_frame" ? line.description || "" : variant?.product?.title ?? "",
+      title: line.kind === "frame" ? variant?.product?.title ?? "" : line.description || "",
       variant_title: variant?.title ?? null,
       sku: variant?.sku ?? null,
       selection: line.selection,
@@ -879,7 +882,7 @@ export async function quoteSale(
       lens_category: line.selection.design_code === "frame-only" ? null : category,
       lens_requires_add: line.selection.design_code === "frame-only" ? false : requiresAdd,
       // The customer's own frame: the lens width they gave (small-frame checks use it too).
-      eye_size: line.kind === "own_frame" ? line.own_frame?.eye_size ?? null : Number.isFinite(eye) && eye > 0 ? eye : null,
+      eye_size: line.kind === "frame" ? (Number.isFinite(eye) && eye > 0 ? eye : null) : line.own_frame?.eye_size ?? null,
       list,
       frame: d.frame,
       lenses: d.lenses,
@@ -1367,7 +1370,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
       customerId,
       rx: await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId),
     })),
-    Promise.all(input.lines.map((line) => (line.kind === "own_frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
+    Promise.all(input.lines.map((line) => (line.kind !== "frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
   ]);
 
   const address = {
@@ -1414,7 +1417,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
       items: quote.lines.map((l, i) => {
         const withRx = l.selection.design_code !== "frame-only";
         const metadata = {
-          kind: l.kind === "own_frame" ? "own-frame" : "configured-frame",
+          kind: l.kind === "own_frame" ? "own-frame" : l.kind === "store_frame" ? "store-frame" : "configured-frame",
           channel: "pos",
           lens_config: l.selection,
           // By id only: the Rx values (PHI) live in the prescription record.
@@ -1433,12 +1436,14 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           promo: l.promo,
           frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
           own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i], ...(l.own_frame ?? {}) } : null,
+          // A store frame off the catalog: what was sold, for the lab, the receipt and the sale.
+          store_frame: l.kind === "store_frame" ? { description: l.description, photo_key: photoKeys[i], price: l.frame, ...(l.own_frame ?? {}) } : null,
         };
         // Nothing is shipped from the till: without this Medusa would ask for
         // a shipping method before completing the cart.
         return l.variant_id
           ? { variant_id: l.variant_id, quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata }
-          : { title: l.description || "Patient's own frame", quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata };
+          : { title: l.description || (l.kind === "store_frame" ? "Store frame" : "Patient's own frame"), quantity: 1, unit_price: l.unit_price, requires_shipping: false, metadata };
       }),
     } as never,
   });

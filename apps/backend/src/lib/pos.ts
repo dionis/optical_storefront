@@ -285,7 +285,11 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
 // ---------------------------------------------------------------------------
 
 export interface PosLineInput {
-  /** "frame": a catalog frame (variant); "own_frame": lenses for a frame the customer brought. */
+  /**
+   * "frame": a catalog frame (variant); "store_frame": a frame of the store that
+   * is not in the catalog (typed in, charged at the price the seller enters);
+   * "own_frame": lenses for a frame the customer brought (not charged).
+   */
   kind?: unknown;
   variant_id?: unknown;
   selection?: {
@@ -302,6 +306,8 @@ export interface PosLineInput {
   photo?: unknown;
   /** Own frame: brand, model, color and its size (lens width, bridge, temple), for the lab. */
   own_frame?: unknown;
+  /** Store frame off the catalog: the same specs plus `price` (dollars, required). */
+  store_frame?: unknown;
 }
 
 /**
@@ -354,14 +360,39 @@ export function ownFrameSummary(specs: OwnFrameSpecs | null, description: string
   return (description || auto || null);
 }
 
+/** Price limits (dollars) of a store frame typed in at the till. */
+export const STORE_FRAME_PRICE = { min: 0.01, max: 5000 } as const;
+
+/**
+ * A store frame that is not in the catalog (owner, 9-nov-2026): specs as for
+ * an own frame, a name (brand or model) required, and the price the seller
+ * charges. Reasons: `bad_store_frame` (sizes), `store_frame_needs_name`,
+ * `bad_store_frame_price`. Pure.
+ */
+export function cleanStoreFrame(raw: unknown): { specs: OwnFrameSpecs; price_cents: number } | { reason: string } {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return { reason: "store_frame_needs_name" };
+  const specs = cleanOwnFrame(raw);
+  if ("reason" in specs) return { reason: "bad_store_frame" };
+  if (!specs.specs || (!specs.specs.brand && !specs.specs.model)) return { reason: "store_frame_needs_name" };
+  const o = raw as Record<string, unknown>;
+  const p = typeof o["price"] === "number" ? o["price"] : Number(String(o["price"] ?? "").replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(p) || p < STORE_FRAME_PRICE.min || p > STORE_FRAME_PRICE.max) return { reason: "bad_store_frame_price" };
+  return { specs: specs.specs, price_cents: Math.round(p * 100) };
+}
+
 export interface PosLine {
-  kind: "frame" | "own_frame";
+  kind: "frame" | "own_frame" | "store_frame";
   variant_id: string | null;
   selection: { design_code: string; material_code: string | null; photo_code: string | null; ar_code: string | null; finish: LensFinish | null };
   description: string | null;
   photo: string | null;
-  /** Own frame only: brand, model, color and size (null = not given). */
+  /**
+   * The specs the clerk typed: the customer's own frame or a store frame off
+   * the catalog (brand, model, color and size; null = a catalog frame / not given).
+   */
   own_frame: OwnFrameSpecs | null;
+  /** Store frame off the catalog: the price charged for the frame, in cents (null otherwise). */
+  frame_price_cents?: number | null;
 }
 
 /** A sale carries one frame: either from the catalog or the customer's own, never both. */
@@ -378,7 +409,7 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
   if (input.length > MAX_LINES) return { reason: "too_many_lines" };
   const lines: PosLine[] = [];
   for (const raw of input as PosLineInput[]) {
-    const kind = raw?.kind === "own_frame" ? "own_frame" : raw?.kind === "frame" ? "frame" : null;
+    const kind = raw?.kind === "own_frame" ? "own_frame" : raw?.kind === "store_frame" ? "store_frame" : raw?.kind === "frame" ? "frame" : null;
     if (!kind) return { reason: "bad_line" };
     const design_code = code(raw.selection?.design_code);
     if (!design_code) return { reason: "bad_line" };
@@ -389,6 +420,10 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
     const photo = typeof raw.photo === "string" && raw.photo.startsWith("data:image/") ? raw.photo : null;
     const own = kind === "own_frame" ? cleanOwnFrame(raw.own_frame) : { specs: null };
     if ("reason" in own) return own;
+    const store = kind === "store_frame" ? cleanStoreFrame(raw.store_frame) : null;
+    if (store && "reason" in store) return store;
+    const typed = kind === "own_frame" || kind === "store_frame";
+    const specs = store ? store.specs : own.specs;
     // Only the two finish codes; anything else is a bad line, not a silent default.
     const rawFinish = raw.selection?.finish;
     const finish = rawFinish == null || rawFinish === "" ? null : parseLensFinish(rawFinish);
@@ -404,9 +439,10 @@ export function cleanLines(input: unknown): { reason: string } | { lines: PosLin
         finish: design_code === "frame-only" ? null : finish,
       },
       // The lab reads the brand, model, color and size first, then the clerk's note.
-      description: kind === "own_frame" ? ownFrameSummary(own.specs, text(raw.description, 160) || null) : null,
-      photo: kind === "own_frame" ? photo : null,
-      own_frame: kind === "own_frame" ? own.specs : null,
+      description: typed ? ownFrameSummary(specs, text(raw.description, 160) || null) : null,
+      photo: typed ? photo : null,
+      own_frame: typed ? specs : null,
+      frame_price_cents: store ? store.price_cents : null,
     });
   }
   return { lines };
