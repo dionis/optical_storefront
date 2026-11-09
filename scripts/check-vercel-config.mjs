@@ -8,7 +8,9 @@
 //     change where the live store points. (vercel.ts was tried and dropped: Vercel
 //     validates its static properties from the source, which kept rejecting it.)
 //   - apps/capri-storefront/backend-target.mjs picks the prefix per build from the
-//     branch: develop/main → /medusa, always; any other branch → /medusa-staging.
+//     branch: develop/main → /medusa; any other branch → /medusa-staging. The one
+//     exception is BACKEND_TARGET_OVERRIDE=staging, an env var set by hand in a
+//     Vercel project (never in code, so a merge cannot turn it on).
 //   - the app takes the prefix from VITE_BACKEND_PROXY, which scripts/vercel-build.sh
 //     sets from backend-target.mjs (and refuses to build a live branch otherwise).
 // This check fails whenever any of that stops being true.
@@ -67,11 +69,25 @@ const CASES = [
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop_optical_storepos" }, "staging"],
   [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "frontend" }, "staging"],
   [{}, "staging"],
+  // The deliberate switch: only the exact value "staging", on any branch.
+  [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "staging" }, "staging"],
+  [{ VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main", BACKEND_TARGET_OVERRIDE: "staging" }, "staging"],
+  [{ VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: "" }, "production"],
 ];
 if (PROXY_PATHS.production !== "/medusa" || PROXY_PATHS.staging !== "/medusa-staging") fail("backend-target.mjs: PROXY_PATHS must be /medusa and /medusa-staging (the vercel.json rewrites)");
 for (const [env, want] of CASES) {
   const got = resolveBackend(env);
   if (got.target !== want || got.proxy !== PROXY_PATHS[want]) fail(`${JSON.stringify(env)} → ${got.target} ${got.proxy}, expected ${want} ${PROXY_PATHS[want]}`);
+  if (got.override !== Boolean(env.BACKEND_TARGET_OVERRIDE)) fail(`${JSON.stringify(env)} → override=${got.override}`);
+}
+for (const bad of ["production", "Staging", "https://api-staging.example", "1"]) {
+  let threw = false;
+  try { resolveBackend({ VERCEL_GIT_COMMIT_REF: "develop", BACKEND_TARGET_OVERRIDE: bad }); } catch { threw = true; }
+  if (!threw) fail(`backend-target.mjs must reject BACKEND_TARGET_OVERRIDE="${bad}"`);
+}
+// The override must never be set in code: only in a Vercel project's settings.
+for (const file of [join(ROOT, "vercel.json"), join(STOREFRONT, "vercel.json"), join(STOREFRONT, ".env"), join(STOREFRONT, ".env.production")].filter(existsSync)) {
+  if (read(file).includes("BACKEND_TARGET_OVERRIDE")) fail(`${relative(ROOT, file)} sets BACKEND_TARGET_OVERRIDE — it belongs in the Vercel project settings only`);
 }
 
 // 3. The build script feeds the app from backend-target.mjs and guards live branches.
@@ -81,6 +97,7 @@ for (const [needle, why] of [
   ["export VITE_BACKEND_TARGET VITE_BACKEND_PROXY", "must export both variables to the app build"],
   ['VITE_VISION_API_BASE="${VITE_BACKEND_PROXY:-/medusa}"', "must give the try-on the same prefix"],
   ['[ "$VITE_BACKEND_PROXY" != "/medusa" ]', "must refuse a live branch that does not use /medusa"],
+  ['[ "$BACKEND_DECIDED_BY" != "override" ]', "must let only the explicit override past the live-branch guard"],
 ]) if (!build.includes(needle)) fail(`scripts/vercel-build.sh ${why}`);
 
 // 4. The app builds every backend URL from VITE_BACKEND_PROXY.
