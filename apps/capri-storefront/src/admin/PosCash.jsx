@@ -21,7 +21,7 @@ import { money } from "./adminOrders.js";
 import { addCashMovement, emailCashDocument, listCashSessions, openCashSession, posContext } from "./posApi.js";
 import { SubTabs } from "./ui.jsx";
 import CashReport from "./CashReport.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
@@ -121,7 +121,6 @@ export default function PosCash({ me }) {
       <div className="adm-head-row">
         <h2>{t("adm.tab.cash")}<HelpTip topic="cash.session" size={16} /></h2>
         <div className="pos-where">
-          {who && <StoreFilter me={who} />}
           {view === "day" && store && (!globalStore || globalStore.id !== store.id) && (
             <span className="scr-store-note" title={ctx.stores.length > 1 ? t("adm.scr.storeHint") : undefined}><Icon name="store" size={12} /> {t("adm.scr.storeShown", { store: `${store.code} · ${store.name}` })}</span>
           )}

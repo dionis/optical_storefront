@@ -1,0 +1,230 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Tableta y celular: la capa final del panel (AdminShell la importa la
+   última). Los vendedores trabajan en tableta (iPad 810×1080 / 1080×810,
+   Galaxy Tab 712×1138 / 1138×712) y el dueño mira desde el celular.
+
+   Criterios (revisión 9-nov-2026, pantalla por pantalla):
+   1. Nada duplicado: una sola búsqueda (la global), un solo selector de
+      tienda (el de la barra), exportar solo si la pantalla exporta.
+   2. Lo pegajoso cuesta pantalla: cabecera de UNA fila en el celular y barra
+      de filtros de dos filas como mucho.
+   3. Todo lo que se toca mide ≥ 44 px (WCAG 2.5.5 / Apple HIG), sin agrandar
+      el dibujo cuando no hace falta.
+   4. Campos a 16 px en táctil (iOS no hace zoom al enfocar).
+
+   `html.adm-touch` (AdminShell, mientras `(pointer: coarse)`) sube la
+   especificidad lo justo para ganar a las hojas de cada módulo, que se cargan
+   después y empatan; así no hace falta !important.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Cabecera ────────────────────────────────────────────────────────── */
+
+/* El buscador «producto para editar precio» es un atajo de escritorio: en
+   tableta y celular el buscador global de la barra ya encuentra monturas. */
+@media (max-width: 1199.98px) { .adm-top .adm-find { display: none; } }
+html.adm-touch .adm-top .adm-find { display: none; }
+
+/* La píldora «dónde estoy» repite la tienda: en tableta y celular cada
+   pantalla ya la dice (el selector de la barra, o la cabecera del POS con
+   tienda y punto de venta). Se queda solo donde no hay otra (equipo, perfil…). */
+@media (max-width: 1199.98px) {
+  .adm-main:has(.adm-bar-store) .adm-top .adm-store-pill,
+  .adm-main:has(.pos-head .adm-team-tag, .pos-head select) .adm-top .adm-store-pill { display: none; }
+}
+
+/* Celular: una sola fila — menú · sección · avatar. Idioma, tema y salir van
+   en el menú del avatar (adm-profile-popup-prefs / foot). */
+@media (max-width: 768px) {
+  .adm-top { flex-wrap: nowrap; height: auto; min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+  .adm-top-crumb { flex: 1 1 auto; min-width: 0; gap: 8px; }
+  .adm-top-sec { overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 17px; }
+  .adm-top .adm-badge { display: none; }
+  .adm-top .adm-store-pill { max-width: 38vw; }
+  .adm-top-right { flex: 0 0 auto; gap: 6px; }
+  .adm-top-right > .adm-icobtn { display: none; }
+  .adm-top .adm-user-mail { display: none; }
+}
+
+/* Menú del avatar: preferencias (idioma, tema) en dos botones iguales. */
+.adm-profile-popup-prefs { display: flex; gap: 8px; padding: 0 16px 10px; }
+.adm-profile-popup-prefs .btn-sm { flex: 1; justify-content: center; }
+
+/* ── 2. Barra de filtros global ────────────────────────────────────────── */
+
+/* El desplegable de período solo existe en el celular; las píldoras, fuera de él. */
+.adm-bar-period-sel { display: none; position: relative; align-items: center; }
+.adm-bar-period-sel select {
+  appearance: none; -webkit-appearance: none; min-height: 32px; padding: 0 30px 0 12px;
+  border: 1px solid var(--adm-line); border-radius: 999px; background: var(--adm-surface); color: var(--adm-ink);
+  font: 700 13px var(--adm-font); box-shadow: var(--adm-shadow-card); cursor: pointer;
+}
+.adm-bar-period-sel select:focus-visible { outline: none; border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+.adm-bar-period-sel .adm-ico { position: absolute; right: 11px; pointer-events: none; color: var(--adm-muted); }
+
+/* Exportar sin nada que exportar (la pantalla no registró manejadores):
+   en táctil no se pinta — tres botones apagados solo roban sitio. */
+html.adm-touch .adm-bar-export:has(.adm-export-menu.idle) { display: none; }
+
+@media (max-width: 768px) {
+  /* Dos filas fijas, en rejilla: [buscador ········ exportar]
+                                  [tienda · período · rango]
+     Los envoltorios ya son `display: contents` (filter-bar.css), así que cada
+     pieza es hija directa de la rejilla. */
+  .adm-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "search search export" "store period range"; gap: 6px; padding: 6px 10px; align-items: center; }
+  .adm-bar-search { grid-area: search; min-width: 0; max-width: none; }
+  .adm-bar:not(:has(.adm-bar-export)) .adm-bar-search,
+  .adm-bar:has(.adm-export-menu.idle) .adm-bar-search { grid-column: 1 / -1; }
+  .adm-bar-export { grid-area: export; margin-left: 0; }
+  .adm-bar-store { grid-area: store; min-width: 0; }
+  .adm-bar-period-sel { grid-area: period; display: inline-flex; }
+  .adm-bar-range { grid-area: range; justify-content: center; }
+  .adm-bar:not(:has(.adm-bar-store)) .adm-bar-period-sel { grid-column: 1; justify-self: start; }
+  .adm-bar-seg { display: none; }
+  /* Con «Rango» elegido, las dos fechas en su propia fila. */
+  .adm-bar:has(.adm-bar-range.on) { grid-template-areas: "search search export" "store period period" "range range range"; }
+  .adm-bar > .ep-notice { grid-column: 1 / -1; }
+  /* Exportar: solo los iconos (el nombre queda en aria-label y title). */
+  .adm-bar-export-txt { display: none; }
+  .adm-bar-export .adm-export-menu .btn-xs { padding: 0 11px; }
+  .adm-bar .adm-store-filter.compact { min-width: 0; max-width: 100%; display: flex; }
+  .adm-bar .adm-store-filter.compact .adm-sf-btn { max-width: 100%; min-width: 0; }
+  .adm-bar .adm-store-filter.compact .adm-sf-txt { max-width: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .adm-omni-kbd { display: none; }
+}
+@media (max-width: 380px) {
+  .adm-bar-range-btn span { display: none; }
+  .adm-bar-range-btn { padding-right: 10px; }
+}
+
+/* Táctil: 44 px en todo lo de la barra. */
+html.adm-touch .adm-bar-period-sel select { min-height: 44px; font-size: 16px; }
+
+/* ── 3. Objetivos táctiles ≥ 44 px ─────────────────────────────────────── */
+html.adm-touch .btn-xs,
+html.adm-touch .btn-sm,
+html.adm-touch .adm-bar-export .adm-export-menu .btn-xs { min-height: 44px; }
+html.adm-touch .adm-mini { width: 44px; height: 44px; }
+html.adm-touch .adm-store-swatch { width: 40px; height: 40px; }
+/* Botones de orden de las cabeceras de tabla y filas que se abren al tocar. */
+html.adm-touch .adm-table th .sort-btn,
+html.adm-touch .adm-table th button { min-height: 40px; }
+html.adm-touch .dt-table tbody tr[tabindex] > td { padding-top: 12px; padding-bottom: 12px; }
+/* Píldoras que filtran (chips con conteo, períodos de los paneles, subpestañas). */
+html.adm-touch .adm-range button,
+html.adm-touch .adm-seg button,
+html.adm-touch .adm-subtabs button,
+html.adm-touch button.adm-chip,
+html.adm-touch .pm-chips button,
+html.adm-touch .sb-seg button,
+html.adm-touch .pt-chips button { min-height: 40px; }
+/* «Dirección (solo si…)» y demás desplegables nativos: toda la fila se toca. */
+html.adm-touch summary { min-height: 44px; display: flex; align-items: center; gap: 6px; }
+/* Casillas y radios: 22 px, y la etiqueta entera como zona de toque. */
+html.adm-touch .adm-shell input[type="checkbox"],
+html.adm-touch .adm-shell input[type="radio"],
+html.adm-touch .sd-panel input[type="checkbox"],
+html.adm-touch .sd-panel input[type="radio"] { width: 22px; height: 22px; flex: 0 0 auto; }
+/* Los interruptores (casilla dibujada como switch) conservan su forma. */
+html.adm-touch .adm-shell .adm-switch input[type="checkbox"] { width: 44px; height: 26px; }
+html.adm-touch .pos-wears label,
+html.adm-touch .pos-check { min-height: 44px; display: inline-flex; align-items: center; gap: 10px; }
+/* Selects y campos sueltos que se quedaban en 19–24 px. */
+html.adm-touch .adm-shell select,
+html.adm-touch .adm-shell input[type="text"],
+html.adm-touch .adm-shell input[type="search"],
+html.adm-touch .adm-shell input[type="email"],
+html.adm-touch .adm-shell input[type="tel"],
+html.adm-touch .adm-shell input[type="number"],
+html.adm-touch .adm-shell input[type="date"],
+html.adm-touch .adm-shell input:not([type]) { min-height: 44px; font-size: max(16px, 1em); }
+/* …salvo los que viven dentro de una caja que ya mide 44 (buscadores con icono, rango de fechas). */
+html.adm-touch .adm-shell .adm-omni-box input,
+html.adm-touch .adm-shell .adm-bar-range input,
+html.adm-touch .adm-shell .pos-search input,
+html.adm-touch .adm-shell .adm-find input { min-height: 0; }
+
+/* ── 4. Detalles de pantallas ──────────────────────────────────────────── */
+
+/* Nueva venta → buscar cliente: la caja con la lupa ya es el campo; el input
+   de dentro no lleva su propio borde (se veían dos cajas una dentro de otra). */
+.adm-shell .pos .pos-search input,
+html.adm-touch .pos label.pos-search input[type="search"] { border: 0; box-shadow: none; background: transparent; padding-left: 0; min-height: 46px; }
+.adm-shell .pos .pos-search:focus-within { border-color: var(--adm-accent); box-shadow: var(--adm-shadow-glow); }
+html.adm-touch .adm-shell .pos .pos-search { min-height: 48px; }
+
+/* Tablas como tarjetas en el celular (adm-table.responsive): la primera
+   columna es el título de la tarjeta y el resto va en dos columnas, etiqueta
+   arriba y valor abajo — la mitad de alto que una línea por dato. */
+@media (max-width: 768px) {
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; padding: 10px 12px; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td::before { font-size: 10.5px; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td:first-child { grid-column: 1 / -1; font-size: 15px; padding-bottom: 4px; border-bottom: 1px solid var(--adm-line); margin-bottom: 2px; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td:first-child::before { display: none; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td.full { grid-column: 1 / -1; }
+  .adm-shell .dt-table.responsive tbody tr:not(.dt-empty-row) > td .dt-empty { color: var(--adm-faint); }
+}
+
+/* Celular: márgenes y títulos más contenidos. */
+@media (max-width: 768px) {
+  .adm-body { padding-left: 10px; padding-right: 10px; }
+  .adm-head-row h2 { font-size: 21px; }
+  .adm-sub { font-size: 12.5px; }
+}
+
+/* Ventas de tienda → filtros: primero lo que se escribe (nº de venta, cliente),
+   luego lo que se elige; en el celular, de dos en dos en vez de seis filas. */
+@media (max-width: 1199.98px) {
+  .adm-shell .pos-filters > input { order: 1; flex: 1 1 140px; }
+  .adm-shell .pos-filters > .pos-cust-filter { order: 2; flex: 2 1 220px; }
+  .adm-shell .pos-filters > select { order: 3; flex: 1 1 160px; }
+  .adm-shell .pos-filters > .pos-check { order: 4; }
+  .adm-shell .pos-filters > .btn-sm { order: 5; margin-left: auto; }
+}
+@media (max-width: 768px) {
+  .adm-shell .pos-filters > select, .adm-shell .pos-filters > input, .adm-shell .pos-filters > .pos-cust-filter { flex: 1 1 calc(50% - 4px); width: auto; min-width: 0; }
+  .adm-shell .pos-filters > .pos-check { flex: 1 1 auto; }
+}
+/* El desplegable de período no necesita el ancho de «Semana pasada» entero. */
+@media (max-width: 768px) { .adm-bar-period-sel select { max-width: 132px; } }
+
+/* Nueva venta → Precio y Pago: los importes, como en un recibo, a la derecha
+   de la tarjeta (antes quedaban a media tarjeta con media tarjeta vacía). */
+@media (min-width: 600px) {
+  .adm-shell .pos-card > .pos-totals { margin-left: auto; width: min(420px, 100%); }
+  .adm-shell .pos-done .pos-totals { margin-left: 0; }
+}
+
+/* Receta en el celular: la cuadrícula se transpone — los ojos pasan a ser
+   columnas (OD | OI) y cada dato una fila (Esf, Cil, Eje, …). Así cabe sin
+   desplazarse de lado y cada casilla mide la mitad de la pantalla. La tabla no
+   cambia (lectores de pantalla y teclado siguen igual): solo su rejilla. */
+@container pos (max-width: 560px) {
+  .adm-shell .pos .pos-rx-scroll { overflow: visible; }
+  .adm-shell .pos .pos-rx-grid { display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: column; gap: 6px 8px; width: 100%; max-width: none; border-spacing: 0; }
+  .adm-shell .pos .pos-rx-grid.cols-6 { grid-template-rows: repeat(7, auto); }
+  .adm-shell .pos .pos-rx-grid.cols-8 { grid-template-rows: repeat(9, auto); }
+  .adm-shell .pos .pos-rx-grid thead, .adm-shell .pos .pos-rx-grid tbody, .adm-shell .pos .pos-rx-grid tr { display: contents; }
+  .adm-shell .pos .pos-rx-grid thead th { text-align: left; align-self: center; font-size: 12px; padding: 0; white-space: nowrap; }
+  .adm-shell .pos .pos-rx-grid tbody th { text-align: center; font-size: 14px; padding: 0 0 2px; color: var(--adm-navy); }
+  .adm-shell .pos .pos-rx-grid input, .adm-shell .pos .pos-rx-grid select { min-width: 0; width: 100%; }
+}
+
+/* Nueva venta en el celular: la cabecera ya dice «Nueva venta»; aquí solo
+   tienda · punto de venta · código, en una línea. */
+@media (max-width: 768px) {
+  .adm-shell .pos-head h2 { display: none; }
+  .adm-shell .pos-head .pos-where { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; width: 100%; }
+  .adm-shell .pos-head .pos-where::-webkit-scrollbar { display: none; }
+  .adm-shell .pos-head .pos-where > * { flex: 0 0 auto; }
+  .adm-shell .pos-head .pos-where select { flex: 1 1 auto; min-width: 0; }
+}
+
+/* Más objetivos que el barrido encontró por debajo de 40 px. */
+html.adm-touch th .sort-btn { min-height: 40px; }
+html.adm-touch .pm-eye { min-width: 40px; min-height: 40px; }
+html.adm-touch .pm-more { min-width: 44px; min-height: 44px; }
+html.adm-touch .sel-social-main { min-height: 40px; }
+html.adm-touch .pb-link { min-height: 36px; display: inline-flex; align-items: center; }
+html.adm-touch .adm-store-swatch-custom { min-width: 40px; min-height: 40px; }
+@media (max-width: 768px) { .adm-shell .pos-frame-photo.noimg:not(.md) { aspect-ratio: auto; height: 96px; } }

@@ -13,7 +13,7 @@ import { fetchStores } from "./adminStores.js";
 import { fetchTeam } from "./adminTeam.js";
 import { decideApproval, listApprovals } from "./posApi.js";
 import Accordion, { AccordionGroup } from "./Accordion.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import "./screens.css";
 
 const DECIDED = ["approved", "rejected", "used", "expired"];
@@ -111,7 +111,6 @@ export default function PosApprovals({ params = {}, me }) {
     <div className="adm-section pos">
       <div className="adm-head-row">
         <h2>{t("adm.tab.approvals")}</h2>
-        <StoreFilter me={me} />
       </div>
       <p className="adm-sub">{t("adm.pos.approvals.sub")}</p>
       {state === "error" && <div className="adm-demo-banner">{t("adm.err.pos.generic")}</div>}

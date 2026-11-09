@@ -30,7 +30,7 @@ import Accordion from "./Accordion.jsx";
 import DataTable, { tableSpecFrom } from "./DataTable.jsx";
 import { useColumns } from "./useColumns.js";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import { ExportMenu } from "./ui.jsx";
 import "./screens.css";
 
@@ -330,7 +330,7 @@ export default function PosSales({ me, params }) {
 
   return (
     <div className="adm-section pos">
-      <div className="adm-head-row"><h2>{t("adm.tab.possales")}</h2>{who && <StoreFilter me={who} />}</div>
+      <div className="adm-head-row"><h2>{t("adm.tab.possales")}</h2></div>
       <p className="adm-sub">{ctx && !ctx.is_admin && ctx.role === "seller" ? t("adm.pos.sales.subSeller") : t("adm.pos.sales.sub")}</p>
       <div className="adm-card pos-filters">
         {/* Filtrar por punto de venta solo tiene sentido si hay más de uno (un vendedor tiene el suyo fijo). */}

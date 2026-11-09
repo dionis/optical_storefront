@@ -11,6 +11,8 @@ import AdminErrorBoundary from "./AdminErrorBoundary.jsx";
 import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreTheme.js";
 import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
+// Capa final de tableta y celular (objetivos táctiles, cabecera y barra compactas): va la última.
+import "./responsive.css";
 
 /**
  * Secciones del panel en grupos pequeños, por tarea: cada grupo es un submenú
@@ -158,6 +160,14 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
   const [collapsedPref, setCollapsedPref] = useState(readCollapsed);
   const [tabletPref, setTabletPref] = useState(readTabletCollapsed);
   const tabletLandscape = useMediaQuery(TABLET_LANDSCAPE_QUERY);
+  // Pantalla táctil: `html.adm-touch` deja que responsive.css gane a las hojas
+  // de cada módulo (se cargan después y empatan en especificidad) sin !important.
+  const touch = useMediaQuery("(pointer: coarse)");
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("adm-touch", touch);
+    return () => root.classList.remove("adm-touch");
+  }, [touch]);
   const [drawer, setDrawer] = useState(false);
   // Tablet vertical de 900–1199 px: la barra queda en iconos sola (más ancho
   // para el contenido) sin tocar la preferencia guardada del escritorio. Por
@@ -445,6 +455,15 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
                 <dd>{me.seller_code}</dd>
               </div>}
             </dl>
+            {/* En el celular la cabecera solo deja el menú y el avatar: idioma y tema viven aquí (también en tableta y escritorio). */}
+            <div className="adm-profile-popup-prefs">
+              <button type="button" className="btn-sm" onClick={toggle} title={t("lang.switch")}>
+                <Icon name="globe" size={15} /> {lang === "es" ? "English" : "Español"}
+              </button>
+              <button type="button" className="btn-sm" onClick={cycleMode} title={t("adm.mode.next", { mode: t(`adm.mode.${COLOR_MODES[(COLOR_MODES.indexOf(mode) + 1) % 3]}`) })}>
+                <Icon name={mode === "dark" ? "moon" : mode === "light" ? "sun" : "auto"} size={15} /> {t(`adm.mode.${mode}`)}
+              </button>
+            </div>
             <div className="adm-profile-popup-foot">
               <button type="button" className="btn-sm" onClick={() => { onTab("profile"); setShowProfile(false); }}>
                 <Icon name="user" size={15} /> {t("adm.profile.viewFull")}

@@ -71,7 +71,10 @@ import "./empty-period.css";
  *   storestatus  foto de AHORA (caja abierta, saldos, pendientes) → sin período.
  *   approvals    cola de aprobaciones vivas → sin período y sin exportación.
  *   audit        sí filtra por tienda y fechas, pero no registra exportación.
- *   orders       pedidos de la WEB: no hay tienda que elegir; sí período.
+ *   orders       pedidos de la WEB: no hay tienda que elegir, y la pantalla lleva
+ *                sus propias fechas (Hoy · 7 · 30 · 90 días · Todo, desde/hasta, y el
+ *                enlace a un pedido abre «Todo»): el período de la barra no la
+ *                filtraba, así que fuera (revisión 9-nov-2026). Exporta por su cuenta.
  * Solo el buscador (la pantalla no depende de tienda ni de fechas, y exporta
  * por su cuenta o no exporta):
  *   catalog           clave de grupo (ver abajo). «Productos y precios»
@@ -106,7 +109,7 @@ export const BAR_TABS = {
   storestatus: { store: true, period: false, export: true },
   approvals: { store: true, period: false, export: false },
   audit: { store: true, period: true, export: false },
-  orders: { store: false, period: true, export: true },
+  orders: NONE,
   // «Productos y precios» (Productos + Precios y costos, 6-nov-2026): la tienda
   // deja solo sus columnas en la matriz y elige maestro/variación en «Reglas y
   // comisiones». Exporta: la matriz registra su libro de Excel y las reglas el
@@ -256,6 +259,14 @@ function PeriodControl() {
           </button>
         ))}
       </div>
+      {/* Teléfono: los ocho períodos no caben como píldoras sin ocupar dos filas
+          pegajosas; ahí el mismo control es un desplegable (responsive.css). */}
+      <label className="adm-bar-period-sel">
+        <select value={period} onChange={(e) => setPeriod(e.target.value, { explicit: true })} aria-label={t("adm.bar.period")} title={t("adm.bar.period")}>
+          {PERIODS.map((p) => <option key={p} value={p}>{t(`adm.ex.per.${p}`)}</option>)}
+        </select>
+        <Icon name="chevronDown" size={14} />
+      </label>
       {custom ? (
         <span className="adm-bar-range on" title={t("adm.bar.range")}>
           <Icon name="calendar" size={13} />
@@ -373,7 +384,7 @@ function ExportGroup({ me, storeScoped }) {
       <button key={f.kind} type="button" className={`btn-xs ${pick?.kind === f.kind ? "on" : ""}`} disabled={none || !entry.has[f.kind]}
         title={titleOf(f, label)} aria-label={label} aria-haspopup={audiences ? "menu" : undefined} aria-expanded={audiences ? pick?.kind === f.kind : undefined}
         onClick={press(f)}>
-        <Icon name={f.icon} size={14} />{f.text}
+        <Icon name={f.icon} size={14} /><span className="adm-bar-export-txt">{f.text}</span>
       </button>
     );
   };

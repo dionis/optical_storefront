@@ -34,7 +34,7 @@ import Accordion from "./Accordion.jsx";
 import DataTable, { tableSpecFrom } from "./DataTable.jsx";
 import { useColumns } from "./useColumns.js";
 import { mergeSaleDetails } from "./PosSales.jsx";
-import StoreFilter, { useStoreFilter } from "./StoreFilter.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import { ExportMenu } from "./ui.jsx";
 import { daysOverdue } from "./lateness.js";
 import "./screens.css";
@@ -224,9 +224,6 @@ export default function PendingBalances({ me, openSale, embedded = false, params
           <div>
             <h2>{t("adm.pb.title")}<HelpTip topic="pending.what" size={16} /></h2>
             <p className="adm-sub">{t(seller ? "adm.pb.subSeller" : "adm.pb.sub")}</p>
-          </div>
-          <div className="pos-filters">
-            <StoreFilter me={me} />
           </div>
         </div>
       )}
