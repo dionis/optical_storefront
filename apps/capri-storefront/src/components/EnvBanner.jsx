@@ -11,6 +11,8 @@
 import { useLang } from "../i18n/LanguageContext.jsx";
 
 const TARGET = import.meta.env.VITE_BACKEND_TARGET;
+// Deliberate switch to another backend (BACKEND_TARGET_OVERRIDE in Vercel): shoppers see no strip.
+const OVERRIDE = import.meta.env.VITE_BACKEND_OVERRIDE === "1";
 const BANNER_H = 28;
 
 const CSS = `
@@ -25,7 +27,7 @@ body { padding-top: ${BANNER_H}px; }
 
 export default function EnvBanner() {
   const { t } = useLang();
-  if (!TARGET || TARGET === "production") return null;
+  if (!TARGET || TARGET === "production" || OVERRIDE) return null;
   return (
     <>
       <style>{CSS}</style>
