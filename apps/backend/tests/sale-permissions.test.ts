@@ -1,4 +1,4 @@
-import { creatorRank, saleAdminDenied, saleEditDenied, saleMoveDenied, salePermissions, type SaleActor } from "../src/lib/sale-permissions";
+import { canViewSaleRx, creatorRank, saleAdminDenied, saleEditDenied, saleMoveDenied, salePermissions, type SaleActor } from "../src/lib/sale-permissions";
 import { cleanDeleteInput, cleanDetailsPatch } from "../src/lib/pos-sale-admin";
 import { isAllowedForRestrictedRole } from "../src/lib/staff-roles";
 
@@ -60,8 +60,22 @@ describe("delete, restore and move — owner and superadmin only", () => {
     expect(saleMoveDenied({ role: "owner" }, sale({ status: "voided" }), target)).toBe("sale_voided");
   });
   it("salePermissions mirrors the rules", () => {
-    expect(salePermissions(actor("seller", { user_id: "u_seller" }), sale(), "seller")).toEqual({ can_edit: true, can_delete: false, can_move: false });
-    expect(salePermissions(actor("superadmin"), sale(), "seller")).toEqual({ can_edit: true, can_delete: true, can_move: true });
+    expect(salePermissions(actor("seller", { user_id: "u_seller" }), sale(), "seller")).toEqual({ can_edit: true, can_delete: false, can_move: false, can_view_rx: true });
+    expect(salePermissions(actor("superadmin"), sale(), "seller")).toEqual({ can_edit: true, can_delete: true, can_move: true, can_view_rx: true });
+  });
+});
+
+describe("canViewSaleRx — health data", () => {
+  it("the seller who made the sale sees its prescription; another seller does not", () => {
+    expect(canViewSaleRx(actor("seller", { user_id: "u_seller" }), sale())).toBe(true);
+    expect(canViewSaleRx(actor("seller", { user_id: "u_other" }), sale())).toBe(false);
+  });
+  it("managers and supervisors of the store, and admins, always do", () => {
+    for (const r of ["manager", "supervisor", "superadmin", "owner"] as const) expect(canViewSaleRx(actor(r), sale())).toBe(true);
+    expect(canViewSaleRx(actor("manager", { establishment_ids: [OTHER] }), sale())).toBe(false);
+  });
+  it("nobody without a role", () => {
+    expect(canViewSaleRx(actor(null, { user_id: "u_seller" }), sale())).toBe(false);
   });
 });
 

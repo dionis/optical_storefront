@@ -27,7 +27,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
     const { sale, access } = await saleForUser(req, scope, String(req.params.id ?? ""));
     if (access === "limited") {
       const contacts = await customerContacts(req.scope, [sale.customer_id]);
-      res.json({ sale: limitedSale(sale, sale.customer_id ? contacts.get(sale.customer_id) : null, true), insurance_claims: [], permissions: { can_edit: false, can_delete: false, can_move: false } });
+      res.json({ sale: limitedSale(sale, sale.customer_id ? contacts.get(sale.customer_id) : null, true), insurance_claims: [], permissions: { can_edit: false, can_delete: false, can_move: false, can_view_rx: false } });
       return;
     }
     const [claims, creatorRole] = await Promise.all([

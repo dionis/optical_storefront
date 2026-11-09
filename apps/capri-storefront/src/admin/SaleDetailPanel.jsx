@@ -310,7 +310,8 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   useEffect(() => { if (givenCtx) setCtx(givenCtx); else loadCtx().then(setCtx).catch(() => setCtx({ stores: [], payment_methods: [], void_reasons: [], can_void: false })); }, [givenCtx]);
 
   const who = me || (ctx && ctx.role !== undefined ? { is_admin: ctx.is_admin, role: ctx.role } : null);
-  const rxAllowed = canSeeRx(who);
+  // Por rol (administración, supervisión, encargado); la receta de UNA venta la ve además quien la hizo (`permissions.can_view_rx`).
+  const roleSeesRx = canSeeRx(who);
 
   // Un pedido de caja abierto por `orderId` lleva `pos_sale_id`: se pinta la ficha de venta completa.
   const saleId = givenSaleId || (!givenSaleId && order && givenOrderId && order.id === givenOrderId ? order.pos_sale_id : null) || null;
@@ -331,12 +332,12 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
         if (!on) return;
         setData(d); setDoc(dc); setState("ok");
         if (d.sale.customer_id) fetchCustomer(d.sale.customer_id).then((r) => on && setCustomer(r.customer || null)).catch(() => null);
-        if (rxAllowed && dc?.lines?.some((l) => l.prescription_id)) fetchSaleDocument(saleId, "job").then((r) => on && setRxDoc(r.document)).catch(() => on && setRxDoc({ tickets: [] }));
+        if ((roleSeesRx || d.permissions?.can_view_rx) && dc?.lines?.some((l) => l.prescription_id)) fetchSaleDocument(saleId, "job").then((r) => on && setRxDoc(r.document)).catch(() => on && setRxDoc({ tickets: [] }));
       })
       .catch((e) => { if (on) { setState("error"); toast({ tone: "error", title: t(errKey(e)) }); } });
     return () => { on = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, saleId, tick, rxAllowed, Boolean(ctx)]);
+  }, [open, saleId, tick, roleSeesRx, Boolean(ctx)]);
 
   // El pedido: el dado (`orderId`) o el de la venta (`sale.order_id`). Sin pedido, sin etapas.
   const orderIdToLoad = givenOrderId || data?.sale?.order_id || null;
@@ -405,6 +406,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   };
 
   const s = data?.sale;
+  const rxAllowed = roleSeesRx || Boolean(data?.permissions?.can_view_rx);
   const store = useMemo(() => (s && ctx ? (ctx.stores || []).find((x) => x.id === s.establishment_id) : null), [s, ctx]);
   const terminal = store?.terminals?.find((x) => x.id === s?.terminal_id) || null;
   const methods = useMemo(() => (ctx?.payment_methods || []).filter((x) => (!store || (store.payment_methods || []).includes(x.code)) && !(x.kind === "insurance" || x.receivable)), [ctx, store]);

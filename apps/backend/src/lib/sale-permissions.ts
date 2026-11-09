@@ -67,13 +67,26 @@ export function saleMoveDenied(
   return null;
 }
 
+/**
+ * Prescription values of a sale (health data): owner, superadmin, supervisor
+ * and manager on the sales of their stores, and the seller who made THIS sale
+ * (owner, 9-nov-2026: they may correct its prescription). Any other seller
+ * sees only «with / without prescription».
+ */
+export function canViewSaleRx(actor: SaleActor, sale: SaleForPermission): boolean {
+  if (!actor.role || !canSellAt(actor, sale.establishment_id)) return false;
+  if (actor.is_admin || actor.role === "supervisor" || actor.role === "manager") return true;
+  return Boolean(sale.seller_id) && sale.seller_id === actor.user_id;
+}
+
 /** What the panel may offer on one sale (it never decides on its own: the routes check again). */
-export function salePermissions(actor: SaleActor, sale: SaleForPermission, creatorRole: StaffRole | null): { can_edit: boolean; can_delete: boolean; can_move: boolean } {
+export function salePermissions(actor: SaleActor, sale: SaleForPermission, creatorRole: StaffRole | null): { can_edit: boolean; can_delete: boolean; can_move: boolean; can_view_rx: boolean } {
   const admin = saleAdminDenied(actor) === null;
   return {
     can_edit: saleEditDenied(actor, sale, creatorRole) === null,
     can_delete: admin,
     can_move: admin && sale.status !== "voided",
+    can_view_rx: canViewSaleRx(actor, sale),
   };
 }
 
