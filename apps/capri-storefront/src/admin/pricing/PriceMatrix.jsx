@@ -161,12 +161,12 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
   useEffect(() => { load(); }, [load]);
 
   const allStores = useMemo(() => (Array.isArray(data?.stores) ? data.stores : []), [data]);
-  // The global store picker narrows the columns to ONE store (handy on a phone);
-  // «Todas las tiendas» / «Tienda online» shows them all.
-  const stores = useMemo(() => {
-    const one = onlyStore ? allStores.filter((s) => s.id === onlyStore) : [];
-    return one.length ? one : allStores;
-  }, [allStores, onlyStore]);
+  // Every store is always a column (owner, 9-nov-2026: «no están saliendo todas
+  // las tiendas»): picking a store in the global filter — which the POS also
+  // does when you sell — used to leave only that column. Now the picked store
+  // is highlighted and scrolled into view instead.
+  const stores = allStores;
+  const picked = onlyStore && allStores.some((s) => s.id === onlyStore) ? onlyStore : null;
   const storeIds = useMemo(() => stores.map((s) => s.id), [stores]);
   const costAccess = Boolean(data?.cost_access);
 
@@ -510,6 +510,16 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
     toast({ tone: "success", title: t(created ? "adm.pm.created" : "adm.pm.updated", { name: brand.name }) });
     if (created && brandScope(section) === (brand.kind || "frame")) openGroup(brand.slug);
   };
+  // The picked store's column comes into view (on a phone the matrix scrolls sideways).
+  useEffect(() => {
+    const box = tableRef.current;
+    if (!box || !picked) return;
+    const th = box.querySelector(`th[data-store="${CSS.escape(picked)}"]`);
+    if (!th) return;
+    const fixed = [...box.querySelectorAll("thead th.pm-corner")].reduce((w, el) => w + el.offsetWidth, 0);
+    box.scrollTo({ left: Math.max(0, th.offsetLeft - fixed - 8), behavior: "smooth" });
+  }, [picked, data]);
+
   useEffect(() => {
     if (!flash) return undefined;
     // Scroll inside the matrix only: scrolling the page would push the sticky header out of view.
@@ -598,7 +608,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                 </th>
                 {costAccess && <th rowSpan={2} className="pm-c-cost pm-corner" scope="col">{t("adm.pm.col.cost")}</th>}
                 {stores.map((s) => (
-                  <th key={s.id} colSpan={2} scope="colgroup" className="pm-store" style={{ "--st": s.color || "var(--adm-accent)" }} title={`${s.code} · ${s.name}`}>
+                  <th key={s.id} colSpan={2} scope="colgroup" data-store={s.id} className={`pm-store ${picked === s.id ? "is-picked" : ""}`} style={{ "--st": s.color || "var(--adm-accent)" }} title={`${s.code} · ${s.name}`}>
                     <span className="pm-store-n"><b>{s.code}</b> {s.name}</span>
                   </th>
                 ))}

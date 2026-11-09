@@ -480,3 +480,7 @@
 .pm-cat-grid td .pp-input { width: 100%; }
 .pm-cat-grid tr.is-off tbody th, .pm-cat-grid tr.is-off th { color: var(--adm-faint); }
 @media (max-width: 520px) { .pm-cat-grid td { width: 96px; } }
+
+/* La tienda elegida en el filtro global se resalta (ya no deja una sola columna). */
+.pm-store.is-picked { border-top-width: 6px; background: color-mix(in srgb, var(--st) 16%, var(--adm-surface)) !important; }
+.pm-store.is-picked .pm-store-n { font-weight: 900; }
