@@ -15,6 +15,11 @@ import "./styles/index.css";
 // módulo las lea (LanguageContext, CartContext y priceStore leen al importarse).
 purgeStaleStorage();
 
+// El panel (/admin…) es una ruta perezosa: su trozo empieza a bajar ya, en
+// paralelo con el resto del arranque, en vez de esperar a que React la pida
+// (en una tableta lenta eran ~250 ms de espera en cascada).
+if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) import("./pages/AdminPage.jsx").catch(() => {});
+
 // La marca guardada por el dueño en el panel: la última conocida antes del primer
 // pintado (sin parpadeo) y la actual en segundo plano.
 applyCachedBrand();

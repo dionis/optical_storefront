@@ -166,7 +166,16 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("adm-touch", touch);
-    return () => root.classList.remove("adm-touch");
+    // Modo ligero: tabletas de gama baja (p. ej. Galaxy Tab A7 Lite, 3–4 GB y
+    // GPU modesta). Chrome da la memoria redondeada (2/4/8 GB); sin el dato
+    // (iPad/Safari) no se activa. Quita desenfoques y animaciones, que son lo
+    // que más le cuesta pintar a esa GPU al desplazarse.
+    const mem = typeof navigator !== "undefined" ? Number(navigator.deviceMemory || 0) : 0;
+    const cores = typeof navigator !== "undefined" ? Number(navigator.hardwareConcurrency || 0) : 0;
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const lite = (touch && ((mem > 0 && mem <= 4) || (cores > 0 && cores <= 4))) || reduced;
+    root.classList.toggle("adm-lite", Boolean(lite));
+    return () => { root.classList.remove("adm-touch"); root.classList.remove("adm-lite"); };
   }, [touch]);
   const [drawer, setDrawer] = useState(false);
   // Tablet vertical de 900–1199 px: la barra queda en iconos sola (más ancho

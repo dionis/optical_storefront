@@ -48,7 +48,7 @@ export function PosRunningTotal({ quote, status, lines, catalog, money, beforeLe
   // Plegada de entrada en móvil y en tablet vertical: la línea de cabecera ya
   // dice montura, lentes y total; el detalle se abre con un toque. En vertical
   // la franja es pegajosa y abierta se comía un cuarto de la pantalla.
-  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px), (pointer: coarse) and (orientation: portrait)").matches));
+  const [open, setOpen] = useState(() => !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px), (pointer: coarse) and (orientation: portrait), (orientation: landscape) and (max-height: 560px)").matches));
   if (!lines.length) return null;
   const pending = !quote;
   const dash = "—";

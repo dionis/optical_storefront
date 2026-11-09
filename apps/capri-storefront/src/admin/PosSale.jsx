@@ -340,7 +340,8 @@ export default function PosSale({ me }) {
   // The lens list of the store being sold in (GET /admin/pos/lens-matrix): the
   // owner's cells and finishes, at that store's prices. Until it arrives, or
   // if it fails, the bundled list — and the lens step says so (`catalog.live`).
-  const catalog = useAdminLensCatalog(storeId);
+  // Solo con la tienda ya decidida: antes se pedía la lista maestra y luego la de la tienda, una detrás de otra.
+  const catalog = useAdminLensCatalog(storeId, { enabled: Boolean(storeId) });
   const [terminalId, setTerminalId] = useState("");
   const [step, setStep] = useState(0);
   const rootRef = useRef(null);

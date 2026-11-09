@@ -211,8 +211,10 @@ export function loadAdminLensCatalog(storeId = "") {
  * fallback — the POS says so next to the picker, because then the finish
  * toggle and the option list may not match what the quote will accept.
  */
-export function useAdminLensCatalog(storeId = "") {
-  const { data, refresh } = useCached(adminMatrixKey(storeId), { ttl: ADMIN_LENS_MATRIX_TTL });
+export function useAdminLensCatalog(storeId = "", { enabled = true } = {}) {
+  // `enabled: false` (p. ej. el POS mientras aún no sabe en qué tienda vende):
+  // no se pide la lista maestra para tirarla un instante después.
+  const { data, refresh } = useCached(adminMatrixKey(storeId), { ttl: ADMIN_LENS_MATRIX_TTL, enabled });
   const catalog = useMemo(() => (data ? adaptLensMatrix(data) : null) || STATIC_CATALOG, [data]);
 
   useEffect(() => {

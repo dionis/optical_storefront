@@ -1,20 +1,9 @@
 // Dónde se usa: interior de /admin. Secciones Ejecutivo/Pedidos/Costos/Vendedores/Resumen/Ventas/Productos/Precios/Equipo/Seguridad dentro del armazón AdminShell (barra lateral de iconos).
-import { useState, useEffect, useMemo, useRef } from "react";
-import { KpiCard } from "./charts.jsx";
-import { ensureSeed, rangeFor, productSales, productSalesFrom } from "./analytics.js";
-// REAL analytics: the panel's Resumen/Ventas/Precios feed on the store's actual
-// orders (Medusa order board) when the login is real; the demo seed only backs
-// the demo login and the error fallback. See realAnalytics.js.
-import { fetchBoardWindow, toAnalyticsOrder } from "./realAnalytics.js";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { ensureSeed } from "./analytics.js";
 import { isDemoLogin } from "./adminAuth.js";
-import ExecutiveHub, { EXEC_TABS } from "./ExecutiveHub.jsx";
-import { Card } from "./ui.jsx";
+import { getSession } from "./adminApi.js";
 import { printElement } from "./exportUtils.js";
-import CatalogSync from "./CatalogSync.jsx";
-import Team from "./Team.jsx";
-import Stores from "./Stores.jsx";
-import Security from "./Security.jsx";
-import Setup from "./Setup.jsx";
 import { fetchSetup } from "./adminTenant.js";
 // The Orders tab is the one part of this panel backed by the real store: it
 // reads and mutates Medusa orders instead of the seeded localStorage the other
@@ -28,437 +17,100 @@ import {
 import { fetchOrderCost, marginTone } from "./adminCosting.js";
 import { fetchSellers } from "./adminSellers.js";
 import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
-import StaffProfile from "./StaffProfile.jsx";
-import AuditLog from "./AuditLog.jsx";
-import PosSale from "./PosSale.jsx";
-import PosSales from "./PosSales.jsx";
-import PosApprovals from "./PosApprovals.jsx";
-import PosConfig from "./PosConfig.jsx";
-import AlertRules from "./AlertRules.jsx";
-import AiUsage from "./AiUsage.jsx";
 import { fetchAiStatus } from "./aiUsage.js";
-import SalesBoard from "./SalesBoard.jsx";
-import StoreStatus from "./StoreStatus.jsx";
-import MySales from "./MySales.jsx";
-import PosCash from "./PosCash.jsx";
-import StoreCosts from "./StoreCosts.jsx";
-import StoreStatement from "./StoreStatement.jsx";
-import StoreOrders from "./StoreOrders.jsx";
-import PendingBalances from "./PendingBalances.jsx";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
-import Patients from "./Patients.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
-import Costs from "./Costs.jsx";
-import Sellers from "./Sellers.jsx";
 import { TENANT } from "../config/tenant.js";
-import { useCatalog } from "../data/catalogStore.js";
-import { supplierPriceFor } from "../data/products.js";
-import { FRAME_MARKUP } from "../config/features.js";
-import { BRANDS, BRAND_BY_SLUG } from "../data/brands.js";
-import * as PS from "./priceStore.js";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
-import { DESIGNS, MATERIALS as LENS_MATERIALS, BASE, PHOTO, AR, L } from "../data/lensPricing.js";
-import PricingPanel from "./PricingPanel.jsx";
 
-const BRAND_LOGO_BY_NAME = Object.fromEntries(BRANDS.map((b) => [b.name, b.logo]));
+// RENDIMIENTO (tabletas de gama baja, 9-nov-2026): cada pestaña es su propio
+// trozo de código y se baja la primera vez que se abre; el armazón, la ficha de
+// venta y el saludo diario van en el trozo principal. Las pestañas de trabajo
+// del rol se precargan en segundo plano tras el primer pintado (prefetchTabs).
+const TAB_IMPORTS = {
+  exec: () => import("./ExecutiveHub.jsx"),
+  catalogsync: () => import("./CatalogSync.jsx"),
+  team: () => import("./Team.jsx"),
+  stores: () => import("./Stores.jsx"),
+  security: () => import("./Security.jsx"),
+  setup: () => import("./Setup.jsx"),
+  profile: () => import("./StaffProfile.jsx"),
+  audit: () => import("./AuditLog.jsx"),
+  pos: () => import("./PosSale.jsx"),
+  possales: () => import("./PosSales.jsx"),
+  approvals: () => import("./PosApprovals.jsx"),
+  posconfig: () => import("./PosConfig.jsx"),
+  alerts: () => import("./AlertRules.jsx"),
+  aiusage: () => import("./AiUsage.jsx"),
+  salesboard: () => import("./SalesBoard.jsx"),
+  storestatus: () => import("./StoreStatus.jsx"),
+  mysales: () => import("./MySales.jsx"),
+  cash: () => import("./PosCash.jsx"),
+  storecosts: () => import("./StoreCosts.jsx"),
+  statement: () => import("./StoreStatement.jsx"),
+  storeorders: () => import("./StoreOrders.jsx"),
+  pendingbalances: () => import("./PendingBalances.jsx"),
+  patients: () => import("./Patients.jsx"),
+  costs: () => import("./Costs.jsx"),
+  sellers: () => import("./Sellers.jsx"),
+  products: () => import("./PricingPanel.jsx"),
+};
+// La pestaña de la URL empieza a bajar ya, mientras se pinta el armazón (sin esperar a que React la pida).
+try {
+  const first = new URLSearchParams(window.location.search).get("tab");
+  if (first && TAB_IMPORTS[first]) TAB_IMPORTS[first]().catch(() => {});
+  // Nueva venta: el contexto del punto de venta (tiendas, cajas, formas de pago) también, con la sesión ya guardada.
+  if (first === "pos" && getSession()) import("./posApi.js").then((m) => m.posContext()).catch(() => {});
+} catch { /* sin window (pruebas) */ }
+const ExecutiveHub = lazy(TAB_IMPORTS.exec);
+const CatalogSync = lazy(TAB_IMPORTS.catalogsync);
+const Team = lazy(TAB_IMPORTS.team);
+const Stores = lazy(TAB_IMPORTS.stores);
+const Security = lazy(TAB_IMPORTS.security);
+const Setup = lazy(TAB_IMPORTS.setup);
+const StaffProfile = lazy(TAB_IMPORTS.profile);
+const AuditLog = lazy(TAB_IMPORTS.audit);
+const PosSale = lazy(TAB_IMPORTS.pos);
+const PosSales = lazy(TAB_IMPORTS.possales);
+const PosApprovals = lazy(TAB_IMPORTS.approvals);
+const PosConfig = lazy(TAB_IMPORTS.posconfig);
+const AlertRules = lazy(TAB_IMPORTS.alerts);
+const AiUsage = lazy(TAB_IMPORTS.aiusage);
+const SalesBoard = lazy(TAB_IMPORTS.salesboard);
+const StoreStatus = lazy(TAB_IMPORTS.storestatus);
+const MySales = lazy(TAB_IMPORTS.mysales);
+const PosCash = lazy(TAB_IMPORTS.cash);
+const StoreCosts = lazy(TAB_IMPORTS.storecosts);
+const StoreStatement = lazy(TAB_IMPORTS.statement);
+const StoreOrders = lazy(TAB_IMPORTS.storeorders);
+const PendingBalances = lazy(TAB_IMPORTS.pendingbalances);
+const Patients = lazy(TAB_IMPORTS.patients);
+const Costs = lazy(TAB_IMPORTS.costs);
+const Sellers = lazy(TAB_IMPORTS.sellers);
+const PricingPanel = lazy(TAB_IMPORTS.products);
+/** Lo que cada rol abre a diario: se baja en segundo plano para que el cambio de pestaña sea instantáneo. */
+const PREFETCH = {
+  seller: [TAB_IMPORTS.pos, TAB_IMPORTS.mysales, TAB_IMPORTS.pendingbalances, TAB_IMPORTS.cash],
+  staff: [TAB_IMPORTS.pos, TAB_IMPORTS.possales, TAB_IMPORTS.cash, TAB_IMPORTS.pendingbalances, TAB_IMPORTS.storestatus],
+  admin: [TAB_IMPORTS.exec, TAB_IMPORTS.pos, TAB_IMPORTS.possales, TAB_IMPORTS.cash],
+};
+function prefetchTabs(me) {
+  const list = !me || me.is_admin !== false ? PREFETCH.admin : me.role === "seller" ? PREFETCH.seller : PREFETCH.staff;
+  const idle = typeof window !== "undefined" && window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 4000 }) : (fn) => setTimeout(fn, 1500);
+  // De una en una: en una tableta lenta, bajar y compilar todo a la vez competiría con lo que se está pintando.
+  const next = (i) => { if (i < list.length) idle(() => list[i]().catch(() => {}).finally(() => next(i + 1))); };
+  next(0);
+}
+/** Mientras baja el trozo de una pestaña: reserva alto (sin saltos) y dice que está cargando. */
+const TabFallback = () => <div className="adm-section adm-tab-loading" aria-busy="true"><div className="adm-src-note loading" /></div>;
+
+
 
 // US business: "$1,234.50" in both languages (never "$1.234,50").
 const money = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int = (n) => (Number(n) || 0).toLocaleString("en-US");
-const normKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
-
-// Visual bar list with a small product photo per row (icons with product thumbnails).
-function ThumbBars({ data, imgByName, valuePrefix = "", emptyMsg }) {
-  const { t } = useLang();
-  if (!data || !data.length) return <div className="adm-nodata">{emptyMsg ?? t("adm.chart.noData")}</div>;
-  const max = Math.max(...data.map((d) => d.value), 1);
-  return (
-    <div className="adm-thumbbars">
-      {data.map((d, i) => {
-        const img = imgByName && imgByName[d.label];
-        return (
-          <div className="adm-tb-row" key={i}>
-            <div className="adm-tb-thumb">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-            <div className="adm-tb-main">
-              <div className="adm-tb-top"><span className="adm-tb-name" title={d.label}>{d.label}</span><b>{valuePrefix}{int(d.value)}</b></div>
-              <div className="adm-tb-track"><div className="adm-tb-fill" style={{ width: (d.value / max * 100).toFixed(1) + "%" }} /></div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// Range keys only — the words come from the dictionary at render time, so the
-// picker follows the language switch instead of freezing at first paint.
-// `RangePicker`, `RANGES` y la vieja `Products` vivían aquí; la pantalla de
-// Productos es ahora «Productos y precios» (PricingPanel.jsx + la matriz
-// pricing/PriceMatrix.jsx), que fusionó también «Precios y costos».
-
-/* ---------------- Prices ---------------- */
-// [storageKey, dictionaryKey, basePrice]. The middle entry is a key, not a
-// name: these rows are read by the shop owner, who may be working in English.
-const MATERIALS = [
-  ["1.50", "adm.mat.150", 0], ["1.59", "adm.mat.159", 20], ["1.61", "adm.mat.161", 35],
-  ["1.67", "adm.mat.167", 60], ["1.74", "adm.mat.174", 95],
-];
-const TREATMENTS = [
-  ["ar", "adm.trt.ar", 8], ["blue", "adm.trt.blue", 20], ["photo", "adm.trt.photo", 45], ["tint", "adm.trt.tint", 15],
-];
-const USAGE = [
-  ["sv-dist", "adm.use.svDist", 6.95], ["sv-read", "adm.use.svRead", 6.95],
-  ["progressive", "adm.use.progressive", 49], ["frame-only", "adm.use.frameOnly", 0],
-];
-
-function PriceInput({ value, placeholder, onCommit }) {
-  const [v, setV] = useState(value ?? "");
-  useEffect(() => { setV(value ?? ""); }, [value]);
-  return (
-    <input className="adm-price-input" type="number" step="0.01" min="0" value={v} placeholder={placeholder}
-      onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-  );
-}
-
-function TxtInput({ value, placeholder, onCommit, wide }) {
-  const [v, setV] = useState(value ?? "");
-  useEffect(() => { setV(value ?? ""); }, [value]);
-  return (
-    <input className={`adm-txt ${wide ? "wide" : ""}`} value={v} placeholder={placeholder}
-      onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
-  );
-}
-
-function ShippingConfig({ ov }) {
-  const { t } = useLang();
-  const sh = ov.shipping; const pk = sh.pickup || {}; const og = sh.origin || {};
-  const zones = sh.zones || []; const carriers = sh.carriers || ["FedEx", "UPS", "USPS", "DHL", "Consignataria"];
-  return (
-    <div className="adm-card">
-      <h3>{t("adm.ship.title")}</h3>
-      <div className="adm-grid-2">
-        <div className="ship-block">
-          <div className="ship-h"><Icon name="store" size={16} /> {t("adm.ship.pickup")}
-            <label className="ship-toggle"><input type="checkbox" checked={!!pk.enabled} onChange={(e) => PS.setPickup({ enabled: e.target.checked })} /> {t("adm.ship.active")}</label>
-          </div>
-          <div className="ship-fields">
-            <label>{t("adm.ship.name")}<TxtInput value={pk.name} onCommit={(v) => PS.setPickup({ name: v })} wide /></label>
-            <label>{t("adm.ship.address")}<TxtInput value={pk.address} onCommit={(v) => PS.setPickup({ address: v })} wide /></label>
-            <label>{t("adm.ship.city")}<TxtInput value={pk.city} onCommit={(v) => PS.setPickup({ city: v })} wide /></label>
-            <label>{t("adm.ship.hours")}<TxtInput value={pk.hours} onCommit={(v) => PS.setPickup({ hours: v })} wide /></label>
-            <label>{t("adm.ship.mapUrl")}<TxtInput value={pk.mapsUrl} onCommit={(v) => PS.setPickup({ mapsUrl: v })} wide /></label>
-            {/* Vive en shipping (no en pickup): el mismo plazo aplica a lo que se
-                envía, porque el laboratorio tarda igual. */}
-            <label>{t("adm.ship.labDays")}<PriceInput value={sh.labDays} placeholder="10" onCommit={(v) => PS.setShipping({ labDays: Math.max(0, Math.round(Number(v) || 0)) })} /></label>
-          </div>
-          <p className="muted">{t("adm.ship.labDaysHint")}</p>
-        </div>
-        <div className="ship-block">
-          <div className="ship-h"><Icon name="box" size={16} /> {t("adm.ship.origin")}</div>
-          <div className="ship-fields">
-            <label>{t("adm.ship.name")}<TxtInput value={og.name} onCommit={(v) => PS.setOrigin({ name: v })} wide /></label>
-            <label>{t("adm.ship.address")}<TxtInput value={og.address} onCommit={(v) => PS.setOrigin({ address: v })} wide /></label>
-            <label>{t("adm.ship.city")}<TxtInput value={og.city} onCommit={(v) => PS.setOrigin({ city: v })} wide /></label>
-          </div>
-          <div className="ship-h" style={{ marginTop: 12 }}><Icon name="dollar" size={16} /> {t("adm.ship.baseCost")}</div>
-          <div className="ship-fields r3">
-            <label>{t("adm.ship.standard")}<PriceInput value={sh.standard} placeholder="4.95" onCommit={(v) => PS.setShipping({ standard: Number(v) || 0 })} /></label>
-            <label>{t("adm.ship.express")}<PriceInput value={sh.express} placeholder="12.95" onCommit={(v) => PS.setShipping({ express: Number(v) || 0 })} /></label>
-            <label>{t("adm.ship.freeFrom")}<PriceInput value={sh.freeThreshold} placeholder="59" onCommit={(v) => PS.setShipping({ freeThreshold: Number(v) || 0 })} /></label>
-          </div>
-        </div>
-      </div>
-      <div className="ship-h" style={{ marginTop: 14 }}><Icon name="globe" size={16} /> {t("adm.ship.zones")}
-        <button className="btn-sm" onClick={PS.addZone}><Icon name="plus" size={14} />{t("adm.ship.addZone")}</button></div>
-      <div className="adm-table-wrap">
-        <table className="adm-table zones">
-          <thead><tr><th>{t("adm.ship.destination")}</th><th>{t("adm.ship.carrier")}</th><th>{t("adm.ship.cost")}</th><th>{t("adm.ship.days")}</th><th></th></tr></thead>
-          <tbody>
-            {zones.map((z) => (
-              <tr key={z.id}>
-                <td><TxtInput value={z.name} onCommit={(v) => PS.updateZone(z.id, { name: v })} wide /></td>
-                <td><select className="adm-sel" value={z.carrier} onChange={(e) => PS.updateZone(z.id, { carrier: e.target.value })}>
-                  {[...new Set([z.carrier, ...carriers])].filter(Boolean).map((c) => <option key={c} value={c}>{c}</option>)}</select></td>
-                <td><PriceInput value={z.cost} onCommit={(v) => PS.updateZone(z.id, { cost: Number(v) || 0 })} /></td>
-                <td className="eta"><PriceInput value={z.etaMin} onCommit={(v) => PS.updateZone(z.id, { etaMin: Number(v) || 0 })} /><span>–</span><PriceInput value={z.etaMax} onCommit={(v) => PS.updateZone(z.id, { etaMax: Number(v) || 0 })} /></td>
-                <td><button className="btn-sm danger" title={t("adm.ship.removeZone")} onClick={() => PS.removeZone(z.id)}><Icon name="trash" size={13} /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted">{t("adm.ship.note")}</p>
-    </div>
-  );
-}
-
-// Categories (columns) for the fotocromáticos / transitions table.
-const LENS_PHOTO_CATS = ["sv", "bifocal", "prog"];
-
-// "Lista de precios 2026 · Lentes": base matrix + fotocromáticos + antirreflejos.
-function LensPriceList() {
-  const { t, lang } = useLang();
-  const [, force] = useState(0);
-  useEffect(() => PS.subscribe(() => force((n) => n + 1)), []);
-  return (
-    <div className="adm-card lens-pl">
-      <h3>{t("adm.lens.title")}</h3>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.base")}</h4>
-        <div className="adm-table-wrap">
-          <table className="adm-table lens-tbl">
-            <thead>
-              <tr>
-                <th>{t("adm.lens.design")}</th>
-                {LENS_MATERIALS.map((m) => <th key={m.id} className="r">{L(m.label, lang)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {DESIGNS.map((d) => (
-                <tr key={d.id}>
-                  <td><b>{L(d.label, lang)}</b></td>
-                  {LENS_MATERIALS.map((m) => {
-                    const base = BASE[d.id][m.id];
-                    return (
-                      <td key={m.id} className="r">
-                        <PriceInput value={PS.lensBasePrice(d.id, m.id, base)} placeholder={String(base)} onCommit={(v) => PS.setLensBase(d.id, m.id, v)} />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.photo")}</h4>
-        <div className="adm-table-wrap">
-          <table className="adm-table lens-tbl">
-            <thead>
-              <tr>
-                <th>{t("adm.lens.type")}</th>
-                {LENS_PHOTO_CATS.map((k) => <th key={k} className="r">{t(`adm.lens.cat.${k}`)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {PHOTO.map((p) => (
-                <tr key={p.id}>
-                  <td><b>{L(p.label, lang)}</b></td>
-                  {LENS_PHOTO_CATS.map((cat) => {
-                    const base = p.price[cat];
-                    return (
-                      <td key={cat} className="r">
-                        {base === null
-                          ? <span className="muted">—</span>
-                          : <PriceInput value={PS.lensPhotoPrice(p.id, cat, base)} placeholder={String(base)} onCommit={(v) => PS.setLensPhoto(p.id, cat, v)} />}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="lens-sub">
-        <h4>{t("adm.lens.ar")}</h4>
-        <div className="adm-grid-2">
-          <div className="lens-ar-group">
-            <div className="lens-ar-h">{t("adm.lens.arSv")}</div>
-            {AR.sv.map((a) => (
-              <div className="adm-price-row" key={a.id}>
-                <span>{L(a.label, lang)}</span>
-                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
-              </div>
-            ))}
-          </div>
-          <div className="lens-ar-group">
-            <div className="lens-ar-h">{t("adm.lens.arBifProg")}</div>
-            {AR.bifprog.map((a) => (
-              <div className="adm-price-row" key={a.id}>
-                <span>{L(a.label, lang)}</span>
-                <PriceInput value={PS.lensARPrice(a.id, a.price)} placeholder={String(a.price)} onCommit={(v) => PS.setLensAR(a.id, v)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Prices({ preQ }) {
-  const { t } = useLang();
-  const { toast, confirm } = useFeedback();
-  const { products, cases } = useCatalog();
-  const [ov, setOv] = useState(PS.getOverrides());
-  useEffect(() => PS.subscribe(() => setOv(PS.getOverrides())), []);
-  const [q, setQ] = useState("");
-  useEffect(() => { if (preQ != null) setQ(preQ); }, [preQ]);
-  const fileRef = useRef(null);
-
-  const frames = useMemo(() => products.filter((p) => `${p.name} ${p.brand}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [products, q]);
-  // Units sold per product: REAL orders when the login is real (newest scan
-  // window of the whole history); demo localStorage otherwise or on error.
-  const [sales, setSales] = useState(() => productSales());
-  useEffect(() => {
-    if (isDemoLogin()) return undefined;
-    let on = true;
-    fetchBoardWindow(rangeFor("all"))
-      .then((w) => {
-        if (!on) return;
-        const real = (w.orders || []).filter((o) => !o.terminal).map((o) => toAnalyticsOrder(o, null));
-        setSales(productSalesFrom(real));
-      })
-      .catch(() => { /* keep demo fallback */ });
-    return () => { on = false; };
-  }, []);
-
-  // shared product price row: photo + name + (hover) units bought this month + never-sold tag
-  const ProdRow = ({ p, value, onCommit }) => {
-    const key = normKey(p.sku);
-    const m = sales.month[key] || 0, ev = sales.ever[key] || 0;
-    const img = p.colors?.[0]?.image;
-    return (
-      <div className={`adm-price-row prod ${ev === 0 ? "never" : ""}`}>
-        <div className="adm-pp-left">
-          <div className="adm-tb-thumb sm">{img ? <img src={img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.opacity = 0; }} /> : <span>◈</span>}</div>
-          <span className="adm-pp-name">{p.name} <small className="muted">{p.brand ? p.brand + " · " : ""}{supplierPriceFor(p.sku) ? `${t("adm.prices.supplier")} ${money(supplierPriceFor(p.sku))} × ${FRAME_MARKUP} = ` : ""}{t("adm.prices.base")} {money(p.basePrice ?? p.price)}</small></span>
-        </div>
-        <div className="adm-pp-right">
-          {ev === 0
-            ? <span className="pp-tag never" title={t("adm.prices.neverSoldTitle")}>{t("adm.prices.neverSold")}</span>
-            : <span className="pp-tag sold"><Icon name="orders" size={12} /> {m} <em>{t("adm.prices.thisMonth")}</em></span>}
-          <PriceInput value={value} placeholder={String(p.basePrice ?? p.price)} onCommit={onCommit} />
-        </div>
-      </div>
-    );
-  };
-
-  const doImport = (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        PS.importJSON(rd.result);
-        toast({ tone: "success", title: t("adm.importOk"), message: t("adm.importOkBody") });
-      } catch {
-        toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
-      }
-    };
-    rd.onerror = () => toast({ tone: "error", title: t("adm.importInvalid"), message: t("adm.importInvalidBody") });
-    rd.readAsText(f);
-    e.target.value = ""; // allow re-picking the same file after a failed import
-  };
-
-  const doReset = async () => {
-    const ok = await confirm({
-      tone: "danger",
-      title: t("adm.resetTitle"),
-      message: t("adm.resetBody"),
-      confirmLabel: t("adm.resetConfirm"),
-    });
-    if (!ok) return;
-    PS.resetAll();
-    toast({ tone: "success", title: t("adm.resetDone"), message: t("adm.resetDoneBody") });
-  };
-
-  return (
-    <div className="adm-section">
-      <div className="adm-head-row">
-        <h2>{t("adm.prices.title")}</h2>
-        <div className="adm-actions">
-          <button className="btn-sm" onClick={PS.exportJSON}><Icon name="download" size={14} />{t("adm.prices.export")}</button>
-          <button className="btn-sm" onClick={() => fileRef.current?.click()}><Icon name="upload" size={14} />{t("adm.prices.import")}</button>
-          <input ref={fileRef} type="file" accept="application/json" hidden onChange={doImport} />
-          <button className="btn-sm danger" onClick={doReset}><Icon name="rotate" size={14} />{t("adm.prices.reset")}</button>
-        </div>
-      </div>
-      <p className="muted">{t("adm.prices.hint")}</p>
-      <div className="adm-demo-banner" style={{ background: "var(--adm-blue-soft)", color: "var(--adm-navy)", borderColor: "var(--adm-blue-line)" }}>
-        <Icon name="info" size={14} /> {t("adm.prices.markupRule")}
-      </div>
-
-      <div className="adm-grid-2">
-        <div className="adm-card">
-          <h3>{t("adm.prices.materials")}</h3>
-          {MATERIALS.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.materials[k]} placeholder={String(base)} onCommit={(v) => PS.setMaterialPrice(k, v)} /></div>
-          ))}
-          <h3 style={{ marginTop: 14 }}>{t("adm.prices.treatments")}</h3>
-          {TREATMENTS.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.treatments[k]} placeholder={String(base)} onCommit={(v) => PS.setTreatmentPrice(k, v)} /></div>
-          ))}
-        </div>
-        <div className="adm-card">
-          <h3>{t("adm.prices.usage")}</h3>
-          {USAGE.map(([k, label, base]) => (
-            <div className="adm-price-row" key={k}><span>{t(label)} <small className="muted">{t("adm.prices.base")} ${base}</small></span>
-              <PriceInput value={ov.usage[k]} placeholder={String(base)} onCommit={(v) => PS.setUsagePrice(k, v)} /></div>
-          ))}
-        </div>
-      </div>
-
-      <ShippingConfig ov={ov} />
-
-      <div className="adm-card">
-        <h3>{t("adm.prices.cases")}</h3>
-        <div className="adm-price-grid">
-          {cases.map((c) => (
-            <ProdRow key={c.slug} p={c} value={ov.cases[c.sku]} onCommit={(v) => PS.setCasePrice(c.sku, v)} />
-          ))}
-        </div>
-      </div>
-
-      <div className="adm-card">
-        <div className="adm-head-row"><h3>{t("adm.prices.frames", { n: int(products.length) })}</h3>
-          <input className="adm-search" placeholder={t("adm.prices.searchModel")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        {Object.entries(frames.reduce((m, p) => { (m[p.brand] = m[p.brand] || []).push(p); return m; }, {}))
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([brand, list]) => (
-            <details className="cost-accordion brand" key={brand} open={!!q}>
-              <summary className="cost-acc-head">
-                {BRAND_LOGO_BY_NAME[brand] && <img src={BRAND_LOGO_BY_NAME[brand]} alt="" className="cost-acc-logo" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                <span className="cost-acc-title">{brand}</span>
-                <small className="cost-acc-count">({list.length})</small>
-                <Icon name="chevronDown" size={14} className="cost-acc-arrow" />
-              </summary>
-              <div className="cost-acc-body">
-                <div className="adm-price-grid">
-                  {list.map((p) => <ProdRow key={p.slug} p={p} value={ov.frames[p.sku]} onCommit={(v) => PS.setFramePrice(p.sku, v)} />)}
-                </div>
-              </div>
-            </details>
-          ))}
-        {products.length > 200 && <p className="muted">{t("adm.prices.capped")}</p>}
-      </div>
-
-      <LensPriceList />
-    </div>
-  );
-}
-
-/* ───────────────────────────  Pedidos (Medusa)  ───────────────────────────
- * Real orders from the Admin API. Every filter, stage and transition shown here
- * comes from the server: `stage` is what the customer's tracking page shows, and
- * `next_stages` is what the API will actually accept — the panel never decides
- * for itself which move is legal, so a button that exists always works.
- *
- * Paridad con la hoja de Google: lo que el dueño puede tocar allí (Estado y
- * Guía) se puede tocar aquí, y además la nota interna y la ficha de costo; cada
- * cambio se replica a la hoja en el acto, y lo que se edite en la hoja llega
- * aquí en ≤1 min (job gsheet-watch).
- */
 
 const PAGE_SIZE = 20;
 
@@ -962,6 +614,8 @@ function navFromUrl(tabs) {
 }
 
 export default function AdminDashboard({ user, onLogout, me = null }) {
+  // Tras el primer pintado, las pestañas de trabajo del rol bajan en segundo plano.
+  useEffect(() => { prefetchTabs(me); }, [me?.role, me?.is_admin]); // eslint-disable-line react-hooks/exhaustive-deps
   const { t } = useLang();
   const groups = navGroupsFor(me);
   const tabs = tabsOf(groups);
@@ -1039,6 +693,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
   return (
     <AdminShell tab={tab} onTab={(k) => go(k)} user={user} onLogout={onLogout} goTo={go} find={restricted ? null : find} onFind={onFind} groups={groups} me={me} badges={Object.keys(badges).length ? badges : undefined}>
       {showBriefing && <WelcomeBriefing me={me} go={go} onDone={() => setShowBriefing(false)} />}
+      <Suspense fallback={<TabFallback />}>
       {tab === "exec" && (
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
@@ -1077,6 +732,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
           <div className="adm-card"><StaffProfile mode="self" /></div>
         </div>
       )}
+      </Suspense>
       <p className="muted adm-foot">{t("adm.footer", { name: TENANT.name })}</p>
     </AdminShell>
   );

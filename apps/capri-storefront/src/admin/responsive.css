@@ -228,3 +228,30 @@ html.adm-touch .sel-social-main { min-height: 40px; }
 html.adm-touch .pb-link { min-height: 36px; display: inline-flex; align-items: center; }
 html.adm-touch .adm-store-swatch-custom { min-width: 40px; min-height: 40px; }
 @media (max-width: 768px) { .adm-shell .pos-frame-photo.noimg:not(.md) { aspect-ratio: auto; height: 96px; } }
+
+/* ── 5. Modo ligero (html.adm-lite, AdminShell) ────────────────────────────
+   Tabletas de gama baja: sin desenfoques (cada `backdrop-filter` repinta lo
+   que hay detrás en cada fotograma del desplazamiento), sin animaciones y con
+   sombras cortas. Superficies sólidas: el aspecto sigue limpio. */
+html.adm-lite *, html.adm-lite *::before, html.adm-lite *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+html.adm-lite *, html.adm-lite *::before, html.adm-lite *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .06s !important; scroll-behavior: auto !important; }
+html.adm-lite .adm-top { background: var(--adm-surface); }
+html.adm-lite .pos-sticky, html.adm-lite .pos-run { background: var(--adm-bg); }
+html.adm-lite .adm-shell { --adm-shadow: 0 1px 3px rgba(27, 31, 58, .08); --adm-shadow-lg: 0 6px 18px -6px rgba(27, 31, 58, .25); --adm-shadow-hover: 0 1px 4px rgba(27, 31, 58, .1); }
+html.adm-lite .adm-shell[data-mode="dark"] { --adm-shadow: 0 1px 3px rgba(0, 0, 0, .4); --adm-shadow-lg: 0 6px 18px -6px rgba(0, 0, 0, .6); }
+
+/* ── 6. Tableta apaisada de poca altura (Galaxy Tab A7 Lite: ~1006×470 útiles)
+   Con cabecera, barra, pasos y pie pegajosos no quedaba ni la mitad para
+   trabajar. Aquí solo se pegan la cabecera (más baja), los pasos del POS y su
+   pie; la barra de filtros se desplaza con la página. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .adm-shell { --adm-top-h: 48px; }
+  .adm-top { height: 48px; min-height: 48px; }
+  .adm-bar { position: relative; top: auto; z-index: 1; }
+  .adm-shell .pos-sticky { top: var(--adm-top-real, 48px); padding-top: 4px; padding-bottom: 4px; gap: 4px; margin-bottom: 6px; }
+  .adm-shell .pos-steps .pos-step-btn { min-height: 38px; }
+  .adm-shell .pos .pos-nav-sticky { padding-top: 6px; padding-bottom: 6px; }
+  .adm-shell .pos .pos-nav-sticky .btn-sm { min-height: 42px; }
+  .adm-body { padding-top: 8px; }
+  .adm-head-row { margin-bottom: 6px; }
+}

@@ -74,5 +74,7 @@
 html.adm-touch .pos-rx-today { min-height: 44px; padding: 0 4px; }
 .pos-rx-datef { display: grid; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--adm-muted); }
 .pos-rx-date { flex-wrap: nowrap; }
-.pos-rx-date input[type="date"] { flex: 1 1 auto; width: auto; min-width: 0; }
+.pos-rx-date input[type="date"] { flex: 1 1 auto; width: auto; min-width: 150px; }
 .sd-edit-field .pos-rx-today input[type="checkbox"], .pos .pos-rx-today input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; padding: 0; flex: 0 0 auto; }
+/* Táctil: las casillas con «±» necesitan sitio para el signo y 4 cifras (−12.25). */
+html.adm-touch .pos .pos-rx-grid .pos-rx-signed input { min-width: 96px; }
