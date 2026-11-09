@@ -1183,6 +1183,8 @@ button.cost-kpi:focus-visible { outline: 2px solid var(--adm-accent); outline-of
 .adm-store-swatch-custom { width: 34px; height: 28px; padding: 0; border: 1px solid var(--adm-line, #d6dce5); border-radius: 7px; background: none; cursor: pointer; }
 .adm-team-pw { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .adm-team-pw .adm-input { flex: 1 1 220px; max-width: 320px; }
+.adm-team-pw .pw-field { flex: 1 1 220px; max-width: 320px; width: auto; }
+.adm-team-pw .pw-field .adm-input { max-width: none; }
 .adm-team-pw small { flex-basis: 100%; }
 .adm-team-profile { padding: 4px 6px 14px 52px; }
 /* Ficha de vendedor al dar el rol vendedor (Equipo). */

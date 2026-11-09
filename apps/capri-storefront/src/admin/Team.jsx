@@ -15,6 +15,7 @@ import StaffAvatar from "./StaffAvatar.jsx";
 import useDefaultCommission from "./finance/useDefaultCommission.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, nameProblem, typedEmail } from "../data/fieldRules.js";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 const isAdminRole = (role) => role === "owner" || role === "superadmin";
 
@@ -468,7 +469,7 @@ export default function Team() {
             )}
             {ownerFor === m.id && canMakeOwner(m) && (
               <form className="adm-team-profile adm-team-pw" onSubmit={(e) => submitOwner(e, m)}>
-                <input className="adm-input" type="password" required autoComplete="current-password" aria-label={t("adm.team.owner.password")} placeholder={t("adm.team.owner.password")} value={ownerPw} onChange={(e) => setOwnerPw(e.target.value)} />
+                <PasswordInput className="adm-input" required autoComplete="current-password" aria-label={t("adm.team.owner.password")} placeholder={t("adm.team.owner.password")} value={ownerPw} onChange={(e) => setOwnerPw(e.target.value)} />
                 <button className="btn-sm primary" disabled={busy || !ownerPw}>{t("adm.team.owner.save")}</button>
                 <button type="button" className="btn-sm" onClick={() => setOwnerFor(null)}>{t("adm.ord.cancel")}</button>
                 <small className="muted">{t("adm.team.owner.hint", { email: m.email })}</small>

@@ -11,6 +11,7 @@ import { useLang } from "../i18n/LanguageContext.jsx";
 import AdminDashboard from "../admin/AdminDashboard.jsx";
 import "../admin/admin.css";
 import "./admin-auth.css";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 // Mismo mínimo que el candado de primera contraseña y que el servidor
 // (POST /admin/team/password). No hay regla de contraseña en fieldRules.js.
@@ -107,7 +108,7 @@ function Login({ onOk }) {
           <h1>{t("adm.title")}</h1>
           <p className="muted">{t("adm.login.sub")}</p>
           <label>{t("adm.login.email")}<input type="email" autoFocus value={user} placeholder={t("adm.login.emailPh")} onChange={(e) => setUser(e.target.value)} autoComplete="username" /></label>
-          <label>{t("adm.login.pass")}<input type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" /></label>
+          <label>{t("adm.login.pass")}<PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" /></label>
           {note && <div className="adm-login-ok" role="status">{t(note)}</div>}
           {err && <div className="adm-login-err">{errText(err)}</div>}
           <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.login.checking") : t("adm.login.submit")}</button>
@@ -140,8 +141,8 @@ function Login({ onOk }) {
           <p className="muted">{t("adm.auth.resetSub", { email: resetEmail })}</p>
           {/* Hidden username so password managers file the new password under the right account. */}
           <input type="email" value={resetEmail} readOnly autoComplete="username" hidden />
-          <label>{t("adm.auth.newPass")}<input type="password" autoFocus value={newPass} minLength={PASSWORD_MIN} onChange={(e) => setNewPass(e.target.value)} autoComplete="new-password" /></label>
-          <label>{t("adm.auth.again")}<input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></label>
+          <label>{t("adm.auth.newPass")}<PasswordInput autoFocus value={newPass} minLength={PASSWORD_MIN} onChange={(e) => setNewPass(e.target.value)} autoComplete="new-password" /></label>
+          <label>{t("adm.auth.again")}<PasswordInput value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></label>
           {err && <div className="adm-login-err">{errText(err)}</div>}
           <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.auth.saving") : t("adm.auth.save")}</button>
           <div className="adm-login-links">
@@ -200,9 +201,9 @@ function FirstPasswordGate({ onDone }) {
         <img src={TENANT.logo} alt={TENANT.name} className="adm-login-logo" />
         <h1>{t("adm.team.gate.title")}</h1>
         <p className="muted">{t("adm.team.gate.sub")}</p>
-        <label>{t("adm.team.gate.current")}<input type="password" autoFocus value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" /></label>
-        <label>{t("adm.team.gate.new")}<input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" /></label>
-        <label>{t("adm.team.gate.again")}<input type="password" value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></label>
+        <label>{t("adm.team.gate.current")}<PasswordInput autoFocus value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" /></label>
+        <label>{t("adm.team.gate.new")}<PasswordInput value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" /></label>
+        <label>{t("adm.team.gate.again")}<PasswordInput value={again} onChange={(e) => setAgain(e.target.value)} autoComplete="new-password" /></label>
         {err && <div className="adm-login-err">{t(err)}</div>}
         <button className="btn btn-primary big" disabled={busy}>{busy ? t("adm.login.checking") : t("adm.team.gate.save")}</button>
       </form>

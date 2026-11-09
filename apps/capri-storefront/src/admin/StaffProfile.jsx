@@ -11,6 +11,7 @@ import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProf
 import { logout } from "./adminAuth.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 /* ── Photo helpers ─────────────────────────────────────────────── */
 const MAX_PHOTO_BYTES = 200_000; // 200 KB of base64 text
@@ -187,9 +188,9 @@ function OwnPassword() {
       <fieldset className="adm-profile-group" disabled={busy}>
         <legend>{t("adm.profile.pw.title")}</legend>
         <div className="adm-profile-grid">
-          <label><span>{t("adm.profile.pw.current")}</span><input type="password" required autoComplete="current-password" value={f.current} onChange={set("current")} /></label>
-          <label><span>{t("adm.profile.pw.new")}</span><input type="password" required minLength={8} autoComplete="new-password" value={f.next} onChange={set("next")} /></label>
-          <label><span>{t("adm.profile.pw.again")}</span><input type="password" required minLength={8} autoComplete="new-password" value={f.again} onChange={set("again")} /></label>
+          <label><span>{t("adm.profile.pw.current")}</span><PasswordInput required autoComplete="current-password" value={f.current} onChange={set("current")} /></label>
+          <label><span>{t("adm.profile.pw.new")}</span><PasswordInput required minLength={8} autoComplete="new-password" value={f.next} onChange={set("next")} /></label>
+          <label><span>{t("adm.profile.pw.again")}</span><PasswordInput required minLength={8} autoComplete="new-password" value={f.again} onChange={set("again")} /></label>
         </div>
       </fieldset>
       <div className="adm-profile-actions">
