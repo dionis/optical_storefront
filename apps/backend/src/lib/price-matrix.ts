@@ -390,6 +390,8 @@ export interface MatrixGroup {
    * `POST /admin/catalog/brands/:slug { active }`.
    */
   active?: boolean;
+  /** Lens design groups: what the «edit design» dialog needs (docs/PRICE-MATRIX.md §12). */
+  design?: { category: string; label_es: string; label_en: string; requires_add: boolean; tier: string | null; use_es: string | null; use_en: string | null };
 }
 
 /** One store's brand header (v2 adds the brand price and the brand discount). */
@@ -811,7 +813,7 @@ export function storeLensCell(
 }
 
 export interface LensSectionInput {
-  designs: ReadonlyArray<{ code: string; label_es: string; label_en: string; category: string }>;
+  designs: ReadonlyArray<{ code: string; label_es: string; label_en: string; category: string; requires_add?: boolean; tier?: string | null; use_es?: string | null; use_en?: string | null }>;
   materials: ReadonlyArray<{ code: string; label_es: string; label_en: string }>;
   cells: ReadonlyArray<{ design_code: string; material_code: string; finish: LensFinish | null; price_cents: number; cost_cents: number | null }>;
   /** Each store's `lens_store_price` rows. */
@@ -889,7 +891,14 @@ export function buildLensGroups(input: LensSectionInput, stores: readonly Matrix
         (materialSort.get(a.material_code ?? "") ?? 999) - (materialSort.get(b.material_code ?? "") ?? 999) ||
         LENS_FINISHES.indexOf(a.finish as LensFinish) - LENS_FINISHES.indexOf(b.finish as LensFinish)
     );
-    return { key: d.code, label: d.label_es || d.label_en || d.code, label_en: d.label_en || d.label_es || d.code, kind: "design" as const, rows };
+    return {
+      key: d.code,
+      label: d.label_es || d.label_en || d.code,
+      label_en: d.label_en || d.label_es || d.code,
+      kind: "design" as const,
+      rows,
+      design: { category: d.category, label_es: d.label_es, label_en: d.label_en, requires_add: Boolean(d.requires_add), tier: d.tier ?? null, use_es: d.use_es ?? null, use_en: d.use_en ?? null },
+    };
   });
 }
 

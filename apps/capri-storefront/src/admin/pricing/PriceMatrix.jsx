@@ -48,12 +48,14 @@ import { buildStyledXlsx, downloadBytes, readXlsx } from "../exportXlsx.js";
 import { useRegisterExport } from "../GlobalFilterBar.jsx";
 import Icon from "../icons.jsx";
 import {
-  deleteCatalogBrand, deleteCatalogFrame, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, updateCatalogBrand, wasArchived,
+  deleteCatalogBrand, deleteCatalogFrame, deleteLensCell, deleteLensDesign, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, updateCatalogBrand, wasArchived,
 } from "./api.js";
 import NumCell from "./matrix/NumCell.jsx";
 import BrandDialog, { knownErr } from "./matrix/BrandDialog.jsx";
 import FrameDialog from "./matrix/FrameDialog.jsx";
 import TreatmentDialog from "./matrix/TreatmentDialog.jsx";
+import LensDesignDialog from "./matrix/LensDesignDialog.jsx";
+import LensCellDialog from "./matrix/LensCellDialog.jsx";
 import ImportDialog from "./matrix/ImportDialog.jsx";
 import MoreMenu from "./matrix/MoreMenu.jsx";
 import { BrandLogo, Thumb } from "./matrix/Media.jsx";
@@ -363,6 +365,40 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
   };
 
   /** Delete a treatment option (every category row of a photochromic goes). */
+  /** Delete a lens design: removed if it never sold, archived (hidden everywhere) if it did. */
+  const removeDesign = async (g) => {
+    if (busy) return;
+    const name = lang === "en" ? g.label_en || g.label : g.label;
+    if (!(await confirm({ tone: "danger", title: t("adm.pm.lens.delQ", { name }), message: t("adm.pm.lens.delMsg") }))) return;
+    setBusy(`del:${g.key}`);
+    try {
+      const res = await deleteLensDesign(g.key);
+      setGroups((list) => list.filter((x) => x.key !== g.key));
+      toast({ tone: wasArchived(res) ? "info" : "success", title: t(wasArchived(res) ? "adm.pm.lens.archived" : "adm.pm.lens.deleted", { name }) });
+    } catch (e) {
+      toast({ tone: "error", title: errTitle(e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  /** A material stops being offered in a design (its row goes; past sales keep their figures). */
+  const removeLensCell = async (row) => {
+    if (busy) return;
+    const name = rowTitle(row, t, lang);
+    if (!(await confirm({ tone: "danger", title: t("adm.pm.lens.cellDelQ", { name }), message: t("adm.pm.lens.cellDelMsg") }))) return;
+    setBusy(`del:${row.key}`);
+    try {
+      await deleteLensCell(row.design_code, row.material_code, row.finish);
+      toast({ tone: "success", title: t("adm.pm.lens.cellDeleted", { name }) });
+      await load(true);
+    } catch (e) {
+      toast({ tone: "error", title: errTitle(e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
   const removeTreatment = async (row) => {
     if (busy) return;
     const code = treatmentCode(row);
@@ -576,6 +612,11 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
               </button>
             </>
           )}
+          {section === "lenses" && (
+            <button type="button" className="btn-xs primary" onClick={() => setDialog({ type: "lensDesign" })} title={t("adm.pm.lens.addHintShort")}>
+              <Icon name="plus" size={15} /> {t("adm.pm.lens.add")}
+            </button>
+          )}
           {section === "treatments" && (
             <button type="button" className="btn-xs primary" onClick={() => setDialog({ type: "treatment" })}>
               <Icon name="plus" size={15} /> {t("adm.pm.addTreatment")}
@@ -680,6 +721,24 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                               { key: "add", icon: "plus", label: t(section === "cases" ? "adm.pm.menu.addCase" : "adm.pm.menu.addModel"), onSelect: () => openAddModel(g) },
                               { key: "edit", icon: "edit", label: t("adm.pm.menu.editBrand"), onSelect: () => setDialog({ type: "brand", brand: reg || { slug: g.key, name: label, kind: modelKind, logo_url: g.logo_url || null, active: true } }) },
                               { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.menu.deleteBrand"), hint: (g.rows || []).length ? t("adm.pm.menu.deleteBrandHint") : undefined, disabled: busy === `del:${g.key}`, onSelect: () => removeBrand(g) },
+                            ]}
+                          />
+                        )}
+                        {section === "lenses" && g.kind === "design" && (
+                          <MoreMenu
+                            label={t("adm.pm.lens.menu", { name: label })}
+                            items={[
+                              { key: "add", icon: "plus", label: t("adm.pm.lens.menuAddMaterial"), onSelect: () => setDialog({ type: "lensCell", group: g }) },
+                              { key: "edit", icon: "edit", label: t("adm.pm.lens.menuEdit"), onSelect: () => setDialog({ type: "lensDesign", group: g }) },
+                              { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.menuDelete"), hint: t("adm.pm.lens.menuDeleteHint"), disabled: busy === `del:${g.key}`, onSelect: () => removeDesign(g) },
+                            ]}
+                          />
+                        )}
+                        {section === "treatments" && (g.key === "photo" || g.key === "ar") && (
+                          <MoreMenu
+                            label={t("adm.pm.menu.treatGroup", { name: label })}
+                            items={[
+                              { key: "add", icon: "plus", label: t(g.key === "photo" ? "adm.pm.menu.addPhoto" : "adm.pm.menu.addAr"), onSelect: () => setDialog({ type: "treatment", presetType: g.key }) },
                             ]}
                           />
                         )}
@@ -790,6 +849,14 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                                   { key: "edit", icon: "edit", label: t("adm.pm.menu.editModel"), onSelect: () => setDialog({ type: "frame", kind: modelKind, row: r }) },
                                   { key: "status", icon: "power", label: t(draft ? "adm.pm.reactivate" : "adm.pm.discontinue"), onSelect: () => toggleStatus(r) },
                                   { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.menu.deleteModel"), hint: t("adm.pm.menu.deleteModelHint"), disabled: busy === `del:${r.key}`, onSelect: () => removeModel(r) },
+                                ]}
+                              />
+                            )}
+                            {section === "lenses" && r.kind === "lens" && r.available !== false && (
+                              <MoreMenu
+                                label={t("adm.pm.lens.rowMenu", { name: title })}
+                                items={[
+                                  { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.cellDelete"), hint: t("adm.pm.lens.cellDeleteHint"), disabled: busy === `del:${r.key}`, onSelect: () => removeLensCell(r) },
                                 ]}
                               />
                             )}
@@ -948,8 +1015,29 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
           })}
         />
       )}
+      {dialog?.type === "lensDesign" && (
+        <LensDesignDialog
+          group={dialog.group || null}
+          onClose={() => setDialog(null)}
+          onSaved={(res, form, { editing }) => {
+            const code = res?.code || dialog.group?.key;
+            afterSave({ groupKey: code, sku: null, rowKey: null, label: lang === "en" ? form.label_en : form.label_es, editing });
+            // A new design has no material yet: go straight to adding the first one.
+            if (!editing && code) setTimeout(() => setDialog({ type: "lensCell", group: { key: code, label: form.label_es, label_en: form.label_en, rows: [], design: { category: form.category } } }), 50);
+          }}
+        />
+      )}
+      {dialog?.type === "lensCell" && (
+        <LensCellDialog
+          group={dialog.group}
+          costAccess={costAccess}
+          onClose={() => setDialog(null)}
+          onSaved={(res) => afterSave({ groupKey: dialog.group.key, sku: null, rowKey: res?.key || null, label: lang === "en" ? dialog.group.label_en || dialog.group.label : dialog.group.label, editing: false })}
+        />
+      )}
       {dialog?.type === "treatment" && (
         <TreatmentDialog
+          presetType={dialog.presetType || null}
           row={dialog.row || null}
           groups={groups}
           costAccess={costAccess}

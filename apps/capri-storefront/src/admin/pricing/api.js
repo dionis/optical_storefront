@@ -538,5 +538,46 @@ export async function deleteTreatment(code) {
   return data;
 }
 
+/* ── Diseños de lente (Visión sencilla, Bifocal, Progresivo…) y sus materiales ── */
+
+/** Diseño nuevo: `{ label_es, label_en, category: "sv"|"bifocal"|"prog", requires_add?, tier?, use_es?, use_en? }` → `{ code }`. */
+export async function createLensDesign(body) {
+  const data = await post("/admin/pricing/lens-designs", body);
+  forgetPriceCaches();
+  return data;
+}
+/** Editar un diseño (nombres, ADD, gama, para quién). La categoría no cambia. */
+export async function updateLensDesign(code, body) {
+  const data = await post(`/admin/pricing/lens-designs/${seg(code)}`, body);
+  forgetPriceCaches();
+  return data;
+}
+/** Borrar un diseño: `{ deleted }` si nunca se vendió, `{ archived }` si sí. */
+export async function deleteLensDesign(code) {
+  const data = await del(`/admin/pricing/lens-designs/${seg(code)}`);
+  forgetPriceCaches();
+  return data;
+}
+/** Añadir un material a un diseño: `{ material_code | new_material, finish?, price, cost? }`. */
+export async function addLensCell(code, body) {
+  const data = await post(`/admin/pricing/lens-designs/${seg(code)}/cells`, body);
+  forgetPriceCaches();
+  return data;
+}
+/** Quitar un material (una celda) de un diseño. */
+export async function deleteLensCell(code, material, finish) {
+  const data = await del(`/admin/pricing/lens-designs/${seg(code)}/cells?material=${seg(material)}&finish=${seg(finish || "stock")}`);
+  forgetPriceCaches();
+  return data;
+}
+/** Todos los materiales de la lista maestra (para el selector). */
+export async function fetchLensMaterials() {
+  try {
+    return await adminFetch("/admin/pricing/lens-materials");
+  } catch (e) {
+    throw new Error(key(e, "adm.err.pricing.load_failed"));
+  }
+}
+
 /** ¿La respuesta de un DELETE dice que se archivó (descontinuado/inactivo) en vez de borrarse? */
 export const wasArchived = (res) => Boolean(res && (res.archived === true || res.result === "archived" || res.status === "archived" || (res.deleted === false && res.archived !== false)));

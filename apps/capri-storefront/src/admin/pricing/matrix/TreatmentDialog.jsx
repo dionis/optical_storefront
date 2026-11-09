@@ -20,7 +20,7 @@ const CATS = PHOTO_CATS;
 const money2 = (v) => (v == null ? "" : Number(v).toFixed(2));
 const FIELD_OF = { bad_type: "type", bad_label: "label_es", bad_value: "price", code_taken: "label_es" };
 
-export default function TreatmentDialog({ row = null, groups = [], costAccess = true, onClose, onCreated }) {
+export default function TreatmentDialog({ row = null, groups = [], presetType = null, costAccess = true, onClose, onCreated }) {
   const { t } = useLang();
   const editing = Boolean(row);
   const [form, setForm] = useState(() => {
@@ -45,7 +45,7 @@ export default function TreatmentDialog({ row = null, groups = [], costAccess = 
     prices: {},
     price: "",
     ar_group: row.ar_group || "all",
-  } : { type: "photo", label_es: "", label_en: "", cost: "", cats: emptyCats, price: "", ar_group: "all" };
+  } : { type: presetType === "ar" ? "ar" : "photo", label_es: "", label_en: "", cost: "", cats: emptyCats, price: "", ar_group: "all" };
   });
   const [errors, setErrors] = useState({});
   const [serverErr, setServerErr] = useState(null);

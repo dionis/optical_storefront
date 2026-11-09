@@ -385,6 +385,10 @@ const labelRow = (r: LensMatrixRow) => ({
   label_es: String(r["label_es"] ?? ""),
   label_en: String(r["label_en"] ?? ""),
   category: String(r["category"] ?? ""),
+  requires_add: r["requires_add"] === true,
+  tier: r["tier"] == null ? null : String(r["tier"]),
+  use_es: r["use_es"] == null ? null : String(r["use_es"]),
+  use_en: r["use_en"] == null ? null : String(r["use_en"]),
 });
 
 /** The lenses section: the master list (`loadLensMatrix`), its lab costs and every store's variations. */

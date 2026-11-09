@@ -725,3 +725,30 @@ configurado, disco local si no. Solo dueño/superadmin (403
 - **Filtro «Desactivados u ocultos»**: modelos ocultos en al menos una tienda
   visible, descontinuados o de marca apagada, más las marcas apagadas sin
   modelos (`rowHiddenSome`, `filterGroups`). Pruebas en `scripts/test-xlsx.mjs`.
+
+### 12. Diseños de lente: alta, edición y baja (9-nov-2026)
+
+- **Lentes** tiene el botón «Diseño de lente» y un ⋯ en cada diseño (Añadir
+  material · Editar diseño · Eliminar diseño); cada fila con precio tiene un ⋯
+  «Quitar este material». **Tratamientos**: además del ⋯ de cada fila (editar,
+  eliminar) y «+ Tratamiento», el ⋯ de los grupos Fotocromáticos y Antirreflejo
+  abre el alta con el tipo ya elegido.
+- Rutas (dueño y superadmin; un costo pide «Gestionar costos"):
+  `POST /admin/pricing/lens-designs` `{ label_es, label_en, category, requires_add?, tier?, use_es?, use_en? }`,
+  `POST|DELETE /admin/pricing/lens-designs/:code`,
+  `POST /admin/pricing/lens-designs/:code/cells` `{ material_code | new_material, finish?, price, cost? }`,
+  `DELETE …/cells?material=&finish=` y `GET /admin/pricing/lens-materials`.
+  Validación pura en `lib/lens-design.ts`, escritura en `lib/lens-design-data.ts`.
+- La **categoría** (visión sencilla, bifocal, progresivo) no cambia después
+  de crear el diseño: de ella dependen los acabados (un progresivo solo tiene
+  celda digital, `finish_unavailable`). `requires_add` por defecto: sí en
+  bifocal y progresivo.
+- **Eliminar un diseño**: si nunca se vendió (`sale_fact.lens_design` ni
+  `metadata.lens_config.design_code` de una línea) se borra con sus celdas,
+  sus precios de tratamiento por diseño y los precios/descuentos propios de
+  las tiendas; si se vendió se **archiva** (`is_active = false`: fuera del
+  POS, la web y la matriz; las ventas pasadas conservan su nombre). Quitar un
+  material es borrado suave de la celda (y de sus precios por tienda).
+- Los grupos de diseño llevan `design` (categoría, nombres, ADD, gama, para
+  quién) para el diálogo de edición. Pruebas: `tests/lens-design.test.ts` y
+  la QA local t25.
