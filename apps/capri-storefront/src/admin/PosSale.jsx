@@ -374,6 +374,8 @@ export default function PosSale({ me }) {
   const [frameListOpen, setFrameListOpen] = useState(false);
   const [own, setOwn] = useState(EMPTY_OWN);
   const [frameMode, setFrameMode] = useState("catalog");
+  // Se intentó añadir (o avanzar) con la montura escrita a mano incompleta: lo que falta se marca en rojo.
+  const [ownTried, setOwnTried] = useState(false);
   const [cardProduct, setCardProduct] = useState(null);
   const { products: catProducts = [], cases: catCases = [] } = useCatalog();
   // Ficha completa de una montura (AdminFrameCard) desde el buscador, o null si el catálogo local no la tiene.
@@ -507,21 +509,34 @@ export default function PosSale({ me }) {
     setLines([{ key: `${v.id}-${Date.now()}`, kind: "frame", variant_id: v.id, ...frameLineFields(p, v), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }]);
     setOwn(EMPTY_OWN);
   };
+  // Qué le falta a la montura escrita a mano (obligatorio: marca o modelo —o una nota, la del paciente—; y el precio, la de la tienda).
+  const ownProblems = {
+    name: frameMode === "store" ? !own.brand.trim() && !own.model.trim() : !own.brand.trim() && !own.model.trim() && !own.description.trim(),
+    size: Object.keys(OWN_SIZE).some((k) => ownSizeBad(k, own[k])),
+    price: frameMode === "store" && (!String(own.price).trim() || storePriceBad(own.price)),
+  };
+  const nameBad = ownTried && ownProblems.name;
+  const priceBad = (ownTried && ownProblems.price) || storePriceBad(own.price);
   // La montura escrita a mano: la del paciente (no se cobra) o una de la tienda fuera del catálogo (se cobra).
   const addOwn = () => {
     const store = frameMode === "store";
     const title = ownTitle(own);
-    if (store ? !own.brand.trim() && !own.model.trim() : !own.brand.trim() && !own.model.trim() && !own.description.trim()) {
-      toast({ tone: "error", title: t(store ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription") }); return;
+    const p = ownProblems;
+    if (p.name || p.size || p.price) {
+      // En rojo lo que falta, y el foco en el primer campo a corregir.
+      setOwnTried(true);
+      toast({ tone: "error", title: t(p.name ? (store ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription") : p.price ? "adm.err.pos.bad_store_frame_price" : "adm.err.pos.bad_own_frame") });
+      requestAnimationFrame(() => { const el = document.querySelector('.pos-own [aria-invalid="true"]'); el?.scrollIntoView({ block: "center" }); el?.focus(); });
+      return false;
     }
-    if (Object.keys(OWN_SIZE).some((k) => ownSizeBad(k, own[k]))) { toast({ tone: "error", title: t("adm.err.pos.bad_own_frame") }); return; }
-    if (store && (!String(own.price).trim() || storePriceBad(own.price))) { toast({ tone: "error", title: t("adm.err.pos.bad_store_frame_price") }); return; }
     const specs = { brand: own.brand.trim(), model: own.model.trim(), color: own.color.trim(), eye_size: own.eye_size.trim(), bridge: own.bridge.trim(), temple: own.temple.trim() };
     const base = { variant_id: null, title, description: own.description.trim(), own_frame: specs, photo: own.photo };
     setLines([store
       ? { key: `store-${Date.now()}`, kind: "store_frame", ...base, store_price: Number(String(own.price).replace(/[$,\s]/g, "")), selection: { design_code: "frame-only", material_code: null, photo_code: null, ar_code: null, finish: null } }
       : { key: `own-${Date.now()}`, kind: "own_frame", ...base, selection: { design_code: "sv", material_code: null, photo_code: null, ar_code: null, finish: "stock" } }]);
     setOwn(EMPTY_OWN);
+    setOwnTried(false);
+    return true;
   };
   // Reciben el archivo ya elegido (PosCapture vacía el input para que repetir la misma foto dispare otra vez).
   const onOwnPhoto = async (f) => {
@@ -686,6 +701,12 @@ export default function PosSale({ me }) {
   // Bloqueado en el primer paso: en vez de un botón mudo, marca qué falta y lleva hasta ahí.
   const next = () => {
     if (canNext()) { setShowCustErrors(false); setStep((s) => s + 1); return; }
+    // Montura escrita a mano sin «Añadir»: Siguiente la añade si está completa, o marca en rojo lo que falta.
+    if (stepName === "frame" && !lines.length) {
+      if (frameMode !== "catalog") { if (addOwn()) setStep((s) => s + 1); }
+      else setOwnTried(true);
+      return;
+    }
     if (stepName !== "customer") return;
     setShowCustErrors(true);
     const fields = Object.keys(customerProblems(customer));
@@ -733,7 +754,7 @@ export default function PosSale({ me }) {
   const reset = () => {
     idem.current = null;
     setStep(0); setTouched({}); setShowCustErrors(false); setCustomer(EMPTY_CUSTOMER); setCustomerId(null); setCustInfo(null); setWears(null);
-    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
+    setLines([]); setOwn(EMPTY_OWN); setFrameMode("catalog"); setOwnTried(false); setNoRx(false); setRxNew(EMPTY_RX); setRxWorn(EMPTY_RX); setOcr({ status: "idle", confirmed: true });
     setWorn({ source: "previous_rx", dateMode: "exact", date: "", months: "" });
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
@@ -893,21 +914,23 @@ export default function PosSale({ me }) {
                 <p className="pos-frame-mode-title">{t("adm.pos.fm.label")}<HelpTip topic="pos.ownFrame" /></p>
                 <div className="pos-frame-mode" role="radiogroup" aria-label={t("adm.pos.fm.label")}>
                   {FRAME_MODES.map((fm) => (
-                    <button key={fm.key} type="button" role="radio" aria-checked={frameMode === fm.key} className={frameMode === fm.key ? "on" : ""} onClick={() => setFrameMode(fm.key)}>
+                    <button key={fm.key} type="button" role="radio" aria-checked={frameMode === fm.key} className={frameMode === fm.key ? "on" : ""} onClick={() => { setFrameMode(fm.key); setOwnTried(false); }}>
                       <Icon name={fm.icon} size={18} />
                       <span><b>{t(`adm.pos.fm.${fm.key}`)}</b><small>{t(`adm.pos.fm.${fm.key}.hint`)}</small></span>
                     </button>
                   ))}
                 </div>
+                {frameMode === "catalog" && ownTried && <div className="pos-frame-missing" role="alert"><Icon name="alert" size={15} /> {t("adm.pos.fm.pickFirst")}</div>}
                 {frameMode === "catalog" && <PosFrameSearch storeId={store?.id} money={m} onAdd={addFrame} onOpenChange={setFrameListOpen} onView={viewFrame} />}
                 {frameMode !== "catalog" && (
                   <div className={`pos-own ${frameMode === "store" ? "is-store" : ""}`}>
                     {/* Marca, modelo, color y las 3 medidas de la varilla (ancho del lente – puente – varilla) para el laboratorio. */}
                     <div className="pos-own-grid">
-                      <label><span>{t("adm.pos.own.brand")}{frameMode === "store" && <i className="pos-req"> *</i>}</span><input maxLength={60} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
-                      <label>{t("adm.pos.own.model")}<input maxLength={60} value={own.model} onChange={(e) => setOwn((o) => ({ ...o, model: e.target.value }))} placeholder={t("adm.pos.own.modelPh")} autoCapitalize="characters" enterKeyHint="next" /></label>
+                      <label className={nameBad ? "err" : ""}><span>{t("adm.pos.own.brand")}{frameMode === "store" && <i className="pos-req"> *</i>}</span><input maxLength={60} aria-invalid={nameBad || undefined} value={own.brand} onChange={(e) => setOwn((o) => ({ ...o, brand: e.target.value }))} placeholder={t("adm.pos.own.brandPh")} autoCapitalize="words" enterKeyHint="next" /></label>
+                      <label className={nameBad ? "err" : ""}>{t("adm.pos.own.model")}<input maxLength={60} aria-invalid={nameBad || undefined} value={own.model} onChange={(e) => setOwn((o) => ({ ...o, model: e.target.value }))} placeholder={t("adm.pos.own.modelPh")} autoCapitalize="characters" enterKeyHint="next" /></label>
                       <label>{t("adm.pos.own.color")}<input maxLength={40} value={own.color} onChange={(e) => setOwn((o) => ({ ...o, color: e.target.value }))} placeholder={t("adm.pos.own.colorPh")} autoCapitalize="sentences" enterKeyHint="next" /></label>
                     </div>
+                    {nameBad && <small className="field-err pos-own-err" role="alert">{t(frameMode === "store" ? "adm.err.pos.store_frame_needs_name" : "adm.pos.own.needDescription")}</small>}
                     <fieldset className="pos-own-size">
                       <legend>{t("adm.pos.own.size")} <small className="muted">{t("adm.pos.own.sizeHint")}</small></legend>
                       {Object.keys(OWN_SIZE).map((k) => (
@@ -923,13 +946,13 @@ export default function PosSale({ me }) {
                       ))}
                     </fieldset>
                     {frameMode === "store" && (
-                      <label className={`pos-store-price ${storePriceBad(own.price) ? "err" : ""}`}>
+                      <label className={`pos-store-price ${priceBad ? "err" : ""}`}>
                         <span>{t("adm.pos.store.price")}<i className="pos-req"> *</i></span>
                         <span className="pos-money-in"><b>$</b>
-                          <input inputMode="decimal" maxLength={9} value={own.price} placeholder="0.00" aria-invalid={storePriceBad(own.price) || undefined}
+                          <input inputMode="decimal" maxLength={9} value={own.price} placeholder="0.00" aria-invalid={priceBad || undefined}
                             onChange={(e) => setOwn((o) => ({ ...o, price: e.target.value.replace(/[^\d.]/g, "") }))} enterKeyHint="done" />
                         </span>
-                        {storePriceBad(own.price) ? <small className="field-err" role="alert">{t("adm.pos.store.priceRange", { max: STORE_PRICE_MAX })}</small> : <small className="muted">{t("adm.pos.store.priceHint")}</small>}
+                        {storePriceBad(own.price) ? <small className="field-err" role="alert">{t("adm.pos.store.priceRange", { max: STORE_PRICE_MAX })}</small> : priceBad ? <small className="field-err" role="alert">{t("adm.pos.store.priceMissing")}</small> : <small className="muted">{t("adm.pos.store.priceHint")}</small>}
                       </label>
                     )}
                     <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t(frameMode === "store" ? "adm.pos.store.notesPh" : "adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
@@ -1167,7 +1190,7 @@ export default function PosSale({ me }) {
               {busy ? t("adm.pos.confirming") : t("adm.pos.confirm", { total: m(total) })}
             </button>
           ) : (
-            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={stepName !== "customer" && !canNext()} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
+            <button type="button" className={`btn-sm primary ${canNext() ? "" : "is-blocked"}`} disabled={stepName !== "customer" && !(stepName === "frame" && !lines.length) && !canNext()} onClick={next}>{t("adm.pos.next")} <Icon name="chevronRight" size={14} /></button>
           )}
         </div>
       )}

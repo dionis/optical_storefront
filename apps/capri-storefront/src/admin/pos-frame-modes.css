@@ -42,3 +42,10 @@
 .pos-own-grid label > span:first-child { display: block; }
 html.adm-touch .pos label .pos-money-in input[inputmode] { border: 0; box-shadow: none; background: transparent; min-height: 46px; }
 .pos .pos-money-in input:focus, .pos .pos-money-in input:focus-visible, html.adm-touch .pos label .pos-money-in input[inputmode]:focus { outline: none; border: 0; box-shadow: none; }
+
+/* Lo que falta en la montura escrita a mano, en rojo y claro (tras pulsar Añadir o Siguiente). */
+.pos-own label.err { color: var(--adm-red-dark); }
+.pos .pos-own label.err > input, html.adm-touch .pos .pos-own label.err > input { border: 2px solid var(--adm-red); background: var(--adm-red-soft); }
+.pos-own-err { display: block; margin-top: -4px; font-weight: 700; }
+.pos-store-price.err .pos-money-in { border-width: 2px; }
+.pos-frame-missing { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border: 1.5px solid var(--adm-red); border-radius: 10px; background: var(--adm-red-soft); color: var(--adm-red-dark); font-weight: 700; font-size: 13px; }
