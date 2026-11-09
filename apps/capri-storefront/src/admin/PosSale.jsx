@@ -23,10 +23,12 @@ import {
   quote as fetchQuote,
   requestApproval,
   searchCustomers,
+  setWearingPhoto,
 } from "./posApi.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFrameSearch from "./PosFrameSearch.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import { WearingCaptureCard } from "./WearingPhoto.jsx";
 import PosCapture from "./PosCapture.jsx";
 import PosFrameCard, { frameLineFields } from "./PosFrameCard.jsx";
 import { setActiveStore } from "./useStoreTheme.js";
@@ -382,6 +384,9 @@ export default function PosSale({ me }) {
   const [notifyEmail, setNotifyEmail] = useState(true);
   // Foto y receta en el correo: se decide en cada venta, nunca se recuerda.
   const [receiptDetail, setReceiptDetail] = useState(false);
+  // Foto del paciente con la montura puesta (opcional, se queda en la tienda; WearingPhoto.jsx).
+  const [wear, setWear] = useState({ consent: false, photo: null });
+  const [wearSaved, setWearSaved] = useState(null);
   const [result, setResult] = useState(null);
   const idem = useRef(null);
 
@@ -688,6 +693,13 @@ export default function PosSale({ me }) {
       });
       setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null });
       setStep(STEPS.indexOf("done"));
+      // La foto con la montura va aparte, una vez registrada la venta: si falla, la venta queda y se añade desde su ficha.
+      if (wear.consent && wear.photo && r.sale?.id) {
+        setWearSaved("saving");
+        setWearingPhoto(r.sale.id, wear.photo)
+          .then(() => setWearSaved("saved"))
+          .catch(() => { setWearSaved("failed"); toast({ tone: "error", title: t("adm.wear.saleNoPhoto") }); });
+      }
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
     } finally { setBusy(false); }
@@ -701,6 +713,7 @@ export default function PosSale({ me }) {
     setDiscount(""); setQ(null); setQStatus("idle"); setApproval(null); setReason("");
     setDup({ phone: null, email: null }); dupDismissed.current = { phone: new Set(), email: new Set() };
     setPayments([EMPTY_PAYMENT]); setDelivery("pickup"); setNotifyEmail(true); setReceiptDetail(false); setResult(null);
+    setWear({ consent: false, photo: null }); setWearSaved(null);
   };
 
   if (ctxError) return <div className="adm-section"><div className="adm-demo-banner">{t(ctxError)}</div></div>;
@@ -1065,6 +1078,7 @@ export default function PosSale({ me }) {
               <label><input type="radio" checked={delivery === "ship"} onChange={() => setDelivery("ship")} /> {t("adm.pos.pay.ship")}</label>
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
+            <WearingCaptureCard value={wear} onChange={setWear} busy={busy} />
             <label className="pos-check"><input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} /> {t("adm.pos.pay.notify")}</label>
             {notifyEmail && (
               <div className="pos-receipt-detail">
@@ -1088,6 +1102,12 @@ export default function PosSale({ me }) {
               {result.rx_number && <><dt>{t("adm.pos.done.rx")}</dt><dd>{result.rx_number}</dd></>}
               {result.promised_on && <><dt>{t("adm.pos.done.promised")}</dt><dd>{result.promised_on}</dd></>}
             </dl>
+            {wearSaved && (
+              <p className={`pos-wear-status ${wearSaved}`}>
+                <Icon name={wearSaved === "failed" ? "alert" : wearSaved === "saved" ? "camera" : "clock"} size={14} />{" "}
+                {t(wearSaved === "failed" ? "adm.wear.saleNoPhoto" : wearSaved === "saved" ? "adm.wear.saved" : "adm.wear.saving")}
+              </p>
+            )}
             <OpticalChange change={result.optical_change} />
             <SaleDocuments saleId={result.id} printer={terminal?.printer} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>

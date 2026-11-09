@@ -188,6 +188,32 @@ async function call(path, { method = "GET", body, token, query } = {}) {
  * requests behind a shell that still looks logged in.
  */
 /**
+ * Authenticated GET of a binary resource (an image only the backend may read,
+ * e.g. the photo of the patient wearing the frame). Returns a Blob; never
+ * cached by the browser (the route answers `no-store`).
+ */
+export async function adminFetchBlob(path) {
+  const session = getSession();
+  if (!session) throw new AdminApiError("adm.err.sessionExpired", { status: 401 });
+  let res;
+  try {
+    res = await fetch(new URL(`${ADMIN_API_URL}${path}`, ORIGIN || undefined).toString(), {
+      headers: { Authorization: `Bearer ${session.token}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new AdminApiError("adm.err.offline", { reason: "offline" });
+  }
+  if (!res.ok) {
+    let payload = null;
+    try { payload = await res.json(); } catch { payload = null; }
+    if (res.status === 401) clearSession();
+    throw new AdminApiError(payload?.message || `HTTP ${res.status}`, { status: res.status, reason: payload?.reason, payload });
+  }
+  return res.blob();
+}
+
+/**
  * Authenticated multipart upload (a prescription photo for the OCR reader).
  * No Content-Type header: the browser sets the multipart boundary itself.
  */

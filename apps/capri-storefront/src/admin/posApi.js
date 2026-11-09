@@ -1,7 +1,7 @@
 // Punto de venta (API real /admin/pos/*). Módulo sin hook de idioma: los
 // errores viajan como CLAVES adm.err.pos.<reason> y traduce quien pinta; el
 // servidor calcula todos los importes, aquí nunca se suma un precio.
-import { adminFetch, adminUpload } from "./adminApi.js";
+import { adminFetch, adminFetchBlob, adminUpload } from "./adminApi.js";
 import { cachedGet, invalidate } from "./adminCache.js";
 import { preparePrescriptionFile } from "../lib/imagePrep.js";
 
@@ -124,6 +124,23 @@ export async function ocrPrescription(file) {
 }
 
 /** Foto de la montura del cliente como data URL JPEG reducida (se guarda en el bucket privado). */
+/**
+ * La foto del paciente con la montura puesta (docs/WEARING-PHOTO.md): se queda
+ * en la tienda. Subir/reemplazar exige el consentimiento del paciente; leerla
+ * devuelve un Blob (nunca un enlace) y cada lectura queda en Auditoría.
+ */
+export const setWearingPhoto = (id, photo) =>
+  call(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`, { method: "POST", body: { photo, consent: true } }).then(after(["/admin/pos/sales"]));
+export const removeWearingPhoto = (id) =>
+  call(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`, { method: "DELETE" }).then(after(["/admin/pos/sales"]));
+export async function fetchWearingPhoto(id) {
+  try {
+    return await adminFetchBlob(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`);
+  } catch (e) {
+    throw posErr(e);
+  }
+}
+
 export async function photoDataUrl(file) {
   const prepared = await preparePrescriptionFile(file);
   return new Promise((resolve, reject) => {

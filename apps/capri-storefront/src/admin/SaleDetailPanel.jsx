@@ -34,6 +34,7 @@ import RxForm from "./PosRx.jsx";
 import { fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
 import SaleDocuments from "./SaleDocuments.jsx";
 import PosFramePhoto from "./PosFramePhoto.jsx";
+import { WearingPhotoPanel } from "./WearingPhoto.jsx";
 import { StageChip, STAGE_ICON, STAGE_INDEX, nextForward, stageLabel } from "./StageBar.jsx";
 import { DESIGNS, MATERIALS, PHOTO, AR_OPTIONS, L } from "../data/lensPricing.js";
 import "./sale-detail.css";
@@ -433,7 +434,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
     () => { setPay({ method_code: "", amount: "", details: {} }); return t("adm.pos.sales.collected"); },
   );
   const deliver = async () => {
-    if (!(await confirm({ title: t("adm.pos.sales.deliverConfirm", { n: s.number }), message: t("adm.ops.deliver.body") }))) return;
+    if (!(await confirm({ title: t("adm.pos.sales.deliverConfirm", { n: s.number }), message: s.has_wearing_photo ? `${t("adm.wear.compare")} ${t("adm.ops.deliver.body")}` : t("adm.ops.deliver.body") }))) return;
     run(() => deliverSale(s.id), () => t("adm.pos.sales.delivered"));
   };
   // HU-32: the whole balance and the hand-over in one call (POST …/deliver with payments).
@@ -704,6 +705,12 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   {s.tray && <><dt>{t("adm.sd.tray")}</dt><dd><b>{s.tray}</b></dd></>}
                 </dl>
               </Section>
+
+              {(s.has_wearing_photo || (perms.can_wearing_photo && s.status !== "voided")) && (
+                <Section icon="camera" title={t("adm.wear.title")} right={!s.has_wearing_photo ? <span className="adm-chip">{t("adm.wear.optional")}</span> : null}>
+                  <WearingPhotoPanel sale={s} canManage={Boolean(perms.can_wearing_photo)} pickup={canDeliver} onSale={(sale) => { setData((d) => ({ ...d, sale: { ...d.sale, ...sale } })); onChanged?.(); }} />
+                </Section>
+              )}
 
               <Section icon="glasses" title={t("adm.sd.sec.frame")}>
                 {lines.length === 0 && <p className="sd-empty">{t("adm.sd.noLines")}</p>}

@@ -60,8 +60,8 @@ describe("delete, restore and move — owner and superadmin only", () => {
     expect(saleMoveDenied({ role: "owner" }, sale({ status: "voided" }), target)).toBe("sale_voided");
   });
   it("salePermissions mirrors the rules", () => {
-    expect(salePermissions(actor("seller", { user_id: "u_seller" }), sale(), "seller")).toEqual({ can_edit: true, can_delete: false, can_move: false, can_view_rx: true });
-    expect(salePermissions(actor("superadmin"), sale(), "seller")).toEqual({ can_edit: true, can_delete: true, can_move: true, can_view_rx: true });
+    expect(salePermissions(actor("seller", { user_id: "u_seller" }), sale(), "seller")).toEqual({ can_edit: true, can_delete: false, can_move: false, can_view_rx: true, can_wearing_photo: true });
+    expect(salePermissions(actor("superadmin"), sale(), "seller")).toEqual({ can_edit: true, can_delete: true, can_move: true, can_view_rx: true, can_wearing_photo: true });
   });
 });
 

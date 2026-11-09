@@ -1625,6 +1625,13 @@ export interface SaleRow {
   delete_reason: string | null;
   /** Numbers the sale had in other stores before being moved, oldest first. */
   previous_numbers: Array<{ number: string; establishment_id: string; moved_at: string; moved_by: string | null }>;
+  /**
+   * A photo of the patient wearing the frame exists (lib/pos-wearing-photo.ts).
+   * Only the flag and the time: the photo itself is read through its own
+   * route, and its key never leaves the backend.
+   */
+  has_wearing_photo: boolean;
+  wearing_photo_at: string | null;
   payments: Array<{ method_code: string; amount: number; kind: string; reference: string | null; created_at: string }>;
   /**
    * Who the sale was for and what was sold, when the caller asked for it
@@ -1682,6 +1689,8 @@ export function toSale(s: Record<string, unknown>, payments: Array<Record<string
     deleted_by: (s.deleted_by as string | null) ?? null,
     delete_reason: (s.delete_reason as string | null) ?? null,
     previous_numbers: Array.isArray(s.previous_numbers) ? (s.previous_numbers as SaleRow["previous_numbers"]) : [],
+    has_wearing_photo: typeof s.wearing_photo_key === "string" && s.wearing_photo_key.length > 0,
+    wearing_photo_at: iso(s.wearing_photo_at),
     payments: payments
       .filter((p) => p.sale_id === s.id)
       .map((p) => ({

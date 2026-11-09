@@ -70,4 +70,12 @@ export const PosSale = model.define("pos_sale", {
    * [{ number, establishment_id, moved_at, moved_by }] (lib/pos-sale-admin.ts moveSale).
    */
   previous_numbers: model.json().nullable(),
+  /**
+   * The patient wearing the frame, taken at the counter and shown at pickup
+   * (lib/pos-wearing-photo.ts). The key never leaves the backend.
+   */
+  wearing_photo_key: model.text().nullable(),
+  wearing_photo_at: model.dateTime().nullable(),
+  wearing_photo_by: model.text().nullable(),
+  wearing_photo_consent_at: model.dateTime().nullable(),
 });

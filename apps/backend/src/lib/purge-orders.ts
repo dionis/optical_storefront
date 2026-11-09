@@ -98,9 +98,12 @@ export async function purgeOrders(container: MedusaContainer, confirm: boolean):
     : [];
   // Fotos de las monturas que trajo el cliente al punto de venta.
   if (existing.has("pos_sale")) {
-    for (const r of await pg("pos_sale").select("own_frame_photo_keys")) {
-      const keys = (r as { own_frame_photo_keys: unknown }).own_frame_photo_keys;
+    for (const r of await pg("pos_sale").select("own_frame_photo_keys", "wearing_photo_key")) {
+      const row = r as { own_frame_photo_keys: unknown; wearing_photo_key?: unknown };
+      const keys = row.own_frame_photo_keys;
       if (Array.isArray(keys)) rxFiles.push(...keys.filter((k): k is string => typeof k === "string" && k.length > 0));
+      // La foto del paciente con la montura puesta (lib/pos-wearing-photo.ts).
+      if (typeof row.wearing_photo_key === "string" && row.wearing_photo_key) rxFiles.push(row.wearing_photo_key);
     }
   }
   logger.info(`[purge] ${rxFiles.length} archivo(s) de recetas/probador en el bucket privado.`);

@@ -7,7 +7,7 @@
  * bytes), so no presigned link — a bearer token — ever leaves the backend.
  */
 import { randomUUID } from "crypto";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createStorageClient, prescriptionBucket, storageConfigured } from "./s3";
 
 /** Largest render accepted from the client. */
@@ -53,7 +53,7 @@ export const POS_FRAME_KEY_PATTERN = /^posframe\/[A-Za-z0-9-]{1,64}\.[a-z0-9]{1,
  * Same upload under another key prefix (`tryon`, `posframe`). Best-effort, like
  * uploadTryonImage: null when there is nothing to store or storage fails.
  */
-export async function uploadPrivateImage(dataUrl: unknown, prefix: "tryon" | "posframe"): Promise<string | null> {
+export async function uploadPrivateImage(dataUrl: unknown, prefix: "tryon" | "posframe" | "poswear"): Promise<string | null> {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:") || !storageConfigured()) {
     return null;
   }
@@ -78,6 +78,20 @@ export async function uploadPrivateImage(dataUrl: unknown, prefix: "tryon" | "po
     return objectKey;
   } catch {
     return null;
+  }
+}
+
+/** Object keys of the photos of a patient wearing the frame (lib/pos-wearing-photo.ts): `poswear/<uuid>.<ext>`. */
+export const POS_WEAR_KEY_PATTERN = /^poswear\/[A-Za-z0-9-]{1,64}\.[a-z0-9]{1,8}$/;
+
+/** Removes one object from the private bucket. Best-effort: false when it could not. */
+export async function deletePrivateObject(objectKey: string | null | undefined): Promise<boolean> {
+  if (!objectKey || !storageConfigured()) return false;
+  try {
+    await createStorageClient().send(new DeleteObjectCommand({ Bucket: prescriptionBucket(), Key: objectKey }));
+    return true;
+  } catch {
+    return false;
   }
 }
 

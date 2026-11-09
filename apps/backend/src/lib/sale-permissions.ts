@@ -48,6 +48,17 @@ export function saleEditDenied(actor: SaleActor, sale: SaleForPermission, creato
   return roleRank(actor.role) > creatorRank(creatorRole) ? null : "edit_not_allowed";
 }
 
+/**
+ * The photo of the patient wearing the frame (lib/pos-wearing-photo.ts):
+ * taking, replacing or removing it is for whoever may correct the sale.
+ * Removing it is also allowed on a voided sale, so a photo never outlives the
+ * reason to keep it just because the sale was voided.
+ */
+export function wearingPhotoDenied(actor: SaleActor, sale: SaleForPermission, creatorRole: StaffRole | null, op: "set" | "remove"): string | null {
+  const s = op === "remove" && sale.status === "voided" ? { ...sale, status: "completed" } : sale;
+  return saleEditDenied(actor, s, creatorRole);
+}
+
 /** Delete, restore and move: owner and superadmin only. */
 export function saleAdminDenied(actor: Pick<SaleActor, "role">): string | null {
   return isAdminRole(actor.role) ? null : "admin_only";
@@ -80,13 +91,14 @@ export function canViewSaleRx(actor: SaleActor, sale: SaleForPermission): boolea
 }
 
 /** What the panel may offer on one sale (it never decides on its own: the routes check again). */
-export function salePermissions(actor: SaleActor, sale: SaleForPermission, creatorRole: StaffRole | null): { can_edit: boolean; can_delete: boolean; can_move: boolean; can_view_rx: boolean } {
+export function salePermissions(actor: SaleActor, sale: SaleForPermission, creatorRole: StaffRole | null): { can_edit: boolean; can_delete: boolean; can_move: boolean; can_view_rx: boolean; can_wearing_photo: boolean } {
   const admin = saleAdminDenied(actor) === null;
   return {
     can_edit: saleEditDenied(actor, sale, creatorRole) === null,
     can_delete: admin,
     can_move: admin && sale.status !== "voided",
     can_view_rx: canViewSaleRx(actor, sale),
+    can_wearing_photo: wearingPhotoDenied(actor, sale, creatorRole, sale.status === "voided" ? "remove" : "set") === null,
   };
 }
 

@@ -107,6 +107,8 @@ export interface LimitedSaleRow {
   status: string;
   limited: true;
   payments?: SaleRow["payments"];
+  /** Single sale only: whoever hands the glasses over may compare them with the photo. */
+  has_wearing_photo?: boolean;
 }
 
 export function limitedSale(sale: SaleRow, contact?: CustomerContact | null, withPayments = false): LimitedSaleRow {
@@ -125,7 +127,10 @@ export function limitedSale(sale: SaleRow, contact?: CustomerContact | null, wit
     status: sale.status,
     limited: true,
   };
-  if (withPayments) row.payments = sale.payments;
+  if (withPayments) {
+    row.payments = sale.payments;
+    row.has_wearing_photo = sale.has_wearing_photo;
+  }
   return row;
 }
 

@@ -34,6 +34,9 @@ export const AUDIT_ACTIONS = [
   "sale.delete",
   "sale.restore",
   "sale.move",
+  // The patient wearing the frame (lib/pos-wearing-photo.ts): taken / replaced / removed, and each time it is shown.
+  "sale.wearing_photo",
+  "sale.wearing_photo_view",
   "payment.method",
   "payment.collect",
   "insurance.paid",
