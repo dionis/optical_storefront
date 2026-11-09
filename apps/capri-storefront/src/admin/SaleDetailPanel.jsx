@@ -96,7 +96,7 @@ function RxGrid({ rx }) {
  * servidor vuelve a validar todo con las reglas de la caja y nunca toca
  * artículos, precios ni cobros.
  */
-function SaleEditForm({ sale, customer, address, rx, rxAllowed, busy, onSave, onCancel }) {
+function SaleEditForm({ sale, customer, address, rx, rxAllowed, startWithRx = false, busy, onSave, onCancel }) {
   const { t } = useLang();
   const initCust = useMemo(() => ({
     first_name: customer?.first_name || "", last_name: customer?.last_name || "", email: customer?.email || "", phone: customer?.phone || "", birth_date: customer?.birth_date || "",
@@ -107,7 +107,7 @@ function SaleEditForm({ sale, customer, address, rx, rxAllowed, busy, onSave, on
   const [delivery, setDelivery] = useState(sale.delivery === "ship" ? "ship" : "pickup");
   const [promised, setPromised] = useState(sale.promised_on || "");
   const [note, setNote] = useState(sale.internal_note || "");
-  const [rxOpen, setRxOpen] = useState(false);
+  const [rxOpen, setRxOpen] = useState(startWithRx);
   const initRx = useMemo(() => (rx ? fromRx(rx) : null), [rx]);
   const [rxForm, setRxForm] = useState(initRx);
   useEffect(() => setRxForm(initRx), [initRx]);
@@ -295,6 +295,8 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
   const [voiding, setVoiding] = useState({ open: false, reason: "", note: "" });
   // Después de la venta: "edit" (corregir datos), "move" (otra tienda) o "delete"; solo uno abierto a la vez.
   const [mode, setMode] = useState(null);
+  // «Corregir la receta» junto a la receta abre el formulario ya con la receta desplegada.
+  const [editRx, setEditRx] = useState(false);
   const [moveTo, setMoveTo] = useState("");
   const [del, setDel] = useState({ reason: "", note: "" });
   const [tick, setTick] = useState(0);
@@ -683,6 +685,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                   address={order?.shipping_address || null}
                   rx={(rxDoc?.tickets || []).find((tk) => tk.rx)?.rx || null}
                   rxAllowed={rxAllowed}
+                  startWithRx={editRx}
                   busy={busy}
                   onSave={saveEdit}
                   onCancel={() => setMode(null)}
@@ -736,6 +739,11 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                               <>
                                 <div className="sd-rx-head">{rx.rx_number && <span>{t("adm.sd.rxNumber")} <b>{rx.rx_number}</b></span>}{rx.seg_height != null && <span className="sd-muted">{t("adm.sd.rx.seg")}: {fmtRx(rx.seg_height, 2, false)}</span>}</div>
                                 <RxGrid rx={rx} />
+                                {perms.can_edit && mode !== "edit" && (
+                                  <button type="button" className="btn-sm sd-rx-edit adm-noprint" disabled={busy} onClick={() => { setEditRx(true); setMode("edit"); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                                    <Icon name="edit" size={13} /> {t("adm.sd.edit.rxEdit")}
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -850,7 +858,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
             <button type="button" className={`btn-sm ${canCollectDeliver ? "" : "primary"}`} disabled={busy || s.balance > 0} title={s.balance > 0 ? t("adm.err.pos.balance_due") : undefined} onClick={deliver}><Icon name="hand" size={14} /> {t("adm.sd.act.deliver")}</button>
           )}
           {perms.can_edit && (
-            <button type="button" className="btn-sm" disabled={busy} aria-pressed={mode === "edit"} onClick={() => { setMode((m0) => (m0 === "edit" ? null : "edit")); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="edit" size={14} /> {t("adm.sd.act.edit")}</button>
+            <button type="button" className="btn-sm" disabled={busy} aria-pressed={mode === "edit"} onClick={() => { setEditRx(false); setMode((m0) => (m0 === "edit" ? null : "edit")); panelRef.current?.querySelector(".sd-body")?.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="edit" size={14} /> {t("adm.sd.act.edit")}</button>
           )}
           {perms.can_move && moveTargets.length > 0 && (
             <button type="button" className="btn-sm" disabled={busy} aria-pressed={mode === "move"} onClick={() => setMode((m0) => (m0 === "move" ? null : "move"))}><Icon name="store" size={14} /> {t("adm.sd.act.move")}</button>
