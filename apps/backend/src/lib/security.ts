@@ -188,11 +188,21 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "urls.backend_https", ok: isHttps(env.BACKEND_URL), detail: hostOf(env.BACKEND_URL) });
 
   const stripe = (env.STRIPE_SECRET_KEY || "").trim();
-  checks.push({
-    key: "payments.stripe_mode",
-    ok: stripe.startsWith("sk_live_"),
-    detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
-  });
+  // DEPLOY_ENV=staging: a staging backend must NOT charge real cards, so there
+  // test mode is the right state (and live keys would be the problem).
+  if ((env.DEPLOY_ENV || "").trim().toLowerCase() === "staging") {
+    checks.push({
+      key: "payments.stripe_test_staging",
+      ok: !stripe.startsWith("sk_live_"),
+      detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
+    });
+  } else {
+    checks.push({
+      key: "payments.stripe_mode",
+      ok: stripe.startsWith("sk_live_"),
+      detail: stripe.startsWith("sk_live_") ? "live" : stripe.startsWith("sk_test_") ? "test" : "unset",
+    });
+  }
   checks.push({ key: "payments.stripe_webhook_secret", ok: (env.STRIPE_WEBHOOK_SECRET || "").startsWith("whsec_") });
   checks.push({ key: "payments.stripe_key_is_secret", ok: !stripe || stripe.startsWith("sk_") || stripe.startsWith("rk_") });
 
