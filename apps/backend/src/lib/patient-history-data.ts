@@ -101,6 +101,10 @@ export async function listPatients(
       });
     }
   }
+  // A shopper of the online store checks out as a guest: the customer record
+  // carries only the email, and the name they typed lives on the order's
+  // shipping address. Without it the list showed an email where a name goes.
+  await fillWebNames(pg, [...byId.values()]);
   const now = input.now ?? new Date();
   const aggBy = new Map(page.map((r) => [r.customer_id, r]));
   const rxIds = [...new Set([...page.map((r) => r.customer_id), ...(searched ?? []).map((c) => c.id)])];
@@ -128,6 +132,35 @@ export async function listPatients(
   return { patients, truncated };
 }
 
+/**
+ * Names (and a phone) for customers that have none, from the shipping address
+ * of their most recent order. Best effort: a failed read leaves the rows as
+ * they were. Mutates `rows`.
+ */
+export async function fillWebNames(pg: Knex, rows: PosCustomerRow[]): Promise<void> {
+  const nameless = rows.filter((c) => !(c.first_name || "").trim() && !(c.last_name || "").trim());
+  if (!nameless.length) return;
+  try {
+    const found = (await pg("order as o")
+      .join("order_address as a", "a.id", "o.shipping_address_id")
+      .whereIn("o.customer_id", nameless.map((c) => c.id))
+      .whereNull("o.deleted_at")
+      .distinctOn("o.customer_id")
+      .orderBy([{ column: "o.customer_id" }, { column: "o.created_at", order: "desc" }])
+      .select("o.customer_id", "a.first_name", "a.last_name", "a.phone")) as Array<{ customer_id: string; first_name: string | null; last_name: string | null; phone: string | null }>;
+    const by = new Map(found.map((r) => [String(r.customer_id), r]));
+    for (const c of nameless) {
+      const a = by.get(c.id);
+      if (!a) continue;
+      c.first_name = a.first_name?.trim() || null;
+      c.last_name = a.last_name?.trim() || null;
+      if (!c.phone && a.phone) c.phone = a.phone;
+    }
+  } catch {
+    /* the email stays as the label */
+  }
+}
+
 export interface PatientFile {
   customer: PosCustomerRow & { address: { address_1: string | null; city: string | null; province: string | null; postal_code: string | null } | null; since: string | null; has_account: boolean };
   summary: PatientSummary;
@@ -142,6 +175,8 @@ export async function patientFile(container: MedusaContainer, customerId: string
   const customer = await getCustomer(container, customerId);
   if (!customer) return null;
   const pg = pgOf(container);
+  // A web shopper's name is on the order, not on the customer record (fillWebNames).
+  await fillWebNames(pg, [customer]);
   const settings = await getPosSettings(container);
   const [facts, last, history, extra, addr] = await Promise.all([
     pg("sale_fact").where({ customer_id: customerId }).whereNull("deleted_at").select(FACT_COLUMNS).orderBy("sold_at", "desc").limit(2000) as unknown as Promise<PatientFactLike[]>,
@@ -150,11 +185,20 @@ export async function patientFile(container: MedusaContainer, customerId: string
     pg("customer").where({ id: customerId }).first("created_at", "has_account") as Promise<{ created_at?: Date | string; has_account?: boolean } | undefined>,
     (pg("customer_address").where({ customer_id: customerId }).whereNull("deleted_at").orderBy("created_at", "asc").first("address_1", "city", "province", "postal_code") as Promise<Record<string, string | null> | undefined>).catch(() => undefined),
   ]);
+  // A guest of the online store saved no address book: the one they shipped their last order to.
+  const shipped = addr
+    ? undefined
+    : await (pg("order as o")
+        .join("order_address as a", "a.id", "o.shipping_address_id")
+        .where("o.customer_id", customerId)
+        .whereNull("o.deleted_at")
+        .orderBy("o.created_at", "desc")
+        .first("a.address_1", "a.city", "a.province", "a.postal_code") as Promise<Record<string, string | null> | undefined>).catch(() => undefined);
   const purchases = groupPurchases(facts);
   return {
     customer: {
       ...customer,
-      address: addr ? { address_1: addr["address_1"] ?? null, city: addr["city"] ?? null, province: addr["province"] ?? null, postal_code: addr["postal_code"] ?? null } : null,
+      address: (addr ?? shipped) ? { address_1: (addr ?? shipped)!["address_1"] ?? null, city: (addr ?? shipped)!["city"] ?? null, province: (addr ?? shipped)!["province"] ?? null, postal_code: (addr ?? shipped)!["postal_code"] ?? null } : null,
       since: extra?.created_at ? new Date(extra.created_at).toISOString() : null,
       has_account: Boolean(extra?.has_account),
     },

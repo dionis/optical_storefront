@@ -1,12 +1,13 @@
 import { commissionResolverOf } from "./commission-pct";
 import { loadDefaultCommissionPct } from "./store-cost-toggle";
-import type { MedusaContainer } from "@medusajs/framework/types";
+import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
 import { localParts } from "./alerts";
 import { loadCostingContext } from "./costing";
 import type { EstablishmentRow } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
+import { fetchBoardOrdersByIds } from "./order-board";
 import { deriveOrderProgress, stageIndex, type OrderStage } from "./order-status";
 import { canSellAt, sellableStores } from "./pos";
 import { PosError } from "./pos-data";
@@ -350,6 +351,33 @@ export function pendingOf(
 
 // ── Scope ────────────────────────────────────────────────────────────────────
 
+/** An order of the online store that is not finished: its stage and what it is worth. */
+export interface OpenWebOrder {
+  id: string;
+  total_cents: number;
+  stage: OrderStage;
+  terminal: string | null;
+}
+
+/**
+ * The online store's part of the lab buckets. A web order is paid when placed
+ * and has no till sale, so the rule of the stages applies (lib/order-status.ts):
+ * confirmed or in the laboratory → "in the lab"; packed or on its way → "to
+ * deliver"; delivered, canceled, refunded or not paid → nowhere. Pure.
+ */
+export function webPendingOf(orders: OpenWebOrder[]): { in_lab: Bucket; to_deliver: Bucket } {
+  const out = { in_lab: { count: 0, cents: 0, balance_cents: 0 }, to_deliver: { count: 0, cents: 0, balance_cents: 0 } };
+  for (const o of orders) {
+    if (o.terminal) continue;
+    const i = stageIndex(o.stage);
+    if (i >= stageIndex("delivered")) continue;
+    const b = i >= stageIndex("shipped") ? out.to_deliver : out.in_lab;
+    b.count += 1;
+    b.cents += o.total_cents;
+  }
+  return out;
+}
+
 export interface StartScope {
   /** Filter of the sales lines (lib/sales-analytics.ts applyFilter). */
   sales: Pick<AnalyticsFilter, "stores" | "sellers" | "sellerCodes">;
@@ -361,6 +389,8 @@ export interface StartScope {
   collectStores: string[] | null;
   /** Per-store lines go out (never to a seller). */
   showStores: boolean;
+  /** The online store's unfinished orders count in the lab buckets (an administrator looking at everything or at the web). */
+  webPending?: boolean;
 }
 
 const NONE = ["-"];
@@ -379,7 +409,7 @@ export function resolveStartScope(
   const seller = !scope.is_admin && scope.role === "seller";
   if (param === "web") {
     if (!scope.is_admin) throw new PosError("forbidden_store", 403);
-    return { sales: { stores: ["web"], sellers: null }, pendingStores: NONE, ownSellerId: null, collectStores: NONE, showStores: true };
+    return { sales: { stores: ["web"], sellers: null }, pendingStores: NONE, ownSellerId: null, collectStores: NONE, showStores: true, webPending: true };
   }
   if (param !== "all") {
     if (!stores.some((s) => s.id === param) || !canSellAt(scope, param)) throw new PosError("forbidden_store", 403);
@@ -387,7 +417,7 @@ export function resolveStartScope(
       ? { sales: { stores: [param], sellers: [scope.user_id] }, pendingStores: [param], ownSellerId: scope.user_id, collectStores: [param], showStores: false }
       : { sales: { stores: [param], sellers: null }, pendingStores: [param], ownSellerId: null, collectStores: [param], showStores: true };
   }
-  if (scope.is_admin) return { sales: { stores: null, sellers: null }, pendingStores: null, ownSellerId: null, collectStores: null, showStores: true };
+  if (scope.is_admin) return { sales: { stores: null, sellers: null }, pendingStores: null, ownSellerId: null, collectStores: null, showStores: true, webPending: true };
   const mine = sellableStores(scope, stores).map((s) => s.id);
   if (seller) {
     // Their own sales wherever they made them; the balances of the store they sell in.
@@ -604,6 +634,46 @@ async function orderStages(container: MedusaContainer, orderIds: string[]): Prom
   return (id) => (id ? map.get(id) : undefined);
 }
 
+/** Web orders older than this are not looked at: one that old and still open is a forgotten test, not work in the lab. */
+const WEB_PENDING_DAYS = 120;
+/** The stage needs the order's payment and shipment (one board read, lib/order-board.ts), not a column: keep the read small. */
+const MAX_OPEN_WEB = 200;
+
+/**
+ * The online store's orders that may still be in progress: not canceled, not
+ * a till sale, nothing delivered yet, of the last WEB_PENDING_DAYS. Their
+ * stage comes from the same projection as the order board (payment +
+ * shipment + the lab note), so the map and «Pedidos» never disagree. One row
+ * over the cap so the caller can say the figures are short.
+ */
+async function loadOpenWebOrders(container: MedusaContainer, pg: Knex): Promise<{ orders: OpenWebOrder[]; truncated: boolean }> {
+  const since = new Date(Date.now() - WEB_PENDING_DAYS * 86_400_000);
+  const rows = (await pg("order as o")
+    .whereNull("o.deleted_at")
+    .whereNot("o.status", "canceled")
+    .where("o.created_at", ">=", since)
+    .whereRaw("COALESCE(o.metadata->>'source', '') <> 'pos'")
+    .whereNotExists(pg("pos_sale as s").whereRaw("s.order_id = o.id").select(pg.raw("1")))
+    .whereNotExists(
+      pg("order_fulfillment as l")
+        .join("fulfillment as f", "f.id", "l.fulfillment_id")
+        .whereRaw("l.order_id = o.id")
+        .whereNull("l.deleted_at")
+        .whereNotNull("f.delivered_at")
+        .whereNull("f.canceled_at")
+        .select(pg.raw("1"))
+    )
+    .orderBy("o.created_at", "desc")
+    .limit(MAX_OPEN_WEB + 1)
+    .select("o.id")) as Array<{ id: string }>;
+  const truncated = rows.length > MAX_OPEN_WEB;
+  const board = await fetchBoardOrdersByIds(container, rows.slice(0, MAX_OPEN_WEB).map((r) => String(r.id)));
+  return {
+    truncated,
+    orders: board.map((o) => ({ id: o.id, total_cents: Math.round(Number(o.total ?? 0) * 100), stage: o.stage, terminal: o.terminal })),
+  };
+}
+
 async function countWhere(q: Knex.QueryBuilder): Promise<number> {
   const [row] = (await q.count<{ n: string | number }[]>({ n: "*" })) as Array<{ n: string | number }>;
   return Number(row?.n ?? 0);
@@ -648,20 +718,36 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
   else if (ss.pendingStores) approvalsQ.whereIn("establishment_id", ss.pendingStores);
   if (ss.collectStores) tillsQ.whereIn("establishment_id", ss.collectStores);
 
-  const [sales, open, approvals, openTills, sources] = await Promise.all([
+  const [sales, open, approvals, openTills, sources, web] = await Promise.all([
     loadEconomics(container, filter, access),
     subject ? loadOpenSales(pg, ss.pendingStores, ss.ownSellerId, true) : loadOpenSales(pg, seller ? ss.collectStores : ss.pendingStores, ss.ownSellerId),
     countWhere(approvalsQ),
     // Registers are a store's, not a person's: a seller's map carries none.
     subject ? Promise.resolve(0) : countWhere(tillsQ),
     subject ? subjectSources(container, subject, pr.span, storeParam) : Promise.resolve([]),
+    // The online store's orders in progress. A failure here must not take the map down: the till figures still go out.
+    !subject && ss.webPending
+      ? loadOpenWebOrders(container, pg).catch((e: Error) => {
+          container.resolve<Logger>(ContainerRegistrationKeys.LOGGER).warn(`[start-map] web orders in progress not read: ${e.message}`);
+          return { orders: [] as OpenWebOrder[], truncated: false };
+        })
+      : Promise.resolve({ orders: [] as OpenWebOrder[], truncated: false }),
   ]);
-  const pendingTruncated = open.length > MAX_OPEN_SALES;
+  const pendingTruncated = open.length > MAX_OPEN_SALES || web.truncated;
   const openSales = pendingTruncated ? open.slice(0, MAX_OPEN_SALES) : open;
   const stageOf = await orderStages(container, openSales.filter((s) => !s.delivered_at && s.order_id).map((s) => s.order_id as string));
 
   const agg = aggregateSales(sales.lines, sales.econ, pr, access);
   const pend = pendingOf(openSales, stageOf, { today: pr.today, ownSellerId: ss.ownSellerId, collectStores: ss.collectStores });
+  // The online store's orders join the same two buckets (and its own line of the per-store table).
+  const webPend = webPendingOf(web.orders);
+  for (const k of ["in_lab", "to_deliver"] as const) {
+    pend.pending[k].count += webPend[k].count;
+    pend.pending[k].cents += webPend[k].cents;
+  }
+  if (webPend.in_lab.count || webPend.to_deliver.count) {
+    pend.byStore.set("web", { on_street_cents: 0, in_lab: webPend.in_lab.count, to_deliver: webPend.to_deliver.count });
+  }
 
   const storeRows: StartMapStore[] = [];
   if (ss.showStores) {

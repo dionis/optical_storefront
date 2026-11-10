@@ -82,6 +82,7 @@ export async function fetchOrders({
   terminal = "",
   hasPrescription = "",
   seller = "",
+  store = "",
   limit = 20,
   offset = 0,
 } = {}) {
@@ -94,6 +95,8 @@ export async function fetchOrders({
       terminal,
       has_prescription: hasPrescription,
       seller,
+      // "" = todas; "web" = la tienda online; un id = las ventas de esa tienda.
+      store,
       limit,
       offset,
     },

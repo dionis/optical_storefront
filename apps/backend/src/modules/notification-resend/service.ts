@@ -23,6 +23,8 @@ import type {
   ProviderSendNotificationResultsDTO,
 } from "@medusajs/framework/types";
 
+import { storefrontBrand } from "../../lib/tenant";
+
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 export interface ResendOptions {
@@ -116,7 +118,8 @@ export class ResendNotificationService extends AbstractNotificationProviderServi
     const providerData = notification.provider_data ?? {};
 
     const payload: Record<string, unknown> = {
-      from: notification.from?.trim() || this.options_.from,
+      // A web shop on another domain of this backend may send as itself (STOREFRONT_BRANDS, lib/tenant.ts).
+      from: notification.from?.trim() || storefrontBrand()?.from || this.options_.from,
       to,
       subject: content.subject,
     };

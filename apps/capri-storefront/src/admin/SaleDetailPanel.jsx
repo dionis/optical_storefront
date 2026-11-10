@@ -607,7 +607,7 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
           {o && (
             <ul className="sd-meta">
               <li><Icon name="calendar" size={13} /> <b>{fmt(o.created_at, lang)}</b></li>
-              <li>{o.channel === "pos" ? <span className="sd-dot" style={{ background: oStoreLabel?.color || "var(--adm-line)" }} /> : <Icon name="globe" size={13} />} {t("adm.sd.store")}: <b>{o.channel === "pos" ? (oStoreLabel ? `${oStoreLabel.code} · ${oStoreLabel.name}` : o.establishment_id || "—") : t("adm.sd.order.web")}</b></li>
+              <li>{o.channel === "pos" ? <span className="sd-dot" style={{ background: oStoreLabel?.color || "var(--adm-line)" }} /> : <Icon name="globe" size={13} />} {t("adm.sd.store")}: <b>{o.channel === "pos" ? (oStoreLabel ? `${oStoreLabel.code} · ${oStoreLabel.name}` : o.establishment_id || "—") : [t("adm.sd.order.web"), o.storefront?.name || o.storefront?.host].filter(Boolean).join(" · ")}</b></li>
               {o.seller_code && <li><Icon name="user" size={13} /> {t("adm.sd.order.seller")}: <b>{o.seller_code}</b></li>}
               {o.has_prescription && <li><Icon name="eye" size={13} /> <b>{t("adm.sd.rxYes")}</b></li>}
             </ul>

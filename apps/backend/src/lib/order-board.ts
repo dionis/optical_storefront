@@ -24,6 +24,8 @@ import {
   type OrderStage,
 } from "./order-status";
 import { absoluteImageUrl } from "./image-url";
+import { orderStorefrontOrigin } from "./storefront-origin";
+import { storefrontBrandName } from "./tenant";
 
 /**
  * Marca `has_tryon` en cada orden: una consulta por lote pregunta cuáles de las
@@ -480,6 +482,7 @@ export function slimBoardOrder(o: BoardOrder) {
     stage_history: o.stage_history,
     channel: o.channel,
     establishment_id: o.establishment_id,
+    storefront: o.storefront,
     seller_code: o.seller_code,
     pos_sale_id: o.pos_sale_id,
     pos_sale_number: o.pos_sale_number,
@@ -600,6 +603,10 @@ export function projectBoardOrder(order: Record<string, unknown>) {
     // establishment) or the online store. The executive panel filters on it.
     channel: metadata["source"] === "pos" ? "pos" : "web",
     establishment_id: typeof metadata["establishment_id"] === "string" && metadata["establishment_id"] ? String(metadata["establishment_id"]) : null,
+    // The web shop it was bought on (lib/storefront-origin.ts): its domain and,
+    // when that shop has a brand of its own (STOREFRONT_BRANDS), its name.
+    // null for a till sale and for a web order placed before origins were recorded.
+    storefront: metadata["source"] === "pos" ? null : storefrontOf(metadata),
     // Free-text note the owner keeps on the order (panel + sheet).
     owner_note: ownerNote,
     // Every stage change recorded by transitionOrderStage, oldest first.
@@ -654,6 +661,19 @@ function haystack(row: BoardOrder): string {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+/** The web shop of an order: its host and its brand name when it has one. Pure (reads STOREFRONT_URLS / STOREFRONT_BRANDS). */
+export function storefrontOf(metadata: Record<string, unknown> | null | undefined): { host: string; name: string | null } | null {
+  const origin = orderStorefrontOrigin(metadata);
+  if (!origin) return null;
+  let host = origin;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    /* keep the origin as written */
+  }
+  return { host, name: storefrontBrandName(origin) };
 }
 
 /** `store` = "web" keeps online orders; an establishment id keeps that till's sales; empty keeps all. Pure. */

@@ -15,7 +15,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { TENANT_PROFILE_MODULE } from "../modules/tenant-profile/index";
 import type TenantProfileModuleService from "../modules/tenant-profile/service";
 import { FIELD_LIMITS, isValidPhone } from "./field-rules";
-import { setTenantOverlay, tenant } from "./tenant";
+import { setTenantOverlay, storefrontBrand, tenant } from "./tenant";
 import { publicBrand, readBrand, type TenantBrandProfile } from "./tenant-brand";
 
 export const TENANT_PROFILE_ID = "default";
@@ -245,7 +245,10 @@ export function publicTenantProfile(view: TenantProfileView) {
     whatsapp: view.whatsapp,
     social: view.social,
     pickup: view.pickup?.enabled ? view.pickup : null,
-    brand: publicBrand(view.brand),
+    // The panel's brand paints this deployment's own storefront. A web shop on
+    // another domain of this backend (STOREFRONT_BRANDS) keeps the brand it was
+    // built with: answering with the stores' colours and logo would repaint it.
+    brand: storefrontBrand() ? null : publicBrand(view.brand),
     currency: t.currency,
     country: t.country,
     timezone: t.timezone,

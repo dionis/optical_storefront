@@ -11,6 +11,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
   const [profile, settings] = await Promise.all([readTenantProfile(req.scope), resolveStoreSettings(req.scope)]);
   const body = publicTenantProfile(profile);
   res.setHeader("Cache-Control", "public, max-age=300");
+  // The answer depends on which storefront asks (lib/storefront-origin.ts).
+  res.setHeader("Vary", "Origin");
   // El correo de soporte lo edita el dueño en Ajustes (store_setting); manda sobre la variable.
   res.json({ tenant: { ...body, support_email: settings.support_email ?? body.support_email } });
 }

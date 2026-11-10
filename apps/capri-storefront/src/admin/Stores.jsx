@@ -9,6 +9,7 @@ import { fetchStores, createStore, updateStore, freeStoreColor, storeInk, STORE_
 import { formatAddressLine } from "../data/addressAutocomplete.js";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
+import WebStoreCard from "./WebStoreCard.jsx";
 import HelpTip from "./HelpTip.jsx";
 import StorePricing from "./StorePricing.jsx";
 import StoreAssortment from "./StoreAssortment.jsx";
@@ -46,7 +47,7 @@ function ColorPicker({ value, onChange, disabled }) {
  *  · No se borran: una tienda con ventas solo se desactiva.
  *  · Cada una nace con un color distinto, el de sus correos; se puede cambiar.
  */
-export default function Stores() {
+export default function Stores({ go = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
   const demo = isDemoLogin();
@@ -126,6 +127,9 @@ export default function Stores() {
           <button className="btn-sm primary" disabled={demo || busy}><Icon name="plus" size={14} />{busy ? "…" : t("adm.stores.create")}</button>
         </div>
       </form>
+
+      {/* La tienda online: la cuarta tienda del negocio, sin caja ni dirección. */}
+      <WebStoreCard go={go} demo={demo} />
 
       <div className="adm-card">
         <h3><Icon name="store" size={16} />{t("adm.stores.listTitle", { n: stores.length })}</h3>

@@ -19,6 +19,7 @@ import { fetchSellers } from "./adminSellers.js";
 import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { fetchAiStatus } from "./aiUsage.js";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
+import { useStoreFilter } from "./StoreFilter.jsx";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import { TENANT } from "../config/tenant.js";
@@ -396,9 +397,13 @@ function deepLinkedOrder() {
   return (new URLSearchParams(window.location.search).get("order") || "").trim();
 }
 
-export function Orders({ onGoCosts, sellers = [], params = {} }) {
+export function Orders({ onGoCosts, sellers = [], params = {}, me = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
+  // La tienda elegida en la barra (una tienda, la tienda online o todas) filtra la lista en el servidor.
+  const sf = useStoreFilter(me);
+  const store = sf.isAll ? "" : sf.storeId;
+  const storeById = new Map(sf.stores.map((x) => [x.id, x]));
   // Llega desde la hoja (`?order=`) o desde otra pantalla del panel (`go("orders", {...})`).
   const [linked] = useState(() => params.order || deepLinkedOrder());
   const initialPreset = params.preset || (linked ? "all" : "30d");
@@ -421,12 +426,12 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => { const id = setTimeout(() => setDebounced(query.trim()), 300); return () => clearTimeout(id); }, [query]);
-  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx, seller]);
+  useEffect(() => { setPage(0); }, [debounced, from, to, stage, terminal, rx, seller, store]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchOrders({ q: debounced, from, to, stage, terminal, hasPrescription: rx, seller, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+    fetchOrders({ q: debounced, from, to, stage, terminal, hasPrescription: rx, seller, store, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
       .then((result) => {
         if (!alive) return;
         setData(result); setError("");
@@ -442,7 +447,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
       })
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [debounced, from, to, stage, terminal, rx, seller, page, reloadKey]);
+  }, [debounced, from, to, stage, terminal, rx, seller, store, page, reloadKey]);
 
   function applyPreset(key) { setPreset(key); setFrom(presetFrom(key)); setTo(""); }
 
@@ -450,6 +455,12 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const count = data?.count ?? 0;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const hasFilters = stage || terminal || rx || seller || debounced || preset === "custom";
+  // De dónde viene cada pedido: la tienda online (con el nombre de su web si lo tiene) o la tienda que lo vendió.
+  const originText = (o) => {
+    if (o.channel !== "pos") return [t("adm.theme.online"), o.storefront?.name || o.storefront?.host].filter(Boolean).join(" · ");
+    const st = storeById.get(o.establishment_id);
+    return st ? [st.code, st.name].filter(Boolean).join(" · ") : "—";
+  };
 
   async function move(order, target, opts) {
     setBusyId(order.id);
@@ -469,7 +480,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
   const exportCsv = () => {
     const stageText = (o) => o.terminal && o.terminal !== "payment_pending" ? t(TERMINAL_BY_KEY[o.terminal].label) : t(STAGE_BY_KEY[o.stage]?.label || o.stage);
     const csv = ordersToCsv(orders, [
-      [t("adm.col.order"), (o) => orderLabel(o)], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)],
+      [t("adm.col.order"), (o) => orderLabel(o)], [t("adm.ord.colOrigin"), originText], [t("adm.col.date"), (o) => shortDate(o.created_at, lang)],
       [t("adm.ord.colCustomer"), (o) => o.customer.name || ""], [t("adm.login.email"), (o) => o.customer.email || ""], [t("adm.sel.phone"), (o) => o.customer.phone || ""],
       [t("adm.ord.colDelivery"), (o) => o.shipping_address?.city || t("adm.ord.pickup")], [t("adm.col.total"), (o) => Number(o.total || 0).toFixed(2)],
       [t("adm.ord.colStage"), stageText], [t("adm.ord.tracking"), (o) => o.tracking_number || ""], [t("adm.ord.seller"), (o) => o.seller_code || ""],
@@ -539,17 +550,17 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
           <table className="adm-table orders responsive">
             <thead>
               <tr>
-                <th>{t("adm.col.order")}</th><th>{t("adm.col.date")}</th><th>{t("adm.ord.colCustomer")}</th><th>{t("adm.ord.colDelivery")}</th>
+                <th>{t("adm.col.order")}</th><th>{t("adm.ord.colOrigin")}</th><th>{t("adm.col.date")}</th><th>{t("adm.ord.colCustomer")}</th><th>{t("adm.ord.colDelivery")}</th>
                 <th className="r">{t("adm.col.total")}</th><th>{t("adm.ord.colStage")}</th><th>{t("adm.ord.colAdvance")}</th>
               </tr>
             </thead>
             <tbody>
               {loading && !orders.length ? (
-                <tr><td colSpan="7" className="full"><div className="adm-skel-rows"><div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" /></div></td></tr>
+                <tr><td colSpan="8" className="full"><div className="adm-skel-rows"><div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" /></div></td></tr>
               ) : error && !orders.length ? (
-                <tr><td colSpan="7" className="muted full">{t("adm.ord.loadFailed")}</td></tr>
+                <tr><td colSpan="8" className="muted full">{t("adm.ord.loadFailed")}</td></tr>
               ) : !orders.length ? (
-                <tr><td colSpan="7" className="full"><div className="adm-empty"><Icon name="orders" size={36} /><b>{hasFilters ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}</b><p>{t("adm.ord.emptyHint")}</p></div></td></tr>
+                <tr><td colSpan="8" className="full"><div className="adm-empty"><Icon name="orders" size={36} /><b>{hasFilters ? t("adm.ord.noResults") : t("adm.ord.noneInRange")}</b><p>{t("adm.ord.emptyHint")}</p></div></td></tr>
               ) : orders.map((o) => {
                 const open = openId === o.id;
                 return [
@@ -560,6 +571,13 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
                       {o.has_tryon && <span className="ord-tryon" title={t("adm.ord.tryonTitle")}><Icon name="camera" size={13} /></span>}
                       {o.owner_note && <span className="ord-tryon" title={o.owner_note}><Icon name="clipboard" size={13} /></span>}
                     </td>
+                    <td data-label={t("adm.ord.colOrigin")}>
+                      {o.channel !== "pos" ? (
+                        <span className="ord-origin web" title={originText(o)}><Icon name="globe" size={13} /><b>{t("adm.ord.originWeb")}</b>{(o.storefront?.name || o.storefront?.host) && <small>{o.storefront.name || o.storefront.host}</small>}</span>
+                      ) : (
+                        <span className="ord-origin" title={originText(o)}><i className="dot" style={{ background: storeById.get(o.establishment_id)?.color || "var(--adm-line)" }} /><b>{storeById.get(o.establishment_id)?.code || "—"}</b>{storeById.get(o.establishment_id)?.name && <small>{storeById.get(o.establishment_id).name}</small>}</span>
+                      )}
+                    </td>
                     <td data-label={t("adm.col.date")}>{shortDate(o.created_at, lang)}</td>
                     <td data-label={t("adm.ord.colCustomer")}><span title={o.customer.email || ""}>{o.customer.name || o.customer.email || "—"}</span>{o.seller_code && <span className="adm-chip gold" style={{ marginLeft: 6, fontSize: 10.5 }}>{o.seller_code}</span>}</td>
                     <td data-label={t("adm.ord.colDelivery")}>{o.shipping_address?.city ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="truck" size={13} />{o.shipping_address.city}</span> : <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Icon name="store" size={13} />{t("adm.ord.pickup")}</span>}</td>
@@ -569,7 +587,7 @@ export function Orders({ onGoCosts, sellers = [], params = {} }) {
                   </tr>,
                   open && (
                     <tr key={o.id + "-d"} className="ord-detail">
-                      <td colSpan="7" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} onMove={(target, opts) => move(o, target, opts)} /></td>
+                      <td colSpan="8" className="full"><OrderDetail order={o} onPatched={patch} onGoCosts={onGoCosts} onMove={(target, opts) => move(o, target, opts)} /></td>
                     </tr>
                   ),
                 ];
@@ -697,7 +715,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
       {tab === "exec" && (
         <ExecutiveHub me={me} go={go} sub={nav.params.sub} onSub={onSub} params={nav.params} />
       )}
-      {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} />}
+      {tab === "orders" && <Orders key={`orders-${nav.n}`} onGoCosts={(id) => go("costs", { sub: "profit", order: id })} sellers={sellers} params={nav.params} me={me} />}
       {tab === "costs" && <Costs key={`costs-${nav.n}`} params={nav.params} sellers={sellers} go={go} onSub={onSub} />}
       {tab === "sellers" && <Sellers onChanged={loadSellers} go={go} me={me} params={nav.params} />}
       {/* «Productos y precios»: Productos + Precios y costos en una pantalla
@@ -705,7 +723,7 @@ export default function AdminDashboard({ user, onLogout, me = null }) {
           hace falta: sin él useStoreFilter no ve las tiendas. */}
       {tab === "products" && <PricingPanel key={`products-${nav.n}`} me={me} sellers={sellers} go={go} params={nav.params} onSub={onSub} />}
       {tab === "catalogsync" && <CatalogSync />}
-      {tab === "stores" && <Stores />}
+      {tab === "stores" && <Stores go={go} />}
       {tab === "team" && <Team />}
       {tab === "security" && <Security />}
       {tab === "setup" && <Setup go={go} onChanged={onSetup} />}

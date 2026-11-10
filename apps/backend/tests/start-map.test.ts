@@ -1,7 +1,7 @@
 import { PosError } from "../src/lib/pos-data";
 import type { InsightLine, LineEconomics } from "../src/lib/sales-insights";
 import { isAllowedForRestrictedRole } from "../src/lib/staff-roles";
-import { aggregateSales, labBucketOf, pendingOf, periodRanges, resolveStartScope, resolveSubjectScope, type OpenSaleRow } from "../src/lib/start-map";
+import { aggregateSales, labBucketOf, pendingOf, periodRanges, resolveStartScope, resolveSubjectScope, webPendingOf, type OpenSaleRow, type OpenWebOrder } from "../src/lib/start-map";
 
 const line = (over: Partial<InsightLine> = {}): InsightLine => ({
   order_id: "o1",
@@ -154,6 +154,30 @@ describe("pendingOf", () => {
     expect(pending.to_deliver.count).toBe(1);
     expect(pending.on_street).toEqual({ count: 3, cents: 14500 });
     expect(pending.overdue_balances).toEqual({ count: 2, cents: 9500 });
+  });
+});
+
+// The online store sells on the same backend as the stores: its orders in
+// progress count in "En laboratorio" / "Por entregar" next to the till sales.
+describe("webPendingOf", () => {
+  const web = (stage: OpenWebOrder["stage"], over: Partial<OpenWebOrder> = {}): OpenWebOrder => ({ id: `o_${stage}`, total_cents: 10000, stage, terminal: null, ...over });
+  it("confirmed and in the lab wait on the lab; packed and on its way wait on delivery", () => {
+    const p = webPendingOf([web("confirmed"), web("in_lab", { total_cents: 5000 }), web("shipped"), web("in_transit")]);
+    expect(p.in_lab).toEqual({ count: 2, cents: 15000, balance_cents: 0 });
+    expect(p.to_deliver).toEqual({ count: 2, cents: 20000, balance_cents: 0 });
+  });
+  it("delivered, canceled, refunded and unpaid orders wait on no one", () => {
+    const p = webPendingOf([web("delivered"), web("in_lab", { terminal: "canceled" }), web("in_lab", { terminal: "refunded" }), web("confirmed", { terminal: "payment_pending" })]);
+    expect(p.in_lab.count + p.to_deliver.count).toBe(0);
+  });
+  it("only an administrator looking at everything or at the web counts them", () => {
+    const stores = [{ id: "est_1", is_active: true }];
+    const admin = { is_admin: true, role: "owner" as const, establishment_ids: null, user_id: "o", seller: null };
+    const manager = { is_admin: false, role: "manager" as const, establishment_ids: ["est_1"], user_id: "m", seller: null };
+    expect(resolveStartScope(admin, stores, "").webPending).toBe(true);
+    expect(resolveStartScope(admin, stores, "web").webPending).toBe(true);
+    expect(resolveStartScope(admin, stores, "est_1").webPending).toBeUndefined();
+    expect(resolveStartScope(manager, stores, "all").webPending).toBeUndefined();
   });
 });
 

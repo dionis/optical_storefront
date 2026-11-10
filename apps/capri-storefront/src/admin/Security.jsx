@@ -103,6 +103,8 @@ const GROUPS = [
   ["services", (k) => k.startsWith("notifications.") || k.startsWith("sheet.") || k.startsWith("ocr.")],
   // Perfil, dueño explícito y puesta en marcha (multi-óptica): salen de la base de datos.
   ["tenant", (k) => k.startsWith("tenant.")],
+  // La tienda online sobre este mismo backend (lib/web-channel.ts): dominios, marca, clave, cobro, envío y último pedido.
+  ["web", (k) => k.startsWith("web.")],
 ];
 
 export default function Security() {
@@ -173,7 +175,7 @@ export default function Security() {
                       <span className="adm-sec-mark" aria-hidden="true"><Icon name={c.ok ? "check" : "close"} size={15} /></span>
                       <span className="adm-sec-main">
                         <b>{label(c.key)}</b>
-                        {c.detail ? <small className="muted"> · {c.detail}</small> : null}
+                        {c.detail ? <small className="muted"> · {c.key === "web.last_order" && c.detail === "0" ? t("adm.sec.web.noOrders") : c.detail}</small> : null}
                         {!c.ok && hint(c.key) ? <small className="adm-sec-hint">{hint(c.key)}</small> : null}
                       </span>
                     </li>
