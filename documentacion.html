@@ -69,6 +69,24 @@
 </section>
 
 <section>
+  <h2>10-nov-2026 — la tienda online y las tiendas físicas en un solo panel</h2>
+  <p>Las compras de <code>www.rubilens.com</code> no aparecían en el panel de <code>opticaelrancho.com/admin</code> porque eran <b>dos backends con dos bases de datos</b> (la web en producción, el panel en staging). Decisión del dueño: <b>un solo backend, el del panel</b>, para las tres tiendas físicas y la tienda online. Guía completa, pasos de Coolify / Vercel / Stripe y cómo volver atrás: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code>. QA: <code>docs/QA-UNIFICACION-2026-11-10.md</code>.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Marca por dominio: los correos y SMS de un pedido de la web salen como RUBI LENS; caja, recibos y personal siguen como Óptica El Rancho (<code>STOREFRONT_BRANDS</code>)</td><td><span class="tag ok">Listo</span></td><td><code>lib/tenant.ts</code>, <code>modules/notification-resend</code>, <code>lib/tenant-profile.ts</code></td></tr>
+    <tr><td>Pedidos: columna «Origen» (Online · marca / tienda) y filtro por la tienda de la barra</td><td><span class="tag ok">Listo</span></td><td><code>lib/order-board.ts</code>, <code>src/admin/AdminDashboard.jsx</code></td></tr>
+    <tr><td>Los pedidos web sin terminar cuentan en «En laboratorio» y «Por entregar»</td><td><span class="tag ok">Listo</span></td><td><code>lib/start-map.ts</code></td></tr>
+    <tr><td>Pacientes de la web con su nombre y dirección</td><td><span class="tag ok">Listo</span></td><td><code>lib/patient-history-data.ts</code></td></tr>
+    <tr><td>Tiendas → tarjeta «Tienda online»; Seguridad → grupo «Tienda online» (7 comprobaciones)</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-channel.ts</code>, <code>GET /admin/web-channel</code>, <code>src/admin/WebStoreCard.jsx</code></td></tr>
+    <tr><td>Foto de la montura fuera de catálogo en el recibo; subirla después de la venta</td><td><span class="tag ok">Listo</span></td><td><code>lib/store-frame-photo.ts</code>, <code>POST /admin/pos/sales/:id/store-frame-photo</code></td></tr>
+    <tr><td>«Salir» cierra la sesión y abre la pantalla de entrada del panel de la óptica</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/adminAuth.js</code> (<code>signOutToLogin</code>)</td></tr>
+    <tr><td>Acabado visual: cabeceras, herramientas en una fila, filtros en rejilla</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/polish.css</code></td></tr>
+    <tr><td>Unir los dos backends (dominios en Coolify, clave publicable en Vercel, Stripe en vivo, compra de prueba)</td><td><span class="tag wip">Pendiente del dueño</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §4</td></tr>
+  </table>
+  <p class="muted">Pruebas: 91 suites / 1551. El 10-nov a las 20:26 UTC el backend de producción respondía 503; la unión lo resuelve de paso.</p>
+</section>
+
+<section>
   <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
   <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
 

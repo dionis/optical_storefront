@@ -2,6 +2,12 @@
 
 Qué rama alimenta cada entorno, cómo elige el storefront su backend y qué impide que la tienda en vivo hable con staging. Escrito tras el incidente del 27 oct 2026: una URL de staging fijada en una rama llegó a `develop` y durante horas la tienda real mandó carrito, pago, pedidos y la medición con IA del probador al backend (y a la base de datos) de staging.
 
+> **10-nov-2026 — un solo backend.** El dueño decidió que la tienda online y el
+> panel compartan el backend del panel. Los pasos (dominios en Coolify, clave
+> publicable en Vercel, Stripe) y lo que cambia están en
+> [TIENDA-ONLINE-UNIFICADA.md](TIENDA-ONLINE-UNIFICADA.md). Hasta que se
+> ejecuten, la tabla de abajo sigue siendo la situación real.
+
 ## Ramas y entornos
 
 | Rama | Storefront (Vercel) | Backend (Coolify) | Para qué |
