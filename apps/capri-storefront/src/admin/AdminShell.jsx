@@ -12,6 +12,7 @@ import { COLOR_MODES, themeVars, useColorMode, useStoreTheme } from "./useStoreT
 import GlobalFilterBar, { ExportRegistry } from "./GlobalFilterBar.jsx";
 import "./admin-theme.css";
 // Capa final de tableta y celular (objetivos táctiles, cabecera y barra compactas): va la última.
+import "./polish.css";
 import "./responsive.css";
 
 /**
