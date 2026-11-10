@@ -76,7 +76,9 @@ export async function uploadPrivateImage(dataUrl: unknown, prefix: "tryon" | "po
       })
     );
     return objectKey;
-  } catch {
+  } catch (e) {
+    // Without this line a refused upload left no trace at all. Never the bytes or the key.
+    console.warn(`[storage] ${prefix} upload refused: ${(e as Error)?.name ?? "Error"}: ${(e as Error)?.message ?? ""}`);
     return null;
   }
 }

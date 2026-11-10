@@ -55,6 +55,7 @@ import { effectiveAssortmentRules } from "./store-assortment-data";
 import { resolveStoreSettings } from "./store-settings";
 import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
+import { storageConfigured } from "./s3";
 
 /**
  * The point-of-sale sale, end to end. A sale is a regular Medusa order:
@@ -1188,6 +1189,12 @@ export interface CreatedSale {
   promised_on: string | null;
   /** "Daño óptico" for the screen only — never on receipts, emails or Sheets. */
   optical_change: OpticalChange | null;
+  /**
+   * True when the till sent a photo of a typed frame (the patient's or one off
+   * the catalog) and the private bucket did not keep it. The sale stands; the
+   * till says so, because the receipt and the lab ticket go out without it.
+   */
+  frame_photo_failed?: boolean;
   /** True when this response is a replay of an earlier identical request. */
   replayed?: boolean;
 }
@@ -1278,7 +1285,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     if (approval) await releaseApproval(container, approval.id);
     throw e;
   }
-  const { sale, orderId, number, promisedOn, withLenses, rx } = placed;
+  const { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed } = placed;
   const svc = pos(container);
   const p = input.payments;
   // Tray, payments and the approval touch different rows of the new sale:
@@ -1340,6 +1347,7 @@ async function recordSale(container: MedusaContainer, input: CreateSaleInput): P
     rx_number: rx.rxNumber,
     promised_on: promisedOn,
     optical_change: change,
+    ...(framePhotoFailed ? { frame_photo_failed: true } : {}),
   };
 }
 
@@ -1351,6 +1359,8 @@ interface PlacedSale {
   promisedOn: string;
   withLenses: boolean;
   rx: { newId: string | null; wornId: string | null; rxNumber: string | null };
+  /** A typed frame came with a photo that the private bucket did not keep. */
+  framePhotoFailed: boolean;
 }
 
 /**
@@ -1372,6 +1382,12 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     })),
     Promise.all(input.lines.map((line) => (line.kind !== "frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
   ]);
+  // A photo that was sent but not kept used to vanish without a trace: the
+  // receipt then printed the empty frame icon and nobody knew why.
+  const framePhotoFailed = input.lines.some((line, i) => line.kind !== "frame" && Boolean(line.photo) && !photoKeys[i]);
+  if (framePhotoFailed) {
+    logger.warn(`[pos] frame photo not stored (${storageConfigured() ? "the private bucket refused it" : "private storage is not configured: R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PRESCRIPTION_BUCKET"})`);
+  }
 
   const address = {
     first_name: customer.first_name,
@@ -1510,7 +1526,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     currency_code: "usd",
     own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
   });
-  return { sale, orderId, number, promisedOn, withLenses, rx };
+  return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
 }
 
 export async function stampOrder(container: MedusaContainer, orderId: string, patch: Record<string, unknown>): Promise<number | null> {

@@ -430,7 +430,35 @@ async function printHtml(title, body, extraCss = "") {
  * cualquier otra (o sin dato), el recibo doble en carta, y el rollo queda como
  * botón secundario.
  */
-export default function SaleDocuments({ saleId, compact = false, printer = null }) {
+/**
+ * Recién cobrada la venta, la pantalla todavía tiene la foto que se tomó de la
+ * montura escrita a mano (del paciente o fuera de catálogo). Si el servidor no
+ * la devolvió (no la pudo guardar), se pone esa en su lugar: el recibo y el
+ * ticket de laboratorio llevan foto igual que con una montura del catálogo.
+ * `localPhotos` va en el orden de las líneas de la venta; una venta lleva una
+ * sola montura (`MAX_LINES`), así que se emparejan por orden entre las escritas.
+ */
+function withLocalPhotos(doc, localPhotos) {
+  const photos = (localPhotos || []).filter(Boolean);
+  if (!photos.length) return doc;
+  const typed = (l) => l && (l.kind === "own_frame" || l.frame?.off_catalog);
+  const fill = (list) => {
+    let i = 0;
+    return list.map((l) => {
+      if (!typed(l)) return l;
+      const photo = photos[i++];
+      if (l.image_url || !photo) return l;
+      return { ...l, image_url: photo, ...(l.own_frame ? { own_frame: { ...l.own_frame, has_photo: true } } : {}) };
+    });
+  };
+  return {
+    ...doc,
+    ...(doc.lines ? { lines: fill(doc.lines) } : {}),
+    ...(doc.tickets ? { tickets: (() => { const lines = fill(doc.tickets.map((tk) => tk.line)); return doc.tickets.map((tk, k) => ({ ...tk, line: lines[k] })); })() } : {}),
+  };
+}
+
+export default function SaleDocuments({ saleId, compact = false, printer = null, localPhotos = null }) {
   const { t } = useLang();
   const { toast } = useFeedback();
   const [busy, setBusy] = useState("");
@@ -441,7 +469,8 @@ export default function SaleDocuments({ saleId, compact = false, printer = null 
   const print = async (kind) => {
     setBusy(kind);
     try {
-      const { document: doc } = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/documents`, { method: "POST", body: { kind } });
+      const { document: served } = await adminFetch(`/admin/pos/sales/${encodeURIComponent(saleId)}/documents`, { method: "POST", body: { kind } });
+      const doc = withLocalPhotos(served, localPhotos);
       if (kind === "job") {
         if (!doc.tickets?.length) { toast({ tone: "info", title: t("adm.doc.noLenses") }); return; }
         const own = doc.tickets.find((tk) => tk.line.own_frame?.photo_url);

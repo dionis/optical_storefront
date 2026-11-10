@@ -737,7 +737,9 @@ export default function PosSale({ me }) {
         receipt_detail: notifyEmail && receiptDetail,
         idempotency_key: idem.current,
       });
-      setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null });
+      // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
+      // servidor no pudo guardarlas, el recibo de ahora las imprime igual.
+      setResult({ ...r.sale, optical_change: r.sale.optical_change || q?.optical_change || null, frame_photos: lines.map((l) => (l.kind !== "frame" ? l.photo || null : null)) });
       setStep(STEPS.indexOf("done"));
       // La foto con la montura va aparte, una vez registrada la venta: si falla, la venta queda y se añade desde su ficha.
       if (wear.consent && wear.photo && r.sale?.id) {
@@ -1175,8 +1177,13 @@ export default function PosSale({ me }) {
                 {t(wearSaved === "failed" ? "adm.wear.saleNoPhoto" : wearSaved === "saved" ? "adm.wear.saved" : "adm.wear.saving")}
               </p>
             )}
+            {result.frame_photo_failed && (
+              <p className="pos-wear-status failed">
+                <Icon name="alert" size={14} /> {t("adm.pos.own.photoNotSaved")}
+              </p>
+            )}
             <OpticalChange change={result.optical_change} />
-            <SaleDocuments saleId={result.id} printer={terminal?.printer} />
+            <SaleDocuments saleId={result.id} printer={terminal?.printer} localPhotos={result.frame_photos} />
             <button type="button" className="btn-sm primary" onClick={reset}><Icon name="plus" size={14} /> {t("adm.pos.done.new")}</button>
           </div>
         )}
