@@ -8,7 +8,7 @@ import AddressChoice from "./AddressChoice.jsx";
 import AddressInput from "./AddressInput.jsx";
 import Icon from "./icons.jsx";
 import { PRIVILEGES, changeOwnPassword, fetchMyProfile, fetchProfile, saveMyProfile, saveProfile, signMeOutEverywhere } from "./adminTeam.js";
-import { logout } from "./adminAuth.js";
+import { signOutToLogin } from "./adminAuth.js";
 import FieldError from "../components/FieldError.jsx";
 import { emailProblem, LIMITS, phoneProblem, typedEmail, typedPhone } from "../data/fieldRules.js";
 import PasswordInput from "../components/PasswordInput.jsx";
@@ -162,8 +162,7 @@ function OwnPassword() {
     setBusy(true);
     try {
       await signMeOutEverywhere();
-      logout();
-      window.location.reload();
+      if (!signOutToLogin()) window.location.reload();
     } catch (err) {
       toast({ tone: "error", title: t(err.message) });
       setBusy(false);

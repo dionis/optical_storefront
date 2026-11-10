@@ -46,6 +46,17 @@ const def = (m) => m.locale?.default ?? "es";
 /** Text in the store's default language (the static HTML is not translated). */
 export const text = (m, v) => (v && (v[def(m)] ?? Object.values(v)[0])) || "";
 
+/** The panel's address for this store: `domains.admin`, else `<storefront>/admin`. */
+function adminUrlOf(m) {
+  const explicit = m.domains?.admin && String(m.domains.admin).trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  try {
+    return `${new URL(m.domains.storefront).origin}/admin`;
+  } catch {
+    return "";
+  }
+}
+
 function hostOf(origin) {
   try {
     return new URL(origin).host;
@@ -62,6 +73,7 @@ export function tenantViteEnv(m) {
     VITE_TENANT_COMPACT_NAME: m.identity.compactName || m.identity.name.replace(/\s+/g, ""),
     VITE_TENANT_TAGLINE: text(m, m.identity.tagline),
     VITE_TENANT_SITE: hostOf(m.domains.storefront),
+    VITE_TENANT_ADMIN_URL: adminUrlOf(m),
     VITE_TENANT_LOGO: m.brand.logo,
     VITE_TENANT_LOGO_MARK: m.brand.logoMark,
     VITE_TENANT_IMAGE_CREDIT: m.supplier.imageCredit ?? "",

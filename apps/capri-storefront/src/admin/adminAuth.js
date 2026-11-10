@@ -22,6 +22,7 @@
 // must stay off anywhere real orders exist.
 
 import { ADMIN_API_URL, getSession as getApiSession, login, logout as apiLogout, verifyMfa } from "./adminApi.js";
+import { TENANT } from "../config/tenant.js";
 
 const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 const DEMO_LOGIN = String(env.VITE_ADMIN_DEMO_LOGIN || "") === "true";
@@ -133,4 +134,43 @@ export function isAuthed() {
 
 export function logout() {
   apiLogout();
+  try {
+    sessionStorage.removeItem(DEMO_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1|.+\.localhost|.+\.test)$/i;
+
+/**
+ * Where «Salir» lands: the store's panel address (TENANT.adminUrl, e.g.
+ * https://opticaelrancho.com/admin) — also from the Vercel host the domain
+ * proxies to. On a local host (QA, development) it stays on this origin's
+ * /admin, so a test never jumps to the real site.
+ */
+export function adminLoginUrl(loc = typeof window !== "undefined" ? window.location : null) {
+  const here = loc ? `${loc.origin}/admin` : "/admin";
+  if (!loc || LOCAL_HOST.test(loc.hostname || "")) return here;
+  const target = String(TENANT.adminUrl || "").trim();
+  if (!/^https:\/\//i.test(target)) return here;
+  return target;
+}
+
+/**
+ * «Salir»: the token, the panel cache and the demo session go, and the page is
+ * reloaded at the login address — no state of the closed session stays in
+ * memory (the next person on a shared tablet starts from a clean login), and
+ * «atrás» does not return to the panel. Returns false when there is no window
+ * (tests): the caller then just paints the login.
+ */
+export function signOutToLogin() {
+  logout();
+  if (typeof window === "undefined" || !window.location) return false;
+  try {
+    window.location.replace(adminLoginUrl());
+    return true;
+  } catch {
+    return false;
+  }
 }

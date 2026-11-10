@@ -28,6 +28,8 @@ export const TENANT = Object.freeze({
   compactName: pick("VITE_TENANT_COMPACT_NAME", "EL RANCHO"),
   /** Storefront host ("www.example.com"), for copy that names the site. */
   site: pick("VITE_TENANT_SITE", ""),
+  /** The panel's public address ("https://opticaelrancho.com/admin"): where «Salir» lands. */
+  adminUrl: pick("VITE_TENANT_ADMIN_URL", ""),
   /** Tagline appended to the brand in document titles. */
   tagline: pick("VITE_TENANT_TAGLINE", "Óptica y Salud Visual"),
   /** Logos: the one the owner uploaded in the panel (brandRuntime.js) or the build's (/public). */

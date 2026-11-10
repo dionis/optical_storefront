@@ -2,7 +2,7 @@
 import { TENANT } from "../config/tenant.js";
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { authenticate, verifyOtp, getSession, logout, requestPasswordReset, completePasswordReset } from "../admin/adminAuth.js";
+import { authenticate, verifyOtp, getSession, signOutToLogin, requestPasswordReset, completePasswordReset } from "../admin/adminAuth.js";
 import { SESSION_EVENT } from "../admin/adminApi.js";
 import { isDemoLogin } from "../admin/adminAuth.js";
 import { fetchMe, changeOwnPassword, roleKey } from "../admin/adminTeam.js";
@@ -285,7 +285,9 @@ export default function AdminPage() {
     return () => { window.removeEventListener(SESSION_EVENT, onSession); if (timer) clearTimeout(timer); };
   }, []);
 
-  const signOut = () => { logout(); setSession(null); setMe(null); };
+  // «Salir» cierra la sesión y recarga la pantalla de entrada en la dirección
+  // del panel de la tienda (adminAuth.signOutToLogin); sin ventana, pinta el login.
+  const signOut = () => { if (!signOutToLogin()) { setSession(null); setMe(null); } };
 
   if (!session) return <Login onOk={() => { setMustChange(null); setSession(getSession()); }} />;
   if (mustChange === null || features === null) return <div className="adm-login"><div className="adm-login-card"><p className="muted">…</p></div></div>;
