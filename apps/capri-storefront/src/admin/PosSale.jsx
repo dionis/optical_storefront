@@ -959,6 +959,7 @@ export default function PosSale({ me }) {
                     )}
                     <label>{t("adm.pos.own.notes")}<input maxLength={160} value={own.description} onChange={(e) => setOwn((o) => ({ ...o, description: e.target.value }))} placeholder={t(frameMode === "store" ? "adm.pos.store.notesPh" : "adm.pos.own.placeholder")} autoCapitalize="sentences" enterKeyHint="done" /></label>
                     {/* Cámara trasera o galería; vista previa con «Repetir foto». La foto se reduce en photoDataUrl (imagePrep). */}
+                    {frameMode === "store" && <span className="pos-store-photo-title">{t("adm.pos.store.photoTitle")}</span>}
                     <PosCapture onFile={onOwnPhoto} preview={own.photo} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")}
                       onClear={() => setOwn((o) => ({ ...o, photo: null }))} previewAlt={t("adm.pos.own.tag")} />
                     <small className="muted">{t(frameMode === "store" ? "adm.pos.store.hint" : "adm.pos.own.hint")}</small>

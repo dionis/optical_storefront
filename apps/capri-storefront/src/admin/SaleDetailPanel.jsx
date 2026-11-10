@@ -29,7 +29,8 @@ import { useFeedback } from "../components/Feedback.jsx";
 import Icon from "./icons.jsx";
 import { STAGES, STAGE_BY_KEY, money, orderLabel, setOrderStage, stageErrorText } from "./adminOrders.js";
 import { adminFetch } from "./adminApi.js";
-import { DELETE_REASONS, collectPayment, deleteSale, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, moveSale, posContext, updateSale, voidSale } from "./posApi.js";
+import { DELETE_REASONS, collectPayment, deleteSale, deliverSale, fetchCustomer, fetchSale, fetchSaleDocument, methodName, moveSale, photoDataUrl, posContext, setStoreFramePhoto, updateSale, voidSale } from "./posApi.js";
+import PosCapture from "./PosCapture.jsx";
 import RxForm, { RxDateInput } from "./PosRx.jsx";
 import { fromRx, hasRxErrors, inferType, toRx, validateRx } from "./rxRules.js";
 import SaleDocuments from "./SaleDocuments.jsx";
@@ -282,6 +283,46 @@ function StageBlock({ order, state, moving, onMove, tracking, setTracking }) {
  * cost/fee/commission/profit/margin_pct, opcional), `ctx` (contexto del POS si
  * la pantalla ya lo tiene; opcional).
  */
+/**
+ * Montura de la tienda fuera de catálogo: subir o cambiar su foto después de la
+ * venta (POST /admin/pos/sales/:id/store-frame-photo). La foto se guarda con las
+ * imágenes públicas del catálogo y sale en el recibo, el correo y esta ficha.
+ * `onSaved(url)` pinta la foto nueva sin recargar la ficha.
+ */
+function StoreFramePhotoControl({ saleId, has, onSaved }) {
+  const { t } = useLang();
+  const { toast } = useFeedback();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const onFile = async (f) => {
+    setBusy(true);
+    try {
+      const photo = await photoDataUrl(f);
+      const r = await setStoreFramePhoto(saleId, photo);
+      if (r?.photo_url) onSaved(r.photo_url);
+      setOpen(false);
+      toast({ tone: "success", title: t("adm.pos.store.photoSaved") });
+    } catch (e) {
+      toast({ tone: "error", title: t(e?.message?.startsWith("adm.") ? e.message : "adm.err.pos.photo_upload_failed") });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="sd-sfphoto adm-noprint">
+      {!has && !open && <small className="sd-muted">{t("adm.pos.store.photoMissing")}</small>}
+      {!open ? (
+        <button type="button" className="btn-xs" onClick={() => setOpen(true)}><Icon name="camera" size={13} /> {t(has ? "adm.pos.store.photoChange" : "adm.pos.store.photoAdd")}</button>
+      ) : (
+        <div className="sd-sfphoto-pick">
+          <PosCapture onFile={onFile} cameraLabel={t("adm.pos.own.photo")} fileLabel={t("adm.pos.own.file")} busy={busy} busyLabel={t("adm.wear.loading")} previewAlt={t("adm.pos.store.tag")} />
+          <button type="button" className="btn-xs" disabled={busy} onClick={() => setOpen(false)}>{t("adm.wear.cancel")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrderId = null, open, onClose, onChanged, me, economics = null, ctx: givenCtx = null }) {
   const { t, lang } = useLang();
   const { toast, confirm } = useFeedback();
@@ -748,6 +789,10 @@ export default function SaleDetailPanel({ saleId: givenSaleId, orderId: givenOrd
                           {lens.length ? lens.map((x) => <span key={x} className="adm-chip neutral">{x}</span>) : <span className="adm-chip neutral">{t("adm.sd.frameOnly")}</span>}
                           <span className={`adm-chip ${l.prescription_id ? "ok" : "neutral"}`}>{l.prescription_id ? t("adm.sd.rxYes") : t("adm.sd.rxNo")}</span>
                         </div>
+                        {l.frame?.off_catalog && perms.can_edit && s.status !== "voided" && (
+                          <StoreFramePhotoControl saleId={s.id} has={Boolean(l.image_url)}
+                            onSaved={(url) => setDoc((d) => (d ? { ...d, lines: d.lines.map((x, j) => (j === i ? { ...x, image_url: url } : x)) } : d))} />
+                        )}
                         <div className="sd-line-price">{l.frame_price > 0 || l.lens_price > 0 ? <>{t("adm.pos.sum.frame")} {m(l.frame_price)} · {t("adm.sd.lenses")} {m(l.lens_price)}</> : m(l.unit_price)}</div>
                         {l.prescription_id && rxAllowed && (
                           <div className="sd-rx">

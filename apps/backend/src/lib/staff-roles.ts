@@ -208,6 +208,12 @@ const RESTRICTED_ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+$/ },
   { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(payments|deliver|void|receipt|documents)$/ },
   { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/documents$/ },
+  // The photo of the patient wearing the frame (lib/pos-wearing-photo.ts) and the
+  // photo of a store frame off the catalog (lib/store-frame-photo.ts): the routes
+  // let in whoever may correct the sale (lib/sale-permissions.ts), own stores only.
+  { method: "GET", path: /^\/admin\/pos\/sales\/[^/]+\/wearing-photo$/ },
+  { method: "POST", path: /^\/admin\/pos\/sales\/[^/]+\/(wearing-photo|store-frame-photo)$/ },
+  { method: "DELETE", path: /^\/admin\/pos\/sales\/[^/]+\/wearing-photo$/ },
   { method: "POST", path: /^\/admin\/pos\/terminals\/[^/]+$/ },
   // Deleting a till: the route lets in admins and the store's manager only.
   { method: "DELETE", path: /^\/admin\/pos\/terminals\/[^/]+$/ },

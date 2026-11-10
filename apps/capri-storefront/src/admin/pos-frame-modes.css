@@ -49,3 +49,6 @@ html.adm-touch .pos label .pos-money-in input[inputmode] { border: 0; box-shadow
 .pos-own-err { display: block; margin-top: -4px; font-weight: 700; }
 .pos-store-price.err .pos-money-in { border-width: 2px; }
 .pos-frame-missing { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border: 1.5px solid var(--adm-red); border-radius: 10px; background: var(--adm-red-soft); color: var(--adm-red-dark); font-weight: 700; font-size: 13px; }
+
+/* Modo «de la tienda»: la foto sale en el recibo, se dice encima de los botones. */
+.pos-store-photo-title { display: block; font-size: 13px; font-weight: 700; color: var(--adm-ink); margin: 2px 0 -4px; }

@@ -56,6 +56,7 @@ import { resolveStoreSettings } from "./store-settings";
 import { tenant } from "./tenant";
 import { uploadPrivateImage } from "./tryon-image";
 import { storageConfigured } from "./s3";
+import { uploadStoreFramePhoto } from "./store-frame-photo";
 
 /**
  * The point-of-sale sale, end to end. A sale is a regular Medusa order:
@@ -1380,13 +1381,21 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
       customerId,
       rx: await insertPrescriptions(container, input.prescriptions, input.rxMeta, customerId),
     })),
-    Promise.all(input.lines.map((line) => (line.kind !== "frame" ? uploadPrivateImage(line.photo, "posframe") : Promise.resolve(null)))),
+    // The patient's own frame → private bucket; a store frame off the catalog → public assets (lib/store-frame-photo.ts).
+    Promise.all(input.lines.map((line) => (line.kind === "own_frame" ? uploadPrivateImage(line.photo, "posframe") : line.kind === "store_frame" ? uploadStoreFramePhoto(container, line.photo) : Promise.resolve(null)))),
   ]);
   // A photo that was sent but not kept used to vanish without a trace: the
   // receipt then printed the empty frame icon and nobody knew why.
   const framePhotoFailed = input.lines.some((line, i) => line.kind !== "frame" && Boolean(line.photo) && !photoKeys[i]);
   if (framePhotoFailed) {
-    logger.warn(`[pos] frame photo not stored (${storageConfigured() ? "the private bucket refused it" : "private storage is not configured: R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PRESCRIPTION_BUCKET"})`);
+    // The patient's own frame goes to the private bucket; a store frame's photo to the public file storage (which logs its own reason).
+    const ownLost = input.lines.some((line, i) => line.kind === "own_frame" && Boolean(line.photo) && !photoKeys[i]);
+    const why = !ownLost
+      ? "the public file storage refused the store frame's photo"
+      : storageConfigured()
+        ? "the private bucket refused it"
+        : "private storage is not configured: R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_PRESCRIPTION_BUCKET";
+    logger.warn(`[pos] frame photo not stored (${why})`);
   }
 
   const address = {
@@ -1453,7 +1462,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
           frame_handling: l.kind === "own_frame" ? "patient_own_frame" : withRx ? "frame_supplied" : null,
           own_frame: l.kind === "own_frame" ? { description: l.description, photo_key: photoKeys[i], ...(l.own_frame ?? {}) } : null,
           // A store frame off the catalog: what was sold, for the lab, the receipt and the sale.
-          store_frame: l.kind === "store_frame" ? { description: l.description, photo_key: photoKeys[i], price: l.frame, ...(l.own_frame ?? {}) } : null,
+          store_frame: l.kind === "store_frame" ? { description: l.description, photo_url: photoKeys[i], price: l.frame, ...(l.own_frame ?? {}) } : null,
         };
         // Nothing is shipped from the till: without this Medusa would ask for
         // a shipping method before completing the cart.
@@ -1524,7 +1533,8 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
     promised_on: promisedOn,
     delivery: input.delivery,
     currency_code: "usd",
-    own_frame_photo_keys: photoKeys.filter(Boolean) as unknown as Record<string, unknown>,
+    // Only the private keys (the patient's frames): a store frame's photo is a public URL.
+    own_frame_photo_keys: photoKeys.filter((k, i) => k && input.lines[i]?.kind === "own_frame") as unknown as Record<string, unknown>,
   });
   return { sale, orderId, number, promisedOn, withLenses, rx, framePhotoFailed };
 }

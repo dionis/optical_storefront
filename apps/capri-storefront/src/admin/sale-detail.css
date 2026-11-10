@@ -221,3 +221,8 @@
 .sd-move { border-color: var(--adm-accent-line); background: var(--adm-accent-soft); }
 .sd-move .sd-void-title { color: var(--adm-accent-ink); }
 .sd-note-text { white-space: pre-wrap; font-weight: 400; }
+
+/* Montura de la tienda fuera de catálogo: subir o cambiar su foto (sale en el recibo). */
+.sd-sfphoto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 2px; }
+.sd-sfphoto-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; }
+.sd-sfphoto-pick .pos-cap { width: 100%; }

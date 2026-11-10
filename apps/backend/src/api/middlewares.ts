@@ -376,6 +376,12 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "10mb" },
     },
     {
+      // The photo of a store frame off the catalog added after the sale (lib/store-frame-photo.ts).
+      matcher: "/admin/pos/sales/:id/store-frame-photo",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "9mb" },
+    },
+    {
       // The photo of the patient wearing the frame (lib/pos-wearing-photo.ts),
       // a base64 `data:` URL of at most 6 MB decoded.
       matcher: "/admin/pos/sales/:id/wearing-photo",

@@ -272,14 +272,15 @@ export async function buildSaleDocument(
     const own = md.kind === "own-frame";
     // A store frame that is not in the catalog: sold (charged), described by the seller.
     const offCat = md.kind === "store-frame";
-    const storeFrame = offCat ? ((md.store_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null) : null;
+    const storeFrame = offCat ? ((md.store_frame ?? null) as { description?: string | null; photo_url?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null) : null;
     const withLenses = Boolean(s.design_code) && s.design_code !== "frame-only";
     const pm = it.product_id ? productMeta.get(String(it.product_id)) ?? {} : {};
     const n = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
     const ownFrame = (md.own_frame ?? null) as { description?: string | null; photo_key?: string | null; brand?: string | null; model?: string | null; color?: string | null; eye_size?: unknown; bridge?: unknown; temple?: unknown } | null;
     // The customer's own photo lives in the private bucket: a presigned link only when a print asked for it.
     const ownPhotoUrl = own && opts.withPhotoUrls ? await presignPrescriptionUrl(ownFrame?.photo_key ?? null) : null;
-    const offCatPhotoUrl = offCat && opts.withPhotoUrls ? await presignPrescriptionUrl(storeFrame?.photo_key ?? null) : null;
+    // A store frame's photo is a public URL (lib/store-frame-photo.ts); sales recorded before kept a private key.
+    const offCatPhotoUrl = offCat ? productImageUrl(storeFrame?.photo_url ?? null) ?? (opts.withPhotoUrls ? await presignPrescriptionUrl(storeFrame?.photo_key ?? null) : null) : null;
     const list = Number(md.list_price ?? it.unit_price ?? 0);
     lines.push({
       kind: own ? "own_frame" : "frame",

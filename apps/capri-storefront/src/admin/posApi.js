@@ -133,6 +133,12 @@ export const setWearingPhoto = (id, photo) =>
   call(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`, { method: "POST", body: { photo, consent: true } }).then(after(["/admin/pos/sales"]));
 export const removeWearingPhoto = (id) =>
   call(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`, { method: "DELETE" }).then(after(["/admin/pos/sales"]));
+/**
+ * Foto de una montura fuera del catálogo (montura de la tienda): se guarda con
+ * las imágenes públicas del catálogo y sale en el recibo, el correo y la ficha.
+ */
+export const setStoreFramePhoto = (id, photo) =>
+  call(`/admin/pos/sales/${encodeURIComponent(id)}/store-frame-photo`, { method: "POST", body: { photo } }).then(after(["/admin/pos/sales"]));
 export async function fetchWearingPhoto(id) {
   try {
     return await adminFetchBlob(`/admin/pos/sales/${encodeURIComponent(id)}/wearing-photo`);
