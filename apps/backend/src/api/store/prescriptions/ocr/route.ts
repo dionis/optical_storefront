@@ -11,6 +11,8 @@ import { downscaleForOcr } from "../../../../lib/image-downscale";
 import { resolveOcrSettings } from "../../../../lib/ocr-settings";
 import { getOcrModel } from "../../../../lib/ocr-models";
 import { recordAiUsage } from "../../../../lib/ai-usage-data";
+import { isNoCreditError } from "../../../../lib/ai-usage";
+import { GeminiApiError, readWithGemini, resolveOcrProvider } from "../../../../lib/ocr-gemini";
 import { PRESCRIPTION_MODULE } from "../../../../modules/prescription/index";
 import type PrescriptionModuleService from "../../../../modules/prescription/service";
 import type { Prescription, PrescriptionValidationResult } from "@eyewear/shared";
@@ -211,7 +213,9 @@ function classifyModelFailure(err: unknown): ModelFailure {
   const name = err instanceof Error ? err.constructor.name : typeof err;
   const message = err instanceof Error ? err.message : String(err);
   const status = (err as { status?: number })?.status;
-  const type = (err as { error?: { error?: { type?: string } } })?.error?.error?.type;
+  const type =
+    (err as { error?: { error?: { type?: string } } })?.error?.error?.type ??
+    (err instanceof GeminiApiError ? err.type : undefined);
 
   // No HTTP status means the request never completed — DNS, egress firewall,
   // TLS. The SDK retries these, so it surfaces after a few seconds.
@@ -219,6 +223,16 @@ function classifyModelFailure(err: unknown): ModelFailure {
     return {
       code: "ocr_unreachable",
       error: "Could not reach the model API from this host.",
+      http_status: 503,
+      status, type, name, message,
+    };
+  }
+  // Gemini reports an exhausted prepaid balance or quota as a 429; only that
+  // wording is a credit problem — a plain 429 is a rate limit and is not.
+  if (status === 429 && isNoCreditError(message, status)) {
+    return {
+      code: "ocr_no_credit",
+      error: "The model API account has no remaining credit.",
       http_status: 503,
       status, type, name, message,
     };
@@ -231,7 +245,8 @@ function classifyModelFailure(err: unknown): ModelFailure {
       status, type, name, message,
     };
   }
-  if (status === 401 || status === 403) {
+  // Gemini answers a bad key with a 400 rather than a 401.
+  if (status === 401 || status === 403 || (status === 400 && /api key not valid|API_KEY_INVALID/i.test(message))) {
     return {
       code: "ocr_unauthorized",
       error: "The model API rejected the credentials.",
@@ -303,19 +318,26 @@ export async function POST(
     return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  // Anthropic when ANTHROPIC_API_KEY is set (unchanged behaviour); otherwise
+  // Gemini when GEMINI_API_KEY/GOOGLE_API_KEY is; otherwise no automatic read.
+  const choice = resolveOcrProvider();
+  if (!choice) {
     // Graceful fallback: return empty prescription, let user fill manually
     res.status(503).json({
       error_code: "ocr_unavailable",
-      error: "ANTHROPIC_API_KEY is not configured.",
+      error: "Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is configured.",
       fallback: true,
     });
     return;
   }
 
   const settings = await resolveOcrSettings(req.scope);
-  const primaryModel = getOcrModel(settings.model_id);
+  // The admin settings list Anthropic models; Gemini takes its models from the
+  // environment (see lib/ocr-gemini.ts). Image size applies to both.
+  const primaryModelId = choice.provider === "gemini" ? choice.model : settings.model_id;
+  const escalationModelId =
+    choice.provider === "gemini" ? choice.escalationModel : settings.escalation_model_id;
+  const primaryModel = choice.provider === "anthropic" ? getOcrModel(settings.model_id) : undefined;
 
   // Shrink before sending. Image tokens scale with area, so this is the single
   // biggest lever on what a read costs — and it caps the upload we archive too.
@@ -361,7 +383,7 @@ export async function POST(
   }
 
   const base64Data = downscaled.buffer.toString("base64");
-  const client = new Anthropic({ apiKey });
+  const client = choice.provider === "anthropic" ? new Anthropic({ apiKey: choice.apiKey }) : null;
 
   // A PDF rides a `document` block, an image an `image` block. Either way it
   // must precede the text block in the content array.
@@ -411,7 +433,7 @@ export async function POST(
   const track = (modelId: string, attempt: string) =>
     (usage: { input_tokens?: number | null; output_tokens?: number | null }) =>
       void recordAiUsage(req.scope, {
-        provider: "anthropic",
+        provider: choice.provider,
         model: modelId,
         activity: "ocr",
         input_tokens: usage.input_tokens ?? null,
@@ -420,30 +442,38 @@ export async function POST(
         ref_id: readId,
       });
 
+  /** One extraction attempt on whichever provider was chosen. */
+  const read = (modelId: string, attempt: string) =>
+    client
+      ? readWithModel(client, modelId, sourceBlock, track(modelId, attempt))
+      : readWithGemini(
+          choice.apiKey,
+          modelId,
+          OCR_SYSTEM_PROMPT,
+          mediaType,
+          base64Data,
+          track(modelId, attempt)
+        );
+
   let extracted: Partial<Prescription> | null;
-  let modelUsed = settings.model_id;
+  let modelUsed = primaryModelId;
   let escalated = false;
 
   try {
-    extracted = await readWithModel(client, settings.model_id, sourceBlock, track(settings.model_id, "primary"));
+    extracted = await read(primaryModelId, "primary");
 
     // Cascade: only pay for the stronger model when the cheap one came back
     // unusable. At a ~20% escalation rate this lands near the cheap model's
     // price while keeping the expensive model's accuracy where it matters.
-    if (settings.escalation_model_id) {
+    if (escalationModelId) {
       const firstValidation = extracted
         ? prescriptionService.validate(toPrescription(extracted))
         : null;
       if (shouldEscalate(extracted, firstValidation)) {
-        const retry = await readWithModel(
-          client,
-          settings.escalation_model_id,
-          sourceBlock,
-          track(settings.escalation_model_id, "escalation")
-        );
+        const retry = await read(escalationModelId, "escalation");
         if (retry) {
           extracted = retry;
-          modelUsed = settings.escalation_model_id;
+          modelUsed = escalationModelId;
           escalated = true;
         }
       }
@@ -454,8 +484,8 @@ export async function POST(
     // Out of credit: the alert job emails the owner within minutes.
     if (failure.code === "ocr_no_credit") {
       void recordAiUsage(req.scope, {
-        provider: "anthropic",
-        model: settings.model_id,
+        provider: choice.provider,
+        model: primaryModelId,
         activity: "ocr",
         status: "no_credit",
         event_key: `ocr:${readId}:no_credit`,
@@ -472,7 +502,8 @@ export async function POST(
       JSON.stringify({
         event: "prescription_ocr.failed",
         error_code: failure.code,
-        model: settings.model_id,
+        provider: choice.provider,
+        model: primaryModelId,
         upstream_status: failure.status ?? null,
         upstream_type: failure.type ?? null,
         error_name: failure.name,
@@ -506,6 +537,7 @@ export async function POST(
     validation,
     // Operational telemetry so the admin can see what a read actually used.
     meta: {
+      provider: choice.provider,
       model_used: modelUsed,
       escalated,
       image_resized: downscaled.resized,

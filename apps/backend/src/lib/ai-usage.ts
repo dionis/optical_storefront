@@ -80,6 +80,8 @@ const FALLBACK_RATES: Record<string, Array<[string, number, number]>> = {
     ["gemini-2.5-flash", 0.3, 2.5],
     ["gemini-2.5-pro", 1.25, 10],
     ["gemini-3-flash", 0.3, 2.5],
+    // Prescription OCR fallback (lib/ocr-gemini.ts); under 200k prompt tokens.
+    ["gemini-3.1-pro", 2, 12],
   ],
 };
 

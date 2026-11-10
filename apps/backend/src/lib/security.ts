@@ -1,6 +1,7 @@
 import type { MedusaNextFunction, MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { clientIp } from "./client-ip";
 import { createRateLimit } from "./rate-limit";
+import { resolveOcrProvider } from "./ocr-gemini";
 
 /**
  * Security hardening shared by `src/api/middlewares.ts` and the admin
@@ -209,7 +210,9 @@ export function securityAudit(env: NodeJS.ProcessEnv = process.env, now: () => D
   checks.push({ key: "notifications.email_provider", ok: Boolean(env.RESEND_API_KEY) });
   checks.push({ key: "notifications.sms_provider", ok: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER) });
   checks.push({ key: "sheet.configured", ok: Boolean(env.GSHEET_FILE_URL && env.GSHEET_SERVICE_ACCOUNT_EMAIL && env.GSHEET_SERVICE_ACCOUNT_KEY) });
-  checks.push({ key: "ocr.api_key", ok: Boolean(env.ANTHROPIC_API_KEY) });
+  // Anthropic first; Gemini is the fallback reader (lib/ocr-gemini.ts).
+  const ocr = resolveOcrProvider(env);
+  checks.push({ key: "ocr.api_key", ok: ocr !== null, detail: ocr ? ocr.provider : "unset" });
 
   const failing = checks.filter((c) => !c.ok).length;
   return { checked_at: now().toISOString(), node_env: env.NODE_ENV || "", strict_mode: env.SECURITY_STRICT === "1", checks, failing };
