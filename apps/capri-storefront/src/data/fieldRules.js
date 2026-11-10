@@ -60,8 +60,14 @@ export function birthProblem(v, required = false, now = new Date()) {
   const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00Z`) : null;
   if (!d || Number.isNaN(d.getTime())) return "val.birth";
   const age = (now.getTime() - d.getTime()) / (365.25 * 86400000);
-  return age < 0 || age > 120 ? "val.birth" : null;
+  if (age < 0 || age > 120) return "val.birth";
+  // Regla del dueño (10-nov-2026): nunca del año en curso — es el «hoy» con que
+  // abre el calendario, no un paciente. Igual en cleanCustomer() del backend.
+  return d.getUTCFullYear() >= now.getFullYear() ? "val.birthYear" : null;
 }
+
+/** Último día aceptable como nacimiento (31-dic del año pasado): `max` del selector de fecha. */
+export const birthMax = (now = new Date()) => `${now.getFullYear() - 1}-12-31`;
 
 const onlyProblems = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v));
 

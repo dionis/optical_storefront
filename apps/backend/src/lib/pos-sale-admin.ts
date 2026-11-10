@@ -36,6 +36,7 @@ import type { EstablishmentRow } from "./establishments";
 import { loadProductMetadata } from "./frame-specs";
 import { syncOrderToSheet } from "./gsheet-sync";
 import { cleanCustomer, saleNumber, type PosCustomerInput } from "./pos";
+import { tenant } from "./tenant";
 import {
   checkPrescriptions,
   ensureTerminal,
@@ -102,7 +103,7 @@ const realDay = (v: string): boolean => DAY_RE.test(v) && new Date(`${v}T00:00:0
 export function cleanDetailsPatch(body: SaleDetailsPatch): { reason: string } | { patch: CleanPatch } {
   const patch: CleanPatch = {};
   if (body.customer !== undefined) {
-    const c = cleanCustomer(body.customer);
+    const c = cleanCustomer(body.customer, new Date(), tenant().timezone);
     if ("reason" in c) return { reason: c.reason };
     patch.customer = c.customer;
   }

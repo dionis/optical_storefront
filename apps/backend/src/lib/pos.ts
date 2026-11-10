@@ -237,7 +237,7 @@ const text = (v: unknown, max: number): string => (typeof v === "string" ? v.tri
  * must agree, or the sale fails at the very last step); the address only
  * when the glasses are shipped.
  */
-export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date()): { reason: string } | { customer: PosCustomer } {
+export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date(), timeZone = "UTC"): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
   // Longer than allowed is refused, not cut: a silently shortened email or phone is a wrong one.
   const first_name = text(c.first_name, FIELD_LIMITS.name + 1);
@@ -259,6 +259,10 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
     }
     const age = (now.getTime() - born.getTime()) / (365.25 * 24 * 3600 * 1000);
     if (age < 0 || age > 120) return { reason: "customer_birth_date" };
+    // Owner's rule (10-nov-2026): never born in the current year, on the store's
+    // calendar — a date of this year is the "today" the date picker opens on, not
+    // a patient. Same rule as birthProblem() in the panel's fieldRules.js.
+    if (Number(birthText.slice(0, 4)) >= localYear(now, timeZone)) return { reason: "customer_birth_date" };
     birth_date = birthText;
   }
 

@@ -1,4 +1,5 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import { tenant } from "../../../../lib/tenant";
 import {
   cleanCustomer,
   cleanDiscountPct,
@@ -150,7 +151,7 @@ export async function POST(req: AuthenticatedMedusaRequest<SaleBody>, res: Medus
     const till = sellerTillProblem(scope, store.id, terminal.id);
     if (till) throw new PosError(till, 403);
 
-    const customer = cleanCustomer(body.customer);
+    const customer = cleanCustomer(body.customer, new Date(), tenant().timezone);
     if ("reason" in customer) throw new PosError(customer.reason);
     if (body.delivery === "ship" && !customer.customer.address) throw new PosError("address_required_to_ship");
     const lines = cleanLines(body.lines);

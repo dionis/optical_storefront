@@ -37,7 +37,7 @@ import AdminFrameCard from "./AdminFrameCard.jsx";
 import { useCatalog } from "../data/catalogStore.js";
 import FieldError from "../components/FieldError.jsx";
 import PosSaleSummary, { PosRunningTotal } from "./PosSaleSummary.jsx";
-import { customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
+import { birthMax, customerProblems, emailProblem, LIMITS, paymentProblem, phoneProblem, typedEmail, typedPhone, typedZip } from "../data/fieldRules.js";
 import "./pos.css";
 import "./pos-tablet.css";
 import RxForm from "./PosRx.jsx";
@@ -862,7 +862,7 @@ export default function PosSale({ me }) {
                   {/* La edad ya calculada, al lado: el dato con el que de verdad se trabaja. */}
                   {ageFrom(customer.birth_date) !== null && <b className="pos-age">{t("adm.pos.cust.age", { n: ageFrom(customer.birth_date) })}</b>}
                 </span>
-                <input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
+                <input type="date" autoComplete="off" max={birthMax()} value={customer.birth_date} onChange={setC("birth_date")} {...custField("birth_date").props} />
                 <FieldError error={custField("birth_date").problem} />
               </label>
             </div>

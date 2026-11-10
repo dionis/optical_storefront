@@ -85,6 +85,13 @@ describe("cleanCustomer", () => {
     expect(cleanCustomer({ ...ok, phone: "12" }, NOW)).toEqual({ reason: "customer_phone" });
     expect(cleanCustomer({ ...ok, birth_date: "1980-02-30" }, NOW)).toEqual({ reason: "customer_birth_date" });
     expect(cleanCustomer({ ...ok, birth_date: "2027-01-01" }, NOW)).toEqual({ reason: "customer_birth_date" });
+    // Never born in the current year (owner's rule), on the store's calendar.
+    expect(cleanCustomer({ ...ok, birth_date: "2026-01-15" }, NOW)).toEqual({ reason: "customer_birth_date" });
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2025-12-31" }, NOW)).toBe(true);
+    const newYearUtc = new Date("2027-01-01T03:00:00Z"); // still 31-dec-2026 in Houston
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2026-06-01" }, newYearUtc, "America/Chicago")).toBe(false);
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2026-06-01" }, newYearUtc, "UTC")).toBe(true); // in UTC it is already 2027: why the store's zone is passed
+    expect("customer" in cleanCustomer({ ...ok, birth_date: "2025-06-01" }, newYearUtc, "America/Chicago")).toBe(true);
   });
 
   // The panel's customerProblems() treats the birth date as optional (owner's
