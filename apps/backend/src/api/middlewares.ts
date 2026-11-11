@@ -18,6 +18,7 @@ import { revokeSessionsAfterPasswordRecovery } from "../lib/session-control";
 import { staffGuard } from "../lib/staff-guard";
 import { warmTenantProfile } from "../lib/tenant-profile";
 import { captureCartOrigin, storefrontOriginScope } from "../lib/storefront-origin-http";
+import { webStorePrices } from "../lib/web-pricing-http";
 
 /**
  * Medusa ships `GET /store/orders/:id` with NO authentication — its own source
@@ -276,6 +277,13 @@ export default defineMiddlewares({
       matcher: "/store/carts*",
       method: ["POST"],
       middlewares: [captureCartOrigin],
+    },
+    {
+      // The web shop sells at the online store's prices (lib/web-pricing.ts):
+      // the catalogue's `calculated_price` leaves with that store's figure.
+      matcher: "/store/products*",
+      method: ["GET"],
+      middlewares: [webStorePrices],
     },
     {
       // Role gate for every admin route, Medusa's own included: owner and

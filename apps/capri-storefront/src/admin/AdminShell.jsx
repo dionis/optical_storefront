@@ -264,7 +264,7 @@ export default function AdminShell({ tab, onTab, user, onLogout, goTo = null, fi
   // Claro / oscuro / sistema: `data-mode` en el armazón; admin.css redefine los tokens.
   const { mode, resolved: colorMode, cycle: cycleMode } = useColorMode();
   // El nombre es el guardado en Tiendas (`name`), tal cual; el código delante.
-  const storeName = store ? (store.online ? t("adm.theme.online") : String(store.name || store.code || "")) : "";
+  const storeName = store ? (store.online && !store.establishment_id ? t("adm.theme.online") : String(store.name || store.code || "")) : "";
   const userStore = store ? [store.code, storeName].filter(Boolean).join(" · ") : me?.store_name || me?.store_code || "";
   const storeLabel = store ? storeName : multi ? stores.map((s) => s.code).join(" · ") : t("adm.theme.allStores");
   const dotStyle = store && !storeTheme.neutral ? { background: storeTheme.accent } : undefined;

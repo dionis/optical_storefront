@@ -46,7 +46,9 @@ export interface EstablishmentRow {
   created_at: string;
 }
 
-export const STORE_KINDS = ["own", "family", "partner", "consignment"] as const;
+export const STORE_KINDS = ["own", "family", "partner", "consignment", "online"] as const;
+/** The kind of THE online store (lib/online-store.ts). */
+export const ONLINE_KIND = "online";
 
 export async function listEstablishments(container: MedusaContainer): Promise<EstablishmentRow[]> {
   const svc = container.resolve<EstablishmentModuleService>(ESTABLISHMENT_MODULE);

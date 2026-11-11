@@ -8,6 +8,7 @@ import type { Knex } from "@mikro-orm/knex";
 import { computeLensAddonCents, type LensSelection } from "../../../../../lib/lens-quote";
 import { resolveStoreSettings } from "../../../../../lib/store-settings";
 import { uploadTryonImage } from "../../../../../lib/tryon-image";
+import { quoteWebLine, webPriceContext } from "../../../../../lib/web-pricing";
 
 /**
  * POST /store/carts/:id/configured-line
@@ -17,6 +18,11 @@ import { uploadTryonImage } from "../../../../../lib/tryon-image";
  * ENTIRELY server-side (frame's own price + lens add-on from the 2026 matrix); the
  * client never sends a total. The lens selection is stored in the line item
  * metadata so the order/admin can see the configuration.
+ *
+ * With an online store (lib/online-store.ts) the line is priced IN THAT STORE:
+ * its price of the frame, its lens list and its promotions (lib/web-pricing.ts)
+ * — what its column says in «Productos y precios». Without one, the master
+ * list, as always.
  *
  * Prices are decimal dollars (Medusa v2), so cents are converted at the boundary.
  */
@@ -60,7 +66,7 @@ export async function POST(
   // Frame price — the variant's own server-computed price for the cart's region.
   const { data: variants } = await query.graph({
     entity: "variant",
-    fields: ["id", "calculated_price.calculated_amount"],
+    fields: ["id", "product_id", "calculated_price.calculated_amount"],
     filters: { id: body.variant_id },
     context: {
       calculated_price: QueryContext({
@@ -69,15 +75,27 @@ export async function POST(
       }),
     },
   });
-  const frameAmount = Number(
-    (variants?.[0] as { calculated_price?: { calculated_amount?: number } } | undefined)
-      ?.calculated_price?.calculated_amount ?? 0
-  );
+  const variant = variants?.[0] as { product_id?: string | null; calculated_price?: { calculated_amount?: number } } | undefined;
+  const masterAmount = Number(variant?.calculated_price?.calculated_amount ?? 0);
 
-  // Lens add-on — server-side from the 2026 matrix.
+  // The online store's price of the frame and of the lenses; without an online
+  // store, the master's: the variant's price + the master lens matrix.
+  let frameAmount = masterAmount;
   let lensCents: number;
+  let promo: Record<string, unknown> | null = null;
+  let pricedBy: string | null = null;
   try {
-    lensCents = await computeLensAddonCents(pg, body.selection);
+    const web = variant?.product_id ? await webPriceContext(req.scope) : null;
+    if (web && variant?.product_id) {
+      const line = await quoteWebLine(req.scope, web, { productId: variant.product_id, base: masterAmount, selection: body.selection });
+      frameAmount = line.frame;
+      lensCents = line.lens_cents;
+      promo = line.promo as Record<string, unknown> | null;
+      pricedBy = web.store.id;
+    } else {
+      // Lens add-on — server-side from the 2026 matrix.
+      lensCents = await computeLensAddonCents(pg, body.selection);
+    }
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
     return;
@@ -129,6 +147,10 @@ export async function POST(
             tax_amount: taxAmount,
             tax_rate: taxRate,
             price_pretax: preTax,
+            // The store whose price list quoted this line (the online store), and
+            // its promotion on it — the till stores the same on its lines.
+            price_store_id: pricedBy,
+            promo,
             // Clave privada del render del probador (solo sin receta); null si no hay.
             tryon_image_key: tryonImageKey,
           },

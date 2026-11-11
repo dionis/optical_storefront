@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
-import { WEB_STORE, defaultColorForStore, setActiveStore, useStoreTheme } from "./useStoreTheme.js";
+import { WEB_STORE, defaultColorForStore, onlineStoreOf, setActiveStore, useStoreTheme, webStoreOf } from "./useStoreTheme.js";
 
 export const ALL_STORES = "all";
 /** A partir de tantas opciones la lista lleva buscador. */
@@ -33,12 +33,23 @@ export function useStoreFilter(me) {
   const setStoreId = useCallback((id) => setActiveStore(!id || id === ALL_STORES ? null : id), []);
   // Nombre del parámetro según la ruta: `establishment_id` (caja, estado de cuenta), `store` (POS, auditoría), `stores` (analítica).
   const param = useCallback((name = "establishment_id") => (storeId === ALL_STORES ? "" : `${name}=${encodeURIComponent(storeId)}`), [storeId]);
+  // La tienda online llevada como una tienda del panel (tipo «Tienda online»):
+  // UNA sola opción en el selector — la de la web, con el código, el nombre y
+  // el color de esa tienda — en vez de «Tienda online» y, aparte, la tienda.
+  const online = useMemo(() => (isAdmin ? onlineStoreOf(stores) : null), [stores, isAdmin]);
   const options = useMemo(() => {
     // `name` es el nombre guardado en Tiendas, tal cual (nunca un slug ni el correo de nadie).
-    const list = stores.map((s) => ({ id: s.id, code: s.code, name: String(s.name || ""), color: s.color || defaultColorForStore(s.name) }));
-    return isAdmin ? [{ id: ALL_STORES, code: "", name: "", color: null }, { id: WEB_STORE.id, code: WEB_STORE.code, name: "", color: WEB_STORE.color, online: true }, ...list] : list;
-  }, [stores, isAdmin]);
-  return { storeId, store, stores, options, setStoreId, param, isAdmin, isAll: storeId === ALL_STORES, isWeb: storeId === WEB_STORE.id };
+    const list = stores.filter((s) => !online || s.id !== online.id).map((s) => ({ id: s.id, code: s.code, name: String(s.name || ""), color: s.color || defaultColorForStore(s.name) }));
+    const web = webStoreOf(isAdmin ? stores : []);
+    return isAdmin ? [{ id: ALL_STORES, code: "", name: "", color: null }, { id: WEB_STORE.id, code: web.code, name: web.name, color: web.color, online: true, named: Boolean(online) }, ...list] : list;
+  }, [stores, isAdmin, online]);
+  const isWeb = storeId === WEB_STORE.id;
+  // El establecimiento detrás de la elección: la tienda física, o la tienda
+  // online cuando el dueño la lleva como tienda («» = ninguna: «Todas», o la
+  // web sin tienda propia). Para las pantallas de precios y costos, que son
+  // por establecimiento.
+  const establishmentId = storeId === ALL_STORES ? "" : isWeb ? online?.id || "" : storeId;
+  return { storeId, store, stores, options, setStoreId, param, isAdmin, isAll: storeId === ALL_STORES, isWeb, online, establishmentId };
 }
 
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -48,7 +59,7 @@ export default function StoreFilter({ me, compact = false, className = "", allow
   const { storeId, options, setStoreId, isAdmin } = useStoreFilter(me);
   const visible = allowAll ? options : options.filter((o) => o.id !== ALL_STORES);
   const current = visible.find((o) => o.id === storeId) || visible[0];
-  const label = (o) => (o.id === ALL_STORES ? t("adm.theme.allStores") : o.online ? t("adm.theme.online") : [o.code, o.name].filter(Boolean).join(" · "));
+  const label = (o) => (o.id === ALL_STORES ? t("adm.theme.allStores") : o.online && !o.named ? t("adm.theme.online") : [o.code, o.name].filter(Boolean).join(" · "));
   const dotOf = (o) => (o?.id === ALL_STORES ? "var(--adm-muted)" : o?.color || "var(--adm-muted)");
 
   const [open, setOpen] = useState(false);

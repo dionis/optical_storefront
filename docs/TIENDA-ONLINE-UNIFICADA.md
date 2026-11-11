@@ -79,17 +79,45 @@ Una compra en `rubilens.com` es un pedido de Medusa sin venta de caja
 | Estado de resultados (Reglas y comisiones) | Columna «Tienda en línea» y consolidado. |
 | Alertas | Las reglas con «incluir la web» avisan también de pedidos online. |
 
-- **Lo que la web no tiene** (por diseño): caja, estado de cuenta ni costos fijos
-  de tienda (renta, sueldos). Su resultado es venta − costo de montura y lentes
-  − comisión del cobro − comisión del vendedor.
-- **Precios de la web**: los del **maestro** de Productos y precios (el job
-  `price-sync` los escribe en Medusa cada 4 h). La columna de una tienda física
-  no mueve el precio de la web (decisión C8 de `docs/PRICE-MATRIX.md`).
-- **«Op4 · Online Optical Store»** de la lista de Tiendas es un establecimiento
-  (una columna de precios y una caja), **no** la tienda online: los pedidos de
-  la web no entran por él. La tienda online es la tarjeta «Tienda online».
+- **Lo que la web no tiene** (por diseño): caja ni estado de cuenta (el
+  documento de cobros de mostrador).
 
-## 3. Qué cambió en el código (parches 0058–0062)
+### 2.1 La tienda online ES una tienda del panel (Op4) — 11-nov-2026
+
+Decisión del dueño: **«Op4 · Online Optical Store» es la manera de manejar
+rubilens.com.** Una tienda de la lista se marca como **Tipo «Tienda online»**
+(Tiendas → Editar → Tipo; solo una a la vez) y desde ese momento la web es esa
+tienda:
+
+| Qué | Cómo queda |
+|---|---|
+| **Precios de la web** | Los de la **columna de Op4** en Productos y precios: su precio fijado de un modelo, su precio por marca, su ajuste y su banda, su lista de lentes (celdas propias y «% sobre el maestro») y sus **descuentos** (el precio tachado sale en la web). Una casilla vacía en Op4 = el precio del maestro, como en cualquier tienda. |
+| **Dónde se aplican** | Catálogo y ficha del producto (`GET /store/products…`), asistente de lentes (`/store/lens-config/matrix` y `/quote`) y **carrito** (`/store/carts/:id/configured-line` y `/revalidate`), que es donde se decide el precio. Nunca lo decide el navegador. |
+| **Ventas** | Cada pedido de la web es una venta de Op4. En el selector de tienda de la barra hay **una** opción, «Op4 · Online Optical Store» (antes «Tienda online» y, aparte, Op4). Pedidos, Ejecutivo, saludo del día y «Por tienda» la enseñan con su código y su color. |
+| **Costos** | Los que se le pongan a Op4 en Tiendas → Resultado por tienda / Costos (hosting, publicidad, empaques por venta…) y su parte de los costos compartidos. El costo de la montura es el de Op4 si lo tiene; si no, el de la cadena. |
+| **Contabilidad** | Resultado por tienda y Estado de resultados: la columna de **Op4** lleva las ventas de la web, la comisión de la pasarela (Stripe: % + fijo por pedido), comisiones de vendedor y sus costos. Ya no hay columna «Tienda en línea» aparte; el renglón «Ventas en línea» del estado de resultados se mantiene. |
+| **Seguridad** | Punto nuevo «Tienda con la que se maneja la web» (Op4 · nombre). |
+
+Lo que **no** cambia: los pedidos de la web siguen entrando solos (no pasan por
+ninguna caja) y siguen marcados como canal web; la marca de los correos sigue
+siendo la del dominio (`STOREFRONT_BRANDS`).
+
+Notas:
+
+- **Sin ninguna tienda de tipo «Tienda online»** todo funciona como antes: la
+  web cobra el maestro y sus ventas van a la pseudo-tienda «Tienda online».
+- **Surtido**: lo que la web lista es lo publicado en su canal de venta. El
+  surtido de Op4 (Tiendas → Catálogo) todavía no oculta modelos en la web.
+- **Op4 no es una caja**: la web no vende por el punto de venta. Si alguien
+  hiciera una venta de caja en Op4, cuenta en su contabilidad y en «Todas las
+  tiendas», pero no bajo el filtro «Op4» de Ejecutivo/Pedidos (que es la web).
+- **Estuches y accesorios** sueltos: Medusa los añade al carrito al precio del
+  maestro y `revalidate` (que la web llama al abrir el carrito y al entrar a
+  pagar) los pasa al precio de Op4.
+- La migración `CreateEstablishmentOnline6` marca sola como tienda online la
+  única tienda activa cuyo nombre contiene «online», si ninguna lo es todavía.
+
+## 3. Qué cambió en el código (parches 0058–0062 y 0064)
 
 ### 3.1 Dos marcas sobre un backend
 
@@ -160,6 +188,28 @@ título y botones que caían a una segunda fila), filtros de Pedidos en rejilla,
 «Por tienda» del saludo sin rótulos repetidos. Detalle y capturas:
 `docs/QA-UNIFICACION-2026-11-10.md`.
 
+### 3.7 La tienda online como tienda del panel (0064)
+
+| Pieza | Dónde |
+|---|---|
+| Tipo de tienda `online` (CHECK de `establishment.kind`, una sola activa: `online_exists` 409) | `modules/establishment/migrations/CreateEstablishmentOnline6.ts`, `api/admin/establishments/[id]/route.ts` |
+| Qué tienda es, con caché de 15 s que se vacía al guardar una tienda | `lib/online-store.ts` (`onlineStore`, `pickOnlineStore`, `forgetOnlineStore`) |
+| Precio de la web = el de esa tienda, con las mismas funciones puras que la caja (`storeLinePrice`, `promoStoreLine`, `computeLensBreakdown` con tienda) | `lib/web-pricing.ts` |
+| Catálogo: `calculated_price` reescrito a la salida (no se escribe nada en Medusa: la variante conserva el maestro, del que parten las demás tiendas) | `lib/web-pricing-http.ts`, middleware `GET /store/products*` |
+| Carrito y asistente | `api/store/carts/[id]/configured-line`, `…/revalidate`, `api/store/lens-config/{matrix,quote,price}` |
+| La línea guarda `price_store_id` y `promo` (como las de caja) | metadata de la línea |
+| Libro mayor: los pedidos web se asientan en la entidad de la tienda online (`onlineStoreId`, `web_net_sales`) | `lib/financial-statement.ts`, `lib/store-pnl.ts`, `api/admin/finance/statement` (`store=web` = esa tienda) |
+| Saludo del día: una sola fila con el código y el color de la tienda | `lib/start-map.ts` |
+| Seguridad `web.store`; `GET /admin/web-channel` devuelve `store` | `lib/web-channel.ts` |
+| Panel: selector con una sola opción, etiquetas, Tiendas (tipo y tarjeta), Productos y precios y Costos apuntan a la tienda cuando se elige la web | `useStoreTheme.js` (`onlineStoreOf`, `webStoreOf`, `webStoreLabel`), `StoreFilter.jsx` (`establishmentId`, `online`), `Stores.jsx`, `WebStoreCard.jsx`, `PricingPanel.jsx`, `StoreCosts.jsx` |
+| Pruebas | `tests/online-store.test.ts`, `tests/web-pricing.test.ts` |
+
+QA local (11-nov): `scratchpad qa/op4/online.cjs` — 17 comprobaciones de punta
+a punta (tipo de tienda, segunda tienda online rechazada, catálogo con precio
+fijado y con descuento, lista de lentes, cotización = carrito, `revalidate`
+tras un cambio de precio, línea suelta, tarjeta y Seguridad) y un pedido web
+completo asentado en la columna de la tienda online.
+
 ## 4. Lo que falta (lo hace Daniel: Coolify y Stripe)
 
 Ninguno toca código. Los valores están preparados en
@@ -188,6 +238,12 @@ las claves de Stripe salen de su panel de Stripe, nunca por chat.
 5. **Vercel**, rama `develop_optical_storepos`: `VITE_STRIPE_PUBLISHABLE_KEY` =
    `pk_live_…` (la vista previa de El Rancho usa el mismo backend, que ya
    cobrará en vivo).
+
+6. **Op4 es la tienda online**: al redesplegar, la migración la marca sola
+   (se llama «Online Optical Store»). Comprobar en Tiendas que Op4 dice
+   **Tienda online**; si no, Tiendas → Op4 → Editar → Tipo → «Tienda online».
+   Después, en Productos y precios, revisar la **columna de Op4**: es lo que
+   cobra la web (vacía = el maestro).
 
 **Comprobar**
 
@@ -218,6 +274,7 @@ habría que levantarlo antes.
 | Productos publicados en el canal de la web | El canal de esa clave no tiene productos | Medusa Admin → Products → Sales channels |
 | Cobro con tarjeta activo en la región | En producción, la región no tiene Stripe / PayPal / Square | Medusa Admin → Regions |
 | Opciones de envío | No hay ninguna | Medusa Admin → Locations & Shipping |
+| Tienda con la que se maneja la web | Ninguna tienda es de tipo «Tienda online» y el backend sirve un catálogo web | Tiendas → Editar → Tipo «Tienda online» |
 | Último pedido de la web recibido aquí | Nunca falla: dice número, fecha, dominio y cuántos en 30 días | — |
 
 ## 6. Lo que hay que saber
@@ -229,9 +286,9 @@ habría que levantarlo antes.
   panel.
 - **Cuentas de clientes de la web** creadas en la base antigua: no pasan; el
   cliente se registra de nuevo (el seguimiento por correo no necesita cuenta).
-- **Precios e impuestos de la web**: son los de la base del panel. Revisar en
-  Productos y precios que el maestro es lo que debe cobrar la web, y la regla
-  de impuestos (`STORE_FRAME_TAX_RATE`).
+- **Precios e impuestos de la web**: los de la columna de la tienda online
+  (Op4) en Productos y precios (§2.1); sin precio propio, el maestro. Revisar
+  también la regla de impuestos (`STORE_FRAME_TAX_RATE`).
 - **Datos del panel**: hay ventas reales y de prueba mezcladas. No usar la
   «Puesta a cero» de Seguridad (borra todo). Las de prueba se eliminan una a
   una desde la ficha de la venta (Eliminar, motivo «Venta de prueba»; solo

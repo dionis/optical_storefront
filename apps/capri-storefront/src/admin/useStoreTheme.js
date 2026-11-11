@@ -141,6 +141,30 @@ export function defaultColorForStore(name) {
 /** La tienda online como pseudo-tienda del tema (`setActiveStore(WEB_STORE.id)`). */
 export const WEB_STORE = Object.freeze({ id: "web", code: "WEB", name: "", online: true, color: ONLINE_STORE_COLOR });
 
+/**
+ * LA TIENDA ONLINE ES UNA TIENDA DEL PANEL (Tiendas → Editar → Tipo «Tienda
+ * online»; backend lib/online-store.ts). Sus ventas son los pedidos de la web,
+ * que en todo el panel siguen llevando la clave "web"; lo que cambia es con
+ * qué cara se enseñan: el código, el nombre y el color de ESA tienda, y sus
+ * precios y costos son los de su columna.
+ *
+ *   onlineStoreOf(stores)  → el establecimiento marcado como tienda online, o null
+ *   webStoreOf(stores)     → la pseudo-tienda "web" vestida de esa tienda
+ *                            (`establishment_id` = su id real, para precios y costos)
+ *   webStoreLabel(stores, t, { short }) → "Op4 · Nombre" (o "Op4"); sin tienda
+ *                            online, «Tienda online»
+ */
+export const onlineStoreOf = (stores) => (stores || []).find((s) => s && s.kind === "online" && s.is_active !== false) || null;
+export function webStoreOf(stores) {
+  const o = onlineStoreOf(stores);
+  return o ? { ...WEB_STORE, code: o.code || WEB_STORE.code, name: String(o.name || ""), color: o.color || WEB_STORE.color, establishment_id: o.id } : WEB_STORE;
+}
+export function webStoreLabel(stores, t, { short = false } = {}) {
+  const o = onlineStoreOf(stores);
+  if (!o) return t("adm.theme.online");
+  return short ? o.code || t("adm.theme.online") : [o.code, o.name].filter(Boolean).join(" · ");
+}
+
 const HEX = /^#[0-9a-f]{6}$/i;
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const toHex = (c) => `#${c.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
@@ -279,8 +303,11 @@ export function useStoreTheme(me, { tab } = {}) {
 
   return useMemo(() => {
     const { stores, assigned } = data;
-    // "web" es la tienda online: no está en la lista porque no es un establecimiento.
-    const byId = (id) => (id === WEB_STORE.id ? WEB_STORE : id ? stores.find((s) => s.id === id) || null : null);
+    // "web" es la tienda online. Si el dueño la lleva como una tienda del panel
+    // (tipo «Tienda online»), es ESA tienda: su código, su nombre y su color; y
+    // quien tuviera elegida esa tienda por su id queda en la tienda online.
+    const web = webStoreOf(stores);
+    const byId = (id) => (id === WEB_STORE.id || (isAdmin && id && id === web.establishment_id) ? web : id ? stores.find((s) => s.id === id) || null : null);
     let store = null;
     if (!isAdmin) store = byId(assigned) || byId(hint) || (stores.length === 1 ? stores[0] : null);
     else store = byId(read(ACTIVE_KEY));

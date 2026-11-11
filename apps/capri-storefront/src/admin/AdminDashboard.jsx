@@ -20,6 +20,7 @@ import AdminShell, { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { fetchAiStatus } from "./aiUsage.js";
 import { useSalePanel } from "./SaleDetailPanel.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
+import { webStoreLabel } from "./useStoreTheme.js";
 import WelcomeBriefing, { briefingShown } from "./WelcomeBriefing.jsx";
 import Icon from "./icons.jsx";
 import { TENANT } from "../config/tenant.js";
@@ -457,7 +458,8 @@ export function Orders({ onGoCosts, sellers = [], params = {}, me = null }) {
   const hasFilters = stage || terminal || rx || seller || debounced || preset === "custom";
   // De dónde viene cada pedido: la tienda online (con el nombre de su web si lo tiene) o la tienda que lo vendió.
   const originText = (o) => {
-    if (o.channel !== "pos") return [t("adm.theme.online"), o.storefront?.name || o.storefront?.host].filter(Boolean).join(" · ");
+    // Con la web llevada como una tienda del panel, su código delante (Op4 · la web de donde vino).
+    if (o.channel !== "pos") return [webStoreLabel(sf.stores, t, { short: true }), o.storefront?.name || o.storefront?.host].filter(Boolean).join(" · ");
     const st = storeById.get(o.establishment_id);
     return st ? [st.code, st.name].filter(Boolean).join(" · ") : "—";
   };

@@ -1,5 +1,7 @@
-// Dónde se usa: pestaña Tiendas de /admin — alta y edición de las tiendas físicas
+// Dónde se usa: pestaña Tiendas de /admin — alta y edición de las tiendas
 // (Op1, Op2, Op3…), cada una con su canal de venta. Backend: /admin/establishments.
+// Una de ellas puede ser LA TIENDA ONLINE (Tipo «Tienda online»): la web vende
+// a sus precios y los pedidos de la web son sus ventas (backend lib/online-store.ts).
 import { useEffect, useState } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import { useFeedback } from "../components/Feedback.jsx";
@@ -20,7 +22,11 @@ import { LIMITS, phoneProblem, typedPhone } from "../data/fieldRules.js";
 
 const EMPTY = { name: "", address: "", phone: "" };
 /** Icono de cada tipo de tienda: propia, familiar, de un socio o en consignación. */
-const KIND_ICON = { own: "store", family: "team", partner: "share", consignment: "box" };
+const KIND_ICON = { own: "store", family: "team", partner: "share", consignment: "box", online: "globe" };
+/** Tipos que elige el dueño. «online» = la tienda con la que se maneja la web (solo una). */
+const KINDS = ["own", "family", "partner", "consignment", "online"];
+/** Las tiendas que liquidan un % de sus ventas (ni la propia ni la online). */
+const settles = (kind) => Boolean(kind) && kind !== "own" && kind !== "online";
 
 /** Muestras de la paleta y, al lado, cualquier otro color. */
 function ColorPicker({ value, onChange, disabled }) {
@@ -129,7 +135,7 @@ export default function Stores({ go = null }) {
       </form>
 
       {/* La tienda online: la cuarta tienda del negocio, sin caja ni dirección. */}
-      <WebStoreCard go={go} demo={demo} />
+      <WebStoreCard go={go} demo={demo} stores={stores} />
 
       <div className="adm-card">
         <h3><Icon name="store" size={16} />{t("adm.stores.listTitle", { n: stores.length })}</h3>
@@ -149,9 +155,10 @@ export default function Stores({ go = null }) {
                   <FieldError error={phoneProblem(draft.phone)} />
                   <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
                   <select className="adm-input" aria-label={t("adm.stores.kind")} title={t("adm.stores.kind")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
-                    {["own", "family", "partner", "consignment"].map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
+                    {KINDS.map((k) => <option key={k} value={k}>{t(`adm.stores.kind.${k}`)}</option>)}
                   </select>
-                  {draft.kind !== "own" && (
+                  {draft.kind === "online" && <small className="muted adm-store-online-hint">{t("adm.stores.kind.onlineHint")}</small>}
+                  {settles(draft.kind) && (
                     <input className="adm-input" type="number" min="0" max="100" step="0.5" aria-label={t("adm.stores.settlementPct")} placeholder={t("adm.stores.settlementPct")} value={draft.settlement_pct ?? ""} onChange={(e) => setDraft({ ...draft, settlement_pct: e.target.value === "" ? null : Number(e.target.value) })} />
                   )}
                   <textarea className="adm-input" rows={3} maxLength={600} aria-label={t("adm.stores.receiptNote")} placeholder={t("adm.stores.receiptNote")} value={draft.receipt_note} onChange={(e) => setDraft({ ...draft, receipt_note: e.target.value })} />
@@ -165,7 +172,7 @@ export default function Stores({ go = null }) {
                     {s.address && <span className="adm-store-fact" title={t("adm.stores.address")}><Icon name="mapPin" size={12} />{s.address}</span>}
                     {s.phone && <span className="adm-store-fact" title={t("adm.stores.phone")}><Icon name="phone" size={12} />{s.phone}</span>}
                     {s.created_at && <span className="adm-store-fact" title={t("adm.scr.store.created")}><Icon name="calendar" size={12} />{shortDate(s.created_at, lang)}</span>}
-                    {s.kind && s.kind !== "own" && s.settlement_pct != null && <span className="adm-store-fact" title={t("adm.stores.settlementPct")}><Icon name="percent" size={12} />{s.settlement_pct} %</span>}
+                    {settles(s.kind) && s.settlement_pct != null && <span className="adm-store-fact" title={t("adm.stores.settlementPct")}><Icon name="percent" size={12} />{s.settlement_pct} %</span>}
                   </span>
                 </span>
               )}

@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import type { Knex } from "@mikro-orm/knex";
+import { quoteWebLens, webPriceContext } from "../../../../lib/web-pricing";
 
 interface LensQuoteSelection {
   design_code: string; // "sv" | "bifocal" | "prog-mid" | "prog-high" | "frame-only"
@@ -20,6 +21,11 @@ const n = (v: unknown): number => {
  * Returns the server-computed price breakdown (cents). The storefront NEVER sends a
  * total — this is the single source of truth for lens pricing. Reads the price list
  * via the shared Postgres connection so it's independent of the module ORM lifecycle.
+ *
+ * With an online store (lib/online-store.ts) the lenses are that store's: its
+ * cells, its % over the master and its promotions (lib/web-pricing.ts) — the
+ * figure the cart will charge. `frame_price_cents` is what the browser shows
+ * for the frame, which the catalogue already answered at the store's price.
  */
 export async function POST(
   req: MedusaRequest,
@@ -56,6 +62,26 @@ export async function POST(
         frame_only: true,
       },
     });
+    return;
+  }
+
+  const web = await webPriceContext(req.scope);
+  if (web) {
+    try {
+      const lens = await quoteWebLens(req.scope, web, selection);
+      res.json({
+        quote: {
+          frame_price_cents: frame,
+          lens_base_cents: lens.lens_base_cents,
+          photo_cents: lens.photo_cents,
+          ar_cents: lens.ar_cents,
+          total_cents: frame + lens.total_cents,
+          frame_only: false,
+        },
+      });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
     return;
   }
 

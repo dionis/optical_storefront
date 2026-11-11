@@ -62,7 +62,9 @@ const normalizeSub = (v) => {
 
 export default function PricingPanel({ me = null, sellers = [], go, params = null, onSub = null }) {
   const { t } = useLang();
-  const { storeId, isAll, isWeb } = useStoreFilter(me);
+  // Con la web llevada como una tienda del panel, «Tienda online» en el filtro
+  // es esa tienda: su columna de precios (`establishmentId` = su id real).
+  const { establishmentId } = useStoreFilter(me);
   const [view, pickSub] = useSubTab({ normalize: normalizeSub, fallback: TABS[0], sub: params?.sub ?? null, onSub });
 
   const items = [
@@ -94,7 +96,7 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
           key={view}
           section={view}
           me={me}
-          onlyStore={isAll || isWeb ? null : storeId}
+          onlyStore={establishmentId || null}
           initialQ={params?.q || ""}
         />
       )}
@@ -116,8 +118,8 @@ export default function PricingPanel({ me = null, sellers = [], go, params = nul
 function RulesView({ me, sellers, go, params = null }) {
   const { t, lang } = useLang();
   const { toast } = useFeedback();
-  const { storeId, store, isAll, isWeb } = useStoreFilter(me);
-  const scope = isAll || isWeb ? "all" : storeId;
+  const { store, establishmentId } = useStoreFilter(me);
+  const scope = establishmentId || "all";
   const [data, setData] = useState(null);
   const [state, setState] = useState("loading");
   // Costos, comisiones e impuestos: GET /admin/finance/rules (los acordeones).

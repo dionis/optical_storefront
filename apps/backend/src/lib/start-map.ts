@@ -1,4 +1,5 @@
 import { commissionResolverOf } from "./commission-pct";
+import { pickOnlineStore } from "./online-store";
 import { loadDefaultCommissionPct } from "./store-cost-toggle";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
@@ -752,22 +753,28 @@ export async function startMap(container: MedusaContainer, scope: StaffScope, st
   const storeRows: StartMapStore[] = [];
   if (ss.showStores) {
     const wanted = ss.sales.stores ?? [...stores.filter((s) => s.is_active).map((s) => s.id), "web"];
+    // The web shop run as a store of the panel (lib/online-store.ts): ONE row,
+    // the web's, with that store's code, name and color — and whatever its own
+    // till sold folded into it — instead of «WEB» plus an empty store.
+    const online = pickOnlineStore(stores);
+    const folded = online && wanted.includes("web") && wanted.includes(online.id) ? online.id : null;
     for (const id of wanted) {
-      const est = stores.find((s) => s.id === id);
+      if (id === folded) continue;
+      const est = id === "web" ? online : stores.find((s) => s.id === id);
       if (id !== "web" && !est) continue;
-      const s = agg.byStore.get(id);
-      const p = pend.byStore.get(id);
+      const keys = id === "web" && folded ? ["web", folded] : [id];
+      const sum = (pick: (k: string) => number | undefined) => keys.reduce((n, k) => n + (pick(k) ?? 0), 0);
       storeRows.push({
         id,
         code: est?.code ?? "WEB",
         name: est?.name ?? "",
         color: est?.color ?? null,
-        today_cents: s?.today_cents ?? 0,
-        week_cents: s?.week_cents ?? 0,
-        month_cents: s?.month_cents ?? 0,
-        on_street_cents: p?.on_street_cents ?? 0,
-        in_lab: p?.in_lab ?? 0,
-        to_deliver: p?.to_deliver ?? 0,
+        today_cents: sum((k) => agg.byStore.get(k)?.today_cents),
+        week_cents: sum((k) => agg.byStore.get(k)?.week_cents),
+        month_cents: sum((k) => agg.byStore.get(k)?.month_cents),
+        on_street_cents: sum((k) => pend.byStore.get(k)?.on_street_cents),
+        in_lab: sum((k) => pend.byStore.get(k)?.in_lab),
+        to_deliver: sum((k) => pend.byStore.get(k)?.to_deliver),
       });
     }
     storeRows.sort((a, b) => b.month_cents - a.month_cents || a.code.localeCompare(b.code));

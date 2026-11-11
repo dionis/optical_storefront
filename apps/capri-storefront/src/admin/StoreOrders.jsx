@@ -53,7 +53,7 @@ import { adminGet } from "./adminApi.js";
 import { isDemoLogin } from "./adminAuth.js";
 import { STAGES, STAGE_BY_KEY, money as fmtMoney, setOrderStage, stageErrorText } from "./adminOrders.js";
 import { useStoreFilter } from "./StoreFilter.jsx";
-import { WEB_STORE } from "./useStoreTheme.js";
+import { WEB_STORE, onlineStoreOf } from "./useStoreTheme.js";
 import { useSortable } from "./useSortable.js";
 import SortTh from "./SortTh.jsx";
 import { PERIODS, applyPeriodParams, usePeriodFilter } from "./periodStore.js";
@@ -713,8 +713,10 @@ export function StoreOrdersTable({ data, rows: givenRows, storeLabel, onOpen, co
 /** Etiqueta de tienda de una venta a partir de las tiendas de useStoreFilter. */
 export function storeLabelFor(stores, t) {
   const byId = new Map((stores || []).map((s) => [s.id, s]));
+  // La web llevada como una tienda del panel sale con el código de esa tienda.
+  const online = onlineStoreOf(stores);
   return (r) => {
-    if (r.channel === "web") return t("adm.ex.so.web");
+    if (r.channel === "web") return online?.code || t("adm.ex.so.web");
     const s = byId.get(r.establishment_id);
     return s ? s.code || s.name : r.establishment_id || "—";
   };

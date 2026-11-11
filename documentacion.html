@@ -87,6 +87,21 @@
 </section>
 
 <section>
+  <h2>11-nov-2026 — Op4 es la tienda online: sus precios, sus costos y su contabilidad</h2>
+  <p>Decisión del dueño: <b>«Op4 · Online Optical Store» es la manera de manejar rubilens.com</b>. Una tienda se marca como <b>Tipo «Tienda online»</b> (Tiendas → Editar; solo una) y la web pasa a ser esa tienda: cobra lo que dice su columna de Productos y precios, sus pedidos son sus ventas y la contabilidad los asienta junto a sus costos. Sin ninguna tienda de ese tipo, todo queda como antes (maestro y pseudo-tienda «Tienda online»). Guía: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §2.1 y §3.7.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Tipo de tienda «online», una sola activa; la migración marca a Op4 por su nombre</td><td><span class="tag ok">Listo</span></td><td><code>CreateEstablishmentOnline6</code>, <code>lib/online-store.ts</code>, <code>POST /admin/establishments/:id</code></td></tr>
+    <tr><td>La web cobra los precios de Op4: catálogo, ficha, asistente de lentes y carrito (precio fijado, por marca, ajuste, banda, lista de lentes y descuentos)</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-pricing.ts</code>, <code>lib/web-pricing-http.ts</code>, <code>/store/carts/:id/configured-line</code>, <code>…/revalidate</code>, <code>/store/lens-config/*</code></td></tr>
+    <tr><td>Panel: una sola opción «Op4 · Online Optical Store» en el selector; Pedidos, Ejecutivo y el saludo la enseñan con su código y su color; Productos y precios y Costos abren su columna</td><td><span class="tag ok">Listo</span></td><td><code>useStoreTheme.js</code>, <code>StoreFilter.jsx</code>, <code>Stores.jsx</code>, <code>WebStoreCard.jsx</code>, <code>lib/start-map.ts</code></td></tr>
+    <tr><td>Contabilidad: los pedidos web se asientan en la columna de Op4 con la comisión de la pasarela, sus costos propios y su parte de los compartidos</td><td><span class="tag ok">Listo</span></td><td><code>lib/financial-statement.ts</code>, <code>lib/store-pnl.ts</code>, <code>GET /admin/finance/statement</code></td></tr>
+    <tr><td>Seguridad: «Tienda con la que se maneja la web»</td><td><span class="tag ok">Listo</span></td><td><code>lib/web-channel.ts</code></td></tr>
+    <tr><td>El surtido de Op4 todavía no oculta modelos en la web (lista lo publicado en su canal)</td><td><span class="tag wip">Después</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §2.1</td></tr>
+  </table>
+  <p class="muted">Pruebas: 94 suites / 1585; diccionario 6891 claves × 2. QA local: 17 comprobaciones de punta a punta y un pedido web asentado en la tienda online; pantallas revisadas en escritorio, Galaxy Tab A7 Lite y teléfono.</p>
+</section>
+
+<section>
   <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
   <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
 

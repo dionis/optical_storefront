@@ -1,8 +1,9 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ESTABLISHMENT_MODULE } from "../../../../modules/establishment";
 import type EstablishmentModuleService from "../../../../modules/establishment/service";
-import { cleanText, listEstablishments, STORE_KINDS } from "../../../../lib/establishments";
+import { cleanText, listEstablishments, ONLINE_KIND, STORE_KINDS } from "../../../../lib/establishments";
 import { isValidPhone } from "../../../../lib/field-rules";
+import { forgetOnlineStore } from "../../../../lib/online-store";
 import { normalizeColor } from "../../../../lib/store-color";
 
 /**
@@ -10,6 +11,11 @@ import { normalizeColor } from "../../../../lib/store-color";
  *
  * Edita una tienda. El código no se cambia nunca (está impreso en recibos y
  * fichas). No hay DELETE: una tienda con historial solo se desactiva (HU-01).
+ *
+ * `kind: "online"` makes the store THE online store (lib/online-store.ts): the
+ * web shop sells at its prices and its orders are this store's sales. Only one
+ * active store can be it — a second one is refused with `online_exists` (409)
+ * and the code of the store that already is.
  */
 interface UpdateBody {
   name?: string;
@@ -66,6 +72,17 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
     }
     patch.kind = body.kind;
   }
+  // One online store at a time: becoming it, or coming back to life as it.
+  const nextKind = String(patch.kind ?? (current as { kind?: string }).kind ?? "own");
+  const nextActive = typeof body.is_active === "boolean" ? body.is_active : Boolean(current.is_active);
+  const becomesOnline = nextKind === ONLINE_KIND && nextActive;
+  if (becomesOnline) {
+    const other = (await listEstablishments(req.scope)).find((e) => e.id !== id && e.kind === ONLINE_KIND && e.is_active);
+    if (other) {
+      res.status(409).json({ type: "not_allowed", reason: "online_exists", code: other.code, name: other.name, message: `${other.code} is already the online store.` });
+      return;
+    }
+  }
   if ("receipt_note" in body) patch.receipt_note = cleanText(body.receipt_note, 600);
   if ("settlement_pct" in body) {
     const v = body.settlement_pct === null || (body.settlement_pct as unknown) === "" ? null : Number(body.settlement_pct);
@@ -78,5 +95,6 @@ export async function POST(req: AuthenticatedMedusaRequest<UpdateBody>, res: Med
   if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
 
   await svc.updateEstablishments(patch as never);
+  forgetOnlineStore();
   res.json({ establishments: await listEstablishments(req.scope) });
 }

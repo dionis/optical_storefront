@@ -69,7 +69,7 @@ export async function monthPnl(container: MedusaContainer, month: string, storeI
       name: s.name,
       kind: s.kind,
       sales_count: e?.sales_count ?? 0,
-      settlement: s.kind !== "own" && pct !== null ? { pct, store_share: c(Math.round((net * pct) / 100)), owner_share: c(net - Math.round((net * pct) / 100)) } : null,
+      settlement: s.kind !== "own" && s.kind !== "online" && pct !== null ? { pct, store_share: c(Math.round((net * pct) / 100)), owner_share: c(net - Math.round((net * pct) / 100)) } : null,
     };
   });
   const sum = (k: keyof Pnl) => stores.reduce((acc, x) => acc + Math.round(Number(x[k]) * 100), 0);

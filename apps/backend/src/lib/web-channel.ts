@@ -18,6 +18,7 @@
 import type { Knex } from "@mikro-orm/knex";
 import type { MedusaContainer } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { onlineStore } from "./online-store";
 import type { SecurityCheck } from "./security";
 import { defaultStorefrontOrigin, normalizeOrigin, storefrontOrigins } from "./storefront-origin";
 import { parseStorefrontBrands } from "./tenant";
@@ -34,6 +35,8 @@ export interface WebChannelFacts {
   lastWebOrder: { display_id: number; created_at: string; origin: string | null } | null | undefined;
   /** Web orders of the last 30 days. */
   webOrders30d: number | null;
+  /** The store the owner runs the web shop with (lib/online-store.ts); null = none; undefined = not read. */
+  onlineStore?: { code: string; name: string } | null;
 }
 
 const hostOf = (origin: string): string => {
@@ -66,6 +69,13 @@ export function webChannelChecks(f: WebChannelFacts, env: NodeJS.ProcessEnv = pr
       ok: problems.length + orphan.length === 0,
       detail: problems.length + orphan.length ? [...problems, ...orphan].join(", ") : brands.map((b) => `${hostOf(b.origin)} → ${b.name}`).join(", "),
     });
+  }
+
+  // The store the web shop is run with: its prices and its costs are the web's.
+  // Only a failure when this backend actually serves a web catalogue.
+  if (f.onlineStore !== undefined) {
+    const serves = (f.webProducts ?? 0) > 0;
+    checks.push({ key: "web.store", ok: Boolean(f.onlineStore) || !serves, detail: f.onlineStore ? `${f.onlineStore.code} · ${f.onlineStore.name}` : "—" });
   }
 
   if (f.publishableKeys !== null) checks.push({ key: "web.publishable_key", ok: f.publishableKeys > 0, detail: String(f.publishableKeys) });
@@ -144,12 +154,23 @@ export async function gatherWebChannelFacts(container: MedusaContainer): Promise
   ]);
   // `safe` answers null for both "no web order yet" and "could not read": tell them apart for the item.
   const readable = webOrders30d !== null;
-  return { publishableKeys, webProducts, regionProviders, shippingOptions, lastWebOrder: readable ? lastWebOrder : undefined, webOrders30d };
+  const store = await onlineStore(container);
+  return {
+    publishableKeys,
+    webProducts,
+    regionProviders,
+    shippingOptions,
+    lastWebOrder: readable ? lastWebOrder : undefined,
+    webOrders30d,
+    onlineStore: store ? { code: store.code, name: store.name } : null,
+  };
 }
 
 export interface WebChannelSummary {
   /** Every storefront domain of this backend: the default first. `name` = its own brand, null = the deployment's. */
   storefronts: Array<{ host: string; url: string; name: string | null; is_default: boolean }>;
+  /** The establishment the web shop is run with; null = none (master prices). */
+  store: { id: string; code: string; name: string; color: string } | null;
   orders_30d: number | null;
   last_order: { display_id: number; created_at: string; host: string | null } | null;
 }
@@ -161,6 +182,7 @@ export async function webChannelSummary(container: MedusaContainer, env: NodeJS.
   const brands = parseStorefrontBrands(env.STOREFRONT_BRANDS).brands;
   return {
     storefronts: storefrontOrigins(env).map((o) => ({ host: hostOf(o), url: o, name: brands.find((b) => b.origin === o)?.name ?? null, is_default: o === def })),
+    store: await onlineStore(container),
     orders_30d: f.webOrders30d,
     last_order: f.lastWebOrder ? { display_id: f.lastWebOrder.display_id, created_at: f.lastWebOrder.created_at, host: f.lastWebOrder.origin ? hostOf(f.lastWebOrder.origin) : null } : null,
   };

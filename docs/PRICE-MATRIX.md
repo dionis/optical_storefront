@@ -654,6 +654,16 @@ configurado, disco local si no. Solo dueño/superadmin (403
 
 ### 9. La tienda online (decisión C8)
 
+> **Actualizado el 11-nov-2026.** Ya existe el tipo de tienda «online»
+> (`establishment.kind = 'online'`): la tienda que lo lleva (Op4) **es** la
+> web, y la web cobra lo que diga su columna. No se hizo escribiendo el precio
+> de la tienda en Medusa (lo que sigue siendo inseguro, por lo que explica el
+> texto de abajo) sino aplicando sus reglas al **leer**: el catálogo sale con
+> `calculated_price` reescrito y el carrito cotiza en esa tienda
+> (`lib/web-pricing.ts`). La variante de Medusa conserva el maestro. Ver
+> `docs/TIENDA-ONLINE-UNIFICADA.md` §2.1 y §3.7. Lo de abajo describe el estado
+> anterior y por qué no se escribe en Medusa.
+
 - **Cómo salen hoy los precios de la web**: la web en modo Medusa
   (`VITE_USE_MEDUSA`) pinta `variants[].calculated_price` (precio de la
   variante en Medusa) y la línea del carrito (`/store/carts/:id/configured-line`)

@@ -297,7 +297,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   // por tienda (la del vendedor en su ficha) con subtotales; los sin ventas, fuera.
   const sellersReport = () => {
     const periodLabel = per.period === "range" ? `${from} → ${to}` : t(`adm.ex.period.${per.period}`);
-    const storeName = sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "";
+    const storeName = sf.isAll ? t("adm.rpt.allStores") : sf.isWeb && !sf.online ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "";
     const labelOf = (id) => { const st = sf.stores.find((x) => x.id === id); return st ? `${st.code} · ${st.name}` : t("adm.sp.rpt.noStoreBlock"); };
     let groups = null;
     if (sf.isAll) {
@@ -346,7 +346,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
   const methodLabel = (row) => (row.builtin ? t(`adm.pos.method.${row.code}`) : (lang === "en" && row.label?.en) || row.label?.es || row.label?.en || row.code);
   const when = (iso) => (iso ? new Date(iso).toLocaleString(lang === "en" ? "en-US" : "es-US", { dateStyle: "short", timeStyle: "short" }) : "—");
 
-  const scopeText = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb ? t("adm.ex.scope.web") : `${sf.store?.code || ""} · ${sf.store?.name || ""}`;
+  const scopeText = sf.isAll ? t("adm.ex.scope.all") : sf.isWeb && !sf.online ? t("adm.ex.scope.web") : `${sf.store?.code || ""} · ${sf.store?.name || ""}`;
   const meta = `${scopeText} · ${from} → ${to}`;
   const title = t("adm.ex.title");
 
@@ -414,7 +414,7 @@ export default function ExecutiveHub({ me, go, sub, onSub, params = null }) {
       return salesReportSpec({
         rows: sales.rows, totals: sales.totals, access, t, lang, storeLabel, stageOf,
         scope: { store: sf.store, isAll: sf.isAll, isWeb: sf.isWeb }, period: { from, to },
-        title: t("adm.rpt.execTitle", { store: sf.isAll ? t("adm.rpt.allStores") : sf.isWeb ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "" }),
+        title: t("adm.rpt.execTitle", { store: sf.isAll ? t("adm.rpt.allStores") : sf.isWeb && !sf.online ? t("adm.rpt.web") : sf.store?.name || sf.store?.code || "" }),
         kpis: [
           kpiOf(t("adm.ex.kpi.sales"), m(tot.sales), tot.sales, { key: "sales", ...d("sales") }),
           kpiOf(t("adm.ex.kpi.count"), int(tot.count, lang), tot.count, { key: "count", ...d("count") }),

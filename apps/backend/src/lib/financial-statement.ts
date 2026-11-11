@@ -7,6 +7,7 @@ import { localParts } from "./alerts";
 import { commissionResolverOf } from "./commission-pct";
 import { computeCostSheet, isPaymentFeeRule, lineGroup, lineKind, listCostRules, type CostOrderLike, type CostRule } from "./costing";
 import { listEstablishments, type EstablishmentRow } from "./establishments";
+import { pickOnlineStore } from "./online-store";
 import { loadProductMetadata } from "./frame-specs";
 import { parseLensFinish } from "./lens-finish";
 import { listSellers } from "./sellers";
@@ -210,6 +211,12 @@ export interface EntityMonth {
   channel: "pos" | "web";
   /** Σ (total − tax) of the active lines. */
   net_sales: number;
+  /**
+   * The part of `net_sales` sold on the web. The «web» entity is all web; a
+   * store only carries some when it is THE online store (lib/online-store.ts),
+   * whose sales are the web's orders. Absent = by `channel` (all or nothing).
+   */
+  web_net_sales?: number;
   /** Σ tax: collected for the state, a liability. */
   sales_tax: number;
   /** Σ total (what customers were charged, tax included). */
@@ -272,8 +279,14 @@ export interface LedgerInput {
    */
   netByMonthStore?: Map<string, Map<string, number>>;
   tz: string;
-  /** Include the online orders as the «web» entity. */
+  /** Include the online orders as the «web» entity (ignored with `onlineStoreId`). */
   web: boolean;
+  /**
+   * THE online store (lib/online-store.ts). When set, a web order is a sale of
+   * THAT store: it is booked on its entity (when the store is in view), next
+   * to the store's own costs, and no separate «web» entity exists.
+   */
+  onlineStoreId?: string | null;
 }
 
 const emptyCogs = (): CogsCents => ({ frames: 0, lenses: 0, treatments: 0, per_order: 0, total: 0 });
@@ -291,6 +304,11 @@ function cogsLineOf(kind: string): keyof Omit<CogsCents, "total"> {
  * inline before 7-nov-2026 (one cost sheet per sale, material lines only;
  * fees by local month without voided sales; commission per line; store
  * costs by validity, frequency, sharing and per sale), plus the web.
+ *
+ * The web is its own entity («web», no store costs) unless the owner runs it
+ * as a store (`onlineStoreId`): then its orders are that store's sales — the
+ * gateway fee stays the web's formula, the frame's cost is that store's, and
+ * the store's fixed, per-sale and shared costs apply to it like to any store.
  */
 export function ledgerOf(input: LedgerInput): LedgerMonth[] {
   const { months, rules } = input;
@@ -311,10 +329,13 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
       return e;
     };
     for (const id of input.storeIds) entityOf(id, "pos");
-    if (input.web) entityOf(WEB_ENTITY, "web");
+    const online = input.onlineStoreId || null;
+    if (input.web && !online) entityOf(WEB_ENTITY, "web");
 
-    const lines = input.facts.filter((f) => f.sold_date_local.startsWith(month) && (f.channel === "web" ? input.web : ids.has(String(f.establishment_id ?? ""))));
-    const keyOf = (f: LedgerFact) => (f.channel === "web" ? WEB_ENTITY : String(f.establishment_id));
+    // A web order counts when its entity is in view: the online store, or «web».
+    const webIn = online ? ids.has(online) : input.web;
+    const lines = input.facts.filter((f) => f.sold_date_local.startsWith(month) && (f.channel === "web" ? webIn : ids.has(String(f.establishment_id ?? ""))));
+    const keyOf = (f: LedgerFact) => (f.channel === "web" ? online ?? WEB_ENTITY : String(f.establishment_id));
 
     // Sales, tax and cost of goods: one sheet per sale.
     const byOrder = new Map<string, LedgerFact[]>();
@@ -326,11 +347,12 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
     const commissionFacts: CommissionFactLike[] = [];
     for (const group of byOrder.values()) {
       const first = group[0];
-      const ent = entityOf(keyOf(first), first.channel === "web" ? "web" : "pos");
+      const ent = entityOf(keyOf(first), first.channel === "web" && !online ? "web" : "pos");
       const order: CostOrderLike = {
         // The store that sold it: a frame's cost is that store's own when it
-        // holds one, the chain's otherwise (lib/frame-cost.ts). A web order has none.
-        establishment_id: first.channel === "web" ? null : String(first.establishment_id ?? "") || null,
+        // holds one, the chain's otherwise (lib/frame-cost.ts). A web order has
+        // none — unless the web is run as a store, and then it is that store's.
+        establishment_id: first.channel === "web" ? online : String(first.establishment_id ?? "") || null,
         total: group.reduce((s, l) => s + l.total_cents, 0) / 100,
         tax_total: group.reduce((s, l) => s + l.tax_cents, 0) / 100,
         paid: true,
@@ -351,7 +373,9 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
       const gross = group.reduce((s, l) => s + l.total_cents, 0);
       ent.gross_sales += gross;
       ent.sales_tax += group.reduce((s, l) => s + l.tax_cents, 0);
-      ent.net_sales += group.reduce((s, l) => s + (l.total_cents - l.tax_cents), 0);
+      const net = group.reduce((s, l) => s + (l.total_cents - l.tax_cents), 0);
+      ent.net_sales += net;
+      if (first.channel === "web") ent.web_net_sales = (ent.web_net_sales ?? 0) + net;
       ent.sales_count += 1;
       // A web order's fee is the gateway's: % of what the customer paid + fixed.
       if (first.channel === "web") ent.payment_fees += Math.round((gross * gatewayPct) / 100) + gatewayFixed;
@@ -485,8 +509,10 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
   const cogs = { ...emptyCogs(), items: 0, total_all: 0 };
   let pos = 0, web = 0, tax = 0, gross = 0, count = 0, fixed = 0, variableItems = 0, perSale = 0;
   for (const e of parts) {
-    if (e.channel === "web") web += e.net_sales;
-    else pos += e.net_sales;
+    // What was sold on the web: the «web» entity whole, or the web orders of the online store.
+    const onWeb = e.web_net_sales ?? (e.channel === "web" ? e.net_sales : 0);
+    web += onWeb;
+    pos += e.net_sales - onWeb;
     tax += e.sales_tax;
     gross += e.gross_sales;
     count += e.sales_count;
@@ -624,12 +650,16 @@ export interface LoadedLedger {
   /** Stores in view that have figures or are active (the ones the screens list). */
   shownStores: EstablishmentRow[];
   rules: CostRule[];
+  /** THE online store, when the owner has one: the web's orders are booked on it. */
+  onlineStoreId: string | null;
 }
 
 /**
  * Reads everything a span of months needs, in a handful of queries for the
  * whole span (not per month), and runs `ledgerOf`. `storeIds` null = every
- * store. Till sales only unless `web`.
+ * store. Till sales only unless `web` — or unless a store in view is THE
+ * online store (lib/online-store.ts): the web's orders are its sales, so they
+ * come with it, `web` or not.
  */
 export async function loadLedger(container: MedusaContainer, months: string[], storeIds: string[] | null, opts: { web?: boolean } = {}): Promise<LoadedLedger> {
   const pg = pgOf(container);
@@ -639,6 +669,9 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
   const activeStoreIds = everyStore.filter((s) => s.is_active).map((s) => s.id);
   const inView = everyStore.filter((s) => storeIds === null || storeIds.includes(s.id));
   const ids = inView.map((s) => s.id);
+  // The web run as a store: its orders are that store's sales.
+  const online = pickOnlineStore(everyStore)?.id ?? null;
+  const webFacts = online ? ids.includes(online) : web;
   const first = `${months[0]}-01`;
   const last = lastDayOf(months[months.length - 1]);
 
@@ -647,7 +680,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     .where("status", "active")
     .where((q) => {
       q.where((p) => p.where("channel", "pos").whereIn("establishment_id", ids.length ? ids : ["-"]));
-      if (web) q.orWhere("channel", "web");
+      if (webFacts) q.orWhere("channel", "web");
     })
     .where("sold_date_local", ">=", first)
     .where("sold_date_local", "<=", last)
@@ -700,15 +733,19 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
   const needsWeights = liveItems.some((it) => !it.establishment_id && it.allocation?.method !== "percent") && ids.length !== activeStoreIds.length;
   let netByMonthStore: Map<string, Map<string, number>> | undefined;
   if (needsWeights && activeStoreIds.length) {
+    // The online store's weight is what it sold: the web's orders (and its till, if it has one).
+    const storeKey = online ? pg.raw("CASE WHEN channel = 'web' THEN ? ELSE establishment_id END", [online]) : pg.raw("establishment_id");
     const rows = (await pg("sale_fact")
       .whereNull("deleted_at")
       .where("status", "active")
-      .where("channel", "pos")
-      .whereIn("establishment_id", activeStoreIds)
+      .where((q) => {
+        q.where((p) => p.where("channel", "pos").whereIn("establishment_id", activeStoreIds));
+        if (online && activeStoreIds.includes(online)) q.orWhere("channel", "web");
+      })
       .where("sold_date_local", ">=", first)
       .where("sold_date_local", "<=", last)
-      .groupByRaw("substring(sold_date_local, 1, 7), establishment_id")
-      .select(pg.raw("substring(sold_date_local, 1, 7) AS month"), "establishment_id", pg.raw("SUM(total_cents - tax_cents)::bigint AS net"))) as Array<Record<string, unknown>>;
+      .groupByRaw("1, 2")
+      .select(pg.raw("substring(sold_date_local, 1, 7) AS month"), pg.raw("? AS establishment_id", [storeKey]), pg.raw("SUM(total_cents - tax_cents)::bigint AS net"))) as Array<Record<string, unknown>>;
     netByMonthStore = new Map(months.map((m) => [m, new Map<string, number>()]));
     for (const r of rows) netByMonthStore.get(String(r.month))?.set(String(r.establishment_id), Number(r.net));
   }
@@ -729,6 +766,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
     netByMonthStore,
     tz,
     web,
+    onlineStoreId: online,
   });
 
   // A deactivated store keeps its history: it stays in the months it still
@@ -739,7 +777,7 @@ export async function loadLedger(container: MedusaContainer, months: string[], s
       return Boolean(e && (e.net_sales || e.cogs.total || e.payment_fees || e.commissions || e.sales_count || e.costs.some((c) => c.cents)));
     });
   const shownStores = inView.filter((s) => s.is_active || hasFigures(s.id));
-  return { ledger, stores: everyStore, shownStores, rules };
+  return { ledger, stores: everyStore, shownStores, rules, onlineStoreId: online };
 }
 
 /** The statement document for a span, a store selection and a grouping (cents). */
@@ -748,11 +786,12 @@ export async function financialStatement(
   input: { from: string; to: string; group: StatementGroup; storeIds: string[] | null; web: boolean }
 ): Promise<FinancialStatement> {
   const months = monthsBetween(input.from, input.to).slice(0, MAX_STATEMENT_MONTHS);
-  const { ledger, shownStores } = await loadLedger(container, months, input.storeIds, { web: input.web });
+  const { ledger, shownStores, onlineStoreId } = await loadLedger(container, months, input.storeIds, { web: input.web });
   const t = tenant();
   const entities: StatementEntity[] = [
     ...shownStores.map((s) => ({ id: s.id, code: s.code, name: s.name, color: s.color ?? null, kind: "store" as const })),
-    ...(input.web ? [{ id: WEB_ENTITY, code: "WEB", name: "Online", color: null, kind: "web" as const }] : []),
+    // With an online store the web has no entity of its own: it is that store's column.
+    ...(input.web && !onlineStoreId ? [{ id: WEB_ENTITY, code: "WEB", name: "Online", color: null, kind: "web" as const }] : []),
     { id: "total", code: "TOTAL", name: "Consolidated", color: null, kind: "total" },
   ];
   const doc = buildStatement(ledger, input.group, entities);

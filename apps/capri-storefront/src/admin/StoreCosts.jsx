@@ -61,8 +61,10 @@ export default function StoreCosts({ me }) {
   // Tienda del filtro global del panel: acota los costos (?store=) y la columna
   // del resultado. La online no tiene costos de tienda: se enseña el negocio.
   const who = me || (ctx ? { is_admin: ctx.is_admin, role: ctx.role } : undefined);
-  const { storeId, isAll, isWeb } = useStoreFilter(who);
-  const storeOnly = isAll || isWeb ? "" : storeId;
+  // Con la web llevada como una tienda del panel (tipo «Tienda online»), sus
+  // costos son los de esa tienda: `establishmentId` es su id real.
+  const { isWeb, establishmentId } = useStoreFilter(who);
+  const storeOnly = establishmentId;
 
   useEffect(() => { posContext().then(setCtx).catch(() => setCtx({ stores: [] })); }, []);
   // Cada cambio de mes o de tienda vuelve a pedir las dos lecturas (y se
@@ -208,7 +210,7 @@ export default function StoreCosts({ me }) {
       </div>
       <p className="adm-sub">{t("adm.costs2.sub")}</p>
       <p className="adm-sub sc-note"><Icon name="info" size={13} /> {t("adm.scr.sc.monthly")}</p>
-      {isWeb && <div className="adm-demo-banner">{t("adm.scr.sc.webNote")}</div>}
+      {isWeb && !establishmentId && <div className="adm-demo-banner">{t("adm.scr.sc.webNote")}</div>}
       {pnl?.cost_rules_missing && <div className="adm-demo-banner">{t("adm.costs2.noRules")}</div>}
       {state === "loading" && !pnl && <div className="adm-src-note loading">{t("adm.ord.loading")}</div>}
       {state === "error" && <div className="adm-login-err">{t("adm.err.pos.generic")}</div>}

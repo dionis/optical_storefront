@@ -28,7 +28,7 @@ import { adminFetch } from "./adminApi.js";
 import { money } from "./adminOrders.js";
 import { navGroupsFor, tabsOf } from "./AdminShell.jsx";
 import { useStoreFilter } from "./StoreFilter.jsx";
-import { WEB_STORE, defaultColorForStore, setActiveStore } from "./useStoreTheme.js";
+import { WEB_STORE, defaultColorForStore, setActiveStore, webStoreLabel, webStoreOf } from "./useStoreTheme.js";
 import "./start-map.css";
 
 const PERIODS = ["yesterday", "today", "this_week", "last_week", "this_month", "last_month"];
@@ -122,7 +122,7 @@ export default function WelcomeBriefing({ me, onDone, go }) {
   // Dónde está: su tienda (vendedor, o la que diga el servidor) o el filtro global del panel.
   const where = data?.me?.store_code
     ? { label: `${data.me.store_code} · ${data.me.store_name}`, color: data.me.store_color || defaultColorForStore(data.me.store_name) }
-    : store ? { label: store.online ? t("adm.theme.online") : `${store.code} · ${store.name}`, color: store.color || defaultColorForStore(store.name) } : { label: t("adm.theme.allStores"), color: null };
+    : store ? { label: store.online && !store.establishment_id ? t("adm.theme.online") : `${store.code} · ${store.name}`, color: store.color || defaultColorForStore(store.name) } : { label: t("adm.theme.allStores"), color: null };
 
   const showProfit = Boolean(data?.access?.profit);
   const showCommission = !showProfit && Boolean(data?.access?.commission);
@@ -146,7 +146,7 @@ export default function WelcomeBriefing({ me, onDone, go }) {
 
   const storeInfo = useMemo(() => {
     const map = new Map(stores.map((s) => [s.id, { name: `${s.code ? `${s.code} · ` : ""}${s.name}`, color: s.color || defaultColorForStore(s.name) }]));
-    map.set(WEB_STORE.id, { name: t("adm.theme.online"), color: WEB_STORE.color });
+    map.set(WEB_STORE.id, { name: webStoreLabel(stores, t), color: webStoreOf(stores).color });
     return map;
   }, [stores, t]);
 
