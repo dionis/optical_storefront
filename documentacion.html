@@ -69,8 +69,8 @@
 </section>
 
 <section>
-  <h2>10-nov-2026 — la tienda online y las tiendas físicas en un solo panel</h2>
-  <p>Las compras de <code>www.rubilens.com</code> no aparecían en el panel de <code>opticaelrancho.com/admin</code> porque eran <b>dos backends con dos bases de datos</b> (la web en producción, el panel en staging). Decisión del dueño: <b>un solo backend, el del panel</b>, para las tres tiendas físicas y la tienda online. Guía completa, pasos de Coolify / Vercel / Stripe y cómo volver atrás: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code>. QA: <code>docs/QA-UNIFICACION-2026-11-10.md</code>.</p>
+  <h2>10/11-nov-2026 — la tienda online y las tiendas físicas en un solo panel</h2>
+  <p>Un solo backend, el del panel (<code>opticaelrancho.com/admin</code>), para las tres tiendas físicas y la tienda online. Comprobado el 11-nov sobre lo desplegado: <b>la web ya usa ese backend desde el 8-nov</b> (<code>BACKEND_TARGET_OVERRIDE=staging</code> en Vercel, PR #5 de <code>develop</code>). No ha entrado ninguna compra web porque <b>no se puede pagar</b>: la web lleva la clave de Stripe en vivo y el backend del panel sigue con Stripe en pruebas. Guía y lo que falta: <code>docs/TIENDA-ONLINE-UNIFICADA.md</code>. QA: <code>docs/QA-UNIFICACION-2026-11-10.md</code>.</p>
   <table>
     <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
     <tr><td>Marca por dominio: los correos y SMS de un pedido de la web salen como RUBI LENS; caja, recibos y personal siguen como Óptica El Rancho (<code>STOREFRONT_BRANDS</code>)</td><td><span class="tag ok">Listo</span></td><td><code>lib/tenant.ts</code>, <code>modules/notification-resend</code>, <code>lib/tenant-profile.ts</code></td></tr>
@@ -81,9 +81,9 @@
     <tr><td>Foto de la montura fuera de catálogo en el recibo; subirla después de la venta</td><td><span class="tag ok">Listo</span></td><td><code>lib/store-frame-photo.ts</code>, <code>POST /admin/pos/sales/:id/store-frame-photo</code></td></tr>
     <tr><td>«Salir» cierra la sesión y abre la pantalla de entrada del panel de la óptica</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/adminAuth.js</code> (<code>signOutToLogin</code>)</td></tr>
     <tr><td>Acabado visual: cabeceras, herramientas en una fila, filtros en rejilla</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/polish.css</code></td></tr>
-    <tr><td>Unir los dos backends (dominios en Coolify, clave publicable en Vercel, Stripe en vivo, compra de prueba)</td><td><span class="tag wip">Pendiente del dueño</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §4</td></tr>
+    <tr><td>Backend del panel: secretos de sesión, Stripe en vivo con su webhook, marca de la web (<code>STOREFRONT_BRANDS</code>), bucket privado; después, una compra de prueba</td><td><span class="tag wip">Pendiente del dueño</span></td><td><code>docs/TIENDA-ONLINE-UNIFICADA.md</code> §4</td></tr>
   </table>
-  <p class="muted">Pruebas: 92 suites / 1562. El 10-nov a las 20:26 UTC el backend de producción respondía 503; la unión lo resuelve de paso.</p>
+  <p class="muted">Pruebas: 92 suites / 1562. El backend de producción antiguo responde 503; la tienda ya no lo usa.</p>
 </section>
 
 <section>

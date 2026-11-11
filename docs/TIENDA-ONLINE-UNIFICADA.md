@@ -1,57 +1,71 @@
 # La tienda online y las tiendas físicas en un solo panel
 
-_10-nov-2026. Decisión del dueño: **un solo backend**, el que ya usa el panel
-(`opticaelrancho.com/admin`), para las tres tiendas físicas y para la tienda
-online (`www.rubilens.com`). Este documento explica por qué hoy no se veían las
-compras de la web, qué cambió en el código y los pasos exactos para unirlo._
+_Revisado el 11-nov-2026 contra lo que está desplegado. Decisión del dueño: **un
+solo backend**, el del panel (`opticaelrancho.com/admin`), para las tres tiendas
+físicas y para la tienda online (`www.rubilens.com`). Este documento dice cómo
+está hoy, qué cambió en el código y lo que falta para que una compra de la web
+se cobre y aparezca en el panel._
+
+> **Corrección (11-nov-2026).** La primera versión de esta guía (10-nov) decía
+> que la web seguía en el backend de producción y pedía mover dominios en
+> Coolify y cambiar la clave publicable en Vercel. **No hace falta**: la web ya
+> usa el backend del panel desde el 8-nov (§1). Esa versión se escribió con una
+> copia vieja de la rama `develop` y sin mirar el sitio desplegado.
 
 ---
 
-## 1. Qué pasaba
+## 1. Cómo está hoy (comprobado el 11-nov-2026, 03:45 UTC)
 
 | | Tienda online | Panel y tiendas físicas |
 |---|---|---|
 | Dirección | `www.rubilens.com` | `opticaelrancho.com/admin` |
-| Rama del storefront (Vercel) | `develop` | `develop_optical_storepos` |
-| Prefijo de API | `/medusa` | `/medusa-staging` |
-| Backend (Coolify) | producción (`api.161-153-9-98.sslip.io`, `api.rubilens.com`) | staging (`api-staging.161-153-9-98.sslip.io`) |
-| Base de datos | la de producción | la de staging |
+| Rama del storefront (Vercel) | `develop` + `BACKEND_TARGET_OVERRIDE=staging` | `develop_optical_storepos` |
+| Prefijo de API | `/medusa-staging` | `/medusa-staging` |
+| Backend (Coolify) | **el del panel** (`api-staging.161-153-9-98.sslip.io`) | el mismo |
+| Base de datos | **la del panel** | la misma |
 
-Eran **dos backends con dos bases de datos**. Una compra en la web se guardaba
-en la base de producción; el panel lee la de staging. Por eso ninguna compra de
-`rubilens.com` aparecía en el panel: no era un fallo de una pantalla, eran datos
-en otro sitio.
+- El 8-nov-2026 se unió a `develop` el interruptor `BACKEND_TARGET_OVERRIDE`
+  (PR #5, decisión del dueño): con `staging` en el proyecto de Vercel, la web
+  habla con el backend del panel aunque su rama sea `develop`. El sitio
+  desplegado lo lleva puesto (`VITE_BACKEND_TARGET: "staging"` en su código).
+- Por la API pública que usa la web: 584 productos, una región con Stripe y
+  dos opciones de envío. La web **ya está conectada** al backend del panel.
+- El backend de producción antiguo (`api.161-153-9-98.sslip.io`,
+  `api.rubilens.com`) responde `503 no available server`. La tienda ya no lo
+  usa: que esté caído no le afecta.
 
-El código del panel ya trataba la web como una tienda más («Tienda online» en
-el selector de tienda, canal `web` en ventas, costos, estado de resultados,
-pacientes y pedidos). Lo que faltaba era que la web escribiera en el mismo
-backend, y unos pocos huecos que solo se ven cuando conviven las dos cosas
-(§3).
+**Por qué no aparece ninguna compra de la web en el panel.** Seguridad →
+«Tienda online» → «Último pedido de la web recibido aquí»: **ninguno todavía**.
+No es que se pierdan: ninguna compra ha llegado a completarse. La causa que
+muestran los datos:
 
-> **Aviso del 10-nov-2026, 20:26 UTC:** el backend de producción respondía
-> `503 no available server` (`https://www.rubilens.com/medusa/version`). La
-> página de `rubilens.com` carga, pero sin backend no hay catálogo ni cobro.
-> La unión de abajo lo resuelve de paso; si no se hace hoy, reiniciar ese
-> servicio en Coolify.
+- la web lleva la clave publicable de Stripe **en vivo** (`pk_live_…`);
+- el backend del panel tiene Stripe **en modo de pruebas** (Seguridad → Pagos:
+  «Stripe en modo en vivo · test»).
+
+Con una clave en vivo en la web y una de pruebas en el servidor, Stripe rechaza
+el pago: el cliente llega al final del checkout y no puede pagar. Hasta que el
+backend tenga la clave en vivo (§4, paso 2) no entrará ningún pedido web.
+
+Además, Seguridad marca 12 puntos en ese backend, que ahora es el real:
+secretos de sesión débiles (`JWT_SECRET`, `COOKIE_SECRET`,
+`ORDER_ACCESS_SECRET`), `VISION_INTERNAL_SECRET`, bucket privado de recetas,
+`STORE_CORS` vacío, `STOREFRONT_URL` sin https, Stripe en pruebas, SMS, perfil
+de la óptica y puesta en marcha. Los secretos débiles son lo más grave: con el
+valor por defecto se pueden falsificar sesiones de administrador.
 
 ## 2. Cómo queda
 
 ```
-www.rubilens.com  (marca RUBI LENS, rama develop)      ─┐
-   /medusa → api.161-153-9-98.sslip.io                  │
-                                                        ├─►  UN backend (Coolify)
-opticaelrancho.com/admin  (panel, develop_optical_…)    │    el del panel: 3 tiendas,
-   /medusa-staging → api-staging.161-153-9-98.sslip.io ─┘    equipo, precios, costos,
-                                                             reglas + pedidos de la web
+www.rubilens.com  (marca RUBI LENS, rama develop,       ─┐
+   BACKEND_TARGET_OVERRIDE=staging)                      │
+                                                         ├─►  UN backend (Coolify):
+opticaelrancho.com/admin  (panel, develop_optical_…)    ─┘    3 tiendas, equipo, precios,
+        las dos por /medusa-staging                           costos, reglas + pedidos web
 ```
 
-- **No cambia ninguna dirección pública** ni ningún `vercel.json`: el servicio
-  del panel en Coolify pasa a atender también los dominios de API de
-  producción. Para la web, `/medusa` sigue siendo `/medusa`.
-- **No se vuelve a cargar nada en el panel**: tiendas, equipo, precios, costos,
-  reglas y ventas se quedan como están.
-- Una compra en `rubilens.com` es un pedido de Medusa sin venta de caja:
-  `channel = web`. Entra sola en:
+Una compra en `rubilens.com` es un pedido de Medusa sin venta de caja
+(`channel = web`). En cuanto se pueda cobrar, entra sola en:
 
 | Pantalla | Qué se ve de la web |
 |---|---|
@@ -70,10 +84,12 @@ opticaelrancho.com/admin  (panel, develop_optical_…)    │    el del panel: 3
   − comisión del cobro − comisión del vendedor.
 - **Precios de la web**: los del **maestro** de Productos y precios (el job
   `price-sync` los escribe en Medusa cada 4 h). La columna de una tienda física
-  no mueve el precio de la web (decisión C8 de `docs/PRICE-MATRIX.md`, sin
-  cambios).
+  no mueve el precio de la web (decisión C8 de `docs/PRICE-MATRIX.md`).
+- **«Op4 · Online Optical Store»** de la lista de Tiendas es un establecimiento
+  (una columna de precios y una caja), **no** la tienda online: los pedidos de
+  la web no entran por él. La tienda online es la tarjeta «Tienda online».
 
-## 3. Qué cambió en el código (parches 0058–0060)
+## 3. Qué cambió en el código (parches 0058–0062)
 
 ### 3.1 Dos marcas sobre un backend
 
@@ -144,83 +160,53 @@ título y botones que caían a una segunda fila), filtros de Pedidos en rejilla,
 «Por tienda» del saludo sin rótulos repetidos. Detalle y capturas:
 `docs/QA-UNIFICACION-2026-11-10.md`.
 
-## 4. Pasos para unirlo (los hace Daniel: Coolify, Vercel y Stripe)
+## 4. Lo que falta (lo hace Daniel: Coolify y Stripe)
 
-Ninguno toca código. Orden recomendado; del 3 al 6 la web queda unos minutos
-sin servicio (hoy ya lo está).
+Ninguno toca código. Los valores están preparados en
+`secrets/coolify-staging-seguridad.txt` de su PC (carpeta ignorada por git);
+las claves de Stripe salen de su panel de Stripe, nunca por chat.
 
-**Antes**
-
-1. `sync-repo.bat` → **S** y **Redeploy** del backend del panel en Coolify.
-   Comprobar `https://opticaelrancho.com/medusa-staging/version`.
-2. **Copia de seguridad** de la base del panel (Coolify → base de datos →
-   Backups → Backup now). Es la base que pasa a ser la única.
-
-**Coolify — servicio del backend del panel**
-
-3. Variables (Environment Variables):
-
-   | Variable | Valor |
-   |---|---|
-   | `DEPLOY_ENV` | quitarla (o `production`): deja de ser un staging que no cobra |
-   | `STRIPE_SECRET_KEY` | la `sk_live_…` (la misma del servicio de producción) |
-   | `STRIPE_WEBHOOK_SECRET` | el `whsec_…` del webhook **live** (aprovechar para rotarlo: paso 7) |
-   | `STOREFRONT_URLS` | añadir `https://www.rubilens.com,https://rubilens.com` |
-   | `STORE_CORS` | añadir `https://www.rubilens.com,https://rubilens.com` |
-   | `STOREFRONT_BRANDS` | `https://www.rubilens.com\|RUBI LENS\|#0b2f66\|#b8921e;https://rubilens.com\|RUBI LENS\|#0b2f66\|#b8921e` |
-
-   `STORE_NAME`, `STOREFRONT_URL` y `ADMIN_PANEL_URL` se quedan como están.
-   Los valores secretos se copian de un servicio a otro dentro de Coolify; nunca
-   por chat.
-
-4. En el **servicio de producción antiguo**: quitar sus dominios
-   (`https://api.161-153-9-98.sslip.io` y `https://api.rubilens.com` si está) y
-   **detenerlo**. No borrarlo: su base de datos es el archivo de los pedidos web
-   anteriores.
-5. En el **servicio del panel** → Domains: añadir esos mismos dominios a los que
-   ya tiene (separados por comas) → **Redeploy**.
-   Comprobar: `https://www.rubilens.com/medusa/version` debe dar el mismo
-   `commit` que `https://opticaelrancho.com/medusa-staging/version` y
-   `"features":["multistore"]`.
-
-**Medusa Admin del backend del panel** (`…/app`)
-
-6. Settings → Regions → la región → Payment providers: **Stripe** activado.
-   Settings → Publishable API keys: copiar la clave (`pk_…`) del canal de la web.
-
-**Stripe (modo live)**
-
-7. Developers → Webhooks → el endpoint `…/hooks/payment/stripe_stripe`: si usa
-   `api.rubilens.com` no cambia nada; si usa otro dominio, apuntarlo al del
-   panel. **Roll secret** y pegar el nuevo `whsec_` en el paso 3 (el anterior
-   quedó expuesto en una captura).
-
-**Vercel**
-
-8. `VITE_MEDUSA_PUBLISHABLE_KEY` del build que sirve `www.rubilens.com` (rama
-   `develop`): la clave del paso 6. **Redeploy** de `develop` sin caché.
-   Sin esto la web no muestra productos (todas las llamadas `/store` dan 400).
-9. `VITE_STRIPE_PUBLISHABLE_KEY` de la rama `develop_optical_storepos`:
-   `pk_live_…` (el backend ya cobra en vivo; con `pk_test_` esa vista previa no
-   podría pagar).
+1. **Coolify → backend del panel → Environment Variables**: pegar el
+   **Bloque 1** del archivo (secretos de sesión, `STORE_CORS` con los dominios
+   de la web, `STOREFRONT_URL`, `ADMIN_PANEL_URL`) y el **Bloque 3**
+   (`STOREFRONT_URLS` y `STOREFRONT_BRANDS`). Borrar `DEPLOY_ENV` si existe:
+   este backend ya no es un staging de pruebas.
+   Efecto al redesplegar: todos vuelven a iniciar sesión en el panel.
+2. **Stripe en vivo en ese mismo servicio**: `STRIPE_SECRET_KEY` = la
+   `sk_live_…` y `STRIPE_WEBHOOK_SECRET` = el `whsec_…` de un endpoint **live**
+   que apunte a
+   `https://api-staging.161-153-9-98.sslip.io/hooks/payment/stripe_stripe`
+   (eventos `payment_intent.succeeded` y
+   `payment_intent.amount_capturable_updated`). El endpoint anterior apuntaba al
+   backend antiguo, que está caído. Crear el endpoint nuevo da un secreto nuevo,
+   que es lo que hay que usar (el anterior quedó expuesto).
+3. **Redeploy** del backend.
+4. **Bucket privado de recetas** (Bloque 2 del archivo): crear el bucket
+   `rubilens-recetas` y poner `R2_PRESCRIPTION_BUCKET`. Sin él no se guardan la
+   foto de la receta ni la del probador de un cliente de la web, ni las fotos
+   privadas del punto de venta.
+5. **Vercel**, rama `develop_optical_storepos`: `VITE_STRIPE_PUBLISHABLE_KEY` =
+   `pk_live_…` (la vista previa de El Rancho usa el mismo backend, que ya
+   cobrará en vivo).
 
 **Comprobar**
 
-10. Panel → Administración → Seguridad → **Tienda online**: los siete puntos
-    en verde. Tiendas → tarjeta «Tienda online · RUBI LENS».
-11. Compra real en `www.rubilens.com` con tarjeta propia (montura barata):
-    - el correo de confirmación llega a nombre de **RUBI LENS**, con su logo;
-    - en el panel: Pedidos («Online · RUBI LENS»), Ejecutivo → Tienda online,
-      Rentabilidad, Pacientes, y el contador «En laboratorio»;
-    - mover la etapa a «Preparado» y ver el correo de etapa;
-    - reembolsar desde Stripe y ver «Reembolsado».
-12. Una venta de prueba en caja: el recibo sigue a nombre de **Óptica El
-    Rancho**.
+6. Panel → Administración → Seguridad: «Pagos» en verde («Stripe en modo en
+   vivo · live») y «Tienda online» con «Marca de la tienda online ·
+   www.rubilens.com → RUBI LENS».
+7. Compra real en `www.rubilens.com` con tarjeta propia (montura barata):
+   - el pago se completa;
+   - el correo de confirmación llega a nombre de **RUBI LENS**, con su logo;
+   - en el panel: Pedidos («Online · RUBI LENS»), Ejecutivo → Tienda online,
+     Rentabilidad, Pacientes, y el contador «En laboratorio»;
+   - mover la etapa a «Preparado» y ver el correo de etapa;
+   - reembolsar desde Stripe y ver «Reembolsado».
+8. Una venta de prueba en caja: el recibo sigue a nombre de **Óptica El
+   Rancho**.
 
-**Volver atrás** (si algo falla): quitar los dominios de producción del
-servicio del panel, devolverlos al servicio antiguo e iniciarlo; restaurar la
-`VITE_MEDUSA_PUBLISHABLE_KEY` anterior en Vercel y redesplegar `develop`. Las
-ventas hechas en el panel mientras tanto no se pierden.
+**Volver atrás**: quitar `BACKEND_TARGET_OVERRIDE` del proyecto de Vercel y
+redesplegar `develop` devuelve la web al backend antiguo, que hoy está caído:
+habría que levantarlo antes.
 
 ## 5. Comprobaciones de «Tienda online» (Seguridad)
 
@@ -234,34 +220,36 @@ ventas hechas en el panel mientras tanto no se pierden.
 | Opciones de envío | No hay ninguna | Medusa Admin → Locations & Shipping |
 | Último pedido de la web recibido aquí | Nunca falla: dice número, fecha, dominio y cuántos en 30 días | — |
 
-## 6. Lo que hay que saber antes
+## 6. Lo que hay que saber
 
-- **Pedidos web anteriores**: se quedan en la base antigua (servicio detenido,
-  no borrado). No aparecerán en el panel ni en «Mis pedidos» de la web. Si hace
-  falta pasarlos, se puede preparar una importación aparte; hoy no existe.
-- **Numeración**: los pedidos nuevos de la web siguen la numeración de la base
-  del panel (no empiezan en #1 ni continúan la antigua).
-- **Cuentas de clientes de la web**: las que existieran en la base antigua no
-  pasan; el cliente se registra de nuevo (el seguimiento por correo no necesita
-  cuenta).
-- **Precios e impuestos de la web**: pasan a ser los de esta base. Antes de
-  abrir, revisar en Productos y precios que el maestro es lo que debe cobrar la
-  web, y la regla de impuestos (`STORE_FRAME_TAX_RATE`).
+- **Pedidos web anteriores al 8-nov**: están en la base del backend antiguo
+  (servicio caído). No aparecen en el panel ni en «Mis pedidos» de la web. Si
+  hace falta pasarlos, se puede preparar una importación aparte; hoy no existe.
+- **Numeración**: los pedidos de la web siguen la numeración de la base del
+  panel.
+- **Cuentas de clientes de la web** creadas en la base antigua: no pasan; el
+  cliente se registra de nuevo (el seguimiento por correo no necesita cuenta).
+- **Precios e impuestos de la web**: son los de la base del panel. Revisar en
+  Productos y precios que el maestro es lo que debe cobrar la web, y la regla
+  de impuestos (`STORE_FRAME_TAX_RATE`).
 - **Datos del panel**: hay ventas reales y de prueba mezcladas. No usar la
   «Puesta a cero» de Seguridad (borra todo). Las de prueba se eliminan una a
-  una desde la ficha de la venta (Eliminar, motivo «Venta de prueba»; solo dueño y superadmin): salen de todos
-  los informes y quedan en «Eliminadas».
-- **`rubilens.com/admin`**: seguirá abriendo un panel (con el código de
-  `develop`, más antiguo) sobre los mismos datos. El panel de trabajo es
+  una desde la ficha de la venta (Eliminar, motivo «Venta de prueba»; solo
+  dueño y superadmin): salen de todos los informes y quedan en «Eliminadas».
+- **`rubilens.com/admin`** abre un panel con el código de `develop` (más
+  antiguo) sobre los mismos datos. El panel de trabajo es
   `opticaelrancho.com/admin`.
-- **Compatibilidad de la web actual**: las 18 rutas `/store/*` que usa el
-  storefront de `develop` existen en este backend y las del carrito no han
-  cambiado entre ramas (comprobado sobre el código, no con una compra real: es
-  el paso 11).
-- **Correo**: los correos de la web salen con el nombre RUBI LENS pero desde la
-  dirección configurada en `RESEND_FROM_EMAIL` hasta que se verifique
-  `rubilens.com` en Resend y se ponga un remitente en el campo 6 de
-  `STOREFRONT_BRANDS`.
+- **La web corre con el código de `develop`** y el backend con el de
+  `develop_optical_storepos`: las 18 rutas `/store/*` que usa esa web existen
+  en este backend y las del carrito no han cambiado entre ramas (comprobado
+  sobre el código y leyendo catálogo, región y envíos del sitio real; una
+  compra completa es el paso 7).
+- **Correo**: los correos de la web salen con el nombre RUBI LENS (cuando esté
+  `STOREFRONT_BRANDS`) pero desde la dirección de `RESEND_FROM_EMAIL` hasta que
+  se verifique `rubilens.com` en Resend y se ponga un remitente en el campo 6.
+- **Dos equipos suben a la rama**: antes de trabajar, `git fetch` y partir de
+  `origin` (`sync-repo.bat` lo hace y, si no cabe limpio, deja el trabajo local
+  en una rama `backup/local-…`).
 
 ## 7. Después (no urgente)
 
@@ -270,7 +258,10 @@ ventas hechas en el panel mientras tanto no se pierden.
   panel salgan del mismo código. Tras eso el backend único se despliega desde
   `main`.
 - Renombrar en Coolify el servicio «staging» y su dominio `api-staging…`: ya es
-  el de producción.
+  el de producción (cambiar el dominio obliga a cambiar el rewrite
+  `/medusa-staging` de `vercel.json` y el webhook de Stripe).
+- Decidir qué se hace con el backend antiguo (hoy caído): borrarlo o dejarlo
+  como archivo de los pedidos anteriores.
 - Verificar `rubilens.com` en Resend y poner su remitente.
 - Decisión C8 (precio propio para la web) si se quiere que la web no cobre el
   maestro.

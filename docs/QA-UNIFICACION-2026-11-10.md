@@ -7,7 +7,7 @@ RUBI LENS y `STOREFRONT_BRANDS` con su marca. Los pedidos web se crearon por
 la API pública de la tienda (`/store/*`: carrito, línea configurada con lentes
 y receta, envío, pago y cierre), con la cabecera `Origin` de la web, igual que
 los manda el navegador. **No se probó con Stripe en vivo ni contra los
-servidores reales**: eso es el paso 11 de `docs/TIENDA-ONLINE-UNIFICADA.md`.
+servidores reales**: eso es el paso 7 de `docs/TIENDA-ONLINE-UNIFICADA.md` §4.
 
 ## 1. Pruebas automáticas
 
@@ -70,11 +70,28 @@ que cambiaron.
 
 Sin cambios de paleta ni de tokens.
 
-## 4. Lo que no se probó
+## 4. Comprobado sobre lo desplegado (11-nov-2026, solo lectura)
+
+| Qué | Resultado |
+|---|---|
+| GitHub `develop_optical_storepos` | `ebc81a2`, mismo árbol que el trabajo local (`c963a614…`) |
+| Backend del panel (`/medusa-staging/version`) | commit `ebc81a2`, migraciones `ok` |
+| Panel desplegado | Tiendas muestra la tarjeta «Tienda online»; Seguridad, el grupo «Tienda online»; el saludo ya no repite rótulos |
+| `www.rubilens.com` | su código lleva `VITE_BACKEND_TARGET: "staging"`: usa el backend del panel |
+| API pública desde la web | 584 productos, 1 región con Stripe, 2 opciones de envío |
+| Seguridad → Pagos | Stripe **en pruebas** en el backend; la web lleva `pk_live` → no se puede pagar |
+| Seguridad → Tienda online | dominios de la web listados; marca sin configurar; «último pedido: ninguno todavía» |
+| Seguridad en total | 12 puntos por resolver (secretos de sesión, bucket privado, CORS, URL pública, Stripe, SMS, perfil, puesta en marcha) |
+| Backend antiguo (`/medusa/version`) | 503; la tienda ya no lo usa |
+
+No se pudo leer el resultado del CI de GitHub desde aquí; las mismas
+comprobaciones pasan en local sobre ese árbol.
+
+## 5. Lo que no se probó
 
 - Compra con tarjeta real y webhook de Stripe en vivo.
-- El storefront de la rama `develop` (el que sirve hoy `rubilens.com`) contra
-  este backend: se comprobó que sus 18 rutas `/store/*` existen y que las del
-  carrito no cambiaron entre ramas, no una compra completa.
+- Una compra completa en `rubilens.com` contra este backend: se comprobó que
+  sus 18 rutas `/store/*` existen, que las del carrito no cambiaron entre ramas
+  y que el sitio real lee catálogo, región y envíos; no el pago.
 - Entrega real de correos (en local no hay proveedor): se probó el contenido
   de la plantilla, no la bandeja de entrada.

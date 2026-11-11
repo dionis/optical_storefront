@@ -2,11 +2,14 @@
 
 Qué rama alimenta cada entorno, cómo elige el storefront su backend y qué impide que la tienda en vivo hable con staging. Escrito tras el incidente del 27 oct 2026: una URL de staging fijada en una rama llegó a `develop` y durante horas la tienda real mandó carrito, pago, pedidos y la medición con IA del probador al backend (y a la base de datos) de staging.
 
-> **10-nov-2026 — un solo backend.** El dueño decidió que la tienda online y el
-> panel compartan el backend del panel. Los pasos (dominios en Coolify, clave
-> publicable en Vercel, Stripe) y lo que cambia están en
-> [TIENDA-ONLINE-UNIFICADA.md](TIENDA-ONLINE-UNIFICADA.md). Hasta que se
-> ejecuten, la tabla de abajo sigue siendo la situación real.
+> **11-nov-2026 — un solo backend.** `www.rubilens.com` ya no usa el backend de
+> producción: desde el 8-nov su proyecto de Vercel lleva
+> `BACKEND_TARGET_OVERRIDE=staging` (PR #5 de `develop`, decisión del dueño) y
+> habla con el backend del panel por `/medusa-staging`. El backend de `main`
+> está caído y la tienda no lo necesita. La tabla de abajo describe la regla
+> por rama; el interruptor la salta para ese proyecto. Estado real, lo que
+> falta (Stripe en vivo en el backend del panel) y cómo volver atrás:
+> [TIENDA-ONLINE-UNIFICADA.md](TIENDA-ONLINE-UNIFICADA.md).
 
 ## Ramas y entornos
 
