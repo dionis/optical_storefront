@@ -15,8 +15,8 @@ servidores reales**: eso es el paso 11 de `docs/TIENDA-ONLINE-UNIFICADA.md`.
 |---|---|
 | Backend: `tsc --noEmit` | sin errores |
 | Backend: `eslint src tests` | 0 errores (12 avisos anteriores) |
-| Backend: `jest --runInBand` | **91 suites / 1551 pruebas** (antes 89 / 1530) |
-| Diccionario (`check-i18n`) | 6880 claves × 2 idiomas |
+| Backend: `jest --runInBand` | **92 suites / 1562 pruebas** (con los cuatro commits de Eyewear Dev del 10-nov ya debajo) |
+| Diccionario (`check-i18n`) | 6882 claves × 2 idiomas |
 | `check-vercel-config`, `check-tenant` | OK |
 | Excel (`test-xlsx`) | 20 |
 | Storefront: `vite build` | OK |
