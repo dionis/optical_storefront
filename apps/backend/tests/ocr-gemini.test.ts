@@ -61,7 +61,11 @@ describe("resolveOcrProvider", () => {
 
 describe("Gemini request and response", () => {
   it("sends the image inline with a JSON response schema", () => {
-    const body = buildGeminiRequest("SYS", "image/jpeg", "AAAA") as any;
+    const body = buildGeminiRequest("SYS", "image/jpeg", "AAAA") as unknown as {
+      systemInstruction: { parts: Array<{ text: string }> };
+      contents: Array<{ parts: unknown[] }>;
+      generationConfig: { responseMimeType: string; responseSchema: { required: string[] } };
+    };
     expect(body.systemInstruction.parts[0].text).toBe("SYS");
     expect(body.contents[0].parts[0]).toEqual({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } });
     expect(body.generationConfig.responseMimeType).toBe("application/json");
