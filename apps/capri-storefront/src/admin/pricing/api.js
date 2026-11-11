@@ -570,6 +570,15 @@ export async function deleteLensCell(code, material, finish) {
   forgetPriceCaches();
   return data;
 }
+/**
+ * Mostrar u ocultar una celda de lente (un trabajo que por ahora no se hace):
+ * conserva su precio y su costo, pero ni la caja ni la web la ofrecen.
+ */
+export async function setLensCellActive(code, material, finish, active) {
+  const data = await post(`/admin/pricing/lens-designs/${seg(code)}/cells/active`, { material, finish: finish || "stock", active: Boolean(active) });
+  forgetPriceCaches();
+  return data;
+}
 /** Todos los materiales de la lista maestra (para el selector). */
 export async function fetchLensMaterials() {
   try {

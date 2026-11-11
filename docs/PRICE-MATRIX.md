@@ -762,3 +762,25 @@ configurado, disco local si no. Solo dueño/superadmin (403
 - Los grupos de diseño llevan `design` (categoría, nombres, ADD, gama, para
   quién) para el diálogo de edición. Pruebas: `tests/lens-design.test.ts` y
   la QA local t25.
+
+### Lentes: mostrar u ocultar una celda (11-nov-2026)
+
+Cada fila de la sección Lentes (diseño × material × acabado) lleva un
+interruptor. Apagada (`lens_base_price.is_active = false`), la celda es un
+trabajo que por ahora no se hace:
+
+- sigue en la matriz del dueño, atenuada y con la etiqueta «Oculto», con su
+  precio, su costo y los precios y descuentos de cada tienda intactos;
+- no sale en la lista que leen la caja (`GET /admin/pos/lens-matrix`) ni la
+  web (`GET /store/lens-config/matrix`), ni en las listas heredadas;
+- una cotización que la pida se rechaza como una celda sin precio
+  (`finish_unavailable` en caja, 400 en la web);
+- las ventas ya hechas conservan sus cifras; al encenderla vuelve igual.
+
+`POST /admin/pricing/lens-designs/:code/cells/active { material, finish, active }`
+(dueño y superadmin; auditado como `catalog.update`). Borrar la fila (papelera)
+sigue existiendo y es otra cosa: quita la celda y los precios de tienda.
+
+Las acciones de una fila y de la cabecera de un diseño (añadir material,
+editar, borrar) están a la vista como iconos (`matrix/RowActions.jsx`); el menú
+«⋯» queda solo en marcas y modelos.

@@ -27,6 +27,8 @@ export interface LensMatrixBaseCell {
   /** Absent only on a database that has not run the finish migration (the row is the cell's only finish). */
   finish?: LensFinish;
   price_cents: number;
+  /** Only with `includeHidden` (the owner's matrix): the cell is switched off, not offered anywhere. */
+  hidden?: true;
 }
 
 export type LensMatrixRow = Record<string, unknown>;
@@ -45,6 +47,13 @@ const cents = (v: unknown): number => {
   return Number.isFinite(x) ? Math.round(x) : 0;
 };
 
+/**
+ * A lens cell the owner switched off (`lens_base_price.is_active` false,
+ * UpgradeLensCellActive11): the shop does not do that work for now. It is not
+ * offered at the till or on the web and is never quoted. Absent column = on.
+ */
+export const isHiddenLensCell = (row: { is_active?: unknown } | LensMatrixRow): boolean => (row as { is_active?: unknown })["is_active"] === false;
+
 /** The public face of a `lens_base_price` row: codes, finish and price. Never the cost. */
 export function publicBaseCell(row: LensMatrixRow): LensMatrixBaseCell {
   const finish = parseLensFinish(row["finish"]);
@@ -53,6 +62,7 @@ export function publicBaseCell(row: LensMatrixRow): LensMatrixBaseCell {
     material_code: String(row["material_code"] ?? ""),
     ...(finish ? { finish } : {}),
     price_cents: cents(row["price_cents"]),
+    ...(isHiddenLensCell(row) ? { hidden: true as const } : {}),
   };
 }
 
@@ -73,8 +83,12 @@ export function publicOptionRow(row: LensMatrixRow): LensMatrixRow {
 /** Lab-cost columns of the option tables: never on the public matrix. */
 export const PRIVATE_COST_COLUMNS: ReadonlySet<string> = new Set(["cost_cents", "cost_sv_cents", "cost_bifocal_cents", "cost_prog_cents"]);
 
-/** The master list, straight from the lens-config tables. */
-export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {
+/**
+ * The master list, straight from the lens-config tables. Cells the owner
+ * switched off are left out — this is what the till and the web offer —
+ * unless `includeHidden` (the owner's matrix, where they carry `hidden`).
+ */
+export async function loadLensMatrix(pg: Knex, opts: { includeHidden?: boolean } = {}): Promise<LensMatrixPayload> {
   // lens_treatment_price may not exist yet (before its migration); if the query
   // fails we answer [] so the storefront keeps its bundled fallback table.
   const treatmentPrices = pg("lens_treatment_price").whereNull("deleted_at").catch(() => [] as LensMatrixRow[]);
@@ -84,7 +98,9 @@ export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {
     pg("lens_material").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
     pg("lens_base_price")
       .whereNull("deleted_at")
-      .select("design_code", "material_code", "finish", "price_cents")
+      .select("design_code", "material_code", "finish", "price_cents", "is_active")
+      // Before the is_active migration the column is missing: same rows, all on.
+      .catch(() => pg("lens_base_price").whereNull("deleted_at").select("design_code", "material_code", "finish", "price_cents"))
       // Before the finish migration the column is missing: same rows, no finish.
       .catch(() => pg("lens_base_price").whereNull("deleted_at").select("design_code", "material_code", "price_cents")),
     pg("lens_photo_option").whereNull("deleted_at").where({ is_active: true }).orderBy("sort", "asc"),
@@ -95,7 +111,7 @@ export async function loadLensMatrix(pg: Knex): Promise<LensMatrixPayload> {
   return {
     designs: designs as LensMatrixRow[],
     materials: materials as LensMatrixRow[],
-    base_prices: (baseRows as LensMatrixRow[]).map(publicBaseCell),
+    base_prices: (baseRows as LensMatrixRow[]).filter((r) => opts.includeHidden || !isHiddenLensCell(r)).map(publicBaseCell),
     photos: (photos as LensMatrixRow[]).map(publicOptionRow),
     ars: (ars as LensMatrixRow[]).map(publicOptionRow),
     treatment_prices: treatment_prices as LensMatrixRow[],

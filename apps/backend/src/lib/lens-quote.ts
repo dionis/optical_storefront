@@ -1,5 +1,6 @@
 import type { Knex } from "@mikro-orm/knex";
 import { cellForFinish, LensFinishError, resolveLensFinish, type LensFinish } from "./lens-finish";
+import { isHiddenLensCell } from "./lens-matrix";
 import { arGroupServes } from "./pos-lens-rules";
 import { applyStoreLensBreakdown, loadStoreLensPricesPg } from "./pricing-overview";
 
@@ -118,7 +119,10 @@ export async function computeLensBreakdown(
   // with no cell for that finish is not quoted at 0: the seller asked for a
   // lens the list does not price, and the POS must say so (`finish_unavailable`).
   const finish = resolveLensFinish(selection.finish ?? null, category);
-  const cell = cellForFinish(baseRows as Array<{ finish?: unknown; price_cents?: number | null; cost_cents?: number | null }>, finish);
+  // A cell the owner switched off is a work the shop does not do for now: it
+  // is refused exactly like a cell with no price, never quoted.
+  const offered = (baseRows as Array<{ finish?: unknown; price_cents?: number | null; cost_cents?: number | null; is_active?: unknown }>).filter((r) => !isHiddenLensCell(r));
+  const cell = cellForFinish(offered, finish);
   if (selection.material_code && (!cell || cell.price_cents == null)) {
     throw new LensFinishError(selection.design_code, selection.material_code, finish);
   }

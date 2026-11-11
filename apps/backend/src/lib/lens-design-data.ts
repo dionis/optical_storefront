@@ -173,6 +173,36 @@ export async function addLensCell(container: MedusaContainer, designCode: string
 }
 
 /**
+ * Shows or hides a lens cell (`lens_base_price.is_active`): the shop does, or
+ * for now does not do, that work. Nothing else changes — the price, the lab
+ * cost and every store's price and discount stay — so switching it back on
+ * restores the cell exactly. Audited as `catalog.update`.
+ */
+export async function setLensCellActive(
+  container: MedusaContainer,
+  designCode: string,
+  materialCode: string,
+  finish: LensFinish,
+  active: boolean,
+  actorId: string | null
+): Promise<{ key: string; active: boolean } | { reason: string }> {
+  const design = await findDesign(container, designCode);
+  if (!design) return { reason: "design_not_found" };
+  const svc = svcOf(container);
+  const rows = (await svc.listLensBasePrices({ design_code: designCode, material_code: materialCode } as never)) as unknown as Row[];
+  const cell = rows.find((r) => !r["deleted_at"] && cellMatchesFinish(r as { finish?: unknown }, finish));
+  if (!cell) return { reason: "cell_not_found" };
+  const key = lensBaseKey(designCode, materialCode, finish, String(design["category"] ?? ""));
+  const before = cell["is_active"] !== false;
+  if (before !== active) {
+    await svc.updateLensBasePrices({ id: String(cell["id"]), is_active: active } as never);
+    await recordAudit(container, { actorId, action: "catalog.update", entity: "lens_base_price", entityId: key, before: { is_active: before }, after: { is_active: active } });
+    invalidatePriceCaches();
+  }
+  return { key, active };
+}
+
+/**
  * `DELETE /admin/pricing/lens-designs/:code/cells?material=&finish=`: the cell
  * stops being offered (soft delete; past sales keep their figures), with the
  * stores' own prices and discounts of it. Reasons: `design_not_found`, `cell_not_found`.

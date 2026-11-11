@@ -102,6 +102,18 @@
 </section>
 
 <section>
+  <h2>11-nov-2026 — Lentes: mostrar u ocultar un trabajo, y acciones a la vista</h2>
+  <p>Pedido del dueño sobre Productos y precios → Lentes: «puede que en algún momento no se haga alguno de estos trabajos». Cada celda (diseño × material × acabado) lleva un <b>interruptor</b>: apagada, conserva su precio, su costo y los precios de cada tienda, pero <b>no se ofrece ni en caja ni en la web</b> y no se puede cotizar; al encenderla vuelve tal como estaba. La papelera, el lápiz y «añadir» dejan de esconderse en el menú «⋯» (solo asomaba al pasar el ratón) y quedan a la vista en las filas de lentes y tratamientos y en la cabecera de cada diseño.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td>Columna <code>lens_base_price.is_active</code>; una celda apagada sale de la lista de la caja y de la web y la cotización la rechaza (<code>finish_unavailable</code>)</td><td><span class="tag ok">Listo</span></td><td><code>UpgradeLensCellActive11</code>, <code>lib/lens-matrix.ts</code> (<code>isHiddenLensCell</code>, <code>includeHidden</code>), <code>lib/lens-quote.ts</code>, <code>lib/lens-compat.ts</code></td></tr>
+    <tr><td>Encender / apagar (solo dueño y superadmin, auditado)</td><td><span class="tag ok">Listo</span></td><td><code>POST /admin/pricing/lens-designs/:code/cells/active</code>, <code>lib/lens-design-data.ts</code> (<code>setLensCellActive</code>)</td></tr>
+    <tr><td>Matriz: interruptor por fila, etiqueta «Oculto», fila atenuada; iconos de añadir / editar / borrar a la vista</td><td><span class="tag ok">Listo</span></td><td><code>pricing/PriceMatrix.jsx</code>, <code>pricing/matrix/RowActions.jsx</code>, <code>pricing/price-matrix.css</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 95 suites / 1589; diccionario 6897 claves × 2. QA local: 9 comprobaciones (ocultar, lista de la web y de la caja, cotización rechazada, vendedor sin permiso, volver a mostrar) y el interruptor usado desde la pantalla en escritorio, tableta y teléfono.</p>
+</section>
+
+<section>
   <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
   <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
 

@@ -48,7 +48,7 @@ import { buildStyledXlsx, downloadBytes, readXlsx } from "../exportXlsx.js";
 import { useRegisterExport } from "../GlobalFilterBar.jsx";
 import Icon from "../icons.jsx";
 import {
-  deleteCatalogBrand, deleteCatalogFrame, deleteLensCell, deleteLensDesign, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, updateCatalogBrand, wasArchived,
+  deleteCatalogBrand, deleteCatalogFrame, deleteLensCell, deleteLensDesign, deleteTreatment, fetchCatalogBrands, fetchMatrix, importMatrix, saveMatrixCell, setLensCellActive, updateCatalogBrand, wasArchived,
 } from "./api.js";
 import NumCell from "./matrix/NumCell.jsx";
 import BrandDialog, { knownErr } from "./matrix/BrandDialog.jsx";
@@ -58,6 +58,7 @@ import LensDesignDialog from "./matrix/LensDesignDialog.jsx";
 import LensCellDialog from "./matrix/LensCellDialog.jsx";
 import ImportDialog from "./matrix/ImportDialog.jsx";
 import MoreMenu from "./matrix/MoreMenu.jsx";
+import RowActions from "./matrix/RowActions.jsx";
 import { BrandLogo, Thumb } from "./matrix/Media.jsx";
 import {
   MATRIX_SECTIONS, brandCell, brandOff, brandScope, costTone, orderOff, rowHiddenSome, groupOff, filterGroups, finalCents, groupLabel, groupStats, isBrandGroup, marginOf,
@@ -376,6 +377,27 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       setGroups((list) => list.filter((x) => x.key !== g.key));
       toast({ tone: wasArchived(res) ? "info" : "success", title: t(wasArchived(res) ? "adm.pm.lens.archived" : "adm.pm.lens.deleted", { name }) });
     } catch (e) {
+      toast({ tone: "error", title: errTitle(e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  /**
+   * Show or hide a lens cell: a work the shop does not do for now is switched
+   * off, not deleted — its prices and cost stay for when it comes back.
+   */
+  const toggleLensCell = async (row) => {
+    if (busy) return;
+    const next = row.active === false;
+    const name = rowTitle(row, t, lang);
+    setBusy(`act:${row.key}`);
+    setGroups((g) => patchCell(g, row.key, null, { active: next }));
+    try {
+      await setLensCellActive(row.design_code, row.material_code, row.finish, next);
+      toast({ tone: "success", title: t(next ? "adm.pm.lens.shown" : "adm.pm.lens.hidden", { name }) });
+    } catch (e) {
+      setGroups((g) => patchCell(g, row.key, null, { active: !next }));
       toast({ tone: "error", title: errTitle(e) });
     } finally {
       setBusy("");
@@ -725,12 +747,12 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                           />
                         )}
                         {section === "lenses" && g.kind === "design" && (
-                          <MoreMenu
+                          <RowActions
                             label={t("adm.pm.lens.menu", { name: label })}
-                            items={[
+                            actions={[
                               { key: "add", icon: "plus", label: t("adm.pm.lens.menuAddMaterial"), onSelect: () => setDialog({ type: "lensCell", group: g }) },
                               { key: "edit", icon: "edit", label: t("adm.pm.lens.menuEdit"), onSelect: () => setDialog({ type: "lensDesign", group: g }) },
-                              { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.menuDelete"), hint: t("adm.pm.lens.menuDeleteHint"), disabled: busy === `del:${g.key}`, onSelect: () => removeDesign(g) },
+                              { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.menuDelete"), disabled: busy === `del:${g.key}`, onSelect: () => removeDesign(g) },
                             ]}
                           />
                         )}
@@ -819,7 +841,9 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                     const ct = costTone(r.cost_source);
                     const title = rowTitle(r, t, lang);
                     const draft = r.status && r.status !== "published";
-                    const offRow = isFrames && ri >= (g.offAt ?? g.rows.length);
+                    // A lens cell the owner switched off: listed, dimmed, not offered anywhere.
+                    const lensOff = r.kind === "lens" && r.active === false;
+                    const offRow = (isFrames && ri >= (g.offAt ?? g.rows.length)) || lensOff;
                     // Separator before the first model sold nowhere (not when the whole group is off).
                     const sep = isFrames && ri > 0 && ri === g.offAt;
                     return (
@@ -840,6 +864,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                                 {draft && <em className="pm-draft">{t("adm.pm.draft")}</em>}
                                 {isNewModel(r) && <em className="pm-new">{t("adm.pm.new")}</em>}
                                 {r.available === false && <em className="pm-draft" title={t("adm.pm.digitalOffHint")}>{t("adm.pm.digitalOff")}</em>}
+                                {lensOff && <em className="pm-draft pm-hidden-tag" title={t("adm.pm.lens.hiddenHint")}><Icon name="eyeOff" size={11} /> {t("adm.pm.lens.hiddenTag")}</em>}
                               </small>
                             </span>
                             {isFrames && r.product_id && (
@@ -853,19 +878,31 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
                               />
                             )}
                             {section === "lenses" && r.kind === "lens" && r.available !== false && (
-                              <MoreMenu
+                              <RowActions
                                 label={t("adm.pm.lens.rowMenu", { name: title })}
-                                items={[
-                                  { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.cellDelete"), hint: t("adm.pm.lens.cellDeleteHint"), disabled: busy === `del:${r.key}`, onSelect: () => removeLensCell(r) },
+                                actions={[
+                                  { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.lens.cellDelete"), disabled: busy === `del:${r.key}`, onSelect: () => removeLensCell(r) },
                                 ]}
-                              />
+                              >
+                                {/* Mostrar u ocultar: un trabajo que por ahora no se hace se apaga, no se borra. */}
+                                <label className="pm-sw pm-row-sw" title={t(lensOff ? "adm.pm.lens.hiddenHint" : "adm.pm.lens.shownHint")}>
+                                  <input
+                                    type="checkbox"
+                                    role="switch"
+                                    checked={!lensOff}
+                                    disabled={busy === `act:${r.key}`}
+                                    onChange={() => toggleLensCell(r)}
+                                    aria-label={t("adm.pm.lens.visibleAria", { name: title })}
+                                  />
+                                </label>
+                              </RowActions>
                             )}
                             {section === "treatments" && (
-                              <MoreMenu
+                              <RowActions
                                 label={t("adm.pm.menu.treat", { name: title })}
-                                items={[
+                                actions={[
                                   { key: "edit", icon: "edit", label: t("adm.pm.menu.editTreat"), onSelect: () => setDialog({ type: "treatment", row: r }) },
-                                  { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.menu.deleteTreat"), hint: t("adm.pm.menu.deleteTreatHint"), disabled: busy === `del:${r.key}`, onSelect: () => removeTreatment(r) },
+                                  { key: "del", icon: "trash", tone: "danger", label: t("adm.pm.menu.deleteTreat"), disabled: busy === `del:${r.key}`, onSelect: () => removeTreatment(r) },
                                 ]}
                               />
                             )}

@@ -81,6 +81,8 @@ export const LensBasePrice = model.define("lens_base_price", {
   finish: model.text().default("stock"),
   price_cents: model.number().default(0),
   cost_cents: model.number().nullable(),
+  /** false = hidden: the shop does not do this work for now (not offered at the till or on the web). */
+  is_active: model.boolean().default(true),
 });
 
 /** Photochromic / Transitions add-on, priced per design category (null = N/A). */

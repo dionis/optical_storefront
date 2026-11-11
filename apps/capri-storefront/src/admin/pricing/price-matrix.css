@@ -155,6 +155,22 @@
 .pm-sw.big input::after { width: 18px; height: 18px; top: 3px; left: 3px; }
 .pm-sw.big input:checked::after { transform: translateX(16px); }
 
+/* Acciones a la vista de una fila o de un grupo (RowActions.jsx): el interruptor
+   de mostrar/ocultar, editar, añadir y la papelera. Siempre visibles: en una
+   tableta no hay ratón que las haga asomar. */
+.pm-acts { flex: none; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+.pm-act { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--adm-muted); cursor: pointer;
+  transition: background .15s, color .15s, box-shadow .15s; }
+.pm-act:hover { background: var(--adm-surface); color: var(--adm-ink); box-shadow: inset 0 0 0 1px var(--adm-line); }
+.pm-act.danger:hover { color: var(--adm-red-dark, #b42318); background: color-mix(in srgb, var(--adm-red, #dc2626) 10%, var(--adm-surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--adm-red, #dc2626) 35%, transparent); }
+.pm-act:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 1px; }
+.pm-act:disabled { opacity: .4; cursor: default; }
+.pm-row-sw { margin-right: 4px; }
+.pm-row-sw input:checked { background: var(--adm-green, #16a34a); }
+/* Una celda de lente apagada: se sigue viendo (para volver a encenderla), atenuada. */
+.pm-hidden-tag { display: inline-flex; align-items: center; gap: 3px; }
+.pm-row.is-off:not(.has-thumb) td .pm-cell { opacity: .55; }
+
 /* Menú ⋯ */
 .pm-more { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--adm-muted); cursor: pointer;
   opacity: .5; transition: opacity .15s, background .15s, color .15s; }
@@ -427,6 +443,7 @@
 @media (pointer: coarse) {
   .pm { --pm-row: 42px; --pm-row-t: 48px; --pm-gh: 54px; }
   .pm-more { opacity: 1; width: 36px; height: 36px; }
+  .pm-act { width: 34px; height: 34px; }
   .pm-x { opacity: 1; width: 20px; height: 20px; }
   .pm-eye { width: 24px; height: 24px; top: calc(50% - 12px); left: 3px; }
   .pm-cell.has-eye .pm-in { padding-left: 30px; }
@@ -484,3 +501,19 @@
 /* La tienda elegida en el filtro global se resalta (ya no deja una sola columna). */
 .pm-store.is-picked { border-top-width: 6px; background: color-mix(in srgb, var(--st) 16%, var(--adm-surface)) !important; }
 .pm-store.is-picked .pm-store-n { font-weight: 900; }
+
+/* Lentes y tratamientos llevan sus acciones a la vista (interruptor, editar,
+   papelera): en tableta y teléfono la columna del artículo se ensancha lo
+   justo para que el nombre no se quede en tres letras, y el nombre puede
+   ocupar dos líneas. La tabla ya se desplaza de lado con el artículo fijo. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .pm[data-section="lenses"], .pm[data-section="treatments"] { --pm-art: 250px; }
+}
+@media (max-width: 760px) {
+  .pm[data-section="lenses"], .pm[data-section="treatments"] { --pm-art: 196px; }
+  .pm[data-section="lenses"] .pm-row .pm-art-t b, .pm[data-section="treatments"] .pm-row .pm-art-t b { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 11.5px; line-height: 1.15; }
+  .pm[data-section="lenses"] .pm-row .pm-art-t small { font-size: 0; }
+  .pm[data-section="lenses"] .pm-row .pm-art-t small em { font-size: 9.5px; }
+  .pm[data-section="lenses"] .pm-acts, .pm[data-section="treatments"] .pm-acts { margin-left: 0; gap: 0; }
+  .pm[data-section="lenses"] .pm-act, .pm[data-section="treatments"] .pm-act { width: 30px; height: 32px; }
+}

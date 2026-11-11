@@ -352,6 +352,12 @@ export interface MatrixRow {
    * goes on top as usual). Absent = an existing cell.
    */
   available?: boolean;
+  /**
+   * Lenses only: `false` on a cell the owner switched off (`lens_base_price.is_active`):
+   * the shop does not do that work for now. Its prices stay, but neither the
+   * till nor the web offers it. Absent on the other sections.
+   */
+  active?: boolean;
   /** The chain's own price of the article, in cents (frames: `masterLinePrice`-free base or the owner's price; lenses: the master list). */
   master_cents?: number | null;
   /** Cost viewers only (`redactMatrixCosts`). */
@@ -815,7 +821,7 @@ export function storeLensCell(
 export interface LensSectionInput {
   designs: ReadonlyArray<{ code: string; label_es: string; label_en: string; category: string; requires_add?: boolean; tier?: string | null; use_es?: string | null; use_en?: string | null }>;
   materials: ReadonlyArray<{ code: string; label_es: string; label_en: string }>;
-  cells: ReadonlyArray<{ design_code: string; material_code: string; finish: LensFinish | null; price_cents: number; cost_cents: number | null }>;
+  cells: ReadonlyArray<{ design_code: string; material_code: string; finish: LensFinish | null; price_cents: number; cost_cents: number | null; active?: boolean }>;
   /** Each store's `lens_store_price` rows. */
   storeRows: ReadonlyMap<string, LensStorePriceLike[]>;
 }
@@ -864,6 +870,7 @@ export function buildLensGroups(input: LensSectionInput, stores: readonly Matrix
           finish,
           category: d.category,
           master_cents: c.price_cents,
+          active: c.active !== false,
           stores: lensCells("lens", key, c.price_cents, stores, input.storeRows, discounts),
         };
         if (withCosts) {

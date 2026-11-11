@@ -396,7 +396,8 @@ async function loadLensSection(container: MedusaContainer, stores: MatrixStore[]
   const pg = pgOf(container);
   const ids = stores.map((s) => s.id);
   const [matrix, costs, storeRows, discounts] = await Promise.all([
-    loadLensMatrix(pg),
+    // The owner's matrix lists the cells he switched off too (with their switch).
+    loadLensMatrix(pg, { includeHidden: true }),
     withCosts
       ? (pg("lens_base_price").whereNull("deleted_at").select("design_code", "material_code", "finish", "cost_cents") as Promise<Array<Record<string, unknown>>>).catch(
           () => [] as Array<Record<string, unknown>>
@@ -416,6 +417,7 @@ async function loadLensSection(container: MedusaContainer, stores: MatrixStore[]
         finish: c.finish ?? null,
         price_cents: c.price_cents,
         cost_cents: costOf.get(`${c.design_code}|${c.material_code}|${c.finish ?? ""}`) ?? null,
+        active: !c.hidden,
       })),
       storeRows,
     },
