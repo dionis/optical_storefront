@@ -132,7 +132,7 @@ function Part({ title, icon, onEdit, wide, children }) {
   );
 }
 
-export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, approval, delivery, notifyEmail, receiptDetail, store, terminal, sellerCode, money, onEdit }) {
+export default function PosSaleSummary({ customer, customerId, quote, lines, catalog, rx, noRx, approval, delivery, notifyEmail, notifySms = false, receiptDetail, store, terminal, sellerCode, money, onEdit }) {
   const { t, lang } = useLang();
   const name = [customer.first_name, customer.last_name].filter(Boolean).join(" ");
   const age = ageOf(customer.birth_date);
@@ -177,7 +177,7 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
 
         <Part title={t("adm.pos.step.customer")} icon="user" onEdit={() => onEdit("customer")}>
           <p><b>{name}</b>{customerId ? <small className="muted"> · {t("adm.pos.cust.existing")}</small> : null}</p>
-          <p>{customer.email}<br />{customer.phone}</p>
+          <p>{customer.email ? <>{customer.email}<br /></> : null}{customer.phone}</p>
           {birth && <p className="muted">{birth}{age !== null ? ` · ${t("adm.pos.sum.age", { n: age })}` : ""}</p>}
           {address && <p className="muted">{address}</p>}
         </Part>
@@ -201,6 +201,7 @@ export default function PosSaleSummary({ customer, customerId, quote, lines, cat
         <Part title={t("adm.pos.sum.sale")} icon="store">
           <p>{delivery === "ship" ? t("adm.pos.pay.ship") : t("adm.pos.pay.pickup")}{delivery === "ship" && address ? `: ${address}` : ""}</p>
           <p className="muted">{notifyEmail ? t(!receiptDetail ? "adm.pos.sum.receiptTo" : !noRx && eyeRows.length ? "adm.pos.sum.receiptToRx" : "adm.pos.sum.receiptToPhotos", { email: customer.email }) : t("adm.pos.sum.noReceipt")}</p>
+          {notifySms && <p className="muted">{t("adm.pos.sum.smsTo", { phone: customer.phone })}</p>}
           <p className="muted">{[store && `${store.code} · ${store.name}`, terminal?.code, sellerCode].filter(Boolean).join(" · ")}</p>
         </Part>
 

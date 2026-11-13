@@ -114,6 +114,20 @@
 </section>
 
 <section>
+  <h2>12-nov-2026 — Nueva venta: correo opcional, avisos con interruptor, buscador de monturas, fotos de cámara y receta sin barra</h2>
+  <p>Cinco pedidos del dueño sobre el trabajo diario del vendedor.</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>El correo del paciente es opcional</b> al meter un trabajo; solo lo exige una venta hecha en la tienda online. Sin correo no se envía nada por correo y el paciente se busca por teléfono.</td><td><span class="tag ok">Listo</span></td><td><code>lib/pos.ts</code> (<code>cleanCustomer</code>, <code>requireEmail</code>), <code>lib/pos-data.ts</code>, <code>lib/pos-sale-admin.ts</code>, <code>src/data/fieldRules.js</code>, <code>PosSale.jsx</code></td></tr>
+    <tr><td><b>Avisos al paciente con interruptor</b> en el paso de cobro: «Recibo y avisos por correo» y «Avisar por SMS» (apagado por defecto), para no saturar a nadie.</td><td><span class="tag ok">Listo</span></td><td><code>PosSale.jsx</code> (<code>.pos-notify</code>), <code>POST /admin/pos/sales</code> (<code>notify_sms</code>), <code>order.metadata.notify_email / notify_sms / phone</code></td></tr>
+    <tr><td><b>Desplegable de monturas</b>: la lista de resultados ya no queda tapada por la barra Atrás/Siguiente ni se sale de la pantalla; sube arriba y mide el hueco que hay (teclado incluido).</td><td><span class="tag ok">Listo</span></td><td><code>PosFrameSearch.jsx</code>, <code>admin.css</code> (<code>.ac-open</code>)</td></tr>
+    <tr><td><b>Fotos de montura tomadas con la cámara</b>: una captura sin tipo de archivo (algunas tabletas Android) se rechazaba como «no es una imagen»; ahora se reconoce por sus bytes. Las fotos grandes se reducen a 1600 px antes de subir.</td><td><span class="tag ok">Listo</span></td><td><code>src/lib/imagePrep.js</code> (<code>withSniffedType</code>), <code>pricing/matrix/ImageInput.jsx</code>, <code>posApi.js</code> (<code>photoDataUrl</code>)</td></tr>
+    <tr><td><b>Receta en la ficha de la venta sin barra de desplazamiento</b>: las seis columnas caben en la tarjeta (en el teléfono ocupa todo el ancho).</td><td><span class="tag ok">Listo</span></td><td><code>sale-detail.css</code> (<code>.sd-rx-grid</code>)</td></tr>
+  </table>
+  <p class="muted">Pruebas: 95 suites / 1590; diccionario 6904 claves × 2. QA local en Galaxy Tab A7 Lite, escritorio y teléfono: venta completa sin correo y con SMS, venta con correo, foto de cámara de 10 MB sin tipo (caja y catálogo), lista de monturas y ficha de venta con la receta más ancha posible.</p>
+</section>
+
+<section>
   <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
   <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
 

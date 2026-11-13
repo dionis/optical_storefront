@@ -86,11 +86,14 @@ export function addressProblems(a, { required = false, stateRequired = false } =
 }
 
 /** Cliente de una venta del punto de venta. */
-export function customerProblems(c, { requireAddress = false } = {}) {
+export function customerProblems(c, { requireAddress = false, requireEmail = false } = {}) {
   return onlyProblems({
     first_name: nameProblem(c.first_name, true),
     last_name: nameProblem(c.last_name, true),
-    email: emailProblem(c.email, true),
+    // El correo es OPCIONAL en el mostrador (dueño, 11-nov-2026): solo lo exige
+    // la tienda online (`requireEmail`). Si se escribe, tiene que ser válido.
+    // Misma regla que `cleanCustomer` en el backend (lib/pos.ts).
+    email: emailProblem(c.email, requireEmail),
     phone: phoneProblem(c.phone, true),
     // La fecha de nacimiento NO es obligatoria: en el mostrador solo se exigen
     // los datos de contacto (decisión del dueño). Si se escribe, se valida

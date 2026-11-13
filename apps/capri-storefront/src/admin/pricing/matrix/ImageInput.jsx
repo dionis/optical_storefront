@@ -10,7 +10,7 @@
 // JPEG de 1600 px (lib/imagePrep.js, la misma que usa la receta).
 import { useEffect, useId, useRef, useState } from "react";
 import { useLang } from "../../../i18n/LanguageContext.jsx";
-import { preparePrescriptionFile } from "../../../lib/imagePrep.js";
+import { preparePrescriptionFile, withSniffedType } from "../../../lib/imagePrep.js";
 import Icon from "../../icons.jsx";
 import { uploadCatalogImage } from "../api.js";
 import { BrandLogo, Thumb } from "./Media.jsx";
@@ -21,11 +21,29 @@ const DIRECT = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const isTouch = () => typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
 
-/** File → a file the server accepts, or throws an i18n key. */
-async function prepare(file) {
-  if (!file) throw new Error("adm.pm.img.badType");
-  if (DIRECT.has(file.type) && file.size <= MAX_BYTES) return file;
-  if (!String(file.type || "").startsWith("image/") && !/\.(heic|heif)$/i.test(file.name || "")) throw new Error("adm.pm.img.badType");
+/** A camera photo above this is re-encoded to a 1600 px JPEG before it travels (a tablet shot is 4–12 MB). */
+const RESIZE_ABOVE = 1.5 * 1024 * 1024;
+const IMAGE_NAME = /\.(jpe?g|png|webp|heic|heif)$/i;
+
+/**
+ * File → a file the server accepts, or throws an i18n key.
+ *
+ * A photo taken with the camera goes the same road as a chosen file, with two
+ * things a camera does that a file picker rarely does: some Android browsers
+ * hand the shot with an EMPTY mime type (it used to be refused as "not an
+ * image" before it was even tried), and the shot is several megabytes — it is
+ * reduced here so the upload is quick on the store's Wi-Fi and never meets a
+ * size limit on the way. A PNG keeps going as it is (a logo keeps its
+ * transparent background).
+ */
+async function prepare(picked) {
+  if (!picked) throw new Error("adm.pm.img.badType");
+  const file = await withSniffedType(picked);
+  const type = String(file.type || "").toLowerCase();
+  const looksImage = type.startsWith("image/") || IMAGE_NAME.test(file.name || "");
+  if (!looksImage) throw new Error("adm.pm.img.badType");
+  if (type === "image/png" && file.size <= MAX_BYTES) return file;
+  if (DIRECT.has(type) && file.size <= RESIZE_ABOVE) return file;
   const out = await preparePrescriptionFile(file);
   if (!DIRECT.has(out.type)) throw new Error("adm.pm.img.badType");
   if (out.size > MAX_BYTES) throw new Error("adm.pm.img.tooBig");

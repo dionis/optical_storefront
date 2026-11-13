@@ -30,6 +30,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse):
         code: s.code,
         name: s.name,
         color: s.color,
+        // "online" = THE online store: the only one whose sales need the patient's email.
+        kind: s.kind,
         terminals,
         payment_methods: methods.filter((m) => acceptedAt(m, s.id)).map((m) => m.code),
       });

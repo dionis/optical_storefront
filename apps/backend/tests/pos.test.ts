@@ -82,6 +82,13 @@ describe("cleanCustomer", () => {
   it("requires name, email and phone; a birth date only has to be real when given", () => {
     expect(cleanCustomer({ ...ok, last_name: "" }, NOW)).toEqual({ reason: "customer_name" });
     expect(cleanCustomer({ ...ok, email: "ana@" }, NOW)).toEqual({ reason: "customer_email" });
+    // The email is optional at the counter (owner, 11-nov-2026): none = "", and the sale goes on…
+    const noEmail = cleanCustomer({ ...ok, email: "" }, NOW);
+    expect("customer" in noEmail && noEmail.customer.email).toBe("");
+    expect("customer" in cleanCustomer({ ...ok, email: undefined }, NOW)).toBe(true);
+    // …except in THE online store, where it is how the patient hears from us.
+    expect(cleanCustomer({ ...ok, email: "" }, NOW, "UTC", { requireEmail: true })).toEqual({ reason: "customer_email" });
+    expect("customer" in cleanCustomer(ok, NOW, "UTC", { requireEmail: true })).toBe(true);
     expect(cleanCustomer({ ...ok, phone: "12" }, NOW)).toEqual({ reason: "customer_phone" });
     expect(cleanCustomer({ ...ok, birth_date: "1980-02-30" }, NOW)).toEqual({ reason: "customer_birth_date" });
     expect(cleanCustomer({ ...ok, birth_date: "2027-01-01" }, NOW)).toEqual({ reason: "customer_birth_date" });

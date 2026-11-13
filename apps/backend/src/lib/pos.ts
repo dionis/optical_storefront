@@ -220,6 +220,7 @@ export interface PosCustomerInput {
 export interface PosCustomer {
   first_name: string;
   last_name: string;
+  /** "" when the patient gave none (optional at the counter). */
   email: string;
   phone: string;
   /** YYYY-MM-DD, or null: the counter only requires the contact data (owner's decision, same rule as `customerProblems` in the panel). */
@@ -231,13 +232,21 @@ export interface PosCustomer {
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 /**
- * The customer data the owner asked for: full name, email and phone,
- * required; the birth date only validated when given (the panel treats it as
+ * The customer data the owner asked for: full name and phone, required; the
+ * EMAIL is optional at the counter (owner, 11-nov-2026: «solo es obligatorio
+ * el email para la tienda online») — validated when given, "" when not — and
+ * required only with `requireEmail` (a sale made in THE online store, whose
+ * receipts and stage notices travel by mail); the birth date only validated when given (the panel treats it as
  * optional — `customerProblems` in src/data/fieldRules.js — and both sides
  * must agree, or the sale fails at the very last step); the address only
  * when the glasses are shipped.
  */
-export function cleanCustomer(input: PosCustomerInput | null | undefined, now = new Date(), timeZone = "UTC"): { reason: string } | { customer: PosCustomer } {
+export function cleanCustomer(
+  input: PosCustomerInput | null | undefined,
+  now = new Date(),
+  timeZone = "UTC",
+  opts: { requireEmail?: boolean } = {}
+): { reason: string } | { customer: PosCustomer } {
   const c = input ?? {};
   // Longer than allowed is refused, not cut: a silently shortened email or phone is a wrong one.
   const first_name = text(c.first_name, FIELD_LIMITS.name + 1);
@@ -245,7 +254,8 @@ export function cleanCustomer(input: PosCustomerInput | null | undefined, now = 
   if (!isValidName(first_name) || !isValidName(last_name)) return { reason: "customer_name" };
 
   const email = text(c.email, FIELD_LIMITS.email + 1).toLowerCase();
-  if (!isValidEmail(email)) return { reason: "customer_email" };
+  // Optional: a patient without email is a patient. A typed one must be a real address.
+  if (email ? !isValidEmail(email) : opts.requireEmail) return { reason: "customer_email" };
 
   const phone = text(c.phone, FIELD_LIMITS.phone + 1);
   if (!isValidPhone(phone)) return { reason: "customer_phone" };

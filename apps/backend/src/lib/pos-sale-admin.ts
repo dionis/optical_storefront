@@ -212,7 +212,8 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
     await customers.updateCustomers(existing.id, {
       first_name: p.customer.first_name,
       last_name: p.customer.last_name,
-      email: p.customer.email,
+      // Optional at the counter: no email is NULL, never "" (the unique index on email would collide).
+      email: p.customer.email || null,
       phone: p.customer.phone,
       metadata: { ...(existing.metadata ?? {}), birth_date: p.customer.birth_date },
     });
@@ -226,7 +227,8 @@ export async function updateSaleDetails(container: MedusaContainer, sale: SaleRo
           ? { address_1: p.customer.address.address_1, city: p.customer.address.city, province: p.customer.address.province ?? undefined, postal_code: p.customer.address.postal_code, country_code: p.customer.address.country_code }
           : {}),
       };
-      await orders.updateOrders(order.id, { email: p.customer.email, metadata: { ...(order.metadata ?? {}), patient_phone: p.customer.phone } });
+      // `null` clears it (the column is nullable; the DTO type only knows `string`).
+      await orders.updateOrders(order.id, { email: (p.customer.email || null) as unknown as string, metadata: { ...(order.metadata ?? {}), patient_phone: p.customer.phone } });
       const ids = [order.shipping_address?.id, order.billing_address?.id].filter((v): v is string => Boolean(v));
       if (ids.length) await orders.updateOrderAddresses(ids.map((id) => ({ id, ...address })) as never);
     }

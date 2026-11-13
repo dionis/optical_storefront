@@ -326,7 +326,8 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
   const svc = container.resolve<ICustomerModuleService>(Modules.CUSTOMER);
   let existing = customerId ? (await svc.listCustomers({ id: customerId }, { take: 1 }))[0] : undefined;
   if (customerId && !existing) throw new PosError("customer_not_found", 404);
-  if (!existing) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
+  // No email given: only the phone can match (an empty email must never "find" someone).
+  if (!existing && c.email) existing = (await svc.listCustomers({ email: c.email }, { take: 1, order: { created_at: "ASC" } }))[0];
   if (!existing) {
     const ids = await customerIdsByPhone(container, c.phone);
     if (ids.length) existing = (await svc.listCustomers({ id: ids }, { take: 1, order: { created_at: "ASC" } }))[0];
@@ -339,13 +340,13 @@ async function upsertCustomer(container: MedusaContainer, c: PosCustomer, custom
       first_name: existing.first_name || c.first_name,
       last_name: existing.last_name || c.last_name,
       phone: existing.phone || c.phone,
-      email: existing.email || c.email,
+      email: existing.email || c.email || undefined,
       metadata,
     });
     return existing.id;
   }
   const created = await svc.createCustomers({
-    email: c.email,
+    email: c.email || undefined,
     first_name: c.first_name,
     last_name: c.last_name,
     phone: c.phone,
@@ -1173,6 +1174,8 @@ export interface CreateSaleInput {
   thresholds: Thresholds;
   delivery: "pickup" | "ship";
   notifyEmail: boolean;
+  /** The patient asked for the stage notices by SMS too (the till's switch). */
+  notifySms?: boolean;
   idempotencyKey: string | null;
 }
 
@@ -1418,7 +1421,7 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
       region_id: regionId,
       sales_channel_id: store.sales_channel_id,
       currency_code: "usd",
-      email: customer.email,
+      email: customer.email || undefined,
       customer_id: customerId,
       shipping_address: address,
       billing_address: address,
@@ -1434,9 +1437,12 @@ async function placeOrderAndSale(container: MedusaContainer, input: CreateSaleIn
         // Sellers module, who earns a commission (costing.ts). The till's
         // seller is a member of the staff.
         staff_code: input.sellerCode,
-        notify_email: input.notifyEmail,
-        notify_sms: false,
+        // The two switches of the pay step. No email on file = nothing to mail.
+        notify_email: input.notifyEmail && Boolean(customer.email),
+        notify_sms: input.notifySms === true,
         patient_phone: customer.phone,
+        // Where the stage SMS goes (lib/order-stage-transition.ts reads `phone`), only when asked for.
+        ...(input.notifySms === true ? { phone: customer.phone } : {}),
         delivery: input.delivery,
       },
       items: quote.lines.map((l, i) => {

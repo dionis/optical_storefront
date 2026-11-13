@@ -147,8 +147,18 @@ export async function fetchWearingPhoto(id) {
   }
 }
 
+/** Lo que el servidor guarda como foto de una montura (lib/store-frame-photo.ts, own-frame). */
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/**
+ * La foto de una montura, de la cámara o de un archivo, como `data:` URL lista
+ * para viajar con la venta: reducida a JPEG de 1600 px (una foto de tableta
+ * pesa 4–12 MB). Si el navegador no pudo leerla (un formato raro), se avisa
+ * AQUÍ en vez de mandar algo que el servidor descartaría en silencio.
+ */
 export async function photoDataUrl(file) {
   const prepared = await preparePrescriptionFile(file);
+  if (!PHOTO_TYPES.has(String(prepared?.type || "").toLowerCase())) throw new Error("adm.err.pos.photo_format");
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));

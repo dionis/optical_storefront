@@ -31,7 +31,7 @@ jest.mock("../src/lib/pos-settings", () => ({
   getPosSettings: jest.fn(async () => ({ discount_limits: {}, optical_thresholds: {} })),
 }));
 jest.mock("../src/lib/pos", () => ({
-  cleanCustomer: jest.fn(() => ({ customer: {} })),
+  cleanCustomer: jest.fn(() => ({ customer: { email: "ana@example.com" } })),
   cleanDiscountPct: jest.fn(() => ({ pct: 0 })),
   cleanLines: jest.fn(() => ({ lines: [] })),
   cleanPayments: jest.fn(() => ({ payments: [] })),
@@ -113,6 +113,15 @@ describe("POST /admin/pos/sales", () => {
     await post(sale, { receipt_detail: "true" });
     await new Promise((resolve) => setImmediate(resolve));
     expect((emailReceipt as jest.Mock).mock.calls[0][2].detailed).toBe(false);
+  });
+
+  it("a patient without email gets no receipt mail (the email is optional at the counter)", async () => {
+    const { cleanCustomer } = jest.requireMock("../src/lib/pos") as { cleanCustomer: jest.Mock };
+    cleanCustomer.mockReturnValueOnce({ customer: { email: "" } });
+    await post(sale);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(emailReceipt).not.toHaveBeenCalled();
+    expect(emitAlert).toHaveBeenCalled(); // the rest of the after-sale work still runs
   });
 
   it("a retried sale does not send anything again", async () => {

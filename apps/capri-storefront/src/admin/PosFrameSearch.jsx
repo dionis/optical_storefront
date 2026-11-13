@@ -6,7 +6,7 @@
 // Cada resultado trae además marca, fotos y ficha técnica (`brand`, `images`,
 // `specs`) y cada color su nombre y códigos: `onAdd(p, v)` recibe los dos
 // objetos enteros para que la línea de la venta los guarde (frameLineFields).
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useLayoutEffect } from "react";
 import { useLang } from "../i18n/LanguageContext.jsx";
 import Icon from "./icons.jsx";
 import { searchProducts } from "./posApi.js";
@@ -112,6 +112,35 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
 
   const showList = open && term.trim().length >= MIN_CHARS;
   useEffect(() => { onOpenChange?.(showList); }, [showList]); // eslint-disable-line react-hooks/exhaustive-deps
+  // La lista cabe SIEMPRE en lo que se ve: su alto es el hueco que queda bajo el
+  // buscador (descontando el teclado de la tableta, `visualViewport`), y si ese
+  // hueco es poco, el buscador sube primero arriba. Antes la lista medía un alto
+  // fijo y, con el buscador a media pantalla (tableta en vertical), se salía por
+  // abajo y la barra Atrás/Siguiente tapaba los primeros resultados.
+  const [listMax, setListMax] = useState(null);
+  useLayoutEffect(() => {
+    if (!showList) return undefined;
+    const box = boxRef.current;
+    if (!box) return undefined;
+    const viewH = () => { const vv = window.visualViewport; return vv ? vv.height + vv.offsetTop : window.innerHeight; };
+    const fit = () => {
+      const room = Math.round(viewH() - box.getBoundingClientRect().bottom - 14);
+      setListMax((cur) => { const next = Math.max(180, room); return cur === next ? cur : next; });
+    };
+    // Menos de media pantalla libre bajo el buscador (tableta en vertical, o el
+    // teclado abierto): el buscador sube arriba. Un fotograma después, cuando la
+    // tarjeta ya dejó su hueco de desplazamiento (`.ac-open`, admin.css).
+    let raf = 0;
+    if (viewH() - box.getBoundingClientRect().bottom < Math.max(360, viewH() * 0.5)) {
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => { box.scrollIntoView({ block: "start" }); fit(); }); });
+    }
+    fit();
+    const vv = window.visualViewport;
+    window.addEventListener("resize", fit);
+    window.addEventListener("scroll", fit, true);
+    vv?.addEventListener("resize", fit);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", fit); window.removeEventListener("scroll", fit, true); vv?.removeEventListener("resize", fit); };
+  }, [showList]);
   useEffect(() => () => onOpenChange?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="pos-ac" ref={boxRef}>
@@ -143,7 +172,7 @@ export default function PosFrameSearch({ storeId, money, onAdd, onOpenChange, on
           {state === "error" && <div className="pos-ac-note">{t("adm.pos.frame.searchFailed")}</div>}
           {state === "ok" && !hits.length && <div className="pos-ac-note">{t("adm.pos.frame.noResults", { q: term.trim() })}</div>}
           {hits.length > 0 && (
-            <ul id={listId} role="listbox" className="pos-ac-list">
+            <ul id={listId} role="listbox" className="pos-ac-list" style={listMax ? { maxHeight: listMax } : undefined}>
               {hits.map((p, i) => {
                 const unpriced = p.price == null;
                 const byCode = matchedOf(p);

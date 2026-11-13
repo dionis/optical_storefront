@@ -403,6 +403,8 @@ export default function PosSale({ me }) {
   const [notifyEmail, setNotifyEmail] = useState(true);
   // Foto y receta en el correo: se decide en cada venta, nunca se recuerda.
   const [receiptDetail, setReceiptDetail] = useState(false);
+  // Avisos al paciente por SMS (etapas del pedido): apagado salvo que lo pida.
+  const [notifySms, setNotifySms] = useState(false);
   // Foto del paciente con la montura puesta (opcional, se queda en la tienda; WearingPhoto.jsx).
   const [wear, setWear] = useState({ consent: false, photo: null });
   const [wearSaved, setWearSaved] = useState(null);
@@ -677,10 +679,13 @@ export default function PosSale({ me }) {
   // La montura que se está vendiendo, siempre a la vista en los pasos siguientes.
   const frameCards = lines.filter((l) => l.kind === "frame").map((l) => <PosFrameCard key={l.key} frame={l} money={m} compact />);
   const wornSummary = wornReady ? `${t("adm.pos.rx.od")} ${fmtEye(rxWorn.od)} · ${t("adm.pos.rx.os")} ${fmtEye(rxWorn.os)}` : t("adm.pos.worn.missing");
-  const custProblems = customerProblems(customer, { requireAddress: delivery === "ship" });
+  // El correo solo es obligatorio en la tienda online; en el mostrador es opcional.
+  const requireEmail = store?.kind === "online";
+  const hasEmail = Boolean(customer.email.trim());
+  const custProblems = customerProblems(customer, { requireAddress: delivery === "ship", requireEmail });
   const canNext = () => {
     switch (STEPS[step]) {
-      case "customer": return Object.keys(customerProblems(customer)).length === 0 && wears !== null
+      case "customer": return Object.keys(customerProblems(customer, { requireEmail })).length === 0 && wears !== null
         && (!wears || wornReady);
       case "frame": return lines.length > 0;
       case "rx":
@@ -709,7 +714,7 @@ export default function PosSale({ me }) {
     }
     if (stepName !== "customer") return;
     setShowCustErrors(true);
-    const fields = Object.keys(customerProblems(customer));
+    const fields = Object.keys(customerProblems(customer, { requireEmail }));
     if (fields.some((k) => ["address_1", "city", "state", "postal_code"].includes(k)) && addressRef.current) addressRef.current.open = true;
     requestAnimationFrame(() => document.querySelector('.pos-card [aria-invalid="true"]')?.focus());
   };
@@ -733,8 +738,9 @@ export default function PosSale({ me }) {
         payments: payRows.filter((p) => p.method_code && Number(p.amount) > 0).map(({ method_code, amount, details }) => ({ method_code, amount, details })),
         prescriptions: { new: newBody(), worn: wornBody() },
         delivery,
-        notify_email: notifyEmail,
-        receipt_detail: notifyEmail && receiptDetail,
+        notify_email: notifyEmail && hasEmail,
+        notify_sms: notifySms,
+        receipt_detail: notifyEmail && hasEmail && receiptDetail,
         idempotency_key: idem.current,
       });
       // Las fotos de la montura escrita a mano se quedan en esta pantalla: si el
@@ -854,7 +860,7 @@ export default function PosSale({ me }) {
             <div className="pos-form">
               <label>{t("adm.pos.cust.first")}<input maxLength={LIMITS.name} value={customer.first_name} onChange={setC("first_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("first_name").props} /><FieldError error={custField("first_name").problem} /></label>
               <label>{t("adm.pos.cust.last")}<input maxLength={LIMITS.name} value={customer.last_name} onChange={setC("last_name")} autoComplete="off" autoCapitalize="words" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("last_name").props} /><FieldError error={custField("last_name").problem} /></label>
-              <label>{t("adm.pos.cust.email")}<input type="email" inputMode="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
+              <label><span>{t("adm.pos.cust.email")}{!requireEmail && <small className="pos-opt"> · {t("adm.pos.cust.optional")}</small>}</span><input type="email" inputMode="email" maxLength={LIMITS.email} value={customer.email} onChange={setC("email", typedEmail)} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next" {...custField("email").props} /><FieldError error={custField("email").problem} /></label>
               <label>{t("adm.pos.cust.phone")}<input type="tel" inputMode="tel" maxLength={LIMITS.phone} value={customer.phone} onChange={setC("phone", typedPhone)} autoComplete="off" enterKeyHint="next" {...custField("phone").props} /><FieldError error={custField("phone").problem} /></label>
               <label>
                 <span className="pos-birth-lbl">
@@ -1101,7 +1107,7 @@ export default function PosSale({ me }) {
 
         {stepName === "payment" && q && (
           <>
-            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
+            <PosSaleSummary customer={customer} customerId={customerId} quote={q.quote} lines={lines} catalog={catalog} rx={rxNew} noRx={noRx} approval={approval} delivery={delivery} notifyEmail={notifyEmail && hasEmail} notifySms={notifySms} receiptDetail={receiptDetail} store={store} terminal={terminal} sellerCode={ctx.seller_code} money={m} onEdit={(s) => setStep(STEPS.indexOf(s))} />
             <dl className="pos-totals">
               <dt className="big">{t("adm.pos.price.total")}</dt><dd className="big">{m(total)}</dd>
             </dl>
@@ -1149,13 +1155,24 @@ export default function PosSale({ me }) {
             </fieldset>
             {delivery === "ship" && !(customer.address_1 && customer.city && customer.postal_code) && <div className="adm-demo-banner">{t("adm.err.pos.address_required_to_ship")}</div>}
             <WearingCaptureCard value={wear} onChange={setWear} busy={busy} />
-            <label className="pos-check"><input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} /> {t("adm.pos.pay.notify")}</label>
-            {notifyEmail && (
-              <div className="pos-receipt-detail">
-                <label className="pos-check"><input type="checkbox" checked={receiptDetail} onChange={(e) => setReceiptDetail(e.target.checked)} /> {t("adm.pos.pay.notifyDetail")}</label>
-                <small className="muted">{t(receiptDetail ? "adm.pos.pay.notifyDetailOn" : "adm.pos.pay.notifySimple")}</small>
-              </div>
-            )}
+            {/* Avisos al paciente: un interruptor por canal, para no saturar su correo ni su teléfono. */}
+            <fieldset className="pos-notify">
+              <legend>{t("adm.pos.pay.notifyTitle")}</legend>
+              <label className={`pos-switch ${hasEmail ? "" : "is-off"}`}>
+                <input type="checkbox" role="switch" checked={notifyEmail && hasEmail} disabled={!hasEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />
+                <span className="pos-switch-t"><b><Icon name="mail" size={15} /> {t("adm.pos.pay.notify")}</b><small>{hasEmail ? customer.email.trim() : t("adm.pos.pay.notifyNoEmail")}</small></span>
+              </label>
+              {notifyEmail && hasEmail && (
+                <div className="pos-receipt-detail">
+                  <label className="pos-check"><input type="checkbox" checked={receiptDetail} onChange={(e) => setReceiptDetail(e.target.checked)} /> {t("adm.pos.pay.notifyDetail")}</label>
+                  <small className="muted">{t(receiptDetail ? "adm.pos.pay.notifyDetailOn" : "adm.pos.pay.notifySimple")}</small>
+                </div>
+              )}
+              <label className="pos-switch">
+                <input type="checkbox" role="switch" checked={notifySms} onChange={(e) => setNotifySms(e.target.checked)} />
+                <span className="pos-switch-t"><b><Icon name="phone" size={15} /> {t("adm.pos.pay.notifySms")}</b><small>{customer.phone.trim() || "—"} · {t("adm.pos.pay.notifySmsHint")}</small></span>
+              </label>
+            </fieldset>
           </>
         )}
 
