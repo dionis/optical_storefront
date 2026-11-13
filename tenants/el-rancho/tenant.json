@@ -30,7 +30,7 @@
   },
   "domains": {
     "storefront": "https://opticaelrancho.com",
-    "api": "https://api-staging.161-153-9-98.sslip.io"
+    "api": "https://api.opticaelrancho.com"
   },
   "locale": {
     "default": "es",

@@ -24,8 +24,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STOREFRONT = join(ROOT, "apps", "capri-storefront");
 const PRODUCTION = "https://api.161-153-9-98.sslip.io";
-const STAGING = "https://api-staging.161-153-9-98.sslip.io";
-const STAGING_HOST = "api-staging.";
+// Óptica El Rancho's own name for the same Coolify app (13-nov-2026); the old
+// sslip.io name stays on it in Coolify for anything that still calls it.
+const STAGING = "https://api.opticaelrancho.com";
+const STAGING_HOST = new URL(STAGING).host;
 const { readManifests, tenantVercelRules, tenantProxyPath } = await import(pathToFileURL(join(ROOT, "scripts", "tenant", "routing.mjs")).href);
 const MANIFESTS = readManifests(ROOT);
 const TENANT_RULES = tenantVercelRules(MANIFESTS);

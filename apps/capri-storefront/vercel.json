@@ -11,7 +11,7 @@
     },
     {
       "source": "/medusa-staging/:path*",
-      "destination": "https://api-staging.161-153-9-98.sslip.io/:path*"
+      "destination": "https://api.opticaelrancho.com/:path*"
     },
     {
       "source": "/(.*)",

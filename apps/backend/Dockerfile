@@ -77,7 +77,9 @@ WORKDIR /app/vision-measure
 # --no-install-project mirrors [tool.uv] package = false in that pyproject.toml
 # — vision_api.py resolves its own repo root at runtime and needs no install
 # step for "services" itself, only its third-party dependencies.
-RUN uv sync --frozen --no-install-project --no-dev
+# The cache is only needed while installing: cleaned in the same layer so the
+# image ships no /root/.cache/uv (smaller, and nothing for uv to touch at runtime).
+RUN uv sync --frozen --no-install-project --no-dev && uv cache clean
 COPY apps/vision-measure/services /app/vision-measure/services
 WORKDIR /app
 

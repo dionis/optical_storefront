@@ -14,7 +14,11 @@ set -e
 (
   cd /app/vision-measure
   while true; do
-    uv run --frozen --no-sync python services/api/vision_api.py
+    # The venv's own python, not `uv run`: uv writes and deletes temp dirs under
+    # /root/.cache/uv on every start, and Coolify's rolling update measures the
+    # container's disk at that same moment — a dir vanishing mid-scan failed
+    # the deploy ("snapshotter.Usage failed … .cache/uv/.tmp…: no such file").
+    /app/vision-measure/.venv/bin/python services/api/vision_api.py
     echo "[vision-measure] exited, restarting in 2s" >&2
     sleep 2
   done
