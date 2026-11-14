@@ -7,7 +7,7 @@
 // sin % propio (lib/commission-pct.ts en el servidor). Datos: el bloque
 // `commissions` de GET /admin/finance/rules; se guarda con POST
 // /admin/pricing/commissions (solo lo que cambió).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "../../i18n/LanguageContext.jsx";
 import { money } from "../adminOrders.js";
 import HelpTip from "../HelpTip.jsx";
@@ -24,9 +24,17 @@ export default function CommissionsSection({ commissions, stores = [], earned = 
   const [showInactive, setShowInactive] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // La vista se relee tras CADA guardado (también de un costo): lo que llegue del
+  // servidor solo sustituye lo que aquí no se ha tocado. Antes se pisaba todo y
+  // un % escrito y aún sin guardar desaparecía al guardarse otra cosa.
+  const prev = useRef(commissions);
   useEffect(() => {
-    setDefaultPct(commissions.default_pct == null ? "" : String(commissions.default_pct));
-    setPcts(Object.fromEntries(commissions.sellers.map((s) => [s.id, String(s.pct)])));
+    const was = prev.current;
+    prev.current = commissions;
+    const wasDefault = was.default_pct == null ? "" : String(was.default_pct);
+    setDefaultPct((cur) => (String(cur) === wasDefault ? (commissions.default_pct == null ? "" : String(commissions.default_pct)) : cur));
+    const before = new Map(was.sellers.map((s) => [s.id, String(s.pct)]));
+    setPcts((cur) => Object.fromEntries(commissions.sellers.map((s) => [s.id, cur[s.id] === undefined || cur[s.id] === before.get(s.id) ? String(s.pct) : cur[s.id]])));
   }, [commissions]);
 
   const dirty = commissions.sellers.filter((s) => String(s.pct) !== String(pcts[s.id] ?? s.pct));
@@ -38,16 +46,22 @@ export default function CommissionsSection({ commissions, stores = [], earned = 
     .filter((s) => !q || norm(`${s.name} ${s.code}`).includes(norm(q)));
   const inactive = commissions.sellers.filter((s) => !s.active).length;
 
-  const submit = async (e) => {
+  // Un % válido: 0–100 (vacío solo vale en la comisión por defecto: «sin valor»).
+  const okPct = (v, allowEmpty = false) => (String(v).trim() === "" ? allowEmpty : Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 100);
+  const submit = async (e, opts) => {
     e?.preventDefault();
     if (busy || (!dirty.length && !defaultDirty)) return;
+    // Autoguardado (al salir de una casilla): solo lo que ya es un número válido.
+    const sellers = dirty.filter((s) => !opts?.quiet || okPct(pcts[s.id]));
+    const withDefault = defaultDirty && (!opts?.quiet || okPct(defaultPct, true));
+    if (!sellers.length && !withDefault) return;
     setBusy(true);
     try {
       await saveCommissions({
-        ...(defaultDirty ? { defaultPct } : {}),
-        ...(dirty.length ? { sellers: dirty.map((s) => ({ id: s.id, pct: pcts[s.id] })) } : {}),
+        ...(withDefault ? { defaultPct } : {}),
+        ...(sellers.length ? { sellers: sellers.map((s) => ({ id: s.id, pct: pcts[s.id] })) } : {}),
       });
-      onSaved();
+      onSaved(opts);
     } catch (err) {
       onError(err.message);
     } finally {
@@ -60,7 +74,7 @@ export default function CommissionsSection({ commissions, stores = [], earned = 
       <div className="fin-comm-bar">
         <label className="fin-comm-def" htmlFor="fin-comm-default">
           <span>{t("adm.fin.comm.default")}<HelpTip topic="fin.defaultCommission" /></span>
-          <input id="fin-comm-default" className="fin-in num" type="number" step="0.01" min="0" max="100" value={defaultPct} placeholder="—" onChange={(e) => setDefaultPct(e.target.value)} />
+          <input id="fin-comm-default" className="fin-in num" type="number" step="0.01" min="0" max="100" value={defaultPct} placeholder="—" onChange={(e) => setDefaultPct(e.target.value)} onBlur={() => submit(null, { quiet: true })} />
           <span className="fin-unit">%</span>
         </label>
         <small className="muted fin-comm-hint">{t("adm.fin.comm.defaultHint")}</small>
@@ -89,6 +103,7 @@ export default function CommissionsSection({ commissions, stores = [], earned = 
               <span className="fin-chip-v">
                 <input className="fin-in num" type="number" step="0.01" min="0" max="100" aria-label={`${t("adm.fin.comm.pct")} · ${s.name}`} value={pcts[s.id] ?? ""}
                   onChange={(e) => setPcts((p) => ({ ...p, [s.id]: e.target.value }))}
+                  onBlur={() => submit(null, { quiet: true })}
                   onKeyDown={(e) => { if (e.key === "Escape") setPcts((p) => ({ ...p, [s.id]: String(s.pct) })); }} />
                 <span className="fin-unit">%</span>
               </span>

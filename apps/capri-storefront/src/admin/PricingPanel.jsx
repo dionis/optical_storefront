@@ -152,7 +152,8 @@ function RulesView({ me, sellers, go, params = null }) {
   useEffect(() => { loadFin(); }, [loadFin]);
   // Una escritura de costos o comisiones: se relee la vista (los totales
   // mensuales, el reparto y el resultado del mes los calcula el servidor).
-  const onFinSaved = useCallback(() => { toast({ tone: "success", title: t("adm.price.saved") }); loadFin(); }, [toast, t, loadFin]);
+  // `quiet`: un autoguardado (la fila ya dice «Guardado»): sin aviso flotante en cada tecla.
+  const onFinSaved = useCallback((opts) => { if (!opts?.quiet) toast({ tone: "success", title: t("adm.price.saved") }); loadFin(); }, [toast, t, loadFin]);
 
   // Cada escritura contesta la porción que cambió: se fusiona sin releer todo.
   const onSaved = useCallback((slice) => {
