@@ -128,6 +128,18 @@
 </section>
 
 <section>
+  <h2>13-nov-2026 — Costos: autoguardado, revisión de la contabilidad e informe fiscal</h2>
+  <p>El dueño ya trabaja en vivo y avisó: «cuando se modifica algo en los costos no se está autoguardando».</p>
+  <table>
+    <tr><th>Qué</th><th>Estado</th><th>Dónde</th></tr>
+    <tr><td><b>Autoguardado en «Reglas y comisiones»</b>. Antes un costo solo se guardaba con Enter o la ✓ pequeña, y al guardarse cualquier fila las demás volvían a lo del servidor (se perdía lo escrito). Ahora cada fila se guarda sola (lista o interruptor: al momento; texto: 1,2 s después de la última tecla, al salir de la fila y al cerrar la pantalla), lo escrito nunca se pisa (ni por la relectura ni por un fallo de red: queda marcado para reintentar), dos guardados seguidos se encolan y las filas no cambian de sitio mientras se trabaja. También las reglas por venta, el impuesto de venta y el % de cada vendedor.</td><td><span class="tag ok">Listo</span></td><td><code>pricing/CostsSection.jsx</code>, <code>pricing/CommissionsSection.jsx</code>, <code>PricingPanel.jsx</code> (<code>onFinSaved({ quiet })</code>), <code>finance/finance.css</code></td></tr>
+    <tr><td><b>Revisión de los números</b>: el mismo mes leído por las tres rutas (reglas, resultado por tienda, estado de resultados) y directo de <code>sale_fact</code> cuadra al centavo: identidad ingresos − costo − gastos = utilidad, consolidado = suma de tiendas, punto de equilibrio, reparto de compartidos, y cada frecuencia (diaria … anual) guarda el importe exacto y mueve el resultado en su equivalente mensual. 37 comprobaciones sobre los datos locales.</td><td><span class="tag ok">Sin diferencias</span></td><td><code>lib/financial-statement.ts</code>, <code>lib/store-pnl.ts</code>, <code>lib/store-costs.ts</code></td></tr>
+    <tr><td><b>Informe fiscal en PDF</b>: botón junto a «Estado de resultados»; se elige el período (mes pasado, trimestre, año, de mes a mes) y de quién (consolidado o una tienda) y sale el PDF: resumen, impuesto de venta mes a mes con ventas <b>gravadas</b> y <b>exentas</b>, ingresos y gastos por línea del Schedule C / Form 1120-S y desglose por tienda.</td><td><span class="tag ok">Listo</span></td><td><code>src/admin/FiscalReport.jsx</code>, <code>Statement.taxable_sales / exempt_sales</code> en <code>lib/financial-statement.ts</code></td></tr>
+  </table>
+  <p class="muted">Pruebas: 96 suites / 1593; diccionario 6941 claves × 2. QA local: 9 casos de autoguardado en pantalla (salir de la fila, pausa, dos filas a la vez, lista, fila con texto sin guardar, fallo de red y reintento, fila nueva, recargar justo después de escribir), 37 comprobaciones contables y el PDF generado y revisado.</p>
+</section>
+
+<section>
   <h2>Panel de tienda — 5-nov-2026: auditoría contra el documento v2.2 y correcciones</h2>
   <p>Se contrastó la especificación <b>«Gestión de Tiendas RUBI LENS v2.2»</b> (HU-01…HU-73) con el código de la rama <code>develop_optical_storepos</code>: unos 80 puntos, de los que antes de las correcciones de hoy <b>45 estaban hechos, 24 parciales y 11 faltaban</b>. La tabla completa, punto por punto, está en el documento del proyecto de Claude <code>auditoria-spec-v22-vs-codigo-2026-11-05.md</code> y en <code>docs/HITOS-PANEL-TIENDA.md</code> (hitos 6 a 9).</p>
 

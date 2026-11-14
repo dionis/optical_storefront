@@ -35,6 +35,7 @@ import { BandBlock, RuleRow } from "./pricing/FramesSection.jsx";
 import { AdjustRow } from "./pricing/lensShared.jsx";
 import CommissionsSection from "./pricing/CommissionsSection.jsx";
 import CostsAccordions from "./pricing/CostsSection.jsx";
+import FiscalReport from "./FiscalReport.jsx";
 import FinAcc, { useOpenSet } from "./finance/Accordion.jsx";
 import RulesIO from "./finance/RulesIO.jsx";
 import { fetchFinanceRules } from "./finance/financeApi.js";
@@ -127,6 +128,8 @@ function RulesView({ me, sellers, go, params = null }) {
   const [finState, setFinState] = useState("loading");
   // ?sub=rules-statement abre directamente el estado de resultados (enlace del Ejecutivo).
   const [showStatement, setShowStatement] = useState(() => String(params?.sub || "") === "rules-statement");
+  // «Informe fiscal»: período → PDF para el contador (FiscalReport.jsx).
+  const [showFiscal, setShowFiscal] = useState(false);
   const [open, toggleAcc] = useOpenSet(["fixed", "commissions"]);
   const ref = useRef(null);
   const demo = isDemoLogin();
@@ -340,9 +343,11 @@ function RulesView({ me, sellers, go, params = null }) {
         <span className="pp-scope" title={t("adm.price.intro")}><Icon name="store" size={12} />{scopeLabel}</span>
         <span className="fin-top-act">
           <button type="button" className="btn-xs primary" onClick={() => setShowStatement(true)}><Icon name="receipt" size={13} /> {t("adm.fin.st.open")}</button>
+          <button type="button" className="btn-xs" onClick={() => setShowFiscal(true)}><Icon name="clipboard" size={13} /> {t("adm.fin.fx.open")}</button>
           {fin && <RulesIO data={fin} who={me?.display_name || me?.email || ""} business={TENANT.name} onApplied={onFinSaved} onError={onError} />}
         </span>
       </div>
+      {showFiscal && <FiscalReport scope={scope} stores={fin?.stores || []} onClose={() => setShowFiscal(false)} />}
       {kpis.length > 0 && (
         <div className="fin-kpis" aria-label={t("adm.fin.kpi.title", { month: pnl.month })}>
           <span className="fin-kpi-m"><Icon name="calendar" size={12} /> {t("adm.fin.kpi.month", { month: pnl.month })}</span>

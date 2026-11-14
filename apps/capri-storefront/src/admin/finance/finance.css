@@ -202,3 +202,20 @@
   .fin-kpi { min-width: calc(50% - 6px); }
   .fin-comm-grid { grid-template-columns: 1fr; }
 }
+
+/* Informe fiscal (FiscalReport.jsx): período, de quién y una vista previa de las cifras. */
+.fx { display: grid; gap: 12px; }
+.fx-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-range { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fx-range label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: var(--adm-muted); }
+.fx-range .pp-input { height: 38px; font-size: 14px; width: 100%; }
+.fx-preview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.fx-preview > div { border: 1px solid var(--adm-line); border-radius: 10px; padding: 8px 10px; background: var(--adm-surface-2); min-width: 0; }
+.fx-preview dt { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--adm-muted); }
+.fx-preview dd { margin: 2px 0 0; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--adm-ink); overflow: hidden; text-overflow: ellipsis; }
+.fx-preview .neg dd { color: var(--adm-red-dark, #b42318); }
+.fx-preview .pos dd { color: var(--adm-green-dark, #15803d); }
+.fx-msg { margin: 0; font-size: 13px; color: var(--adm-muted); }
+.fx-msg.bad { color: var(--adm-red-dark, #b42318); font-weight: 600; }
+.fx-note { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 12px; color: var(--adm-muted); }
+@media (max-width: 640px) { .fx-range, .fx-preview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fx-range label:last-child { grid-column: 1 / -1; } }

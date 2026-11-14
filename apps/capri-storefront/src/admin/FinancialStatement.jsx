@@ -31,7 +31,7 @@ const ym = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const addMonths = (s, n) => { const [y, m] = s.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return ym(d); };
 
 /** Rango de cada atajo, en meses YYYY-MM (los estados van por meses completos). */
-function presetRange(p, now = new Date()) {
+export function presetRange(p, now = new Date()) {
   const cur = ym(now);
   const y = now.getFullYear();
   const q = Math.floor(now.getMonth() / 3);

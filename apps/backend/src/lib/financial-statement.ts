@@ -217,6 +217,12 @@ export interface EntityMonth {
    * whose sales are the web's orders. Absent = by `channel` (all or nothing).
    */
   web_net_sales?: number;
+  /**
+   * The part of `net_sales` that carried sales tax (lines with tax > 0): the
+   * taxable sales of the sales-tax return. The rest is exempt (prescription
+   * lenses, a frame sold with them). Absent = none recorded.
+   */
+  taxable_net_sales?: number;
   /** Σ tax: collected for the state, a liability. */
   sales_tax: number;
   /** Σ total (what customers were charged, tax included). */
@@ -376,6 +382,7 @@ export function ledgerOf(input: LedgerInput): LedgerMonth[] {
       const net = group.reduce((s, l) => s + (l.total_cents - l.tax_cents), 0);
       ent.net_sales += net;
       if (first.channel === "web") ent.web_net_sales = (ent.web_net_sales ?? 0) + net;
+      ent.taxable_net_sales = (ent.taxable_net_sales ?? 0) + group.reduce((s, l) => s + (l.tax_cents > 0 ? l.total_cents - l.tax_cents : 0), 0);
       ent.sales_count += 1;
       // A web order's fee is the gateway's: % of what the customer paid + fixed.
       if (first.channel === "web") ent.payment_fees += Math.round((gross * gatewayPct) / 100) + gatewayFixed;
@@ -475,6 +482,9 @@ export interface Statement {
   revenue: { pos: number; web: number; total: number };
   /** Sales tax collected: a liability to the state, NOT revenue. */
   sales_tax: number;
+  /** Net sales that carried sales tax, and the rest (exempt): the two figures of the sales-tax return. */
+  taxable_sales: number;
+  exempt_sales: number;
   gross_sales: number;
   sales_count: number;
   cogs: CogsCents & { items: number; total_all: number };
@@ -507,13 +517,14 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
   opex.commissions = 0;
   opex.total = 0;
   const cogs = { ...emptyCogs(), items: 0, total_all: 0 };
-  let pos = 0, web = 0, tax = 0, gross = 0, count = 0, fixed = 0, variableItems = 0, perSale = 0;
+  let pos = 0, web = 0, tax = 0, taxable = 0, gross = 0, count = 0, fixed = 0, variableItems = 0, perSale = 0;
   for (const e of parts) {
     // What was sold on the web: the «web» entity whole, or the web orders of the online store.
     const onWeb = e.web_net_sales ?? (e.channel === "web" ? e.net_sales : 0);
     web += onWeb;
     pos += e.net_sales - onWeb;
     tax += e.sales_tax;
+    taxable += e.taxable_net_sales ?? 0;
     gross += e.gross_sales;
     count += e.sales_count;
     for (const k of ["frames", "lenses", "treatments", "per_order", "total"] as const) cogs[k] += e.cogs[k];
@@ -539,6 +550,8 @@ export function statementOf(parts: readonly EntityMonth[]): Statement {
   return {
     revenue: { pos, web, total: revenue },
     sales_tax: tax,
+    taxable_sales: taxable,
+    exempt_sales: revenue - taxable,
     gross_sales: gross,
     sales_count: count,
     cogs,
@@ -573,6 +586,8 @@ export function statementDollars(s: Statement): Statement {
   return {
     revenue: map(s.revenue),
     sales_tax: d(s.sales_tax),
+    taxable_sales: d(s.taxable_sales),
+    exempt_sales: d(s.exempt_sales),
     gross_sales: d(s.gross_sales),
     sales_count: s.sales_count,
     cogs: map(s.cogs),
