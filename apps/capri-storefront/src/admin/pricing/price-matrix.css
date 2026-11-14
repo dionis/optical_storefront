@@ -216,6 +216,7 @@
   padding: 2px 4px 1.5px; border-radius: 4px; white-space: nowrap; background: var(--adm-surface-2); color: var(--adm-muted); box-shadow: inset 0 0 0 1px var(--adm-line-2); }
 .pm-pill.t-exact { background: color-mix(in srgb, var(--st, var(--adm-blue)) 16%, var(--adm-surface)); color: color-mix(in srgb, var(--st, var(--adm-blue)) 80%, var(--adm-ink)); box-shadow: none; }
 .pm-pill.t-brand { background: color-mix(in srgb, var(--adm-purple) 15%, var(--adm-surface)); color: var(--adm-purple); box-shadow: none; }
+.pm-pill.t-xcost { background: color-mix(in srgb, var(--adm-green, #16a34a) 14%, var(--adm-surface)); color: var(--adm-green-dark, #15803d); box-shadow: none; }
 .pm-pill.t-rule { background: var(--adm-blue-soft); color: var(--adm-blue-dark); box-shadow: none; }
 .pm-pill.t-band { background: var(--adm-amber-soft); color: var(--adm-amber-dark); box-shadow: none; }
 .pm-pill.t-master { background: transparent; color: var(--adm-faint); }

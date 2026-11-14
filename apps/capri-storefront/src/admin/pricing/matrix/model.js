@@ -202,6 +202,8 @@ export function filterGroups(groups, { q = "", filters = new Set(), storeIds = [
 export const sourceTone = (source) => {
   const s = String(source || "");
   if (s === "store_exact" || s === "exact") return "exact";
+  // El precio sale de la regla «N × costo» de la tienda (backend lib/cost-multiple.ts).
+  if (s === "cost_multiple") return "xcost";
   if (s === "brand") return "brand";
   if (s === "rule" || s === "adjusted") return "rule";
   if (s === "band") return "band";

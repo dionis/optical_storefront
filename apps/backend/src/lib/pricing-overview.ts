@@ -309,11 +309,14 @@ export function frameRuleOf(
 
 export interface FrameRuleView {
   scope: "frame" | "case" | "all";
-  mode: "percent" | "delta";
+  /** "cost_multiple" = the store's «N × costo de la montura» (lib/cost-multiple.ts); frames only. */
+  mode: "percent" | "delta" | "cost_multiple";
   value: number;
   since: string | null;
   /** True when it comes from the master because the store has none of its own. */
   inherited: boolean;
+  /** cost_multiple only: how many models sell at cost × N today. */
+  applied?: number;
 }
 
 function frameRuleView(
@@ -322,6 +325,18 @@ function frameRuleView(
   scope: "frame" | "case",
   now: Date
 ): FrameRuleView | null {
+  // The store's «N × costo» rule is its frame rule: it is what prices its frames.
+  const multiple = storeId && scope === "frame" ? rules.filter((r) => r.establishment_id === storeId && r.scope === "frame" && r.target == null && r.mode === "cost_multiple" && isActiveAt(r, now)).sort((a, b) => toMs(b.valid_from) - toMs(a.valid_from))[0] : null;
+  if (multiple) {
+    return {
+      scope: "frame",
+      mode: "cost_multiple",
+      value: Number(multiple.value),
+      since: multiple.valid_from ? new Date(multiple.valid_from).toISOString() : null,
+      inherited: false,
+      applied: rules.filter((r) => r.establishment_id === storeId && r.mode === "override" && r.source === "cost_multiple" && r.target && isActiveAt(r, now)).length,
+    };
+  }
   const own = storeId ? frameRuleOf(rules, storeId, scope, now) : null;
   const master = frameRuleOf(rules, null, scope, now);
   const pick = own ?? master;
@@ -460,7 +475,8 @@ export async function loadPricingOverview(
 
   // ── Frames and cases ──
   // A brand price (`brand:<slug>`, v2) is not a model's price: the matrix shows it in the brand header.
-  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && !brandOfTarget(r.target) && isActiveAt(r, now));
+  // Prices derived from a «N × costo» rule are the rule's, not prices the owner typed: they are not listed as his.
+  const liveOverrides = rules.filter((r) => r.mode === "override" && r.target && !brandOfTarget(r.target) && r.source !== "cost_multiple" && isActiveAt(r, now));
   const masterById = new Map<string, PriceRuleRow>();
   const storeById = new Map<string, PriceRuleRow>();
   for (const r of liveOverrides) {

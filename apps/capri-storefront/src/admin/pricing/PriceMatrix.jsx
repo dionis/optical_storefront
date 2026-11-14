@@ -1011,7 +1011,7 @@ export default function PriceMatrix({ section, me = null, onlyStore = null, init
       </div>
 
       <p className="pm-legend adm-noprint">
-        {["exact", ...(isFrames ? ["brand"] : []), "rule", "band", "master"].map((k) => (
+        {["exact", ...(isFrames ? ["brand", "xcost"] : []), "rule", "band", "master"].map((k) => (
           <span key={k} title={t(`adm.pm.src.${k}`)}><Pill tone={k}>{t(`adm.pm.pill.${k}`)}</Pill></span>
         ))}
         {costAccess && isFrames && <span className="pm-lg-sep" aria-hidden="true" />}

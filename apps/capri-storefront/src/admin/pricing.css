@@ -84,7 +84,10 @@
 
 /* Campos: el ancho lo decide el dato, no el contenedor. */
 .pp-num { width: 7.5ch; text-align: right; font-variant-numeric: tabular-nums; }
-.pp-num.wide { width: 10ch; }
+.pp-num.wide { width: 12ch; }
+/* El campo de una regla enseña la cifra ENTERA («299.93» se quedaba en «299» en 7,5 ch con las flechas). */
+.pp-row .pp-num { min-width: 11ch; }
+.pp-row-note { flex-basis: 100%; margin: 0; }
 .pp-input { padding: 3px 7px; font-size: 12.5px; border: 1px solid var(--adm-line); border-radius: 6px; background: var(--adm-surface); color: var(--adm-ink); }
 .pp-input:focus-visible { outline: none; border-color: var(--adm-accent, var(--adm-blue)); box-shadow: 0 0 0 2px var(--adm-accent-soft, transparent); }
 .pp-unit { font-size: 11.5px; color: var(--adm-muted); font-weight: 700; }

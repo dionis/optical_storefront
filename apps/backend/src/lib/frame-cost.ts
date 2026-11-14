@@ -831,7 +831,7 @@ export function upcsOf(metadata: Record<string, unknown> | null | undefined): st
  * database the panel simply shows no catalogue counts (and the sheet mirrors
  * only the cost side) rather than failing.
  */
-export async function loadCatalogModels(container: MedusaContainer): Promise<CatalogModel[]> {
+export async function loadCatalogModels(container: MedusaContainer, opts: { drafts?: boolean } = {}): Promise<CatalogModel[]> {
   const out: CatalogModel[] = [];
   try {
     const query = container.resolve(ContainerRegistrationKeys.QUERY);
@@ -840,7 +840,8 @@ export async function loadCatalogModels(container: MedusaContainer): Promise<Cat
       const { data } = await query.graph({
         entity: "product",
         fields: ["id", "title", "handle", "metadata", "variants.sku", "variants.prices.amount", "variants.prices.currency_code"],
-        filters: { status: "published" },
+        // `drafts`: a model not yet on sale is priced too, so it is right the day it is published.
+        filters: { status: opts.drafts ? ["published", "draft"] : "published" },
         pagination: { skip, take: pageSize },
       });
       const page = (data ?? []) as Array<Record<string, any>>;

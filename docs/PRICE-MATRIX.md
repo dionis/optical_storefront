@@ -55,6 +55,38 @@ antes de la promoción tachado y «Promoción −x %» cuando `promo` existe.
 `GET /admin/pos/products` y `GET /admin/pos/lens-matrix?store=` devuelven el
 precio rebajado y el de antes.
 
+### «N veces el costo» de una tienda (`lib/cost-multiple.ts`, 13-nov-2026)
+
+Una tienda puede fijar el precio de TODAS sus monturas como un múltiplo del
+costo (la tienda online: 3 ×). La regla es una fila de `store_price_rule`
+(tienda, scope `frame`, sin `target`, `mode = cost_multiple`, `value = N`,
+1–20) y se guarda con `POST /admin/pricing/frames/rule { scope: "frame", mode:
+"cost_multiple", value, store }`; es alternativa al ajuste general de esa
+tienda (guardar una cierra la otra). Solo de tienda (`store_required`), solo
+monturas (`bad_scope` en estuches).
+
+Lo que produce NO se calcula al vuelo: se escribe como el **precio exacto** de
+cada modelo en esa tienda (`mode = override`, `source = "cost_multiple"`), que
+es lo que ya leen la caja, la matriz, la web (`lib/web-pricing.ts`) y los
+informes.
+
+| Caso | Qué pasa |
+|---|---|
+| Modelo con costo (el de la tienda, o el de la cadena) | precio = costo × N, al centavo |
+| Modelo sin costo | sin precio derivado: conserva el que tendría sin la regla |
+| El dueño escribió un precio para ese modelo en esa tienda | no se toca (`source` distinto) |
+| El dueño vacía ese precio | vuelve a costo × N al momento (`followCostMultiple`) |
+| Estuche | no se toca |
+| Borrador (no publicado) | se le pone precio igual: sale bien el día que se publica |
+
+Se vuelve a derivar al guardar la regla, al cambiar un costo o crear un modelo
+(`queueCostMultiples`, una pasada 1,5 s después) y en `price-sync` cada 4 h. La
+pasada es idempotente (`planCostMultiple` no escribe si el precio ya coincide).
+En la matriz la casilla lleva la pastilla «COSTO ×» (origen `cost_multiple`,
+`exact: false`) y en «Reglas y comisiones» la fila dice «3 veces el costo de la
+montura · 127 modelos a ese precio». Quitar la regla (o poner un % / monto
+para esa tienda) cierra todos los precios derivados y ninguno escrito a mano.
+
 ## API
 
 ### `GET /admin/pricing/matrix?section=frames|cases|lenses|treatments[&q=]`

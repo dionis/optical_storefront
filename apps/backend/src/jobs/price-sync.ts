@@ -6,10 +6,13 @@
  * catalog changes, and logs any product that lacks a sheet price.
  */
 import type { MedusaContainer } from "@medusajs/framework/types";
+import { reapplyCostMultiples } from "../lib/cost-multiple";
 import { syncPrices } from "../lib/price-sync";
 
 export default async function priceSyncJob(container: MedusaContainer) {
   await syncPrices(container);
+  // Stores priced at «N × costo»: a new model or a new supplier list gets its price here.
+  await reapplyCostMultiples(container);
 }
 
 export const config = {

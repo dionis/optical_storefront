@@ -1,6 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { followCostMultiple } from "../../../../../lib/cost-multiple";
 import { mirrorPricesToSheet } from "../../../../../lib/gsheet-sync";
 import { loadPricingOverview, productOfVariant, resolvePricingStore } from "../../../../../lib/pricing-overview";
 import { exactPriceDenied } from "../../../../../lib/store-pricing";
@@ -66,6 +67,8 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
       price === null ? null : { mode: "override", value: Math.round(Number(price) * 100) / 100, source: "pricing-panel" },
       actorId
     );
+    // Cleared in a store priced at «N × costo»: the model is cost × N again, now.
+    if (price === null && kind === "frame") await followCostMultiple(req.scope, store.storeId, actorId);
     const overview = await loadPricingOverview(req.scope, store.storeId);
     logger.info(
       `[pricing] override ${kind} ${productId} -> ${price ?? "removed"} on ${store.storeId ?? "master"} by ${actorId ?? "?"}`

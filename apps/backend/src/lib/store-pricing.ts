@@ -38,7 +38,7 @@ import { applyPriceBandUsd, priceBandFor, type PriceBand } from "./pricing";
 
 export const RULE_SCOPES = ["all", "frame", "case"] as const;
 export type RuleScope = (typeof RULE_SCOPES)[number];
-export const RULE_MODES = ["percent", "delta", "override", "min"] as const;
+export const RULE_MODES = ["percent", "delta", "override", "min", "cost_multiple"] as const;
 export type RuleMode = (typeof RULE_MODES)[number];
 
 /** A general adjustment can never take a price below this fraction of itself. */
@@ -46,6 +46,8 @@ export const MIN_PERCENT = -90;
 export const MAX_PERCENT = 500;
 
 export interface PriceRuleLike {
+  /** Who wrote it ("pricing-panel", "cost_multiple" = derived from the store's «N × costo» rule…). Optional. */
+  source?: string | null;
   establishment_id: string | null;
   scope: string;
   target: string | null;

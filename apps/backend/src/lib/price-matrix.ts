@@ -286,7 +286,7 @@ export function promoLinePct(promo: { before_cents: number } | null | undefined,
  *                master lens list)
  *   base         the bare Medusa price of the model
  */
-export type CellSource = "store_exact" | "brand" | "rule" | "band" | "master" | "base";
+export type CellSource = "store_exact" | "cost_multiple" | "brand" | "rule" | "band" | "master" | "base";
 
 export interface MatrixStore {
   id: string;
@@ -521,8 +521,12 @@ export function priceScopeFor(kind: "frame" | "case", productId: string, caseIds
   return kind === "case" || caseIds.has(productId) ? "case" : "frame";
 }
 
-function frameSource(line: StoreLinePrice, rules: PriceRuleLike[], scope: "frame" | "case", target: string, now: Date): CellSource {
-  if (line.frame_source === "store_exact") return "store_exact";
+function frameSource(line: StoreLinePrice, rules: PriceRuleLike[], scope: "frame" | "case", target: string, now: Date, storeId?: string): CellSource {
+  if (line.frame_source === "store_exact") {
+    // A price DERIVED from the store's «N × costo» rule (lib/cost-multiple.ts) is the rule's, not one the owner typed.
+    const derived = storeId && rules.some((r) => r.establishment_id === storeId && r.scope === scope && r.target === target && r.mode === "override" && r.source === "cost_multiple" && r.valid_to == null);
+    return derived ? "cost_multiple" : "store_exact";
+  }
   if (line.frame_source === "brand") return "brand";
   if (line.band) return "band";
   if (line.adjustment) return "rule";
@@ -545,10 +549,12 @@ export function storeFramePrice(
     { establishmentId: storeId, scope: product.price_scope, target: product.product_id, base: (product.base_cents ?? 0) / 100, lenses: 0, brand: product.brand_slug ?? null },
     now
   );
-  const exact = line.frame_source === "store_exact";
+  const source = frameSource(line, rules, product.price_scope, product.product_id, now, storeId);
+  // `exact` = a price the owner fixed in this cell (it can be cleared there); a derived one belongs to the rule.
+  const exact = line.frame_source === "store_exact" && source !== "cost_multiple";
   // A brand price is a price even when the model has none in Medusa.
-  if (product.base_cents == null && !exact && line.frame_source !== "brand") return { price_cents: null, source: "base", exact: false };
-  return { price_cents: toCents(line.frame), source: frameSource(line, rules, product.price_scope, product.product_id, now), exact };
+  if (product.base_cents == null && line.frame_source !== "store_exact" && line.frame_source !== "brand") return { price_cents: null, source: "base", exact: false };
+  return { price_cents: toCents(line.frame), source, exact };
 }
 
 function cellOf(price: { price_cents: number | null; source: CellSource; exact: boolean }, pct: number | null, exposed: boolean): MatrixCell {

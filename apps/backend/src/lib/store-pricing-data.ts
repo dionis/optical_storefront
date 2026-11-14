@@ -279,6 +279,7 @@ export const MODE_FAMILIES = {
   adjustment: ["percent", "delta"],
   price: ["override"],
   minimum: ["min"],
+  cost_multiple: ["cost_multiple"],
 } as const satisfies Record<string, readonly RuleMode[]>;
 export type ModeFamily = keyof typeof MODE_FAMILIES;
 

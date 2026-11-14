@@ -57,9 +57,14 @@ export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
 
   const now = !rule
     ? t("adm.price.frames.ruleNone")
-    : rule.mode === "percent"
-      ? t("adm.price.frames.rulePercent", { v: rule.value > 0 ? `+${rule.value}` : rule.value })
-      : t("adm.price.frames.ruleDelta", { v: money(rule.value, "usd", lang) });
+    : rule.mode === "cost_multiple"
+      ? t("adm.price.frames.ruleCost", { v: rule.value, n: rule.applied ?? 0 })
+      : rule.mode === "percent"
+        ? t("adm.price.frames.rulePercent", { v: rule.value > 0 ? `+${rule.value}` : rule.value })
+        : t("adm.price.frames.ruleDelta", { v: money(rule.value, "usd", lang) });
+  // «N veces el costo»: la regla de UNA tienda para sus monturas (no del maestro, no de estuches).
+  const canCost = scope === "frame" && store && store !== "all";
+  const unit = mode === "percent" ? "%" : mode === "cost_multiple" ? t("adm.price.frames.unitCost") : "USD";
 
   const submit = async (e) => {
     e.preventDefault();
@@ -87,22 +92,26 @@ export function RuleRow({ scope, rule, store, onSaved, onError, t, lang }) {
         <option value="none">{t("adm.price.frames.mode.none")}</option>
         <option value="percent">{t("adm.price.frames.mode.percent")}</option>
         <option value="delta">{t("adm.price.frames.mode.delta")}</option>
+        {(canCost || mode === "cost_multiple") && <option value="cost_multiple">{t("adm.price.frames.mode.cost")}</option>}
       </select>
       {mode !== "none" && (
         <>
           <input
-            className="pp-input pp-num"
+            className="pp-input pp-num wide"
             type="number"
             step="0.01"
+            min={mode === "cost_multiple" ? 1 : undefined}
+            max={mode === "cost_multiple" ? 20 : undefined}
             required
             aria-label={t("adm.price.frames.value")}
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />
-          <span className="pp-unit">{mode === "percent" ? "%" : "USD"}</span>
+          <span className="pp-unit">{unit}</span>
         </>
       )}
-      <button className="btn-xs primary" disabled={busy}>{t("adm.price.save")}</button>
+      <button className="btn-xs primary" disabled={busy}>{busy ? t("adm.price.saving") : t("adm.price.save")}</button>
+      {mode === "cost_multiple" && <small className="pp-hint pp-row-note">{t("adm.price.frames.costHint")}</small>}
     </form>
   );
 }

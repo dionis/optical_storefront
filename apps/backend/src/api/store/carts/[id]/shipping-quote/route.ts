@@ -7,12 +7,11 @@ import {
 } from "../../../../../lib/shipping-rates";
 
 /**
- * POST /store/carts/:id/shipping-quote — cotiza FedEx y DHL para este carrito.
+ * POST /store/carts/:id/shipping-quote — el precio de la entrega de este carrito.
  *
- * El precio lo decide el SERVIDOR (tabla de tarifas + gratis desde $100 de
- * subtotal); el cliente solo recibe las dos opciones y elige. Solo USA: una
- * dirección de otro país recibe 422 `us_only` y el checkout lo explica en el
- * idioma del cliente.
+ * Es UN precio fijo que decide el SERVIDOR (lib/shipping-rates.ts: $30 a todo
+ * EE. UU.); el checkout solo lo muestra. Solo USA: una dirección de otro país
+ * recibe 422 `us_only` y el checkout lo explica en el idioma del cliente.
  */
 export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<void> {
   const { id: cart_id } = req.params as { id: string };

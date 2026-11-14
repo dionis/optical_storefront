@@ -20,7 +20,7 @@ import { normalizeModel } from "./pricing";
  *          number cannot fill that matrix, so they are reported for review.
  *  - materials / treatments / usage: keys of the pre-2026 lens model that the
  *    server no longer prices; reported, not imported.
- *  - shipping: not a price rule (the server charges SHIPPING_FEDEX_RATE);
+ *  - shipping: not a price rule (the server charges the flat SHIPPING_FLAT_RATE);
  *    reported so nobody assumes it moved.
  */
 

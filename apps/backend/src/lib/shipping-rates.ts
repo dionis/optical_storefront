@@ -1,21 +1,23 @@
 /**
- * Cotización de envío de la tienda: FedEx y DHL, SOLO Estados Unidos.
+ * Envío de la tienda online: UN precio fijo, SOLO Estados Unidos.
  *
- * Política comercial (14-oct-2026):
- *   · Pedidos de $100 o más ⇒ envío GRATIS con cualquiera de los dos.
- *   · Por debajo, cada transportista cotiza su tarifa y EL CLIENTE elige.
- *   · De momento no se admite ninguna dirección fuera de USA (us_only).
+ * Política comercial (dueño, 13-nov-2026): la entrega hasta el cliente se
+ * VENDE a $30, siempre, a cualquier dirección de EE. UU. No hay tarifa por
+ * peso ni por zona, ni segunda mensajería más barata: es un precio de venta,
+ * no el reembolso de lo que cobre el transportista (eso es un costo «por
+ * venta» de la tienda online, en «Reglas y comisiones»).
  *
- * Las tarifas salen de esta TABLA de servidor (paquete pequeño ~1 lb, 48
- * estados contiguos, tarifas de lista publicadas de FedEx Home Delivery y DHL
- * eCommerce SmartMail). El cliente JAMÁS manda importes. Cuando existan
- * credenciales de las APIs oficiales (FEDEX_API_KEY / DHL_API_KEY en el env),
- * `quoteCarriers` es el único punto a cambiar para cotizar en vivo — la firma
- * ya es asíncrona-amistosa y los dos routes consumen solo su resultado.
+ *   · Fuera de EE. UU. no se vende (422 `us_only`).
+ *   · El importe lo fija el SERVIDOR; el cliente jamás manda importes.
+ *   · `SHIPPING_FLAT_RATE` cambia el precio sin tocar código. Las variables
+ *     antiguas (`SHIPPING_FEDEX_RATE`, `SHIPPING_DHL_RATE`) ya NO se leen: un
+ *     28 olvidado en Coolify no puede pisar los $30.
+ *   · `FREE_SHIPPING_THRESHOLD` sigue existiendo para una promo puntual; sin
+ *     ella nunca es gratis.
  */
 
 export interface CarrierQuote {
-  carrier: "fedex" | "dhl";
+  carrier: "fedex";
   label: string;
   amount: number;        // USD decimales; 0 cuando free === true
   free: boolean;
@@ -28,28 +30,22 @@ const num = (v: string | undefined, fallback: number): number => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-// Promo de envío gratis RETIRADA (pedido del dueño, 14-oct-2026): sin la env
-// no hay umbral (Infinity = nunca gratis). Poner FREE_SHIPPING_THRESHOLD en
-// Coolify la reactiva sin tocar código.
+// Envío gratis: solo si el dueño pone FREE_SHIPPING_THRESHOLD en Coolify (una
+// promo). Sin la variable no hay umbral (Infinity = nunca gratis).
 export const FREE_SHIPPING_THRESHOLD = process.env.FREE_SHIPPING_THRESHOLD
   ? num(process.env.FREE_SHIPPING_THRESHOLD, Infinity)
   : Infinity;
+
+/** Lo que se le cobra al cliente por la entrega, en dólares. */
+export const FLAT_SHIPPING_RATE = num(process.env.SHIPPING_FLAT_RATE, 30);
 
 const CARRIERS: Array<Omit<CarrierQuote, "amount" | "free"> & { rate: number }> = [
   {
     carrier: "fedex",
     label: "FedEx Home Delivery",
-    // Pedido del dueño (14-oct-2026): $28 de envío con 4 días de demora.
-    rate: num(process.env.SHIPPING_FEDEX_RATE, 28),
+    rate: FLAT_SHIPPING_RATE,
     eta_min_days: num(process.env.SHIPPING_FEDEX_ETA_DAYS, 4),
     eta_max_days: num(process.env.SHIPPING_FEDEX_ETA_DAYS, 4),
-  },
-  {
-    carrier: "dhl",
-    label: "DHL eCommerce",
-    rate: num(process.env.SHIPPING_DHL_RATE, 7.95),
-    eta_min_days: 4,
-    eta_max_days: 7,
   },
 ];
 

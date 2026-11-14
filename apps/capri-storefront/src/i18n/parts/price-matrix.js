@@ -325,6 +325,8 @@ export default {
     "adm.pm.xlsx.how5": "La hoja «Marcas» lleva el precio y el descuento de cada marca por tienda: todos sus modelos toman ese precio salvo los que tienen uno propio.",
 
     "adm.pm.pill.exact": "exacto",
+    "adm.pm.pill.xcost": "costo ×",
+    "adm.pm.src.xcost": "Precio = costo × la regla de esta tienda (Reglas y comisiones)",
     "adm.pm.pill.brand": "marca",
     "adm.pm.pill.rule": "regla",
     "adm.pm.pill.band": "banda",
@@ -760,6 +762,8 @@ export default {
     "adm.pm.xlsx.how5": "The «Brands» sheet holds each brand's price and discount per store: all its models take that price except those with their own.",
 
     "adm.pm.pill.exact": "exact",
+    "adm.pm.pill.xcost": "cost ×",
+    "adm.pm.src.xcost": "Price = cost × this store's rule (Rules & commissions)",
     "adm.pm.pill.brand": "brand",
     "adm.pm.pill.rule": "rule",
     "adm.pm.pill.band": "band",

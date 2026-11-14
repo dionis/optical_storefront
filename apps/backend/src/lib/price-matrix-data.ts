@@ -1,4 +1,5 @@
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
+import { followCostMultiple, queueCostMultiples } from "./cost-multiple";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { createProductsWorkflow } from "@medusajs/medusa/core-flows";
 import type { Knex } from "@mikro-orm/knex";
@@ -553,6 +554,8 @@ export async function executeCellOp(container: MedusaContainer, op: CellOp, rowI
       const costKey = row.cost_key || row.sku;
       if (!costKey) return "unknown_item";
       const { row: after, before } = await setOwnerFrameCost(container, { sku: costKey, costCents: op.cents }, actorId);
+      // A store priced at «N × costo» follows the cost that just changed.
+      queueCostMultiples(container);
       await recordAudit(container, {
         actorId,
         action: "cost.change",
@@ -581,6 +584,8 @@ export async function executeCellOp(container: MedusaContainer, op: CellOp, rowI
         op.usd === null ? null : { mode: "override", value: Math.round(op.usd * 100) / 100, source: "price-matrix" },
         actorId
       );
+      // Cleared in a store priced at «N × costo»: the model is cost × N again, now.
+      if (op.usd === null && scope === "frame") await followCostMultiple(container, op.storeId, actorId);
       return null;
     }
     case "lens_cost": {
@@ -883,6 +888,7 @@ export async function createCatalogFrame(
   });
   if (frame.cost_cents !== null) {
     const { row, before } = await setOwnerFrameCost(container, { sku: frame.sku, costCents: frame.cost_cents }, actorId);
+    queueCostMultiples(container);
     await recordAudit(container, { actorId, action: "cost.change", entity: "frame_cost", entityId: frameCostKeyOf(frame.sku), before: frameCostAudit(before), after: frameCostAudit(row) });
   }
   for (const [storeId, cell] of Object.entries(frame.prices)) {

@@ -66,10 +66,11 @@ export default function MedusaCheckout() {
   // Días hábiles de laboratorio (configurables por el dueño). No es tiempo de
   // transporte: es lo que tarda el pedido en estar listo para recoger o salir.
   const labDays = Number(shippingConfig().labDays) || 0;
-  // Tarifa FIJA de FedEx (pedido del dueño): $28 siempre, 4 días — lo que el
-  // cliente ve. El servidor cobra lo mismo (SHIPPING_FEDEX_RATE en Coolify).
-  const FEDEX_RATE = Number(shippingConfig().fedexRate) || 28;
-  const FEDEX_ETA = Number(shippingConfig().fedexEtaDays) || 4;
+  // Entrega a PRECIO FIJO (dueño, 13-nov-2026): $30 a todo EE. UU. El número
+  // es el que cotiza el SERVIDOR (lib/shipping-rates.ts); el de aquí solo se
+  // enseña mientras la cotización no ha llegado.
+  const FLAT_RATE = 30;
+  const FLAT_ETA = Number(shippingConfig().fedexEtaDays) || 4;
 
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +104,10 @@ export default function MedusaCheckout() {
   // ruta (se usa el flujo clásico de opciones Medusa como respaldo).
   const [carriers, setCarriers] = useState(null);
   const [carrierSel, setCarrierSel] = useState("");
+  // Lo que el servidor cobra por la entrega (y en cuántos días): lo que se muestra.
+  const quoted = (carriers || []).find((c) => c.carrier === carrierSel) || null;
+  const FEDEX_RATE = quoted && Number.isFinite(Number(quoted.amount)) ? Number(quoted.amount) : FLAT_RATE;
+  const FEDEX_ETA = quoted && Number(quoted.eta_max_days) > 0 ? Number(quoted.eta_max_days) : FLAT_ETA;
   const [freeThreshold, setFreeThreshold] = useState(100);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -638,7 +643,7 @@ export default function MedusaCheckout() {
               {cart.item_total != null && <div><span>{L("subtotal")}</span><b>{money(cart.item_total)}</b></div>}
               {(() => {
                 // Tarifa FIJA: en cuanto hay método de envío (cotizado solo al
-                // completar la dirección), la línea dice FedEx · $28 — siempre.
+                // completar la dirección), la línea dice FedEx · $30 — el precio fijo.
                 const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
                 return (
                   <div>
@@ -657,7 +662,7 @@ export default function MedusaCheckout() {
             </div>
             {(() => {
               // Total con la tarifa fija: lo que Medusa aún no haya sumado del
-              // envío se completa hasta los $28 fijos para que el cliente vea
+              // envío se completa hasta el precio fijo para que el cliente vea
               // el número final real desde el principio.
               const ready = (carriers && carrierSel) || shipId || cart.shipping_total > 0;
               const pend = ready ? Math.max(0, FEDEX_RATE - Number(cart.shipping_total || 0)) : 0;

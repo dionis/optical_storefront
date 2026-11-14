@@ -19,6 +19,7 @@ import {
   summarizeFrameCosts,
 } from "../../../../../lib/frame-cost";
 import { frameCostsDenied } from "../../../../../lib/frame-cost-route";
+import { queueCostMultiples } from "../../../../../lib/cost-multiple";
 import { mirrorPricesToSheet } from "../../../../../lib/gsheet-sync";
 import { resolvePricingStore } from "../../../../../lib/pricing-overview";
 
@@ -118,6 +119,9 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
         `[pricing] frame cost ${key} -> ${costCents === null ? "supplier list" : `${costCents} cents`} by ${actorId ?? "?"}`
       );
     }
+
+    // A store priced at «N × costo» follows the cost that just changed.
+    queueCostMultiples(req.scope);
 
     // Read the scope back the way the panel reads it, so the row it gets is
     // the EFFECTIVE one (and, after removing a variation, the master's figure

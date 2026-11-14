@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import type { Logger } from "@medusajs/framework/types";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { loadPricingOverview, resolvePricingStore } from "../../../../../lib/pricing-overview";
+import { applyCostMultiple, COST_MULTIPLE_MODE, costMultipleDenied } from "../../../../../lib/cost-multiple";
 import { adjustmentDenied } from "../../../../../lib/store-pricing";
 import { replaceRule } from "../../../../../lib/store-pricing-data";
 import { mirrorPricesToSheet } from "../../../../../lib/gsheet-sync";
@@ -38,7 +39,9 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     res.status(422).json({ type: "invalid_data", reason: "bad_scope", message: "Scope must be frame, case or all." });
     return;
   }
-  const denied = adjustmentDenied(mode, body.value);
+  // «N veces el costo de la montura» (lib/cost-multiple.ts): a STORE's rule for its frames.
+  const byCost = mode === COST_MULTIPLE_MODE;
+  const denied = byCost ? (scope !== "frame" ? "bad_scope" : costMultipleDenied(body.value)) : adjustmentDenied(mode, body.value);
   if (denied) {
     res.status(422).json({ type: "invalid_data", reason: denied, message: "Invalid rule." });
     return;
@@ -48,15 +51,30 @@ export async function POST(req: AuthenticatedMedusaRequest<Body>, res: MedusaRes
     res.status(404).json({ type: "not_found", reason: store.reason, message: "Store not found." });
     return;
   }
+  if (byCost && !store.storeId) {
+    res.status(422).json({ type: "invalid_data", reason: "store_required", message: "A cost multiple is a store's rule: pick the store." });
+    return;
+  }
 
   const actorId = req.auth_context?.actor_id ?? null;
   try {
+    // The two kinds of frame rule are alternatives: saving one closes the other.
     await replaceRule(
       req.scope,
       { establishmentId: store.storeId, scope, target: null, family: "adjustment" },
-      mode === "none" ? null : { mode: mode as "percent" | "delta", value: Number(body.value), source: "pricing-panel" },
+      mode === "none" || byCost ? null : { mode: mode as "percent" | "delta", value: Number(body.value), source: "pricing-panel" },
       actorId
     );
+    if (store.storeId && scope === "frame") {
+      await replaceRule(
+        req.scope,
+        { establishmentId: store.storeId, scope: "frame", target: null, family: "cost_multiple" },
+        byCost ? { mode: COST_MULTIPLE_MODE, value: Number(body.value), source: "pricing-panel" } : null,
+        actorId
+      );
+      // Writes (or removes) the price of every frame with a cost: cost × N.
+      await applyCostMultiple(req.scope, store.storeId, byCost ? Number(body.value) : null, actorId);
+    }
     const overview = await loadPricingOverview(req.scope, store.storeId);
     logger.info(`[pricing] rule ${scope} ${mode} on ${store.storeId ?? "master"} by ${actorId ?? "?"}`);
     // The sheet is a mirror, never a dependency: it is refreshed after the
